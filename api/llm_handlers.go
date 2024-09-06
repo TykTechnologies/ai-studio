@@ -1,0 +1,420 @@
+package api
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/gin-gonic/gin"
+)
+
+// @Summary Create a new LLM
+// @Description Create a new LLM with the provided information
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param llm body LLMInput true "LLM information"
+// @Success 201 {object} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms [post]
+// @Security BearerAuth
+func (a *API) createLLM(c *gin.Context) {
+	var input LLMInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	llm, err := a.service.CreateLLM(
+		input.Data.Attributes.Name,
+		input.Data.Attributes.APIKey,
+		input.Data.Attributes.APIEndpoint,
+		input.Data.Attributes.StreamingEndpoint,
+		input.Data.Attributes.PrivacyScore,
+		input.Data.Attributes.ShortDescription,
+		input.Data.Attributes.LongDescription,
+		input.Data.Attributes.ExternalURL,
+		input.Data.Attributes.LogoURL,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": serializeLLM(llm)})
+}
+
+// @Summary Get an LLM by ID
+// @Description Get details of an LLM by its ID
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param id path int true "LLM ID"
+// @Success 200 {object} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /llms/{id} [get]
+// @Security BearerAuth
+func (a *API) getLLM(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
+		})
+		return
+	}
+
+	llm, err := a.service.GetLLMByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "LLM not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+}
+
+// @Summary Update an LLM
+// @Description Update an existing LLM's information
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param id path int true "LLM ID"
+// @Param llm body LLMInput true "Updated LLM information"
+// @Success 200 {object} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms/{id} [patch]
+// @Security BearerAuth
+func (a *API) updateLLM(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
+		})
+		return
+	}
+
+	var input LLMInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	llm, err := a.service.UpdateLLM(
+		uint(id),
+		input.Data.Attributes.Name,
+		input.Data.Attributes.APIKey,
+		input.Data.Attributes.APIEndpoint,
+		input.Data.Attributes.StreamingEndpoint,
+		input.Data.Attributes.PrivacyScore,
+		input.Data.Attributes.ShortDescription,
+		input.Data.Attributes.LongDescription,
+		input.Data.Attributes.ExternalURL,
+		input.Data.Attributes.LogoURL,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+}
+
+// @Summary Delete an LLM
+// @Description Delete an LLM by its ID
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param id path int true "LLM ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms/{id} [delete]
+// @Security BearerAuth
+func (a *API) deleteLLM(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
+		})
+		return
+	}
+
+	err = a.service.DeleteLLM(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary List all LLMs
+// @Description Get a list of all LLMs
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Success 200 {array} LLMResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms [get]
+// @Security BearerAuth
+func (a *API) listLLMs(c *gin.Context) {
+	llms, err := a.service.GetAllLLMs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+}
+
+// @Summary Search LLMs by name
+// @Description Search for LLMs using a name stub
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param name query string true "Name stub to search for"
+// @Success 200 {array} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms/search [get]
+// @Security BearerAuth
+func (a *API) searchLLMs(c *gin.Context) {
+	nameStub := c.Query("name")
+	if nameStub == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Name stub is required"}},
+		})
+		return
+	}
+
+	llms, err := a.service.GetLLMsByNameStub(nameStub)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+}
+
+// @Summary Get LLMs by maximum privacy score
+// @Description Get a list of LLMs with privacy score less than or equal to the specified value
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param max_score query int true "Maximum privacy score"
+// @Success 200 {array} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms/max-privacy-score [get]
+// @Security BearerAuth
+func (a *API) getLLMsByMaxPrivacyScore(c *gin.Context) {
+	maxScore, err := strconv.Atoi(c.Query("max_score"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid max_score parameter"}},
+		})
+		return
+	}
+
+	llms, err := a.service.GetLLMsByMaxPrivacyScore(maxScore)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+}
+
+// @Summary Get LLMs by minimum privacy score
+// @Description Get a list of LLMs with privacy score greater than or equal to the specified value
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param min_score query int true "Minimum privacy score"
+// @Success 200 {array} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms/min-privacy-score [get]
+// @Security BearerAuth
+func (a *API) getLLMsByMinPrivacyScore(c *gin.Context) {
+	minScore, err := strconv.Atoi(c.Query("min_score"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid min_score parameter"}},
+		})
+		return
+	}
+
+	llms, err := a.service.GetLLMsByMinPrivacyScore(minScore)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+}
+
+// @Summary Get LLMs by privacy score range
+// @Description Get a list of LLMs with privacy score within the specified range
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param min_score query int true "Minimum privacy score"
+// @Param max_score query int true "Maximum privacy score"
+// @Success 200 {array} LLMResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llms/privacy-score-range [get]
+// @Security BearerAuth
+func (a *API) getLLMsByPrivacyScoreRange(c *gin.Context) {
+	minScore, err := strconv.Atoi(c.Query("min_score"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid min_score parameter"}},
+		})
+		return
+	}
+
+	maxScore, err := strconv.Atoi(c.Query("max_score"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid max_score parameter"}},
+		})
+		return
+	}
+
+	if minScore > maxScore {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "min_score cannot be greater than max_score"}},
+		})
+		return
+	}
+
+	llms, err := a.service.GetLLMsByPrivacyScoreRange(minScore, maxScore)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+}
+
+func serializeLLM(llm *models.LLM) LLMResponse {
+	return LLMResponse{
+		Type: "llms",
+		ID:   strconv.FormatUint(uint64(llm.ID), 10),
+		Attributes: struct {
+			Name              string `json:"name"`
+			APIKey            string `json:"api_key"`
+			APIEndpoint       string `json:"api_endpoint"`
+			StreamingEndpoint string `json:"streaming_endpoint"`
+			PrivacyScore      int    `json:"privacy_score"`
+			ShortDescription  string `json:"short_description"`
+			LongDescription   string `json:"long_description"`
+			ExternalURL       string `json:"external_url"`
+			LogoURL           string `json:"logo_url"`
+		}{
+			Name:              llm.Name,
+			APIKey:            llm.APIKey,
+			APIEndpoint:       llm.APIEndpoint,
+			StreamingEndpoint: llm.StreamingEndpoint,
+			PrivacyScore:      llm.PrivacyScore,
+			ShortDescription:  llm.ShortDescription,
+			LongDescription:   llm.LongDescription,
+			ExternalURL:       llm.ExternalURL,
+			LogoURL:           llm.LogoURL,
+		},
+	}
+}
+
+func serializeLLMs(llms models.LLMs) []LLMResponse {
+	result := make([]LLMResponse, len(llms))
+	for i, llm := range llms {
+		result[i] = serializeLLM(&llm)
+	}
+	return result
+}
