@@ -250,3 +250,52 @@ type DataCatalogueDatasourceInput struct {
 		ID   string `json:"id"`
 	} `json:"data"`
 }
+
+// CredentialInput represents the input for credential-related operations
+// @Description Credential input model
+type CredentialInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Active bool `json:"active"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// CredentialResponse represents the response for credential-related operations
+// @Description Credential response model
+type CredentialResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		KeyID  string `json:"key_id"`
+		Secret string `json:"secret"`
+		Active bool   `json:"active"`
+	} `json:"attributes"`
+}
+
+// AppInput represents the input for app-related operations
+// @Description App input model
+type AppInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			UserID      uint   `json:"user_id"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// AppResponse represents the response for app-related operations
+// @Description App response model
+type AppResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name         string `json:"name"`
+		Description  string `json:"description"`
+		UserID       uint   `json:"user_id"`
+		CredentialID uint   `json:"credential_id"`
+	} `json:"attributes"`
+}

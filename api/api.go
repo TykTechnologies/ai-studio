@@ -123,6 +123,28 @@ func (a *API) setupRoutes() {
 		v1.DELETE("/data-catalogues/:id/datasources/:datasourceId", a.removeDatasourceFromDataCatalogue)
 		v1.GET("/data-catalogues/by-tag", a.getDataCataloguesByTag)
 		v1.GET("/data-catalogues/by-datasource", a.getDataCataloguesByDatasource)
+
+		// Credential routes
+		v1.POST("/credentials", a.createCredential)
+		v1.GET("/credentials/:id", a.getCredential)
+		v1.GET("/credentials/key/:keyId", a.getCredentialByKeyID)
+		v1.PATCH("/credentials/:id", a.updateCredential)
+		v1.DELETE("/credentials/:id", a.deleteCredential)
+		v1.POST("/credentials/:id/activate", a.activateCredential)
+		v1.POST("/credentials/:id/deactivate", a.deactivateCredential)
+		v1.GET("/credentials", a.listCredentials)
+		v1.GET("/credentials/active", a.listActiveCredentials)
+
+		// App routes
+		v1.POST("/apps", a.createApp)
+		v1.GET("/apps/:id", a.getApp)
+		v1.PATCH("/apps/:id", a.updateApp)
+		v1.DELETE("/apps/:id", a.deleteApp)
+		v1.GET("/users/:id/apps", a.getAppsByUserID)
+		v1.GET("/apps/by-name", a.getAppByName)
+		v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
+		v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
+
 	}
 }
 

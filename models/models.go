@@ -11,6 +11,8 @@ func InitModels(db *gorm.DB) error {
 		&Tags{},
 		&Datasource{},
 		&DataCatalogue{},
+		&Credential{},
+		&App{},
 	)
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {

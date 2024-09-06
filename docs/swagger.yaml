@@ -1,5 +1,42 @@
 basePath: /api/v1
 definitions:
+  api.AppInput:
+    description: App input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              description:
+                type: string
+              name:
+                type: string
+              user_id:
+                type: integer
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.AppResponse:
+    description: App response model
+    properties:
+      attributes:
+        properties:
+          credential_id:
+            type: integer
+          description:
+            type: string
+          name:
+            type: string
+          user_id:
+            type: integer
+        type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
   api.CatalogueInput:
     description: Catalogue input model
     properties:
@@ -31,6 +68,37 @@ definitions:
       attributes:
         properties:
           name:
+            type: string
+        type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  api.CredentialInput:
+    description: Credential input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              active:
+                type: boolean
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.CredentialResponse:
+    description: Credential response model
+    properties:
+      attributes:
+        properties:
+          active:
+            type: boolean
+          key_id:
+            type: string
+          secret:
             type: string
         type: object
       id:
@@ -376,6 +444,222 @@ info:
   title: Midsommar API
   version: "1.0"
 paths:
+  /apps:
+    post:
+      consumes:
+      - application/json
+      description: Create a new app with the provided information
+      parameters:
+      - description: App information
+        in: body
+        name: app
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.AppResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new app
+      tags:
+      - apps
+  /apps/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an app by its ID
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete an app
+      tags:
+      - apps
+    get:
+      consumes:
+      - application/json
+      description: Get details of an app by its ID
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an app by ID
+      tags:
+      - apps
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing app's information
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated app information
+        in: body
+        name: app
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update an app
+      tags:
+      - apps
+  /apps/{id}/activate-credential:
+    post:
+      consumes:
+      - application/json
+      description: Activate the credential associated with an app
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Activate app credential
+      tags:
+      - apps
+  /apps/{id}/deactivate-credential:
+    post:
+      consumes:
+      - application/json
+      description: Deactivate the credential associated with an app
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Deactivate app credential
+      tags:
+      - apps
+  /apps/by-name:
+    get:
+      consumes:
+      - application/json
+      description: Get details of an app by its name
+      parameters:
+      - description: App name
+        in: query
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get app by name
+      tags:
+      - apps
   /catalogues:
     get:
       consumes:
@@ -659,6 +943,260 @@ paths:
       summary: Search catalogues by name
       tags:
       - catalogues
+  /credentials:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all credentials
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.CredentialResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all credentials
+      tags:
+      - credentials
+    post:
+      consumes:
+      - application/json
+      description: Create a new credential
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.CredentialResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new credential
+      tags:
+      - credentials
+  /credentials/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a credential by its ID
+      parameters:
+      - description: Credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a credential
+      tags:
+      - credentials
+    get:
+      consumes:
+      - application/json
+      description: Get details of a credential by its ID
+      parameters:
+      - description: Credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a credential by ID
+      tags:
+      - credentials
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing credential's information
+      parameters:
+      - description: Credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated credential information
+        in: body
+        name: credential
+        required: true
+        schema:
+          $ref: '#/definitions/api.CredentialInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a credential
+      tags:
+      - credentials
+  /credentials/{id}/activate:
+    post:
+      consumes:
+      - application/json
+      description: Activate a credential by its ID
+      parameters:
+      - description: Credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Activate a credential
+      tags:
+      - credentials
+  /credentials/{id}/deactivate:
+    post:
+      consumes:
+      - application/json
+      description: Deactivate a credential by its ID
+      parameters:
+      - description: Credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Deactivate a credential
+      tags:
+      - credentials
+  /credentials/active:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all active credentials
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.CredentialResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List active credentials
+      tags:
+      - credentials
+  /credentials/key/{keyId}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a credential by its Key ID
+      parameters:
+      - description: Credential Key ID
+        in: path
+        name: keyId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a credential by Key ID
+      tags:
+      - credentials
   /data-catalogues:
     get:
       consumes:
@@ -2294,6 +2832,39 @@ paths:
       summary: Get user accessible catalogues
       tags:
       - users
+  /users/{userId}/apps:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of apps for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.AppResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get apps by user ID
+      tags:
+      - apps
 security:
 - BearerAuth: []
 securityDefinitions:
