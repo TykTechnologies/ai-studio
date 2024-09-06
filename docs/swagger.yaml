@@ -7,8 +7,16 @@ definitions:
         properties:
           attributes:
             properties:
+              datasource_ids:
+                items:
+                  type: integer
+                type: array
               description:
                 type: string
+              llm_ids:
+                items:
+                  type: integer
+                type: array
               name:
                 type: string
               user_id:
@@ -25,8 +33,16 @@ definitions:
         properties:
           credential_id:
             type: integer
+          datasource_ids:
+            items:
+              type: integer
+            type: array
           description:
             type: string
+          llm_ids:
+            items:
+              type: integer
+            type: array
           name:
             type: string
           user_id:

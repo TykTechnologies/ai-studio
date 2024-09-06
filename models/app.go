@@ -14,6 +14,8 @@ type App struct {
 	UserID       uint   `json:"user_id" gorm:"foreignKey:ID"`
 	CredentialID uint   `json:"credential_id"`
 	Credential   Credential
+	Datasources  []Datasource `json:"datasources" gorm:"many2many:app_datasources;"`
+	LLMs         []LLM        `json:"llms" gorm:"many2many:app_llms;"`
 }
 
 func NewApp() *App {
@@ -84,4 +86,28 @@ func (a *App) DeactivateCredential(db *gorm.DB) error {
 		return err
 	}
 	return credential.Deactivate(db)
+}
+
+func (a *App) AddDatasource(db *gorm.DB, datasource *Datasource) error {
+	return db.Model(a).Association("Datasources").Append(datasource)
+}
+
+func (a *App) RemoveDatasource(db *gorm.DB, datasource *Datasource) error {
+	return db.Model(a).Association("Datasources").Delete(datasource)
+}
+
+func (a *App) AddLLM(db *gorm.DB, llm *LLM) error {
+	return db.Model(a).Association("LLMs").Append(llm)
+}
+
+func (a *App) RemoveLLM(db *gorm.DB, llm *LLM) error {
+	return db.Model(a).Association("LLMs").Delete(llm)
+}
+
+func (a *App) GetDatasources(db *gorm.DB) error {
+	return db.Model(a).Association("Datasources").Find(&a.Datasources)
+}
+
+func (a *App) GetLLMs(db *gorm.DB) error {
+	return db.Model(a).Association("LLMs").Find(&a.LLMs)
 }

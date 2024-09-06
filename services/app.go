@@ -1,11 +1,18 @@
 package services
 
 import (
+	"errors"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-// CreateApp creates a new app
-func (s *Service) CreateApp(name, description string, userID uint) (*models.App, error) {
+// CreateApp creates a new app with validity checks
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint) (*models.App, error) {
+	// Check if datasources have higher privacy score than LLMs
+	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
+		return nil, err
+	}
+
 	app := &models.App{
 		Name:        name,
 		Description: description,
@@ -16,7 +23,143 @@ func (s *Service) CreateApp(name, description string, userID uint) (*models.App,
 		return nil, err
 	}
 
+	// Add datasources to the app
+	for _, dsID := range datasourceIDs {
+		ds, err := s.GetDatasourceByID(dsID)
+		if err != nil {
+			return nil, err
+		}
+		if err := app.AddDatasource(s.DB, ds); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add LLMs to the app
+	for _, llmID := range llmIDs {
+		llm, err := s.GetLLMByID(llmID)
+		if err != nil {
+			return nil, err
+		}
+		if err := app.AddLLM(s.DB, llm); err != nil {
+			return nil, err
+		}
+	}
+
 	return app, nil
+}
+
+// UpdateApp updates an existing app with validity checks
+func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, llmIDs []uint) (*models.App, error) {
+	app, err := s.GetAppByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if datasources have higher privacy score than LLMs
+	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
+		return nil, err
+	}
+
+	app.Name = name
+	app.Description = description
+
+	// Update datasources
+	if err := s.updateAppDatasources(app, datasourceIDs); err != nil {
+		return nil, err
+	}
+
+	// Update LLMs
+	if err := s.updateAppLLMs(app, llmIDs); err != nil {
+		return nil, err
+	}
+
+	if err := app.Update(s.DB); err != nil {
+		return nil, err
+	}
+
+	return app, nil
+}
+
+// validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
+func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
+	var maxLLMScore int
+	var minDatasourceScore int = 101 // Initialize with a value higher than the maximum possible score
+
+	if len(llmIDs) == 0 && len(datasourceIDs) == 0 {
+		return nil
+	}
+
+	for _, llmID := range llmIDs {
+		llm, err := s.GetLLMByID(llmID)
+		if err != nil {
+			return err
+		}
+		if llm.PrivacyScore > maxLLMScore {
+			maxLLMScore = llm.PrivacyScore
+		}
+	}
+
+	for _, dsID := range datasourceIDs {
+		ds, err := s.GetDatasourceByID(dsID)
+		if err != nil {
+			return err
+		}
+		if ds.PrivacyScore < minDatasourceScore {
+			minDatasourceScore = ds.PrivacyScore
+		}
+	}
+
+	if minDatasourceScore > maxLLMScore {
+		return errors.New("datasource privacy score cannot be higher than LLM privacy score")
+	}
+
+	return nil
+}
+
+// updateAppDatasources updates the datasources associated with an app
+func (s *Service) updateAppDatasources(app *models.App, datasourceIDs []uint) error {
+	// Remove existing datasources
+	for _, ds := range app.Datasources {
+		if err := app.RemoveDatasource(s.DB, &ds); err != nil {
+			return err
+		}
+	}
+
+	// Add new datasources
+	for _, dsID := range datasourceIDs {
+		ds, err := s.GetDatasourceByID(dsID)
+		if err != nil {
+			return err
+		}
+		if err := app.AddDatasource(s.DB, ds); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// updateAppLLMs updates the LLMs associated with an app
+func (s *Service) updateAppLLMs(app *models.App, llmIDs []uint) error {
+	// Remove existing LLMs
+	for _, llm := range app.LLMs {
+		if err := app.RemoveLLM(s.DB, &llm); err != nil {
+			return err
+		}
+	}
+
+	// Add new LLMs
+	for _, llmID := range llmIDs {
+		llm, err := s.GetLLMByID(llmID)
+		if err != nil {
+			return err
+		}
+		if err := app.AddLLM(s.DB, llm); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetAppByID retrieves an app by its ID
@@ -25,23 +168,6 @@ func (s *Service) GetAppByID(id uint) (*models.App, error) {
 	if err := app.Get(s.DB, id); err != nil {
 		return nil, err
 	}
-	return app, nil
-}
-
-// UpdateApp updates an existing app
-func (s *Service) UpdateApp(id uint, name, description string) (*models.App, error) {
-	app, err := s.GetAppByID(id)
-	if err != nil {
-		return nil, err
-	}
-
-	app.Name = name
-	app.Description = description
-
-	if err := app.Update(s.DB); err != nil {
-		return nil, err
-	}
-
 	return app, nil
 }
 
@@ -88,4 +214,92 @@ func (s *Service) DeactivateAppCredential(appID uint) error {
 	}
 
 	return app.DeactivateCredential(s.DB)
+}
+
+// AddDatasourceToApp adds a datasource to an app
+func (s *Service) AddDatasourceToApp(appID, datasourceID uint) error {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return err
+	}
+
+	datasource, err := s.GetDatasourceByID(datasourceID)
+	if err != nil {
+		return err
+	}
+
+	return app.AddDatasource(s.DB, datasource)
+}
+
+// RemoveDatasourceFromApp removes a datasource from an app
+func (s *Service) RemoveDatasourceFromApp(appID, datasourceID uint) error {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return err
+	}
+
+	datasource, err := s.GetDatasourceByID(datasourceID)
+	if err != nil {
+		return err
+	}
+
+	return app.RemoveDatasource(s.DB, datasource)
+}
+
+// GetAppDatasources retrieves all datasources associated with an app
+func (s *Service) GetAppDatasources(appID uint) ([]models.Datasource, error) {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := app.GetDatasources(s.DB); err != nil {
+		return nil, err
+	}
+
+	return app.Datasources, nil
+}
+
+// AddLLMToApp adds an LLM to an app
+func (s *Service) AddLLMToApp(appID, llmID uint) error {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return err
+	}
+
+	llm, err := s.GetLLMByID(llmID)
+	if err != nil {
+		return err
+	}
+
+	return app.AddLLM(s.DB, llm)
+}
+
+// RemoveLLMFromApp removes an LLM from an app
+func (s *Service) RemoveLLMFromApp(appID, llmID uint) error {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return err
+	}
+
+	llm, err := s.GetLLMByID(llmID)
+	if err != nil {
+		return err
+	}
+
+	return app.RemoveLLM(s.DB, llm)
+}
+
+// GetAppLLMs retrieves all LLMs associated with an app
+func (s *Service) GetAppLLMs(appID uint) ([]models.LLM, error) {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := app.GetLLMs(s.DB); err != nil {
+		return nil, err
+	}
+
+	return app.LLMs, nil
 }

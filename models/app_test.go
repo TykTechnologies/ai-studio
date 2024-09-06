@@ -40,6 +40,8 @@ func TestApp_Create(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotZero(t, appWithCredential.ID)
 	assert.Equal(t, credential.ID, appWithCredential.CredentialID)
+	assert.Empty(t, app.Datasources)
+	assert.Empty(t, app.LLMs)
 }
 
 func TestApp_Get(t *testing.T) {
@@ -62,6 +64,8 @@ func TestApp_Get(t *testing.T) {
 	assert.Equal(t, app.UserID, fetchedApp.UserID)
 	assert.NotZero(t, fetchedApp.CredentialID)
 	assert.NotNil(t, fetchedApp.Credential)
+	assert.Empty(t, app.Datasources)
+	assert.Empty(t, app.LLMs)
 }
 
 func TestApp_Update(t *testing.T) {
@@ -85,6 +89,57 @@ func TestApp_Update(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Updated App Name", fetchedApp.Name)
 	assert.Equal(t, "Updated description", fetchedApp.Description)
+
+	// Add a datasource and LLM to the app
+	datasource := &Datasource{Name: "Test Datasource"}
+	err = datasource.Create(db)
+	assert.NoError(t, err)
+	err = app.AddDatasource(db, datasource)
+	assert.NoError(t, err)
+
+	llm := &LLM{Name: "Test LLM"}
+	err = llm.Create(db)
+	assert.NoError(t, err)
+	err = app.AddLLM(db, llm)
+	assert.NoError(t, err)
+
+	// Fetch the updated app
+	updatedApp := &App{}
+	err = updatedApp.Get(db, app.ID)
+	assert.NoError(t, err)
+
+	// Check if the datasource and LLM were added correctly
+	err = updatedApp.GetDatasources(db)
+	assert.NoError(t, err)
+	assert.Len(t, updatedApp.Datasources, 1)
+	assert.Equal(t, datasource.ID, updatedApp.Datasources[0].ID)
+
+	err = updatedApp.GetLLMs(db)
+	assert.NoError(t, err)
+	assert.Len(t, updatedApp.LLMs, 1)
+	assert.Equal(t, llm.ID, updatedApp.LLMs[0].ID)
+
+	// Update the app again
+	updatedApp.Name = "Final App Name"
+	err = updatedApp.Update(db)
+	assert.NoError(t, err)
+
+	// Fetch the app one last time to confirm all changes
+	finalApp := &App{}
+	err = finalApp.Get(db, app.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "Final App Name", finalApp.Name)
+	assert.Equal(t, "Updated description", finalApp.Description)
+
+	err = finalApp.GetDatasources(db)
+	assert.NoError(t, err)
+	assert.Len(t, finalApp.Datasources, 1)
+	assert.Equal(t, datasource.ID, finalApp.Datasources[0].ID)
+
+	err = finalApp.GetLLMs(db)
+	assert.NoError(t, err)
+	assert.Len(t, finalApp.LLMs, 1)
+	assert.Equal(t, llm.ID, finalApp.LLMs[0].ID)
 }
 
 func TestApp_Delete(t *testing.T) {
@@ -187,4 +242,72 @@ func TestApp_DeactivateCredential(t *testing.T) {
 	err = fetchedApp.Get(db, app.ID)
 	assert.NoError(t, err)
 	assert.False(t, fetchedApp.Credential.Active)
+}
+
+func TestApp_DatasourceAssociation(t *testing.T) {
+	db := setupTestDB(t)
+
+	app := &App{
+		Name:        "Test App",
+		Description: "This is a test app",
+		UserID:      1,
+	}
+	err := app.Create(db)
+	assert.NoError(t, err)
+
+	datasource := &Datasource{Name: "Test Datasource"}
+	err = datasource.Create(db)
+	assert.NoError(t, err)
+
+	// Add Datasource
+	err = app.AddDatasource(db, datasource)
+	assert.NoError(t, err)
+
+	// Get Datasources
+	err = app.GetDatasources(db)
+	assert.NoError(t, err)
+	assert.Len(t, app.Datasources, 1)
+	assert.Equal(t, datasource.ID, app.Datasources[0].ID)
+
+	// Remove Datasource
+	err = app.RemoveDatasource(db, datasource)
+	assert.NoError(t, err)
+
+	err = app.GetDatasources(db)
+	assert.NoError(t, err)
+	assert.Len(t, app.Datasources, 0)
+}
+
+func TestApp_LLMAssociation(t *testing.T) {
+	db := setupTestDB(t)
+
+	app := &App{
+		Name:        "Test App",
+		Description: "This is a test app",
+		UserID:      1,
+	}
+	err := app.Create(db)
+	assert.NoError(t, err)
+
+	llm := &LLM{Name: "Test LLM"}
+	err = llm.Create(db)
+	assert.NoError(t, err)
+
+	// Add LLM
+	err = app.AddLLM(db, llm)
+	assert.NoError(t, err)
+
+	// Get LLMs
+	err = app.GetLLMs(db)
+	assert.NoError(t, err)
+	assert.Len(t, app.LLMs, 1)
+	assert.Equal(t, llm.ID, app.LLMs[0].ID)
+
+	// Remove LLM
+	err = app.RemoveLLM(db, llm)
+	assert.NoError(t, err)
+
+	err = app.GetLLMs(db)
+	assert.NoError(t, err)
+	assert.Len(t, app.LLMs, 0)
 }

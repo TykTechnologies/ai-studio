@@ -3846,8 +3846,20 @@ const docTemplate = `{
                         "attributes": {
                             "type": "object",
                             "properties": {
+                                "datasource_ids": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    }
+                                },
                                 "description": {
                                     "type": "string"
+                                },
+                                "llm_ids": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    }
                                 },
                                 "name": {
                                     "type": "string"
@@ -3874,8 +3886,20 @@ const docTemplate = `{
                         "credential_id": {
                             "type": "integer"
                         },
+                        "datasource_ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
                         "description": {
                             "type": "string"
+                        },
+                        "llm_ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
                         },
                         "name": {
                             "type": "string"
