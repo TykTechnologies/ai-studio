@@ -21,16 +21,20 @@ func TestAppEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UserID      uint   `json:"user_id"`
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "apps",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UserID      uint   `json:"user_id"`
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
 			}{
 				Name:        "Test App",
 				Description: "This is a test app",
@@ -60,16 +64,20 @@ func TestAppEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UserID      uint   `json:"user_id"`
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "apps",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UserID      uint   `json:"user_id"`
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
 			}{
 				Name:        "Updated Test App",
 				Description: "This is an updated test app",
@@ -130,16 +138,20 @@ func TestAppEndpoints_ErrorCases(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UserID      uint   `json:"user_id"`
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "apps",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UserID      uint   `json:"user_id"`
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
 			}{
 				Name:        "",
 				Description: "This is an invalid app",
@@ -193,16 +205,20 @@ func TestAppEndpoints_MultipleApps(t *testing.T) {
 			Data: struct {
 				Type       string `json:"type"`
 				Attributes struct {
-					Name        string `json:"name"`
-					Description string `json:"description"`
-					UserID      uint   `json:"user_id"`
+					Name          string `json:"name"`
+					Description   string `json:"description"`
+					UserID        uint   `json:"user_id"`
+					DatasourceIDs []uint `json:"datasource_ids"`
+					LLMIDs        []uint `json:"llm_ids"`
 				} `json:"attributes"`
 			}{
 				Type: "apps",
 				Attributes: struct {
-					Name        string `json:"name"`
-					Description string `json:"description"`
-					UserID      uint   `json:"user_id"`
+					Name          string `json:"name"`
+					Description   string `json:"description"`
+					UserID        uint   `json:"user_id"`
+					DatasourceIDs []uint `json:"datasource_ids"`
+					LLMIDs        []uint `json:"llm_ids"`
 				}{
 					Name:        name,
 					Description: description,

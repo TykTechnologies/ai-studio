@@ -280,9 +280,11 @@ type AppInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			UserID      uint   `json:"user_id"`
+			Name          string `json:"name"`
+			Description   string `json:"description"`
+			UserID        uint   `json:"user_id"`
+			DatasourceIDs []uint `json:"datasource_ids"`
+			LLMIDs        []uint `json:"llm_ids"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -293,9 +295,11 @@ type AppResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name         string `json:"name"`
-		Description  string `json:"description"`
-		UserID       uint   `json:"user_id"`
-		CredentialID uint   `json:"credential_id"`
+		Name          string `json:"name"`
+		Description   string `json:"description"`
+		UserID        uint   `json:"user_id"`
+		CredentialID  uint   `json:"credential_id"`
+		DatasourceIDs []uint `json:"datasource_ids"`
+		LLMIDs        []uint `json:"llm_ids"`
 	} `json:"attributes"`
 }

@@ -41,10 +41,16 @@ func (a *API) createApp(c *gin.Context) {
 		return
 	}
 
+	// Extract datasourceIDs and llmIDs from the input
+	datasourceIDs := input.Data.Attributes.DatasourceIDs
+	llmIDs := input.Data.Attributes.LLMIDs
+
 	app, err := a.service.CreateApp(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.Description,
 		input.Data.Attributes.UserID,
+		datasourceIDs,
+		llmIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -131,10 +137,16 @@ func (a *API) updateApp(c *gin.Context) {
 		return
 	}
 
+	// Extract datasourceIDs and llmIDs from the input
+	datasourceIDs := input.Data.Attributes.DatasourceIDs
+	llmIDs := input.Data.Attributes.LLMIDs
+
 	app, err := a.service.UpdateApp(
 		uint(id),
 		input.Data.Attributes.Name,
 		input.Data.Attributes.Description,
+		datasourceIDs,
+		llmIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -339,17 +351,37 @@ func serializeApp(app *models.App) AppResponse {
 		Type: "apps",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name         string `json:"name"`
-			Description  string `json:"description"`
-			UserID       uint   `json:"user_id"`
-			CredentialID uint   `json:"credential_id"`
+			Name          string `json:"name"`
+			Description   string `json:"description"`
+			UserID        uint   `json:"user_id"`
+			CredentialID  uint   `json:"credential_id"`
+			DatasourceIDs []uint `json:"datasource_ids"`
+			LLMIDs        []uint `json:"llm_ids"`
 		}{
-			Name:         app.Name,
-			Description:  app.Description,
-			UserID:       app.UserID,
-			CredentialID: app.CredentialID,
+			Name:          app.Name,
+			Description:   app.Description,
+			UserID:        app.UserID,
+			CredentialID:  app.CredentialID,
+			DatasourceIDs: getDatasourceIDs(app.Datasources),
+			LLMIDs:        getLLMIDs(app.LLMs),
 		},
 	}
+}
+
+func getDatasourceIDs(datasources []models.Datasource) []uint {
+	ids := make([]uint, len(datasources))
+	for i, ds := range datasources {
+		ids[i] = ds.ID
+	}
+	return ids
+}
+
+func getLLMIDs(llms []models.LLM) []uint {
+	ids := make([]uint, len(llms))
+	for i, llm := range llms {
+		ids[i] = llm.ID
+	}
+	return ids
 }
 
 func serializeApps(apps []models.App) []AppResponse {
