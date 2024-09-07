@@ -13,6 +13,8 @@ func InitModels(db *gorm.DB) error {
 		&DataCatalogue{},
 		&Credential{},
 		&App{},
+		&LLMSettings{},
+		&Chat{},
 	)
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {

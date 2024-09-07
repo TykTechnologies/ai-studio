@@ -145,6 +145,22 @@ func (a *API) setupRoutes() {
 		v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 		v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
 
+		// LLMSettings routes
+		v1.POST("/llm-settings", a.createLLMSettings)
+		v1.GET("/llm-settings/:id", a.getLLMSettings)
+		v1.PATCH("/llm-settings/:id", a.updateLLMSettings)
+		v1.DELETE("/llm-settings/:id", a.deleteLLMSettings)
+		v1.GET("/llm-settings", a.listLLMSettings)
+		v1.GET("/llm-settings/search", a.searchLLMSettings)
+
+		// Chat routes
+		v1.POST("/chats", a.createChat)
+		v1.GET("/chats/:id", a.getChat)
+		v1.PATCH("/chats/:id", a.updateChat)
+		v1.DELETE("/chats/:id", a.deleteChat)
+		v1.GET("/chats", a.listChats)
+		v1.GET("/chats/by-group", a.getChatsByGroupID)
+
 	}
 }
 

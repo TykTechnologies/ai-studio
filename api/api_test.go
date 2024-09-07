@@ -853,3 +853,364 @@ func TestDatasourceEndpoints(t *testing.T) {
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/datasources/%s", datasourceID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
+
+func TestLLMSettingsEndpoints(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Test Create LLMSettings
+	createLLMSettingsInput := LLMSettingsInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				ModelName         string                 `json:"model_name"`
+				CandidateCount    int                    `json:"candidate_count"`
+				FrequencyPenalty  float64                `json:"frequency_penalty"`
+				JSONMode          bool                   `json:"json_mode"`
+				MaxLength         int                    `json:"max_length"`
+				MaxTokens         int                    `json:"max_tokens"`
+				Metadata          map[string]interface{} `json:"metadata"`
+				MinLength         int                    `json:"min_length"`
+				N                 int                    `json:"n"`
+				PresencePenalty   float64                `json:"presence_penalty"`
+				RepetitionPenalty float64                `json:"repetition_penalty"`
+				Seed              int                    `json:"seed"`
+				StopWords         []string               `json:"stop_words"`
+				Temperature       float64                `json:"temperature"`
+				TopK              int                    `json:"top_k"`
+				TopP              float64                `json:"top_p"`
+			} `json:"attributes"`
+		}{
+			Type: "llm-settings",
+			Attributes: struct {
+				ModelName         string                 `json:"model_name"`
+				CandidateCount    int                    `json:"candidate_count"`
+				FrequencyPenalty  float64                `json:"frequency_penalty"`
+				JSONMode          bool                   `json:"json_mode"`
+				MaxLength         int                    `json:"max_length"`
+				MaxTokens         int                    `json:"max_tokens"`
+				Metadata          map[string]interface{} `json:"metadata"`
+				MinLength         int                    `json:"min_length"`
+				N                 int                    `json:"n"`
+				PresencePenalty   float64                `json:"presence_penalty"`
+				RepetitionPenalty float64                `json:"repetition_penalty"`
+				Seed              int                    `json:"seed"`
+				StopWords         []string               `json:"stop_words"`
+				Temperature       float64                `json:"temperature"`
+				TopK              int                    `json:"top_k"`
+				TopP              float64                `json:"top_p"`
+			}{
+				ModelName:         "TestModel",
+				CandidateCount:    5,
+				FrequencyPenalty:  0.5,
+				JSONMode:          true,
+				MaxLength:         100,
+				MaxTokens:         50,
+				Metadata:          map[string]interface{}{"key": "value"},
+				MinLength:         10,
+				N:                 3,
+				PresencePenalty:   0.3,
+				RepetitionPenalty: 1.2,
+				Seed:              42,
+				StopWords:         []string{"stop1", "stop2"},
+				Temperature:       0.7,
+				TopK:              40,
+				TopP:              0.9,
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/llm-settings", createLLMSettingsInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var response map[string]LLMSettingsResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "TestModel", response["data"].Attributes.ModelName)
+
+	settingsID := response["data"].ID
+
+	// Test Get LLMSettings
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/llm-settings/%s", settingsID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test Update LLMSettings
+	updateLLMSettingsInput := LLMSettingsInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				ModelName         string                 `json:"model_name"`
+				CandidateCount    int                    `json:"candidate_count"`
+				FrequencyPenalty  float64                `json:"frequency_penalty"`
+				JSONMode          bool                   `json:"json_mode"`
+				MaxLength         int                    `json:"max_length"`
+				MaxTokens         int                    `json:"max_tokens"`
+				Metadata          map[string]interface{} `json:"metadata"`
+				MinLength         int                    `json:"min_length"`
+				N                 int                    `json:"n"`
+				PresencePenalty   float64                `json:"presence_penalty"`
+				RepetitionPenalty float64                `json:"repetition_penalty"`
+				Seed              int                    `json:"seed"`
+				StopWords         []string               `json:"stop_words"`
+				Temperature       float64                `json:"temperature"`
+				TopK              int                    `json:"top_k"`
+				TopP              float64                `json:"top_p"`
+			} `json:"attributes"`
+		}{
+			Type: "llm-settings",
+			Attributes: struct {
+				ModelName         string                 `json:"model_name"`
+				CandidateCount    int                    `json:"candidate_count"`
+				FrequencyPenalty  float64                `json:"frequency_penalty"`
+				JSONMode          bool                   `json:"json_mode"`
+				MaxLength         int                    `json:"max_length"`
+				MaxTokens         int                    `json:"max_tokens"`
+				Metadata          map[string]interface{} `json:"metadata"`
+				MinLength         int                    `json:"min_length"`
+				N                 int                    `json:"n"`
+				PresencePenalty   float64                `json:"presence_penalty"`
+				RepetitionPenalty float64                `json:"repetition_penalty"`
+				Seed              int                    `json:"seed"`
+				StopWords         []string               `json:"stop_words"`
+				Temperature       float64                `json:"temperature"`
+				TopK              int                    `json:"top_k"`
+				TopP              float64                `json:"top_p"`
+			}{
+				ModelName:         "UpdatedTestModel",
+				CandidateCount:    6,
+				FrequencyPenalty:  0.6,
+				JSONMode:          false,
+				MaxLength:         120,
+				MaxTokens:         60,
+				Metadata:          map[string]interface{}{"key": "updated_value"},
+				MinLength:         15,
+				N:                 4,
+				PresencePenalty:   0.4,
+				RepetitionPenalty: 1.3,
+				Seed:              43,
+				StopWords:         []string{"stop1", "stop2", "stop3"},
+				Temperature:       0.8,
+				TopK:              50,
+				TopP:              0.95,
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/llm-settings/%s", settingsID), updateLLMSettingsInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test List LLMSettings
+	w = performRequest(api.router, "GET", "/api/v1/llm-settings", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var listResponse map[string][]LLMSettingsResponse
+	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
+	assert.NoError(t, err)
+	assert.Len(t, listResponse["data"], 1)
+	assert.Equal(t, "UpdatedTestModel", listResponse["data"][0].Attributes.ModelName)
+
+	// Test Search LLMSettings
+	w = performRequest(api.router, "GET", "/api/v1/llm-settings/search?model_name=Updated", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var searchResponse map[string][]LLMSettingsResponse
+	err = json.Unmarshal(w.Body.Bytes(), &searchResponse)
+	assert.NoError(t, err)
+	assert.Len(t, searchResponse["data"], 1)
+	assert.Equal(t, "UpdatedTestModel", searchResponse["data"][0].Attributes.ModelName)
+
+	// Test Delete LLMSettings
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/llm-settings/%s", settingsID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// Verify LLMSettings is deleted
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/llm-settings/%s", settingsID), nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestChatEndpoints(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Create test data
+	group, err := api.service.CreateGroup("Test Group")
+	assert.NoError(t, err)
+
+	llmSettings, err := api.service.CreateLLMSettings(&models.LLMSettings{ModelName: "TestModel"})
+	assert.NoError(t, err)
+
+	llm, err := api.service.CreateLLM("TestLLM", "api-key", "http://api.test", "http://stream.test", 75, "Short desc", "Long desc", "http://external.test", "http://logo.test")
+	assert.NoError(t, err)
+
+	// Test Create Chat
+	createChatInput := ChatInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			} `json:"attributes"`
+		}{
+			Type: "chats",
+			Attributes: struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			}{
+				Name:          "Test Chat",
+				LLMSettingsID: llmSettings.ID,
+				LLMID:         llm.ID,
+				GroupIDs:      []uint{group.ID},
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/chats", createChatInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var response map[string]ChatResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Test Chat", response["data"].Attributes.Name)
+
+	chatID := response["data"].ID
+
+	// Test Get Chat
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test Update Chat
+	updateChatInput := ChatInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			} `json:"attributes"`
+		}{
+			Type: "chats",
+			Attributes: struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			}{
+				Name:          "Updated Chat",
+				LLMSettingsID: llmSettings.ID,
+				LLMID:         llm.ID,
+				GroupIDs:      []uint{group.ID},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/chats/%s", chatID), updateChatInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test List Chats
+	w = performRequest(api.router, "GET", "/api/v1/chats", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var listResponse map[string][]ChatResponse
+	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
+	assert.NoError(t, err)
+	assert.Len(t, listResponse["data"], 1)
+	assert.Equal(t, "Updated Chat", listResponse["data"][0].Attributes.Name)
+
+	// Test Get Chats by Group ID
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/by-group?group_id=%d", group.ID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var groupChatsResponse map[string][]ChatResponse
+	err = json.Unmarshal(w.Body.Bytes(), &groupChatsResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupChatsResponse["data"], 1)
+	assert.Equal(t, "Updated Chat", groupChatsResponse["data"][0].Attributes.Name)
+
+	// Test Delete Chat
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// Verify chat is deleted
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestChatEndpointsErrors(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Test Get non-existent chat
+	w := performRequest(api.router, "GET", "/api/v1/chats/999", nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test Update non-existent chat
+	updateChatInput := ChatInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			} `json:"attributes"`
+		}{
+			Type: "chats",
+			Attributes: struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			}{
+				Name:          "Updated Chat",
+				LLMSettingsID: 1,
+				LLMID:         1,
+				GroupIDs:      []uint{1},
+			},
+		},
+	}
+	w = performRequest(api.router, "PATCH", "/api/v1/chats/999", updateChatInput)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test Delete non-existent chat
+	w = performRequest(api.router, "DELETE", "/api/v1/chats/999", nil)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Test Create chat with invalid input
+	invalidCreateChatInput := ChatInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			} `json:"attributes"`
+		}{
+			Type: "chats",
+			Attributes: struct {
+				Name          string `json:"name"`
+				LLMSettingsID uint   `json:"llm_settings_id"`
+				LLMID         uint   `json:"llm_id"`
+				GroupIDs      []uint `json:"group_ids"`
+			}{
+				Name:          "",
+				LLMSettingsID: 0,
+				LLMID:         0,
+				GroupIDs:      []uint{},
+			},
+		},
+	}
+	w = performRequest(api.router, "POST", "/api/v1/chats", invalidCreateChatInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test Get chats by non-existent group
+	w = performRequest(api.router, "GET", "/api/v1/chats/by-group?group_id=999", nil)
+	assert.Equal(t, http.StatusOK, w.Code) // This should return an empty list, not an error
+
+	var emptyResponse map[string][]ChatResponse
+	err := json.Unmarshal(w.Body.Bytes(), &emptyResponse)
+	assert.NoError(t, err)
+	assert.Len(t, emptyResponse["data"], 0)
+}

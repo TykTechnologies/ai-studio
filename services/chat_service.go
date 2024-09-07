@@ -1,0 +1,112 @@
+package services
+
+import (
+	"fmt"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+)
+
+// CreateChat creates a new chat
+func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint) (*models.Chat, error) {
+	chat := &models.Chat{
+		Name:          name,
+		LLMSettingsID: llmSettingsID,
+		LLMID:         llmID,
+	}
+
+	// Fetch the groups
+	var groups []models.Group
+	if err := s.DB.Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+
+	if len(groups) == 0 {
+		return nil, fmt.Errorf("no groups found with the provided IDs")
+	}
+	chat.Groups = groups
+
+	if err := chat.Create(s.DB); err != nil {
+		return nil, err
+	}
+
+	return chat, nil
+}
+
+// GetChatByID retrieves a chat by its ID
+func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
+	chat := &models.Chat{}
+	if err := chat.Get(s.DB, id); err != nil {
+		return nil, err
+	}
+	return chat, nil
+}
+
+// UpdateChat updates an existing chat
+func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint) (*models.Chat, error) {
+	chat, err := s.GetChatByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	chat.Name = name
+	chat.LLMSettingsID = llmSettingsID
+	chat.LLMID = llmID
+
+	// Update groups
+	var groups []models.Group
+	if err := s.DB.Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+	chat.Groups = groups
+
+	if err := chat.Update(s.DB); err != nil {
+		return nil, err
+	}
+
+	return chat, nil
+}
+
+// DeleteChat deletes a chat by its ID
+func (s *Service) DeleteChat(id uint) error {
+	chat, err := s.GetChatByID(id)
+	if err != nil {
+		return err
+	}
+	return chat.Delete(s.DB)
+}
+
+// ListChats retrieves all chats
+func (s *Service) ListChats() (models.Chats, error) {
+	var chats models.Chats
+	if err := chats.List(s.DB); err != nil {
+		return nil, err
+	}
+	return chats, nil
+}
+
+// GetChatsByGroupID retrieves all chats associated with a specific group
+func (s *Service) GetChatsByGroupID(groupID uint) (models.Chats, error) {
+	var chats models.Chats
+	if err := chats.GetByGroupID(s.DB, groupID); err != nil {
+		return nil, err
+	}
+	return chats, nil
+}
+
+// GetChatsByLLMID retrieves all chats associated with a specific LLM
+func (s *Service) GetChatsByLLMID(llmID uint) (models.Chats, error) {
+	var chats models.Chats
+	if err := chats.GetByLLMID(s.DB, llmID); err != nil {
+		return nil, err
+	}
+	return chats, nil
+}
+
+// GetChatsByLLMSettingsID retrieves all chats associated with specific LLM settings
+func (s *Service) GetChatsByLLMSettingsID(llmSettingsID uint) (models.Chats, error) {
+	var chats models.Chats
+	if err := chats.GetByLLMSettingsID(s.DB, llmSettingsID); err != nil {
+		return nil, err
+	}
+	return chats, nil
+}

@@ -303,3 +303,79 @@ type AppResponse struct {
 		LLMIDs        []uint `json:"llm_ids"`
 	} `json:"attributes"`
 }
+
+// LLMSettingsInput represents the input structure for creating or updating LLM settings
+type LLMSettingsInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			ModelName         string                 `json:"model_name"`
+			CandidateCount    int                    `json:"candidate_count"`
+			FrequencyPenalty  float64                `json:"frequency_penalty"`
+			JSONMode          bool                   `json:"json_mode"`
+			MaxLength         int                    `json:"max_length"`
+			MaxTokens         int                    `json:"max_tokens"`
+			Metadata          map[string]interface{} `json:"metadata"`
+			MinLength         int                    `json:"min_length"`
+			N                 int                    `json:"n"`
+			PresencePenalty   float64                `json:"presence_penalty"`
+			RepetitionPenalty float64                `json:"repetition_penalty"`
+			Seed              int                    `json:"seed"`
+			StopWords         []string               `json:"stop_words"`
+			Temperature       float64                `json:"temperature"`
+			TopK              int                    `json:"top_k"`
+			TopP              float64                `json:"top_p"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// LLMSettingsResponse represents the response structure for LLM settings
+type LLMSettingsResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		ModelName         string                 `json:"model_name"`
+		CandidateCount    int                    `json:"candidate_count"`
+		FrequencyPenalty  float64                `json:"frequency_penalty"`
+		JSONMode          bool                   `json:"json_mode"`
+		MaxLength         int                    `json:"max_length"`
+		MaxTokens         int                    `json:"max_tokens"`
+		Metadata          map[string]interface{} `json:"metadata"`
+		MinLength         int                    `json:"min_length"`
+		N                 int                    `json:"n"`
+		PresencePenalty   float64                `json:"presence_penalty"`
+		RepetitionPenalty float64                `json:"repetition_penalty"`
+		Seed              int                    `json:"seed"`
+		StopWords         []string               `json:"stop_words"`
+		Temperature       float64                `json:"temperature"`
+		TopK              int                    `json:"top_k"`
+		TopP              float64                `json:"top_p"`
+	} `json:"attributes"`
+}
+
+// ChatInput represents the input for chat-related operations
+// @Description Chat input model
+type ChatInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name          string `json:"name"`
+			LLMSettingsID uint   `json:"llm_settings_id"`
+			LLMID         uint   `json:"llm_id"`
+			GroupIDs      []uint `json:"group_ids"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ChatResponse represents the response for chat-related operations
+// @Description Chat response model
+type ChatResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name          string          `json:"name"`
+		LLMSettingsID uint            `json:"llm_settings_id"`
+		LLMID         uint            `json:"llm_id"`
+		Groups        []GroupResponse `json:"groups"`
+	} `json:"attributes"`
+}

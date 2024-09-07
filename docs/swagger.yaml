@@ -91,6 +91,49 @@ definitions:
       type:
         type: string
     type: object
+  api.ChatInput:
+    description: Chat input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              group_ids:
+                items:
+                  type: integer
+                type: array
+              llm_id:
+                type: integer
+              llm_settings_id:
+                type: integer
+              name:
+                type: string
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.ChatResponse:
+    description: Chat response model
+    properties:
+      attributes:
+        properties:
+          groups:
+            items:
+              $ref: '#/definitions/api.GroupResponse'
+            type: array
+          llm_id:
+            type: integer
+          llm_settings_id:
+            type: integer
+          name:
+            type: string
+        type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
   api.CredentialInput:
     description: Credential input model
     properties:
@@ -354,6 +397,97 @@ definitions:
             type: string
           streaming_endpoint:
             type: string
+        type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  api.LLMSettingsInput:
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              candidate_count:
+                type: integer
+              frequency_penalty:
+                type: number
+              json_mode:
+                type: boolean
+              max_length:
+                type: integer
+              max_tokens:
+                type: integer
+              metadata:
+                additionalProperties: true
+                type: object
+              min_length:
+                type: integer
+              model_name:
+                type: string
+              "n":
+                type: integer
+              presence_penalty:
+                type: number
+              repetition_penalty:
+                type: number
+              seed:
+                type: integer
+              stop_words:
+                items:
+                  type: string
+                type: array
+              temperature:
+                type: number
+              top_k:
+                type: integer
+              top_p:
+                type: number
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.LLMSettingsResponse:
+    properties:
+      attributes:
+        properties:
+          candidate_count:
+            type: integer
+          frequency_penalty:
+            type: number
+          json_mode:
+            type: boolean
+          max_length:
+            type: integer
+          max_tokens:
+            type: integer
+          metadata:
+            additionalProperties: true
+            type: object
+          min_length:
+            type: integer
+          model_name:
+            type: string
+          "n":
+            type: integer
+          presence_penalty:
+            type: number
+          repetition_penalty:
+            type: number
+          seed:
+            type: integer
+          stop_words:
+            items:
+              type: string
+            type: array
+          temperature:
+            type: number
+          top_k:
+            type: integer
+          top_p:
+            type: number
         type: object
       id:
         type: string
@@ -959,6 +1093,192 @@ paths:
       summary: Search catalogues by name
       tags:
       - catalogues
+  /chats:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all chats
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ChatResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all chats
+      tags:
+      - chats
+    post:
+      consumes:
+      - application/json
+      description: Create a new chat with the provided information
+      parameters:
+      - description: Chat information
+        in: body
+        name: chat
+        required: true
+        schema:
+          $ref: '#/definitions/api.ChatInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.ChatResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new chat
+      tags:
+      - chats
+  /chats/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a chat by its ID
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a chat
+      tags:
+      - chats
+    get:
+      consumes:
+      - application/json
+      description: Get details of a chat by its ID
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ChatResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a chat by ID
+      tags:
+      - chats
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing chat's information
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated chat information
+        in: body
+        name: chat
+        required: true
+        schema:
+          $ref: '#/definitions/api.ChatInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ChatResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a chat
+      tags:
+      - chats
+  /chats/by-group:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of chats associated with a specific group
+      parameters:
+      - description: Group ID
+        in: query
+        name: group_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ChatResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get chats by group ID
+      tags:
+      - chats
   /credentials:
     get:
       consumes:
@@ -2198,6 +2518,188 @@ paths:
       summary: Search groups by name
       tags:
       - groups
+  /llm-settings:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all LLM settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.LLMSettingsResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all LLM settings
+      tags:
+      - llm-settings
+    post:
+      consumes:
+      - application/json
+      description: Create new LLM settings with the provided information
+      parameters:
+      - description: LLM settings information
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/api.LLMSettingsInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.LLMSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create new LLM settings
+      tags:
+      - llm-settings
+  /llm-settings/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete LLM settings by its ID
+      parameters:
+      - description: LLM Settings ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete LLM settings
+      tags:
+      - llm-settings
+    get:
+      consumes:
+      - application/json
+      description: Get details of LLM settings by its ID
+      parameters:
+      - description: LLM Settings ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.LLMSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get LLM settings by ID
+      tags:
+      - llm-settings
+    patch:
+      consumes:
+      - application/json
+      description: Update existing LLM settings information
+      parameters:
+      - description: LLM Settings ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated LLM settings information
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/api.LLMSettingsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.LLMSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update LLM settings
+      tags:
+      - llm-settings
+  /llm-settings/search:
+    get:
+      consumes:
+      - application/json
+      description: Search for LLM settings using a model name stub
+      parameters:
+      - description: Model name stub to search for
+        in: query
+        name: model_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.LLMSettingsResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search LLM settings by model name
+      tags:
+      - llm-settings
   /llms:
     get:
       consumes:
