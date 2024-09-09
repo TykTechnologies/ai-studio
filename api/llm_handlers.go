@@ -41,6 +41,7 @@ func (a *API) createLLM(c *gin.Context) {
 		input.Data.Attributes.LongDescription,
 		input.Data.Attributes.ExternalURL,
 		input.Data.Attributes.LogoURL,
+		models.Vendor(input.Data.Attributes.Vendor),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -138,6 +139,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.LongDescription,
 		input.Data.Attributes.ExternalURL,
 		input.Data.Attributes.LogoURL,
+		models.Vendor(input.Data.Attributes.Vendor),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -397,6 +399,7 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			LongDescription   string `json:"long_description"`
 			ExternalURL       string `json:"external_url"`
 			LogoURL           string `json:"logo_url"`
+			Vendor            string `json:"vendor"`
 		}{
 			Name:              llm.Name,
 			APIKey:            llm.APIKey,
@@ -407,6 +410,7 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			LongDescription:   llm.LongDescription,
 			ExternalURL:       llm.ExternalURL,
 			LogoURL:           llm.LogoURL,
+			Vendor:            string(llm.Vendor),
 		},
 	}
 }

@@ -2,6 +2,8 @@ package models
 
 import "gorm.io/gorm"
 
+type Vendor string
+
 type LLM struct {
 	gorm.Model
 	ID                uint   `json:"id" gorm:"primary_key"`
@@ -14,7 +16,15 @@ type LLM struct {
 	LongDescription   string `json:"long_description"`
 	ExternalURL       string `json:"external_url"`
 	LogoURL           string `json:"logo"`
+	Vendor            Vendor `json:"vendor"`
 }
+
+const (
+	OPENAI    Vendor = "openai"
+	ANTHROPIC Vendor = "anthropic"
+	GOOGLE    Vendor = "google"
+	MOCK      Vendor = "mock"
+)
 
 type LLMs []LLM
 

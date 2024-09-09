@@ -77,6 +77,7 @@ type LLMInput struct {
 			LongDescription   string `json:"long_description"`
 			ExternalURL       string `json:"external_url"`
 			LogoURL           string `json:"logo_url"`
+			Vendor            string `json:"vendor"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -96,6 +97,7 @@ type LLMResponse struct {
 		LongDescription   string `json:"long_description"`
 		ExternalURL       string `json:"external_url"`
 		LogoURL           string `json:"logo_url"`
+		Vendor            string `json:"vendor"`
 	} `json:"attributes"`
 }
 

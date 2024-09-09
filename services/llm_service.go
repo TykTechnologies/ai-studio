@@ -4,7 +4,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateLLM(name, apiKey, apiEndpoint, streamingEndpoint string, privacyScore int, shortDescription, longDescription, externalURL, logoURL string) (*models.LLM, error) {
+func (s *Service) CreateLLM(name, apiKey, apiEndpoint, streamingEndpoint string, privacyScore int, shortDescription, longDescription, externalURL, logoURL string, vendor models.Vendor) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:              name,
 		APIKey:            apiKey,
@@ -15,6 +15,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint, streamingEndpoint string,
 		LongDescription:   longDescription,
 		ExternalURL:       externalURL,
 		LogoURL:           logoURL,
+		Vendor:            vendor,
 	}
 
 	if err := llm.Create(s.DB); err != nil {
@@ -32,7 +33,7 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	return llm, nil
 }
 
-func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint, streamingEndpoint string, privacyScore int, shortDescription, longDescription, externalURL, logoURL string) (*models.LLM, error) {
+func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint, streamingEndpoint string, privacyScore int, shortDescription, longDescription, externalURL, logoURL string, vendor models.Vendor) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -47,6 +48,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint, streamingEndpoin
 	llm.LongDescription = longDescription
 	llm.ExternalURL = externalURL
 	llm.LogoURL = logoURL
+	llm.Vendor = vendor
 
 	if err := llm.Update(s.DB); err != nil {
 		return nil, err

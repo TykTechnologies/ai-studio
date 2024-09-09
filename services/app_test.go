@@ -30,8 +30,8 @@ func TestAppService(t *testing.T) {
 	// Create test datasources and LLMs
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{})
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{})
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", "https://stream1.com", 80, "Short1", "Long1", "https://llm1.com", "https://logo1.com")
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", "https://stream2.com", 90, "Short2", "Long2", "https://llm2.com", "https://logo2.com")
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", "https://stream1.com", 80, "Short1", "Long1", "https://llm1.com", "https://logo1.com", models.OPENAI)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", "https://stream2.com", 90, "Short2", "Long2", "https://llm2.com", "https://logo2.com", models.OPENAI)
 
 	// Test CreateApp with valid privacy scores
 	app, err := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID})
@@ -110,7 +110,7 @@ func TestAppService(t *testing.T) {
 	assert.Len(t, appDatasources, 2)
 
 	// Test AddLLMToApp and GetAppLLMs
-	newLLM, _ := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", "https://newstream.com", 85, "NewShort", "NewLong", "https://newllm.com", "https://newlogo.com")
+	newLLM, _ := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", "https://newstream.com", 85, "NewShort", "NewLong", "https://newllm.com", "https://newlogo.com", models.OPENAI)
 	err = service.AddLLMToApp(app.ID, newLLM.ID)
 	assert.NoError(t, err)
 
@@ -199,8 +199,8 @@ func TestAppService_MultipleApps(t *testing.T) {
 	// Create datasources and LLMs
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user1.ID, []string{})
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user2.ID, []string{})
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", "https://stream1.com", 80, "Short1", "Long1", "https://llm1.com", "https://logo1.com")
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", "https://stream2.com", 90, "Short2", "Long2", "https://llm2.com", "https://logo2.com")
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", "https://stream1.com", 80, "Short1", "Long1", "https://llm1.com", "https://logo1.com", models.OPENAI)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", "https://stream2.com", 90, "Short2", "Long2", "https://llm2.com", "https://logo2.com", models.OPENAI)
 
 	// Create multiple apps
 	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, []uint{ds1.ID}, []uint{llm1.ID})

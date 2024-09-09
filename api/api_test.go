@@ -254,6 +254,7 @@ func TestLLMEndpoints(t *testing.T) {
 				LongDescription   string `json:"long_description"`
 				ExternalURL       string `json:"external_url"`
 				LogoURL           string `json:"logo_url"`
+				Vendor            string `json:"vendor"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -267,6 +268,7 @@ func TestLLMEndpoints(t *testing.T) {
 				LongDescription   string `json:"long_description"`
 				ExternalURL       string `json:"external_url"`
 				LogoURL           string `json:"logo_url"`
+				Vendor            string `json:"vendor"`
 			}{
 				Name:              "Test LLM",
 				APIKey:            "test-api-key",
@@ -309,6 +311,7 @@ func TestLLMEndpoints(t *testing.T) {
 				LongDescription   string `json:"long_description"`
 				ExternalURL       string `json:"external_url"`
 				LogoURL           string `json:"logo_url"`
+				Vendor            string `json:"vendor"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -322,6 +325,7 @@ func TestLLMEndpoints(t *testing.T) {
 				LongDescription   string `json:"long_description"`
 				ExternalURL       string `json:"external_url"`
 				LogoURL           string `json:"logo_url"`
+				Vendor            string `json:"vendor"`
 			}{
 				Name:              "Updated Test LLM",
 				APIKey:            "updated-api-key",
@@ -493,6 +497,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				LongDescription   string `json:"long_description"`
 				ExternalURL       string `json:"external_url"`
 				LogoURL           string `json:"logo_url"`
+				Vendor            string `json:"vendor"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -506,6 +511,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				LongDescription   string `json:"long_description"`
 				ExternalURL       string `json:"external_url"`
 				LogoURL           string `json:"logo_url"`
+				Vendor            string `json:"vendor"`
 			}{
 				Name:              "Test LLM",
 				APIKey:            "test-api-key",
@@ -1037,7 +1043,7 @@ func TestChatEndpoints(t *testing.T) {
 	llmSettings, err := api.service.CreateLLMSettings(&models.LLMSettings{ModelName: "TestModel"})
 	assert.NoError(t, err)
 
-	llm, err := api.service.CreateLLM("TestLLM", "api-key", "http://api.test", "http://stream.test", 75, "Short desc", "Long desc", "http://external.test", "http://logo.test")
+	llm, err := api.service.CreateLLM("TestLLM", "api-key", "http://api.test", "http://stream.test", 75, "Short desc", "Long desc", "http://external.test", "http://logo.test", models.OPENAI)
 	assert.NoError(t, err)
 
 	// Test Create Chat
