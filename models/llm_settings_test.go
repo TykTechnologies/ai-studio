@@ -16,16 +16,11 @@ func TestLLMSettings_CRUD(t *testing.T) {
 
 	// Create
 	settings := &LLMSettings{
-		CandidateCount:    5,
-		FrequencyPenalty:  0.5,
-		JSONMode:          true,
 		MaxLength:         100,
 		MaxTokens:         50,
 		Metadata:          map[string]interface{}{"key": "value"},
 		MinLength:         10,
 		ModelName:         "TestModel",
-		N:                 3,
-		PresencePenalty:   0.3,
 		RepetitionPenalty: 1.2,
 		Seed:              42,
 		StopWords:         []string{"stop1", "stop2"},

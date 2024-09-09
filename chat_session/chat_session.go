@@ -3,10 +3,16 @@ package chat_session
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/gofrs/uuid"
+	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/anthropic"
 	"github.com/tmc/langchaingo/llms/openai"
+	"github.com/tmc/langchaingo/memory"
+	"gorm.io/gorm"
 )
 
 type ChatMode string
@@ -17,10 +23,11 @@ const (
 )
 
 type LLMDriver interface {
-	Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)
+	Call(ctx context.Context, inputs map[string]any, options ...chains.ChainCallOption) (map[string]any, error)
 }
 
 type ChatSession struct {
+	id             string
 	chatRef        *models.Chat
 	input          chan *UserMessage
 	outputMessages chan *ChatResponse
@@ -28,8 +35,9 @@ type ChatSession struct {
 	stop           chan struct{}
 	errors         chan error
 	preProcessors  []func(*UserMessage) error
-	caller         LLMDriver
+	caller         chains.Chain
 	mode           ChatMode
+	db             *gorm.DB
 }
 
 type UserMessage struct {
@@ -40,8 +48,10 @@ type ChatResponse struct {
 	Payload string
 }
 
-func NewChatSession(chat *models.Chat, mode ChatMode) *ChatSession {
+func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) *ChatSession {
+	id, _ := uuid.NewV4()
 	return &ChatSession{
+		id:             id.String(),
 		chatRef:        chat,
 		input:          make(chan *UserMessage, 100),
 		outputMessages: make(chan *ChatResponse, 100),
@@ -50,7 +60,12 @@ func NewChatSession(chat *models.Chat, mode ChatMode) *ChatSession {
 		errors:         make(chan error, 100),
 		preProcessors:  []func(*UserMessage) error{},
 		mode:           mode,
+		db:             db,
 	}
+}
+
+func (cs *ChatSession) ID() string {
+	return cs.id
 }
 
 func (cs *ChatSession) Errors() chan error {
@@ -117,13 +132,15 @@ func (cs *ChatSession) Start() error {
 
 func (cs *ChatSession) initSession() error {
 	// create the LLM client
-	var llm LLMDriver
+	var llm llms.Model
 	var err error
 	switch cs.chatRef.LLM.Vendor {
 	case models.OPENAI:
 		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case models.MOCK:
-		llm = &DummyDriver{}
+	case models.ANTHROPIC:
+		llm, err = setupAnthropicDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
+	case models.MOCK_VENDOR:
+		// Mock vendor is used for testing purposes and is handled later
 	default:
 		return fmt.Errorf("unsupported LLM model: %s", cs.chatRef.LLMSettings.ModelName)
 	}
@@ -132,7 +149,20 @@ func (cs *ChatSession) initSession() error {
 		return fmt.Errorf("failed to create LLM driver for model %s: %v", cs.chatRef.LLMSettings.ModelName, err)
 	}
 
-	cs.caller = llm
+	// Hostory for the chain
+	chatHistory := NewGormChatMessageHistory(cs.db, cs.id)
+	conversationBuffer := memory.NewConversationBuffer(memory.WithChatHistory(chatHistory))
+
+	// handle the mock vendor
+	if cs.chatRef.LLM.Vendor == models.MOCK_VENDOR {
+		llm = &DummyDriver{
+			StreamingFunc: cs.streamingFunc,
+			Memory:        conversationBuffer,
+		}
+	}
+
+	llmChain := chains.NewConversation(llm, conversationBuffer)
+	cs.caller = llmChain
 
 	return nil
 }
@@ -151,7 +181,10 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage) (string, error) {
 	if cs.caller == nil {
 		return "", fmt.Errorf("LLM driver is not initialized")
 	}
-	resp, err := cs.caller.Call(context.Background(), msg.Payload, opts...)
+
+	ctx, done := context.WithTimeout(context.Background(), 120*time.Second)
+	defer done()
+	resp, err := chains.Run(ctx, cs.caller, msg.Payload, opts...)
 	if err != nil {
 		return "", err
 	}
@@ -171,59 +204,46 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 	return nil
 }
 
-func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings) []llms.CallOption {
-	var callOptions = make([]llms.CallOption, 0)
-	if llmSettings.CandidateCount > 0 {
-		callOptions = append(callOptions, llms.WithCandidateCount(llmSettings.CandidateCount))
-	}
-	if llmSettings.FrequencyPenalty > 0 {
-		callOptions = append(callOptions, llms.WithFrequencyPenalty(llmSettings.FrequencyPenalty))
-	}
-	if llmSettings.JSONMode {
-		callOptions = append(callOptions, llms.WithJSONMode())
-	}
+func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings) []chains.ChainCallOption {
+	var callOptions = make([]chains.ChainCallOption, 0)
+
 	if llmSettings.MaxLength > 0 {
-		callOptions = append(callOptions, llms.WithMaxLength(llmSettings.MaxLength))
+		callOptions = append(callOptions, chains.WithMaxLength(llmSettings.MaxLength))
 	}
 	if llmSettings.MaxTokens > 0 {
-		callOptions = append(callOptions, llms.WithMaxTokens(llmSettings.MaxTokens))
+		callOptions = append(callOptions, chains.WithMaxTokens(llmSettings.MaxTokens))
 	}
 	if llmSettings.MinLength > 0 {
-		callOptions = append(callOptions, llms.WithMinLength(llmSettings.MinLength))
+		callOptions = append(callOptions, chains.WithMinLength(llmSettings.MinLength))
 	}
-	if llmSettings.N > 0 {
-		callOptions = append(callOptions, llms.WithN(llmSettings.N))
-	}
-	if llmSettings.PresencePenalty > 0 {
-		callOptions = append(callOptions, llms.WithPresencePenalty(llmSettings.PresencePenalty))
-	}
+
 	if llmSettings.RepetitionPenalty > 0 {
-		callOptions = append(callOptions, llms.WithRepetitionPenalty(llmSettings.RepetitionPenalty))
+		callOptions = append(callOptions, chains.WithRepetitionPenalty(llmSettings.RepetitionPenalty))
 	}
 	if llmSettings.Seed > 0 {
-		callOptions = append(callOptions, llms.WithSeed(llmSettings.Seed))
+		callOptions = append(callOptions, chains.WithSeed(llmSettings.Seed))
 	}
 	if len(llmSettings.StopWords) > 0 {
-		callOptions = append(callOptions, llms.WithStopWords(llmSettings.StopWords))
+		callOptions = append(callOptions, chains.WithStopWords(llmSettings.StopWords))
 	}
 	if llmSettings.Temperature > 0 {
-		callOptions = append(callOptions, llms.WithTemperature(llmSettings.Temperature))
+		callOptions = append(callOptions, chains.WithTemperature(llmSettings.Temperature))
 	}
 	if llmSettings.TopK > 0 {
-		callOptions = append(callOptions, llms.WithTopK(llmSettings.TopK))
+		callOptions = append(callOptions, chains.WithTopK(llmSettings.TopK))
 	}
 	if llmSettings.TopP > 0 {
-		callOptions = append(callOptions, llms.WithTopP(llmSettings.TopP))
+		callOptions = append(callOptions, chains.WithTopP(llmSettings.TopP))
 	}
 
 	if cs.mode == ChatStream {
-		callOptions = append(callOptions, llms.WithStreamingFunc(cs.streamingFunc))
+		callOptions = append(callOptions, chains.WithStreamingFunc(cs.streamingFunc))
 	}
 
 	return callOptions
 }
 
-func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (LLMDriver, error) {
+func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]openai.Option, 0)
 	if connDef.APIEndpoint != "" {
 		opts = append(opts, openai.WithBaseURL(connDef.APIEndpoint))
@@ -236,6 +256,26 @@ func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (LL
 	opts = append(opts, openai.WithModel(llmSettings.ModelName))
 
 	llm, err := openai.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OpenAI driver: %v", err)
+	}
+
+	return llm, nil
+}
+
+func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
+	var opts = make([]anthropic.Option, 0)
+	if connDef.APIEndpoint != "" {
+		opts = append(opts, anthropic.WithBaseURL(connDef.APIEndpoint))
+	}
+
+	if connDef.APIKey != "" {
+		opts = append(opts, anthropic.WithToken(connDef.APIKey))
+	}
+
+	opts = append(opts, anthropic.WithModel(llmSettings.ModelName))
+
+	llm, err := anthropic.New(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OpenAI driver: %v", err)
 	}

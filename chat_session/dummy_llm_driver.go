@@ -9,22 +9,52 @@ import (
 	"math/rand"
 
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/schema"
 )
 
-type DummyDriver struct{}
+type DummyDriver struct {
+	StreamingFunc func(ctx context.Context, chunk []byte) error
+	Memory        schema.Memory
+}
+
+type DummyOptions struct {
+}
+
+func (d *DummyDriver) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+	paragraph := "this is a ten word sentence that should be sent."
+
+	if d.StreamingFunc != nil {
+		d.FakeChunkedResponse(paragraph, d.StreamingFunc)
+	}
+
+	x := &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{
+			{
+				Content:    paragraph,
+				StopReason: "",
+			},
+		},
+	}
+	return x, nil
+}
 
 func (d *DummyDriver) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	paragraph := "this is a ten word sentence that should be sent."
-
-	cOptions := llms.CallOptions{}
-	for _, option := range options {
-		option(&cOptions)
-	}
-
-	if cOptions.StreamingFunc != nil {
-		go d.FakeChunkedResponse(paragraph, cOptions.StreamingFunc)
-	}
 	return paragraph, nil
+}
+
+func (d *DummyDriver) GetMemory() schema.Memory {
+	return d.Memory
+}
+
+// GetInputKeys returns the input keys the chain expects.
+func (d *DummyDriver) GetInputKeys() []string {
+	return []string{}
+}
+
+// GetOutputKeys returns the output keys the chain returns.
+func (d *DummyDriver) GetOutputKeys() []string {
+	return []string{"result"}
 }
 
 func (d *DummyDriver) FakeChunkedResponse(para string, sFunc func(ctx context.Context, chunk []byte) error) {

@@ -25,13 +25,11 @@ func TestLLMSettingsService(t *testing.T) {
 
 	// Test CreateLLMSettings
 	settings := &models.LLMSettings{
-		ModelName:        "TestModel",
-		Temperature:      0.7,
-		MaxTokens:        100,
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.5,
-		TopP:             0.9,
-		StopWords:        []string{"stop1", "stop2"},
+		ModelName:   "TestModel",
+		Temperature: 0.7,
+		MaxTokens:   100,
+		TopP:        0.9,
+		StopWords:   []string{"stop1", "stop2"},
 	}
 	createdSettings, err := service.CreateLLMSettings(settings)
 	assert.NoError(t, err)

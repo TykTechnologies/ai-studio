@@ -20,10 +20,10 @@ type LLM struct {
 }
 
 const (
-	OPENAI    Vendor = "openai"
-	ANTHROPIC Vendor = "anthropic"
-	GOOGLE    Vendor = "google"
-	MOCK      Vendor = "mock"
+	OPENAI      Vendor = "openai"
+	ANTHROPIC   Vendor = "anthropic"
+	GOOGLE      Vendor = "google"
+	MOCK_VENDOR Vendor = "mock"
 )
 
 type LLMs []LLM

@@ -5,16 +5,11 @@ import "gorm.io/gorm"
 type LLMSettings struct {
 	gorm.Model
 	ID                uint                   `gorm:"primaryKey" json:"id"`
-	CandidateCount    int                    `json:"candidate_count"`
-	FrequencyPenalty  float64                `json:"frequency_penalty"`
-	JSONMode          bool                   `json:"json_mode"`
 	MaxLength         int                    `json:"max_length"`
 	MaxTokens         int                    `json:"max_tokens"`
 	Metadata          map[string]interface{} `gorm:"serializer:json" json:"metadata"`
 	MinLength         int                    `json:"min_length"`
 	ModelName         string                 `json:"model_name"`
-	N                 int                    `json:"n"`
-	PresencePenalty   float64                `json:"presence_penalty"`
 	RepetitionPenalty float64                `json:"repetition_penalty"`
 	Seed              int                    `json:"seed"`
 	StopWords         []string               `gorm:"serializer:json" json:"stop_words"`

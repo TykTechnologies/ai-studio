@@ -33,15 +33,10 @@ func (a *API) createLLMSettings(c *gin.Context) {
 
 	settings := &models.LLMSettings{
 		ModelName:         input.Data.Attributes.ModelName,
-		CandidateCount:    input.Data.Attributes.CandidateCount,
-		FrequencyPenalty:  input.Data.Attributes.FrequencyPenalty,
-		JSONMode:          input.Data.Attributes.JSONMode,
 		MaxLength:         input.Data.Attributes.MaxLength,
 		MaxTokens:         input.Data.Attributes.MaxTokens,
 		Metadata:          input.Data.Attributes.Metadata,
 		MinLength:         input.Data.Attributes.MinLength,
-		N:                 input.Data.Attributes.N,
-		PresencePenalty:   input.Data.Attributes.PresencePenalty,
 		RepetitionPenalty: input.Data.Attributes.RepetitionPenalty,
 		Seed:              input.Data.Attributes.Seed,
 		StopWords:         input.Data.Attributes.StopWords,
@@ -139,15 +134,10 @@ func (a *API) updateLLMSettings(c *gin.Context) {
 	settings := &models.LLMSettings{
 		ID:                uint(id),
 		ModelName:         input.Data.Attributes.ModelName,
-		CandidateCount:    input.Data.Attributes.CandidateCount,
-		FrequencyPenalty:  input.Data.Attributes.FrequencyPenalty,
-		JSONMode:          input.Data.Attributes.JSONMode,
 		MaxLength:         input.Data.Attributes.MaxLength,
 		MaxTokens:         input.Data.Attributes.MaxTokens,
 		Metadata:          input.Data.Attributes.Metadata,
 		MinLength:         input.Data.Attributes.MinLength,
-		N:                 input.Data.Attributes.N,
-		PresencePenalty:   input.Data.Attributes.PresencePenalty,
 		RepetitionPenalty: input.Data.Attributes.RepetitionPenalty,
 		Seed:              input.Data.Attributes.Seed,
 		StopWords:         input.Data.Attributes.StopWords,
@@ -274,15 +264,10 @@ func serializeLLMSettings(settings *models.LLMSettings) LLMSettingsResponse {
 		ID:   strconv.FormatUint(uint64(settings.ID), 10),
 		Attributes: struct {
 			ModelName         string                 `json:"model_name"`
-			CandidateCount    int                    `json:"candidate_count"`
-			FrequencyPenalty  float64                `json:"frequency_penalty"`
-			JSONMode          bool                   `json:"json_mode"`
 			MaxLength         int                    `json:"max_length"`
 			MaxTokens         int                    `json:"max_tokens"`
 			Metadata          map[string]interface{} `json:"metadata"`
 			MinLength         int                    `json:"min_length"`
-			N                 int                    `json:"n"`
-			PresencePenalty   float64                `json:"presence_penalty"`
 			RepetitionPenalty float64                `json:"repetition_penalty"`
 			Seed              int                    `json:"seed"`
 			StopWords         []string               `json:"stop_words"`
@@ -291,15 +276,10 @@ func serializeLLMSettings(settings *models.LLMSettings) LLMSettingsResponse {
 			TopP              float64                `json:"top_p"`
 		}{
 			ModelName:         settings.ModelName,
-			CandidateCount:    settings.CandidateCount,
-			FrequencyPenalty:  settings.FrequencyPenalty,
-			JSONMode:          settings.JSONMode,
 			MaxLength:         settings.MaxLength,
 			MaxTokens:         settings.MaxTokens,
 			Metadata:          settings.Metadata,
 			MinLength:         settings.MinLength,
-			N:                 settings.N,
-			PresencePenalty:   settings.PresencePenalty,
 			RepetitionPenalty: settings.RepetitionPenalty,
 			Seed:              settings.Seed,
 			StopWords:         settings.StopWords,

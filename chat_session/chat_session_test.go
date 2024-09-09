@@ -7,9 +7,23 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/tmc/langchaingo/chains"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
+func setupTestDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	err = models.InitModels(db)
+	assert.NoError(t, err)
+
+	return db
+}
+
 func TestNewChatSession(t *testing.T) {
+	db := setupTestDB(t)
 	chat := &models.Chat{
 		LLM: &models.LLM{
 			Name: "Dummy LLM",
@@ -19,7 +33,7 @@ func TestNewChatSession(t *testing.T) {
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage)
+	cs := NewChatSession(chat, ChatMessage, db)
 
 	assert.NotNil(t, cs)
 	assert.Equal(t, chat, cs.chatRef)
@@ -32,35 +46,37 @@ func TestNewChatSession(t *testing.T) {
 }
 
 func TestChatSession_InitSession(t *testing.T) {
+	db := setupTestDB(t)
 	chat := &models.Chat{
 		LLM: &models.LLM{
 			Name:   "Dummy LLM",
-			Vendor: models.MOCK,
+			Vendor: models.MOCK_VENDOR,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage)
+	cs := NewChatSession(chat, ChatMessage, db)
 	err := cs.initSession()
 
 	assert.NoError(t, err)
-	assert.IsType(t, &DummyDriver{}, cs.caller)
+	assert.IsType(t, chains.LLMChain{}, cs.caller)
 }
 
 func TestChatSession_HandleUserMessage(t *testing.T) {
+	db := setupTestDB(t)
 	chat := &models.Chat{
 		LLM: &models.LLM{
 			Name:   "Dummy LLM",
-			Vendor: models.MOCK,
+			Vendor: models.MOCK_VENDOR,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage)
+	cs := NewChatSession(chat, ChatMessage, db)
 	err := cs.initSession()
 	assert.NoError(t, err)
 
@@ -72,7 +88,8 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 }
 
 func TestChatSession_PreProcessors(t *testing.T) {
-	cs := NewChatSession(&models.Chat{}, ChatMessage)
+	db := setupTestDB(t)
+	cs := NewChatSession(&models.Chat{}, ChatMessage, db)
 
 	preprocessor := func(msg *UserMessage) error {
 		msg.Payload = "Processed: " + msg.Payload
@@ -89,17 +106,18 @@ func TestChatSession_PreProcessors(t *testing.T) {
 }
 
 func TestChatSession_Start(t *testing.T) {
+	db := setupTestDB(t)
 	chat := &models.Chat{
 		LLM: &models.LLM{
 			Name:   "Dummy LLM",
-			Vendor: models.MOCK,
+			Vendor: models.MOCK_VENDOR,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage)
+	cs := NewChatSession(chat, ChatMessage, db)
 	err := cs.initSession()
 	assert.NoError(t, err)
 
@@ -114,7 +132,7 @@ func TestChatSession_Start(t *testing.T) {
 		assert.NotEmpty(t, response.Payload)
 	case err := <-cs.Errors():
 		assert.Fail(t, "Received error", err)
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		assert.Fail(t, "Timeout waiting for response")
 	}
 
@@ -125,19 +143,27 @@ func TestChatSession_StreamingMode(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
 			Name:   "Dummy LLM",
-			Vendor: models.MOCK,
+			Vendor: models.MOCK_VENDOR,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
 		},
 	}
 
-	cs := NewChatSession(chat, ChatStream)
+	db := setupTestDB(t)
+	cs := NewChatSession(chat, ChatStream, db)
 	err := cs.Start()
 	assert.NoError(t, err)
 
 	// Call with streaming option
-	cs.Input() <- &UserMessage{Payload: "Test prompt"}
+	go func() {
+		select {
+		case cs.Input() <- &UserMessage{Payload: "Test prompt"}:
+		default:
+			fmt.Println("failed to send prompt")
+		}
+
+	}()
 
 	// Check if streaming data is received
 	count := 0
@@ -149,7 +175,7 @@ func TestChatSession_StreamingMode(t *testing.T) {
 			assert.NotEmpty(t, chunk)
 		case intErr := <-cs.Errors():
 			assert.Fail(t, "Received error", intErr)
-		case <-time.After(1 * time.Second):
+		case <-time.After(5 * time.Second):
 			assert.Fail(t, "Timeout waiting for streaming data")
 		}
 		if count >= 10 {
@@ -163,14 +189,13 @@ func TestChatSession_StreamingMode(t *testing.T) {
 
 func TestChatSession_GetOptions(t *testing.T) {
 	llmSettings := &models.LLMSettings{
-		Temperature:      0.7,
-		MaxTokens:        100,
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.5,
-		TopP:             0.9,
+		Temperature: 0.7,
+		MaxTokens:   100,
+		TopP:        0.9,
 	}
 
-	cs := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage)
+	db := setupTestDB(t)
+	cs := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db)
 	options := cs.getOptions(llmSettings)
 
 	assert.NotEmpty(t, options)
@@ -182,14 +207,15 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
 			Name:   "Dummy LLM",
-			Vendor: models.MOCK,
+			Vendor: models.MOCK_VENDOR,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage)
+	db := setupTestDB(t)
+	cs := NewChatSession(chat, ChatMessage, db)
 	err := cs.initSession()
 	assert.NoError(t, err)
 

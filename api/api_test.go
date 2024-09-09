@@ -869,15 +869,10 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 			Type       string `json:"type"`
 			Attributes struct {
 				ModelName         string                 `json:"model_name"`
-				CandidateCount    int                    `json:"candidate_count"`
-				FrequencyPenalty  float64                `json:"frequency_penalty"`
-				JSONMode          bool                   `json:"json_mode"`
 				MaxLength         int                    `json:"max_length"`
 				MaxTokens         int                    `json:"max_tokens"`
 				Metadata          map[string]interface{} `json:"metadata"`
 				MinLength         int                    `json:"min_length"`
-				N                 int                    `json:"n"`
-				PresencePenalty   float64                `json:"presence_penalty"`
 				RepetitionPenalty float64                `json:"repetition_penalty"`
 				Seed              int                    `json:"seed"`
 				StopWords         []string               `json:"stop_words"`
@@ -889,15 +884,10 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 			Type: "llm-settings",
 			Attributes: struct {
 				ModelName         string                 `json:"model_name"`
-				CandidateCount    int                    `json:"candidate_count"`
-				FrequencyPenalty  float64                `json:"frequency_penalty"`
-				JSONMode          bool                   `json:"json_mode"`
 				MaxLength         int                    `json:"max_length"`
 				MaxTokens         int                    `json:"max_tokens"`
 				Metadata          map[string]interface{} `json:"metadata"`
 				MinLength         int                    `json:"min_length"`
-				N                 int                    `json:"n"`
-				PresencePenalty   float64                `json:"presence_penalty"`
 				RepetitionPenalty float64                `json:"repetition_penalty"`
 				Seed              int                    `json:"seed"`
 				StopWords         []string               `json:"stop_words"`
@@ -906,15 +896,10 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				TopP              float64                `json:"top_p"`
 			}{
 				ModelName:         "TestModel",
-				CandidateCount:    5,
-				FrequencyPenalty:  0.5,
-				JSONMode:          true,
 				MaxLength:         100,
 				MaxTokens:         50,
 				Metadata:          map[string]interface{}{"key": "value"},
 				MinLength:         10,
-				N:                 3,
-				PresencePenalty:   0.3,
 				RepetitionPenalty: 1.2,
 				Seed:              42,
 				StopWords:         []string{"stop1", "stop2"},
@@ -945,15 +930,10 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 			Type       string `json:"type"`
 			Attributes struct {
 				ModelName         string                 `json:"model_name"`
-				CandidateCount    int                    `json:"candidate_count"`
-				FrequencyPenalty  float64                `json:"frequency_penalty"`
-				JSONMode          bool                   `json:"json_mode"`
 				MaxLength         int                    `json:"max_length"`
 				MaxTokens         int                    `json:"max_tokens"`
 				Metadata          map[string]interface{} `json:"metadata"`
 				MinLength         int                    `json:"min_length"`
-				N                 int                    `json:"n"`
-				PresencePenalty   float64                `json:"presence_penalty"`
 				RepetitionPenalty float64                `json:"repetition_penalty"`
 				Seed              int                    `json:"seed"`
 				StopWords         []string               `json:"stop_words"`
@@ -965,15 +945,10 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 			Type: "llm-settings",
 			Attributes: struct {
 				ModelName         string                 `json:"model_name"`
-				CandidateCount    int                    `json:"candidate_count"`
-				FrequencyPenalty  float64                `json:"frequency_penalty"`
-				JSONMode          bool                   `json:"json_mode"`
 				MaxLength         int                    `json:"max_length"`
 				MaxTokens         int                    `json:"max_tokens"`
 				Metadata          map[string]interface{} `json:"metadata"`
 				MinLength         int                    `json:"min_length"`
-				N                 int                    `json:"n"`
-				PresencePenalty   float64                `json:"presence_penalty"`
 				RepetitionPenalty float64                `json:"repetition_penalty"`
 				Seed              int                    `json:"seed"`
 				StopWords         []string               `json:"stop_words"`
@@ -982,15 +957,10 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				TopP              float64                `json:"top_p"`
 			}{
 				ModelName:         "UpdatedTestModel",
-				CandidateCount:    6,
-				FrequencyPenalty:  0.6,
-				JSONMode:          false,
 				MaxLength:         120,
 				MaxTokens:         60,
 				Metadata:          map[string]interface{}{"key": "updated_value"},
 				MinLength:         15,
-				N:                 4,
-				PresencePenalty:   0.4,
 				RepetitionPenalty: 1.3,
 				Seed:              43,
 				StopWords:         []string{"stop1", "stop2", "stop3"},
