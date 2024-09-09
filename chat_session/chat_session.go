@@ -28,7 +28,6 @@ type ChatSession struct {
 	stop           chan struct{}
 	errors         chan error
 	preProcessors  []func(*UserMessage) error
-	postProcessors []func(*UserMessage) error
 	caller         LLMDriver
 	mode           ChatMode
 }
@@ -50,7 +49,6 @@ func NewChatSession(chat *models.Chat, mode ChatMode) *ChatSession {
 		stop:           make(chan struct{}),
 		errors:         make(chan error, 100),
 		preProcessors:  []func(*UserMessage) error{},
-		postProcessors: []func(*UserMessage) error{},
 		mode:           mode,
 	}
 }
@@ -75,10 +73,6 @@ func (cs *ChatSession) AddPreProcessor(fn func(*UserMessage) error) {
 	cs.preProcessors = append(cs.preProcessors, fn)
 }
 
-func (cs *ChatSession) AddPostProcessor(fn func(*UserMessage) error) {
-	cs.postProcessors = append(cs.postProcessors, fn)
-}
-
 func (cs *ChatSession) Stop() {
 	cs.stop <- struct{}{}
 	close(cs.input)
@@ -87,7 +81,6 @@ func (cs *ChatSession) Stop() {
 }
 
 func (cs *ChatSession) Start() error {
-	fmt.Println("starting chat session")
 	if err := cs.initSession(); err != nil {
 		return fmt.Errorf("error initializing chat session: %v", err)
 	}
@@ -98,7 +91,6 @@ func (cs *ChatSession) Start() error {
 			case <-cs.stop:
 				return
 			case msg := <-cs.input:
-				fmt.Println("input received")
 				err := cs.preProcessMessage(msg)
 				if err != nil {
 					cs.errors <- fmt.Errorf("preprocessing error: %v", err)
@@ -127,20 +119,10 @@ func (cs *ChatSession) initSession() error {
 	// create the LLM client
 	var llm LLMDriver
 	var err error
-	switch cs.chatRef.LLMSettings.ModelName {
-	case "gpt-4o":
+	switch cs.chatRef.LLM.Vendor {
+	case models.OPENAI:
 		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case "gpt-4":
-		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case "gpt-4-turbo":
-		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case "gpt-3.5-turbo":
-		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case "gpt-3.5":
-		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case "gpt-3":
-		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case "dummy":
+	case models.MOCK:
 		llm = &DummyDriver{}
 	default:
 		return fmt.Errorf("unsupported LLM model: %s", cs.chatRef.LLMSettings.ModelName)
@@ -165,7 +147,6 @@ func (cs *ChatSession) preProcessMessage(msg *UserMessage) error {
 }
 
 func (cs *ChatSession) HandleUserMessage(msg *UserMessage) (string, error) {
-	fmt.Println("Handling user message")
 	opts := cs.getOptions(cs.chatRef.LLMSettings)
 	if cs.caller == nil {
 		return "", fmt.Errorf("LLM driver is not initialized")
@@ -236,7 +217,6 @@ func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings) []llms.CallOp
 	}
 
 	if cs.mode == ChatStream {
-		fmt.Println("STRAMING MODE")
 		callOptions = append(callOptions, llms.WithStreamingFunc(cs.streamingFunc))
 	}
 

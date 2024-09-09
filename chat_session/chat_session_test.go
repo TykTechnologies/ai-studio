@@ -34,7 +34,8 @@ func TestNewChatSession(t *testing.T) {
 func TestChatSession_InitSession(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
-			Name: "Dummy LLM",
+			Name:   "Dummy LLM",
+			Vendor: models.MOCK,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
@@ -51,7 +52,8 @@ func TestChatSession_InitSession(t *testing.T) {
 func TestChatSession_HandleUserMessage(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
-			Name: "Dummy LLM",
+			Name:   "Dummy LLM",
+			Vendor: models.MOCK,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
@@ -89,7 +91,8 @@ func TestChatSession_PreProcessors(t *testing.T) {
 func TestChatSession_Start(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
-			Name: "Dummy LLM",
+			Name:   "Dummy LLM",
+			Vendor: models.MOCK,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
@@ -121,7 +124,8 @@ func TestChatSession_Start(t *testing.T) {
 func TestChatSession_StreamingMode(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
-			Name: "Dummy LLM",
+			Name:   "Dummy LLM",
+			Vendor: models.MOCK,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
@@ -177,7 +181,8 @@ func TestChatSession_GetOptions(t *testing.T) {
 func TestChatSession_ErrorHandling(t *testing.T) {
 	chat := &models.Chat{
 		LLM: &models.LLM{
-			Name: "Dummy LLM",
+			Name:   "Dummy LLM",
+			Vendor: models.MOCK,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
