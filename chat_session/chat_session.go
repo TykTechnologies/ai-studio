@@ -12,6 +12,8 @@ import (
 	"github.com/tmc/langchaingo/llms/anthropic"
 	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/memory"
+	"github.com/tmc/langchaingo/prompts"
+	"github.com/tmc/langchaingo/schema"
 	"gorm.io/gorm"
 )
 
@@ -21,6 +23,14 @@ const (
 	ChatStream  ChatMode = "stream"
 	ChatMessage ChatMode = "message"
 )
+
+const informedTemplate = `The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
+Some Background:
+{{.context}}
+Current conversation:
+{{.history}}
+Human: {{.input}}
+AI:`
 
 type LLMDriver interface {
 	Call(ctx context.Context, inputs map[string]any, options ...chains.ChainCallOption) (map[string]any, error)
@@ -131,7 +141,34 @@ func (cs *ChatSession) Start() error {
 }
 
 func (cs *ChatSession) initSession() error {
+	// History for the chain
+	chatHistory := NewGormChatMessageHistory(cs.db, cs.id)
+	conversationBuffer := memory.NewConversationBuffer(
+		memory.WithChatHistory(chatHistory),
+		memory.WithInputKey("input"))
+
 	// create the LLM client
+	llm, err := cs.fetchDriver(conversationBuffer)
+	if err != nil {
+		return err
+	}
+
+	convo := chains.NewConversation(llm, conversationBuffer)
+	convo.Prompt = prompts.NewPromptTemplate(
+		informedTemplate,
+		[]string{
+			"history",
+			"input",
+			"context",
+		})
+
+	docChain := chains.NewStuffDocuments(&convo)
+	cs.caller = docChain
+
+	return nil
+}
+
+func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
 	var llm llms.Model
 	var err error
 	switch cs.chatRef.LLM.Vendor {
@@ -140,31 +177,15 @@ func (cs *ChatSession) initSession() error {
 	case models.ANTHROPIC:
 		llm, err = setupAnthropicDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
 	case models.MOCK_VENDOR:
-		// Mock vendor is used for testing purposes and is handled later
-	default:
-		return fmt.Errorf("unsupported LLM model: %s", cs.chatRef.LLMSettings.ModelName)
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to create LLM driver for model %s: %v", cs.chatRef.LLMSettings.ModelName, err)
-	}
-
-	// Hostory for the chain
-	chatHistory := NewGormChatMessageHistory(cs.db, cs.id)
-	conversationBuffer := memory.NewConversationBuffer(memory.WithChatHistory(chatHistory))
-
-	// handle the mock vendor
-	if cs.chatRef.LLM.Vendor == models.MOCK_VENDOR {
 		llm = &DummyDriver{
 			StreamingFunc: cs.streamingFunc,
-			Memory:        conversationBuffer,
+			Memory:        mem,
 		}
+	default:
+		return nil, fmt.Errorf("unsupported LLM model: %s", cs.chatRef.LLMSettings.ModelName)
 	}
 
-	llmChain := chains.NewConversation(llm, conversationBuffer)
-	cs.caller = llmChain
-
-	return nil
+	return llm, err
 }
 
 func (cs *ChatSession) preProcessMessage(msg *UserMessage) error {
@@ -184,12 +205,28 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage) (string, error) {
 
 	ctx, done := context.WithTimeout(context.Background(), 120*time.Second)
 	defer done()
-	resp, err := chains.Run(ctx, cs.caller, msg.Payload, opts...)
+	// resp, err := chains.Run(ctx, cs.caller, msg.Payload, opts...)
+	inputs := map[string]any{
+		"input":           msg.Payload,
+		"input_documents": []schema.Document{},
+	}
+
+	resp, err := chains.Call(ctx, cs.caller, inputs, opts...)
 	if err != nil {
 		return "", err
 	}
 
-	return resp, nil
+	txt, ok := resp["text"]
+	if !ok {
+		return "", fmt.Errorf("no text field returned by caller")
+	}
+
+	txtStr, ok := txt.(string)
+	if !ok {
+		return "", fmt.Errorf("text field is not a string")
+	}
+
+	return txtStr, nil
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {

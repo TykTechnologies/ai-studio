@@ -240,3 +240,36 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 
 	cs.Stop()
 }
+
+// func TestChatSession_Anthropic(t *testing.T) {
+// 	db := setupTestDB(t)
+// 	chat := &models.Chat{
+// 		LLM: &models.LLM{
+// 			Name:   "claude-3-5-sonnet-20240620",
+// 			Vendor: models.ANTHROPIC,
+// 			APIKey: os.Getenv("ANTHROPIC_KEY"),
+// 		},
+// 		LLMSettings: &models.LLMSettings{
+// 			ModelName: "claude-3-5-sonnet-20240620",
+// 		},
+// 	}
+
+// 	cs := NewChatSession(chat, ChatMessage, db)
+// 	cs.Start()
+
+// 	// Send a message
+// 	cs.input <- &UserMessage{Payload: "What is the capital of New Zealand"}
+
+// 	// Wait for response
+// 	select {
+// 	case response := <-cs.OutputMessage():
+// 		assert.NotEmpty(t, response.Payload)
+// 		fmt.Println("[LLM Response]: ", response.Payload)
+// 	case err := <-cs.Errors():
+// 		assert.Fail(t, "Received error", err)
+// 	case <-time.After(10 * time.Second):
+// 		assert.Fail(t, "Timeout waiting for response")
+// 	}
+
+// 	cs.Stop()
+// }
