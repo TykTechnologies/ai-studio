@@ -185,6 +185,14 @@ type DatasourceInput struct {
 			PrivacyScore     int      `json:"privacy_score"`
 			UserID           uint     `json:"user_id"`
 			Tags             []string `json:"tags"`
+			DBConnString     string   `json:"db_conn_string"`
+			DBSourceType     string   `json:"db_source_type"`
+			DBConnAPIKey     string   `json:"db_conn_api_key"`
+			DBName           string   `json:"db_name"`
+			EmbedVendor      string   `json:"embed_vendor"`
+			EmbedUrl         string   `json:"embed_url"`
+			EmbedAPIKey      string   `json:"embed_api_key"`
+			EmbedModel       string   `json:"embed_model"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -203,6 +211,14 @@ type DatasourceResponse struct {
 		PrivacyScore     int           `json:"privacy_score"`
 		UserID           uint          `json:"user_id"`
 		Tags             []TagResponse `json:"tags"`
+		DBConnString     string        `json:"db_conn_string"`
+		DBSourceType     string        `json:"db_source_type"`
+		DBConnAPIKey     string        `json:"db_conn_api_key"`
+		DBName           string        `json:"db_name"`
+		EmbedVendor      string        `json:"embed_vendor"`
+		EmbedUrl         string        `json:"embed_url"`
+		EmbedAPIKey      string        `json:"embed_api_key"`
+		EmbedModel       string        `json:"embed_model"`
 	} `json:"attributes"`
 }
 

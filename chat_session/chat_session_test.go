@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/tmc/langchaingo/chains"
+	"github.com/tmc/langchaingo/schema"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -81,7 +82,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 	assert.NoError(t, err)
 
 	msg := &UserMessage{Payload: "Test message"}
-	resp, err := cs.HandleUserMessage(msg)
+	resp, err := cs.HandleUserMessage(msg, []schema.Document{})
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resp)

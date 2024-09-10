@@ -64,7 +64,11 @@ func TestDataCatalogueService(t *testing.T) {
 	assert.Len(t, fetchedDataCatalogue.Tags, 0)
 
 	// Test AddDatasourceToDataCatalogue
-	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, 1, []string{})
+	datasource, err := service.CreateDatasource(
+		"Test Datasource", "Short Desc",
+		"Long Desc", "icon.png", "https://example.com", 75, 1, []string{},
+		"conn_string", "source_type", "api_key", "dbname",
+		"embed_vendor", "embed_url", "embed_api_key", "embed_model")
 	assert.NoError(t, err)
 	err = service.AddDatasourceToDataCatalogue(dataCatalogue.ID, datasource.ID)
 	assert.NoError(t, err)
@@ -165,8 +169,8 @@ func TestDataCatalogueService_MultipleDataCataloguesScenario(t *testing.T) {
 	assert.ElementsMatch(t, []uint{dc2.ID, dc3.ID}, []uint{dataCataloguesTag2[0].ID, dataCataloguesTag2[1].ID})
 
 	// Create datasources and add to data catalogues
-	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://example1.com", 75, 1, []string{})
-	ds2, _ := service.CreateDatasource("Datasource 2", "Short 2", "Long 2", "icon2.png", "https://example2.com", 80, 1, []string{})
+	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://example1.com", 75, 1, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1")
+	ds2, _ := service.CreateDatasource("Datasource 2", "Short 2", "Long 2", "icon2.png", "https://example2.com", 80, 1, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2")
 
 	err = service.AddDatasourceToDataCatalogue(dc1.ID, ds1.ID)
 	assert.NoError(t, err)

@@ -751,6 +751,14 @@ func TestDatasourceEndpoints(t *testing.T) {
 				PrivacyScore     int      `json:"privacy_score"`
 				UserID           uint     `json:"user_id"`
 				Tags             []string `json:"tags"`
+				DBConnString     string   `json:"db_conn_string"`
+				DBSourceType     string   `json:"db_source_type"`
+				DBConnAPIKey     string   `json:"db_conn_api_key"`
+				DBName           string   `json:"db_name"`
+				EmbedVendor      string   `json:"embed_vendor"`
+				EmbedUrl         string   `json:"embed_url"`
+				EmbedAPIKey      string   `json:"embed_api_key"`
+				EmbedModel       string   `json:"embed_model"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -763,6 +771,14 @@ func TestDatasourceEndpoints(t *testing.T) {
 				PrivacyScore     int      `json:"privacy_score"`
 				UserID           uint     `json:"user_id"`
 				Tags             []string `json:"tags"`
+				DBConnString     string   `json:"db_conn_string"`
+				DBSourceType     string   `json:"db_source_type"`
+				DBConnAPIKey     string   `json:"db_conn_api_key"`
+				DBName           string   `json:"db_name"`
+				EmbedVendor      string   `json:"embed_vendor"`
+				EmbedUrl         string   `json:"embed_url"`
+				EmbedAPIKey      string   `json:"embed_api_key"`
+				EmbedModel       string   `json:"embed_model"`
 			}{
 				Name:             "Test Datasource",
 				ShortDescription: "Short description",
@@ -772,6 +788,13 @@ func TestDatasourceEndpoints(t *testing.T) {
 				PrivacyScore:     75,
 				UserID:           user.ID,
 				Tags:             []string{"tag1", "tag2"},
+				DBConnString:     "test_conn_string",
+				DBSourceType:     "test_source_type",
+				DBConnAPIKey:     "test_api_key",
+				EmbedVendor:      "test_vendor",
+				EmbedUrl:         "https://embed.example.com",
+				EmbedAPIKey:      "test_embed_api_key",
+				EmbedModel:       "test_model",
 			},
 		},
 	}
@@ -803,6 +826,14 @@ func TestDatasourceEndpoints(t *testing.T) {
 				PrivacyScore     int      `json:"privacy_score"`
 				UserID           uint     `json:"user_id"`
 				Tags             []string `json:"tags"`
+				DBConnString     string   `json:"db_conn_string"`
+				DBSourceType     string   `json:"db_source_type"`
+				DBConnAPIKey     string   `json:"db_conn_api_key"`
+				DBName           string   `json:"db_name"`
+				EmbedVendor      string   `json:"embed_vendor"`
+				EmbedUrl         string   `json:"embed_url"`
+				EmbedAPIKey      string   `json:"embed_api_key"`
+				EmbedModel       string   `json:"embed_model"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -815,6 +846,14 @@ func TestDatasourceEndpoints(t *testing.T) {
 				PrivacyScore     int      `json:"privacy_score"`
 				UserID           uint     `json:"user_id"`
 				Tags             []string `json:"tags"`
+				DBConnString     string   `json:"db_conn_string"`
+				DBSourceType     string   `json:"db_source_type"`
+				DBConnAPIKey     string   `json:"db_conn_api_key"`
+				DBName           string   `json:"db_name"`
+				EmbedVendor      string   `json:"embed_vendor"`
+				EmbedUrl         string   `json:"embed_url"`
+				EmbedAPIKey      string   `json:"embed_api_key"`
+				EmbedModel       string   `json:"embed_model"`
 			}{
 				Name:             "Updated Datasource",
 				ShortDescription: "Updated short description",
@@ -824,6 +863,13 @@ func TestDatasourceEndpoints(t *testing.T) {
 				PrivacyScore:     80,
 				UserID:           user.ID,
 				Tags:             []string{"tag1", "tag2", "tag3"},
+				DBConnString:     "updated_conn_string",
+				DBSourceType:     "updated_source_type",
+				DBConnAPIKey:     "updated_api_key",
+				EmbedVendor:      "updated_vendor",
+				EmbedUrl:         "https://updated-embed.example.com",
+				EmbedAPIKey:      "updated_embed_api_key",
+				EmbedModel:       "updated_model",
 			},
 		},
 	}

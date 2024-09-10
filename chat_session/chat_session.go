@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gofrs/uuid"
 	"github.com/tmc/langchaingo/chains"
@@ -48,6 +49,7 @@ type ChatSession struct {
 	caller         chains.Chain
 	mode           ChatMode
 	db             *gorm.DB
+	datasources    map[uint]*models.Datasource
 }
 
 type UserMessage struct {
@@ -71,6 +73,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) *ChatSession 
 		preProcessors:  []func(*UserMessage) error{},
 		mode:           mode,
 		db:             db,
+		datasources:    map[uint]*models.Datasource{},
 	}
 }
 
@@ -92,6 +95,21 @@ func (cs *ChatSession) OutputStream() chan []byte {
 
 func (cs *ChatSession) Input() chan *UserMessage {
 	return cs.input
+}
+
+func (cs *ChatSession) AddDatasource(id uint) error {
+	ds := models.Datasource{}
+	err := ds.Get(cs.db, id)
+	if err != nil {
+		return fmt.Errorf("error getting datasource: %v", err)
+	}
+
+	cs.datasources[id] = &ds
+	return nil
+}
+
+func (cs *ChatSession) RemoveDatasource(id uint) {
+	delete(cs.datasources, id)
 }
 
 func (cs *ChatSession) AddPreProcessor(fn func(*UserMessage) error) {
@@ -122,7 +140,14 @@ func (cs *ChatSession) Start() error {
 					continue
 				}
 
-				resp, err := cs.HandleUserMessage(msg)
+				ds := dataSession.NewDataSession(cs.datasources)
+				docs, err := ds.Search(msg.Payload, 5)
+				if err != nil {
+					cs.errors <- fmt.Errorf("error searching datasources: %v", err)
+					continue
+				}
+
+				resp, err := cs.HandleUserMessage(msg, docs)
 				if err != nil {
 					cs.errors <- fmt.Errorf("chat session handler error: %v", err)
 					continue
@@ -197,7 +222,12 @@ func (cs *ChatSession) preProcessMessage(msg *UserMessage) error {
 	return nil
 }
 
-func (cs *ChatSession) HandleUserMessage(msg *UserMessage) (string, error) {
+func (cs *ChatSession) fetchDocuments(payload string) ([]schema.Document, error) {
+	// var docs []schema.Document
+	panic("not implemented")
+}
+
+func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Document) (string, error) {
 	opts := cs.getOptions(cs.chatRef.LLMSettings)
 	if cs.caller == nil {
 		return "", fmt.Errorf("LLM driver is not initialized")
@@ -208,7 +238,7 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage) (string, error) {
 	// resp, err := chains.Run(ctx, cs.caller, msg.Payload, opts...)
 	inputs := map[string]any{
 		"input":           msg.Payload,
-		"input_documents": []schema.Document{},
+		"input_documents": docs,
 	}
 
 	resp, err := chains.Call(ctx, cs.caller, inputs, opts...)

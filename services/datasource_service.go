@@ -4,7 +4,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string) (*models.Datasource, error) {
+func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string) (*models.Datasource, error) {
 	datasource := &models.Datasource{
 		Name:             name,
 		ShortDescription: shortDesc,
@@ -13,6 +13,14 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		Url:              url,
 		PrivacyScore:     privacyScore,
 		UserID:           userID,
+		DBConnString:     dbConnString,
+		DBSourceType:     dbSourceType,
+		DBConnAPIKey:     dbConnAPIKey,
+		DBName:           dbName,
+		EmbedVendor:      models.Vendor(embedVendor),
+		EmbedUrl:         embedUrl,
+		EmbedAPIKey:      embedAPIKey,
+		EmbedModel:       embedModel,
 	}
 
 	if err := datasource.Create(s.DB); err != nil {
@@ -26,15 +34,7 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 	return datasource, nil
 }
 
-func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
-	datasource := models.NewDatasource()
-	if err := datasource.Get(s.DB, id); err != nil {
-		return nil, err
-	}
-	return datasource, nil
-}
-
-func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int) (*models.Datasource, error) {
+func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string) (*models.Datasource, error) {
 	datasource, err := s.GetDatasourceByID(id)
 	if err != nil {
 		return nil, err
@@ -46,11 +46,27 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.Icon = icon
 	datasource.Url = url
 	datasource.PrivacyScore = privacyScore
+	datasource.DBConnString = dbConnString
+	datasource.DBSourceType = dbSourceType
+	datasource.DBConnAPIKey = dbConnAPIKey
+	datasource.EmbedVendor = models.Vendor(embedVendor)
+	datasource.EmbedUrl = embedUrl
+	datasource.EmbedAPIKey = embedAPIKey
+	datasource.EmbedModel = embedModel
+	datasource.DBName = dbName
 
 	if err := datasource.Update(s.DB); err != nil {
 		return nil, err
 	}
 
+	return datasource, nil
+}
+
+func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
+	datasource := models.NewDatasource()
+	if err := datasource.Get(s.DB, id); err != nil {
+		return nil, err
+	}
 	return datasource, nil
 }
 

@@ -1,6 +1,8 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"gorm.io/gorm"
+)
 
 type Datasource struct {
 	gorm.Model
@@ -13,6 +15,16 @@ type Datasource struct {
 	PrivacyScore     int    `json:"privacy_score"`
 	UserID           uint   `json:"user_id" gorm:"foreignKey:ID"`
 	Tags             []Tag  `json:"tags" gorm:"many2many:datasource_tags;"`
+
+	DBConnString string `json:"db_conn_string"`
+	DBSourceType string `json:"db_source_type"`
+	DBConnAPIKey string `json:"db_conn_api_key"`
+	DBName       string `json:"db_name"`
+
+	EmbedVendor Vendor `json:"embed_vendor"`
+	EmbedUrl    string `json:"embed_url"`
+	EmbedAPIKey string `json:"embed_api_key"`
+	EmbedModel  string `json:"embed_model"`
 }
 
 type Datasources []Datasource
