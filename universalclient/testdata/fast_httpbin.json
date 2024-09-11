@@ -1,0 +1,2157 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "FastAPI Httpbin",
+    "description": "\n<a href=\"static/logo.png\"><img src=\"static/logo.png\" align=\"right\" /></a>\n\nHTTP Endpoints for easy testing of your app.\n\nBuilt with the <a href=\"https://fastapi.tiangolo.com/\">FastAPI framework</a>, \nthis is heavily based on the original <a href=\"https://httpbin.org/\">Httpbin</a> website.\n\n<a href=\"/about\">About this project</a> - \n<a href=\"/roadmap\">Development Roadmap</a> -\n<a href=\"/qrcode/\">Dead Simple QR Code Generator</a> -\n<a href=\"/test-password-manager-form/\">Form for testing Password Managers like 1Password and BitWarden</a>\n<p>\n\n<a href=\"https://github.com/dmuth/fastapi-httpbin\">GitHub repo</a>\n<p>\n\nRun locally in Docker: <tt><b>docker run -p 80:80 dmuth1/fastapi-httpbin</b></tt>\n\n<a href=\"https://httpbin.dmuth.org/\">Main Site</a> - Mirrors: \n<a href=\"https://fly.httpbin.dmuth.org/\">Fly</a>\n<a href=\"https://railway.httpbin.dmuth.org/\">Railway</a>\n<a href=\"https://render.httpbin.dmuth.org/\">Render</a>\n\n",
+    "contact": {},
+    "version": "0.0.51"
+  },
+  "servers": [
+    {
+      "url": "https://httpbin.dmuth.org",
+      "variables": {
+        "defaultHost": {
+          "default": "www.example.com"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/get": {
+      "get": {
+        "tags": ["HTTP Methods"],
+        "summary": "get_get_get",
+        "description": "",
+        "operationId": "get_get_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/get/args": {
+      "get": {
+        "tags": ["HTTP Methods"],
+        "summary": "get_get_args_get",
+        "description": "",
+        "operationId": "get_get_args_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/post": {
+      "post": {
+        "tags": ["HTTP Methods"],
+        "summary": "post_post_post",
+        "description": "",
+        "operationId": "post_post_post",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/put": {
+      "put": {
+        "tags": ["HTTP Methods"],
+        "summary": "put_put_put",
+        "description": "",
+        "operationId": "put_put_put",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/patch": {
+      "patch": {
+        "tags": ["HTTP Methods"],
+        "summary": "patch_patch_patch",
+        "description": "",
+        "operationId": "patch_patch_patch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/delete": {
+      "delete": {
+        "tags": ["HTTP Methods"],
+        "summary": "delete_delete_delete",
+        "description": "",
+        "operationId": "delete_delete_delete",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/headers": {
+      "get": {
+        "tags": ["Request Inspection"],
+        "summary": "get_headers_get",
+        "description": "",
+        "operationId": "get_headers_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/ip": {
+      "get": {
+        "tags": ["Request Inspection"],
+        "summary": "ip_ip_get",
+        "description": "",
+        "operationId": "ip_ip_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/ip/v4": {
+      "get": {
+        "tags": ["Request Inspection"],
+        "summary": "ipv4_ip_v4_get",
+        "description": "",
+        "operationId": "ipv4_ip_v4_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return the user's IPv4 address, if present.",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Returned if user came in over IPv6",
+            "headers": {},
+            "content": {}
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/ip/v6": {
+      "get": {
+        "tags": ["Request Inspection"],
+        "summary": "ipv6_ip_v6_get",
+        "description": "",
+        "operationId": "ipv6_ip_v6_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return the user's IPv6 address, if present.",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Returned if user came in over IPv4",
+            "headers": {},
+            "content": {}
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/user-agent": {
+      "get": {
+        "tags": ["Request Inspection"],
+        "summary": "user_agent_user_agent_get",
+        "description": "",
+        "operationId": "user_agent_user_agent_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/cache": {
+      "get": {
+        "tags": ["Responses"],
+        "summary": "cache_cache_get",
+        "description": "",
+        "operationId": "cache_cache_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/cache/{seconds}": {
+      "get": {
+        "tags": ["Responses"],
+        "summary": "cache_seconds_cache__seconds__get",
+        "description": "",
+        "operationId": "cache_seconds_cache__seconds__get",
+        "parameters": [
+          {
+            "name": "seconds",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/etag/{etag}": {
+      "get": {
+        "tags": ["Responses"],
+        "summary": "etag_etag__etag__get",
+        "description": "",
+        "operationId": "etag_etag__etag__get",
+        "parameters": [
+          {
+            "name": "etag",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "example": "test-etag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/response-headers": {
+      "get": {
+        "tags": ["Responses"],
+        "summary": "response_headers_get_response_headers_get",
+        "description": "",
+        "operationId": "response_headers_get_response_headers_get",
+        "parameters": [
+          {
+            "name": "headers",
+            "in": "query",
+            "description": "",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/html": {
+      "get": {
+        "tags": ["Response Formats"],
+        "summary": "html_html_get",
+        "description": "",
+        "operationId": "html_html_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/json": {
+      "get": {
+        "tags": ["Response Formats"],
+        "summary": "json_json_get",
+        "description": "",
+        "operationId": "json_json_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/robots.txt": {
+      "get": {
+        "tags": ["Response Formats"],
+        "summary": "robots_txt_robots_txt_get",
+        "description": "",
+        "operationId": "robots_txt_robots_txt_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/deny": {
+      "get": {
+        "tags": ["Response Formats"],
+        "summary": "deny_deny_get",
+        "description": "",
+        "operationId": "deny_deny_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/xml": {
+      "get": {
+        "tags": ["Response Formats"],
+        "summary": "xml_xml_get",
+        "description": "",
+        "operationId": "xml_xml_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/encoding/utf8": {
+      "get": {
+        "tags": ["Response Formats"],
+        "summary": "utf8_encoding_utf8_get",
+        "description": "",
+        "operationId": "utf8_encoding_utf8_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/qrcode/form": {
+      "post": {
+        "tags": ["QR Codes"],
+        "summary": "qrcode_post_form_qrcode_form_post",
+        "description": "",
+        "operationId": "qrcode_post_form_qrcode_form_post",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "enum": ["application/x-www-form-urlencoded"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "encoding": {},
+              "schema": {
+                "required": ["url", "box_size", "border"],
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "box_size": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "border": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "description": "Return a QR Code in PNG format.",
+            "headers": {},
+            "content": {
+              "image/png": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/qrcode/json": {
+      "post": {
+        "tags": ["QR Codes"],
+        "summary": "qrcode_post_qrcode_json_post",
+        "description": "",
+        "operationId": "qrcode_post_qrcode_json_post",
+        "parameters": [],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QRCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Return a QR Code in PNG format.",
+            "headers": {},
+            "content": {
+              "image/png": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/uuid": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "uuid_uuid_get",
+        "description": "",
+        "operationId": "uuid_uuid_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/uuid/qrcode": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "uuid_qrcode_uuid_qrcode_get",
+        "description": "",
+        "operationId": "uuid_qrcode_uuid_qrcode_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return a QR Code in PNG format.",
+            "headers": {},
+            "content": {
+              "image/png": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/uuid/qrcode/{uuid}": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "uuid_qrcode_qrcode_uuid_qrcode__uuid__get",
+        "description": "",
+        "operationId": "uuid_qrcode_qrcode_uuid_qrcode__uuid__get",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Return a QR Code in PNG format.",
+            "headers": {},
+            "content": {
+              "image/png": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/delay/{seconds}": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "delay_delay__seconds__get",
+        "description": "",
+        "operationId": "delay_delay__seconds__get",
+        "parameters": [
+          {
+            "name": "seconds",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          },
+          {
+            "name": "debug",
+            "in": "query",
+            "description": "",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/stream/{n}": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "stream_stream__n__get",
+        "description": "",
+        "operationId": "stream_stream__n__get",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/stream/chars/{n}/{rate}": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "stream_chars_stream_chars__n___rate__get",
+        "description": "",
+        "operationId": "stream_chars_stream_chars__n___rate__get",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 128
+            }
+          },
+          {
+            "name": "rate",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 50
+            }
+          },
+          {
+            "name": "debug",
+            "in": "query",
+            "description": "",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/stream/chars/complete/{n}/{rate}": {
+      "get": {
+        "tags": ["Dynamic Data"],
+        "summary": "stream_chars_complete_stream_chars_complete__n___rate__get",
+        "description": "",
+        "operationId": "stream_chars_complete_stream_chars_complete__n___rate__get",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 128
+            }
+          },
+          {
+            "name": "rate",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 50
+            }
+          },
+          {
+            "name": "debug",
+            "in": "query",
+            "description": "",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/status/{codes}": {
+      "get": {
+        "tags": ["Status Codes"],
+        "summary": "get_status__codes__get",
+        "description": "",
+        "operationId": "get_status__codes__get",
+        "parameters": [
+          {
+            "name": "codes",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "minLength": 3,
+              "pattern": "^[0-9,_]+$",
+              "type": "string",
+              "example": "200,201,204"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "post": {
+        "tags": ["Status Codes"],
+        "summary": "get_status__codes__post",
+        "description": "",
+        "operationId": "get_status__codes__post",
+        "parameters": [
+          {
+            "name": "codes",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "minLength": 3,
+              "pattern": "^[0-9,_]+$",
+              "type": "string",
+              "example": "200,201,204"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "put": {
+        "tags": ["Status Codes"],
+        "summary": "get_status__codes__put",
+        "description": "",
+        "operationId": "get_status__codes__put",
+        "parameters": [
+          {
+            "name": "codes",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "minLength": 3,
+              "pattern": "^[0-9,_]+$",
+              "type": "string",
+              "example": "200,201,204"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "patch": {
+        "tags": ["Status Codes"],
+        "summary": "get_status__codes__patch",
+        "description": "",
+        "operationId": "get_status__codes__patch",
+        "parameters": [
+          {
+            "name": "codes",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "minLength": 3,
+              "pattern": "^[0-9,_]+$",
+              "type": "string",
+              "example": "200,201,204"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "delete": {
+        "tags": ["Status Codes"],
+        "summary": "get_status__codes__delete",
+        "description": "",
+        "operationId": "get_status__codes__delete",
+        "parameters": [
+          {
+            "name": "codes",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "minLength": 3,
+              "pattern": "^[0-9,_]+$",
+              "type": "string",
+              "example": "200,201,204"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/redirect/{n}": {
+      "get": {
+        "tags": ["Redirects"],
+        "summary": "get_redirect__n__get",
+        "description": "",
+        "operationId": "get_redirect__n__get",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "Number of redirects to perform",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Status code passed in from a previous redirect",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ],
+              "default": 302,
+              "example": 301
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "post": {
+        "tags": ["Redirects"],
+        "summary": "post_redirect__n__post",
+        "description": "",
+        "operationId": "post_redirect__n__post",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "Number of redirects to perform",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Status code passed in from a previous redirect",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ],
+              "default": 302,
+              "example": 301
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "put": {
+        "tags": ["Redirects"],
+        "summary": "put_redirect__n__put",
+        "description": "",
+        "operationId": "put_redirect__n__put",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "Number of redirects to perform",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Status code passed in from a previous redirect",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ],
+              "default": 302,
+              "example": 301
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "patch": {
+        "tags": ["Redirects"],
+        "summary": "patch_redirect__n__patch",
+        "description": "",
+        "operationId": "patch_redirect__n__patch",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "Number of redirects to perform",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Status code passed in from a previous redirect",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ],
+              "default": 302,
+              "example": 301
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "delete": {
+        "tags": ["Redirects"],
+        "summary": "delete_redirect__n__delete",
+        "description": "",
+        "operationId": "delete_redirect__n__delete",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "description": "Number of redirects to perform",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "example": 3
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Status code passed in from a previous redirect",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ],
+              "default": 302,
+              "example": 301
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/anything": {
+      "get": {
+        "tags": ["Anything"],
+        "summary": "get_anything_get",
+        "description": "",
+        "operationId": "get_anything_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "put": {
+        "tags": ["Anything"],
+        "summary": "put_anything_put",
+        "description": "",
+        "operationId": "put_anything_put",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "post": {
+        "tags": ["Anything"],
+        "summary": "post_anything_post",
+        "description": "",
+        "operationId": "post_anything_post",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "delete": {
+        "tags": ["Anything"],
+        "summary": "delete_anything_delete",
+        "description": "",
+        "operationId": "delete_anything_delete",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "patch": {
+        "tags": ["Anything"],
+        "summary": "patch_anything_patch",
+        "description": "",
+        "operationId": "patch_anything_patch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/cookies": {
+      "get": {
+        "tags": ["Cookies"],
+        "summary": "get_cookies_get",
+        "description": "",
+        "operationId": "get_cookies_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "put": {
+        "tags": ["Cookies"],
+        "summary": "put_cookies_put",
+        "description": "",
+        "operationId": "put_cookies_put",
+        "parameters": [],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object"
+                  }
+                ],
+                "example": {
+                  "cookie1": "value1",
+                  "cookie2": "value2",
+                  "cookie3": "value3"
+                }
+              },
+              "example": {
+                "cookie1": "value1",
+                "cookie2": "value2",
+                "cookie3": "value3"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "delete": {
+        "tags": ["Cookies"],
+        "summary": "delete_cookies_delete",
+        "description": "",
+        "operationId": "delete_cookies_delete",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "enum": ["application/json"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/images/jpeg": {
+      "get": {
+        "tags": ["Images"],
+        "summary": "get_images_jpeg_get",
+        "description": "",
+        "operationId": "get_images_jpeg_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return an image in JPG format.",
+            "headers": {},
+            "content": {
+              "image/jpeg": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/images/png": {
+      "get": {
+        "tags": ["Images"],
+        "summary": "get_images_png_get",
+        "description": "",
+        "operationId": "get_images_png_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return an image in PNG format.",
+            "headers": {},
+            "content": {
+              "image/png": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/images/heic": {
+      "get": {
+        "tags": ["Images"],
+        "summary": "get_images_heic_get",
+        "description": "",
+        "operationId": "get_images_heic_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return an image in HEIC format.",
+            "headers": {},
+            "content": {
+              "image/heic": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/images/webp": {
+      "get": {
+        "tags": ["Images"],
+        "summary": "get_images_webp_get",
+        "description": "",
+        "operationId": "get_images_webp_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return an image in Webp format.",
+            "headers": {},
+            "content": {
+              "image/webp": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/favicon.ico": {
+      "get": {
+        "tags": ["Images"],
+        "summary": "favicon_favicon_ico_get",
+        "description": "",
+        "operationId": "favicon_favicon_ico_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return a 32x32 favicon in JPG format.",
+            "headers": {},
+            "content": {
+              "image/jpeg": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/static/logo.png": {
+      "get": {
+        "tags": ["Images"],
+        "summary": "logo_static_logo_png_get",
+        "description": "",
+        "operationId": "logo_static_logo_png_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Return the logo.",
+            "headers": {},
+            "content": {
+              "image/jpeg": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/test-password-manager-form/post": {
+      "post": {
+        "tags": ["Forms"],
+        "summary": "test_password_manager_form_test_password_manager_form_post_post",
+        "description": "",
+        "operationId": "test_password_manager_form_test_password_manager_form_post_post",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "enum": ["application/x-www-form-urlencoded"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "encoding": {},
+              "schema": {
+                "required": ["username", "password"],
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "description": "Valid credentials were supplied. (username: dmuth, password: password)",
+            "headers": {},
+            "content": {}
+          },
+          "401": {
+            "description": "Invalid credentials were supplied",
+            "headers": {},
+            "content": {}
+          },
+          "422": {
+            "description": "Validation Error",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": ["Meta"],
+        "summary": "version_version_get",
+        "description": "",
+        "operationId": "version_version_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_qrcode_post_form_qrcode_form_post": {
+        "title": "Body_qrcode_post_form_qrcode_form_post",
+        "required": ["url", "box_size", "border"],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "box_size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "border": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "Body_test_password_manager_form_test_password_manager_form_post_post": {
+        "title": "Body_test_password_manager_form_test_password_manager_form_post_post",
+        "required": ["username", "password"],
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "HTTPValidationError": {
+        "title": "HTTPValidationError",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "description": ""
+          }
+        }
+      },
+      "QRCode": {
+        "title": "QRCode",
+        "required": ["url"],
+        "type": "object",
+        "properties": {
+          "url": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "type": "string"
+          },
+          "box_size": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "exclusiveMinimum": true,
+            "type": "integer",
+            "format": "int32",
+            "default": 10
+          },
+          "border": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "exclusiveMinimum": true,
+            "type": "integer",
+            "format": "int32",
+            "default": 2
+          }
+        }
+      },
+      "ValidationError": {
+        "title": "ValidationError",
+        "required": ["loc", "msg", "type"],
+        "type": "object",
+        "properties": {
+          "loc": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "msg": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "HTTP Methods",
+      "description": "Testing different HTTP verbs."
+    },
+    {
+      "name": "Request Inspection",
+      "description": "Inspect the request data. (including source IP address)"
+    },
+    {
+      "name": "Responses",
+      "description": "Inspect response data like caching and headers."
+    },
+    {
+      "name": "Response Formats",
+      "description": "Returns responses in different formats."
+    },
+    {
+      "name": "QR Codes",
+      "description": "Generate QR Codes."
+    },
+    {
+      "name": "Dynamic Data",
+      "description": "Generate random and dynamic data."
+    },
+    {
+      "name": "Status Codes",
+      "description": "Generate responses with specified status codes."
+    },
+    {
+      "name": "Redirects",
+      "description": "Return different redirects."
+    },
+    {
+      "name": "Anything",
+      "description": "Return anything that is passed in on the request."
+    },
+    {
+      "name": "Cookies",
+      "description": "Create, read, and delete cookies."
+    },
+    {
+      "name": "Images",
+      "description": "Return different image formats."
+    },
+    {
+      "name": "Forms",
+      "description": "Endpoints for testing out forms."
+    },
+    {
+      "name": "Meta",
+      "description": "Endpoints related to this app itself."
+    }
+  ]
+}
