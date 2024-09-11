@@ -387,3 +387,44 @@ type ChatResponse struct {
 		Groups        []GroupResponse `json:"groups"`
 	} `json:"attributes"`
 }
+
+// ToolInput represents the input for tool-related operations
+// @Description Tool input model
+type ToolInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name         string  `json:"name"`
+			Description  string  `json:"description"`
+			ToolType     string  `json:"tool_type"`
+			OASSpec      []byte  `json:"oas_spec"`
+			PrivacyScore float64 `json:"privacy_score"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ToolResponse represents the response for tool-related operations
+// @Description Tool response model
+type ToolResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name         string   `json:"name"`
+		Description  string   `json:"description"`
+		ToolType     string   `json:"tool_type"`
+		OASSpec      []byte   `json:"oas_spec"`
+		PrivacyScore float64  `json:"privacy_score"`
+		Operations   []string `json:"operations"`
+	} `json:"attributes"`
+}
+
+// OperationInput represents the input for adding or removing operations from a tool
+// @Description Operation input model
+type OperationInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Operation string `json:"operation"`
+		} `json:"attributes"`
+	} `json:"data"`
+}

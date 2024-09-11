@@ -161,6 +161,15 @@ func (a *API) setupRoutes() {
 		v1.GET("/chats", a.listChats)
 		v1.GET("/chats/by-group", a.getChatsByGroupID)
 
+		// Tool routes
+		v1.POST("/tools", a.createTool)
+		v1.GET("/tools/:id", a.getTool)
+		v1.PATCH("/tools/:id", a.updateTool)
+		v1.DELETE("/tools/:id", a.deleteTool)
+		v1.GET("/tools", a.getAllTools)
+		v1.GET("/tools/by-type", a.getToolsByType)
+		v1.GET("/tools/search", a.searchTools)
+
 	}
 }
 
