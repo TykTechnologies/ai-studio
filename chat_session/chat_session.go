@@ -317,7 +317,7 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 		}
 
 		content = fmt.Sprintf("Using tools: %s\n", strings.Join(tNames, ", "))
-		called, err := cs.handleToolCalls(reply, tools)
+		called, err := cs.handleToolCalls(reply)
 		if err != nil {
 			return "", fmt.Errorf("error handling tool calls: %v", err)
 		}
@@ -365,7 +365,7 @@ func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte) (*Ca
 	return callParams, nil
 }
 
-func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, tools []llms.Tool) (bool, error) {
+func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice) (bool, error) {
 	err := cs.chatHistory.AddMessage(context.Background(), llms.AIChatMessage{
 		Content:   choice.Content,
 		ToolCalls: choice.ToolCalls,
@@ -378,7 +378,25 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, tools []llms.
 	called := false
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
-		toolDef, ok := cs.tools[t.FunctionCall.Name]
+
+		// tools are sent to the LLM  as a list of operation names
+		// This means that the tool name from the LLM will be the opp,
+		// not the tool name
+		toolDefIndex := ""
+		for i, tool := range cs.tools {
+			asList := strings.Split(tool.AvailableOperations, ",")
+			for _, op := range asList {
+				if op == t.FunctionCall.Name {
+					toolDefIndex = i
+					break
+				}
+				if toolDefIndex != "" {
+					break
+				}
+			}
+		}
+
+		toolDef, ok := cs.tools[toolDefIndex]
 		if !ok {
 			return false, fmt.Errorf("tool not found: %s", t.FunctionCall.Name)
 		}
@@ -407,14 +425,19 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, tools []llms.
 				return false, fmt.Errorf("error calling tool operation: %v", err)
 			}
 
-			asStr, ok := resp.([]byte)
-			if !ok {
-				return false, fmt.Errorf("response is not a byte array")
+			var asStr string
+			switch resp.(type) {
+			case []byte:
+				asStr = string(resp.([]byte))
+			case string:
+				asStr = resp.(string)
+			default:
+				return false, fmt.Errorf("response is not a compatible string (%T)", resp)
 			}
 
 			err = cs.chatHistory.AddMessage(context.Background(), llms.ToolChatMessage{
 				ID:      t.ID,
-				Content: string(asStr),
+				Content: asStr,
 			})
 
 			if err != nil {
