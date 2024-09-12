@@ -27,6 +27,11 @@ const (
 	ChatMessage ChatMode = "message"
 )
 
+type LLMResponseWrapper struct {
+	Response *llms.ContentResponse
+	Opts     []llms.CallOption
+}
+
 type LLMDriver interface {
 	Call(ctx context.Context, inputs map[string]any, options ...chains.ChainCallOption) (map[string]any, error)
 }
@@ -36,6 +41,7 @@ type ChatSession struct {
 	chatRef        *models.Chat
 	chatHistory    *GormChatMessageHistory
 	input          chan *UserMessage
+	llmResponses   chan *LLMResponseWrapper
 	outputMessages chan *ChatResponse
 	outputStream   chan []byte
 	stop           chan struct{}
@@ -71,6 +77,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) *ChatSession 
 		db:             db,
 		datasources:    map[uint]*models.Datasource{},
 		tools:          map[string]models.Tool{},
+		llmResponses:   make(chan *LLMResponseWrapper, 100),
 	}
 }
 
@@ -159,12 +166,14 @@ func (cs *ChatSession) Start() error {
 
 				// prep tools
 				tools := cs.prepareTools()
-
 				cs.HandleUserMessage(msg, docs, tools)
-				// if err != nil {
-				// 	cs.errors <- fmt.Errorf("chat session handler error: %v", err)
-				// 	continue
-				// }
+
+			case resp := <-cs.llmResponses:
+				err := cs.HandleLLMResponse(resp)
+				if err != nil {
+					cs.errors <- fmt.Errorf("error handling LLM response: %v", err)
+					continue
+				}
 			}
 		}
 	}()
@@ -294,6 +303,91 @@ func (cs *ChatSession) getMessages() ([]llms.MessageContent, error) {
 	return history, nil
 }
 
+func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
+	resp := w.Response
+	if len(resp.Choices) == 0 {
+		cs.sendError(fmt.Errorf("no choices in response"))
+		return nil
+	}
+
+	toolCall := false
+	toolCallRequest := llms.MessageContent{
+		Role:  llms.ChatMessageTypeAI,
+		Parts: []llms.ContentPart{},
+	}
+
+	toolCallResult := llms.MessageContent{
+		Role:  llms.ChatMessageTypeTool,
+		Parts: []llms.ContentPart{},
+	}
+
+	content := ""
+	for _, reply := range resp.Choices {
+		if reply.Content != "" {
+			content = reply.Content
+			//cs.sendOutput(reply.Content)
+		}
+
+		if len(reply.ToolCalls) > 0 {
+			_, err := cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
+			if err != nil {
+				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
+				continue
+			}
+
+			toolCall = true
+		}
+	}
+
+	if toolCall {
+		// add the whole tool call to history
+		ctx := context.Background()
+		err := cs.chatHistory.AddMessage(ctx, toolCallRequest)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
+
+		// add the tool results to the history
+		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
+
+		history, err := cs.getMessages()
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
+			return err
+		}
+
+		toolCallResp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error generating content after tool call: %v", err))
+			return err
+		}
+
+		cs.llmResponses <- &LLMResponseWrapper{Response: toolCallResp, Opts: w.Opts}
+		// Not sure if this is the right option here, it may want to call more tools?
+		//cs.sendOutput(toolCallResp.Choices[0].Content)
+	}
+
+	if content != "" {
+		// Acknowlkedge the AI message
+		cs.sendOutput(content)
+		if !toolCall {
+			// only store non-tool call MESSAGES from the AI as AI messages
+			err := cs.chatHistory.AddAIMessage(context.Background(), content)
+			if err != nil {
+				cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Document, tools []llms.Tool) (string, error) {
 	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 	if cs.caller == nil {
@@ -318,66 +412,15 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 		return "", fmt.Errorf("error generating content: %v", err)
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no choices returned by model")
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("context cancelled")
+	case cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: opts}:
+	default:
+		return "", fmt.Errorf("could not send response to llm responses channel")
 	}
 
-	content := ""
-
-	toolCall := false
-
-	mc := llms.MessageContent{
-		Role:  llms.ChatMessageTypeAI,
-		Parts: []llms.ContentPart{},
-	}
-	for _, reply := range resp.Choices {
-		if reply.Content != "" {
-			// this is to make sure the function responds with a message,
-			// regular usage should use the
-			// Messager() channel
-			content = reply.Content
-			cs.sendOutput(reply.Content)
-		}
-
-		if len(reply.ToolCalls) > 0 {
-			_, err := cs.handleToolCalls(reply, &mc)
-			if err != nil {
-				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
-				continue
-			}
-
-			toolCall = true
-		}
-	}
-
-	if err != nil {
-		return "", err
-	}
-
-	if toolCall {
-		history, err := cs.getMessages()
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
-			return "", err
-		}
-
-		toolCallResp, err := cs.caller.GenerateContent(ctx, history, opts...)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error generating content after tool call: %v", err))
-			return "", err
-		}
-
-		err = cs.chatHistory.AddAIMessage(ctx, toolCallResp.Choices[0].Content)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
-			return "", err
-		}
-
-		// Not sure if this is the right option here, it may want to call more tools?
-		cs.sendOutput(toolCallResp.Choices[0].Content)
-	}
-
-	return content, nil
+	return resp.Choices[0].Content, nil
 }
 
 type CallParams struct {
@@ -471,12 +514,13 @@ func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opNa
 	return actualParams, nil
 }
 
-func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, mc *llms.MessageContent) (bool, error) {
+func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) (bool, error) {
 	called := false
+
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
 
-		mc.Parts = append(mc.Parts, llms.ToolCall{
+		toolCall.Parts = append(toolCall.Parts, llms.ToolCall{
 			ID:   t.ID,
 			Type: t.Type,
 			FunctionCall: &llms.FunctionCall{
@@ -486,20 +530,11 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, mc *llms.Mess
 		})
 
 		// save the tool call to the chat history
-		err := cs.chatHistory.AddMessage(context.Background(), *mc)
+		// err := cs.chatHistory.AddMessage(context.Background(), *mc)
 
-		// err := cs.chatHistory.AddAIToolCall(context.Background(), llms.ToolCall{
-		// 	ID:   t.ID,
-		// 	Type: t.Type,
-		// 	FunctionCall: &llms.FunctionCall{
-		// 		Name:      t.FunctionCall.Name,
-		// 		Arguments: t.FunctionCall.Arguments,
-		// 	},
-		// })
-
-		if err != nil {
-			return false, fmt.Errorf("error adding tool call to history: %v", err)
-		}
+		// if err != nil {
+		// 	return false, fmt.Errorf("error adding tool call to history: %v", err)
+		// }
 
 		// tools are sent to the LLM  as a list of operation names
 		// This means that the tool name from the LLM will be the opp,
@@ -563,11 +598,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, mc *llms.Mess
 				Content:    asStr,
 			}
 
-			err = cs.chatHistory.AddToolMessage(context.Background(), toolResp)
-			if err != nil {
-				return false, fmt.Errorf("error adding message to history: %v", err)
-			}
-
+			toolResult.Parts = append(toolResult.Parts, toolResp)
 			called = true
 		}
 	}

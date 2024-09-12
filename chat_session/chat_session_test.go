@@ -334,7 +334,7 @@ func TestChatSession_HandleToolCalls(t *testing.T) {
 		},
 	}
 
-	called, err := cs.handleToolCalls(choice, &llms.MessageContent{})
+	called, err := cs.handleToolCalls(choice, &llms.MessageContent{}, &llms.MessageContent{})
 	assert.NoError(t, err)
 	assert.True(t, called)
 }
@@ -487,7 +487,7 @@ func TestChatSession_Live(t *testing.T) {
 
 	// Send a message
 	select {
-	case session.Input() <- &UserMessage{Payload: "What is the weather like today in Auckland, New Zealand?"}:
+	case session.Input() <- &UserMessage{Payload: "What is the weather like today in Auckland, New Zealand, and in New York City, USA?"}:
 	default:
 		assert.Fail(t, "Failed to send message")
 	}
@@ -504,9 +504,9 @@ func TestChatSession_Live(t *testing.T) {
 			fmt.Println("[ERROR]", err)
 			assert.Fail(t, "Error received")
 		default:
-			if resps == 2 {
-				return
-			}
+			// if resps == 2 {
+			// 	return
+			// }
 			if time.Since(t0) > 20*time.Second {
 				assert.Fail(t, "Timeout waiting for response")
 				return
