@@ -273,13 +273,26 @@ func TestChatSession_PrepareTools(t *testing.T) {
 func TestChatSession_ConvertLLMArgsToUniversalClientInputs(t *testing.T) {
 	cs := NewChatSession(&models.Chat{}, ChatMessage, nil)
 
-	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "params": {"query": ["test"]}}`
-	params, err := cs.convertLLMArgsToUniversalClientInputs([]byte(testArgs))
+	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "parameters": {"query": ["test"]}}`
+	params, err := cs.convertLLMArgsToUniversalClientInputs([]byte(testArgs), "foo", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "value", params.Body["key"])
 	assert.Equal(t, []string{"application/json"}, params.Headers["Content-Type"])
-	assert.Equal(t, []string{"test"}, params.Params["query"])
+	assert.Equal(t, []string{"test"}, params.Parameters["query"])
+}
+
+func TestChatSession_ConvertLLMArgsToUniversalClientInputs_WithUnstructuredInput(t *testing.T) {
+	cs := NewChatSession(&models.Chat{}, ChatMessage, nil)
+
+	// LLMs might not send back the parameters key, so we just assume it for anything not in the other two categpories
+	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "query": ["test"]}`
+	params, err := cs.convertLLMArgsToUniversalClientInputs([]byte(testArgs), "foo", nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "value", params.Body["key"])
+	assert.Equal(t, []string{"application/json"}, params.Headers["Content-Type"])
+	assert.Equal(t, []string{"test"}, params.Parameters["query"])
 }
 
 func TestChatSession_HandleToolCalls(t *testing.T) {
@@ -315,13 +328,13 @@ func TestChatSession_HandleToolCalls(t *testing.T) {
 			{
 				FunctionCall: &llms.FunctionCall{
 					Name:      "findPetsByStatus",
-					Arguments: `{"body": {}, "headers": {}, "params": {"status": ["available"]}}`,
+					Arguments: `{"body": {}, "headers": {}, "parameters": {"status": ["available"]}}`,
 				},
 			},
 		},
 	}
 
-	called, err := cs.handleToolCalls(choice)
+	called, err := cs.handleToolCalls(choice, &llms.MessageContent{})
 	assert.NoError(t, err)
 	assert.True(t, called)
 }
@@ -341,9 +354,11 @@ func TestChatSession_GetMessages(t *testing.T) {
 	cs.initSession()
 
 	// Add some messages to the history
-	err := cs.chatHistory.AddMessage(context.Background(), llms.HumanChatMessage{Content: "Hello"})
+	// err := cs.chatHistory.addMessage(context.Background(), llms.HumanChatMessage{Content: "Hello"})
+	err := cs.chatHistory.addMessage(context.Background(), llms.TextParts(llms.ChatMessageTypeHuman, "Hello"))
 	assert.NoError(t, err)
-	err = cs.chatHistory.AddMessage(context.Background(), llms.AIChatMessage{Content: "Hi there"})
+	err = cs.chatHistory.addMessage(context.Background(), llms.TextParts(llms.ChatMessageTypeAI, "Hi there"))
+	// err = cs.chatHistory.addMessage(context.Background(), llms.AIChatMessage{Content: "Hi there"})
 	assert.NoError(t, err)
 
 	messages, err := cs.getMessages()
@@ -433,6 +448,72 @@ func TestChatSession_FetchDriver(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChatSession_Live(t *testing.T) {
+	if os.Getenv("WEATHERBIT_KEY") == "" {
+		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
+	}
+
+	db := setupTestDB(t)
+	chat := &models.Chat{
+		LLM: &models.LLM{
+			Name:   "claude-3-5-sonnet-20240620",
+			Vendor: models.ANTHROPIC,
+			APIKey: os.Getenv("ANTHROPIC_KEY"),
+		},
+		LLMSettings: &models.LLMSettings{
+			ModelName: "claude-3-5-sonnet-20240620",
+		},
+	}
+
+	spec, err := os.ReadFile("../universalclient/testdata/weatherbit.json")
+	assert.NoError(t, err)
+
+	weathertool := models.Tool{
+		Name:                "weather forecast",
+		Description:         "Get the weather forecast for a given location",
+		ToolType:            models.ToolTypeREST,
+		AvailableOperations: "ReturnsadailyforecastGivenLatLon",
+		AuthKey:             os.Getenv("WEATHERBIT_KEY"),
+		OASSpec:             spec,
+	}
+
+	session := NewChatSession(chat, ChatMessage, db)
+	session.AddTool("weather", weathertool)
+
+	err = session.Start()
+	assert.NoError(t, err)
+
+	// Send a message
+	select {
+	case session.Input() <- &UserMessage{Payload: "What is the weather like today in Auckland, New Zealand?"}:
+	default:
+		assert.Fail(t, "Failed to send message")
+	}
+
+	// Wait for a response
+	resps := 0
+	t0 := time.Now()
+	for {
+		select {
+		case resp := <-session.OutputMessage():
+			fmt.Println("[RESPONSE]", resp.Payload)
+			resps += 1
+		case err := <-session.Errors():
+			fmt.Println("[ERROR]", err)
+			assert.Fail(t, "Error received")
+		default:
+			if resps == 2 {
+				return
+			}
+			if time.Since(t0) > 20*time.Second {
+				assert.Fail(t, "Timeout waiting for response")
+				return
+			}
+		}
+	}
+
 }
 
 // func TestNewChatSession(t *testing.T) {

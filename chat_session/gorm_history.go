@@ -2,10 +2,10 @@ package chat_session
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/schema"
 	"gorm.io/gorm"
 )
 
@@ -15,9 +15,6 @@ type GormChatMessageHistory struct {
 	Limit   int
 	Session string
 }
-
-// Ensure GormChatMessageHistory implements the ChatMessageHistory interface
-var _ schema.ChatMessageHistory = &GormChatMessageHistory{}
 
 // GormChatMessageHistoryOption is a function type for configuring GormChatMessageHistory
 type GormChatMessageHistoryOption func(*GormChatMessageHistory)
@@ -49,7 +46,7 @@ func (h *GormChatMessageHistory) GetMemoryKey(context.Context) string {
 }
 
 // Messages returns all messages stored
-func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.ChatMessage, error) {
+func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.MessageContent, error) {
 	var chatMessages []models.CMessage
 	result := h.DB.WithContext(ctx).
 		Where("session = ?", h.Session).
@@ -61,43 +58,65 @@ func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.ChatMessa
 		return nil, result.Error
 	}
 
-	var messages []llms.ChatMessage
+	var messages []llms.MessageContent
 	for _, msg := range chatMessages {
-		switch msg.Type {
-		case string(llms.ChatMessageTypeAI):
-			messages = append(messages, llms.AIChatMessage{Content: msg.Content})
-		case string(llms.ChatMessageTypeHuman):
-			messages = append(messages, llms.HumanChatMessage{Content: msg.Content})
-		case string(llms.ChatMessageTypeSystem):
-			messages = append(messages, llms.SystemChatMessage{Content: msg.Content})
+		mc := llms.MessageContent{}
+		err := json.Unmarshal([]byte(msg.Content), &mc)
+		if err != nil {
+			return nil, err
 		}
+
+		messages = append(messages, mc)
 	}
 
 	return messages, nil
 }
 
-func (h *GormChatMessageHistory) addMessage(ctx context.Context, text string, role llms.ChatMessageType) error {
+func (c *GormChatMessageHistory) AddMessage(ctx context.Context, mc llms.MessageContent) error {
+	return c.addMessage(ctx, mc)
+}
+
+func (h *GormChatMessageHistory) addMessage(ctx context.Context, mc llms.MessageContent) error {
+	asJson, err := json.Marshal(mc)
+	if err != nil {
+		return err
+	}
 	message := models.CMessage{
 		Session: h.Session,
-		Content: text,
-		Type:    string(role),
+		Content: asJson,
 	}
 	return h.DB.WithContext(ctx).Create(&message).Error
 }
 
-// AddMessage adds a message to the chat message history
-func (h *GormChatMessageHistory) AddMessage(ctx context.Context, message llms.ChatMessage) error {
-	return h.addMessage(ctx, message.GetContent(), message.GetType())
-}
-
 // AddAIMessage adds an AIMessage to the chat message history
 func (h *GormChatMessageHistory) AddAIMessage(ctx context.Context, text string) error {
-	return h.addMessage(ctx, text, llms.ChatMessageTypeAI)
+	mc := llms.TextParts(llms.ChatMessageTypeAI, text)
+	return h.addMessage(ctx, mc)
 }
 
 // AddUserMessage adds a user message to the chat message history
 func (h *GormChatMessageHistory) AddUserMessage(ctx context.Context, text string) error {
-	return h.addMessage(ctx, text, llms.ChatMessageTypeHuman)
+	mc := llms.TextParts(llms.ChatMessageTypeHuman, text)
+	return h.addMessage(ctx, mc)
+}
+
+// AddUserMessage adds a user message to the chat message history
+func (h *GormChatMessageHistory) AddToolMessage(ctx context.Context, toolResp llms.ToolCallResponse) error {
+	mc := llms.MessageContent{
+		Role:  llms.ChatMessageTypeTool,
+		Parts: []llms.ContentPart{toolResp},
+	}
+
+	return h.addMessage(ctx, mc)
+}
+
+func (h *GormChatMessageHistory) AddAIToolCall(ctx context.Context, toolCall llms.ToolCall) error {
+	mc := llms.MessageContent{
+		Role:  llms.ChatMessageTypeAI,
+		Parts: []llms.ContentPart{toolCall},
+	}
+
+	return h.addMessage(ctx, mc)
 }
 
 // Clear resets messages
@@ -106,17 +125,21 @@ func (h *GormChatMessageHistory) Clear(ctx context.Context) error {
 }
 
 // SetMessages resets chat history and bulk inserts new messages into it
-func (h *GormChatMessageHistory) SetMessages(ctx context.Context, messages []llms.ChatMessage) error {
+func (h *GormChatMessageHistory) SetMessages(ctx context.Context, messages []llms.MessageContent) error {
 	err := h.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("session = ?", h.Session).Delete(&models.CMessage{}).Error; err != nil {
 			return err
 		}
 
 		for _, msg := range messages {
+			asJson, err := json.Marshal(msg)
+			if err != nil {
+				return err
+			}
+
 			chatMessage := models.CMessage{
 				Session: h.Session,
-				Content: msg.GetContent(),
-				Type:    string(msg.GetType()),
+				Content: asJson,
 			}
 			if err := tx.Create(&chatMessage).Error; err != nil {
 				return err

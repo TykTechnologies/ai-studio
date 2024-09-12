@@ -170,6 +170,7 @@ func WithTimeout(timeout time.Duration) ClientOption {
 
 func WithAuth(schemeName string, credentials interface{}) ClientOption {
 	return func(c *Client) {
+		setAuth := false
 		for i, scheme := range c.authConfig.Schemes {
 			if scheme.Name == schemeName {
 				switch creds := credentials.(type) {
@@ -186,14 +187,39 @@ func WithAuth(schemeName string, credentials interface{}) ClientOption {
 					}
 					// Add more cases if needed for different credential types
 				}
+				setAuth = true
 				break
+			}
+		}
+
+		if !setAuth {
+			// search the other way around, by type
+			for i, scheme := range c.authConfig.Schemes {
+				if scheme.Method == AuthApiKey || scheme.Method == AuthBearer {
+					c.authConfig.Schemes[i].Token = credentials.(string)
+					break
+				}
 			}
 		}
 	}
 }
 
+func (c *Client) GetAuthSchemes() []AuthScheme {
+	return c.authConfig.Schemes
+}
+
 func (c *Client) GetSpec() libopenapi.Document {
 	return c.spec
+}
+
+func (c *Client) GetInputSpecForOperation(operationId string) (map[string]interface{}, error) {
+	operation, _, _, err := c.findOperation(operationId)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas := c.buildParametersSchema(operation)
+	return schemas, nil
 }
 
 func (c *Client) CallOperation(operationId string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
@@ -684,6 +710,9 @@ func (c *Client) buildParametersSchema(operation *v3.Operation) map[string]inter
 
 	for _, param := range operation.Parameters {
 		properties[param.Name] = c.SchemaToMap(param.Schema.Schema())
+		if param.Required == nil {
+			continue
+		}
 		if *param.Required {
 			required = append(required, param.Name)
 		}
@@ -692,8 +721,10 @@ func (c *Client) buildParametersSchema(operation *v3.Operation) map[string]inter
 	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
 		if content, ok := operation.RequestBody.Content.Get("application/json"); ok {
 			properties["body"] = c.SchemaToMap(content.Schema.Schema())
-			if *operation.RequestBody.Required {
-				required = append(required, "body")
+			if operation != nil {
+				if *operation.RequestBody.Required {
+					required = append(required, "body")
+				}
 			}
 		}
 	}

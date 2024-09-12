@@ -222,28 +222,39 @@ func TestScratch(t *testing.T) {
 	}
 
 	// Load the OpenAPI 3.0 definition
-	specBytes, err := os.ReadFile("testdata/petstore.json")
+	specBytes, err := os.ReadFile("testdata/weatherbit.json")
 	require.NoError(t, err)
 
 	// Create the client
-	client, err := NewClient(specBytes, "https://httpbin.dmuth.org", WithResponseFormat(ResponseFormatJSON))
+	client, err := NewClient(specBytes, "", WithResponseFormat(ResponseFormatJSON), WithAuth("apiKey", "060c284fb6104a00876a0df072682347"))
 	require.NoError(t, err)
 
 	// List the operations
 	operations, err := client.ListOperations()
 	require.NoError(t, err)
 
-	fmt.Println("OPERATIONS:")
-	for i, operation := range operations {
-		fmt.Printf("%v. %s\n", i, operation)
+	// fmt.Println("OPERATIONS:")
+	// for i, operation := range operations {
+	// 	fmt.Printf("%v. %s\n", i, operation)
+	// }
+
+	// dat, err := client.AsTool(operations[3])
+	// require.NoError(t, err)
+
+	// jsonStr, err := json.MarshalIndent(dat, "", "  ")
+	// require.NoError(t, err)
+	// fmt.Println(string(jsonStr))
+
+	params := map[string][]string{
+		"city":    []string{"Auckland"},
+		"country": []string{"New Zealand"},
+		//"key":     []string{"060c284fb6104a00876a0df072682347"},
 	}
 
-	dat, err := client.AsTool(operations[19])
+	fmt.Println(operations[3])
+	result, err := client.CallOperation("Returnsadailyforecast-GivenLat/Lon.", params, map[string]interface{}{}, map[string][]string{})
 	require.NoError(t, err)
-
-	jsonStr, err := json.MarshalIndent(dat, "", "  ")
-	require.NoError(t, err)
-	fmt.Println(string(jsonStr))
+	fmt.Println(result)
 
 	// operationId := "addPet"
 	// inputs, err := client.GetOperationInputs(operationId)

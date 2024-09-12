@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +70,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) *ChatSession 
 		mode:           mode,
 		db:             db,
 		datasources:    map[uint]*models.Datasource{},
+		tools:          map[string]models.Tool{},
 	}
 }
 
@@ -105,6 +107,18 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 
 func (cs *ChatSession) RemoveDatasource(id uint) {
 	delete(cs.datasources, id)
+}
+
+func (cs *ChatSession) AddTool(id string, t models.Tool) {
+	cs.tools[id] = t
+}
+
+func (cs *ChatSession) RemoveTool(id string) {
+	delete(cs.tools, id)
+}
+
+func (cs *ChatSession) CurrentTools() map[string]models.Tool {
+	return cs.tools
 }
 
 func (cs *ChatSession) AddPreProcessor(fn func(*UserMessage) error) {
@@ -146,22 +160,30 @@ func (cs *ChatSession) Start() error {
 				// prep tools
 				tools := cs.prepareTools()
 
-				resp, err := cs.HandleUserMessage(msg, docs, tools)
-				if err != nil {
-					cs.errors <- fmt.Errorf("chat session handler error: %v", err)
-					continue
-				}
-
-				select {
-				case cs.outputMessages <- &ChatResponse{Payload: resp}:
-				default:
-					cs.errors <- fmt.Errorf("output channel is full")
-				}
+				cs.HandleUserMessage(msg, docs, tools)
+				// if err != nil {
+				// 	cs.errors <- fmt.Errorf("chat session handler error: %v", err)
+				// 	continue
+				// }
 			}
 		}
 	}()
 
 	return nil
+}
+
+func (cs *ChatSession) sendOutput(resp string) {
+	select {
+	case cs.outputMessages <- &ChatResponse{Payload: resp}:
+	}
+}
+
+func (cs *ChatSession) sendError(err error) {
+	select {
+	case cs.errors <- err:
+	default:
+		fmt.Println("error sending error to channel")
+	}
 }
 
 func (cs *ChatSession) prepareTools() []llms.Tool {
@@ -269,13 +291,7 @@ func (cs *ChatSession) getMessages() ([]llms.MessageContent, error) {
 		return nil, fmt.Errorf("error getting chat history: %v", err)
 	}
 
-	// manual history management (!)
-	messages := make([]llms.MessageContent, 0)
-	for i, _ := range history {
-		messages = append(messages, llms.TextParts(history[i].GetType(), history[i].GetContent()))
-	}
-
-	return messages, nil
+	return history, nil
 }
 
 func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Document, tools []llms.Tool) (string, error) {
@@ -287,7 +303,7 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 	ctx, done := context.WithTimeout(context.Background(), 300*time.Second)
 	defer done()
 
-	err := cs.chatHistory.AddMessage(context.Background(), cs.prepHumanMessage(msg.Payload, docs))
+	err := cs.chatHistory.AddUserMessage(context.Background(), cs.prepHumanMessage(msg.Payload, docs).Content)
 	if err != nil {
 		return "", fmt.Errorf("error adding message to history: %v", err)
 	}
@@ -307,77 +323,183 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 	}
 
 	content := ""
-	// lets just use the first reply for now
-	reply := resp.Choices[0]
 
-	if reply.FuncCall != nil {
-		tNames := []string{}
-		for i, _ := range reply.ToolCalls {
-			tNames = append(tNames, reply.ToolCalls[i].FunctionCall.Name)
+	toolCall := false
+
+	mc := llms.MessageContent{
+		Role:  llms.ChatMessageTypeAI,
+		Parts: []llms.ContentPart{},
+	}
+	for _, reply := range resp.Choices {
+		if reply.Content != "" {
+			// this is to make sure the function responds with a message,
+			// regular usage should use the
+			// Messager() channel
+			content = reply.Content
+			cs.sendOutput(reply.Content)
 		}
 
-		content = fmt.Sprintf("Using tools: %s\n", strings.Join(tNames, ", "))
-		called, err := cs.handleToolCalls(reply)
-		if err != nil {
-			return "", fmt.Errorf("error handling tool calls: %v", err)
-		}
-
-		if called {
-			history, err := cs.getMessages()
+		if len(reply.ToolCalls) > 0 {
+			_, err := cs.handleToolCalls(reply, &mc)
 			if err != nil {
-				return "", fmt.Errorf("error getting chat history after tool call: %v", err)
-			}
-			toolCallResp, err := cs.caller.GenerateContent(ctx, history, opts...)
-			if err != nil {
-				return "", fmt.Errorf("error generating content: %v", err)
+				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
+				continue
 			}
 
-			// Not sure if this is the right option here, it may want to call more tools?
-			return toolCallResp.Choices[0].Content, nil
+			toolCall = true
 		}
-	} else {
-		// Add the response to the chat history
-		content = reply.Content
-		err = cs.chatHistory.AddMessage(context.Background(), llms.HumanChatMessage{
-			Content: reply.Content,
-		})
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	if toolCall {
+		history, err := cs.getMessages()
 		if err != nil {
-			return "", fmt.Errorf("error adding message to history: %v", err)
+			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
+			return "", err
 		}
+
+		toolCallResp, err := cs.caller.GenerateContent(ctx, history, opts...)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error generating content after tool call: %v", err))
+			return "", err
+		}
+
+		err = cs.chatHistory.AddAIMessage(ctx, toolCallResp.Choices[0].Content)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
+			return "", err
+		}
+
+		// Not sure if this is the right option here, it may want to call more tools?
+		cs.sendOutput(toolCallResp.Choices[0].Content)
 	}
 
 	return content, nil
 }
 
 type CallParams struct {
-	Body    map[string]interface{} `json:"body"`
-	Headers map[string][]string    `json:"headers"`
-	Params  map[string][]string    `json:"params"`
+	Body       map[string]interface{} `json:"body"`
+	Headers    map[string][]string    `json:"headers"`
+	Parameters map[string][]string    `json:"parameters"`
 }
 
-func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte) (*CallParams, error) {
-	callParams := &CallParams{}
-	err := json.Unmarshal(params, callParams)
+func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opName string, uc *universalclient.Client) (*CallParams, error) {
+	callParams := map[string]interface{}{}
+	err := json.Unmarshal(params, &callParams)
 	if err != nil {
 		return nil, err
 	}
 
-	return callParams, nil
-}
-
-func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice) (bool, error) {
-	err := cs.chatHistory.AddMessage(context.Background(), llms.AIChatMessage{
-		Content:   choice.Content,
-		ToolCalls: choice.ToolCalls,
-	})
-
-	if err != nil {
-		return false, fmt.Errorf("error adding message to history: %v", err)
+	actualParams := &CallParams{
+		Headers:    map[string][]string{},
+		Parameters: map[string][]string{},
+		Body:       map[string]interface{}{},
 	}
 
+	for k, v := range callParams {
+		if k == "body" {
+			actualParams.Body = v.(map[string]interface{})
+			continue
+		}
+
+		if k == "headers" {
+			for hk, hv := range v.(map[string]interface{}) {
+				hSlice, ok := hv.([]interface{})
+				if ok {
+					for _, h := range hSlice {
+						asStr, ok := h.(string)
+						if ok {
+							actualParams.Headers[hk] = append(actualParams.Headers[hk], asStr)
+						}
+					}
+					continue
+				}
+				actualParams.Headers[hk] = hv.([]string)
+			}
+			continue
+		}
+
+		if k == "parameters" {
+			for pk, pv := range v.(map[string]interface{}) {
+				pSlice, ok := pv.([]interface{})
+				if ok {
+					for _, p := range pSlice {
+						asStr, ok := p.(string)
+						if ok {
+							actualParams.Parameters[pk] = append(actualParams.Parameters[pk], asStr)
+						}
+					}
+					continue
+				}
+				actualParams.Parameters[pk] = pv.([]string)
+			}
+			continue
+		}
+
+		paramName := k
+		paramValue := callParams[k]
+
+		switch paramValue.(type) {
+		case string:
+			actualParams.Parameters[paramName] = []string{paramValue.(string)}
+		case []interface{}:
+			for _, v := range paramValue.([]interface{}) {
+				switch v.(type) {
+				case string:
+					actualParams.Parameters[paramName] = append(actualParams.Parameters[paramName], v.(string))
+				}
+			}
+		case []string:
+			actualParams.Parameters[paramName] = paramValue.([]string)
+		case float64:
+			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(paramValue.(float64), 'f', -1, 64)}
+		case int:
+			actualParams.Parameters[paramName] = []string{strconv.Itoa(paramValue.(int))}
+		case float32:
+			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(float64(paramValue.(float32)), 'f', -1, 32)}
+		case bool:
+			actualParams.Parameters[paramName] = []string{strconv.FormatBool(paramValue.(bool))}
+		default:
+			return nil, fmt.Errorf("unsupported type for parameter %s: %T", k, v)
+		}
+
+	}
+
+	return actualParams, nil
+}
+
+func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, mc *llms.MessageContent) (bool, error) {
 	called := false
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
+
+		mc.Parts = append(mc.Parts, llms.ToolCall{
+			ID:   t.ID,
+			Type: t.Type,
+			FunctionCall: &llms.FunctionCall{
+				Name:      t.FunctionCall.Name,
+				Arguments: t.FunctionCall.Arguments,
+			},
+		})
+
+		// save the tool call to the chat history
+		err := cs.chatHistory.AddMessage(context.Background(), *mc)
+
+		// err := cs.chatHistory.AddAIToolCall(context.Background(), llms.ToolCall{
+		// 	ID:   t.ID,
+		// 	Type: t.Type,
+		// 	FunctionCall: &llms.FunctionCall{
+		// 		Name:      t.FunctionCall.Name,
+		// 		Arguments: t.FunctionCall.Arguments,
+		// 	},
+		// })
+
+		if err != nil {
+			return false, fmt.Errorf("error adding tool call to history: %v", err)
+		}
 
 		// tools are sent to the LLM  as a list of operation names
 		// This means that the tool name from the LLM will be the opp,
@@ -415,12 +537,12 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice) (bool, error)
 				return false, fmt.Errorf("error creating tool client: %v", err)
 			}
 
-			args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments))
+			args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments), t.FunctionCall.Name, uc)
 			if err != nil {
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
-			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Params, args.Body, args.Headers)
+			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
 			if err != nil {
 				return false, fmt.Errorf("error calling tool operation: %v", err)
 			}
@@ -435,11 +557,13 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice) (bool, error)
 				return false, fmt.Errorf("response is not a compatible string (%T)", resp)
 			}
 
-			err = cs.chatHistory.AddMessage(context.Background(), llms.ToolChatMessage{
-				ID:      t.ID,
-				Content: asStr,
-			})
+			toolResp := llms.ToolCallResponse{
+				ToolCallID: t.ID,
+				Name:       t.FunctionCall.Name,
+				Content:    asStr,
+			}
 
+			err = cs.chatHistory.AddToolMessage(context.Background(), toolResp)
 			if err != nil {
 				return false, fmt.Errorf("error adding message to history: %v", err)
 			}

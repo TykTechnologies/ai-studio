@@ -11,7 +11,6 @@ type CMessage struct {
 	gorm.Model
 	ID        uint   `gorm:"primaryKey"`
 	Session   string `gorm:"index"`
-	Content   string
-	Type      string
+	Content   []byte
 	CreatedAt time.Time
 }
