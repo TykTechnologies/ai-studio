@@ -216,69 +216,69 @@ func TestGetOperationInputs(t *testing.T) {
 	}
 }
 
-// func TestScratch(t *testing.T) {
-// 	if os.Getenv("CI") != "" || testing.Short() {
-// 		t.Skip("Skipping live API test in CI environment or short mode")
-// 	}
+func TestScratch(t *testing.T) {
+	if os.Getenv("CI") != "" || testing.Short() {
+		t.Skip("Skipping live API test in CI environment or short mode")
+	}
 
-// 	// Load the OpenAPI 3.0 definition
-// 	specBytes, err := os.ReadFile("testdata/petstore.json")
-// 	require.NoError(t, err)
+	// Load the OpenAPI 3.0 definition
+	specBytes, err := os.ReadFile("testdata/petstore.json")
+	require.NoError(t, err)
 
-// 	// Create the client
-// 	client, err := NewClient(specBytes, "https://httpbin.dmuth.org", WithResponseFormat(ResponseFormatJSON))
-// 	require.NoError(t, err)
+	// Create the client
+	client, err := NewClient(specBytes, "https://httpbin.dmuth.org", WithResponseFormat(ResponseFormatJSON))
+	require.NoError(t, err)
 
-// 	// List the operations
-// 	operations, err := client.ListOperations()
-// 	require.NoError(t, err)
+	// List the operations
+	operations, err := client.ListOperations()
+	require.NoError(t, err)
 
-// 	fmt.Println("OPERATIONS:")
-// 	for i, operation := range operations {
-// 		fmt.Printf("%v. %s\n", i, operation)
-// 	}
+	fmt.Println("OPERATIONS:")
+	for i, operation := range operations {
+		fmt.Printf("%v. %s\n", i, operation)
+	}
 
-// 	dat, err := client.AsTool(operations[19])
-// 	require.NoError(t, err)
+	dat, err := client.AsTool(operations[19])
+	require.NoError(t, err)
 
-// 	jsonStr, err := json.MarshalIndent(dat, "", "  ")
-// 	require.NoError(t, err)
-// 	fmt.Println(string(jsonStr))
+	jsonStr, err := json.MarshalIndent(dat, "", "  ")
+	require.NoError(t, err)
+	fmt.Println(string(jsonStr))
 
-// 	// operationId := "addPet"
-// 	// inputs, err := client.GetOperationInputs(operationId)
-// 	// require.NoError(t, err)
+	// operationId := "addPet"
+	// inputs, err := client.GetOperationInputs(operationId)
+	// require.NoError(t, err)
 
-// 	// fmt.Printf("Inputs for operation '%s':\n", operationId)
-// 	// fmt.Println("Path Parameters:")
-// 	// for _, param := range inputs.PathParams {
-// 	// 	fmt.Printf("- %s (Required: %v): %s\n", param.Name, param.Required, param.Description)
-// 	// }
+	// fmt.Printf("Inputs for operation '%s':\n", operationId)
+	// fmt.Println("Path Parameters:")
+	// for _, param := range inputs.PathParams {
+	// 	fmt.Printf("- %s (Required: %v): %s\n", param.Name, param.Required, param.Description)
+	// }
 
-// 	// fmt.Println("Query Parameters:")
-// 	// for _, param := range inputs.QueryParams {
-// 	// 	fmt.Printf("- %s (Required: %v): %s\n", param.Name, param.Required, param.Description)
-// 	// }
+	// fmt.Println("Query Parameters:")
+	// for _, param := range inputs.QueryParams {
+	// 	fmt.Printf("- %s (Required: %v): %s\n", param.Name, param.Required, param.Description)
+	// }
 
-// 	// if inputs.RequestBody != nil {
-// 	// 	fmt.Printf("Request Body (Required: %v):\n", inputs.RequestBody.Required)
-// 	// 	fmt.Printf("- Content Type: %s\n", inputs.RequestBody.ContentType)
-// 	// 	fmt.Printf("- Description: %s\n", inputs.RequestBody.Description)
+	// if inputs.RequestBody != nil {
+	// 	fmt.Printf("Request Body (Required: %v):\n", inputs.RequestBody.Required)
+	// 	fmt.Printf("- Content Type: %s\n", inputs.RequestBody.ContentType)
+	// 	fmt.Printf("- Description: %s\n", inputs.RequestBody.Description)
 
-// 	// 	// You might want to add more detailed information about the schema here
-// 	// }
+	// 	// You might want to add more detailed information about the schema here
+	// }
 
-// 	// result, err := client.CallOperation(
-// 	// 	operationId,
-// 	// 	nil,
-// 	// 	nil,
-// 	// 	nil,
-// 	// )
+	// result, err := client.CallOperation(
+	// 	operationId,
+	// 	nil,
+	// 	nil,
+	// 	nil,
+	// )
 
-// 	// require.NoError(t, err)
-// 	// require.NotNil(t, result)
+	// require.NoError(t, err)
+	// require.NotNil(t, result)
 
-// 	// fmt.Println("RESULT:")
-// 	// fmt.Println(result)
+	// fmt.Println("RESULT:")
+	// fmt.Println(result)
 
-// }
+}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
-	"github.com/tmc/langchaingo/chains"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -62,7 +62,6 @@ func TestChatSession_InitSession(t *testing.T) {
 	err := cs.initSession()
 
 	assert.NoError(t, err)
-	assert.IsType(t, chains.LLMChain{}, cs.caller)
 }
 
 func TestChatSession_HandleUserMessage(t *testing.T) {
@@ -82,7 +81,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 	assert.NoError(t, err)
 
 	msg := &UserMessage{Payload: "Test message"}
-	resp, err := cs.HandleUserMessage(msg, []schema.Document{})
+	resp, err := cs.HandleUserMessage(msg, []schema.Document{}, []llms.Tool{})
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resp)
@@ -197,7 +196,7 @@ func TestChatSession_GetOptions(t *testing.T) {
 
 	db := setupTestDB(t)
 	cs := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db)
-	options := cs.getOptions(llmSettings)
+	options := cs.getOptions(llmSettings, []llms.Tool{})
 
 	assert.NotEmpty(t, options)
 	// You might want to add more specific checks for each option

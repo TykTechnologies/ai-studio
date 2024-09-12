@@ -44,6 +44,10 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, options ...GormChatM
 	return h
 }
 
+func (h *GormChatMessageHistory) GetMemoryKey(context.Context) string {
+	return "history"
+}
+
 // Messages returns all messages stored
 func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.ChatMessage, error) {
 	var chatMessages []models.CMessage

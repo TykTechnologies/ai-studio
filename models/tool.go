@@ -16,6 +16,7 @@ type Tool struct {
 	OASSpec             []byte  `json:"oas_spec"`
 	AvailableOperations string  `json:"available_operations"`
 	PrivacyScore        float64 `json:"privacy_score"`
+	AuthKey             string  `json:"auth_key"`
 }
 
 type Tools []Tool

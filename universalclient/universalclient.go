@@ -90,7 +90,6 @@ type Client struct {
 	httpClient     *http.Client
 	responseFormat ResponseFormat
 	authConfig     AuthConfig
-	// rolodex        *index.Rolodex
 }
 
 // ClientOption is a function that configures a Client
@@ -638,12 +637,12 @@ func (c *Client) GetSupportedAuthSchemes() []AuthSchemeInfo {
 	return schemes
 }
 
-func (c *Client) AsTool(operations ...string) ([]*llms.Tool, error) {
+func (c *Client) AsTool(operations ...string) ([]llms.Tool, error) {
 	if len(operations) == 0 {
 		return nil, fmt.Errorf("at least one operation must be specified")
 	}
 
-	var tools []*llms.Tool
+	var tools []llms.Tool
 
 	for _, operationID := range operations {
 		operation, path, method, err := c.findOperation(operationID)
@@ -657,7 +656,7 @@ func (c *Client) AsTool(operations ...string) ([]*llms.Tool, error) {
 			Parameters:  c.buildParametersSchema(operation),
 		}
 
-		tool := &llms.Tool{
+		tool := llms.Tool{
 			Type:     "function",
 			Function: functionDef,
 		}

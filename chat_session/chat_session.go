@@ -2,18 +2,19 @@ package chat_session
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gofrs/uuid"
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/anthropic"
 	"github.com/tmc/langchaingo/llms/openai"
-	"github.com/tmc/langchaingo/memory"
-	"github.com/tmc/langchaingo/prompts"
 	"github.com/tmc/langchaingo/schema"
 	"gorm.io/gorm"
 )
@@ -25,14 +26,6 @@ const (
 	ChatMessage ChatMode = "message"
 )
 
-const informedTemplate = `The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
-Some Background:
-{{.context}}
-Current conversation:
-{{.history}}
-Human: {{.input}}
-AI:`
-
 type LLMDriver interface {
 	Call(ctx context.Context, inputs map[string]any, options ...chains.ChainCallOption) (map[string]any, error)
 }
@@ -40,16 +33,18 @@ type LLMDriver interface {
 type ChatSession struct {
 	id             string
 	chatRef        *models.Chat
+	chatHistory    *GormChatMessageHistory
 	input          chan *UserMessage
 	outputMessages chan *ChatResponse
 	outputStream   chan []byte
 	stop           chan struct{}
 	errors         chan error
 	preProcessors  []func(*UserMessage) error
-	caller         chains.Chain
+	caller         llms.Model
 	mode           ChatMode
 	db             *gorm.DB
 	datasources    map[uint]*models.Datasource
+	tools          map[string]models.Tool
 }
 
 type UserMessage struct {
@@ -140,6 +135,7 @@ func (cs *ChatSession) Start() error {
 					continue
 				}
 
+				// handle RAG
 				ds := dataSession.NewDataSession(cs.datasources)
 				docs, err := ds.Search(msg.Payload, 5)
 				if err != nil {
@@ -147,7 +143,10 @@ func (cs *ChatSession) Start() error {
 					continue
 				}
 
-				resp, err := cs.HandleUserMessage(msg, docs)
+				// prep tools
+				tools := cs.prepareTools()
+
+				resp, err := cs.HandleUserMessage(msg, docs, tools)
 				if err != nil {
 					cs.errors <- fmt.Errorf("chat session handler error: %v", err)
 					continue
@@ -165,30 +164,53 @@ func (cs *ChatSession) Start() error {
 	return nil
 }
 
+func (cs *ChatSession) prepareTools() []llms.Tool {
+	tools := make([]llms.Tool, 0)
+	for _, t := range cs.tools {
+		switch t.ToolType {
+		case models.ToolTypeREST:
+			opts := []universalclient.ClientOption{}
+			if t.AuthKey != "" {
+				// API Key only at the moment
+				opts = append(opts, universalclient.WithAuth("apiKey", t.AuthKey))
+			}
+
+			uc, err := universalclient.NewClient(t.OASSpec, "", opts...)
+			if err != nil {
+				cs.errors <- fmt.Errorf("error creating universal client: %v", err)
+				continue
+			}
+
+			if len(t.GetOperations()) > 0 {
+				asToolDef, err := uc.AsTool(t.GetOperations()...)
+				if err != nil {
+					cs.errors <- fmt.Errorf("error creating tool definition: %v", err)
+					continue
+				}
+
+				tools = append(tools, asToolDef...)
+			}
+
+		default:
+			cs.errors <- fmt.Errorf("unknown tool type: %s", t.ToolType)
+		}
+
+	}
+
+	return tools
+}
+
 func (cs *ChatSession) initSession() error {
-	// History for the chain
-	chatHistory := NewGormChatMessageHistory(cs.db, cs.id)
-	conversationBuffer := memory.NewConversationBuffer(
-		memory.WithChatHistory(chatHistory),
-		memory.WithInputKey("input"))
+	// History for the chat session
+	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id)
 
 	// create the LLM client
-	llm, err := cs.fetchDriver(conversationBuffer)
+	llm, err := cs.fetchDriver(nil)
 	if err != nil {
 		return err
 	}
 
-	convo := chains.NewConversation(llm, conversationBuffer)
-	convo.Prompt = prompts.NewPromptTemplate(
-		informedTemplate,
-		[]string{
-			"history",
-			"input",
-			"context",
-		})
-
-	docChain := chains.NewStuffDocuments(&convo)
-	cs.caller = docChain
+	cs.caller = llm
 
 	return nil
 }
@@ -222,41 +244,188 @@ func (cs *ChatSession) preProcessMessage(msg *UserMessage) error {
 	return nil
 }
 
-func (cs *ChatSession) fetchDocuments(payload string) ([]schema.Document, error) {
-	// var docs []schema.Document
-	panic("not implemented")
+func (cs *ChatSession) joinDocuments(docs []schema.Document, separator string) string {
+	var text string
+	docLen := len(docs)
+	for k, doc := range docs {
+		text += doc.PageContent
+		if k != docLen-1 {
+			text += separator
+		}
+	}
+	return text
 }
 
-func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Document) (string, error) {
-	opts := cs.getOptions(cs.chatRef.LLMSettings)
+func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
+	pl := fmt.Sprintf("Context for this message: \n\n%s\n\nMessage: \n\n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	return llms.HumanChatMessage{
+		Content: pl,
+	}
+}
+
+func (cs *ChatSession) getMessages() ([]llms.MessageContent, error) {
+	history, err := cs.chatHistory.Messages(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("error getting chat history: %v", err)
+	}
+
+	// manual history management (!)
+	messages := make([]llms.MessageContent, 0)
+	for i, _ := range history {
+		messages = append(messages, llms.TextParts(history[i].GetType(), history[i].GetContent()))
+	}
+
+	return messages, nil
+}
+
+func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Document, tools []llms.Tool) (string, error) {
+	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 	if cs.caller == nil {
 		return "", fmt.Errorf("LLM driver is not initialized")
 	}
 
-	ctx, done := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, done := context.WithTimeout(context.Background(), 300*time.Second)
 	defer done()
-	// resp, err := chains.Run(ctx, cs.caller, msg.Payload, opts...)
-	inputs := map[string]any{
-		"input":           msg.Payload,
-		"input_documents": docs,
-	}
 
-	resp, err := chains.Call(ctx, cs.caller, inputs, opts...)
+	err := cs.chatHistory.AddMessage(context.Background(), cs.prepHumanMessage(msg.Payload, docs))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error adding message to history: %v", err)
 	}
 
-	txt, ok := resp["text"]
-	if !ok {
-		return "", fmt.Errorf("no text field returned by caller")
+	messages, err := cs.getMessages()
+	if err != nil {
+		return "", fmt.Errorf("error getting chat history: %v", err)
 	}
 
-	txtStr, ok := txt.(string)
-	if !ok {
-		return "", fmt.Errorf("text field is not a string")
+	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		return "", fmt.Errorf("error generating content: %v", err)
 	}
 
-	return txtStr, nil
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices returned by model")
+	}
+
+	content := ""
+	// lets just use the first reply for now
+	reply := resp.Choices[0]
+
+	if reply.FuncCall != nil {
+		tNames := []string{}
+		for i, _ := range reply.ToolCalls {
+			tNames = append(tNames, reply.ToolCalls[i].FunctionCall.Name)
+		}
+
+		content = fmt.Sprintf("Using tools: %s\n", strings.Join(tNames, ", "))
+		called, err := cs.handleToolCalls(reply, tools)
+		if err != nil {
+			return "", fmt.Errorf("error handling tool calls: %v", err)
+		}
+
+		if called {
+			history, err := cs.getMessages()
+			if err != nil {
+				return "", fmt.Errorf("error getting chat history after tool call: %v", err)
+			}
+			toolCallResp, err := cs.caller.GenerateContent(ctx, history, opts...)
+			if err != nil {
+				return "", fmt.Errorf("error generating content: %v", err)
+			}
+
+			// Not sure if this is the right option here, it may want to call more tools?
+			return toolCallResp.Choices[0].Content, nil
+		}
+	} else {
+		// Add the response to the chat history
+		content = reply.Content
+		err = cs.chatHistory.AddMessage(context.Background(), llms.HumanChatMessage{
+			Content: reply.Content,
+		})
+		if err != nil {
+			return "", fmt.Errorf("error adding message to history: %v", err)
+		}
+	}
+
+	return content, nil
+}
+
+type CallParams struct {
+	Body    map[string]interface{} `json:"body"`
+	Headers map[string][]string    `json:"headers"`
+	Params  map[string][]string    `json:"params"`
+}
+
+func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte) (*CallParams, error) {
+	callParams := &CallParams{}
+	err := json.Unmarshal(params, callParams)
+	if err != nil {
+		return nil, err
+	}
+
+	return callParams, nil
+}
+
+func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, tools []llms.Tool) (bool, error) {
+	err := cs.chatHistory.AddMessage(context.Background(), llms.AIChatMessage{
+		Content:   choice.Content,
+		ToolCalls: choice.ToolCalls,
+	})
+
+	if err != nil {
+		return false, fmt.Errorf("error adding message to history: %v", err)
+	}
+
+	called := false
+	for i, _ := range choice.ToolCalls {
+		t := choice.ToolCalls[i]
+		toolDef, ok := cs.tools[t.FunctionCall.Name]
+		if !ok {
+			return false, fmt.Errorf("tool not found: %s", t.FunctionCall.Name)
+		}
+
+		// Call the tool
+		if toolDef.ToolType == models.ToolTypeREST {
+			opts := make([]universalclient.ClientOption, 0)
+			if toolDef.AuthKey != "" {
+				opts = append(opts, universalclient.WithAuth("apiKey", toolDef.AuthKey))
+			}
+
+			opts = append(opts, universalclient.WithResponseFormat(universalclient.ResponseFormatJSON))
+
+			uc, err := universalclient.NewClient(toolDef.OASSpec, "", opts...)
+			if err != nil {
+				return false, fmt.Errorf("error creating tool client: %v", err)
+			}
+
+			args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments))
+			if err != nil {
+				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
+			}
+
+			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Params, args.Body, args.Headers)
+			if err != nil {
+				return false, fmt.Errorf("error calling tool operation: %v", err)
+			}
+
+			asStr, ok := resp.([]byte)
+			if !ok {
+				return false, fmt.Errorf("response is not a byte array")
+			}
+
+			err = cs.chatHistory.AddMessage(context.Background(), llms.ToolChatMessage{
+				ID:      t.ID,
+				Content: string(asStr),
+			})
+
+			if err != nil {
+				return false, fmt.Errorf("error adding message to history: %v", err)
+			}
+
+			called = true
+		}
+	}
+
+	return called, nil
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
@@ -271,40 +440,44 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 	return nil
 }
 
-func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings) []chains.ChainCallOption {
-	var callOptions = make([]chains.ChainCallOption, 0)
+func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings, tools []llms.Tool) []llms.CallOption {
+	var callOptions = make([]llms.CallOption, 0)
 
 	if llmSettings.MaxLength > 0 {
-		callOptions = append(callOptions, chains.WithMaxLength(llmSettings.MaxLength))
+		callOptions = append(callOptions, llms.WithMaxLength(llmSettings.MaxLength))
 	}
 	if llmSettings.MaxTokens > 0 {
-		callOptions = append(callOptions, chains.WithMaxTokens(llmSettings.MaxTokens))
+		callOptions = append(callOptions, llms.WithMaxTokens(llmSettings.MaxTokens))
 	}
 	if llmSettings.MinLength > 0 {
-		callOptions = append(callOptions, chains.WithMinLength(llmSettings.MinLength))
+		callOptions = append(callOptions, llms.WithMinLength(llmSettings.MinLength))
 	}
 
 	if llmSettings.RepetitionPenalty > 0 {
-		callOptions = append(callOptions, chains.WithRepetitionPenalty(llmSettings.RepetitionPenalty))
+		callOptions = append(callOptions, llms.WithRepetitionPenalty(llmSettings.RepetitionPenalty))
 	}
 	if llmSettings.Seed > 0 {
-		callOptions = append(callOptions, chains.WithSeed(llmSettings.Seed))
+		callOptions = append(callOptions, llms.WithSeed(llmSettings.Seed))
 	}
 	if len(llmSettings.StopWords) > 0 {
-		callOptions = append(callOptions, chains.WithStopWords(llmSettings.StopWords))
+		callOptions = append(callOptions, llms.WithStopWords(llmSettings.StopWords))
 	}
 	if llmSettings.Temperature > 0 {
-		callOptions = append(callOptions, chains.WithTemperature(llmSettings.Temperature))
+		callOptions = append(callOptions, llms.WithTemperature(llmSettings.Temperature))
 	}
 	if llmSettings.TopK > 0 {
-		callOptions = append(callOptions, chains.WithTopK(llmSettings.TopK))
+		callOptions = append(callOptions, llms.WithTopK(llmSettings.TopK))
 	}
 	if llmSettings.TopP > 0 {
-		callOptions = append(callOptions, chains.WithTopP(llmSettings.TopP))
+		callOptions = append(callOptions, llms.WithTopP(llmSettings.TopP))
 	}
 
 	if cs.mode == ChatStream {
-		callOptions = append(callOptions, chains.WithStreamingFunc(cs.streamingFunc))
+		callOptions = append(callOptions, llms.WithStreamingFunc(cs.streamingFunc))
+	}
+
+	if len(tools) > 0 {
+		callOptions = append(callOptions, llms.WithTools(tools))
 	}
 
 	return callOptions
