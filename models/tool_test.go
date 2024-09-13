@@ -165,7 +165,7 @@ func TestTools_GetByPrivacyScoreMin(t *testing.T) {
 	}
 
 	var fetchedTools Tools
-	err := fetchedTools.GetByPrivacyScoreMin(db, 0.8)
+	err := fetchedTools.GetByPrivacyScoreMin(db, 8)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedTools, 2)
 }
@@ -184,7 +184,7 @@ func TestTools_GetByPrivacyScoreMax(t *testing.T) {
 	}
 
 	var fetchedTools Tools
-	err := fetchedTools.GetByPrivacyScoreMax(db, 0.8)
+	err := fetchedTools.GetByPrivacyScoreMax(db, 8)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedTools, 2)
 }
@@ -193,9 +193,9 @@ func TestTools_GetByPrivacyScoreRange(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 6},
 		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 8},
-		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 9},
+		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 10},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)
@@ -203,7 +203,7 @@ func TestTools_GetByPrivacyScoreRange(t *testing.T) {
 	}
 
 	var fetchedTools Tools
-	err := fetchedTools.GetByPrivacyScoreRange(db, 0.75, 0.85)
+	err := fetchedTools.GetByPrivacyScoreRange(db, 7, 8)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedTools, 1)
 	assert.Equal(t, "Tool 2", fetchedTools[0].Name)

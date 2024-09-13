@@ -66,17 +66,17 @@ func (t *Tools) GetByType(db *gorm.DB, toolType string) error {
 }
 
 // GetByPrivacyScoreMin retrieves all tools with a privacy score greater than or equal to the given minimum
-func (t *Tools) GetByPrivacyScoreMin(db *gorm.DB, minScore float64) error {
+func (t *Tools) GetByPrivacyScoreMin(db *gorm.DB, minScore int) error {
 	return db.Where("privacy_score >= ?", minScore).Find(t).Error
 }
 
 // GetByPrivacyScoreMax retrieves all tools with a privacy score less than or equal to the given maximum
-func (t *Tools) GetByPrivacyScoreMax(db *gorm.DB, maxScore float64) error {
+func (t *Tools) GetByPrivacyScoreMax(db *gorm.DB, maxScore int) error {
 	return db.Where("privacy_score <= ?", maxScore).Find(t).Error
 }
 
 // GetByPrivacyScoreRange retrieves all tools with a privacy score within the given range
-func (t *Tools) GetByPrivacyScoreRange(db *gorm.DB, minScore, maxScore float64) error {
+func (t *Tools) GetByPrivacyScoreRange(db *gorm.DB, minScore, maxScore int) error {
 	return db.Where("privacy_score BETWEEN ? AND ?", minScore, maxScore).Find(t).Error
 }
 

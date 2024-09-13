@@ -44,7 +44,7 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, tool.ID, updatedTool.ID)
 	assert.Equal(t, "Updated Tool", updatedTool.Name)
 	assert.Equal(t, "Updated Description", updatedTool.Description)
-	assert.Equal(t, 0.9, updatedTool.PrivacyScore)
+	assert.Equal(t, 9, updatedTool.PrivacyScore)
 
 	// Test GetToolByName
 	namedTool, err := service.GetToolByName("Updated Tool")
@@ -64,19 +64,19 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, tool.ID, typedTools[0].ID)
 
 	// Test GetToolsByPrivacyScoreMin
-	minScoreTools, err := service.GetToolsByPrivacyScoreMin(0.8)
+	minScoreTools, err := service.GetToolsByPrivacyScoreMin(8)
 	assert.NoError(t, err)
 	assert.Len(t, minScoreTools, 1)
 	assert.Equal(t, tool.ID, minScoreTools[0].ID)
 
 	// Test GetToolsByPrivacyScoreMax
-	maxScoreTools, err := service.GetToolsByPrivacyScoreMax(1.0)
+	maxScoreTools, err := service.GetToolsByPrivacyScoreMax(9)
 	assert.NoError(t, err)
 	assert.Len(t, maxScoreTools, 1)
 	assert.Equal(t, tool.ID, maxScoreTools[0].ID)
 
 	// Test GetToolsByPrivacyScoreRange
-	rangeScoreTools, err := service.GetToolsByPrivacyScoreRange(0.8, 1.0)
+	rangeScoreTools, err := service.GetToolsByPrivacyScoreRange(8, 10)
 	assert.NoError(t, err)
 	assert.Len(t, rangeScoreTools, 1)
 	assert.Equal(t, tool.ID, rangeScoreTools[0].ID)
@@ -169,19 +169,19 @@ func TestToolService_MultipleTool(t *testing.T) {
 	assert.ElementsMatch(t, []uint{tool1.ID, tool2.ID}, []uint{restTools[0].ID, restTools[1].ID})
 
 	// Test GetToolsByPrivacyScoreMin
-	minScoreTools, err := service.GetToolsByPrivacyScoreMin(0.8)
+	minScoreTools, err := service.GetToolsByPrivacyScoreMin(8)
 	assert.NoError(t, err)
 	assert.Len(t, minScoreTools, 2)
 	assert.ElementsMatch(t, []uint{tool2.ID, tool3.ID}, []uint{minScoreTools[0].ID, minScoreTools[1].ID})
 
 	// Test GetToolsByPrivacyScoreMax
-	maxScoreTools, err := service.GetToolsByPrivacyScoreMax(0.8)
+	maxScoreTools, err := service.GetToolsByPrivacyScoreMax(8)
 	assert.NoError(t, err)
 	assert.Len(t, maxScoreTools, 2)
 	assert.ElementsMatch(t, []uint{tool1.ID, tool2.ID}, []uint{maxScoreTools[0].ID, maxScoreTools[1].ID})
 
 	// Test GetToolsByPrivacyScoreRange
-	rangeScoreTools, err := service.GetToolsByPrivacyScoreRange(0.75, 0.85)
+	rangeScoreTools, err := service.GetToolsByPrivacyScoreRange(8, 8)
 	assert.NoError(t, err)
 	assert.Len(t, rangeScoreTools, 1)
 	assert.Equal(t, tool2.ID, rangeScoreTools[0].ID)

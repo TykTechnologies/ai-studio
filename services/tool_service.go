@@ -88,7 +88,7 @@ func (s *Service) GetToolsByType(toolType string) ([]models.Tool, error) {
 }
 
 // GetToolsByPrivacyScoreMin retrieves all tools with a privacy score greater than or equal to the given minimum
-func (s *Service) GetToolsByPrivacyScoreMin(minScore float64) ([]models.Tool, error) {
+func (s *Service) GetToolsByPrivacyScoreMin(minScore int) ([]models.Tool, error) {
 	var tools models.Tools
 	if err := tools.GetByPrivacyScoreMin(s.DB, minScore); err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func (s *Service) GetToolsByPrivacyScoreMin(minScore float64) ([]models.Tool, er
 }
 
 // GetToolsByPrivacyScoreMax retrieves all tools with a privacy score less than or equal to the given maximum
-func (s *Service) GetToolsByPrivacyScoreMax(maxScore float64) ([]models.Tool, error) {
+func (s *Service) GetToolsByPrivacyScoreMax(maxScore int) ([]models.Tool, error) {
 	var tools models.Tools
 	if err := tools.GetByPrivacyScoreMax(s.DB, maxScore); err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (s *Service) GetToolsByPrivacyScoreMax(maxScore float64) ([]models.Tool, er
 }
 
 // GetToolsByPrivacyScoreRange retrieves all tools with a privacy score within the given range
-func (s *Service) GetToolsByPrivacyScoreRange(minScore, maxScore float64) ([]models.Tool, error) {
+func (s *Service) GetToolsByPrivacyScoreRange(minScore, maxScore int) ([]models.Tool, error) {
 	var tools models.Tools
 	if err := tools.GetByPrivacyScoreRange(s.DB, minScore, maxScore); err != nil {
 		return nil, err
