@@ -83,7 +83,7 @@ func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, ll
 // validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
 func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 	var maxLLMScore int
-	var minDatasourceScore int = 101 // Initialize with a value higher than the maximum possible score
+	var maxDatasourceScore int = 0 // Initialize with a value higher than the maximum possible score
 
 	if len(llmIDs) == 0 && len(datasourceIDs) == 0 {
 		return nil
@@ -104,12 +104,12 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 		if err != nil {
 			return err
 		}
-		if ds.PrivacyScore < minDatasourceScore {
-			minDatasourceScore = ds.PrivacyScore
+		if ds.PrivacyScore > maxDatasourceScore {
+			maxDatasourceScore = ds.PrivacyScore
 		}
 	}
 
-	if minDatasourceScore > maxLLMScore {
+	if maxDatasourceScore > maxLLMScore {
 		return errors.New("datasource privacy score cannot be higher than LLM privacy score")
 	}
 

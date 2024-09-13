@@ -12,12 +12,12 @@ type Tool struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 
-	ToolType            string  `json:"tool_type"`
-	OASSpec             []byte  `json:"oas_spec"`
-	AvailableOperations string  `json:"available_operations"`
-	PrivacyScore        float64 `json:"privacy_score"`
-	AuthKey             string  `json:"auth_key"`
-	AuthSchemaName      string  `json:"auth_schema_name"`
+	ToolType            string `json:"tool_type"`
+	OASSpec             []byte `json:"oas_spec"`
+	AvailableOperations string `json:"available_operations"`
+	PrivacyScore        int    `json:"privacy_score"`
+	AuthKey             string `json:"auth_key"`
+	AuthSchemaName      string `json:"auth_schema_name"`
 }
 
 type Tools []Tool

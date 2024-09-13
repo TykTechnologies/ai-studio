@@ -37,7 +37,7 @@ func TestNewChatSession(t *testing.T) {
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage, db)
+	cs, _ := NewChatSession(chat, ChatMessage, db)
 
 	assert.NotNil(t, cs)
 	assert.Equal(t, chat, cs.chatRef)
@@ -61,7 +61,7 @@ func TestChatSession_InitSession(t *testing.T) {
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage, db)
+	cs, _ := NewChatSession(chat, ChatMessage, db)
 	err := cs.initSession()
 
 	assert.NoError(t, err)
@@ -81,7 +81,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage, db)
+	cs, _ := NewChatSession(chat, ChatMessage, db)
 	err := cs.initSession()
 	assert.NoError(t, err)
 
@@ -94,7 +94,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 
 func TestChatSession_PreProcessors(t *testing.T) {
 	db := setupTestDB(t)
-	cs := NewChatSession(&models.Chat{}, ChatMessage, db)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db)
 
 	preprocessor := func(msg *UserMessage) error {
 		msg.Payload = "Processed: " + msg.Payload
@@ -122,7 +122,7 @@ func TestChatSession_Start(t *testing.T) {
 		},
 	}
 
-	cs := NewChatSession(chat, ChatMessage, db)
+	cs, _ := NewChatSession(chat, ChatMessage, db)
 	err := cs.Start()
 	assert.NoError(t, err)
 
@@ -154,7 +154,7 @@ func TestChatSession_StreamingMode(t *testing.T) {
 	}
 
 	db := setupTestDB(t)
-	cs := NewChatSession(chat, ChatStream, db)
+	cs, _ := NewChatSession(chat, ChatStream, db)
 	err := cs.Start()
 	assert.NoError(t, err)
 
@@ -190,7 +190,7 @@ func TestChatSession_GetOptions(t *testing.T) {
 	}
 
 	db := setupTestDB(t)
-	cs := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db)
+	cs, _ := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db)
 	options := cs.getOptions(llmSettings, []llms.Tool{})
 
 	assert.NotEmpty(t, options)
@@ -209,7 +209,7 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 	}
 
 	db := setupTestDB(t)
-	cs := NewChatSession(chat, ChatMessage, db)
+	cs, _ := NewChatSession(chat, ChatMessage, db)
 	err := cs.Start()
 	assert.NoError(t, err)
 
@@ -232,7 +232,7 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 
 func TestChatSession_AddRemoveDatasource(t *testing.T) {
 	db := setupTestDB(t)
-	cs := NewChatSession(&models.Chat{}, ChatMessage, db)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db)
 
 	// Create a test datasource
 	ds := models.Datasource{ID: 1, Name: "Test Datasource"}
@@ -251,7 +251,7 @@ func TestChatSession_AddRemoveDatasource(t *testing.T) {
 
 func TestChatSession_PrepareTools(t *testing.T) {
 	db := setupTestDB(t)
-	cs := NewChatSession(&models.Chat{}, ChatMessage, db)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db)
 
 	spec, err := os.ReadFile("../universalclient/testdata/petstore.json")
 	require.NoError(t, err)
@@ -271,7 +271,7 @@ func TestChatSession_PrepareTools(t *testing.T) {
 }
 
 func TestChatSession_ConvertLLMArgsToUniversalClientInputs(t *testing.T) {
-	cs := NewChatSession(&models.Chat{}, ChatMessage, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil)
 
 	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "parameters": {"query": ["test"]}}`
 	params, err := cs.convertLLMArgsToUniversalClientInputs([]byte(testArgs), "foo", nil)
@@ -283,7 +283,7 @@ func TestChatSession_ConvertLLMArgsToUniversalClientInputs(t *testing.T) {
 }
 
 func TestChatSession_ConvertLLMArgsToUniversalClientInputs_WithUnstructuredInput(t *testing.T) {
-	cs := NewChatSession(&models.Chat{}, ChatMessage, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil)
 
 	// LLMs might not send back the parameters key, so we just assume it for anything not in the other two categpories
 	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "query": ["test"]}`
@@ -307,7 +307,7 @@ func TestChatSession_HandleToolCalls(t *testing.T) {
 		},
 	}
 
-	cs := NewChatSession(chatRef, ChatMessage, db)
+	cs, _ := NewChatSession(chatRef, ChatMessage, db)
 
 	cs.initSession()
 
@@ -350,7 +350,7 @@ func TestChatSession_GetMessages(t *testing.T) {
 			ModelName: "dummy",
 		},
 	}
-	cs := NewChatSession(chat, ChatMessage, db)
+	cs, _ := NewChatSession(chat, ChatMessage, db)
 	cs.initSession()
 
 	// Add some messages to the history
@@ -374,7 +374,7 @@ func TestChatSession_GetMessages(t *testing.T) {
 }
 
 func TestChatSession_PrepHumanMessage(t *testing.T) {
-	cs := NewChatSession(&models.Chat{}, ChatMessage, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil)
 	docs := []schema.Document{
 		{PageContent: "Document 1"},
 		{PageContent: "Document 2"},
@@ -388,7 +388,7 @@ func TestChatSession_PrepHumanMessage(t *testing.T) {
 }
 
 func TestChatSession_JoinDocuments(t *testing.T) {
-	cs := NewChatSession(&models.Chat{}, ChatMessage, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil)
 	docs := []schema.Document{
 		{PageContent: "Document 1"},
 		{PageContent: "Document 2"},
@@ -400,7 +400,7 @@ func TestChatSession_JoinDocuments(t *testing.T) {
 }
 
 func TestChatSession_StreamingFunc(t *testing.T) {
-	cs := NewChatSession(&models.Chat{}, ChatStream, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatStream, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -439,7 +439,7 @@ func TestChatSession_FetchDriver(t *testing.T) {
 					ModelName: "test-model",
 				},
 			}
-			cs := NewChatSession(chat, ChatMessage, nil)
+			cs, _ := NewChatSession(chat, ChatMessage, nil)
 			_, err := cs.fetchDriver(nil)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -450,196 +450,263 @@ func TestChatSession_FetchDriver(t *testing.T) {
 	}
 }
 
-func TestChatSession_Live_Weather(t *testing.T) {
-	if os.Getenv("WEATHERBIT_KEY") == "" {
-		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
-	}
-
+func TestChatSession_PrivacyScoreValidation(t *testing.T) {
 	db := setupTestDB(t)
+
+	// Create a chat with a low privacy score LLM
 	chat := &models.Chat{
 		LLM: &models.LLM{
-			Name:   "claude-3-5-sonnet-20240620",
-			Vendor: models.ANTHROPIC,
-			APIKey: os.Getenv("ANTHROPIC_KEY"),
+			Name:         "Low Privacy LLM",
+			Vendor:       models.MOCK_VENDOR,
+			PrivacyScore: 3,
 		},
 		LLMSettings: &models.LLMSettings{
-			ModelName: "claude-3-5-sonnet-20240620",
+			ModelName: "dummy",
 		},
 	}
 
-	spec, err := os.ReadFile("../universalclient/testdata/weatherbit.json")
+	cs, err := NewChatSession(chat, ChatMessage, db)
+	require.NoError(t, err)
+
+	// Test AddDatasource with incompatible privacy score
+	highPrivacyDatasource := &models.Datasource{
+		ID:           1,
+		Name:         "High Privacy Datasource",
+		PrivacyScore: 5,
+	}
+	err = db.Create(highPrivacyDatasource).Error
+	require.NoError(t, err)
+
+	err = cs.AddDatasource(highPrivacyDatasource.ID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "datasource or tool privacy score (5) is higher than LLM privacy score (3)")
+
+	// Test AddDatasource with compatible privacy score
+	lowPrivacyDatasource := &models.Datasource{
+		ID:           2,
+		Name:         "Low Privacy Datasource",
+		PrivacyScore: 2,
+	}
+	err = db.Create(lowPrivacyDatasource).Error
+	require.NoError(t, err)
+
+	err = cs.AddDatasource(lowPrivacyDatasource.ID)
 	assert.NoError(t, err)
 
-	weathertool := models.Tool{
-		Name:                "weather forecast",
-		Description:         "Get the weather forecast for a given location",
-		ToolType:            models.ToolTypeREST,
-		AvailableOperations: "ReturnsadailyforecastGivenLatLon",
-		AuthKey:             os.Getenv("WEATHERBIT_KEY"),
-		OASSpec:             spec,
+	// Test AddTool with incompatible privacy score
+	highPrivacyTool := models.Tool{
+		ID:           3,
+		Name:         "High Privacy Tool",
+		PrivacyScore: 5,
+		ToolType:     models.ToolTypeREST,
 	}
 
-	session := NewChatSession(chat, ChatMessage, db)
-	session.AddTool("weather", weathertool)
+	err = cs.AddTool(highPrivacyTool.Name, highPrivacyTool)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "datasource or tool privacy score (5) is higher than LLM privacy score (3)")
 
-	err = session.Start()
+	// Test AddTool with compatible privacy score
+	lowPrivacyTool := models.Tool{
+		ID:           4,
+		Name:         "Low Privacy Tool",
+		PrivacyScore: 2,
+		ToolType:     models.ToolTypeREST,
+	}
+
+	err = cs.AddTool(lowPrivacyTool.Name, lowPrivacyTool)
 	assert.NoError(t, err)
-
-	// Send a message
-	select {
-	case session.Input() <- &UserMessage{Payload: "What is the weather like today in Auckland, New Zealand, and in New York City, USA?"}:
-	default:
-		assert.Fail(t, "Failed to send message")
-	}
-
-	// Wait for a response
-	resps := 0
-	t0 := time.Now()
-	for {
-		select {
-		case resp := <-session.OutputMessage():
-			fmt.Println("[RESPONSE]", resp.Payload)
-			resps += 1
-		case err := <-session.Errors():
-			fmt.Println("[ERROR]", err)
-			assert.Fail(t, "Error received")
-		default:
-			// if resps == 2 {
-			// 	return
-			// }
-			if time.Since(t0) > 20*time.Second {
-				assert.Fail(t, "Timeout waiting for response")
-				return
-			}
-		}
-	}
-
 }
 
-func TestChatSession_Live_Petstore(t *testing.T) {
-	if os.Getenv("WEATHERBIT_KEY") == "" {
-		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
-	}
+// func TestChatSession_Live_Weather(t *testing.T) {
+// 	if os.Getenv("WEATHERBIT_KEY") == "" {
+// 		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
+// 	}
 
-	db := setupTestDB(t)
-	chat := &models.Chat{
-		LLM: &models.LLM{
-			Name:   "claude-3-5-sonnet-20240620",
-			Vendor: models.ANTHROPIC,
-			APIKey: os.Getenv("ANTHROPIC_KEY"),
-		},
-		LLMSettings: &models.LLMSettings{
-			ModelName: "claude-3-5-sonnet-20240620",
-		},
-	}
+// 	db := setupTestDB(t)
+// 	chat := &models.Chat{
+// 		LLM: &models.LLM{
+// 			Name:   "claude-3-5-sonnet-20240620",
+// 			Vendor: models.ANTHROPIC,
+// 			APIKey: os.Getenv("ANTHROPIC_KEY"),
+// 		},
+// 		LLMSettings: &models.LLMSettings{
+// 			ModelName: "claude-3-5-sonnet-20240620",
+// 		},
+// 	}
 
-	spec, err := os.ReadFile("../universalclient/testdata/petstore.json")
-	assert.NoError(t, err)
+// 	spec, err := os.ReadFile("../universalclient/testdata/weatherbit.json")
+// 	assert.NoError(t, err)
 
-	tool := models.Tool{
-		Name:                "access to the pet store",
-		Description:         "Access specific functions for the pet store",
-		ToolType:            models.ToolTypeREST,
-		AvailableOperations: "findPetsByStatus,updatePet,getPetById",
-		AuthKey:             "foo",
-		OASSpec:             spec,
-	}
+// 	weathertool := models.Tool{
+// 		Name:                "weather forecast",
+// 		Description:         "Get the weather forecast for a given location",
+// 		ToolType:            models.ToolTypeREST,
+// 		AvailableOperations: "ReturnsadailyforecastGivenLatLon",
+// 		AuthKey:             os.Getenv("WEATHERBIT_KEY"),
+// 		OASSpec:             spec,
+// 	}
 
-	session := NewChatSession(chat, ChatMessage, db)
-	session.AddTool("petstore", tool)
+// 	session, _ := NewChatSession(chat, ChatMessage, db)
+// 	session.AddTool("weather", weathertool)
 
-	err = session.Start()
-	assert.NoError(t, err)
+// 	err = session.Start()
+// 	assert.NoError(t, err)
 
-	// Send a message
-	select {
-	case session.Input() <- &UserMessage{Payload: "I'd like you to update the dog named Rex in the pet store by listing them as unnavailable please. You can find thr ID by gettign a list of available pets and checking the list,once you've done that, can you list out the pets that are still available please?"}:
-	default:
-		assert.Fail(t, "Failed to send message")
-	}
+// 	// Send a message
+// 	select {
+// 	case session.Input() <- &UserMessage{Payload: "What is the weather like today in Auckland, New Zealand, and in New York City, USA?"}:
+// 	default:
+// 		assert.Fail(t, "Failed to send message")
+// 	}
 
-	// Wait for a response
-	resps := 0
-	t0 := time.Now()
-	for {
-		select {
-		case resp := <-session.OutputMessage():
-			fmt.Println("[RESPONSE]", resp.Payload)
-			resps += 1
-		case err := <-session.Errors():
-			fmt.Println("[ERROR]", err)
-			assert.Fail(t, "Error received")
-		default:
-			if time.Since(t0) > 70*time.Second {
-				return
-			}
-		}
-	}
+// 	// Wait for a response
+// 	resps := 0
+// 	t0 := time.Now()
+// 	for {
+// 		select {
+// 		case resp := <-session.OutputMessage():
+// 			fmt.Println("[RESPONSE]", resp.Payload)
+// 			resps += 1
+// 		case err := <-session.Errors():
+// 			fmt.Println("[ERROR]", err)
+// 			assert.Fail(t, "Error received")
+// 		default:
+// 			// if resps == 2 {
+// 			// 	return
+// 			// }
+// 			if time.Since(t0) > 20*time.Second {
+// 				assert.Fail(t, "Timeout waiting for response")
+// 				return
+// 			}
+// 		}
+// 	}
 
-}
+// }
 
-func TestChatSession_Live_JIRA(t *testing.T) {
-	if os.Getenv("JIRA_KEY") == "" {
-		t.Skip("Skipping live test, set JIRA_KEY to run this test")
-	}
+// func TestChatSession_Live_Petstore(t *testing.T) {
+// 	if os.Getenv("WEATHERBIT_KEY") == "" {
+// 		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
+// 	}
 
-	db := setupTestDB(t)
-	chat := &models.Chat{
-		LLM: &models.LLM{
-			Name:   "claude-3-5-sonnet-20240620",
-			Vendor: models.ANTHROPIC,
-			APIKey: os.Getenv("ANTHROPIC_KEY"),
-		},
-		LLMSettings: &models.LLMSettings{
-			ModelName: "claude-3-5-sonnet-20240620",
-		},
-	}
+// 	db := setupTestDB(t)
+// 	chat := &models.Chat{
+// 		LLM: &models.LLM{
+// 			Name:   "claude-3-5-sonnet-20240620",
+// 			Vendor: models.ANTHROPIC,
+// 			APIKey: os.Getenv("ANTHROPIC_KEY"),
+// 		},
+// 		LLMSettings: &models.LLMSettings{
+// 			ModelName: "claude-3-5-sonnet-20240620",
+// 		},
+// 	}
 
-	spec, err := os.ReadFile("../universalclient/testdata/jira.json")
-	assert.NoError(t, err)
+// 	spec, err := os.ReadFile("../universalclient/testdata/petstore.json")
+// 	assert.NoError(t, err)
 
-	key := os.Getenv("JIRA_KEY")
-	auth := fmt.Sprintf("montag-bot@tyk.io:%s", key)
+// 	tool := models.Tool{
+// 		Name:                "access to the pet store",
+// 		Description:         "Access specific functions for the pet store",
+// 		ToolType:            models.ToolTypeREST,
+// 		AvailableOperations: "findPetsByStatus,updatePet,getPetById",
+// 		AuthKey:             "foo",
+// 		OASSpec:             spec,
+// 	}
 
-	tool := models.Tool{
-		Name:                "access to our JIRA instance",
-		Description:         "Access multiple facets of our JIRA instance",
-		ToolType:            models.ToolTypeREST,
-		AvailableOperations: "search,getIssue,searchForIssuesUsingJql,searchForIssuesIds",
-		AuthKey:             auth,
-		AuthSchemaName:      "basicAuth",
-		OASSpec:             spec,
-	}
+// 	session, _ := NewChatSession(chat, ChatMessage, db)
+// 	session.AddTool("petstore", tool)
 
-	session := NewChatSession(chat, ChatMessage, db)
-	session.AddTool("jira", tool)
+// 	err = session.Start()
+// 	assert.NoError(t, err)
 
-	err = session.Start()
-	assert.NoError(t, err)
+// 	// Send a message
+// 	select {
+// 	case session.Input() <- &UserMessage{Payload: "I'd like you to update the dog named Rex in the pet store by listing them as unnavailable please. You can find thr ID by gettign a list of available pets and checking the list,once you've done that, can you list out the pets that are still available please?"}:
+// 	default:
+// 		assert.Fail(t, "Failed to send message")
+// 	}
 
-	// Send a message
-	select {
-	case session.Input() <- &UserMessage{Payload: "Please find all the issues in JIRA that are related to Tyk Gateway and SSL?"}:
-	default:
-		assert.Fail(t, "Failed to send message")
-	}
+// 	// Wait for a response
+// 	resps := 0
+// 	t0 := time.Now()
+// 	for {
+// 		select {
+// 		case resp := <-session.OutputMessage():
+// 			fmt.Println("[RESPONSE]", resp.Payload)
+// 			resps += 1
+// 		case err := <-session.Errors():
+// 			fmt.Println("[ERROR]", err)
+// 			assert.Fail(t, "Error received")
+// 		default:
+// 			if time.Since(t0) > 70*time.Second {
+// 				return
+// 			}
+// 		}
+// 	}
 
-	// Wait for a response
-	resps := 0
-	t0 := time.Now()
-	for {
-		select {
-		case resp := <-session.OutputMessage():
-			fmt.Println("[RESPONSE]", resp.Payload)
-			resps += 1
-		case err := <-session.Errors():
-			fmt.Println("[ERROR]", err)
-			assert.Fail(t, "Error received")
-		default:
-			if time.Since(t0) > 70*time.Second {
-				return
-			}
-		}
-	}
+// }
 
-}
+// func TestChatSession_Live_JIRA(t *testing.T) {
+// 	if os.Getenv("JIRA_KEY") == "" {
+// 		t.Skip("Skipping live test, set JIRA_KEY to run this test")
+// 	}
+
+// 	db := setupTestDB(t)
+// 	chat := &models.Chat{
+// 		LLM: &models.LLM{
+// 			Name:   "claude-3-5-sonnet-20240620",
+// 			Vendor: models.ANTHROPIC,
+// 			APIKey: os.Getenv("ANTHROPIC_KEY"),
+// 		},
+// 		LLMSettings: &models.LLMSettings{
+// 			ModelName: "claude-3-5-sonnet-20240620",
+// 		},
+// 	}
+
+// 	spec, err := os.ReadFile("../universalclient/testdata/jira.json")
+// 	assert.NoError(t, err)
+
+// 	key := os.Getenv("JIRA_KEY")
+// 	auth := fmt.Sprintf("montag-bot@tyk.io:%s", key)
+
+// 	tool := models.Tool{
+// 		Name:                "access to our JIRA instance",
+// 		Description:         "Access multiple facets of our JIRA instance",
+// 		ToolType:            models.ToolTypeREST,
+// 		AvailableOperations: "search,getIssue,searchForIssuesUsingJql,searchForIssuesIds",
+// 		AuthKey:             auth,
+// 		AuthSchemaName:      "basicAuth",
+// 		OASSpec:             spec,
+// 	}
+
+// 	session, _ := NewChatSession(chat, ChatMessage, db)
+// 	session.AddTool("jira", tool)
+
+// 	err = session.Start()
+// 	assert.NoError(t, err)
+
+// 	// Send a message
+// 	select {
+// 	case session.Input() <- &UserMessage{Payload: "Please find all the issues in JIRA that are related to Tyk Gateway and SSL?"}:
+// 	default:
+// 		assert.Fail(t, "Failed to send message")
+// 	}
+
+// 	// Wait for a response
+// 	resps := 0
+// 	t0 := time.Now()
+// 	for {
+// 		select {
+// 		case resp := <-session.OutputMessage():
+// 			fmt.Println("[RESPONSE]", resp.Payload)
+// 			resps += 1
+// 		case err := <-session.Errors():
+// 			fmt.Println("[ERROR]", err)
+// 			assert.Fail(t, "Error received")
+// 		default:
+// 			if time.Since(t0) > 70*time.Second {
+// 				return
+// 			}
+// 		}
+// 	}
+
+// }

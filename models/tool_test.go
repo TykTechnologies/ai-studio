@@ -18,7 +18,7 @@ func TestTool_Create(t *testing.T) {
 		Name:         "Test Tool",
 		Description:  "This is a test tool",
 		ToolType:     ToolTypeREST,
-		PrivacyScore: 0.8,
+		PrivacyScore: 8,
 	}
 	err := tool.Create(db)
 	assert.NoError(t, err)
@@ -32,7 +32,7 @@ func TestTool_Get(t *testing.T) {
 		Name:         "Test Tool",
 		Description:  "This is a test tool",
 		ToolType:     ToolTypeREST,
-		PrivacyScore: 0.8,
+		PrivacyScore: 8,
 	}
 	err := tool.Create(db)
 	assert.NoError(t, err)
@@ -54,14 +54,14 @@ func TestTool_Update(t *testing.T) {
 		Name:         "Test Tool",
 		Description:  "This is a test tool",
 		ToolType:     ToolTypeREST,
-		PrivacyScore: 0.8,
+		PrivacyScore: 8,
 	}
 	err := tool.Create(db)
 	assert.NoError(t, err)
 
 	tool.Name = "Updated Tool Name"
 	tool.Description = "Updated description"
-	tool.PrivacyScore = 0.9
+	tool.PrivacyScore = 9
 	err = tool.Update(db)
 	assert.NoError(t, err)
 
@@ -70,7 +70,7 @@ func TestTool_Update(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Updated Tool Name", fetchedTool.Name)
 	assert.Equal(t, "Updated description", fetchedTool.Description)
-	assert.Equal(t, 0.9, fetchedTool.PrivacyScore)
+	assert.Equal(t, 9, fetchedTool.PrivacyScore)
 }
 
 func TestTool_Delete(t *testing.T) {
@@ -80,7 +80,7 @@ func TestTool_Delete(t *testing.T) {
 		Name:         "Test Tool",
 		Description:  "This is a test tool",
 		ToolType:     ToolTypeREST,
-		PrivacyScore: 0.8,
+		PrivacyScore: 8,
 	}
 	err := tool.Create(db)
 	assert.NoError(t, err)
@@ -100,7 +100,7 @@ func TestTool_GetByName(t *testing.T) {
 		Name:         "Unique Tool Name",
 		Description:  "This is a unique tool",
 		ToolType:     ToolTypeREST,
-		PrivacyScore: 0.8,
+		PrivacyScore: 8,
 	}
 	err := tool.Create(db)
 	assert.NoError(t, err)
@@ -117,9 +117,9 @@ func TestTools_GetAll(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 0.7},
-		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 0.8},
-		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 0.9},
+		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 8},
+		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 9},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)
@@ -136,9 +136,9 @@ func TestTools_GetByType(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 0.7},
-		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 0.8},
-		{Name: "Tool 3", Description: "Description 3", ToolType: "OTHER", PrivacyScore: 0.9},
+		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 8},
+		{Name: "Tool 3", Description: "Description 3", ToolType: "OTHER", PrivacyScore: 9},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)
@@ -155,9 +155,9 @@ func TestTools_GetByPrivacyScoreMin(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 0.7},
-		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 0.8},
-		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 0.9},
+		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 8},
+		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 9},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)
@@ -174,9 +174,9 @@ func TestTools_GetByPrivacyScoreMax(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 0.7},
-		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 0.8},
-		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 0.9},
+		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 8},
+		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 9},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)
@@ -193,9 +193,9 @@ func TestTools_GetByPrivacyScoreRange(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 0.7},
-		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 0.8},
-		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 0.9},
+		{Name: "Tool 1", Description: "Description 1", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "Tool 2", Description: "Description 2", ToolType: ToolTypeREST, PrivacyScore: 8},
+		{Name: "Tool 3", Description: "Description 3", ToolType: ToolTypeREST, PrivacyScore: 9},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)
@@ -213,9 +213,9 @@ func TestTools_Search(t *testing.T) {
 	db := setupTestDB(t)
 
 	tools := []*Tool{
-		{Name: "REST API Tool", Description: "A tool for REST APIs", ToolType: ToolTypeREST, PrivacyScore: 0.7},
-		{Name: "GraphQL Tool", Description: "A tool for GraphQL APIs", ToolType: "GraphQL", PrivacyScore: 0.8},
-		{Name: "gRPC Tool", Description: "A tool for gRPC APIs", ToolType: "gRPC", PrivacyScore: 0.9},
+		{Name: "REST API Tool", Description: "A tool for REST APIs", ToolType: ToolTypeREST, PrivacyScore: 7},
+		{Name: "GraphQL Tool", Description: "A tool for GraphQL APIs", ToolType: "GraphQL", PrivacyScore: 8},
+		{Name: "gRPC Tool", Description: "A tool for gRPC APIs", ToolType: "gRPC", PrivacyScore: 9},
 	}
 	for _, tool := range tools {
 		err := tool.Create(db)

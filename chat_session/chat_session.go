@@ -62,9 +62,9 @@ type ChatResponse struct {
 	Payload string
 }
 
-func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) *ChatSession {
+func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) (*ChatSession, error) {
 	id, _ := uuid.NewV4()
-	return &ChatSession{
+	cs := &ChatSession{
 		id:             id.String(),
 		chatRef:        chat,
 		input:          make(chan *UserMessage, 100),
@@ -79,6 +79,15 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) *ChatSession 
 		tools:          map[string]models.Tool{},
 		llmResponses:   make(chan *LLMResponseWrapper, 100),
 	}
+
+	// Perform initial privacy check
+	if len(cs.datasources) > 0 || len(cs.tools) > 0 {
+		if err := cs.validatePrivacyScores(); err != nil {
+			return nil, fmt.Errorf("initial privacy score validation failed: %v", err)
+		}
+	}
+
+	return cs, nil
 }
 
 func (cs *ChatSession) ID() string {
@@ -109,6 +118,14 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 	}
 
 	cs.datasources[id] = &ds
+
+	// Validate privacy scores
+	if err := cs.validatePrivacyScores(); err != nil {
+		// If validation fails, remove the datasource and return the error
+		delete(cs.datasources, id)
+		return err
+	}
+
 	return nil
 }
 
@@ -116,8 +133,17 @@ func (cs *ChatSession) RemoveDatasource(id uint) {
 	delete(cs.datasources, id)
 }
 
-func (cs *ChatSession) AddTool(id string, t models.Tool) {
+func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 	cs.tools[id] = t
+
+	// Validate privacy scores
+	if err := cs.validatePrivacyScores(); err != nil {
+		// If validation fails, remove the tool and return the error
+		delete(cs.tools, id)
+		return err
+	}
+
+	return nil
 }
 
 func (cs *ChatSession) RemoveTool(id string) {
@@ -246,6 +272,11 @@ func (cs *ChatSession) initSession() error {
 	}
 
 	cs.caller = llm
+
+	// Validate privacy scores
+	if err := cs.validatePrivacyScores(); err != nil {
+		return fmt.Errorf("privacy score validation failed: %v", err)
+	}
 
 	return nil
 }
@@ -427,97 +458,6 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 	return resp.Choices[0].Content, nil
 }
 
-// type CallParams struct {
-// 	Body       map[string]interface{} `json:"body"`
-// 	Headers    map[string][]string    `json:"headers"`
-// 	Parameters map[string][]string    `json:"parameters"`
-// }
-
-// func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opName string, uc *universalclient.Client) (*CallParams, error) {
-// 	callParams := map[string]interface{}{}
-// 	err := json.Unmarshal(params, &callParams)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	actualParams := &CallParams{
-// 		Headers:    map[string][]string{},
-// 		Parameters: map[string][]string{},
-// 		Body:       map[string]interface{}{},
-// 	}
-
-// 	for k, v := range callParams {
-// 		if k == "body" {
-// 			actualParams.Body = v.(map[string]interface{})
-// 			continue
-// 		}
-
-// 		if k == "headers" {
-// 			for hk, hv := range v.(map[string]interface{}) {
-// 				hSlice, ok := hv.([]interface{})
-// 				if ok {
-// 					for _, h := range hSlice {
-// 						asStr, ok := h.(string)
-// 						if ok {
-// 							actualParams.Headers[hk] = append(actualParams.Headers[hk], asStr)
-// 						}
-// 					}
-// 					continue
-// 				}
-// 				actualParams.Headers[hk] = hv.([]string)
-// 			}
-// 			continue
-// 		}
-
-// 		if k == "parameters" {
-// 			for pk, pv := range v.(map[string]interface{}) {
-// 				pSlice, ok := pv.([]interface{})
-// 				if ok {
-// 					for _, p := range pSlice {
-// 						asStr, ok := p.(string)
-// 						if ok {
-// 							actualParams.Parameters[pk] = append(actualParams.Parameters[pk], asStr)
-// 						}
-// 					}
-// 					continue
-// 				}
-// 				actualParams.Parameters[pk] = pv.([]string)
-// 			}
-// 			continue
-// 		}
-
-// 		paramName := k
-// 		paramValue := callParams[k]
-
-// 		switch paramValue.(type) {
-// 		case string:
-// 			actualParams.Parameters[paramName] = []string{paramValue.(string)}
-// 		case []interface{}:
-// 			for _, v := range paramValue.([]interface{}) {
-// 				switch v.(type) {
-// 				case string:
-// 					actualParams.Parameters[paramName] = append(actualParams.Parameters[paramName], v.(string))
-// 				}
-// 			}
-// 		case []string:
-// 			actualParams.Parameters[paramName] = paramValue.([]string)
-// 		case float64:
-// 			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(paramValue.(float64), 'f', -1, 64)}
-// 		case int:
-// 			actualParams.Parameters[paramName] = []string{strconv.Itoa(paramValue.(int))}
-// 		case float32:
-// 			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(float64(paramValue.(float32)), 'f', -1, 32)}
-// 		case bool:
-// 			actualParams.Parameters[paramName] = []string{strconv.FormatBool(paramValue.(bool))}
-// 		default:
-// 			return nil, fmt.Errorf("unsupported type for parameter %s: %T", k, v)
-// 		}
-
-// 	}
-
-// 	return actualParams, nil
-// }
-
 type CallParams struct {
 	Body       map[string]interface{} `json:"body"`
 	Headers    map[string][]string    `json:"headers"`
@@ -642,13 +582,6 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				Arguments: t.FunctionCall.Arguments,
 			},
 		})
-
-		// save the tool call to the chat history
-		// err := cs.chatHistory.AddMessage(context.Background(), *mc)
-
-		// if err != nil {
-		// 	return false, fmt.Errorf("error adding tool call to history: %v", err)
-		// }
 
 		// tools are sent to the LLM  as a list of operation names
 		// This means that the tool name from the LLM will be the opp,
@@ -819,4 +752,34 @@ func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) 
 	}
 
 	return llm, nil
+}
+
+func (cs *ChatSession) validatePrivacyScores() error {
+	var maxLLMScore int
+	var maxDataSourceScore int = 0 // Initialize with a value higher than the maximum possible score
+
+	// Get LLM privacy score
+	if cs.chatRef.LLM != nil {
+		maxLLMScore = cs.chatRef.LLM.PrivacyScore
+	}
+
+	// Check datasources
+	for _, ds := range cs.datasources {
+		if ds.PrivacyScore > maxDataSourceScore {
+			maxDataSourceScore = ds.PrivacyScore
+		}
+	}
+
+	// Check tools (assuming tools have a PrivacyScore field)
+	for _, tool := range cs.tools {
+		if tool.PrivacyScore > maxDataSourceScore {
+			maxDataSourceScore = tool.PrivacyScore
+		}
+	}
+
+	if maxDataSourceScore > maxLLMScore {
+		return fmt.Errorf("datasource or tool privacy score (%d) is higher than LLM privacy score (%d)", maxDataSourceScore, maxLLMScore)
+	}
+
+	return nil
 }
