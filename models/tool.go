@@ -17,6 +17,7 @@ type Tool struct {
 	AvailableOperations string  `json:"available_operations"`
 	PrivacyScore        float64 `json:"privacy_score"`
 	AuthKey             string  `json:"auth_key"`
+	AuthSchemaName      string  `json:"auth_schema_name"`
 }
 
 type Tools []Tool

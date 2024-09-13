@@ -316,19 +316,23 @@ func serializeTool(tool *models.Tool) ToolResponse {
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
 		Attributes: struct {
-			Name         string   `json:"name"`
-			Description  string   `json:"description"`
-			ToolType     string   `json:"tool_type"`
-			OASSpec      []byte   `json:"oas_spec"`
-			PrivacyScore float64  `json:"privacy_score"`
-			Operations   []string `json:"operations"`
+			Name           string   `json:"name"`
+			Description    string   `json:"description"`
+			ToolType       string   `json:"tool_type"`
+			OASSpec        []byte   `json:"oas_spec"`
+			PrivacyScore   float64  `json:"privacy_score"`
+			Operations     []string `json:"operations"`
+			AuthKey        string   `json:"auth_key"`
+			AuthSchemaName string   `json:"auth_schema_name"`
 		}{
-			Name:         tool.Name,
-			Description:  tool.Description,
-			ToolType:     tool.ToolType,
-			OASSpec:      tool.OASSpec,
-			PrivacyScore: tool.PrivacyScore,
-			Operations:   tool.GetOperations(),
+			Name:           tool.Name,
+			Description:    tool.Description,
+			ToolType:       tool.ToolType,
+			OASSpec:        tool.OASSpec,
+			PrivacyScore:   tool.PrivacyScore,
+			Operations:     tool.GetOperations(),
+			AuthKey:        tool.AuthKey,
+			AuthSchemaName: tool.AuthSchemaName,
 		},
 	}
 }

@@ -450,7 +450,7 @@ func TestChatSession_FetchDriver(t *testing.T) {
 	}
 }
 
-func TestChatSession_Live(t *testing.T) {
+func TestChatSession_Live_Weather(t *testing.T) {
 	if os.Getenv("WEATHERBIT_KEY") == "" {
 		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
 	}
@@ -516,253 +516,130 @@ func TestChatSession_Live(t *testing.T) {
 
 }
 
-// func TestNewChatSession(t *testing.T) {
-// 	db := setupTestDB(t)
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name: "Dummy LLM",
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "dummy",
-// 		},
-// 	}
+func TestChatSession_Live_Petstore(t *testing.T) {
+	if os.Getenv("WEATHERBIT_KEY") == "" {
+		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
+	}
 
-// 	cs := NewChatSession(chat, ChatMessage, db)
+	db := setupTestDB(t)
+	chat := &models.Chat{
+		LLM: &models.LLM{
+			Name:   "claude-3-5-sonnet-20240620",
+			Vendor: models.ANTHROPIC,
+			APIKey: os.Getenv("ANTHROPIC_KEY"),
+		},
+		LLMSettings: &models.LLMSettings{
+			ModelName: "claude-3-5-sonnet-20240620",
+		},
+	}
 
-// 	assert.NotNil(t, cs)
-// 	assert.Equal(t, chat, cs.chatRef)
-// 	assert.Equal(t, ChatMessage, cs.mode)
-// 	assert.NotNil(t, cs.input)
-// 	assert.NotNil(t, cs.outputMessages)
-// 	assert.NotNil(t, cs.outputStream)
-// 	assert.NotNil(t, cs.stop)
-// 	assert.NotNil(t, cs.errors)
-// }
+	spec, err := os.ReadFile("../universalclient/testdata/petstore.json")
+	assert.NoError(t, err)
 
-// func TestChatSession_InitSession(t *testing.T) {
-// 	db := setupTestDB(t)
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name:   "Dummy LLM",
-// 			Vendor: models.MOCK_VENDOR,
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "dummy",
-// 		},
-// 	}
+	tool := models.Tool{
+		Name:                "access to the pet store",
+		Description:         "Access specific functions for the pet store",
+		ToolType:            models.ToolTypeREST,
+		AvailableOperations: "findPetsByStatus,updatePet,getPetById",
+		AuthKey:             "foo",
+		OASSpec:             spec,
+	}
 
-// 	cs := NewChatSession(chat, ChatMessage, db)
-// 	err := cs.initSession()
+	session := NewChatSession(chat, ChatMessage, db)
+	session.AddTool("petstore", tool)
 
-// 	assert.NoError(t, err)
-// }
+	err = session.Start()
+	assert.NoError(t, err)
 
-// func TestChatSession_HandleUserMessage(t *testing.T) {
-// 	db := setupTestDB(t)
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name:   "Dummy LLM",
-// 			Vendor: models.MOCK_VENDOR,
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "dummy",
-// 		},
-// 	}
+	// Send a message
+	select {
+	case session.Input() <- &UserMessage{Payload: "I'd like you to update the dog named Rex in the pet store by listing them as unnavailable please. You can find thr ID by gettign a list of available pets and checking the list,once you've done that, can you list out the pets that are still available please?"}:
+	default:
+		assert.Fail(t, "Failed to send message")
+	}
 
-// 	cs := NewChatSession(chat, ChatMessage, db)
-// 	err := cs.initSession()
-// 	assert.NoError(t, err)
+	// Wait for a response
+	resps := 0
+	t0 := time.Now()
+	for {
+		select {
+		case resp := <-session.OutputMessage():
+			fmt.Println("[RESPONSE]", resp.Payload)
+			resps += 1
+		case err := <-session.Errors():
+			fmt.Println("[ERROR]", err)
+			assert.Fail(t, "Error received")
+		default:
+			if time.Since(t0) > 70*time.Second {
+				return
+			}
+		}
+	}
 
-// 	msg := &UserMessage{Payload: "Test message"}
-// 	resp, err := cs.HandleUserMessage(msg, []schema.Document{}, []llms.Tool{})
+}
 
-// 	assert.NoError(t, err)
-// 	assert.NotEmpty(t, resp)
-// }
+func TestChatSession_Live_JIRA(t *testing.T) {
+	if os.Getenv("JIRA_KEY") == "" {
+		t.Skip("Skipping live test, set JIRA_KEY to run this test")
+	}
 
-// func TestChatSession_PreProcessors(t *testing.T) {
-// 	db := setupTestDB(t)
-// 	cs := NewChatSession(&models.Chat{}, ChatMessage, db)
+	db := setupTestDB(t)
+	chat := &models.Chat{
+		LLM: &models.LLM{
+			Name:   "claude-3-5-sonnet-20240620",
+			Vendor: models.ANTHROPIC,
+			APIKey: os.Getenv("ANTHROPIC_KEY"),
+		},
+		LLMSettings: &models.LLMSettings{
+			ModelName: "claude-3-5-sonnet-20240620",
+		},
+	}
 
-// 	preprocessor := func(msg *UserMessage) error {
-// 		msg.Payload = "Processed: " + msg.Payload
-// 		return nil
-// 	}
+	spec, err := os.ReadFile("../universalclient/testdata/jira.json")
+	assert.NoError(t, err)
 
-// 	cs.AddPreProcessor(preprocessor)
+	key := os.Getenv("JIRA_KEY")
+	auth := fmt.Sprintf("montag-bot@tyk.io:%s", key)
 
-// 	msg := &UserMessage{Payload: "Test message"}
-// 	err := cs.preProcessMessage(msg)
+	tool := models.Tool{
+		Name:                "access to our JIRA instance",
+		Description:         "Access multiple facets of our JIRA instance",
+		ToolType:            models.ToolTypeREST,
+		AvailableOperations: "search,getIssue,searchForIssuesUsingJql,searchForIssuesIds",
+		AuthKey:             auth,
+		AuthSchemaName:      "basicAuth",
+		OASSpec:             spec,
+	}
 
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, "Processed: Test message", msg.Payload)
-// }
+	session := NewChatSession(chat, ChatMessage, db)
+	session.AddTool("jira", tool)
 
-// func TestChatSession_Start(t *testing.T) {
-// 	db := setupTestDB(t)
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name:   "Dummy LLM",
-// 			Vendor: models.MOCK_VENDOR,
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "dummy",
-// 		},
-// 	}
+	err = session.Start()
+	assert.NoError(t, err)
 
-// 	cs := NewChatSession(chat, ChatMessage, db)
-// 	err := cs.initSession()
-// 	assert.NoError(t, err)
+	// Send a message
+	select {
+	case session.Input() <- &UserMessage{Payload: "Please find all the issues in JIRA that are related to Tyk Gateway and SSL?"}:
+	default:
+		assert.Fail(t, "Failed to send message")
+	}
 
-// 	cs.Start()
+	// Wait for a response
+	resps := 0
+	t0 := time.Now()
+	for {
+		select {
+		case resp := <-session.OutputMessage():
+			fmt.Println("[RESPONSE]", resp.Payload)
+			resps += 1
+		case err := <-session.Errors():
+			fmt.Println("[ERROR]", err)
+			assert.Fail(t, "Error received")
+		default:
+			if time.Since(t0) > 70*time.Second {
+				return
+			}
+		}
+	}
 
-// 	// Send a message
-// 	cs.input <- &UserMessage{Payload: "Test message"}
-
-// 	// Wait for response
-// 	select {
-// 	case response := <-cs.OutputMessage():
-// 		assert.NotEmpty(t, response.Payload)
-// 	case err := <-cs.Errors():
-// 		assert.Fail(t, "Received error", err)
-// 	case <-time.After(10 * time.Second):
-// 		assert.Fail(t, "Timeout waiting for response")
-// 	}
-
-// 	cs.Stop()
-// }
-
-// func TestChatSession_StreamingMode(t *testing.T) {
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name:   "Dummy LLM",
-// 			Vendor: models.MOCK_VENDOR,
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "dummy",
-// 		},
-// 	}
-
-// 	db := setupTestDB(t)
-// 	cs := NewChatSession(chat, ChatStream, db)
-// 	err := cs.Start()
-// 	assert.NoError(t, err)
-
-// 	// Call with streaming option
-// 	go func() {
-// 		select {
-// 		case cs.Input() <- &UserMessage{Payload: "Test prompt"}:
-// 		default:
-// 			fmt.Println("failed to send prompt")
-// 		}
-
-// 	}()
-
-// 	// Check if streaming data is received
-// 	count := 0
-// 	for {
-// 		select {
-// 		case chunk := <-cs.OutputStream():
-// 			fmt.Printf("%s ", string(chunk))
-// 			count += 1
-// 			assert.NotEmpty(t, chunk)
-// 		case intErr := <-cs.Errors():
-// 			assert.Fail(t, "Received error", intErr)
-// 		case <-time.After(5 * time.Second):
-// 			assert.Fail(t, "Timeout waiting for streaming data")
-// 		}
-// 		if count >= 10 {
-// 			break
-// 		}
-// 	}
-
-// 	assert.Greater(t, count, 9)
-// 	cs.Stop()
-// }
-
-// func TestChatSession_GetOptions(t *testing.T) {
-// 	llmSettings := &models.LLMSettings{
-// 		Temperature: 0.7,
-// 		MaxTokens:   100,
-// 		TopP:        0.9,
-// 	}
-
-// 	db := setupTestDB(t)
-// 	cs := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db)
-// 	options := cs.getOptions(llmSettings, []llms.Tool{})
-
-// 	assert.NotEmpty(t, options)
-// 	// You might want to add more specific checks for each option
-// 	// This would require exposing the option values or using reflection
-// }
-
-// func TestChatSession_ErrorHandling(t *testing.T) {
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name:   "Dummy LLM",
-// 			Vendor: models.MOCK_VENDOR,
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "dummy",
-// 		},
-// 	}
-
-// 	db := setupTestDB(t)
-// 	cs := NewChatSession(chat, ChatMessage, db)
-// 	err := cs.initSession()
-// 	assert.NoError(t, err)
-
-// 	cs.Start()
-
-// 	// Add a preprocessor that always fails
-// 	cs.AddPreProcessor(func(*UserMessage) error {
-// 		return assert.AnError
-// 	})
-
-// 	// Send a message
-// 	cs.input <- &UserMessage{Payload: "Test message"}
-
-// 	// Wait for error
-// 	select {
-// 	case err := <-cs.Errors():
-// 		assert.Error(t, err)
-// 		assert.Contains(t, err.Error(), "preprocessing error")
-// 	case <-time.After(2 * time.Second):
-// 		assert.Fail(t, "Timeout waiting for error")
-// 	}
-
-// 	cs.Stop()
-// }
-
-// func TestChatSession_Anthropic(t *testing.T) {
-// 	db := setupTestDB(t)
-// 	chat := &models.Chat{
-// 		LLM: &models.LLM{
-// 			Name:   "claude-3-5-sonnet-20240620",
-// 			Vendor: models.ANTHROPIC,
-// 			APIKey: os.Getenv("ANTHROPIC_KEY"),
-// 		},
-// 		LLMSettings: &models.LLMSettings{
-// 			ModelName: "claude-3-5-sonnet-20240620",
-// 		},
-// 	}
-
-// 	cs := NewChatSession(chat, ChatMessage, db)
-// 	cs.Start()
-
-// 	// Send a message
-// 	cs.input <- &UserMessage{Payload: "What is the capital of New Zealand"}
-
-// 	// Wait for response
-// 	select {
-// 	case response := <-cs.OutputMessage():
-// 		assert.NotEmpty(t, response.Payload)
-// 		fmt.Println("[LLM Response]: ", response.Payload)
-// 	case err := <-cs.Errors():
-// 		assert.Fail(t, "Received error", err)
-// 	case <-time.After(10 * time.Second):
-// 		assert.Fail(t, "Timeout waiting for response")
-// 	}
-
-// 	cs.Stop()
-// }
+}

@@ -103,6 +103,11 @@ func NewClient(specBytes []byte, baseURL string, options ...ClientOption) (*Clie
 		return nil, err
 	}
 
+	// Validate the specification
+	if err := validateSpec(doc); err != nil {
+		return nil, fmt.Errorf("invalid OpenAPI specification: %w", err)
+	}
+
 	// Create the client with default settings
 	client := &Client{
 		spec: doc,
@@ -132,6 +137,66 @@ func NewClient(specBytes []byte, baseURL string, options ...ClientOption) (*Clie
 	}
 
 	return client, nil
+}
+
+func validateSpec(doc libopenapi.Document) error {
+	model, err := doc.BuildV3Model()
+	if err != nil {
+		return fmt.Errorf("failed to build V3 model: %v", err)
+	}
+
+	// Check OpenAPI version
+	if model.Model.Version != "3.0.0" && !strings.HasPrefix(model.Model.Version, "3.") {
+		return fmt.Errorf("unsupported OpenAPI version: %s. Only version 3.x is supported", model.Model.Version)
+	}
+
+	// Check for valid servers entry
+	if len(model.Model.Servers) == 0 {
+		return fmt.Errorf("specification must have at least one valid servers entry")
+	}
+
+	// Check for SecuritySchemes
+	if model.Model.Components == nil || model.Model.Components.SecuritySchemes == nil || model.Model.Components.SecuritySchemes.Len() == 0 {
+		return fmt.Errorf("specification must have at least one SecuritySchema entry")
+	}
+
+	// Validate SecuritySchemes
+	hasValidAuthScheme := false
+	for pair := model.Model.Components.SecuritySchemes.First(); pair != nil; pair = pair.Next() {
+		scheme := pair.Value()
+		switch scheme.Type {
+		case "apiKey":
+			hasValidAuthScheme = true
+		case "http":
+			if scheme.Scheme == "bearer" || scheme.Scheme == "basic" {
+				hasValidAuthScheme = true
+			}
+		}
+	}
+	if !hasValidAuthScheme {
+		return fmt.Errorf("specification must have at least one supported authentication type (apiKey, bearer, or basic)")
+	}
+
+	// Check all paths for operationID
+	if model.Model.Paths != nil && model.Model.Paths.PathItems != nil {
+		for pair := model.Model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
+			pathItem := pair.Value()
+			if pathItem == nil {
+				continue
+			}
+			operations := []*v3.Operation{
+				pathItem.Get, pathItem.Post, pathItem.Put, pathItem.Delete,
+				pathItem.Options, pathItem.Head, pathItem.Patch, pathItem.Trace,
+			}
+			for _, op := range operations {
+				if op != nil && op.OperationId == "" {
+					return fmt.Errorf("all operations must have an operationID")
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func getBaseURLFromSpec(doc libopenapi.Document) (string, error) {
@@ -288,8 +353,10 @@ func (c *Client) CallOperation(operationId string, params map[string][]string, p
 	defer resp.Body.Close()
 
 	// Check for successful status code
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("request failed with status code: %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 401 {
+		// somethig wrong with auth
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("request failed with status code: %v error: %v", string(body), resp.StatusCode)
 	}
 
 	// Parse the response
@@ -363,7 +430,9 @@ func (c *Client) parseResponse(resp *http.Response, operation *v3.Operation) (in
 
 	responseSchema := c.getResponseSchema(operation, resp.StatusCode)
 	if responseSchema == nil {
-		return nil, fmt.Errorf("no response schema found for status code %d", resp.StatusCode)
+		// default to text response
+		c.responseFormat = ResponseFormatDefault
+		contentType = "text/text"
 	}
 
 	switch c.responseFormat {

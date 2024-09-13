@@ -394,11 +394,13 @@ type ToolInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name         string  `json:"name"`
-			Description  string  `json:"description"`
-			ToolType     string  `json:"tool_type"`
-			OASSpec      []byte  `json:"oas_spec"`
-			PrivacyScore float64 `json:"privacy_score"`
+			Name           string  `json:"name"`
+			Description    string  `json:"description"`
+			ToolType       string  `json:"tool_type"`
+			OASSpec        []byte  `json:"oas_spec"`
+			PrivacyScore   float64 `json:"privacy_score"`
+			AuthKey        string  `json:"auth_key"`
+			AuthSchemaName string  `json:"auth_schema_name"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -409,12 +411,14 @@ type ToolResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name         string   `json:"name"`
-		Description  string   `json:"description"`
-		ToolType     string   `json:"tool_type"`
-		OASSpec      []byte   `json:"oas_spec"`
-		PrivacyScore float64  `json:"privacy_score"`
-		Operations   []string `json:"operations"`
+		Name           string   `json:"name"`
+		Description    string   `json:"description"`
+		ToolType       string   `json:"tool_type"`
+		OASSpec        []byte   `json:"oas_spec"`
+		PrivacyScore   float64  `json:"privacy_score"`
+		Operations     []string `json:"operations"`
+		AuthKey        string   `json:"auth_key"`
+		AuthSchemaName string   `json:"auth_schema_name"`
 	} `json:"attributes"`
 }
 

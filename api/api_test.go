@@ -1250,6 +1250,9 @@ func TestToolEndpoints(t *testing.T) {
 				ToolType     string  `json:"tool_type"`
 				OASSpec      []byte  `json:"oas_spec"`
 				PrivacyScore float64 `json:"privacy_score"`
+
+				AuthKey        string `json:"auth_key"`
+				AuthSchemaName string `json:"auth_schema_name"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -1259,6 +1262,9 @@ func TestToolEndpoints(t *testing.T) {
 				ToolType     string  `json:"tool_type"`
 				OASSpec      []byte  `json:"oas_spec"`
 				PrivacyScore float64 `json:"privacy_score"`
+
+				AuthKey        string `json:"auth_key"`
+				AuthSchemaName string `json:"auth_schema_name"`
 			}{
 				Name:         "Test Tool",
 				Description:  "A test tool",
@@ -1293,6 +1299,9 @@ func TestToolEndpoints(t *testing.T) {
 				ToolType     string  `json:"tool_type"`
 				OASSpec      []byte  `json:"oas_spec"`
 				PrivacyScore float64 `json:"privacy_score"`
+
+				AuthKey        string `json:"auth_key"`
+				AuthSchemaName string `json:"auth_schema_name"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -1302,6 +1311,9 @@ func TestToolEndpoints(t *testing.T) {
 				ToolType     string  `json:"tool_type"`
 				OASSpec      []byte  `json:"oas_spec"`
 				PrivacyScore float64 `json:"privacy_score"`
+
+				AuthKey        string `json:"auth_key"`
+				AuthSchemaName string `json:"auth_schema_name"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -1366,20 +1378,24 @@ func TestToolEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name         string  `json:"name"`
-				Description  string  `json:"description"`
-				ToolType     string  `json:"tool_type"`
-				OASSpec      []byte  `json:"oas_spec"`
-				PrivacyScore float64 `json:"privacy_score"`
+				Name           string  `json:"name"`
+				Description    string  `json:"description"`
+				ToolType       string  `json:"tool_type"`
+				OASSpec        []byte  `json:"oas_spec"`
+				PrivacyScore   float64 `json:"privacy_score"`
+				AuthKey        string  `json:"auth_key"`
+				AuthSchemaName string  `json:"auth_schema_name"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
 			Attributes: struct {
-				Name         string  `json:"name"`
-				Description  string  `json:"description"`
-				ToolType     string  `json:"tool_type"`
-				OASSpec      []byte  `json:"oas_spec"`
-				PrivacyScore float64 `json:"privacy_score"`
+				Name           string  `json:"name"`
+				Description    string  `json:"description"`
+				ToolType       string  `json:"tool_type"`
+				OASSpec        []byte  `json:"oas_spec"`
+				PrivacyScore   float64 `json:"privacy_score"`
+				AuthKey        string  `json:"auth_key"`
+				AuthSchemaName string  `json:"auth_schema_name"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -1406,6 +1422,9 @@ func TestToolEndpointsErrors(t *testing.T) {
 				ToolType     string  `json:"tool_type"`
 				OASSpec      []byte  `json:"oas_spec"`
 				PrivacyScore float64 `json:"privacy_score"`
+
+				AuthKey        string `json:"auth_key"`
+				AuthSchemaName string `json:"auth_schema_name"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -1415,6 +1434,9 @@ func TestToolEndpointsErrors(t *testing.T) {
 				ToolType     string  `json:"tool_type"`
 				OASSpec      []byte  `json:"oas_spec"`
 				PrivacyScore float64 `json:"privacy_score"`
+
+				AuthKey        string `json:"auth_key"`
+				AuthSchemaName string `json:"auth_schema_name"`
 			}{
 				Name:         "",
 				Description:  "",

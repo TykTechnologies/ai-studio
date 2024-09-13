@@ -203,7 +203,11 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 			opts := []universalclient.ClientOption{}
 			if t.AuthKey != "" {
 				// API Key only at the moment
-				opts = append(opts, universalclient.WithAuth("apiKey", t.AuthKey))
+				schemaName := t.AuthSchemaName
+				if schemaName == "" {
+					schemaName = "apiKey"
+				}
+				opts = append(opts, universalclient.WithAuth(schemaName, t.AuthKey))
 			}
 
 			uc, err := universalclient.NewClient(t.OASSpec, "", opts...)
@@ -423,6 +427,97 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 	return resp.Choices[0].Content, nil
 }
 
+// type CallParams struct {
+// 	Body       map[string]interface{} `json:"body"`
+// 	Headers    map[string][]string    `json:"headers"`
+// 	Parameters map[string][]string    `json:"parameters"`
+// }
+
+// func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opName string, uc *universalclient.Client) (*CallParams, error) {
+// 	callParams := map[string]interface{}{}
+// 	err := json.Unmarshal(params, &callParams)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	actualParams := &CallParams{
+// 		Headers:    map[string][]string{},
+// 		Parameters: map[string][]string{},
+// 		Body:       map[string]interface{}{},
+// 	}
+
+// 	for k, v := range callParams {
+// 		if k == "body" {
+// 			actualParams.Body = v.(map[string]interface{})
+// 			continue
+// 		}
+
+// 		if k == "headers" {
+// 			for hk, hv := range v.(map[string]interface{}) {
+// 				hSlice, ok := hv.([]interface{})
+// 				if ok {
+// 					for _, h := range hSlice {
+// 						asStr, ok := h.(string)
+// 						if ok {
+// 							actualParams.Headers[hk] = append(actualParams.Headers[hk], asStr)
+// 						}
+// 					}
+// 					continue
+// 				}
+// 				actualParams.Headers[hk] = hv.([]string)
+// 			}
+// 			continue
+// 		}
+
+// 		if k == "parameters" {
+// 			for pk, pv := range v.(map[string]interface{}) {
+// 				pSlice, ok := pv.([]interface{})
+// 				if ok {
+// 					for _, p := range pSlice {
+// 						asStr, ok := p.(string)
+// 						if ok {
+// 							actualParams.Parameters[pk] = append(actualParams.Parameters[pk], asStr)
+// 						}
+// 					}
+// 					continue
+// 				}
+// 				actualParams.Parameters[pk] = pv.([]string)
+// 			}
+// 			continue
+// 		}
+
+// 		paramName := k
+// 		paramValue := callParams[k]
+
+// 		switch paramValue.(type) {
+// 		case string:
+// 			actualParams.Parameters[paramName] = []string{paramValue.(string)}
+// 		case []interface{}:
+// 			for _, v := range paramValue.([]interface{}) {
+// 				switch v.(type) {
+// 				case string:
+// 					actualParams.Parameters[paramName] = append(actualParams.Parameters[paramName], v.(string))
+// 				}
+// 			}
+// 		case []string:
+// 			actualParams.Parameters[paramName] = paramValue.([]string)
+// 		case float64:
+// 			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(paramValue.(float64), 'f', -1, 64)}
+// 		case int:
+// 			actualParams.Parameters[paramName] = []string{strconv.Itoa(paramValue.(int))}
+// 		case float32:
+// 			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(float64(paramValue.(float32)), 'f', -1, 32)}
+// 		case bool:
+// 			actualParams.Parameters[paramName] = []string{strconv.FormatBool(paramValue.(bool))}
+// 		default:
+// 			return nil, fmt.Errorf("unsupported type for parameter %s: %T", k, v)
+// 		}
+
+// 	}
+
+// 	return actualParams, nil
+// }
+
 type CallParams struct {
 	Body       map[string]interface{} `json:"body"`
 	Headers    map[string][]string    `json:"headers"`
@@ -443,75 +538,94 @@ func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opNa
 	}
 
 	for k, v := range callParams {
-		if k == "body" {
-			actualParams.Body = v.(map[string]interface{})
-			continue
-		}
-
-		if k == "headers" {
-			for hk, hv := range v.(map[string]interface{}) {
-				hSlice, ok := hv.([]interface{})
-				if ok {
-					for _, h := range hSlice {
-						asStr, ok := h.(string)
-						if ok {
-							actualParams.Headers[hk] = append(actualParams.Headers[hk], asStr)
-						}
-					}
-					continue
-				}
-				actualParams.Headers[hk] = hv.([]string)
+		switch k {
+		case "body":
+			bodyMap, ok := v.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("expected 'body' to be a JSON object")
 			}
-			continue
-		}
+			actualParams.Body = bodyMap
 
-		if k == "parameters" {
-			for pk, pv := range v.(map[string]interface{}) {
-				pSlice, ok := pv.([]interface{})
-				if ok {
-					for _, p := range pSlice {
-						asStr, ok := p.(string)
-						if ok {
-							actualParams.Parameters[pk] = append(actualParams.Parameters[pk], asStr)
-						}
-					}
-					continue
-				}
-				actualParams.Parameters[pk] = pv.([]string)
+		case "headers":
+			headersMap, ok := v.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("expected 'headers' to be a JSON object")
 			}
-			continue
-		}
-
-		paramName := k
-		paramValue := callParams[k]
-
-		switch paramValue.(type) {
-		case string:
-			actualParams.Parameters[paramName] = []string{paramValue.(string)}
-		case []interface{}:
-			for _, v := range paramValue.([]interface{}) {
-				switch v.(type) {
-				case string:
-					actualParams.Parameters[paramName] = append(actualParams.Parameters[paramName], v.(string))
+			for hk, hv := range headersMap {
+				headerValues, err := interfaceToStrings(hv)
+				if err != nil {
+					return nil, fmt.Errorf("error processing header %s: %v", hk, err)
 				}
+				actualParams.Headers[hk] = headerValues
 			}
-		case []string:
-			actualParams.Parameters[paramName] = paramValue.([]string)
-		case float64:
-			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(paramValue.(float64), 'f', -1, 64)}
-		case int:
-			actualParams.Parameters[paramName] = []string{strconv.Itoa(paramValue.(int))}
-		case float32:
-			actualParams.Parameters[paramName] = []string{strconv.FormatFloat(float64(paramValue.(float32)), 'f', -1, 32)}
-		case bool:
-			actualParams.Parameters[paramName] = []string{strconv.FormatBool(paramValue.(bool))}
+
+		case "parameters":
+			paramsMap, ok := v.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("expected 'parameters' to be a JSON object")
+			}
+			for pk, pv := range paramsMap {
+				paramValues, err := interfaceToStrings(pv)
+				if err != nil {
+					return nil, fmt.Errorf("error processing parameter %s: %v", pk, err)
+				}
+				actualParams.Parameters[pk] = paramValues
+			}
+
 		default:
-			return nil, fmt.Errorf("unsupported type for parameter %s: %T", k, v)
+			paramValues, err := interfaceToStrings(v)
+			if err != nil {
+				return nil, fmt.Errorf("error converting parameter %s: %v", k, err)
+			}
+			actualParams.Parameters[k] = paramValues
 		}
-
 	}
 
 	return actualParams, nil
+}
+
+func interfaceToStrings(value interface{}) ([]string, error) {
+	switch v := value.(type) {
+	case string:
+		return []string{v}, nil
+	case []interface{}:
+		var strs []string
+		for _, item := range v {
+			s, err := interfaceToString(item)
+			if err != nil {
+				return nil, err
+			}
+			strs = append(strs, s)
+		}
+		return strs, nil
+	case []string:
+		return v, nil
+	default:
+		s, err := interfaceToString(v)
+		if err != nil {
+			return nil, err
+		}
+		return []string{s}, nil
+	}
+}
+
+func interfaceToString(value interface{}) (string, error) {
+	switch v := value.(type) {
+	case string:
+		return v, nil
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64), nil
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32), nil
+	case int:
+		return strconv.Itoa(v), nil
+	case int64:
+		return strconv.FormatInt(v, 10), nil
+	case bool:
+		return strconv.FormatBool(v), nil
+	default:
+		return "", fmt.Errorf("cannot convert type %T to string", value)
+	}
 }
 
 func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) (bool, error) {
@@ -562,7 +676,12 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 		if toolDef.ToolType == models.ToolTypeREST {
 			opts := make([]universalclient.ClientOption, 0)
 			if toolDef.AuthKey != "" {
-				opts = append(opts, universalclient.WithAuth("apiKey", toolDef.AuthKey))
+				schemaName := toolDef.AuthSchemaName
+				if toolDef.AuthSchemaName == "" {
+					schemaName = "apiKey"
+				}
+
+				opts = append(opts, universalclient.WithAuth(schemaName, toolDef.AuthKey))
 			}
 
 			opts = append(opts, universalclient.WithResponseFormat(universalclient.ResponseFormatJSON))
@@ -577,9 +696,10 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
+			cs.sendOutput(fmt.Sprintf("[TOOL] calling [%s]", t.FunctionCall.Name))
 			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
 			if err != nil {
-				return false, fmt.Errorf("error calling tool operation: %v", err)
+				return false, fmt.Errorf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
 			}
 
 			var asStr string
