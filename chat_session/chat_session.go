@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
@@ -406,8 +407,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		}
 
 		cs.llmResponses <- &LLMResponseWrapper{Response: toolCallResp, Opts: w.Opts}
-		// Not sure if this is the right option here, it may want to call more tools?
-		//cs.sendOutput(toolCallResp.Choices[0].Content)
+
 	}
 
 	if content != "" {
@@ -435,7 +435,8 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 	ctx, done := context.WithTimeout(context.Background(), 300*time.Second)
 	defer done()
 
-	err := cs.chatHistory.AddUserMessage(context.Background(), cs.prepHumanMessage(msg.Payload, docs).Content)
+	pl := cs.prepHumanMessage(msg.Payload, docs).Content
+	err := cs.chatHistory.AddUserMessage(context.Background(), pl)
 	if err != nil {
 		return "", fmt.Errorf("error adding message to history: %v", err)
 	}
@@ -457,6 +458,19 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 	default:
 		return "", fmt.Errorf("could not send response to llm responses channel")
 	}
+
+	mc := llms.TextParts(llms.ChatMessageTypeHuman, pl)
+	analytics.RecordContentMessage(
+		&mc,
+		resp,
+		cs.chatRef.LLM.Vendor,
+		cs.chatRef.LLM.Name,
+		cs.ID(),
+		0,
+		0,
+		0,
+		time.Now(),
+	)
 
 	return resp.Choices[0].Content, nil
 }
@@ -627,6 +641,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error creating tool client: %v", err)
 			}
 
+			t0 := time.Now()
 			args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments), t.FunctionCall.Name, uc)
 			if err != nil {
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
@@ -648,6 +663,8 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("response is not a compatible string (%T)", resp)
 			}
 
+			t1 := time.Now()
+
 			toolResp := llms.ToolCallResponse{
 				ToolCallID: t.ID,
 				Name:       t.FunctionCall.Name,
@@ -656,6 +673,11 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			toolResult.Parts = append(toolResult.Parts, toolResp)
 			called = true
+
+			analytics.RecordToolCall(
+				t.FunctionCall.Name,
+				time.Now(),
+				int(t1.Sub(t0).Milliseconds()), toolDef.ID)
 		}
 	}
 
