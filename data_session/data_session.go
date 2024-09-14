@@ -69,6 +69,7 @@ func (ds *DataSession) getEmbedder(d *models.Datasource) (*embeddings.EmbedderIm
 
 		opts = append(opts, openai.WithEmbeddingModel(d.EmbedModel))
 		llm, err = openai.New(opts...)
+
 	default:
 		return nil, fmt.Errorf("unsupported embed vendor")
 	}

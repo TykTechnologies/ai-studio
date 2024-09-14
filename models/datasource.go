@@ -25,6 +25,8 @@ type Datasource struct {
 	EmbedUrl    string `json:"embed_url"`
 	EmbedAPIKey string `json:"embed_api_key"`
 	EmbedModel  string `json:"embed_model"`
+
+	Active bool
 }
 
 type Datasources []Datasource
@@ -103,4 +105,8 @@ func (d *Datasources) GetByPrivacyScoreRange(db *gorm.DB, minScore, maxScore int
 // Get all datasources belonging to a specific user
 func (d *Datasources) GetByUserID(db *gorm.DB, userID uint) error {
 	return db.Preload("Tags").Where("user_id = ?", userID).Find(d).Error
+}
+
+func (d *Datasources) GetActiveDataSources(db *gorm.DB) error {
+	return db.Preload("Tags").Where("active = ?", true).Find(d).Error
 }

@@ -28,7 +28,7 @@ func TestDatasourceService(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test CreateDatasource
-	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model")
+	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, datasource)
 	assert.NotZero(t, datasource.ID)
@@ -42,7 +42,7 @@ func TestDatasourceService(t *testing.T) {
 	assert.Equal(t, datasource.Name, fetchedDatasource.Name)
 
 	// Test UpdateDatasource
-	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model")
+	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model", true)
 	assert.NoError(t, err)
 	assert.Equal(t, datasource.ID, updatedDatasource.ID)
 	assert.Equal(t, "Updated Datasource", updatedDatasource.Name)
@@ -101,9 +101,9 @@ func TestDatasourceService_MultipleDatasourcesScenario(t *testing.T) {
 	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
 
 	// Create multiple datasources
-	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://ds1.com", 60, user.ID, []string{"AI", "ML"}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1")
-	ds2, _ := service.CreateDatasource("Datasource 2", "Short 2", "Long 2", "icon2.png", "https://ds2.com", 75, user.ID, []string{"NLP", "ML"}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2")
-	ds3, _ := service.CreateDatasource("Datasource 3", "Short 3", "Long 3", "icon3.png", "https://ds3.com", 90, user.ID, []string{"AI", "NLP"}, "conn_string3", "source_type3", "api_key3", "db3", "embed_vendor3", "embed_url3", "embed_api_key3", "embed_model3")
+	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://ds1.com", 60, user.ID, []string{"AI", "ML"}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	ds2, _ := service.CreateDatasource("Datasource 2", "Short 2", "Long 2", "icon2.png", "https://ds2.com", 75, user.ID, []string{"NLP", "ML"}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
+	ds3, _ := service.CreateDatasource("Datasource 3", "Short 3", "Long 3", "icon3.png", "https://ds3.com", 90, user.ID, []string{"AI", "NLP"}, "conn_string3", "source_type3", "api_key3", "db3", "embed_vendor3", "embed_url3", "embed_api_key3", "embed_model3", true)
 
 	// Test GetAllDatasources
 	allDatasources, err := service.GetAllDatasources()

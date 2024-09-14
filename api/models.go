@@ -68,16 +68,15 @@ type LLMInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name              string `json:"name"`
-			APIKey            string `json:"api_key"`
-			APIEndpoint       string `json:"api_endpoint"`
-			StreamingEndpoint string `json:"streaming_endpoint"`
-			PrivacyScore      int    `json:"privacy_score"`
-			ShortDescription  string `json:"short_description"`
-			LongDescription   string `json:"long_description"`
-			ExternalURL       string `json:"external_url"`
-			LogoURL           string `json:"logo_url"`
-			Vendor            string `json:"vendor"`
+			Name             string `json:"name"`
+			APIKey           string `json:"api_key"`
+			APIEndpoint      string `json:"api_endpoint"`
+			PrivacyScore     int    `json:"privacy_score"`
+			ShortDescription string `json:"short_description"`
+			LongDescription  string `json:"long_description"`
+			LogoURL          string `json:"logo_url"`
+			Vendor           string `json:"vendor"`
+			Active           bool   `json:"active"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -88,16 +87,15 @@ type LLMResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name              string `json:"name"`
-		APIKey            string `json:"api_key"`
-		APIEndpoint       string `json:"api_endpoint"`
-		StreamingEndpoint string `json:"streaming_endpoint"`
-		PrivacyScore      int    `json:"privacy_score"`
-		ShortDescription  string `json:"short_description"`
-		LongDescription   string `json:"long_description"`
-		ExternalURL       string `json:"external_url"`
-		LogoURL           string `json:"logo_url"`
-		Vendor            string `json:"vendor"`
+		Name             string `json:"name"`
+		APIKey           string `json:"api_key"`
+		APIEndpoint      string `json:"api_endpoint"`
+		PrivacyScore     int    `json:"privacy_score"`
+		ShortDescription string `json:"short_description"`
+		LongDescription  string `json:"long_description"`
+		LogoURL          string `json:"logo_url"`
+		Vendor           string `json:"vendor"`
+		Active           bool   `json:"active"`
 	} `json:"attributes"`
 }
 
@@ -193,6 +191,7 @@ type DatasourceInput struct {
 			EmbedUrl         string   `json:"embed_url"`
 			EmbedAPIKey      string   `json:"embed_api_key"`
 			EmbedModel       string   `json:"embed_model"`
+			Active           bool     `json:"active"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -219,6 +218,7 @@ type DatasourceResponse struct {
 		EmbedUrl         string        `json:"embed_url"`
 		EmbedAPIKey      string        `json:"embed_api_key"`
 		EmbedModel       string        `json:"embed_model"`
+		Active           bool          `json:"active"`
 	} `json:"attributes"`
 }
 

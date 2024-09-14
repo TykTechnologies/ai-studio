@@ -48,6 +48,7 @@ func (a *API) createDatasource(c *gin.Context) {
 		input.Data.Attributes.EmbedUrl,
 		input.Data.Attributes.EmbedAPIKey,
 		input.Data.Attributes.EmbedModel,
+		input.Data.Attributes.Active,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -150,6 +151,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.EmbedUrl,
 		input.Data.Attributes.EmbedAPIKey,
 		input.Data.Attributes.EmbedModel,
+		input.Data.Attributes.Active,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -320,6 +322,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			EmbedUrl         string        `json:"embed_url"`
 			EmbedAPIKey      string        `json:"embed_api_key"`
 			EmbedModel       string        `json:"embed_model"`
+			Active           bool          `json:"active"`
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -337,6 +340,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			EmbedUrl:         datasource.EmbedUrl,
 			EmbedAPIKey:      datasource.EmbedAPIKey,
 			EmbedModel:       datasource.EmbedModel,
+			Active:           datasource.Active,
 		},
 	}
 }

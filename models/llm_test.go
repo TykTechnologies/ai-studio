@@ -16,10 +16,9 @@ func TestLLM_CRUD(t *testing.T) {
 
 	// Create
 	llm := &LLM{
-		Name:              "TestLLM",
-		APIKey:            "test-api-key",
-		APIEndpoint:       "https://api.test.com",
-		StreamingEndpoint: "https://streaming.test.com",
+		Name:        "TestLLM",
+		APIKey:      "test-api-key",
+		APIEndpoint: "https://api.test.com",
 	}
 	err := llm.Create(db)
 	assert.NoError(t, err)
@@ -32,7 +31,6 @@ func TestLLM_CRUD(t *testing.T) {
 	assert.Equal(t, llm.Name, fetchedLLM.Name)
 	assert.Equal(t, llm.APIKey, fetchedLLM.APIKey)
 	assert.Equal(t, llm.APIEndpoint, fetchedLLM.APIEndpoint)
-	assert.Equal(t, llm.StreamingEndpoint, fetchedLLM.StreamingEndpoint)
 
 	// Update
 	llm.Name = "UpdatedTestLLM"
@@ -55,10 +53,9 @@ func TestLLM_GetByName(t *testing.T) {
 	db := setupTestDB(t)
 
 	llm := &LLM{
-		Name:              "UniqueLLM",
-		APIKey:            "unique-api-key",
-		APIEndpoint:       "https://api.unique.com",
-		StreamingEndpoint: "https://streaming.unique.com",
+		Name:        "UniqueLLM",
+		APIKey:      "unique-api-key",
+		APIEndpoint: "https://api.unique.com",
 	}
 	err := llm.Create(db)
 	assert.NoError(t, err)
@@ -70,7 +67,6 @@ func TestLLM_GetByName(t *testing.T) {
 	assert.Equal(t, llm.Name, fetchedLLM.Name)
 	assert.Equal(t, llm.APIKey, fetchedLLM.APIKey)
 	assert.Equal(t, llm.APIEndpoint, fetchedLLM.APIEndpoint)
-	assert.Equal(t, llm.StreamingEndpoint, fetchedLLM.StreamingEndpoint)
 
 	// Test with non-existent name
 	err = fetchedLLM.GetByName(db, "NonExistentLLM")
@@ -82,9 +78,9 @@ func TestLLMs_GetAll(t *testing.T) {
 
 	// Create some test LLMs
 	llms := []LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://stream1.com"},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://stream2.com"},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://stream3.com"},
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com"},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com"},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com"},
 	}
 	for _, l := range llms {
 		err := db.Create(&l).Error
@@ -106,9 +102,9 @@ func TestLLMs_GetByNameStub(t *testing.T) {
 
 	// Create some test LLMs
 	llms := []LLM{
-		{Name: "GPT-3", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://stream1.com"},
-		{Name: "GPT-4", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://stream2.com"},
-		{Name: "BERT", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://stream3.com"},
+		{Name: "GPT-3", APIKey: "key1", APIEndpoint: "https://api1.com"},
+		{Name: "GPT-4", APIKey: "key2", APIEndpoint: "https://api2.com"},
+		{Name: "BERT", APIKey: "key3", APIEndpoint: "https://api3.com"},
 	}
 	for _, l := range llms {
 		err := db.Create(&l).Error
@@ -142,10 +138,10 @@ func TestLLMs_GetByMaxPrivacyScore(t *testing.T) {
 
 	// Create some test LLMs with different privacy scores
 	llms := []LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://stream1.com", PrivacyScore: 50},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://stream2.com", PrivacyScore: 75},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://stream3.com", PrivacyScore: 90},
-		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", StreamingEndpoint: "https://stream4.com", PrivacyScore: 30},
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", PrivacyScore: 50},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", PrivacyScore: 75},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", PrivacyScore: 90},
+		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", PrivacyScore: 30},
 	}
 	for _, l := range llms {
 		err := db.Create(&l).Error
@@ -190,10 +186,10 @@ func TestLLMs_GetByMinPrivacyScore(t *testing.T) {
 
 	// Create some test LLMs with different privacy scores
 	llms := []LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://stream1.com", PrivacyScore: 50},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://stream2.com", PrivacyScore: 75},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://stream3.com", PrivacyScore: 90},
-		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", StreamingEndpoint: "https://stream4.com", PrivacyScore: 30},
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", PrivacyScore: 50},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", PrivacyScore: 75},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", PrivacyScore: 90},
+		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", PrivacyScore: 30},
 	}
 	for _, l := range llms {
 		err := db.Create(&l).Error
@@ -238,11 +234,11 @@ func TestLLMs_GetByPrivacyScoreRange(t *testing.T) {
 
 	// Create some test LLMs with different privacy scores
 	llms := []LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://stream1.com", PrivacyScore: 50},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://stream2.com", PrivacyScore: 75},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://stream3.com", PrivacyScore: 90},
-		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", StreamingEndpoint: "https://stream4.com", PrivacyScore: 30},
-		{Name: "LLM5", APIKey: "key5", APIEndpoint: "https://api5.com", StreamingEndpoint: "https://stream5.com", PrivacyScore: 60},
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", PrivacyScore: 50},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", PrivacyScore: 75},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", PrivacyScore: 90},
+		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", PrivacyScore: 30},
+		{Name: "LLM5", APIKey: "key5", APIEndpoint: "https://api5.com", PrivacyScore: 60},
 	}
 	for _, l := range llms {
 		err := db.Create(&l).Error

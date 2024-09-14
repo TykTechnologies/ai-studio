@@ -35,13 +35,12 @@ func (a *API) createLLM(c *gin.Context) {
 		input.Data.Attributes.Name,
 		input.Data.Attributes.APIKey,
 		input.Data.Attributes.APIEndpoint,
-		input.Data.Attributes.StreamingEndpoint,
 		input.Data.Attributes.PrivacyScore,
 		input.Data.Attributes.ShortDescription,
 		input.Data.Attributes.LongDescription,
-		input.Data.Attributes.ExternalURL,
 		input.Data.Attributes.LogoURL,
 		models.Vendor(input.Data.Attributes.Vendor),
+		input.Data.Attributes.Active,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -133,13 +132,12 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.Name,
 		input.Data.Attributes.APIKey,
 		input.Data.Attributes.APIEndpoint,
-		input.Data.Attributes.StreamingEndpoint,
 		input.Data.Attributes.PrivacyScore,
 		input.Data.Attributes.ShortDescription,
 		input.Data.Attributes.LongDescription,
-		input.Data.Attributes.ExternalURL,
 		input.Data.Attributes.LogoURL,
 		models.Vendor(input.Data.Attributes.Vendor),
+		input.Data.Attributes.Active,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -212,7 +210,7 @@ func (a *API) listLLMs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
 }
 
 // @Summary Search LLMs by name
@@ -249,7 +247,7 @@ func (a *API) searchLLMs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
 }
 
 // @Summary Get LLMs by maximum privacy score
@@ -286,7 +284,7 @@ func (a *API) getLLMsByMaxPrivacyScore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
 }
 
 // @Summary Get LLMs by minimum privacy score
@@ -323,7 +321,7 @@ func (a *API) getLLMsByMinPrivacyScore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
 }
 
 // @Summary Get LLMs by privacy score range
@@ -382,7 +380,7 @@ func (a *API) getLLMsByPrivacyScoreRange(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(*llms)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
 }
 
 func serializeLLM(llm *models.LLM) LLMResponse {
@@ -390,27 +388,25 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 		Type: "llms",
 		ID:   strconv.FormatUint(uint64(llm.ID), 10),
 		Attributes: struct {
-			Name              string `json:"name"`
-			APIKey            string `json:"api_key"`
-			APIEndpoint       string `json:"api_endpoint"`
-			StreamingEndpoint string `json:"streaming_endpoint"`
-			PrivacyScore      int    `json:"privacy_score"`
-			ShortDescription  string `json:"short_description"`
-			LongDescription   string `json:"long_description"`
-			ExternalURL       string `json:"external_url"`
-			LogoURL           string `json:"logo_url"`
-			Vendor            string `json:"vendor"`
+			Name             string `json:"name"`
+			APIKey           string `json:"api_key"`
+			APIEndpoint      string `json:"api_endpoint"`
+			PrivacyScore     int    `json:"privacy_score"`
+			ShortDescription string `json:"short_description"`
+			LongDescription  string `json:"long_description"`
+			LogoURL          string `json:"logo_url"`
+			Vendor           string `json:"vendor"`
+			Active           bool   `json:"active"`
 		}{
-			Name:              llm.Name,
-			APIKey:            llm.APIKey,
-			APIEndpoint:       llm.APIEndpoint,
-			StreamingEndpoint: llm.StreamingEndpoint,
-			PrivacyScore:      llm.PrivacyScore,
-			ShortDescription:  llm.ShortDescription,
-			LongDescription:   llm.LongDescription,
-			ExternalURL:       llm.ExternalURL,
-			LogoURL:           llm.LogoURL,
-			Vendor:            string(llm.Vendor),
+			Name:             llm.Name,
+			APIKey:           llm.APIKey,
+			APIEndpoint:      llm.APIEndpoint,
+			PrivacyScore:     llm.PrivacyScore,
+			ShortDescription: llm.ShortDescription,
+			LongDescription:  llm.LongDescription,
+			LogoURL:          llm.LogoURL,
+			Vendor:           string(llm.Vendor),
+			Active:           llm.Active,
 		},
 	}
 }

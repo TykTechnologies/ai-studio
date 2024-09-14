@@ -245,40 +245,38 @@ func TestLLMEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name              string `json:"name"`
-				APIKey            string `json:"api_key"`
-				APIEndpoint       string `json:"api_endpoint"`
-				StreamingEndpoint string `json:"streaming_endpoint"`
-				PrivacyScore      int    `json:"privacy_score"`
-				ShortDescription  string `json:"short_description"`
-				LongDescription   string `json:"long_description"`
-				ExternalURL       string `json:"external_url"`
-				LogoURL           string `json:"logo_url"`
-				Vendor            string `json:"vendor"`
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
 			Attributes: struct {
-				Name              string `json:"name"`
-				APIKey            string `json:"api_key"`
-				APIEndpoint       string `json:"api_endpoint"`
-				StreamingEndpoint string `json:"streaming_endpoint"`
-				PrivacyScore      int    `json:"privacy_score"`
-				ShortDescription  string `json:"short_description"`
-				LongDescription   string `json:"long_description"`
-				ExternalURL       string `json:"external_url"`
-				LogoURL           string `json:"logo_url"`
-				Vendor            string `json:"vendor"`
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
 			}{
-				Name:              "Test LLM",
-				APIKey:            "test-api-key",
-				APIEndpoint:       "https://api.test.com",
-				StreamingEndpoint: "https://streaming.test.com",
-				PrivacyScore:      75,
-				ShortDescription:  "A test LLM",
-				LongDescription:   "This is a test LLM for API testing",
-				ExternalURL:       "https://testllm.com",
-				LogoURL:           "https://testllm.com/logo.png",
+				Name:             "Test LLM",
+				APIKey:           "test-api-key",
+				APIEndpoint:      "https://api.test.com",
+				PrivacyScore:     75,
+				ShortDescription: "A test LLM",
+				LongDescription:  "This is a test LLM for API testing",
+				LogoURL:          "https://testllm.com/logo.png",
+				Vendor:           "Test Vendor",
+				Active:           true,
 			},
 		},
 	}
@@ -302,40 +300,38 @@ func TestLLMEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name              string `json:"name"`
-				APIKey            string `json:"api_key"`
-				APIEndpoint       string `json:"api_endpoint"`
-				StreamingEndpoint string `json:"streaming_endpoint"`
-				PrivacyScore      int    `json:"privacy_score"`
-				ShortDescription  string `json:"short_description"`
-				LongDescription   string `json:"long_description"`
-				ExternalURL       string `json:"external_url"`
-				LogoURL           string `json:"logo_url"`
-				Vendor            string `json:"vendor"`
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
 			Attributes: struct {
-				Name              string `json:"name"`
-				APIKey            string `json:"api_key"`
-				APIEndpoint       string `json:"api_endpoint"`
-				StreamingEndpoint string `json:"streaming_endpoint"`
-				PrivacyScore      int    `json:"privacy_score"`
-				ShortDescription  string `json:"short_description"`
-				LongDescription   string `json:"long_description"`
-				ExternalURL       string `json:"external_url"`
-				LogoURL           string `json:"logo_url"`
-				Vendor            string `json:"vendor"`
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
 			}{
-				Name:              "Updated Test LLM",
-				APIKey:            "updated-api-key",
-				APIEndpoint:       "https://updated-api.test.com",
-				StreamingEndpoint: "https://updated-streaming.test.com",
-				PrivacyScore:      80,
-				ShortDescription:  "An updated test LLM",
-				LongDescription:   "This is an updated test LLM for API testing",
-				ExternalURL:       "https://updatedtestllm.com",
-				LogoURL:           "https://updatedtestllm.com/logo.png",
+				Name:             "Updated Test LLM",
+				APIKey:           "updated-api-key",
+				APIEndpoint:      "https://updated-api.test.com",
+				PrivacyScore:     80,
+				ShortDescription: "An updated test LLM",
+				LongDescription:  "This is an updated test LLM for API testing",
+				LogoURL:          "https://updatedtestllm.com/logo.png",
+				Vendor:           "Updated Test Vendor",
+				Active:           true,
 			},
 		},
 	}
@@ -361,10 +357,10 @@ func TestLLMPrivacyScoreEndpoints(t *testing.T) {
 
 	// Create some test LLMs with different privacy scores
 	llms := []models.LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://streaming1.com", PrivacyScore: 30},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://streaming2.com", PrivacyScore: 50},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://streaming3.com", PrivacyScore: 70},
-		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", StreamingEndpoint: "https://streaming4.com", PrivacyScore: 90},
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", PrivacyScore: 30},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", PrivacyScore: 50},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", PrivacyScore: 70},
+		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", PrivacyScore: 90},
 	}
 
 	for _, llm := range llms {
@@ -488,40 +484,36 @@ func TestCatalogueEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name              string `json:"name"`
-				APIKey            string `json:"api_key"`
-				APIEndpoint       string `json:"api_endpoint"`
-				StreamingEndpoint string `json:"streaming_endpoint"`
-				PrivacyScore      int    `json:"privacy_score"`
-				ShortDescription  string `json:"short_description"`
-				LongDescription   string `json:"long_description"`
-				ExternalURL       string `json:"external_url"`
-				LogoURL           string `json:"logo_url"`
-				Vendor            string `json:"vendor"`
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
 			Attributes: struct {
-				Name              string `json:"name"`
-				APIKey            string `json:"api_key"`
-				APIEndpoint       string `json:"api_endpoint"`
-				StreamingEndpoint string `json:"streaming_endpoint"`
-				PrivacyScore      int    `json:"privacy_score"`
-				ShortDescription  string `json:"short_description"`
-				LongDescription   string `json:"long_description"`
-				ExternalURL       string `json:"external_url"`
-				LogoURL           string `json:"logo_url"`
-				Vendor            string `json:"vendor"`
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
 			}{
-				Name:              "Test LLM",
-				APIKey:            "test-api-key",
-				APIEndpoint:       "https://api.test.com",
-				StreamingEndpoint: "https://streaming.test.com",
-				PrivacyScore:      75,
-				ShortDescription:  "A test LLM",
-				LongDescription:   "This is a test LLM for API testing",
-				ExternalURL:       "https://testllm.com",
-				LogoURL:           "https://testllm.com/logo.png",
+				Name:             "Test LLM",
+				APIKey:           "test-api-key",
+				APIEndpoint:      "https://api.test.com",
+				PrivacyScore:     75,
+				ShortDescription: "A test LLM",
+				LongDescription:  "This is a test LLM for API testing",
+				LogoURL:          "https://testllm.com/logo.png",
 			},
 		},
 	}
@@ -759,6 +751,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 				EmbedUrl         string   `json:"embed_url"`
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
+				Active           bool     `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -779,6 +772,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 				EmbedUrl         string   `json:"embed_url"`
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
+				Active           bool     `json:"active"`
 			}{
 				Name:             "Test Datasource",
 				ShortDescription: "Short description",
@@ -795,6 +789,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 				EmbedUrl:         "https://embed.example.com",
 				EmbedAPIKey:      "test_embed_api_key",
 				EmbedModel:       "test_model",
+				Active:           true,
 			},
 		},
 	}
@@ -834,6 +829,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 				EmbedUrl         string   `json:"embed_url"`
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
+				Active           bool     `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -854,6 +850,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 				EmbedUrl         string   `json:"embed_url"`
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
+				Active           bool     `json:"active"`
 			}{
 				Name:             "Updated Datasource",
 				ShortDescription: "Updated short description",
@@ -870,6 +867,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 				EmbedUrl:         "https://updated-embed.example.com",
 				EmbedAPIKey:      "updated_embed_api_key",
 				EmbedModel:       "updated_model",
+				Active:           false,
 			},
 		},
 	}
@@ -1059,7 +1057,7 @@ func TestChatEndpoints(t *testing.T) {
 	llmSettings, err := api.service.CreateLLMSettings(&models.LLMSettings{ModelName: "TestModel"})
 	assert.NoError(t, err)
 
-	llm, err := api.service.CreateLLM("TestLLM", "api-key", "http://api.test", "http://stream.test", 75, "Short desc", "Long desc", "http://external.test", "http://logo.test", models.OPENAI)
+	llm, err := api.service.CreateLLM("TestLLM", "api-key", "http://api.test", 75, "Short desc", "Long desc", "http://logo.test", models.OPENAI, true)
 	assert.NoError(t, err)
 
 	// Test Create Chat

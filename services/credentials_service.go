@@ -36,6 +36,14 @@ func (s *Service) GetCredentialByKeyID(keyID string) (*models.Credential, error)
 	return credential, nil
 }
 
+func (s *Service) GetCredentialBySecret(secret string) (*models.Credential, error) {
+	credential := &models.Credential{}
+	if err := credential.GetBySecret(s.DB, secret); err != nil {
+		return nil, err
+	}
+	return credential, nil
+}
+
 // UpdateCredential updates an existing credential
 func (s *Service) UpdateCredential(credential *models.Credential) error {
 	return credential.Update(s.DB)

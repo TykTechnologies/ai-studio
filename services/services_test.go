@@ -132,18 +132,16 @@ func TestLLMService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateLLM
-	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", "https://streaming.test.com", 75, "Short desc", "Long desc", "https://external.com", "https://logo.com", models.OPENAI)
+	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", 75, "Short desc", "Long desc", "https://logo.com", models.OPENAI, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, llm)
 	assert.NotZero(t, llm.ID)
 	assert.Equal(t, "TestLLM", llm.Name)
 	assert.Equal(t, "test-api-key", llm.APIKey)
 	assert.Equal(t, "https://api.test.com", llm.APIEndpoint)
-	assert.Equal(t, "https://streaming.test.com", llm.StreamingEndpoint)
 	assert.Equal(t, 75, llm.PrivacyScore)
 	assert.Equal(t, "Short desc", llm.ShortDescription)
 	assert.Equal(t, "Long desc", llm.LongDescription)
-	assert.Equal(t, "https://external.com", llm.ExternalURL)
 	assert.Equal(t, "https://logo.com", llm.LogoURL)
 
 	// Test GetLLMByID
@@ -152,24 +150,20 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, llm.Name, fetchedLLM.Name)
 	assert.Equal(t, llm.APIKey, fetchedLLM.APIKey)
 	assert.Equal(t, llm.APIEndpoint, fetchedLLM.APIEndpoint)
-	assert.Equal(t, llm.StreamingEndpoint, fetchedLLM.StreamingEndpoint)
 	assert.Equal(t, llm.PrivacyScore, fetchedLLM.PrivacyScore)
 	assert.Equal(t, llm.ShortDescription, fetchedLLM.ShortDescription)
 	assert.Equal(t, llm.LongDescription, fetchedLLM.LongDescription)
-	assert.Equal(t, llm.ExternalURL, fetchedLLM.ExternalURL)
 	assert.Equal(t, llm.LogoURL, fetchedLLM.LogoURL)
 
 	// Test UpdateLLM
-	updatedLLM, err := service.UpdateLLM(llm.ID, "UpdatedLLM", "updated-api-key", "https://updated-api.test.com", "https://updated-streaming.test.com", 80, "Updated short", "Updated long", "https://updated-external.com", "https://updated-logo.com", models.OPENAI)
+	updatedLLM, err := service.UpdateLLM(llm.ID, "UpdatedLLM", "updated-api-key", "https://updated-api.test.com", 80, "Updated short", "Updated long", "https://updated-logo.com", models.OPENAI, true)
 	assert.NoError(t, err)
 	assert.Equal(t, "UpdatedLLM", updatedLLM.Name)
 	assert.Equal(t, "updated-api-key", updatedLLM.APIKey)
 	assert.Equal(t, "https://updated-api.test.com", updatedLLM.APIEndpoint)
-	assert.Equal(t, "https://updated-streaming.test.com", updatedLLM.StreamingEndpoint)
 	assert.Equal(t, 80, updatedLLM.PrivacyScore)
 	assert.Equal(t, "Updated short", updatedLLM.ShortDescription)
 	assert.Equal(t, "Updated long", updatedLLM.LongDescription)
-	assert.Equal(t, "https://updated-external.com", updatedLLM.ExternalURL)
 	assert.Equal(t, "https://updated-logo.com", updatedLLM.LogoURL)
 
 	// Test GetLLMByName
@@ -181,14 +175,14 @@ func TestLLMService(t *testing.T) {
 	// Test GetAllLLMs
 	allLLMs, err := service.GetAllLLMs()
 	assert.NoError(t, err)
-	assert.Len(t, *allLLMs, 1)
-	assert.Equal(t, updatedLLM.ID, (*allLLMs)[0].ID)
+	assert.Len(t, allLLMs, 1)
+	assert.Equal(t, updatedLLM.ID, (allLLMs)[0].ID)
 
 	// Test GetLLMsByNameStub
 	stubLLMs, err := service.GetLLMsByNameStub("Updated")
 	assert.NoError(t, err)
-	assert.Len(t, *stubLLMs, 1)
-	assert.Equal(t, updatedLLM.ID, (*stubLLMs)[0].ID)
+	assert.Len(t, stubLLMs, 1)
+	assert.Equal(t, updatedLLM.ID, (stubLLMs)[0].ID)
 
 	// Test DeleteLLM
 	err = service.DeleteLLM(llm.ID)
@@ -199,28 +193,28 @@ func TestLLMService(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test creating multiple LLMs and searching
-	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", "https://stream1.com", 70, "GPT-3 short", "GPT-3 long", "https://gpt3.com", "https://gpt3-logo.com", models.OPENAI)
-	llm2, _ := service.CreateLLM("GPT-4", "key2", "https://api2.com", "https://stream2.com", 85, "GPT-4 short", "GPT-4 long", "https://gpt4.com", "https://gpt4-logo.com", models.OPENAI)
-	service.CreateLLM("BERT", "key3", "https://api3.com", "https://stream3.com", 60, "BERT short", "BERT long", "https://bert.com", "https://bert-logo.com", models.OPENAI)
+	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", 70, "GPT-3 short", "GPT-3 long", "https://gpt3-logo.com", models.OPENAI, true)
+	llm2, _ := service.CreateLLM("GPT-4", "key2", "https://api2.com", 85, "GPT-4 short", "GPT-4 long", "https://gpt4-logo.com", models.OPENAI, true)
+	service.CreateLLM("BERT", "key3", "https://api3.com", 60, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true)
 
 	allLLMs, err = service.GetAllLLMs()
 	assert.NoError(t, err)
-	assert.Len(t, *allLLMs, 3)
+	assert.Len(t, allLLMs, 3)
 
 	gptLLMs, err := service.GetLLMsByNameStub("GPT")
 	assert.NoError(t, err)
-	assert.Len(t, *gptLLMs, 2)
-	assert.Contains(t, []uint{llm1.ID, llm2.ID}, (*gptLLMs)[0].ID)
-	assert.Contains(t, []uint{llm1.ID, llm2.ID}, (*gptLLMs)[1].ID)
+	assert.Len(t, gptLLMs, 2)
+	assert.Contains(t, []uint{llm1.ID, llm2.ID}, (gptLLMs)[0].ID)
+	assert.Contains(t, []uint{llm1.ID, llm2.ID}, (gptLLMs)[1].ID)
 }
 
 func createTestLLMs(t *testing.T, db *gorm.DB) {
 	llms := []models.LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", StreamingEndpoint: "https://stream1.com", PrivacyScore: 50, ShortDescription: "Short 1", LongDescription: "Long 1", ExternalURL: "https://llm1.com", LogoURL: "https://logo1.com"},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", StreamingEndpoint: "https://stream2.com", PrivacyScore: 75, ShortDescription: "Short 2", LongDescription: "Long 2", ExternalURL: "https://llm2.com", LogoURL: "https://logo2.com"},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", StreamingEndpoint: "https://stream3.com", PrivacyScore: 90, ShortDescription: "Short 3", LongDescription: "Long 3", ExternalURL: "https://llm3.com", LogoURL: "https://logo3.com"},
-		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", StreamingEndpoint: "https://stream4.com", PrivacyScore: 30, ShortDescription: "Short 4", LongDescription: "Long 4", ExternalURL: "https://llm4.com", LogoURL: "https://logo4.com"},
-		{Name: "LLM5", APIKey: "key5", APIEndpoint: "https://api5.com", StreamingEndpoint: "https://stream5.com", PrivacyScore: 60, ShortDescription: "Short 5", LongDescription: "Long 5", ExternalURL: "https://llm5.com", LogoURL: "https://logo5.com"},
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", PrivacyScore: 50, ShortDescription: "Short 1", LongDescription: "Long 1", LogoURL: "https://logo1.com"},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", PrivacyScore: 75, ShortDescription: "Short 2", LongDescription: "Long 2", LogoURL: "https://logo2.com"},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", PrivacyScore: 90, ShortDescription: "Short 3", LongDescription: "Long 3", LogoURL: "https://logo3.com"},
+		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", PrivacyScore: 30, ShortDescription: "Short 4", LongDescription: "Long 4", LogoURL: "https://logo4.com"},
+		{Name: "LLM5", APIKey: "key5", APIEndpoint: "https://api5.com", PrivacyScore: 60, ShortDescription: "Short 5", LongDescription: "Long 5", LogoURL: "https://logo5.com"},
 	}
 
 	for _, llm := range llms {
@@ -249,10 +243,10 @@ func TestService_GetLLMsByMaxPrivacyScore(t *testing.T) {
 	for _, tc := range testCases {
 		llms, err := service.GetLLMsByMaxPrivacyScore(tc.maxScore)
 		assert.NoError(t, err)
-		assert.Len(t, *llms, tc.expectedCount)
+		assert.Len(t, llms, tc.expectedCount)
 
 		var names []string
-		for _, llm := range *llms {
+		for _, llm := range llms {
 			names = append(names, llm.Name)
 			assert.LessOrEqual(t, llm.PrivacyScore, tc.maxScore)
 		}
@@ -280,10 +274,10 @@ func TestService_GetLLMsByMinPrivacyScore(t *testing.T) {
 	for _, tc := range testCases {
 		llms, err := service.GetLLMsByMinPrivacyScore(tc.minScore)
 		assert.NoError(t, err)
-		assert.Len(t, *llms, tc.expectedCount)
+		assert.Len(t, llms, tc.expectedCount)
 
 		var names []string
-		for _, llm := range *llms {
+		for _, llm := range llms {
 			names = append(names, llm.Name)
 			assert.GreaterOrEqual(t, llm.PrivacyScore, tc.minScore)
 		}
@@ -312,10 +306,10 @@ func TestService_GetLLMsByPrivacyScoreRange(t *testing.T) {
 	for _, tc := range testCases {
 		llms, err := service.GetLLMsByPrivacyScoreRange(tc.minScore, tc.maxScore)
 		assert.NoError(t, err)
-		assert.Len(t, *llms, tc.expectedCount)
+		assert.Len(t, llms, tc.expectedCount)
 
 		var names []string
-		for _, llm := range *llms {
+		for _, llm := range llms {
 			names = append(names, llm.Name)
 			assert.GreaterOrEqual(t, llm.PrivacyScore, tc.minScore)
 			assert.LessOrEqual(t, llm.PrivacyScore, tc.maxScore)
@@ -326,7 +320,7 @@ func TestService_GetLLMsByPrivacyScoreRange(t *testing.T) {
 	// Test invalid range
 	llms, err := service.GetLLMsByPrivacyScoreRange(80, 70)
 	assert.NoError(t, err)
-	assert.Len(t, *llms, 0)
+	assert.Len(t, llms, 0)
 }
 
 func TestCatalogueService(t *testing.T) {
@@ -361,7 +355,7 @@ func TestCatalogueService(t *testing.T) {
 	assert.Equal(t, "Updated Catalogue", searchedCatalogues[0].Name)
 
 	// Test AddLLMToCatalogue
-	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", "https://streaming.test.com", 70, "Short desc", "Long desc", "https://external.com", "https://logo.com", models.OPENAI)
+	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", 70, "Short desc", "Long desc", "https://logo.com", models.OPENAI, true)
 	assert.NoError(t, err)
 
 	err = service.AddLLMToCatalogue(llm.ID, catalogue.ID)
@@ -416,8 +410,8 @@ func TestCatalogueService_MultipleCatalogues(t *testing.T) {
 	assert.Equal(t, catalogue2.ID, mlCatalogues[0].ID)
 
 	// Test adding multiple LLMs to a catalogue
-	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", "https://stream1.com", 80, "GPT-3 short", "GPT-3 long", "https://gpt3.com", "https://gpt3-logo.com", models.OPENAI)
-	llm2, _ := service.CreateLLM("BERT", "key2", "https://api2.com", "https://stream2.com", 70, "BERT short", "BERT long", "https://bert.com", "https://bert-logo.com", models.OPENAI)
+	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", 80, "GPT-3 short", "GPT-3 long", "https://gpt3-logo.com", models.OPENAI, true)
+	llm2, _ := service.CreateLLM("BERT", "key2", "https://api2.com", 70, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true)
 
 	err = service.AddLLMToCatalogue(llm1.ID, catalogue3.ID)
 	assert.NoError(t, err)

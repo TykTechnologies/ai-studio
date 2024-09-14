@@ -4,18 +4,16 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateLLM(name, apiKey, apiEndpoint, streamingEndpoint string, privacyScore int, shortDescription, longDescription, externalURL, logoURL string, vendor models.Vendor) (*models.LLM, error) {
+func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool) (*models.LLM, error) {
 	llm := &models.LLM{
-		Name:              name,
-		APIKey:            apiKey,
-		APIEndpoint:       apiEndpoint,
-		StreamingEndpoint: streamingEndpoint,
-		PrivacyScore:      privacyScore,
-		ShortDescription:  shortDescription,
-		LongDescription:   longDescription,
-		ExternalURL:       externalURL,
-		LogoURL:           logoURL,
-		Vendor:            vendor,
+		Name:             name,
+		APIKey:           apiKey,
+		APIEndpoint:      apiEndpoint,
+		PrivacyScore:     privacyScore,
+		ShortDescription: shortDescription,
+		LongDescription:  longDescription,
+		LogoURL:          logoURL,
+		Vendor:           vendor,
 	}
 
 	if err := llm.Create(s.DB); err != nil {
@@ -33,7 +31,7 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	return llm, nil
 }
 
-func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint, streamingEndpoint string, privacyScore int, shortDescription, longDescription, externalURL, logoURL string, vendor models.Vendor) (*models.LLM, error) {
+func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -42,13 +40,12 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint, streamingEndpoin
 	llm.Name = name
 	llm.APIKey = apiKey
 	llm.APIEndpoint = apiEndpoint
-	llm.StreamingEndpoint = streamingEndpoint
 	llm.PrivacyScore = privacyScore
 	llm.ShortDescription = shortDescription
 	llm.LongDescription = longDescription
-	llm.ExternalURL = externalURL
 	llm.LogoURL = logoURL
 	llm.Vendor = vendor
+	llm.Active = active
 
 	if err := llm.Update(s.DB); err != nil {
 		return nil, err
@@ -75,16 +72,24 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 	return llm, nil
 }
 
-func (s *Service) GetAllLLMs() (*models.LLMs, error) {
-	llms := &models.LLMs{}
+func (s *Service) GetAllLLMs() (models.LLMs, error) {
+	llms := models.LLMs{}
 	if err := llms.GetAll(s.DB); err != nil {
 		return nil, err
 	}
 	return llms, nil
 }
 
-func (s *Service) GetLLMsByNameStub(name string) (*models.LLMs, error) {
-	llms := &models.LLMs{}
+func (s *Service) GetActiveLLMs() (models.LLMs, error) {
+	llms := models.LLMs{}
+	if err := llms.GetActiveLLMs(s.DB); err != nil {
+		return nil, err
+	}
+	return llms, nil
+}
+
+func (s *Service) GetLLMsByNameStub(name string) (models.LLMs, error) {
+	llms := models.LLMs{}
 	if err := llms.GetByNameStub(s.DB, name); err != nil {
 		return nil, err
 	}
@@ -100,24 +105,24 @@ func (s *Service) GetLLMsByNameStub(name string) (*models.LLMs, error) {
 // 	return llms, nil
 // }
 
-func (s *Service) GetLLMsByMaxPrivacyScore(score int) (*models.LLMs, error) {
-	llms := &models.LLMs{}
+func (s *Service) GetLLMsByMaxPrivacyScore(score int) (models.LLMs, error) {
+	llms := models.LLMs{}
 	if err := llms.GetByMaxPrivacyScore(s.DB, score); err != nil {
 		return nil, err
 	}
 	return llms, nil
 }
 
-func (s *Service) GetLLMsByMinPrivacyScore(score int) (*models.LLMs, error) {
-	llms := &models.LLMs{}
+func (s *Service) GetLLMsByMinPrivacyScore(score int) (models.LLMs, error) {
+	llms := models.LLMs{}
 	if err := llms.GetByMinPrivacyScore(s.DB, score); err != nil {
 		return nil, err
 	}
 	return llms, nil
 }
 
-func (s *Service) GetLLMsByPrivacyScoreRange(min, max int) (*models.LLMs, error) {
-	llms := &models.LLMs{}
+func (s *Service) GetLLMsByPrivacyScoreRange(min, max int) (models.LLMs, error) {
+	llms := models.LLMs{}
 	if err := llms.GetByPrivacyScoreRange(s.DB, min, max); err != nil {
 		return nil, err
 	}

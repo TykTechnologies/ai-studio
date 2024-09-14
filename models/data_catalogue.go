@@ -26,7 +26,9 @@ func (dc *DataCatalogue) Create(db *gorm.DB) error {
 
 // Get a data catalogue by ID
 func (dc *DataCatalogue) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Datasources").Preload("Tags").First(dc, id).Error
+	return db.Preload("Datasources", func(db *gorm.DB) *gorm.DB {
+		return db.Where("active = ?", true)
+	}).Preload("Tags").First(dc, id).Error
 }
 
 // Update an existing data catalogue

@@ -64,6 +64,11 @@ func (a *App) GetByName(db *gorm.DB, name string) error {
 	return db.Where("name = ?", name).Preload("Credential").First(a).Error
 }
 
+// GetByCredentialID gets an app by its credential ID
+func (a *App) GetByCredentialID(db *gorm.DB, credentialID uint) error {
+	return db.Where("credential_id = ?", credentialID).Preload("Credential").First(a).Error
+}
+
 // ActivateCredential activates the credential associated with the app
 func (a *App) ActivateCredential(db *gorm.DB) error {
 	if a.CredentialID == 0 {

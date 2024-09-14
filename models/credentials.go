@@ -47,6 +47,10 @@ func (c *Credential) GetByKeyID(db *gorm.DB, keyID string) error {
 	return db.Where("key_id = ?", keyID).First(c).Error
 }
 
+func (c *Credential) GetBySecret(db *gorm.DB, secret string) error {
+	return db.Where("secret = ?", secret).First(c).Error
+}
+
 func (c *Credential) Update(db *gorm.DB) error {
 	return db.Save(c).Error
 }

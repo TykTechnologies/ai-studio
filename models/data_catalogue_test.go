@@ -80,7 +80,7 @@ func TestDataCatalogue_DatasourceAssociation(t *testing.T) {
 	err := dc.Create(db)
 	assert.NoError(t, err)
 
-	ds := &Datasource{Name: "Test Datasource"}
+	ds := &Datasource{Name: "Test Datasource", Active: true}
 	err = ds.Create(db)
 	assert.NoError(t, err)
 

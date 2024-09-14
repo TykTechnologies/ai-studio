@@ -144,6 +144,7 @@ func TestDataCatalogueEndpoints(t *testing.T) {
 		"embed_url",
 		"embed_api_key",
 		"embed_model",
+		true,
 	)
 	assert.NoError(t, err)
 
@@ -303,6 +304,7 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 		"embed_url1",
 		"embed_api_key1",
 		"embed_model1",
+		true,
 	)
 	ds2, _ := api.service.CreateDatasource(
 		"Datasource 2",
@@ -321,6 +323,7 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 		"embed_url2",
 		"embed_api_key2",
 		"embed_model2",
+		true,
 	)
 
 	addDatasourceToDataCatalogue := func(dcID string, dsID uint) {

@@ -192,9 +192,12 @@ func (cs *ChatSession) Start() error {
 
 				// prep tools
 				tools := cs.prepareTools()
+
+				// Handle the message from the user
 				cs.HandleUserMessage(msg, docs, tools)
 
 			case resp := <-cs.llmResponses:
+				// handle any response from the LLM
 				err := cs.HandleLLMResponse(resp)
 				if err != nil {
 					cs.errors <- fmt.Errorf("error handling LLM response: %v", err)
@@ -323,7 +326,7 @@ func (cs *ChatSession) joinDocuments(docs []schema.Document, separator string) s
 }
 
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
-	pl := fmt.Sprintf("Context for this message: \n\n%s\n\nMessage: \n\n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	pl := fmt.Sprintf("Context for this message: \n%s\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
 	return llms.HumanChatMessage{
 		Content: pl,
 	}

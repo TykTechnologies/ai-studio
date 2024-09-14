@@ -6,17 +6,18 @@ type Vendor string
 
 type LLM struct {
 	gorm.Model
-	ID                uint   `json:"id" gorm:"primary_key"`
-	Name              string `json:"name"`
-	APIKey            string `json:"api_key`
-	APIEndpoint       string `json:"api_endpoint"`
-	StreamingEndpoint string `json:"streaming_endpoint"`
-	PrivacyScore      int    `json:"privacy_score"`
-	ShortDescription  string `json:"short_description"`
-	LongDescription   string `json:"long_description"`
-	ExternalURL       string `json:"external_url"`
-	LogoURL           string `json:"logo"`
-	Vendor            Vendor `json:"vendor"`
+	ID          uint   `json:"id" gorm:"primary_key"`
+	Name        string `json:"name"`
+	APIKey      string `json:"api_key`
+	APIEndpoint string `json:"api_endpoint"` // The endpoint to actually access the LLM with Midsommar
+
+	PrivacyScore     int    `json:"privacy_score"`
+	ShortDescription string `json:"short_description"`
+	LongDescription  string `json:"long_description"`
+
+	LogoURL string `json:"logo"`
+	Vendor  Vendor `json:"vendor"`
+	Active  bool   `json:"active"`
 }
 
 const (
@@ -70,4 +71,8 @@ func (l *LLMs) GetByMinPrivacyScore(db *gorm.DB, score int) error {
 
 func (l *LLMs) GetByPrivacyScoreRange(db *gorm.DB, min, max int) error {
 	return db.Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error
+}
+
+func (l *LLMs) GetActiveLLMs(db *gorm.DB) error {
+	return db.Where("active = ?", true).Find(l).Error
 }

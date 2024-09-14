@@ -4,7 +4,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string) (*models.Datasource, error) {
+func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
 	datasource := &models.Datasource{
 		Name:             name,
 		ShortDescription: shortDesc,
@@ -21,6 +21,7 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		EmbedUrl:         embedUrl,
 		EmbedAPIKey:      embedAPIKey,
 		EmbedModel:       embedModel,
+		Active:           active,
 	}
 
 	if err := datasource.Create(s.DB); err != nil {
@@ -34,7 +35,7 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 	return datasource, nil
 }
 
-func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string) (*models.Datasource, error) {
+func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
 	datasource, err := s.GetDatasourceByID(id)
 	if err != nil {
 		return nil, err
@@ -54,6 +55,7 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.EmbedAPIKey = embedAPIKey
 	datasource.EmbedModel = embedModel
 	datasource.DBName = dbName
+	datasource.Active = active
 
 	if err := datasource.Update(s.DB); err != nil {
 		return nil, err
@@ -82,6 +84,14 @@ func (s *Service) DeleteDatasource(id uint) error {
 func (s *Service) GetAllDatasources() (models.Datasources, error) {
 	var datasources models.Datasources
 	if err := datasources.GetAll(s.DB); err != nil {
+		return nil, err
+	}
+	return datasources, nil
+}
+
+func (s *Service) GetActiveDatasources() (models.Datasources, error) {
+	var datasources models.Datasources
+	if err := datasources.GetActiveDataSources(s.DB); err != nil {
 		return nil, err
 	}
 	return datasources, nil

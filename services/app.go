@@ -171,6 +171,15 @@ func (s *Service) GetAppByID(id uint) (*models.App, error) {
 	return app, nil
 }
 
+// GetAppByCredentialID retrieves an app by its credential ID
+func (s *Service) GetAppByCredentialID(credentialID uint) (*models.App, error) {
+	app := models.NewApp()
+	if err := app.GetByCredentialID(s.DB, credentialID); err != nil {
+		return nil, err
+	}
+	return app, nil
+}
+
 // DeleteApp deletes an app
 func (s *Service) DeleteApp(id uint) error {
 	app, err := s.GetAppByID(id)

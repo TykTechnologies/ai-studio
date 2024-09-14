@@ -16,7 +16,9 @@ func NewCatalogue() *Catalogue {
 }
 
 func (c *Catalogue) Get(db *gorm.DB, id uint) error {
-	return db.Preload("LLMs").First(c, id).Error
+	return db.Preload("LLMs", func(db *gorm.DB) *gorm.DB {
+		return db.Where("active = ?", true)
+	}).First(c, id).Error
 }
 
 func (c *Catalogue) Create(db *gorm.DB) error {

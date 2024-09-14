@@ -28,10 +28,10 @@ func TestAppService(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create test datasources and LLMs
-	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1")
-	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2")
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", "https://stream1.com", 80, "Short1", "Long1", "https://llm1.com", "https://logo1.com", models.OPENAI)
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", "https://stream2.com", 90, "Short2", "Long2", "https://llm2.com", "https://logo2.com", models.OPENAI)
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true)
 
 	// Test CreateApp with valid privacy scores
 	app, err := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID})
@@ -43,7 +43,7 @@ func TestAppService(t *testing.T) {
 	assert.Len(t, app.LLMs, 2)
 
 	// Test CreateApp with invalid privacy scores
-	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid")
+	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid", true)
 	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID})
 	assert.Error(t, err)
 
@@ -92,7 +92,7 @@ func TestAppService(t *testing.T) {
 	assert.False(t, deactivatedApp.Credential.Active)
 
 	// Test AddDatasourceToApp and GetAppDatasources
-	newDS, _ := service.CreateDatasource("NewDS", "Short", "Long", "icon.png", "https://newds.com", 65, user.ID, []string{}, "conn_string_new", "source_type_new", "api_key_new", "db1", "embed_vendor_new", "embed_url_new", "embed_api_key_new", "embed_model_new")
+	newDS, _ := service.CreateDatasource("NewDS", "Short", "Long", "icon.png", "https://newds.com", 65, user.ID, []string{}, "conn_string_new", "source_type_new", "api_key_new", "db1", "embed_vendor_new", "embed_url_new", "embed_api_key_new", "embed_model_new", true)
 	err = service.AddDatasourceToApp(app.ID, newDS.ID)
 	assert.NoError(t, err)
 
@@ -110,7 +110,7 @@ func TestAppService(t *testing.T) {
 	assert.Len(t, appDatasources, 2)
 
 	// Test AddLLMToApp and GetAppLLMs
-	newLLM, _ := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", "https://newstream.com", 85, "NewShort", "NewLong", "https://newllm.com", "https://newlogo.com", models.OPENAI)
+	newLLM, _ := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", 85, "NewShort", "NewLong", "https://newlogo.com", models.OPENAI, true)
 	err = service.AddLLMToApp(app.ID, newLLM.ID)
 	assert.NoError(t, err)
 
@@ -197,10 +197,10 @@ func TestAppService_MultipleApps(t *testing.T) {
 	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
 
 	// Create datasources and LLMs
-	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user1.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1")
-	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user2.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2")
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", "https://stream1.com", 80, "Short1", "Long1", "https://llm1.com", "https://logo1.com", models.OPENAI)
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", "https://stream2.com", 90, "Short2", "Long2", "https://llm2.com", "https://logo2.com", models.OPENAI)
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user1.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user2.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true)
 
 	// Create multiple apps
 	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, []uint{ds1.ID}, []uint{llm1.ID})
