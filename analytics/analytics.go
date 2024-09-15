@@ -29,6 +29,7 @@ type LLMChatRecord struct {
 	ToolCalls      int
 	ChatID         string
 	AppID          uint
+	Cost           float64
 }
 
 // logs content
@@ -115,7 +116,9 @@ func RecordContentMessage(
 	vendor models.Vendor,
 	name, chatID string,
 	timeMs int, userID, appID uint,
-	t time.Time) {
+	t time.Time,
+	cpt float64,
+) {
 
 	if !recStarted {
 		return
@@ -168,6 +171,7 @@ func RecordContentMessage(
 	rec.ToolCalls = toolCalls
 	rec.ChatID = chatID
 	rec.AppID = appID
+	rec.Cost = cpt * float64(totalTokens)
 
 	// LLM Response
 	chatLog := &LLMChatLogEntry{}

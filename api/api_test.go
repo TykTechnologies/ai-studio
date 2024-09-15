@@ -923,6 +923,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				CPT               float64                `json:"cpt"`
 			} `json:"attributes"`
 		}{
 			Type: "llm-settings",
@@ -938,6 +939,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				CPT               float64                `json:"cpt"`
 			}{
 				ModelName:         "TestModel",
 				MaxLength:         100,
@@ -950,6 +952,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature:       0.7,
 				TopK:              40,
 				TopP:              0.9,
+				CPT:               0.1,
 			},
 		},
 	}
@@ -984,6 +987,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				CPT               float64                `json:"cpt"`
 			} `json:"attributes"`
 		}{
 			Type: "llm-settings",
@@ -999,6 +1003,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				CPT               float64                `json:"cpt"`
 			}{
 				ModelName:         "UpdatedTestModel",
 				MaxLength:         120,
@@ -1011,6 +1016,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature:       0.8,
 				TopK:              50,
 				TopP:              0.95,
+				CPT:               0.2,
 			},
 		},
 	}

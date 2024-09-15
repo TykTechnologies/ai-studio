@@ -50,7 +50,7 @@ func TestRecordContentMessage(t *testing.T) {
 		},
 	}
 
-	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, now)
+	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, now, 0.1)
 
 	// Wait for goroutine to process
 	time.Sleep(100 * time.Millisecond)

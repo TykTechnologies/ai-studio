@@ -338,6 +338,7 @@ type LLMSettingsInput struct {
 			Temperature       float64                `json:"temperature"`
 			TopK              int                    `json:"top_k"`
 			TopP              float64                `json:"top_p"`
+			CPT               float64                `json:"cpt"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -358,6 +359,7 @@ type LLMSettingsResponse struct {
 		Temperature       float64                `json:"temperature"`
 		TopK              int                    `json:"top_k"`
 		TopP              float64                `json:"top_p"`
+		CPT               float64                `json:"cpt"`
 	} `json:"attributes"`
 }
 

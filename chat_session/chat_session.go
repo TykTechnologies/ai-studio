@@ -470,6 +470,7 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 		0,
 		0,
 		time.Now(),
+		cs.chatRef.LLMSettings.CPT,
 	)
 
 	return resp.Choices[0].Content, nil

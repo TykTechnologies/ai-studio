@@ -4078,6 +4078,345 @@ const docTemplate = `{
                 }
             }
         },
+        "/tools": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a list of all tools",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Get all tools",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new tool with the provided information",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Create a new tool",
+                "parameters": [
+                    {
+                        "description": "Tool information",
+                        "name": "tool",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/by-type": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a list of tools of a specific type",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Get tools by type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tool Type",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/search": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Search for tools by name or description",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Search tools",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search Query",
+                        "name": "query",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get details of a tool by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Get a tool by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a tool by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Delete a tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an existing tool's information",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Update a tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated tool information",
+                        "name": "tool",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "security": [
@@ -4786,6 +5125,33 @@ const docTemplate = `{
                         "attributes": {
                             "type": "object",
                             "properties": {
+                                "active": {
+                                    "type": "boolean"
+                                },
+                                "db_conn_api_key": {
+                                    "type": "string"
+                                },
+                                "db_conn_string": {
+                                    "type": "string"
+                                },
+                                "db_name": {
+                                    "type": "string"
+                                },
+                                "db_source_type": {
+                                    "type": "string"
+                                },
+                                "embed_api_key": {
+                                    "type": "string"
+                                },
+                                "embed_model": {
+                                    "type": "string"
+                                },
+                                "embed_url": {
+                                    "type": "string"
+                                },
+                                "embed_vendor": {
+                                    "type": "string"
+                                },
                                 "icon": {
                                     "type": "string"
                                 },
@@ -4829,6 +5195,33 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "active": {
+                            "type": "boolean"
+                        },
+                        "db_conn_api_key": {
+                            "type": "string"
+                        },
+                        "db_conn_string": {
+                            "type": "string"
+                        },
+                        "db_name": {
+                            "type": "string"
+                        },
+                        "db_source_type": {
+                            "type": "string"
+                        },
+                        "embed_api_key": {
+                            "type": "string"
+                        },
+                        "embed_model": {
+                            "type": "string"
+                        },
+                        "embed_url": {
+                            "type": "string"
+                        },
+                        "embed_vendor": {
+                            "type": "string"
+                        },
                         "icon": {
                             "type": "string"
                         },
@@ -4955,13 +5348,13 @@ const docTemplate = `{
                         "attributes": {
                             "type": "object",
                             "properties": {
+                                "active": {
+                                    "type": "boolean"
+                                },
                                 "api_endpoint": {
                                     "type": "string"
                                 },
                                 "api_key": {
-                                    "type": "string"
-                                },
-                                "external_url": {
                                     "type": "string"
                                 },
                                 "logo_url": {
@@ -4979,7 +5372,7 @@ const docTemplate = `{
                                 "short_description": {
                                     "type": "string"
                                 },
-                                "streaming_endpoint": {
+                                "vendor": {
                                     "type": "string"
                                 }
                             }
@@ -4998,13 +5391,13 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "active": {
+                            "type": "boolean"
+                        },
                         "api_endpoint": {
                             "type": "string"
                         },
                         "api_key": {
-                            "type": "string"
-                        },
-                        "external_url": {
                             "type": "string"
                         },
                         "logo_url": {
@@ -5022,7 +5415,7 @@ const docTemplate = `{
                         "short_description": {
                             "type": "string"
                         },
-                        "streaming_endpoint": {
+                        "vendor": {
                             "type": "string"
                         }
                     }
@@ -5044,14 +5437,8 @@ const docTemplate = `{
                         "attributes": {
                             "type": "object",
                             "properties": {
-                                "candidate_count": {
-                                    "type": "integer"
-                                },
-                                "frequency_penalty": {
+                                "cpt": {
                                     "type": "number"
-                                },
-                                "json_mode": {
-                                    "type": "boolean"
                                 },
                                 "max_length": {
                                     "type": "integer"
@@ -5068,12 +5455,6 @@ const docTemplate = `{
                                 },
                                 "model_name": {
                                     "type": "string"
-                                },
-                                "n": {
-                                    "type": "integer"
-                                },
-                                "presence_penalty": {
-                                    "type": "number"
                                 },
                                 "repetition_penalty": {
                                     "type": "number"
@@ -5111,14 +5492,8 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
-                        "candidate_count": {
-                            "type": "integer"
-                        },
-                        "frequency_penalty": {
+                        "cpt": {
                             "type": "number"
-                        },
-                        "json_mode": {
-                            "type": "boolean"
                         },
                         "max_length": {
                             "type": "integer"
@@ -5135,12 +5510,6 @@ const docTemplate = `{
                         },
                         "model_name": {
                             "type": "string"
-                        },
-                        "n": {
-                            "type": "integer"
-                        },
-                        "presence_penalty": {
-                            "type": "number"
                         },
                         "repetition_penalty": {
                             "type": "number"
@@ -5203,6 +5572,96 @@ const docTemplate = `{
                     "type": "object",
                     "properties": {
                         "name": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ToolInput": {
+            "description": "Tool input model",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "type": "object",
+                            "properties": {
+                                "auth_key": {
+                                    "type": "string"
+                                },
+                                "auth_schema_name": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "oas_spec": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    }
+                                },
+                                "privacy_score": {
+                                    "type": "integer"
+                                },
+                                "tool_type": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.ToolResponse": {
+            "description": "Tool response model",
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "type": "object",
+                    "properties": {
+                        "auth_key": {
+                            "type": "string"
+                        },
+                        "auth_schema_name": {
+                            "type": "string"
+                        },
+                        "description": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "oas_spec": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "operations": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "privacy_score": {
+                            "type": "integer"
+                        },
+                        "tool_type": {
                             "type": "string"
                         }
                     }
