@@ -16,7 +16,6 @@ type LLMSettings struct {
 	Temperature       float64                `json:"temperature"`
 	TopK              int                    `json:"top_k"`
 	TopP              float64                `json:"top_p"`
-	CPT               float64                `json:"cpt"`
 }
 
 type LLMSettingsSlice []LLMSettings

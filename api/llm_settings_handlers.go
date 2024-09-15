@@ -274,7 +274,6 @@ func serializeLLMSettings(settings *models.LLMSettings) LLMSettingsResponse {
 			Temperature       float64                `json:"temperature"`
 			TopK              int                    `json:"top_k"`
 			TopP              float64                `json:"top_p"`
-			CPT               float64                `json:"cpt"`
 		}{
 			ModelName:         settings.ModelName,
 			MaxLength:         settings.MaxLength,
@@ -287,7 +286,6 @@ func serializeLLMSettings(settings *models.LLMSettings) LLMSettingsResponse {
 			Temperature:       settings.Temperature,
 			TopK:              settings.TopK,
 			TopP:              settings.TopP,
-			CPT:               settings.CPT,
 		},
 	}
 }

@@ -170,6 +170,14 @@ func (a *API) setupRoutes() {
 		v1.GET("/tools/by-type", a.getToolsByType)
 		v1.GET("/tools/search", a.searchTools)
 
+		// Model Price routes
+		v1.POST("/model-prices", a.createModelPrice)
+		v1.GET("/model-prices/:id", a.getModelPrice)
+		v1.PATCH("/model-prices/:id", a.updateModelPrice)
+		v1.DELETE("/model-prices/:id", a.deleteModelPrice)
+		v1.GET("/model-prices", a.getAllModelPrices)
+		v1.GET("/model-prices/by-vendor", a.getModelPricesByVendor)
+
 	}
 }
 

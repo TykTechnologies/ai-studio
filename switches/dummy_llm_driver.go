@@ -1,4 +1,4 @@
-package chat_session
+package switches
 
 import (
 	"context"

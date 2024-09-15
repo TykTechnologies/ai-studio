@@ -923,7 +923,6 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
-				CPT               float64                `json:"cpt"`
 			} `json:"attributes"`
 		}{
 			Type: "llm-settings",
@@ -939,7 +938,6 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
-				CPT               float64                `json:"cpt"`
 			}{
 				ModelName:         "TestModel",
 				MaxLength:         100,
@@ -952,7 +950,6 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature:       0.7,
 				TopK:              40,
 				TopP:              0.9,
-				CPT:               0.1,
 			},
 		},
 	}
@@ -987,7 +984,6 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
-				CPT               float64                `json:"cpt"`
 			} `json:"attributes"`
 		}{
 			Type: "llm-settings",
@@ -1003,7 +999,6 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
-				CPT               float64                `json:"cpt"`
 			}{
 				ModelName:         "UpdatedTestModel",
 				MaxLength:         120,
@@ -1016,7 +1011,6 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature:       0.8,
 				TopK:              50,
 				TopP:              0.95,
-				CPT:               0.2,
 			},
 		},
 	}
@@ -1458,6 +1452,179 @@ func TestToolEndpointsErrors(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code) // This should return an empty list, not an error
 
 	var emptyResponse map[string][]ToolResponse
+	err := json.Unmarshal(w.Body.Bytes(), &emptyResponse)
+	assert.NoError(t, err)
+	assert.Len(t, emptyResponse["data"], 0)
+}
+
+func TestModelPriceEndpoints(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Test Create ModelPrice
+	createModelPriceInput := ModelPriceInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			} `json:"attributes"`
+		}{
+			Type: "model-prices",
+			Attributes: struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			}{
+				ModelName: "GPT-3",
+				Vendor:    "OpenAI",
+				CPT:       0.002,
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/model-prices", createModelPriceInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var response map[string]ModelPriceResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "GPT-3", response["data"].Attributes.ModelName)
+	assert.Equal(t, "OpenAI", response["data"].Attributes.Vendor)
+	assert.Equal(t, 0.002, response["data"].Attributes.CPT)
+
+	modelPriceID := response["data"].ID
+
+	// Test Get ModelPrice
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/model-prices/%s", modelPriceID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test Update ModelPrice
+	updateModelPriceInput := ModelPriceInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			} `json:"attributes"`
+		}{
+			Type: "model-prices",
+			Attributes: struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			}{
+				ModelName: "GPT-3",
+				Vendor:    "OpenAI",
+				CPT:       0.003,
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/model-prices/%s", modelPriceID), updateModelPriceInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var updateResponse map[string]ModelPriceResponse
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, 0.003, updateResponse["data"].Attributes.CPT)
+
+	// Test List ModelPrices
+	w = performRequest(api.router, "GET", "/api/v1/model-prices", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var listResponse map[string][]ModelPriceResponse
+	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
+	assert.NoError(t, err)
+	assert.Len(t, listResponse["data"], 1)
+	assert.Equal(t, "GPT-3", listResponse["data"][0].Attributes.ModelName)
+
+	// Test Get ModelPrices by Vendor
+	w = performRequest(api.router, "GET", "/api/v1/model-prices/by-vendor?vendor=OpenAI", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var vendorResponse map[string][]ModelPriceResponse
+	err = json.Unmarshal(w.Body.Bytes(), &vendorResponse)
+	assert.NoError(t, err)
+	assert.Len(t, vendorResponse["data"], 1)
+	assert.Equal(t, "OpenAI", vendorResponse["data"][0].Attributes.Vendor)
+
+	// Test Delete ModelPrice
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/model-prices/%s", modelPriceID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// Verify ModelPrice is deleted
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/model-prices/%s", modelPriceID), nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestModelPriceEndpointsErrors(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Test Get non-existent ModelPrice
+	w := performRequest(api.router, "GET", "/api/v1/model-prices/999", nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test Update non-existent ModelPrice
+	updateModelPriceInput := ModelPriceInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			} `json:"attributes"`
+		}{
+			Type: "model-prices",
+			Attributes: struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			}{
+				ModelName: "GPT-3",
+				Vendor:    "OpenAI",
+				CPT:       0.003,
+			},
+		},
+	}
+	w = performRequest(api.router, "PATCH", "/api/v1/model-prices/999", updateModelPriceInput)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test Delete non-existent ModelPrice
+	w = performRequest(api.router, "DELETE", "/api/v1/model-prices/999", nil)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Test Create ModelPrice with invalid input
+	invalidCreateModelPriceInput := ModelPriceInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			} `json:"attributes"`
+		}{
+			Type: "model-prices",
+			Attributes: struct {
+				ModelName string  `json:"model_name"`
+				Vendor    string  `json:"vendor"`
+				CPT       float64 `json:"cpt"`
+			}{
+				ModelName: "",
+				Vendor:    "",
+				CPT:       -1,
+			},
+		},
+	}
+	w = performRequest(api.router, "POST", "/api/v1/model-prices", invalidCreateModelPriceInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test Get ModelPrices by non-existent vendor
+	w = performRequest(api.router, "GET", "/api/v1/model-prices/by-vendor?vendor=NonExistentVendor", nil)
+	assert.Equal(t, http.StatusOK, w.Code) // This should return an empty list, not an error
+
+	var emptyResponse map[string][]ModelPriceResponse
 	err := json.Unmarshal(w.Body.Bytes(), &emptyResponse)
 	assert.NoError(t, err)
 	assert.Len(t, emptyResponse["data"], 0)

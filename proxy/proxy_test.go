@@ -50,6 +50,11 @@ func (m *MockService) GetAppByCredentialID(credID uint) (*models.App, error) {
 	return args.Get(0).(*models.App), args.Error(1)
 }
 
+func (m *MockService) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
+	args := m.Called(modelName)
+	return args.Get(0).(*models.ModelPrice), args.Error(1)
+}
+
 // TestProxySetup tests the initial setup of the proxy
 func TestProxySetup(t *testing.T) {
 	mockService := new(MockService)
@@ -265,22 +270,25 @@ func TestCredentialValidation(t *testing.T) {
 	err := proxy.loadResources()
 	assert.NoError(t, err)
 
+	r, err := http.NewRequest("POST", "http://goo.bar/baz", bytes.NewBuffer([]byte("")))
+	assert.NoError(t, err)
+
 	// Test valid LLM credential
-	assert.True(t, proxy.credValidator.CheckCredential("valid-token", "", "dummyllm"))
+	assert.True(t, proxy.credValidator.CheckCredential("valid-token", "", "dummyllm", r))
 
 	// Test valid Datasource credential
-	assert.True(t, proxy.credValidator.CheckCredential("valid-token", "dummyds", ""))
+	assert.True(t, proxy.credValidator.CheckCredential("valid-token", "dummyds", "", r))
 
 	// Test invalid credential for LLM
 	mockService.On("GetCredentialBySecret", "invalid-token").Return(&models.Credential{}, fmt.Errorf("invalid credential"))
-	assert.False(t, proxy.credValidator.CheckCredential("invalid-token", "", "dummyllm"))
+	assert.False(t, proxy.credValidator.CheckCredential("invalid-token", "", "dummyllm", r))
 
 	// Test invalid credential for Datasource
-	assert.False(t, proxy.credValidator.CheckCredential("invalid-token", "dummyds", ""))
+	assert.False(t, proxy.credValidator.CheckCredential("invalid-token", "dummyds", "", r))
 
 	// Test non-existent LLM
-	assert.False(t, proxy.credValidator.CheckCredential("valid-token", "", "nonexistentllm"))
+	assert.False(t, proxy.credValidator.CheckCredential("valid-token", "", "nonexistentllm", r))
 
 	// Test non-existent Datasource
-	assert.False(t, proxy.credValidator.CheckCredential("valid-token", "nonexistentds", ""))
+	assert.False(t, proxy.credValidator.CheckCredential("valid-token", "nonexistentds", "", r))
 }

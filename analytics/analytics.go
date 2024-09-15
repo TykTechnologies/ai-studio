@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/tmc/langchaingo/llms"
 	"gorm.io/gorm"
 )
@@ -61,40 +63,6 @@ var (
 	toolCallChan   chan *ToolCallRecord
 )
 
-func getTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int, int) {
-	promptTokens := 0
-	responseTokens := 0
-	totalTokens := 0
-
-	switch vendor {
-	case models.OPENAI:
-		dat, ok := choice.GenerationInfo["usage"]
-		if ok {
-			usage := dat.(map[string]interface{})
-			promptTokens = int(usage["prompt_tokens"].(int))
-			responseTokens = int(usage["response_tokens"].(int))
-			totalTokens = promptTokens + responseTokens
-
-			return totalTokens, promptTokens, responseTokens
-		}
-	case models.ANTHROPIC:
-		dat, ok := choice.GenerationInfo["usage"]
-		if ok {
-			usage := dat.(map[string]interface{})
-			promptTokens = int(usage["input_tokens"].(int))
-			responseTokens = int(usage["output_tokens"].(int))
-			totalTokens = promptTokens + responseTokens
-
-			return totalTokens, promptTokens, responseTokens
-		}
-	default:
-		slog.Warn("vendor not supported", "vendor", vendor)
-		return 0, 0, 0
-	}
-
-	return 0, 0, 0
-}
-
 func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
 	if !recStarted {
 		return
@@ -117,7 +85,7 @@ func RecordContentMessage(
 	name, chatID string,
 	timeMs int, userID, appID uint,
 	t time.Time,
-	cpt float64,
+	svc *services.Service,
 ) {
 
 	if !recStarted {
@@ -134,7 +102,7 @@ func RecordContentMessage(
 	responseParts := []string{}
 	for _, c := range cr.Choices {
 		toolCalls += len(c.ToolCalls)
-		tt, pt, rt := getTokenCounts(c, vendor)
+		tt, pt, rt := switches.GetTokenCounts(c, vendor)
 
 		totalTokens += tt
 		promptTokens += pt
@@ -158,6 +126,12 @@ func RecordContentMessage(
 	}
 
 	prompt := strings.Join(promptParts, "\n")
+
+	price, err := svc.GetModelPriceByModelNameAndVendor(name, string(vendor))
+	cpt := 0.0
+	if err == nil {
+		cpt = price.CPT
+	}
 
 	rec.Choices = len(cr.Choices)
 	rec.Name = name
@@ -194,6 +168,10 @@ func recordToolCall(tc *ToolCallRecord) {
 	default:
 		slog.Warn("tool call buffer full, dropping tool call")
 	}
+}
+
+func RecordChatRecord(record *LLMChatRecord) {
+	recordChatRecord(record)
 }
 
 // Records a chat record

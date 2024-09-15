@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
@@ -77,7 +78,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		if !cv.CheckCredential(token, dsSlug, llmSlug) {
+		if !cv.CheckCredential(token, dsSlug, llmSlug, r) {
 			respondWithError(w, http.StatusUnauthorized, "invalid credential", nil)
 			return
 		}
@@ -86,7 +87,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string) bool {
+func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string, r *http.Request) bool {
 	cred, err := cv.service.GetCredentialBySecret(token)
 	if err != nil || !cred.Active {
 		return false
@@ -96,6 +97,9 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string) bo
 	if err != nil {
 		return false
 	}
+
+	ctx := context.WithValue(r.Context(), "app", app)
+	r = r.WithContext(ctx)
 
 	if dsSlug != "" {
 		ds, ok := cv.p.GetDatasource(dsSlug)

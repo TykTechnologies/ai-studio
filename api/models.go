@@ -338,7 +338,6 @@ type LLMSettingsInput struct {
 			Temperature       float64                `json:"temperature"`
 			TopK              int                    `json:"top_k"`
 			TopP              float64                `json:"top_p"`
-			CPT               float64                `json:"cpt"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -359,7 +358,6 @@ type LLMSettingsResponse struct {
 		Temperature       float64                `json:"temperature"`
 		TopK              int                    `json:"top_k"`
 		TopP              float64                `json:"top_p"`
-		CPT               float64                `json:"cpt"`
 	} `json:"attributes"`
 }
 
@@ -433,4 +431,29 @@ type OperationInput struct {
 			Operation string `json:"operation"`
 		} `json:"attributes"`
 	} `json:"data"`
+}
+
+// ModelPriceInput represents the input for model price-related operations
+// @Description Model Price input model
+type ModelPriceInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			ModelName string  `json:"model_name"`
+			Vendor    string  `json:"vendor"`
+			CPT       float64 `json:"cpt"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ModelPriceResponse represents the response for model price-related operations
+// @Description Model Price response model
+type ModelPriceResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		ModelName string  `json:"model_name"`
+		Vendor    string  `json:"vendor"`
+		CPT       float64 `json:"cpt"`
+	} `json:"attributes"`
 }

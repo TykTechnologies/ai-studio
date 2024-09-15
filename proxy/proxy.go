@@ -11,9 +11,12 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/gorilla/mux"
 	"github.com/gosimple/slug"
 	"github.com/tmc/langchaingo/schema"
@@ -58,6 +61,9 @@ type ServiceInterface interface {
 
 	// App related methods
 	GetAppByCredentialID(credID uint) (*models.App, error)
+
+	// Analytics related methods
+	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
 }
 
 type Proxy struct {
@@ -204,35 +210,89 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = upstreamURL.Scheme
+			req.URL.Host = upstreamURL.Host
+			req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/%s", llmSlug))
+			req.Host = upstreamURL.Host
 
-	// Update the request URL path to remove the "/llm/{llmID}" prefix
-	r.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/%s", llmSlug))
+			// Set any necessary headers (e.g., API key)
+			er := p.setVendorAuthHeader(req, llm)
+			if er != nil {
+				respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", er)
+				return
+			}
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			// This function is called after the upstream response is received
+			// You can analyze headers here if needed
+			return nil
+		},
+	}
 
-	// Set any necessary headers (e.g., API key)
-	er := p.setVendorAuthHeader(r, llm)
-	if er != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", er)
+	// Create a response capture
+	capture := newResponseCapture(w)
+
+	// Serve the request using the custom ResponseWriter
+	proxy.ServeHTTP(capture, r)
+
+	app, ok := r.Context().Value("app").(*models.App)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "app context not found", nil)
 		return
 	}
 
-	// Proxy the request
-	proxy.ServeHTTP(w, r)
+	go func(r *http.Request) {
+		// Perform your analysis here
+		responseBody := capture.buffer.Bytes()
+		statusCode := capture.statusCode
+
+		// Example: log the response
+		log.Printf("Response status: %d, body length: %d", statusCode, len(responseBody))
+
+		// You can perform more sophisticated analysis here
+		// For example, you could send this data to a monitoring service
+		p.analyzeResponse(llm, app, statusCode, responseBody, r)
+	}(r)
+}
+
+func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) {
+	llm, app, response, err := switches.AnalyzeResponse(llm, app, statusCode, body, r)
+	if err != nil {
+		log.Printf("failed to analyze response: %v", err)
+		return
+	}
+
+	p.analyzeCompletionResponse(llm, app, response)
+}
+
+func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
+	cpt := 0.0
+	price, err := p.service.GetModelPriceByModelNameAndVendor(response.GetModel(), string(llm.Vendor))
+	if err == nil {
+		cpt = price.CPT
+	}
+
+	tt := response.GetPromptTokens() + response.GetResponseTokens()
+	rec := &analytics.LLMChatRecord{
+		Vendor:         string(llm.Vendor),
+		PromptTokens:   response.GetPromptTokens(),
+		ResponseTokens: response.GetResponseTokens(),
+		TotalTokens:    tt,
+		TimeStamp:      time.Now(),
+		Choices:        response.GetChoiceCount(),
+		ToolCalls:      response.GetToolCount(),
+		AppID:          app.ID,
+		UserID:         app.UserID,
+		Cost:           cpt * float64(tt),
+	}
+
+	analytics.RecordChatRecord(rec)
 }
 
 func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {
-	switch llm.Vendor {
-	case models.OPENAI:
-		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
-	case models.ANTHROPIC:
-		r.Header.Set("x-api-key", llm.APIKey)
-	case "DUMMY":
-		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
-	default:
-		return fmt.Errorf("unknown vendor: %s", llm.Vendor)
-	}
-
-	return nil
+	return switches.SetVendorAuthHeader(r, llm)
 }
 
 func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {

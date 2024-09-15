@@ -11,12 +11,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gofrs/uuid"
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/anthropic"
-	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/schema"
 	"gorm.io/gorm"
 )
@@ -50,9 +50,10 @@ type ChatSession struct {
 	preProcessors  []func(*UserMessage) error
 	caller         llms.Model
 	mode           ChatMode
-	db             *gorm.DB
 	datasources    map[uint]*models.Datasource
 	tools          map[string]models.Tool
+	db             *gorm.DB
+	service        *services.Service
 }
 
 type UserMessage struct {
@@ -63,7 +64,7 @@ type ChatResponse struct {
 	Payload string
 }
 
-func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) (*ChatSession, error) {
+func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service) (*ChatSession, error) {
 	id, _ := uuid.NewV4()
 	cs := &ChatSession{
 		id:             id.String(),
@@ -79,6 +80,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB) (*ChatSession
 		datasources:    map[uint]*models.Datasource{},
 		tools:          map[string]models.Tool{},
 		llmResponses:   make(chan *LLMResponseWrapper, 100),
+		service:        svc,
 	}
 
 	// Perform initial privacy check
@@ -286,22 +288,7 @@ func (cs *ChatSession) initSession() error {
 }
 
 func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
-	var llm llms.Model
-	var err error
-	switch cs.chatRef.LLM.Vendor {
-	case models.OPENAI:
-		llm, err = setupOpenAIDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case models.ANTHROPIC:
-		llm, err = setupAnthropicDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings)
-	case models.MOCK_VENDOR:
-		llm = &DummyDriver{
-			StreamingFunc: cs.streamingFunc,
-			Memory:        mem,
-		}
-	default:
-		return nil, fmt.Errorf("unsupported LLM model: %s", cs.chatRef.LLMSettings.ModelName)
-	}
-
+	llm, err := switches.FetchDriver(cs.chatRef.LLM, cs.chatRef.LLMSettings, mem, cs.streamingFunc)
 	return llm, err
 }
 
@@ -470,7 +457,7 @@ func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Documen
 		0,
 		0,
 		time.Now(),
-		cs.chatRef.LLMSettings.CPT,
+		cs.service,
 	)
 
 	return resp.Choices[0].Content, nil
@@ -738,46 +725,6 @@ func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings, tools []llms.
 	}
 
 	return callOptions
-}
-
-func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]openai.Option, 0)
-	if connDef.APIEndpoint != "" {
-		opts = append(opts, openai.WithBaseURL(connDef.APIEndpoint))
-	}
-
-	if connDef.APIKey != "" {
-		opts = append(opts, openai.WithToken(connDef.APIKey))
-	}
-
-	opts = append(opts, openai.WithModel(llmSettings.ModelName))
-
-	llm, err := openai.New(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenAI driver: %v", err)
-	}
-
-	return llm, nil
-}
-
-func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]anthropic.Option, 0)
-	if connDef.APIEndpoint != "" {
-		opts = append(opts, anthropic.WithBaseURL(connDef.APIEndpoint))
-	}
-
-	if connDef.APIKey != "" {
-		opts = append(opts, anthropic.WithToken(connDef.APIKey))
-	}
-
-	opts = append(opts, anthropic.WithModel(llmSettings.ModelName))
-
-	llm, err := anthropic.New(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenAI driver: %v", err)
-	}
-
-	return llm, nil
 }
 
 func (cs *ChatSession) validatePrivacyScores() error {
