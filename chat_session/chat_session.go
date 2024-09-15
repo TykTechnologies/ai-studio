@@ -187,7 +187,7 @@ func (cs *ChatSession) Start() error {
 
 				// handle RAG
 				ds := dataSession.NewDataSession(cs.datasources)
-				docs, err := ds.Search(msg.Payload, 5)
+				docs, err := ds.Search(msg.Payload, 5) //TODO this should be configurable in the future
 				if err != nil {
 					cs.errors <- fmt.Errorf("error searching datasources: %v", err)
 					continue
