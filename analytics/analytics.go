@@ -85,7 +85,7 @@ func RecordContentMessage(
 	name, chatID string,
 	timeMs int, userID, appID uint,
 	t time.Time,
-	svc *services.Service,
+	svc services.ServiceInterface,
 ) {
 
 	if !recStarted {

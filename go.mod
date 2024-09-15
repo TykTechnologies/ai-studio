@@ -8,6 +8,8 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.8.1
+	github.com/gosimple/slug v1.14.0
 	github.com/pb33f/libopenapi v0.18.0
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggo/swag v1.16.3
@@ -49,8 +51,6 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
-	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/gosimple/slug v1.14.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/huandu/xstrings v1.3.3 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect

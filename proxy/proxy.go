@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/gorilla/mux"
 	"github.com/gosimple/slug"
@@ -47,27 +48,8 @@ type SearchResults struct {
 	Documents []schema.Document `json:"documents"`
 }
 
-type ServiceInterface interface {
-	// LLM related methods
-	GetActiveLLMs() ([]models.LLM, error)
-	GetLLMByID(id uint) (*models.LLM, error)
-
-	// Datasource related methods
-	GetActiveDatasources() ([]models.Datasource, error)
-	GetDatasourceByID(id uint) (*models.Datasource, error)
-
-	// Credential related methods
-	GetCredentialBySecret(secret string) (*models.Credential, error)
-
-	// App related methods
-	GetAppByCredentialID(credID uint) (*models.App, error)
-
-	// Analytics related methods
-	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
-}
-
 type Proxy struct {
-	service       ServiceInterface
+	service       services.ServiceInterface
 	server        *http.Server
 	llms          map[string]*models.LLM
 	datasources   map[string]*models.Datasource
@@ -81,7 +63,7 @@ type Config struct {
 	// Add other configuration options as needed
 }
 
-func NewProxy(service ServiceInterface, config *Config) *Proxy {
+func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 
 	p := &Proxy{
 		service:     service,

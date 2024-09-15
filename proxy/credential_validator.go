@@ -4,17 +4,19 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 type CredentialExtractor func(r *http.Request) (string, error)
 
 type CredentialValidator struct {
-	service    ServiceInterface
+	service    services.ServiceInterface
 	p          *Proxy
 	validators map[string]CredentialExtractor
 }
 
-func NewCredentialValidator(service ServiceInterface, proxy *Proxy) *CredentialValidator {
+func NewCredentialValidator(service services.ServiceInterface, proxy *Proxy) *CredentialValidator {
 	return &CredentialValidator{
 		service:    service,
 		p:          proxy,

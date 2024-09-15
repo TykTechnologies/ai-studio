@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -153,4 +154,137 @@ func TestGetChatRecordsPerUser(t *testing.T) {
 	for _, count := range chartData.Data {
 		assert.Equal(t, float64(1), count)
 	}
+}
+
+func TestCostCalculation(t *testing.T) {
+	db := setupTestDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	StartRecording(ctx, db)
+
+	now := time.Now()
+	mc := &llms.MessageContent{
+		Parts: []llms.ContentPart{
+			llms.TextContent{Text: "Test prompt"},
+		},
+	}
+	cr := &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{
+			{
+				Content: "Test content",
+				GenerationInfo: map[string]interface{}{
+					"usage": map[string]interface{}{
+						"prompt_tokens":   10,
+						"response_tokens": 20,
+					},
+				},
+			},
+		},
+	}
+
+	// Create a mock service that implements the required method
+	mockService := &mockService{
+		GetModelPriceByModelNameAndVendorFunc: func(modelName, vendor string) (*models.ModelPrice, error) {
+			return &models.ModelPrice{
+				ModelName: modelName,
+				Vendor:    vendor,
+				CPT:       0.002, // $0.002 per token
+			}, nil
+		},
+	}
+
+	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+
+	// Wait for goroutine to process
+	time.Sleep(100 * time.Millisecond)
+
+	var chatRecord LLMChatRecord
+	result := db.First(&chatRecord)
+	assert.NoError(t, result.Error)
+
+	// Check if the cost is calculated correctly
+	expectedCost := 0.002 * float64(30) // CPT * TotalTokens
+	assert.InDelta(t, expectedCost, chatRecord.Cost, 0.0001)
+}
+
+func TestCostCalculationWithoutPrice(t *testing.T) {
+	db := setupTestDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	StartRecording(ctx, db)
+
+	now := time.Now()
+	mc := &llms.MessageContent{
+		Parts: []llms.ContentPart{
+			llms.TextContent{Text: "Test prompt"},
+		},
+	}
+	cr := &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{
+			{
+				Content: "Test content",
+				GenerationInfo: map[string]interface{}{
+					"usage": map[string]interface{}{
+						"prompt_tokens":   10,
+						"response_tokens": 20,
+					},
+				},
+			},
+		},
+	}
+
+	// Create a mock service that returns an error when getting the model price
+	mockService := &mockService{
+		GetModelPriceByModelNameAndVendorFunc: func(modelName, vendor string) (*models.ModelPrice, error) {
+			return nil, fmt.Errorf("price not found")
+		},
+	}
+
+	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+
+	// Wait for goroutine to process
+	time.Sleep(100 * time.Millisecond)
+
+	var chatRecord LLMChatRecord
+	result := db.First(&chatRecord)
+	assert.NoError(t, result.Error)
+
+	// Check if the cost is zero when price is not available
+	assert.Equal(t, float64(0), chatRecord.Cost)
+}
+
+// Mock service for testing
+type mockService struct {
+	GetModelPriceByModelNameAndVendorFunc func(modelName, vendor string) (*models.ModelPrice, error)
+}
+
+func (m *mockService) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
+	return m.GetModelPriceByModelNameAndVendorFunc(modelName, vendor)
+}
+
+// Implement other methods of the ServiceInterface as needed for the mock
+func (m *mockService) GetActiveLLMs() (models.LLMs, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetLLMByID(id uint) (*models.LLM, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetActiveDatasources() (models.Datasources, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetDatasourceByID(id uint) (*models.Datasource, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetCredentialBySecret(secret string) (*models.Credential, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetAppByCredentialID(credID uint) (*models.App, error) {
+	return nil, nil
 }

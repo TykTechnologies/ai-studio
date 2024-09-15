@@ -20,7 +20,7 @@ type MockService struct {
 	mock.Mock
 }
 
-func (m *MockService) GetActiveLLMs() ([]models.LLM, error) {
+func (m *MockService) GetActiveLLMs() (models.LLMs, error) {
 	args := m.Called()
 	return args.Get(0).([]models.LLM), args.Error(1)
 }
@@ -30,7 +30,7 @@ func (m *MockService) GetLLMByID(id uint) (*models.LLM, error) {
 	return args.Get(0).(*models.LLM), args.Error(1)
 }
 
-func (m *MockService) GetActiveDatasources() ([]models.Datasource, error) {
+func (m *MockService) GetActiveDatasources() (models.Datasources, error) {
 	args := m.Called()
 	return args.Get(0).([]models.Datasource), args.Error(1)
 }
