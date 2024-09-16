@@ -189,6 +189,14 @@ func (a *API) setupRoutes() {
 		v1.PATCH("/filters/:id", a.updateFilter)
 		v1.DELETE("/filters/:id", a.deleteFilter)
 		v1.GET("/filters", a.listFilters)
+
+		// Chat History Record routes
+		v1.POST("/chat-history-records", a.createChatHistoryRecord)
+		v1.GET("/chat-history-records/:id", a.getChatHistoryRecord)
+		v1.GET("/chat-history-records", a.listChatHistoryRecords)
+		v1.DELETE("/chat-history-records/:id", a.deleteChatHistoryRecord)
+
+		a.SetupWebSocketRoute()
 	}
 }
 
@@ -215,6 +223,12 @@ func (a *API) authMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		c.Set("user_id", a.GetUserID())
+
 		c.Next()
 	}
+}
+
+func (a *API) GetUserID() uint {
+	return 0
 }

@@ -3,6 +3,8 @@ package chat_session
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/llms"
@@ -14,6 +16,8 @@ type GormChatMessageHistory struct {
 	DB      *gorm.DB
 	Limit   int
 	Session string
+	ChatID  *uint
+	UserID  *uint
 }
 
 // GormChatMessageHistoryOption is a function type for configuring GormChatMessageHistory
@@ -27,15 +31,46 @@ func WithLimit(limit int) GormChatMessageHistoryOption {
 }
 
 // NewGormChatMessageHistory creates a new GormChatMessageHistory
-func NewGormChatMessageHistory(db *gorm.DB, session string, options ...GormChatMessageHistoryOption) *GormChatMessageHistory {
+func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference *uint, userID *uint, options ...GormChatMessageHistoryOption) *GormChatMessageHistory {
 	h := &GormChatMessageHistory{
 		DB:      db,
 		Limit:   100, // Default limit
 		Session: session,
+		ChatID:  chatReference,
 	}
 
 	for _, option := range options {
 		option(h)
+	}
+
+	sessionRecordExists, err := h.CheckIfSessionExists(context.Background())
+	if err != nil {
+		slog.Error("failed to check if session exists", "error", err)
+		sessionRecordExists = false
+	}
+
+	if !sessionRecordExists {
+		uid := 0
+		if h.ChatID != nil {
+			uid = int(*h.ChatID)
+		}
+
+		cid := 0
+		if h.ChatID != nil {
+			cid = int(*h.ChatID)
+		}
+		// create a record of this Chat Session
+		chr := &models.ChatHistoryRecord{
+			SessionID: session,
+			ChatID:    uint(cid),
+			UserID:    uint(uid),
+			Name:      fmt.Sprintf("Chat %d", *h.ChatID),
+		}
+
+		err := db.Create(chr).Error
+		if err != nil {
+			slog.Error("failed to create chat history record", "error", err)
+		}
 	}
 
 	return h
@@ -43,6 +78,15 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, options ...GormChatM
 
 func (h *GormChatMessageHistory) GetMemoryKey(context.Context) string {
 	return "history"
+}
+
+func (h *GormChatMessageHistory) CheckIfSessionExists(ctx context.Context) (bool, error) {
+	var count int64
+	result := h.DB.WithContext(ctx).Model(&models.ChatHistoryRecord{}).Where("session_id = ?", h.Session).Count(&count)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return count > 0, nil
 }
 
 // Messages returns all messages stored
@@ -84,6 +128,7 @@ func (h *GormChatMessageHistory) addMessage(ctx context.Context, mc llms.Message
 	message := models.CMessage{
 		Session: h.Session,
 		Content: asJson,
+		ChatID:  h.ChatID,
 	}
 	return h.DB.WithContext(ctx).Create(&message).Error
 }
@@ -149,4 +194,18 @@ func (h *GormChatMessageHistory) SetMessages(ctx context.Context, messages []llm
 	})
 
 	return err
+}
+
+func (h *GormChatMessageHistory) GetAssociatedChat(ctx context.Context) (*models.Chat, error) {
+	if h.ChatID == nil {
+		return nil, fmt.Errorf("no associated chat for this session")
+	}
+
+	chat := &models.Chat{}
+	err := h.DB.WithContext(ctx).First(chat, *h.ChatID).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return chat, nil
 }

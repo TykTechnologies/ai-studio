@@ -56,16 +56,24 @@ type ChatSession struct {
 	tools          map[string]models.Tool
 	db             *gorm.DB
 	service        *services.Service
+	userID         *uint
 }
 
 type ChatResponse struct {
 	Payload string
 }
 
-func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service, withFilters []*models.Filter) (*ChatSession, error) {
-	id, _ := uuid.NewV4()
+func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service, withFilters []*models.Filter, userID *uint, sessionID *string) (*ChatSession, error) {
+	uid, _ := uuid.NewV4()
+	id := uid.String()
+
+	// override ID if set so we can retain the chat history
+	if sessionID != nil {
+		id = *sessionID
+	}
+
 	cs := &ChatSession{
-		id:             id.String(),
+		id:             id,
 		chatRef:        chat,
 		input:          make(chan *models.UserMessage, 100),
 		outputMessages: make(chan *ChatResponse, 100),
@@ -118,7 +126,7 @@ func (cs *ChatSession) OutputStream() chan []byte {
 	return cs.outputStream
 }
 
-func (cs *ChatSession) Input() chan *UserMessage {
+func (cs *ChatSession) Input() chan *models.UserMessage {
 	return cs.input
 }
 
@@ -278,7 +286,7 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 
 func (cs *ChatSession) initSession() error {
 	// History for the chat session
-	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id)
+	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, &cs.chatRef.ID, cs.userID)
 
 	// create the LLM client
 	llm, err := cs.fetchDriver(nil)

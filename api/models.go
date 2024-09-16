@@ -488,3 +488,36 @@ type FilterResponse struct {
 		Script      []byte `json:"script"`
 	} `json:"attributes"`
 }
+
+// ChatHistoryRecordInput represents the input for chat history record-related operations
+// @Description Chat History Record input model
+type ChatHistoryRecordInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			SessionID string `json:"session_id"`
+			ChatID    uint   `json:"chat_id"`
+			UserID    uint   `json:"user_id"`
+			Name      string `json:"name"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ChatHistoryRecordResponse represents the response for chat history record-related operations
+// @Description Chat History Record response model
+type ChatHistoryRecordResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		SessionID string `json:"session_id"`
+		ChatID    uint   `json:"chat_id"`
+		UserID    uint   `json:"user_id"`
+		Name      string `json:"name"`
+	} `json:"attributes"`
+}
+
+// ChatHistoryRecordListResponse represents the response for listing chat history records
+// @Description Chat History Record list response model
+type ChatHistoryRecordListResponse struct {
+	Data []ChatHistoryRecordResponse `json:"data"`
+}

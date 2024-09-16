@@ -38,7 +38,7 @@ func TestNewChatSession(t *testing.T) {
 		},
 	}
 
-	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 
 	assert.NotNil(t, cs)
 	assert.Equal(t, chat, cs.chatRef)
@@ -62,7 +62,7 @@ func TestChatSession_InitSession(t *testing.T) {
 		},
 	}
 
-	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	err := cs.initSession()
 
 	assert.NoError(t, err)
@@ -82,7 +82,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 		},
 	}
 
-	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	err := cs.initSession()
 	assert.NoError(t, err)
 
@@ -95,7 +95,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 
 func TestChatSession_PreProcessors(t *testing.T) {
 	db := setupTestDB(t)
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db), nil, nil, nil)
 
 	preprocessor := func(msg *models.UserMessage) error {
 		msg.Payload = "Processed: " + msg.Payload
@@ -123,7 +123,7 @@ func TestChatSession_Start(t *testing.T) {
 		},
 	}
 
-	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	err := cs.Start()
 	assert.NoError(t, err)
 
@@ -155,7 +155,7 @@ func TestChatSession_StreamingMode(t *testing.T) {
 	}
 
 	db := setupTestDB(t)
-	cs, _ := NewChatSession(chat, ChatStream, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatStream, db, services.NewService(db), nil, nil, nil)
 	err := cs.Start()
 	assert.NoError(t, err)
 
@@ -191,7 +191,7 @@ func TestChatSession_GetOptions(t *testing.T) {
 	}
 
 	db := setupTestDB(t)
-	cs, _ := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(&models.Chat{LLMSettings: llmSettings}, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	options := cs.getOptions(llmSettings, []llms.Tool{})
 
 	assert.NotEmpty(t, options)
@@ -210,7 +210,7 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 	}
 
 	db := setupTestDB(t)
-	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	err := cs.Start()
 	assert.NoError(t, err)
 
@@ -233,7 +233,7 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 
 func TestChatSession_AddRemoveDatasource(t *testing.T) {
 	db := setupTestDB(t)
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db), nil, nil, nil)
 
 	// Create a test datasource
 	ds := models.Datasource{ID: 1, Name: "Test Datasource"}
@@ -252,7 +252,7 @@ func TestChatSession_AddRemoveDatasource(t *testing.T) {
 
 func TestChatSession_PrepareTools(t *testing.T) {
 	db := setupTestDB(t)
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db), nil, nil, nil)
 
 	spec, err := os.ReadFile("../universalclient/testdata/petstore.json")
 	require.NoError(t, err)
@@ -272,7 +272,7 @@ func TestChatSession_PrepareTools(t *testing.T) {
 }
 
 func TestChatSession_ConvertLLMArgsToUniversalClientInputs(t *testing.T) {
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil, nil, nil, nil)
 
 	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "parameters": {"query": ["test"]}}`
 	params, err := cs.convertLLMArgsToUniversalClientInputs([]byte(testArgs), "foo", nil)
@@ -284,7 +284,7 @@ func TestChatSession_ConvertLLMArgsToUniversalClientInputs(t *testing.T) {
 }
 
 func TestChatSession_ConvertLLMArgsToUniversalClientInputs_WithUnstructuredInput(t *testing.T) {
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil, nil, nil, nil)
 
 	// LLMs might not send back the parameters key, so we just assume it for anything not in the other two categpories
 	testArgs := `{"body": {"key": "value"}, "headers": {"Content-Type": ["application/json"]}, "query": ["test"]}`
@@ -308,7 +308,7 @@ func TestChatSession_HandleToolCalls(t *testing.T) {
 		},
 	}
 
-	cs, _ := NewChatSession(chatRef, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chatRef, ChatMessage, db, services.NewService(db), nil, nil, nil)
 
 	cs.initSession()
 
@@ -351,7 +351,7 @@ func TestChatSession_GetMessages(t *testing.T) {
 			ModelName: "dummy",
 		},
 	}
-	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	cs.initSession()
 
 	// Add some messages to the history
@@ -375,7 +375,7 @@ func TestChatSession_GetMessages(t *testing.T) {
 }
 
 func TestChatSession_PrepHumanMessage(t *testing.T) {
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil, nil, nil, nil)
 	docs := []schema.Document{
 		{PageContent: "Document 1"},
 		{PageContent: "Document 2"},
@@ -389,7 +389,7 @@ func TestChatSession_PrepHumanMessage(t *testing.T) {
 }
 
 func TestChatSession_JoinDocuments(t *testing.T) {
-	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil, nil, nil, nil)
 	docs := []schema.Document{
 		{PageContent: "Document 1"},
 		{PageContent: "Document 2"},
@@ -401,7 +401,7 @@ func TestChatSession_JoinDocuments(t *testing.T) {
 }
 
 func TestChatSession_StreamingFunc(t *testing.T) {
-	cs, _ := NewChatSession(&models.Chat{}, ChatStream, nil, nil)
+	cs, _ := NewChatSession(&models.Chat{}, ChatStream, nil, nil, nil, nil, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -440,7 +440,7 @@ func TestChatSession_FetchDriver(t *testing.T) {
 					ModelName: "test-model",
 				},
 			}
-			cs, _ := NewChatSession(chat, ChatMessage, nil, nil)
+			cs, _ := NewChatSession(chat, ChatMessage, nil, nil, nil, nil, nil)
 			_, err := cs.fetchDriver(nil)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -466,7 +466,7 @@ func TestChatSession_PrivacyScoreValidation(t *testing.T) {
 		},
 	}
 
-	cs, err := NewChatSession(chat, ChatMessage, db, services.NewService(db))
+	cs, err := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 	require.NoError(t, err)
 
 	// Test AddDatasource with incompatible privacy score
