@@ -86,7 +86,7 @@ func TestChatSession_HandleUserMessage(t *testing.T) {
 	err := cs.initSession()
 	assert.NoError(t, err)
 
-	msg := &UserMessage{Payload: "Test message"}
+	msg := &models.UserMessage{Payload: "Test message"}
 	resp, err := cs.HandleUserMessage(msg, []schema.Document{}, []llms.Tool{})
 
 	assert.NoError(t, err)
@@ -97,14 +97,14 @@ func TestChatSession_PreProcessors(t *testing.T) {
 	db := setupTestDB(t)
 	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, db, services.NewService(db))
 
-	preprocessor := func(msg *UserMessage) error {
+	preprocessor := func(msg *models.UserMessage) error {
 		msg.Payload = "Processed: " + msg.Payload
 		return nil
 	}
 
 	cs.AddPreProcessor(preprocessor)
 
-	msg := &UserMessage{Payload: "Test message"}
+	msg := &models.UserMessage{Payload: "Test message"}
 	err := cs.preProcessMessage(msg)
 
 	assert.NoError(t, err)
@@ -128,7 +128,7 @@ func TestChatSession_Start(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Send a message
-	cs.input <- &UserMessage{Payload: "Test message"}
+	cs.input <- &models.UserMessage{Payload: "Test message"}
 
 	// Wait for response
 	select {
@@ -160,7 +160,7 @@ func TestChatSession_StreamingMode(t *testing.T) {
 	assert.NoError(t, err)
 
 	go func() {
-		cs.Input() <- &UserMessage{Payload: "Test prompt"}
+		cs.Input() <- &models.UserMessage{Payload: "Test prompt"}
 	}()
 
 	count := 0
@@ -214,11 +214,11 @@ func TestChatSession_ErrorHandling(t *testing.T) {
 	err := cs.Start()
 	assert.NoError(t, err)
 
-	cs.AddPreProcessor(func(*UserMessage) error {
+	cs.AddPreProcessor(func(*models.UserMessage) error {
 		return fmt.Errorf("test error")
 	})
 
-	cs.input <- &UserMessage{Payload: "Test message"}
+	cs.input <- &models.UserMessage{Payload: "Test message"}
 
 	select {
 	case err := <-cs.Errors():

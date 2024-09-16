@@ -158,4 +158,6 @@ func (o *DummyResponse) GetModel() string {
 	if o.Model == "" {
 		return "dummy"
 	}
+
+	return o.Model
 }

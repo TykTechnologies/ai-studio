@@ -46,6 +46,7 @@ require (
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
+	github.com/d5/tengo/v2 v2.17.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deepmap/oapi-codegen/v2 v2.1.0 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect

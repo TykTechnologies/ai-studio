@@ -464,11 +464,27 @@ type VendorListResponse struct {
 	Data []string `json:"data"`
 }
 
-// ErrorResponse represents the structure of an error response
-// @Description Error response model
-type ErrorResponse struct {
-	Errors []struct {
-		Title  string `json:"title"`
-		Detail string `json:"detail"`
-	} `json:"errors"`
+// FilterInput represents the input for filter-related operations
+// @Description Filter input model
+type FilterInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Script      []byte `json:"script"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// FilterResponse represents the response for filter-related operations
+// @Description Filter response model
+type FilterResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Script      []byte `json:"script"`
+	} `json:"attributes"`
 }

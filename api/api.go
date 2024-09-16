@@ -182,6 +182,13 @@ func (a *API) setupRoutes() {
 		v1.GET("/vendors/llm-drivers", a.getAvailableLLMDrivers)
 		v1.GET("/vendors/embedders", a.getAvailableEmbedders)
 		v1.GET("/vendors/vector-stores", a.getAvailableVectorStores)
+
+		// Filter routes
+		v1.POST("/filters", a.createFilter)
+		v1.GET("/filters/:id", a.getFilter)
+		v1.PATCH("/filters/:id", a.updateFilter)
+		v1.DELETE("/filters/:id", a.deleteFilter)
+		v1.GET("/filters", a.listFilters)
 	}
 }
 

@@ -41,23 +41,19 @@ type ChatSession struct {
 	id             string
 	chatRef        *models.Chat
 	chatHistory    *GormChatMessageHistory
-	input          chan *UserMessage
+	input          chan *models.UserMessage
 	llmResponses   chan *LLMResponseWrapper
 	outputMessages chan *ChatResponse
 	outputStream   chan []byte
 	stop           chan struct{}
 	errors         chan error
-	preProcessors  []func(*UserMessage) error
+	preProcessors  []func(*models.UserMessage) error
 	caller         llms.Model
 	mode           ChatMode
 	datasources    map[uint]*models.Datasource
 	tools          map[string]models.Tool
 	db             *gorm.DB
 	service        *services.Service
-}
-
-type UserMessage struct {
-	Payload string
 }
 
 type ChatResponse struct {
@@ -69,12 +65,12 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 	cs := &ChatSession{
 		id:             id.String(),
 		chatRef:        chat,
-		input:          make(chan *UserMessage, 100),
+		input:          make(chan *models.UserMessage, 100),
 		outputMessages: make(chan *ChatResponse, 100),
 		outputStream:   make(chan []byte, 100),
 		stop:           make(chan struct{}),
 		errors:         make(chan error, 100),
-		preProcessors:  []func(*UserMessage) error{},
+		preProcessors:  []func(*models.UserMessage) error{},
 		mode:           mode,
 		db:             db,
 		datasources:    map[uint]*models.Datasource{},
@@ -157,7 +153,7 @@ func (cs *ChatSession) CurrentTools() map[string]models.Tool {
 	return cs.tools
 }
 
-func (cs *ChatSession) AddPreProcessor(fn func(*UserMessage) error) {
+func (cs *ChatSession) AddPreProcessor(fn func(*models.UserMessage) error) {
 	cs.preProcessors = append(cs.preProcessors, fn)
 }
 
@@ -292,7 +288,7 @@ func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
 	return llm, err
 }
 
-func (cs *ChatSession) preProcessMessage(msg *UserMessage) error {
+func (cs *ChatSession) preProcessMessage(msg *models.UserMessage) error {
 	for _, fn := range cs.preProcessors {
 		if err := fn(msg); err != nil {
 			return err
@@ -413,7 +409,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	return nil
 }
 
-func (cs *ChatSession) HandleUserMessage(msg *UserMessage, docs []schema.Document, tools []llms.Tool) (string, error) {
+func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.Document, tools []llms.Tool) (string, error) {
 	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 	if cs.caller == nil {
 		return "", fmt.Errorf("LLM driver is not initialized")
