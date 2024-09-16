@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/gin-gonic/gin"
 )
@@ -37,6 +38,24 @@ func (a *API) getAvailableLLMDrivers(c *gin.Context) {
 func (a *API) getAvailableEmbedders(c *gin.Context) {
 	vendors := make([]string, len(switches.AVAILABLE_EMBEDDERS))
 	for i, vendor := range switches.AVAILABLE_EMBEDDERS {
+		vendors[i] = string(vendor)
+	}
+
+	c.JSON(http.StatusOK, VendorListResponse{Data: vendors})
+}
+
+// @Summary Get available vector stores
+// @Description Get a list of available vector stores
+// @Tags vendors
+// @Accept json
+// @Produce json
+// @Success 200 {object} VendorListResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /vendors/vector-stores [get]
+// @Security BearerAuth
+func (a *API) getAvailableVectorStores(c *gin.Context) {
+	vendors := make([]string, len(data_session.AVAILABLE_VECTOR_STORES))
+	for i, vendor := range data_session.AVAILABLE_VECTOR_STORES {
 		vendors[i] = string(vendor)
 	}
 

@@ -3936,6 +3936,27 @@ paths:
       summary: Get available LLM drivers
       tags:
       - vendors
+  /vendors/vector-stores:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of available vector stores
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.VendorListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get available vector stores
+      tags:
+      - vendors
 security:
 - BearerAuth: []
 securityDefinitions:

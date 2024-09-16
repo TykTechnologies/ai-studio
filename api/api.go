@@ -181,6 +181,7 @@ func (a *API) setupRoutes() {
 		// Vendor routes
 		v1.GET("/vendors/llm-drivers", a.getAvailableLLMDrivers)
 		v1.GET("/vendors/embedders", a.getAvailableEmbedders)
+		v1.GET("/vendors/vector-stores", a.getAvailableVectorStores)
 	}
 }
 
