@@ -13,15 +13,33 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/anthropic"
+	"github.com/tmc/langchaingo/llms/huggingface"
+	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/schema"
 )
 
 const (
-	OpenAICompletionsEndpoint    = "/v1/chat/completions"
-	AnthropicCompletionsEndpoint = "/v1/messages"
+	OpenAICompletionsEndpoint         = "/v1/chat/completions"
+	AnthropicCompletionsEndpoint      = "/v1/messages"
+	OllamaChatCompletionsEndpoint     = "/api/chat"
+	OllamaGenerateCompletionsEndpoint = "/api/generate"
 )
+
+var AVAILABLE_LLM_DRIVERS = []models.Vendor{
+	models.ANTHROPIC,
+	models.OPENAI,
+	models.OLLAMA,
+	models.VERTEX,
+	models.GOOGLEAI,
+}
+
+var AVAILABLE_EMBEDDERS = []models.Vendor{
+	models.OPENAI,
+	models.OLLAMA,
+	models.VERTEX,
+	models.GOOGLEAI,
+}
 
 // Handles token count finding for analytics, different vendors have different response types and we nee dto handle all of them
 func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int, int) {
@@ -34,8 +52,8 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 		dat, ok := choice.GenerationInfo["usage"]
 		if ok {
 			usage := dat.(map[string]interface{})
-			promptTokens = int(usage["prompt_tokens"].(int))
-			responseTokens = int(usage["response_tokens"].(int))
+			promptTokens = keyValueOrZero(usage, "prompt_tokens")
+			responseTokens = keyValueOrZero(usage, "response_tokens")
 			totalTokens = promptTokens + responseTokens
 
 			return totalTokens, promptTokens, responseTokens
@@ -44,22 +62,51 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 		dat, ok := choice.GenerationInfo["usage"]
 		if ok {
 			usage := dat.(map[string]interface{})
-			promptTokens = int(usage["input_tokens"].(int))
-			responseTokens = int(usage["output_tokens"].(int))
+			promptTokens = keyValueOrZero(usage, "input_tokens")
+			responseTokens = keyValueOrZero(usage, "output_tokens")
 			totalTokens = promptTokens + responseTokens
 
 			return totalTokens, promptTokens, responseTokens
 		}
-		// Vertex
-		// Huggingface
-		// ollama
-		// GoogleAI
+	case models.OLLAMA:
+		promptTokens := keyValueOrZero(choice.GenerationInfo, "PromptTokens")
+		responseTokens := keyValueOrZero(choice.GenerationInfo, "CompletionTokens")
+		totalTokens := promptTokens + responseTokens
+
+		return totalTokens, promptTokens, responseTokens
+
+	case models.VERTEX:
+		promptTokens := keyValueOrZero(choice.GenerationInfo, "input_tokens")
+		responseTokens := keyValueOrZero(choice.GenerationInfo, "output_tokens")
+		totalTokens := promptTokens + responseTokens
+
+		return totalTokens, promptTokens, responseTokens
+
+	case models.GOOGLEAI:
+		promptTokens := keyValueOrZero(choice.GenerationInfo, "input_tokens")
+		responseTokens := keyValueOrZero(choice.GenerationInfo, "output_tokens")
+		totalTokens := promptTokens + responseTokens
+
+		return totalTokens, promptTokens, responseTokens
+	case models.HUGGINGFACE:
+		return 0, 0, 0
+
 	default:
 		slog.Warn("vendor not supported", "vendor", vendor)
 		return 0, 0, 0
 	}
 
 	return 0, 0, 0
+}
+
+func keyValueOrZero(dat map[string]any, key string) int {
+	if val, ok := dat[key]; ok {
+		val, ok := val.(int)
+		if ok {
+			return val
+		}
+	}
+	return 0
 }
 
 func FetchDriver(LLMConfig *models.LLM, settings *models.LLMSettings, mem schema.Memory, streamingFunc func(ctx context.Context, chunk []byte) error) (llms.Model, error) {
@@ -75,10 +122,14 @@ func FetchDriver(LLMConfig *models.LLM, settings *models.LLMSettings, mem schema
 			StreamingFunc: streamingFunc,
 			Memory:        mem,
 		}
-	// Vertex
-	// Huggingface
-	// ollama
-	// GoogleAI
+	case models.VERTEX:
+		llm, err = setupVertexDriver(LLMConfig, settings)
+	case models.GOOGLEAI:
+		llm, err = setupGoogleDriver(LLMConfig, settings)
+	case models.HUGGINGFACE:
+		llm, err = setupHuggingFaceDriver(LLMConfig, settings)
+	case models.OLLAMA:
+		llm, err = setupOllamaDriver(LLMConfig, settings)
 	default:
 		return nil, fmt.Errorf("unsupported LLM model: %s", settings.ModelName)
 	}
@@ -105,11 +156,31 @@ func GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
 
 		opts = append(opts, openai.WithEmbeddingModel(d.EmbedModel))
 		llm, err = openai.New(opts...)
+	case models.VERTEX:
+		llm, err = setupVertexEmbedClient(d)
 
-		// Vertex
-		// Huggingface
-		// ollama
-		// GoogleAI
+	case models.HUGGINGFACE:
+		opts := []huggingface.Option{}
+		if d.EmbedAPIKey != "" {
+			opts = append(opts, huggingface.WithToken(d.EmbedAPIKey))
+		}
+
+		llm, err = NewHFWrapper(d.EmbedModel, opts...)
+	case models.OLLAMA:
+		opts := []ollama.Option{}
+		if d.EmbedUrl != "" {
+			opts = append(opts, ollama.WithServerURL(d.EmbedUrl))
+		}
+		if d.EmbedModel == "" {
+			return nil, fmt.Errorf("missing embed model")
+		}
+
+		opts = append(opts, ollama.WithModel(d.EmbedModel))
+		llm, err = ollama.New(opts...)
+
+	case models.GOOGLEAI:
+		llm, err = setupGoogleAIEmbedClient(d)
+
 	default:
 		return nil, fmt.Errorf("unsupported embed vendor")
 	}
@@ -154,11 +225,68 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 			return nil, nil, nil, err
 		}
 		return llm, app, response, nil
+	case models.HUGGINGFACE:
+		// does not do token counts
+		mName := "huggingface-unspecified"
+		if strings.Contains(r.URL.Path, "/models/") {
+			n, err := ExtractModelName(r.URL.Path)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			mName = n
+		}
+
+		return llm, app, &responses.DummyResponse{
+			Model: mName}, nil
+
+	case models.OLLAMA:
+		if strings.Contains(strings.ToLower(r.URL.Path), OllamaChatCompletionsEndpoint) ||
+			strings.Contains(strings.ToLower(r.URL.Path), OllamaGenerateCompletionsEndpoint) {
+			response = &responses.OllamaGenerateResponse{}
+			err := json.Unmarshal(body, response)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			return llm, app, response, nil
+		}
+
+	case models.VERTEX:
+		modelName, err := extractModelIDFromVertexURL(r.URL.Path)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if modelName == "" {
+			modelName = "googleai-gemini-no-id"
+		}
+
+		response = &responses.GoogleAIChatResponse{}
+		err = json.Unmarshal(body, response)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		response.(*responses.GoogleAIChatResponse).SetModel(modelName)
+		return llm, app, response, nil
+
+	case models.GOOGLEAI:
+		modelName, err := extractModelIDFromGoogleURL(r.URL.Path)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if modelName == "" {
+			modelName = "googleai-gemini-no-id"
+		}
+
+		response = &responses.GoogleAIChatResponse{}
+		err = json.Unmarshal(body, response)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		response.(*responses.GoogleAIChatResponse).SetModel(modelName)
+		return llm, app, response, nil
 	}
-	// Vertex
-	// Huggingface
-	// ollama
-	// GoogleAI
 
 	return nil, nil, nil, fmt.Errorf("unknown vendor: %s", llm.Vendor)
 }
@@ -171,53 +299,18 @@ func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 		r.Header.Set("x-api-key", llm.APIKey)
 	case "DUMMY":
 		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
-	// Vertex
-	// Huggingface
-	// ollama
-	// GoogleAI
+	case models.GOOGLEAI:
+		r.Header.Set("x-goog-api-key", llm.APIKey)
+	case models.OLLAMA:
+		r.Header.Set("Authorization", llm.APIKey)
+	case models.HUGGINGFACE:
+		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
+	case models.VERTEX:
+		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
+
 	default:
 		return fmt.Errorf("unknown vendor: %s", llm.Vendor)
 	}
 
 	return nil
-}
-
-func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]openai.Option, 0)
-	if connDef.APIEndpoint != "" {
-		opts = append(opts, openai.WithBaseURL(connDef.APIEndpoint))
-	}
-
-	if connDef.APIKey != "" {
-		opts = append(opts, openai.WithToken(connDef.APIKey))
-	}
-
-	opts = append(opts, openai.WithModel(llmSettings.ModelName))
-
-	llm, err := openai.New(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenAI driver: %v", err)
-	}
-
-	return llm, nil
-}
-
-func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]anthropic.Option, 0)
-	if connDef.APIEndpoint != "" {
-		opts = append(opts, anthropic.WithBaseURL(connDef.APIEndpoint))
-	}
-
-	if connDef.APIKey != "" {
-		opts = append(opts, anthropic.WithToken(connDef.APIKey))
-	}
-
-	opts = append(opts, anthropic.WithModel(llmSettings.ModelName))
-
-	llm, err := anthropic.New(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenAI driver: %v", err)
-	}
-
-	return llm, nil
 }

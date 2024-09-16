@@ -445,8 +445,6 @@ definitions:
         properties:
           attributes:
             properties:
-              cpt:
-                type: number
               max_length:
                 type: integer
               max_tokens:
@@ -481,8 +479,6 @@ definitions:
     properties:
       attributes:
         properties:
-          cpt:
-            type: number
           max_length:
             type: integer
           max_tokens:
@@ -508,6 +504,41 @@ definitions:
             type: integer
           top_p:
             type: number
+        type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  api.ModelPriceInput:
+    description: Model Price input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              cpt:
+                type: number
+              model_name:
+                type: string
+              vendor:
+                type: string
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.ModelPriceResponse:
+    description: Model Price response model
+    properties:
+      attributes:
+        properties:
+          cpt:
+            type: number
+          model_name:
+            type: string
+          vendor:
+            type: string
         type: object
       id:
         type: string
@@ -658,6 +689,14 @@ definitions:
         type: string
       type:
         type: string
+    type: object
+  api.VendorListResponse:
+    description: Vendor list response model
+    properties:
+      data:
+        items:
+          type: string
+        type: array
     type: object
 host: localhost:8080
 info:
@@ -3067,6 +3106,184 @@ paths:
       summary: Search LLMs by name
       tags:
       - llms
+  /model-prices:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all model prices
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ModelPriceResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get all model prices
+      tags:
+      - model-prices
+    post:
+      consumes:
+      - application/json
+      description: Create a new model price with the provided information
+      parameters:
+      - description: Model Price information
+        in: body
+        name: modelPrice
+        required: true
+        schema:
+          $ref: '#/definitions/api.ModelPriceInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.ModelPriceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new model price
+      tags:
+      - model-prices
+  /model-prices/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a model price by its ID
+      parameters:
+      - description: Model Price ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a model price
+      tags:
+      - model-prices
+    get:
+      consumes:
+      - application/json
+      description: Get details of a model price by its ID
+      parameters:
+      - description: Model Price ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ModelPriceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a model price by ID
+      tags:
+      - model-prices
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing model price's information
+      parameters:
+      - description: Model Price ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated model price information
+        in: body
+        name: modelPrice
+        required: true
+        schema:
+          $ref: '#/definitions/api.ModelPriceInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ModelPriceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a model price
+      tags:
+      - model-prices
+  /model-prices/by-vendor:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of model prices for a specific vendor
+      parameters:
+      - description: Vendor name
+        in: query
+        name: vendor
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ModelPriceResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get model prices by vendor
+      tags:
+      - model-prices
   /tags:
     get:
       consumes:
@@ -3677,6 +3894,48 @@ paths:
       summary: Get apps by user ID
       tags:
       - apps
+  /vendors/embedders:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of available embedders
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.VendorListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get available embedders
+      tags:
+      - vendors
+  /vendors/llm-drivers:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of available LLM drivers
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.VendorListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get available LLM drivers
+      tags:
+      - vendors
 security:
 - BearerAuth: []
 securityDefinitions:

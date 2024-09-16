@@ -135,6 +135,7 @@ type DummyResponse struct {
 		PromptTokens   int `json:"prompt_tokens"`
 		ResponseTokens int `json:"response_tokens"`
 	}
+	Model string `json:"model"`
 }
 
 func (o *DummyResponse) GetPromptTokens() int {
@@ -154,5 +155,7 @@ func (o *DummyResponse) GetToolCount() int {
 }
 
 func (o *DummyResponse) GetModel() string {
-	return "dummy"
+	if o.Model == "" {
+		return "dummy"
+	}
 }

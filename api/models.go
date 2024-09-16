@@ -457,3 +457,18 @@ type ModelPriceResponse struct {
 		CPT       float64 `json:"cpt"`
 	} `json:"attributes"`
 }
+
+// VendorListResponse represents the response for vendor list operations
+// @Description Vendor list response model
+type VendorListResponse struct {
+	Data []string `json:"data"`
+}
+
+// ErrorResponse represents the structure of an error response
+// @Description Error response model
+type ErrorResponse struct {
+	Errors []struct {
+		Title  string `json:"title"`
+		Detail string `json:"detail"`
+	} `json:"errors"`
+}

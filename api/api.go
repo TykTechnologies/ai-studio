@@ -178,6 +178,9 @@ func (a *API) setupRoutes() {
 		v1.GET("/model-prices", a.getAllModelPrices)
 		v1.GET("/model-prices/by-vendor", a.getModelPricesByVendor)
 
+		// Vendor routes
+		v1.GET("/vendors/llm-drivers", a.getAvailableLLMDrivers)
+		v1.GET("/vendors/embedders", a.getAvailableEmbedders)
 	}
 }
 
