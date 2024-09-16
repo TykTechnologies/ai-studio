@@ -60,6 +60,23 @@ func ExtractModelName(urlString string) (string, error) {
 	return modelName, nil
 }
 
+func extractHuggingfaceModelID(url string) string {
+	patterns := []string{
+		`/pipeline/feature-extraction/([^/]+)`,
+		`/models/([^/]+)`,
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(url)
+		if len(matches) > 1 {
+			return matches[1]
+		}
+	}
+
+	return "huggingface-unspecified"
+}
+
 func extractModelIDFromVertexURL(url string) (string, error) {
 	// Regular expression pattern to match the MODEL_ID at the end of the URL
 	pattern := `/models/([^/]+)$`
@@ -84,7 +101,7 @@ func extractModelIDFromVertexURL(url string) (string, error) {
 
 func extractModelIDFromGoogleURL(url string) (string, error) {
 	// Regular expression pattern to match the MODEL-ID in the new URL format
-	pattern := `/v1beta/models/([^/:]+)`
+	pattern := `/publishers/google/models/([^/:]+)`
 
 	// Compile the regular expression
 	re, err := regexp.Compile(pattern)
@@ -102,4 +119,14 @@ func extractModelIDFromGoogleURL(url string) (string, error) {
 
 	// If no match is found, return an error
 	return "", fmt.Errorf("model ID not found in URL")
+}
+
+func keyValueOrZero(dat map[string]any, key string) int {
+	if val, ok := dat[key]; ok {
+		val, ok := val.(int)
+		if ok {
+			return val
+		}
+	}
+	return 0
 }

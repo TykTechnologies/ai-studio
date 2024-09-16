@@ -21,6 +21,7 @@ import (
 
 const (
 	OpenAICompletionsEndpoint         = "/v1/chat/completions"
+	OpenAIEmbeddingsEndpoint          = "/v1/embeddings"
 	AnthropicCompletionsEndpoint      = "/v1/messages"
 	OllamaChatCompletionsEndpoint     = "/api/chat"
 	OllamaGenerateCompletionsEndpoint = "/api/generate"
@@ -97,16 +98,6 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 	}
 
 	return 0, 0, 0
-}
-
-func keyValueOrZero(dat map[string]any, key string) int {
-	if val, ok := dat[key]; ok {
-		val, ok := val.(int)
-		if ok {
-			return val
-		}
-	}
-	return 0
 }
 
 func FetchDriver(LLMConfig *models.LLM, settings *models.LLMSettings, mem schema.Memory, streamingFunc func(ctx context.Context, chunk []byte) error) (llms.Model, error) {
@@ -201,7 +192,9 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 	var response models.ITokenResponse
 	switch llm.Vendor {
 	case models.OPENAI:
-		if strings.Contains(strings.ToLower(r.URL.Path), OpenAICompletionsEndpoint) {
+		// embedding replies have the same usage section
+		if strings.Contains(strings.ToLower(r.URL.Path), OpenAICompletionsEndpoint) ||
+			strings.Contains(strings.ToLower(r.URL.Path), OpenAIEmbeddingsEndpoint) {
 			response = &responses.OpenAIResponse{}
 			err := json.Unmarshal(body, response)
 			if err != nil {
@@ -227,15 +220,7 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 		return llm, app, response, nil
 	case models.HUGGINGFACE:
 		// does not do token counts
-		mName := "huggingface-unspecified"
-		if strings.Contains(r.URL.Path, "/models/") {
-			n, err := ExtractModelName(r.URL.Path)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-
-			mName = n
-		}
+		mName := extractHuggingfaceModelID(r.URL.Path)
 
 		return llm, app, &responses.DummyResponse{
 			Model: mName}, nil
