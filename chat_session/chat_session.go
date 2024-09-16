@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
@@ -48,6 +49,7 @@ type ChatSession struct {
 	stop           chan struct{}
 	errors         chan error
 	preProcessors  []func(*models.UserMessage) error
+	scriptRunners  []*scripting.ScriptRunner
 	caller         llms.Model
 	mode           ChatMode
 	datasources    map[uint]*models.Datasource
@@ -60,7 +62,7 @@ type ChatResponse struct {
 	Payload string
 }
 
-func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service) (*ChatSession, error) {
+func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service, withFilters []*models.Filter) (*ChatSession, error) {
 	id, _ := uuid.NewV4()
 	cs := &ChatSession{
 		id:             id.String(),
@@ -84,6 +86,17 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		if err := cs.validatePrivacyScores(); err != nil {
 			return nil, fmt.Errorf("initial privacy score validation failed: %v", err)
 		}
+	}
+
+	// filter setup
+	preProcessors := []func(*models.UserMessage) error{}
+	for i, _ := range withFilters {
+		sr := scripting.NewScriptRunner(withFilters[i].Script)
+		asFunc := func(m *models.UserMessage) error {
+			return sr.RunFilter(m.Payload)
+		}
+
+		preProcessors = append(preProcessors, asFunc)
 	}
 
 	return cs, nil

@@ -8,18 +8,21 @@ import (
 )
 
 type ScriptRunner struct {
-	mu sync.Mutex
+	mu     sync.Mutex
+	source []byte
 }
 
-func NewScriptRunner() *ScriptRunner {
-	return &ScriptRunner{}
+func NewScriptRunner(source []byte) *ScriptRunner {
+	return &ScriptRunner{
+		source: source,
+	}
 }
 
-func (sr *ScriptRunner) runFilter(sourceCode string, payload string) error {
+func (sr *ScriptRunner) RunFilter(payload string) error {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
-	script := tengo.NewScript([]byte(sourceCode))
+	script := tengo.NewScript(sr.source)
 
 	// Add the payload to the script environment
 	err := script.Add("payload", payload)
@@ -28,6 +31,7 @@ func (sr *ScriptRunner) runFilter(sourceCode string, payload string) error {
 	}
 
 	// Compile the script
+
 	compiled, err := script.Compile()
 	if err != nil {
 		return fmt.Errorf("compilation error: %v", err)
@@ -53,6 +57,6 @@ func (sr *ScriptRunner) runFilter(sourceCode string, payload string) error {
 }
 
 func RunFilter(sourceCode string, payload string) error {
-	runner := NewScriptRunner()
-	return runner.runFilter(sourceCode, payload)
+	runner := NewScriptRunner([]byte(sourceCode))
+	return runner.RunFilter(payload)
 }

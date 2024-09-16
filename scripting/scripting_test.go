@@ -107,13 +107,13 @@ func TestScriptRunnerConcurrency(t *testing.T) {
 		result := filter(payload)
 	`
 
-	runner := NewScriptRunner()
+	runner := NewScriptRunner([]byte(sourceCode))
 	concurrentRuns := 100
 
 	done := make(chan bool)
 	for i := 0; i < concurrentRuns; i++ {
 		go func() {
-			err := runner.runFilter(sourceCode, "hello")
+			err := runner.RunFilter("hello")
 			if err != nil {
 				t.Errorf("Concurrent runFilter() error = %v", err)
 			}
