@@ -27,7 +27,7 @@ const LLMs = () => {
     const fetchLLMs = async () => {
       try {
         const response = await apiClient.get("/llms");
-        setLLMs(Array.isArray(response.data) ? response.data : []);
+        setLLMs(response.data.data || []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching LLMs", error);
@@ -83,7 +83,7 @@ const LLMs = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {Array.isArray(llms) && llms.length > 0 ? (
+          {llms.length > 0 ? (
             llms.map((llm) => (
               <TableRow key={llm.id}>
                 <TableCell>{llm.id}</TableCell>

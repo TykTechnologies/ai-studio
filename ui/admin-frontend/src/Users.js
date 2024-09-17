@@ -26,7 +26,7 @@ const Users = () => {
     const fetchUsers = async () => {
       try {
         const response = await apiClient.get("/users");
-        setUsers(response.data.data || []); // Access the 'data' array from the response
+        setUsers(response.data.data || []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching users", error);

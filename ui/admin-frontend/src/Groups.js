@@ -27,7 +27,7 @@ const Groups = () => {
     const fetchGroups = async () => {
       try {
         const response = await apiClient.get("/groups");
-        setGroups(Array.isArray(response.data) ? response.data : []);
+        setGroups(response.data.data || []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching groups", error);
@@ -81,7 +81,7 @@ const Groups = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {Array.isArray(groups) && groups.length > 0 ? (
+          {groups.length > 0 ? (
             groups.map((group) => (
               <TableRow key={group.id}>
                 <TableCell>{group.id}</TableCell>

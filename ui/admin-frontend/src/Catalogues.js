@@ -27,7 +27,7 @@ const Catalogues = () => {
     const fetchCatalogues = async () => {
       try {
         const response = await apiClient.get("/catalogues");
-        setCatalogues(Array.isArray(response.data) ? response.data : []);
+        setCatalogues(response.data.data || []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching catalogues", error);
@@ -82,7 +82,7 @@ const Catalogues = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {Array.isArray(catalogues) && catalogues.length > 0 ? (
+          {catalogues.length > 0 ? (
             catalogues.map((catalogue) => (
               <TableRow key={catalogue.id}>
                 <TableCell>{catalogue.id}</TableCell>

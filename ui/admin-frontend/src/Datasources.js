@@ -27,7 +27,7 @@ const Datasources = () => {
     const fetchDatasources = async () => {
       try {
         const response = await apiClient.get("/datasources");
-        setDatasources(Array.isArray(response.data) ? response.data : []);
+        setDatasources(response.data.data || []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching datasources", error);
@@ -83,7 +83,7 @@ const Datasources = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {Array.isArray(datasources) && datasources.length > 0 ? (
+          {datasources.length > 0 ? (
             datasources.map((ds) => (
               <TableRow key={ds.id}>
                 <TableCell>{ds.id}</TableCell>
