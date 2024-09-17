@@ -14,8 +14,6 @@ import MyAppBar from "./AppBar";
 import MyDrawer from "./Drawer";
 import Dashboard from "./Dashboard";
 import Users from "./Users";
-import Settings from "./Settings";
-import Reports from "./Reports";
 import Login from "./Login";
 import UserForm from "./UserForm";
 import Apps from "./Apps";
@@ -63,14 +61,6 @@ function App() {
             <Route
               path="/users"
               element={<PrivateRoute element={<Users />} />}
-            />
-            <Route
-              path="/settings"
-              element={<PrivateRoute element={<Settings />} />}
-            />
-            <Route
-              path="/reports"
-              element={<PrivateRoute element={<Reports />} />}
             />
             <Route
               path="/users/new"
