@@ -25,6 +25,7 @@ import {
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import UserDetails from "./UserDetails";
 
 const Users = () => {
   const [users, setUsers] = useState([]);
@@ -35,6 +36,7 @@ const Users = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [openModal, setOpenModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState("");
+  const [openUserDetails, setOpenUserDetails] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -108,6 +110,19 @@ const Users = () => {
     handleMenuClose();
   };
 
+  const handleUserClick = (user) => {
+    setSelectedUser(user);
+    setOpenUserDetails(true);
+  };
+
+  const handleCloseUserDetails = () => {
+    setOpenUserDetails(false);
+  };
+
+  const handleUserUpdate = () => {
+    fetchData();
+  };
+
   if (loading) {
     return <CircularProgress />;
   }
@@ -143,12 +158,15 @@ const Users = () => {
         <TableBody>
           {users.length > 0 ? (
             users.map((user) => (
-              <TableRow key={user.id}>
+              <TableRow key={user.id} onClick={() => handleUserClick(user)} style={{ cursor: 'pointer' }}>
                 <TableCell>{user.id}</TableCell>
                 <TableCell>{user.attributes.name}</TableCell>
                 <TableCell>{user.attributes.email}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={(event) => handleMenuOpen(event, user)}>
+                  <IconButton onClick={(event) => {
+                    event.stopPropagation();
+                    handleMenuOpen(event, user);
+                  }}>
                     <MoreVertIcon />
                   </IconButton>
                 </TableCell>
@@ -195,6 +213,12 @@ const Users = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <UserDetails
+        user={selectedUser}
+        open={openUserDetails}
+        onClose={handleCloseUserDetails}
+        onUserUpdate={handleUserUpdate}
+      />
     </Paper>
   );
 };
