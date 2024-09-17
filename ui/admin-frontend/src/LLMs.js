@@ -1,6 +1,6 @@
 // src/LLMs.js
 import React, { useState, useEffect } from "react";
-import apiClient from "./apiClient";
+import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,

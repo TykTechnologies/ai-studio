@@ -1,6 +1,6 @@
 // src/Dashboard.js
 import React, { useEffect, useState } from "react";
-import apiClient from "./apiClient";
+import apiClient from "../utils/apiClient";
 import { Typography } from "@mui/material";
 
 const Dashboard = () => {

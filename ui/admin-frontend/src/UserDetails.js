@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import apiClient from "./apiClient";
+import apiClient from "../../utils/apiClient";
 import {
   Typography,
   IconButton,

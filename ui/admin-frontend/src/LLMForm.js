@@ -1,6 +1,6 @@
 // src/LLMForm.js
 import React, { useState, useEffect } from "react";
-import apiClient from "./apiClient";
+import apiClient from "../utils/apiClient";
 import { TextField, Button, Box } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 
