@@ -8,6 +8,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Alert,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
@@ -17,6 +18,8 @@ const UserForm = ({ user }) => {
   const [password, setPassword] = useState("");
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,6 +37,8 @@ const UserForm = ({ user }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setSuccessMessage("");
 
     const userData = {
       data: {
@@ -47,30 +52,38 @@ const UserForm = ({ user }) => {
     };
 
     try {
-      let response;
+      let userId;
       if (user) {
-        response = await apiClient.patch(`/users/${user.id}`, userData);
+        await apiClient.patch(`/users/${user.id}`, userData);
+        userId = user.id;
+        setSuccessMessage("User updated successfully");
       } else {
-        response = await apiClient.post("/users", userData);
+        const response = await apiClient.post("/users", userData);
+        userId = response.data.id;
+        setSuccessMessage("User created successfully");
       }
 
-      if (selectedGroup) {
+      if (selectedGroup && userId) {
         await apiClient.post(`/groups/${selectedGroup}/users`, {
           data: {
-            id: response.data.id,
+            id: userId.toString(),
             type: "users"
           }
         });
+        setSuccessMessage(prev => `${prev} and added to the selected group`);
       }
 
-      navigate("/users");
+      setTimeout(() => navigate("/users"), 2000); // Navigate after 2 seconds
     } catch (error) {
       console.error("Error saving user", error);
+      setError("Failed to save user. Please try again.");
     }
   };
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 500 }}>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {successMessage && <Alert severity="success" sx={{ mb: 2 }}>{successMessage}</Alert>}
       <TextField
         fullWidth
         margin="normal"
