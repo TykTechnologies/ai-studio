@@ -91,6 +91,53 @@ definitions:
       type:
         type: string
     type: object
+  api.ChatHistoryRecordInput:
+    description: Chat History Record input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              chat_id:
+                type: integer
+              name:
+                type: string
+              session_id:
+                type: string
+              user_id:
+                type: integer
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.ChatHistoryRecordListResponse:
+    description: Chat History Record list response model
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/api.ChatHistoryRecordResponse'
+        type: array
+    type: object
+  api.ChatHistoryRecordResponse:
+    description: Chat History Record response model
+    properties:
+      attributes:
+        properties:
+          chat_id:
+            type: integer
+          name:
+            type: string
+          session_id:
+            type: string
+          user_id:
+            type: integer
+        type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
   api.ChatInput:
     description: Chat input model
     properties:
@@ -341,6 +388,45 @@ definitions:
               type: string
           type: object
         type: array
+    type: object
+  api.FilterInput:
+    description: Filter input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              description:
+                type: string
+              name:
+                type: string
+              script:
+                items:
+                  type: integer
+                type: array
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.FilterResponse:
+    description: Filter response model
+    properties:
+      attributes:
+        properties:
+          description:
+            type: string
+          name:
+            type: string
+          script:
+            items:
+              type: integer
+            type: array
+        type: object
+      id:
+        type: string
+      type:
+        type: string
     type: object
   api.GroupCatalogueInput:
     description: Group-Catalogue relationship input model
@@ -1211,6 +1297,127 @@ paths:
       summary: Search catalogues by name
       tags:
       - catalogues
+  /chat-history-records:
+    get:
+      consumes:
+      - application/json
+      description: List chat history records for a given user
+      parameters:
+      - description: User ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ChatHistoryRecordListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List chat history records
+      tags:
+      - chat-history
+    post:
+      consumes:
+      - application/json
+      description: Create a new chat history record with the given input
+      parameters:
+      - description: Chat History Record Input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/api.ChatHistoryRecordInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.ChatHistoryRecordResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Create a new chat history record
+      tags:
+      - chat-history
+  /chat-history-records/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a chat history record by its ID
+      parameters:
+      - description: Chat History Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Delete a chat history record
+      tags:
+      - chat-history
+    get:
+      consumes:
+      - application/json
+      description: Get a chat history record by its ID
+      parameters:
+      - description: Chat History Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ChatHistoryRecordResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get a chat history record
+      tags:
+      - chat-history
   /chats:
     get:
       consumes:
@@ -2252,6 +2459,143 @@ paths:
       summary: Search datasources
       tags:
       - datasources
+  /filters:
+    get:
+      description: Get a list of all filters
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.FilterResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List all filters
+      tags:
+      - filters
+    post:
+      consumes:
+      - application/json
+      description: Create a new filter with the given input data
+      parameters:
+      - description: Filter input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/api.FilterInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.FilterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Create a new filter
+      tags:
+      - filters
+  /filters/{id}:
+    delete:
+      description: Delete a filter by its ID
+      parameters:
+      - description: Filter ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Delete a filter
+      tags:
+      - filters
+    get:
+      description: Get a filter's details by its ID
+      parameters:
+      - description: Filter ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.FilterResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get a filter by ID
+      tags:
+      - filters
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing filter's details
+      parameters:
+      - description: Filter ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated filter input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/api.FilterInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.FilterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Update a filter
+      tags:
+      - filters
   /groups:
     get:
       consumes:

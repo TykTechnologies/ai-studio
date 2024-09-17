@@ -28,14 +28,16 @@ import (
 // @name Authorization
 
 type API struct {
-	service *services.Service
-	router  *gin.Engine
+	service     *services.Service
+	router      *gin.Engine
+	disableCORS bool
 }
 
-func NewAPI(service *services.Service) *API {
+func NewAPI(service *services.Service, disableCORS bool) *API {
 	api := &API{
-		service: service,
-		router:  gin.Default(),
+		service:     service,
+		router:      gin.Default(),
+		disableCORS: disableCORS,
 	}
 	api.setupRoutes()
 	return api
@@ -46,6 +48,10 @@ func (a *API) Run(addr string) error {
 }
 
 func (a *API) setupRoutes() {
+	if a.disableCORS {
+		a.router.Use(a.corsMiddleware())
+	}
+
 	a.router.Use(a.authMiddleware())
 
 	v1 := a.router.Group("/api/v1")
@@ -197,6 +203,22 @@ func (a *API) setupRoutes() {
 		v1.DELETE("/chat-history-records/:id", a.deleteChatHistoryRecord)
 
 		a.SetupWebSocketRoute()
+	}
+}
+
+func (a *API) corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
 	}
 }
 
