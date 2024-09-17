@@ -2,7 +2,6 @@
 import React from "react";
 import { ThemeProvider } from "@mui/material/styles";
 import theme from "./theme";
-import logo from "./logo.svg"; // Make sure this path is
 import {
   BrowserRouter as Router,
   Routes,
