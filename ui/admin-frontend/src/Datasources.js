@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 import DeleteIcon from "@mui/icons-material/Delete";
 
 const Datasources = () => {
-  const [datasources, setDatasources] = useState([]);
+  const [datasources, setDatasources] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,7 +27,7 @@ const Datasources = () => {
     const fetchDatasources = async () => {
       try {
         const response = await apiClient.get("/datasources");
-        setDatasources(response.data);
+        setDatasources(Array.isArray(response.data) ? response.data : []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching datasources", error);
@@ -83,23 +83,29 @@ const Datasources = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {datasources.map((ds) => (
-            <TableRow key={ds.id}>
-              <TableCell>{ds.id}</TableCell>
-              <TableCell>{ds.attributes.name}</TableCell>
-              <TableCell>{ds.attributes.db_source_type}</TableCell>
-              {/* Add more cells if needed */}
-              <TableCell align="right">
-                <IconButton
-                  color="secondary"
-                  onClick={() => handleDelete(ds.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-                {/* Add edit button if needed */}
-              </TableCell>
+          {Array.isArray(datasources) && datasources.length > 0 ? (
+            datasources.map((ds) => (
+              <TableRow key={ds.id}>
+                <TableCell>{ds.id}</TableCell>
+                <TableCell>{ds.attributes.name}</TableCell>
+                <TableCell>{ds.attributes.db_source_type}</TableCell>
+                {/* Add more cells if needed */}
+                <TableCell align="right">
+                  <IconButton
+                    color="secondary"
+                    onClick={() => handleDelete(ds.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                  {/* Add edit button if needed */}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={4}>No datasources found</TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </Paper>

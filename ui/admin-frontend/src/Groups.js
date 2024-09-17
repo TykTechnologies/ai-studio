@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 import DeleteIcon from "@mui/icons-material/Delete";
 
 const Groups = () => {
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,7 +27,7 @@ const Groups = () => {
     const fetchGroups = async () => {
       try {
         const response = await apiClient.get("/groups");
-        setGroups(response.data);
+        setGroups(Array.isArray(response.data) ? response.data : []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching groups", error);
@@ -81,22 +81,28 @@ const Groups = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {groups.map((group) => (
-            <TableRow key={group.id}>
-              <TableCell>{group.id}</TableCell>
-              <TableCell>{group.attributes.name}</TableCell>
-              <TableCell align="right">
-                {/* Add edit and delete buttons */}
-                <IconButton
-                  color="secondary"
-                  onClick={() => handleDelete(group.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-                {/* Add more actions if needed */}
-              </TableCell>
+          {Array.isArray(groups) && groups.length > 0 ? (
+            groups.map((group) => (
+              <TableRow key={group.id}>
+                <TableCell>{group.id}</TableCell>
+                <TableCell>{group.attributes.name}</TableCell>
+                <TableCell align="right">
+                  {/* Add edit and delete buttons */}
+                  <IconButton
+                    color="secondary"
+                    onClick={() => handleDelete(group.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                  {/* Add more actions if needed */}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={3}>No groups found</TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </Paper>

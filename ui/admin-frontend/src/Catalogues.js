@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 import DeleteIcon from "@mui/icons-material/Delete";
 
 const Catalogues = () => {
-  const [catalogues, setCatalogues] = useState([]);
+  const [catalogues, setCatalogues] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,7 +27,7 @@ const Catalogues = () => {
     const fetchCatalogues = async () => {
       try {
         const response = await apiClient.get("/catalogues");
-        setCatalogues(response.data);
+        setCatalogues(Array.isArray(response.data) ? response.data : []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching catalogues", error);
@@ -82,22 +82,28 @@ const Catalogues = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {catalogues.map((catalogue) => (
-            <TableRow key={catalogue.id}>
-              <TableCell>{catalogue.id}</TableCell>
-              <TableCell>{catalogue.attributes.name}</TableCell>
-              {/* Add more cells if needed */}
-              <TableCell align="right">
-                <IconButton
-                  color="secondary"
-                  onClick={() => handleDelete(catalogue.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-                {/* Add edit button if needed */}
-              </TableCell>
+          {Array.isArray(catalogues) && catalogues.length > 0 ? (
+            catalogues.map((catalogue) => (
+              <TableRow key={catalogue.id}>
+                <TableCell>{catalogue.id}</TableCell>
+                <TableCell>{catalogue.attributes.name}</TableCell>
+                {/* Add more cells if needed */}
+                <TableCell align="right">
+                  <IconButton
+                    color="secondary"
+                    onClick={() => handleDelete(catalogue.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                  {/* Add edit button if needed */}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={3}>No catalogues found</TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </Paper>

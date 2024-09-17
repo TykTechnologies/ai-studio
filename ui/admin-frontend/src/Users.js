@@ -82,22 +82,28 @@ const Users = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {users.map((user) => (
-            <TableRow key={user.id}>
-              <TableCell>{user.id}</TableCell>
-              <TableCell>{user.attributes.name}</TableCell>
-              <TableCell>{user.attributes.email}</TableCell>
-              <TableCell align="right">
-                <IconButton
-                  color="secondary"
-                  onClick={() => handleDelete(user.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-                {/* Add edit button if needed */}
-              </TableCell>
+          {Array.isArray(users) && users.length > 0 ? (
+            users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.id}</TableCell>
+                <TableCell>{user.attributes.name}</TableCell>
+                <TableCell>{user.attributes.email}</TableCell>
+                <TableCell align="right">
+                  <IconButton
+                    color="secondary"
+                    onClick={() => handleDelete(user.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                  {/* Add edit button if needed */}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={4}>No users found</TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </Paper>

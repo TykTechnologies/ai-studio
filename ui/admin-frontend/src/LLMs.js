@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 import DeleteIcon from "@mui/icons-material/Delete";
 
 const LLMs = () => {
-  const [llms, setLLMs] = useState([]);
+  const [llms, setLLMs] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,7 +27,7 @@ const LLMs = () => {
     const fetchLLMs = async () => {
       try {
         const response = await apiClient.get("/llms");
-        setLLMs(response.data);
+        setLLMs(Array.isArray(response.data) ? response.data : []);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching LLMs", error);
@@ -83,23 +83,29 @@ const LLMs = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {llms.map((llm) => (
-            <TableRow key={llm.id}>
-              <TableCell>{llm.id}</TableCell>
-              <TableCell>{llm.attributes.name}</TableCell>
-              <TableCell>{llm.attributes.vendor}</TableCell>
-              {/* Add more cells if needed */}
-              <TableCell align="right">
-                <IconButton
-                  color="secondary"
-                  onClick={() => handleDelete(llm.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-                {/* Add edit button if needed */}
-              </TableCell>
+          {Array.isArray(llms) && llms.length > 0 ? (
+            llms.map((llm) => (
+              <TableRow key={llm.id}>
+                <TableCell>{llm.id}</TableCell>
+                <TableCell>{llm.attributes.name}</TableCell>
+                <TableCell>{llm.attributes.vendor}</TableCell>
+                {/* Add more cells if needed */}
+                <TableCell align="right">
+                  <IconButton
+                    color="secondary"
+                    onClick={() => handleDelete(llm.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                  {/* Add edit button if needed */}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={4}>No LLMs found</TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </Paper>
