@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -244,4 +245,138 @@ func TestAppService_MultipleApps(t *testing.T) {
 	}
 	fetchedApp3, _ := service.GetAppByID(app3.ID)
 	assert.True(t, fetchedApp3.Credential.Active)
+}
+func TestListApps(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	// Create test users
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+
+	// Create multiple apps
+	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, nil, nil)
+	app2, _ := service.CreateApp("App 2", "Description 2", user1.ID, nil, nil)
+	app3, _ := service.CreateApp("App 3", "Description 3", user2.ID, nil, nil)
+
+	// Test ListApps
+	apps, err := service.ListApps()
+	assert.NoError(t, err)
+	assert.Len(t, apps, 3)
+	assert.ElementsMatch(t, []uint{app1.ID, app2.ID, app3.ID}, []uint{apps[0].ID, apps[1].ID, apps[2].ID})
+}
+
+func TestListAppsWithPagination(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("user@example.com", "User", "password123")
+
+	// Create 5 apps
+	for i := 1; i <= 5; i++ {
+		_, _ = service.CreateApp(fmt.Sprintf("App %d", i), fmt.Sprintf("Description %d", i), user.ID, nil, nil)
+	}
+
+	// Test ListAppsWithPagination
+	apps, err := service.ListAppsWithPagination(1, 3)
+	assert.NoError(t, err)
+	assert.Len(t, apps, 3)
+
+	apps, err = service.ListAppsWithPagination(2, 3)
+	assert.NoError(t, err)
+	assert.Len(t, apps, 2)
+}
+
+func TestListAppsByUserID(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+
+	// Create 3 apps for user1 and 2 apps for user2
+	for i := 1; i <= 3; i++ {
+		_, _ = service.CreateApp(fmt.Sprintf("User1 App %d", i), "Description", user1.ID, nil, nil)
+	}
+	for i := 1; i <= 2; i++ {
+		_, _ = service.CreateApp(fmt.Sprintf("User2 App %d", i), "Description", user2.ID, nil, nil)
+	}
+
+	// Test ListAppsByUserID
+	user1Apps, err := service.ListAppsByUserID(user1.ID, 1, 10)
+	assert.NoError(t, err)
+	assert.Len(t, user1Apps, 3)
+
+	user2Apps, err := service.ListAppsByUserID(user2.ID, 1, 10)
+	assert.NoError(t, err)
+	assert.Len(t, user2Apps, 2)
+}
+
+func TestSearchApps(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("user@example.com", "User", "password123")
+
+	// Create apps with different names and descriptions
+	_, _ = service.CreateApp("Test App", "This is a test app", user.ID, nil, nil)
+	_, _ = service.CreateApp("Production App", "This is a production app", user.ID, nil, nil)
+	_, _ = service.CreateApp("Development App", "This is a development app", user.ID, nil, nil)
+
+	// Test SearchApps
+	testApps, err := service.SearchApps("test")
+	assert.NoError(t, err)
+	assert.Len(t, testApps, 1)
+	assert.Equal(t, "Test App", testApps[0].Name)
+
+	productionApps, err := service.SearchApps("production")
+	assert.NoError(t, err)
+	assert.Len(t, productionApps, 1)
+	assert.Equal(t, "Production App", productionApps[0].Name)
+
+	allApps, err := service.SearchApps("app")
+	assert.NoError(t, err)
+	assert.Len(t, allApps, 3)
+}
+
+func TestCountApps(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("user@example.com", "User", "password123")
+
+	// Create 5 apps
+	for i := 1; i <= 5; i++ {
+		_, _ = service.CreateApp(fmt.Sprintf("App %d", i), fmt.Sprintf("Description %d", i), user.ID, nil, nil)
+	}
+
+	// Test CountApps
+	count, err := service.CountApps()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), count)
+}
+
+func TestCountAppsByUserID(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+
+	// Create 3 apps for user1 and 2 apps for user2
+	for i := 1; i <= 3; i++ {
+		_, _ = service.CreateApp(fmt.Sprintf("User1 App %d", i), "Description", user1.ID, nil, nil)
+	}
+	for i := 1; i <= 2; i++ {
+		_, _ = service.CreateApp(fmt.Sprintf("User2 App %d", i), "Description", user2.ID, nil, nil)
+	}
+
+	// Test CountAppsByUserID
+	user1Count, err := service.CountAppsByUserID(user1.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), user1Count)
+
+	user2Count, err := service.CountAppsByUserID(user2.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), user2Count)
 }

@@ -312,3 +312,39 @@ func (s *Service) GetAppLLMs(appID uint) ([]models.LLM, error) {
 
 	return app.LLMs, nil
 }
+
+// ListApps returns all apps
+func (s *Service) ListApps() (models.Apps, error) {
+	app := models.NewApp()
+	return app.List(s.DB)
+}
+
+// ListAppsWithPagination returns a paginated list of apps
+func (s *Service) ListAppsWithPagination(page, pageSize int) (models.Apps, error) {
+	app := models.NewApp()
+	return app.ListWithPagination(s.DB, page, pageSize)
+}
+
+// ListAppsByUserID returns all apps for a specific user with pagination
+func (s *Service) ListAppsByUserID(userID uint, page, pageSize int) (models.Apps, error) {
+	app := models.NewApp()
+	return app.ListByUserID(s.DB, userID, page, pageSize)
+}
+
+// SearchApps returns apps matching the given search term
+func (s *Service) SearchApps(searchTerm string) (models.Apps, error) {
+	app := models.NewApp()
+	return app.Search(s.DB, searchTerm)
+}
+
+// CountApps returns the total number of apps
+func (s *Service) CountApps() (int64, error) {
+	app := models.NewApp()
+	return app.Count(s.DB)
+}
+
+// CountAppsByUserID returns the total number of apps for a specific user
+func (s *Service) CountAppsByUserID(userID uint) (int64, error) {
+	app := models.NewApp()
+	return app.CountByUserID(s.DB, userID)
+}

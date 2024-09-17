@@ -18,6 +18,8 @@ type App struct {
 	LLMs         []LLM        `json:"llms" gorm:"many2many:app_llms;"`
 }
 
+type Apps []App
+
 func NewApp() *App {
 	return &App{}
 }
@@ -115,4 +117,47 @@ func (a *App) GetDatasources(db *gorm.DB) error {
 
 func (a *App) GetLLMs(db *gorm.DB) error {
 	return db.Model(a).Association("LLMs").Find(&a.LLMs)
+}
+
+func (a *App) List(db *gorm.DB) (Apps, error) {
+	var apps Apps
+	err := db.Preload("Credential").Find(&apps).Error
+	return apps, err
+}
+
+// ListWithPagination returns a paginated list of apps
+func (a *App) ListWithPagination(db *gorm.DB, page, pageSize int) (Apps, error) {
+	var apps Apps
+	offset := (page - 1) * pageSize
+	err := db.Offset(offset).Limit(pageSize).Preload("Credential").Find(&apps).Error
+	return apps, err
+}
+
+// ListByUserID returns all apps for a specific user with pagination
+func (a *App) ListByUserID(db *gorm.DB, userID uint, page, pageSize int) (Apps, error) {
+	var apps Apps
+	offset := (page - 1) * pageSize
+	err := db.Where("user_id = ?", userID).Offset(offset).Limit(pageSize).Preload("Credential").Find(&apps).Error
+	return apps, err
+}
+
+// Search returns apps matching the given search term
+func (a *App) Search(db *gorm.DB, searchTerm string) (Apps, error) {
+	var apps Apps
+	err := db.Where("name LIKE ? OR description LIKE ?", "%"+searchTerm+"%", "%"+searchTerm+"%").Preload("Credential").Find(&apps).Error
+	return apps, err
+}
+
+// Count returns the total number of apps
+func (a *App) Count(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&App{}).Count(&count).Error
+	return count, err
+}
+
+// CountByUserID returns the total number of apps for a specific user
+func (a *App) CountByUserID(db *gorm.DB, userID uint) (int64, error) {
+	var count int64
+	err := db.Model(&App{}).Where("user_id = ?", userID).Count(&count).Error
+	return count, err
 }

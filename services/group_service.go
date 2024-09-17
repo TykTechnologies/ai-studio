@@ -145,3 +145,12 @@ func (s *Service) GetGroupCatalogues(groupID uint) (models.Catalogues, error) {
 
 	return group.Catalogues, nil
 }
+
+func (s *Service) GetGroupsByUserID(userID uint) (models.Groups, error) {
+	var groups models.Groups
+	err := groups.GetGroupsByUserID(s.DB, userID)
+	if err != nil {
+		return nil, err
+	}
+	return groups, nil
+}

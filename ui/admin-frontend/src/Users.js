@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import apiClient from "./apiClient";
 import {
   Table,
@@ -7,36 +8,94 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Toolbar,
   Typography,
   Button,
   IconButton,
   CircularProgress,
   Alert,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Menu,
+  MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  Snackbar,
+  Box,
 } from "@mui/material";
+import { styled } from "@mui/material/styles";
 import { Link } from "react-router-dom";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import UserDetails from "./UserDetails";
+
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  borderRadius: theme.shape.borderRadius * 2,
+  boxShadow: theme.shadows[5],
+  overflow: "hidden",
+}));
+
+const TitleBox = styled(Box)(({ theme }) => ({
+  backgroundColor: "#0B4545",
+  padding: theme.spacing(2),
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+}));
+
+const ContentBox = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(2),
+}));
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  fontWeight: "bold",
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  "&:nth-of-type(odd)": {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  "&:hover": {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+}));
+
+const StyledIconButton = styled(IconButton)(({ theme }) => ({
+  color: theme.palette.primary.main,
+}));
+
+const StyledDialog = styled(Dialog)(({ theme }) => ({
+  "& .MuiDialog-paper": {
+    borderRadius: "12px",
+    backgroundColor: "#2c2c2c",
+  },
+}));
+
+const StyledDialogTitle = styled(DialogTitle)(({ theme }) => ({
+  backgroundColor: "#0B4545",
+  color: theme.palette.common.white,
+  padding: theme.spacing(2),
+}));
+
+const StyledDialogContent = styled(DialogContent)(({ theme }) => ({
+  padding: theme.spacing(3),
+}));
 
 const Users = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [openModal, setOpenModal] = useState(false);
+  const [openAddToGroupModal, setOpenAddToGroupModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState("");
-  const [openUserDetails, setOpenUserDetails] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   useEffect(() => {
     fetchData();
@@ -59,6 +118,7 @@ const Users = () => {
   };
 
   const handleMenuOpen = (event, user) => {
+    event.stopPropagation();
     setAnchorEl(event.currentTarget);
     setSelectedUser(user);
   };
@@ -67,19 +127,47 @@ const Users = () => {
     setAnchorEl(null);
   };
 
-  const handleAddToGroup = () => {
-    setOpenModal(true);
+  const handleDelete = async (id) => {
+    try {
+      await apiClient.delete(`/users/${id}`);
+      setUsers(users.filter((user) => user.id !== id));
+      setSnackbar({
+        open: true,
+        message: "User deleted successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error deleting user", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete user",
+        severity: "error",
+      });
+    }
     handleMenuClose();
   };
 
-  const handleModalClose = () => {
-    setOpenModal(false);
+  const handleUserClick = (user) => {
+    navigate(`/users/${user.id}`);
+  };
+
+  const handleAddToGroup = () => {
+    setOpenAddToGroupModal(true);
+    handleMenuClose();
+  };
+
+  const handleCloseAddToGroupModal = () => {
+    setOpenAddToGroupModal(false);
     setSelectedGroup("");
   };
 
   const handleAddUserToGroup = async () => {
     if (!selectedGroup || !selectedUser) {
-      alert("Please select a group and a user");
+      setSnackbar({
+        open: true,
+        message: "Please select a group",
+        severity: "warning",
+      });
       return;
     }
 
@@ -90,37 +178,28 @@ const Users = () => {
           type: "users",
         },
       });
-      alert("User added to group successfully");
-      await fetchData(); // Refresh user data
+      setSnackbar({
+        open: true,
+        message: "User added to group successfully",
+        severity: "success",
+      });
+      handleCloseAddToGroupModal();
+      fetchData();
     } catch (error) {
       console.error("Error adding user to group", error);
-      alert("Failed to add user to group");
+      setSnackbar({
+        open: true,
+        message: "Failed to add user to group",
+        severity: "error",
+      });
     }
-    handleModalClose();
   };
 
-  const handleDelete = async (id) => {
-    try {
-      await apiClient.delete(`/users/${id}`);
-      setUsers(users.filter((user) => user.id !== id));
-    } catch (error) {
-      console.error("Error deleting user", error);
-      setError("Failed to delete user");
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
     }
-    handleMenuClose();
-  };
-
-  const handleUserClick = (user) => {
-    setSelectedUser(user);
-    setOpenUserDetails(true);
-  };
-
-  const handleCloseUserDetails = () => {
-    setOpenUserDetails(false);
-  };
-
-  const handleUserUpdate = () => {
-    fetchData();
+    setSnackbar({ ...snackbar, open: false });
   };
 
   if (loading) {
@@ -132,53 +211,62 @@ const Users = () => {
   }
 
   return (
-    <Paper sx={{ width: "100%", overflow: "hidden" }}>
-      <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Users
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          component={Link}
-          to="/users/new"
-        >
-          Add User
-        </Button>
-      </Toolbar>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>ID</TableCell>
-            <TableCell>Name</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {users.length > 0 ? (
-            users.map((user) => (
-              <TableRow key={user.id} onClick={() => handleUserClick(user)} style={{ cursor: 'pointer' }}>
-                <TableCell>{user.id}</TableCell>
-                <TableCell>{user.attributes.name}</TableCell>
-                <TableCell>{user.attributes.email}</TableCell>
-                <TableCell align="right">
-                  <IconButton onClick={(event) => {
-                    event.stopPropagation();
-                    handleMenuOpen(event, user);
-                  }}>
-                    <MoreVertIcon />
-                  </IconButton>
-                </TableCell>
+    <Box sx={{ p: 3 }}>
+      <StyledPaper sx={{ width: "100%", overflow: "hidden" }}>
+        <TitleBox>
+          <Typography variant="h5" color="white" sx={{ fontWeight: "bold" }}>
+            Users
+          </Typography>
+          <Button
+            variant="contained"
+            color="secondary"
+            component={Link}
+            to="/users/new"
+            sx={{ borderRadius: 20 }}
+          >
+            Add User
+          </Button>
+        </TitleBox>
+        <ContentBox>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <StyledTableCell>ID</StyledTableCell>
+                <StyledTableCell>Name</StyledTableCell>
+                <StyledTableCell>Email</StyledTableCell>
+                <StyledTableCell align="right">Actions</StyledTableCell>
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={4}>No users found</TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            </TableHead>
+            <TableBody>
+              {users.length > 0 ? (
+                users.map((user) => (
+                  <StyledTableRow
+                    key={user.id}
+                    onClick={() => handleUserClick(user)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell>{user.id}</TableCell>
+                    <TableCell>{user.attributes.name}</TableCell>
+                    <TableCell>{user.attributes.email}</TableCell>
+                    <TableCell align="right">
+                      <StyledIconButton
+                        onClick={(event) => handleMenuOpen(event, user)}
+                      >
+                        <MoreVertIcon />
+                      </StyledIconButton>
+                    </TableCell>
+                  </StyledTableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4}>No users found</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ContentBox>
+      </StyledPaper>
+
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
@@ -189,9 +277,13 @@ const Users = () => {
           Delete User
         </MenuItem>
       </Menu>
-      <Dialog open={openModal} onClose={handleModalClose}>
-        <DialogTitle>Add User to Group</DialogTitle>
-        <DialogContent>
+
+      <StyledDialog
+        open={openAddToGroupModal}
+        onClose={handleCloseAddToGroupModal}
+      >
+        <StyledDialogTitle>Add User to Group</StyledDialogTitle>
+        <StyledDialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Group</InputLabel>
             <Select
@@ -205,21 +297,30 @@ const Users = () => {
               ))}
             </Select>
           </FormControl>
-        </DialogContent>
+        </StyledDialogContent>
         <DialogActions>
-          <Button onClick={handleModalClose}>Cancel</Button>
+          <Button onClick={handleCloseAddToGroupModal}>Cancel</Button>
           <Button onClick={handleAddUserToGroup} color="primary">
             Add to Group
           </Button>
         </DialogActions>
-      </Dialog>
-      <UserDetails
-        user={selectedUser}
-        open={openUserDetails}
-        onClose={handleCloseUserDetails}
-        onUserUpdate={handleUserUpdate}
-      />
-    </Paper>
+      </StyledDialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 };
 

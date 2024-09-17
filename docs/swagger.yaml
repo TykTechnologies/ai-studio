@@ -799,6 +799,37 @@ info:
   version: "1.0"
 paths:
   /apps:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all apps
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.AppResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all apps
+      tags:
+      - apps
     post:
       consumes:
       - application/json
@@ -1012,6 +1043,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Get app by name
+      tags:
+      - apps
+  /apps/count:
+    get:
+      consumes:
+      - application/json
+      description: Get the total number of apps
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Count all apps
+      tags:
+      - apps
+  /apps/search:
+    get:
+      consumes:
+      - application/json
+      description: Search for apps based on a search term
+      parameters:
+      - description: Search term
+        in: query
+        name: searchTerm
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.AppResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search apps
       tags:
       - apps
   /catalogues:
@@ -4236,6 +4323,39 @@ paths:
       security:
       - BearerAuth: []
       summary: Get apps by user ID
+      tags:
+      - apps
+  /users/{userId}/apps/count:
+    get:
+      consumes:
+      - application/json
+      description: Get the total number of apps for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Count apps by user ID
       tags:
       - apps
   /vendors/embedders:

@@ -76,6 +76,7 @@ func (a *API) setupRoutes() {
 		v1.POST("/groups/:id/catalogues", a.addCatalogueToGroup)
 		v1.DELETE("/groups/:id/catalogues/:catalogueId", a.removeCatalogueFromGroup)
 		v1.GET("/groups/:id/catalogues", a.listGroupCatalogues)
+		v1.GET("/users/:id/groups", a.getUserGroups)
 
 		// LLM routes
 		v1.POST("/llms", a.createLLM)
@@ -150,6 +151,10 @@ func (a *API) setupRoutes() {
 		v1.GET("/apps/by-name", a.getAppByName)
 		v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 		v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
+		v1.GET("/apps", a.listApps)                          // New route
+		v1.GET("/apps/search", a.searchApps)                 // New route
+		v1.GET("/apps/count", a.countApps)                   // New route
+		v1.GET("/users/:id/apps/count", a.countAppsByUserID) // New route
 
 		// LLMSettings routes
 		v1.POST("/llm-settings", a.createLLMSettings)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // @Summary Create a new app
@@ -149,6 +150,15 @@ func (a *API) updateApp(c *gin.Context) {
 		llmIDs,
 	)
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -186,6 +196,16 @@ func (a *API) deleteApp(c *gin.Context) {
 
 	err = a.service.DeleteApp(uint(id))
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -366,6 +386,135 @@ func serializeApp(app *models.App) AppResponse {
 			LLMIDs:        getLLMIDs(app.LLMs),
 		},
 	}
+}
+
+// Add these new functions to your existing app_handlers.go file
+
+// @Summary List all apps
+// @Description Get a list of all apps
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number"
+// @Param pageSize query int false "Page size"
+// @Success 200 {array} AppResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps [get]
+// @Security BearerAuth
+func (a *API) listApps(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	apps, err := a.service.ListAppsWithPagination(page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+}
+
+// @Summary Search apps
+// @Description Search for apps based on a search term
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param searchTerm query string true "Search term"
+// @Success 200 {array} AppResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/search [get]
+// @Security BearerAuth
+func (a *API) searchApps(c *gin.Context) {
+	searchTerm := c.Query("searchTerm")
+	if searchTerm == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Search term is required"}},
+		})
+		return
+	}
+
+	apps, err := a.service.SearchApps(searchTerm)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+}
+
+// @Summary Count all apps
+// @Description Get the total number of apps
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]int64
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/count [get]
+// @Security BearerAuth
+func (a *API) countApps(c *gin.Context) {
+	count, err := a.service.CountApps()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+// @Summary Count apps by user ID
+// @Description Get the total number of apps for a specific user
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param userId path int true "User ID"
+// @Success 200 {object} map[string]int64
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /users/{userId}/apps/count [get]
+// @Security BearerAuth
+func (a *API) countAppsByUserID(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
+		})
+		return
+	}
+
+	count, err := a.service.CountAppsByUserID(uint(userID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"count": count})
 }
 
 func getDatasourceIDs(datasources []models.Datasource) []uint {

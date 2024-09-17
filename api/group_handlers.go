@@ -542,3 +542,42 @@ func (a *API) listGroupCatalogues(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
 }
+
+// Add this function to group_handlers.go
+
+// @Summary Get groups for a user
+// @Description Get a list of all groups a specific user belongs to
+// @Tags groups
+// @Accept json
+// @Produce json
+// @Param userId path int true "User ID"
+// @Success 200 {array} GroupResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /users/{userId}/groups [get]
+// @Security BearerAuth
+func (a *API) getUserGroups(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
+		})
+		return
+	}
+
+	groups, err := a.service.GetGroupsByUserID(uint(userID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
+}

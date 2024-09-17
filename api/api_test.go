@@ -25,7 +25,7 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 	assert.NoError(t, err)
 
 	service := services.NewService(db)
-	api := NewAPI(service)
+	api := NewAPI(service, true)
 
 	return api, db
 }

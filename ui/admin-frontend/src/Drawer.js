@@ -1,4 +1,3 @@
-// src/Drawer.js
 import React from "react";
 import { NavLink } from "react-router-dom";
 import Drawer from "@mui/material/Drawer";
@@ -8,10 +7,9 @@ import Divider from "@mui/material/Divider";
 import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import { styled } from "@mui/material/styles";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import PeopleIcon from "@mui/icons-material/People";
-import SettingsIcon from "@mui/icons-material/Settings";
-import BarChartIcon from "@mui/icons-material/BarChart";
 import AppsIcon from "@mui/icons-material/Apps";
 import GroupIcon from "@mui/icons-material/Group";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
@@ -19,6 +17,21 @@ import StorageIcon from "@mui/icons-material/Storage";
 import MemoryIcon from "@mui/icons-material/Memory";
 
 const drawerWidth = 240;
+
+const StyledNavLink = styled(NavLink)(({ theme }) => ({
+  textDecoration: "none",
+  color: theme.palette.text.primary,
+  "&.active": {
+    backgroundColor: "#008080", // Teal color matching AppBar background
+    color: theme.palette.common.white, // White text for better contrast
+    "& .MuiListItemIcon-root": {
+      color: theme.palette.common.white, // White icon for better contrast
+    },
+  },
+  "&:hover": {
+    backgroundColor: "#20B2AA", // Light teal color for hover
+  },
+}));
 
 const menuItems = [
   { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -28,8 +41,6 @@ const menuItems = [
   { text: "Catalogues", icon: <LibraryBooksIcon />, path: "/catalogues" },
   { text: "Datasources", icon: <StorageIcon />, path: "/datasources" },
   { text: "LLMs", icon: <MemoryIcon />, path: "/llms" },
-  { text: "Settings", icon: <SettingsIcon />, path: "/settings" },
-  { text: "Reports", icon: <BarChartIcon />, path: "/reports" },
 ];
 
 const MyDrawer = () => {
@@ -46,18 +57,10 @@ const MyDrawer = () => {
       <List>
         {menuItems.map((item) => (
           <ListItem
-            button
             key={item.text}
-            component={NavLink}
+            component={StyledNavLink}
             to={item.path}
             end={item.path === "/"}
-            sx={{
-              "&.active": {
-                backgroundColor: "rgba(0, 0, 0, 0.08)",
-              },
-              color: "inherit",
-              textDecoration: "none",
-            }}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.text} />

@@ -1,26 +1,27 @@
 import React, { useState, useEffect } from "react";
 import apiClient from "./apiClient";
-import { 
-  TextField, 
-  Button, 
-  Box, 
+import {
+  TextField,
+  Button,
+  Box,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
   Alert,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-const UserForm = ({ user }) => {
-  const [name, setName] = useState(user ? user.attributes.name : "");
-  const [email, setEmail] = useState(user ? user.attributes.email : "");
+const UserForm = () => {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [groups, setGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState("");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
+  const { id } = useParams(); // Get the user ID from URL if editing
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -33,7 +34,24 @@ const UserForm = ({ user }) => {
     };
 
     fetchGroups();
-  }, []);
+
+    // If editing, fetch user details
+    if (id) {
+      const fetchUser = async () => {
+        try {
+          const response = await apiClient.get(`/users/${id}`);
+          const userData = response.data.data;
+          setName(userData.attributes.name);
+          setEmail(userData.attributes.email);
+          // Don't set password for editing
+        } catch (error) {
+          console.error("Error fetching user", error);
+          setError("Failed to fetch user details");
+        }
+      };
+      fetchUser();
+    }
+  }, [id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,31 +64,31 @@ const UserForm = ({ user }) => {
         attributes: {
           name,
           email,
-          password,
+          ...(password && { password }), // Only include password if it's set (for new users)
         },
       },
     };
 
     try {
-      let userId;
-      if (user) {
-        await apiClient.patch(`/users/${user.id}`, userData);
-        userId = user.id;
+      let response;
+      if (id) {
+        response = await apiClient.patch(`/users/${id}`, userData);
         setSuccessMessage("User updated successfully");
       } else {
-        const response = await apiClient.post("/users", userData);
-        userId = response.data.id;
+        response = await apiClient.post("/users", userData);
         setSuccessMessage("User created successfully");
       }
 
-      if (selectedGroup && userId) {
+      const userId = response.data.data.id;
+
+      if (selectedGroup) {
         await apiClient.post(`/groups/${selectedGroup}/users`, {
           data: {
             id: userId.toString(),
-            type: "users"
-          }
+            type: "users",
+          },
         });
-        setSuccessMessage(prev => `${prev} and added to the selected group`);
+        setSuccessMessage((prev) => `${prev} and added to the selected group`);
       }
 
       setTimeout(() => navigate("/users"), 2000); // Navigate after 2 seconds
@@ -82,8 +100,16 @@ const UserForm = ({ user }) => {
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 500 }}>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {successMessage && <Alert severity="success" sx={{ mb: 2 }}>{successMessage}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {successMessage}
+        </Alert>
+      )}
       <TextField
         fullWidth
         margin="normal"
@@ -101,7 +127,7 @@ const UserForm = ({ user }) => {
         onChange={(e) => setEmail(e.target.value)}
         required
       />
-      {!user && (
+      {!id && ( // Only show password field for new users
         <TextField
           fullWidth
           margin="normal"
@@ -129,7 +155,7 @@ const UserForm = ({ user }) => {
         </Select>
       </FormControl>
       <Button variant="contained" color="primary" type="submit" sx={{ mt: 2 }}>
-        {user ? "Update User" : "Add User"}
+        {id ? "Update User" : "Add User"}
       </Button>
     </Box>
   );

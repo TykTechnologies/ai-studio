@@ -1,5 +1,8 @@
 // src/App.js
 import React from "react";
+import { ThemeProvider } from "@mui/material/styles";
+import theme from "./theme";
+import logo from "./logo.svg"; // Make sure this path is
 import {
   BrowserRouter as Router,
   Routes,
@@ -14,6 +17,7 @@ import MyAppBar from "./AppBar";
 import MyDrawer from "./Drawer";
 import Dashboard from "./Dashboard";
 import Users from "./Users";
+import UserDetails from "./UserDetails";
 import Login from "./Login";
 import UserForm from "./UserForm";
 import Apps from "./Apps";
@@ -45,87 +49,96 @@ const PrivateRoute = ({ element }) => {
 
 function App() {
   return (
-    <Router>
-      <Box sx={{ display: "flex" }}>
-        <CssBaseline />
-        <MyAppBar />
-        <MyDrawer />
-        <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-          <Toolbar />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/"
-              element={<PrivateRoute element={<Dashboard />} />}
-            />
-            <Route
-              path="/users"
-              element={<PrivateRoute element={<Users />} />}
-            />
-            <Route
-              path="/users/edit/:id"
-              element={<PrivateRoute element={<UserForm />} />}
-            />
-            <Route
-              path="/users/new"
-              element={<PrivateRoute element={<UserForm />} />}
-            />
-            <Route path="/apps" element={<PrivateRoute element={<Apps />} />} />
-            <Route
-              path="/apps/new"
-              element={<PrivateRoute element={<AppForm />} />}
-            />
-            <Route
-              path="/groups"
-              element={<PrivateRoute element={<Groups />} />}
-            />
-            <Route
-              path="/groups/new"
-              element={<PrivateRoute element={<GroupForm />} />}
-            />
-            <Route
-              path="/groups/edit/:id"
-              element={<PrivateRoute element={<GroupForm />} />}
-            />
-            <Route
-              path="/catalogues"
-              element={<PrivateRoute element={<Catalogues />} />}
-            />
-            <Route
-              path="/catalogues/new"
-              element={<PrivateRoute element={<CatalogueForm />} />}
-            />
-            <Route
-              path="/catalogues/edit/:id"
-              element={<PrivateRoute element={<CatalogueForm />} />}
-            />
-            <Route
-              path="/datasources"
-              element={<PrivateRoute element={<Datasources />} />}
-            />
-            <Route
-              path="/datasources/new"
-              element={<PrivateRoute element={<DatasourceForm />} />}
-            />
-            <Route
-              path="/datasources/edit/:id"
-              element={<PrivateRoute element={<DatasourceForm />} />}
-            />
-            <Route path="/llms" element={<PrivateRoute element={<LLMs />} />} />
-            <Route
-              path="/llms/new"
-              element={<PrivateRoute element={<LLMForm />} />}
-            />
-            <Route
-              path="/llms/edit/:id"
-              element={<PrivateRoute element={<LLMForm />} />}
-            />
+    <ThemeProvider theme={theme}>
+      <Router>
+        <Box sx={{ display: "flex" }}>
+          <CssBaseline />
+          <MyAppBar />
+          <MyDrawer />
+          <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+            <Toolbar />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                path="/"
+                element={<PrivateRoute element={<Dashboard />} />}
+              />
+              <Route
+                path="/users"
+                element={<PrivateRoute element={<Users />} />}
+              />
+              <Route path="/users/:id" element={<UserDetails />} />
+              <Route
+                path="/users/edit/:id"
+                element={<PrivateRoute element={<UserForm />} />}
+              />
+              <Route
+                path="/users/new"
+                element={<PrivateRoute element={<UserForm />} />}
+              />
+              <Route
+                path="/apps"
+                element={<PrivateRoute element={<Apps />} />}
+              />
+              <Route
+                path="/apps/new"
+                element={<PrivateRoute element={<AppForm />} />}
+              />
+              <Route
+                path="/groups"
+                element={<PrivateRoute element={<Groups />} />}
+              />
+              <Route
+                path="/groups/new"
+                element={<PrivateRoute element={<GroupForm />} />}
+              />
+              <Route
+                path="/groups/edit/:id"
+                element={<PrivateRoute element={<GroupForm />} />}
+              />
+              <Route
+                path="/catalogues"
+                element={<PrivateRoute element={<Catalogues />} />}
+              />
+              <Route
+                path="/catalogues/new"
+                element={<PrivateRoute element={<CatalogueForm />} />}
+              />
+              <Route
+                path="/catalogues/edit/:id"
+                element={<PrivateRoute element={<CatalogueForm />} />}
+              />
+              <Route
+                path="/datasources"
+                element={<PrivateRoute element={<Datasources />} />}
+              />
+              <Route
+                path="/datasources/new"
+                element={<PrivateRoute element={<DatasourceForm />} />}
+              />
+              <Route
+                path="/datasources/edit/:id"
+                element={<PrivateRoute element={<DatasourceForm />} />}
+              />
+              <Route
+                path="/llms"
+                element={<PrivateRoute element={<LLMs />} />}
+              />
+              <Route
+                path="/llms/new"
+                element={<PrivateRoute element={<LLMForm />} />}
+              />
+              <Route
+                path="/llms/edit/:id"
+                element={<PrivateRoute element={<LLMForm />} />}
+              />
 
-            {/* Add more routes as needed */}
-          </Routes>
+              {/* Add more routes as needed */}
+            </Routes>
+          </Box>
         </Box>
-      </Box>
-    </Router>
+      </Router>
+    </ThemeProvider>
   );
 }
 

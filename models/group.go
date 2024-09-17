@@ -63,3 +63,9 @@ func (g *Group) RemoveCatalogue(db *gorm.DB, catalogue *Catalogue) error {
 func (g *Group) GetCatalogues(db *gorm.DB) error {
 	return db.Model(g).Association("Catalogues").Find(&g.Catalogues)
 }
+
+func (g *Groups) GetGroupsByUserID(db *gorm.DB, userID uint) error {
+	return db.Joins("JOIN user_groups ON user_groups.group_id = groups.id").
+		Where("user_groups.user_id = ?", userID).
+		Find(g).Error
+}
