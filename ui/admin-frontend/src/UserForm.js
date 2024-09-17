@@ -9,8 +9,32 @@ import {
   FormControl,
   InputLabel,
   Alert,
+  Typography,
+  Paper,
+  Grid,
+  Snackbar,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { styled } from "@mui/material/styles";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  backgroundColor: "#2c2c2c",
+  borderRadius: theme.shape.borderRadius * 2,
+  overflow: "hidden",
+}));
+
+const TitleBox = styled(Box)(({ theme }) => ({
+  backgroundColor: "#0B4545",
+  padding: theme.spacing(2),
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+}));
+
+const ContentBox = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(3),
+}));
 
 const UserForm = () => {
   const [name, setName] = useState("");
@@ -18,45 +42,64 @@ const UserForm = () => {
   const [password, setPassword] = useState("");
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("");
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [errors, setErrors] = useState({});
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
   const navigate = useNavigate();
-  const { id } = useParams(); // Get the user ID from URL if editing
+  const { id } = useParams();
 
   useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        const response = await apiClient.get("/groups");
-        setGroups(response.data.data || []);
-      } catch (error) {
-        console.error("Error fetching groups", error);
-      }
-    };
-
     fetchGroups();
-
-    // If editing, fetch user details
     if (id) {
-      const fetchUser = async () => {
-        try {
-          const response = await apiClient.get(`/users/${id}`);
-          const userData = response.data.data;
-          setName(userData.attributes.name);
-          setEmail(userData.attributes.email);
-          // Don't set password for editing
-        } catch (error) {
-          console.error("Error fetching user", error);
-          setError("Failed to fetch user details");
-        }
-      };
       fetchUser();
     }
   }, [id]);
 
+  const fetchGroups = async () => {
+    try {
+      const response = await apiClient.get("/groups");
+      setGroups(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching groups", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch groups",
+        severity: "error",
+      });
+    }
+  };
+
+  const fetchUser = async () => {
+    try {
+      const response = await apiClient.get(`/users/${id}`);
+      const userData = response.data.data;
+      setName(userData.attributes.name);
+      setEmail(userData.attributes.email);
+    } catch (error) {
+      console.error("Error fetching user", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch user details",
+        severity: "error",
+      });
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!name.trim()) newErrors.name = "Name is required";
+    if (!email.trim()) newErrors.email = "Email is required";
+    if (!id && !password.trim()) newErrors.password = "Password is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    setSuccessMessage("");
+    if (!validateForm()) return;
 
     const userData = {
       data: {
@@ -64,7 +107,7 @@ const UserForm = () => {
         attributes: {
           name,
           email,
-          ...(password && { password }), // Only include password if it's set (for new users)
+          ...(password && { password }),
         },
       },
     };
@@ -73,10 +116,8 @@ const UserForm = () => {
       let response;
       if (id) {
         response = await apiClient.patch(`/users/${id}`, userData);
-        setSuccessMessage("User updated successfully");
       } else {
         response = await apiClient.post("/users", userData);
-        setSuccessMessage("User created successfully");
       }
 
       const userId = response.data.data.id;
@@ -88,76 +129,128 @@ const UserForm = () => {
             type: "users",
           },
         });
-        setSuccessMessage((prev) => `${prev} and added to the selected group`);
       }
 
-      setTimeout(() => navigate("/users"), 2000); // Navigate after 2 seconds
+      setSnackbar({
+        open: true,
+        message: id ? "User updated successfully" : "User created successfully",
+        severity: "success",
+      });
+
+      setTimeout(() => navigate("/users"), 2000);
     } catch (error) {
       console.error("Error saving user", error);
-      setError("Failed to save user. Please try again.");
+      setSnackbar({
+        open: true,
+        message: "Failed to save user. Please try again.",
+        severity: "error",
+      });
     }
   };
 
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 500 }}>
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-      {successMessage && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          {successMessage}
-        </Alert>
-      )}
-      <TextField
-        fullWidth
-        margin="normal"
-        label="Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-      />
-      <TextField
-        fullWidth
-        margin="normal"
-        label="Email"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-      />
-      {!id && ( // Only show password field for new users
-        <TextField
-          fullWidth
-          margin="normal"
-          label="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-      )}
-      <FormControl fullWidth margin="normal">
-        <InputLabel>Group</InputLabel>
-        <Select
-          value={selectedGroup}
-          onChange={(e) => setSelectedGroup(e.target.value)}
+    <StyledPaper>
+      <TitleBox>
+        <Typography variant="h4" color="white">
+          {id ? "Edit User" : "Add User"}
+        </Typography>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/users"
+          color="inherit"
         >
-          <MenuItem value="">
-            <em>None</em>
-          </MenuItem>
-          {groups.map((group) => (
-            <MenuItem key={group.id} value={group.id}>
-              {group.attributes.name}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-      <Button variant="contained" color="primary" type="submit" sx={{ mt: 2 }}>
-        {id ? "Update User" : "Add User"}
-      </Button>
-    </Box>
+          Back to Users
+        </Button>
+      </TitleBox>
+      <ContentBox>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                error={!!errors.name}
+                helperText={errors.name}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={!!errors.email}
+                helperText={errors.email}
+                required
+              />
+            </Grid>
+            {!id && (
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  error={!!errors.password}
+                  helperText={errors.password}
+                  required
+                />
+              </Grid>
+            )}
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Group</InputLabel>
+                <Select
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {groups.map((group) => (
+                    <MenuItem key={group.id} value={group.id}>
+                      {group.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <Button variant="contained" color="primary" type="submit">
+                {id ? "Update User" : "Add User"}
+              </Button>
+            </Grid>
+          </Grid>
+        </Box>
+      </ContentBox>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </StyledPaper>
   );
 };
 

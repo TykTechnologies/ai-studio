@@ -53,10 +53,13 @@ const StyledTableCell = styled(TableCell)(({ theme }) => ({
 
 const StyledTableRow = styled(TableRow)(({ theme }) => ({
   "&:nth-of-type(odd)": {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  "&:nth-of-type(even)": {
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
   "&:hover": {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
 }));
 
