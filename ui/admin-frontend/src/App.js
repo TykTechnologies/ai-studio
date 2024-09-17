@@ -63,6 +63,10 @@ function App() {
               element={<PrivateRoute element={<Users />} />}
             />
             <Route
+              path="/users/edit/:id"
+              element={<PrivateRoute element={<UserForm />} />}
+            />
+            <Route
               path="/users/new"
               element={<PrivateRoute element={<UserForm />} />}
             />
