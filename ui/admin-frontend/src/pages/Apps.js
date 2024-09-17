@@ -1,4 +1,3 @@
-// src/Apps.js
 import React, { useState, useEffect } from "react";
 import apiClient from "../utils/apiClient";
 import {
@@ -7,46 +6,78 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Paper,
-  Toolbar,
   Typography,
   Button,
   IconButton,
   CircularProgress,
   Alert,
+  Menu,
+  MenuItem,
+  Box,
 } from "@mui/material";
-import { Link } from "react-router-dom";
-import DeleteIcon from "@mui/icons-material/Delete";
+import { Link, useNavigate } from "react-router-dom";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import {
+  StyledPaper,
+  TitleBox,
+  ContentBox,
+  StyledTableCell,
+  StyledTableRow,
+} from "../styles/sharedStyles";
 
 const Apps = () => {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedApp, setSelectedApp] = useState(null);
 
   useEffect(() => {
-    const fetchApps = async () => {
-      try {
-        const response = await apiClient.get("/apps");
-        setApps(response.data.data || []);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching apps", error);
-        setError("Failed to load apps");
-        setLoading(false);
-      }
-    };
-
     fetchApps();
   }, []);
 
-  const handleDelete = async (id) => {
+  const fetchApps = async () => {
     try {
-      await apiClient.delete(`/apps/${id}`);
-      setApps(apps.filter((app) => app.id !== id));
+      const response = await apiClient.get("/apps");
+      setApps(response.data.data || []);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching apps", error);
+      setError("Failed to load apps");
+      setLoading(false);
+    }
+  };
+
+  const handleMenuOpen = (event, app) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedApp(app);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedApp(null);
+  };
+
+  const handleDelete = async () => {
+    try {
+      await apiClient.delete(`/apps/${selectedApp.id}`);
+      setApps(apps.filter((app) => app.id !== selectedApp.id));
+      handleMenuClose();
     } catch (error) {
       console.error("Error deleting app", error);
       setError("Failed to delete app");
     }
+  };
+
+  const handleEdit = () => {
+    navigate(`/apps/edit/${selectedApp.id}`);
+    handleMenuClose();
+  };
+
+  const handleDetails = (app) => {
+    navigate(`/apps/${app.id}`);
   };
 
   if (loading) {
@@ -58,55 +89,70 @@ const Apps = () => {
   }
 
   return (
-    <Paper sx={{ width: "100%", overflow: "hidden" }}>
-      <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Apps
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          component={Link}
-          to="/apps/new"
-        >
-          Add App
-        </Button>
-      </Toolbar>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>ID</TableCell>
-            <TableCell>Name</TableCell>
-            <TableCell>Description</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {apps.length > 0 ? (
-            apps.map((app) => (
-              <TableRow key={app.id}>
-                <TableCell>{app.id}</TableCell>
-                <TableCell>{app.attributes.name}</TableCell>
-                <TableCell>{app.attributes.description}</TableCell>
-                <TableCell align="right">
-                  <IconButton
-                    color="secondary"
-                    onClick={() => handleDelete(app.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                  {/* Add edit button if needed */}
-                </TableCell>
+    <Box sx={{ p: 0 }}>
+      <StyledPaper>
+        <TitleBox>
+          <Typography variant="h5" color="white" sx={{ fontWeight: "bold" }}>
+            Apps
+          </Typography>
+          <Button
+            variant="contained"
+            color="secondary"
+            component={Link}
+            to="/apps/new"
+            sx={{ borderRadius: 20 }}
+          >
+            Add App
+          </Button>
+        </TitleBox>
+        <ContentBox>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <StyledTableCell>ID</StyledTableCell>
+                <StyledTableCell>Name</StyledTableCell>
+                <StyledTableCell>Description</StyledTableCell>
+                <StyledTableCell align="right">Actions</StyledTableCell>
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={4}>No apps found</TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </Paper>
+            </TableHead>
+            <TableBody>
+              {apps.length > 0 ? (
+                apps.map((app) => (
+                  <StyledTableRow
+                    key={app.id}
+                    onClick={() => handleDetails(app)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell>{app.id}</TableCell>
+                    <TableCell>{app.attributes.name}</TableCell>
+                    <TableCell>{app.attributes.description}</TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        onClick={(event) => handleMenuOpen(event, app)}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </TableCell>
+                  </StyledTableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4}>No apps found</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ContentBox>
+      </StyledPaper>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEdit}>Edit</MenuItem>
+        <MenuItem onClick={handleDelete}>Delete</MenuItem>
+      </Menu>
+    </Box>
   );
 };
 

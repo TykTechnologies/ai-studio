@@ -10,31 +10,12 @@ import {
   InputLabel,
   Alert,
   Typography,
-  Paper,
   Grid,
   Snackbar,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { styled } from "@mui/material/styles";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-
-const StyledPaper = styled(Paper)(({ theme }) => ({
-  backgroundColor: "#2c2c2c",
-  borderRadius: theme.shape.borderRadius * 2,
-  overflow: "hidden",
-}));
-
-const TitleBox = styled(Box)(({ theme }) => ({
-  backgroundColor: "#0B4545",
-  padding: theme.spacing(2),
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-}));
-
-const ContentBox = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(3),
-}));
+import { StyledPaper, TitleBox, ContentBox } from "../../styles/sharedStyles";
 
 const UserForm = () => {
   const [name, setName] = useState("");

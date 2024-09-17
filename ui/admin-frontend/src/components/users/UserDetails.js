@@ -12,47 +12,20 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Grid,
   Button,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-
-const StyledPaper = styled(Paper)(({ theme }) => ({
-  backgroundColor: "#2c2c2c",
-  borderRadius: theme.shape.borderRadius * 2,
-  overflow: "hidden",
-}));
-
-const TitleBox = styled(Box)(({ theme }) => ({
-  backgroundColor: "#0B4545",
-  padding: theme.spacing(2),
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-}));
-
-const ContentBox = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(3),
-}));
-
-const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
-  marginTop: theme.spacing(2),
-  border: `1px solid ${theme.palette.divider}`,
-  borderRadius: "4px",
-}));
-
-const FieldLabel = styled(Typography)(({ theme }) => ({
-  fontWeight: "bold",
-  color: theme.palette.text.secondary,
-}));
-
-const FieldValue = styled(Typography)(({ theme }) => ({
-  color: theme.palette.text.primary,
-}));
+import {
+  StyledPaper,
+  TitleBox,
+  ContentBox,
+  FieldLabel,
+  FieldValue,
+  StyledTableRow,
+} from "../../styles/sharedStyles";
 
 const UserDetails = () => {
   const [user, setUser] = useState(null);
@@ -149,7 +122,7 @@ const UserDetails = () => {
         {loading ? (
           <CircularProgress />
         ) : (
-          <StyledTableContainer component={Paper}>
+          <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
@@ -160,7 +133,7 @@ const UserDetails = () => {
               <TableBody>
                 {userGroups.length > 0 ? (
                   userGroups.map((group) => (
-                    <TableRow key={group.id}>
+                    <StyledTableRow key={group.id}>
                       <TableCell>{group.attributes.name}</TableCell>
                       <TableCell align="right">
                         <IconButton
@@ -171,7 +144,7 @@ const UserDetails = () => {
                           <DeleteIcon />
                         </IconButton>
                       </TableCell>
-                    </TableRow>
+                    </StyledTableRow>
                   ))
                 ) : (
                   <TableRow>
@@ -182,7 +155,7 @@ const UserDetails = () => {
                 )}
               </TableBody>
             </Table>
-          </StyledTableContainer>
+          </TableContainer>
         )}
       </ContentBox>
     </StyledPaper>

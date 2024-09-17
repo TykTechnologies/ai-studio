@@ -21,6 +21,7 @@ import Login from "./pages/Login";
 import UserForm from "./components/users/UserForm";
 import Apps from "./pages/Apps";
 import AppForm from "./components/apps/AppForm";
+import AppDetails from "./components/apps/AppDetails";
 import Groups from "./pages/Groups";
 import GroupForm from "./components/groups/GroupForm";
 import Catalogues from "./pages/Catalogues";
@@ -78,6 +79,14 @@ function App() {
               <Route
                 path="/apps"
                 element={<PrivateRoute element={<Apps />} />}
+              />
+              <Route
+                path="/apps/:id"
+                element={<PrivateRoute element={<AppDetails />} />}
+              />
+              <Route
+                path="/apps/edit/:id"
+                element={<PrivateRoute element={<AppForm />} />}
               />
               <Route
                 path="/apps/new"

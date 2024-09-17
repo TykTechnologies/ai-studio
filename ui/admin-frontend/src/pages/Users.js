@@ -7,7 +7,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Paper,
   Typography,
   Button,
   IconButton,
@@ -25,47 +24,16 @@ import {
   Snackbar,
   Box,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
 import { Link } from "react-router-dom";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-
-const StyledPaper = styled(Paper)(({ theme }) => ({
-  borderRadius: theme.shape.borderRadius * 2,
-  boxShadow: theme.shadows[5],
-  overflow: "hidden",
-}));
-
-const TitleBox = styled(Box)(({ theme }) => ({
-  backgroundColor: "#0B4545",
-  padding: theme.spacing(2),
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-}));
-
-const ContentBox = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
-}));
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  fontWeight: "bold",
-}));
-
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(odd)": {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-  },
-  "&:nth-of-type(even)": {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-  },
-  "&:hover": {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-  },
-}));
-
-const StyledIconButton = styled(IconButton)(({ theme }) => ({
-  color: theme.palette.primary.main,
-}));
+import {
+  StyledPaper,
+  TitleBox,
+  ContentBox,
+  StyledTableCell,
+  StyledTableRow,
+} from "../styles/sharedStyles";
+import { styled } from "@mui/material/styles";
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   "& .MuiDialog-paper": {
@@ -214,8 +182,8 @@ const Users = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <StyledPaper sx={{ width: "100%", overflow: "hidden" }}>
+    <Box sx={{ p: 0 }}>
+      <StyledPaper>
         <TitleBox>
           <Typography variant="h5" color="white" sx={{ fontWeight: "bold" }}>
             Users
@@ -252,11 +220,11 @@ const Users = () => {
                     <TableCell>{user.attributes.name}</TableCell>
                     <TableCell>{user.attributes.email}</TableCell>
                     <TableCell align="right">
-                      <StyledIconButton
+                      <IconButton
                         onClick={(event) => handleMenuOpen(event, user)}
                       >
                         <MoreVertIcon />
-                      </StyledIconButton>
+                      </IconButton>
                     </TableCell>
                   </StyledTableRow>
                 ))
