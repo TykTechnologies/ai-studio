@@ -1,4 +1,3 @@
-// src/Users.js
 import React, { useState, useEffect } from "react";
 import apiClient from "./apiClient";
 import {
@@ -20,14 +19,14 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 const Users = () => {
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true); // New state for loading
-  const [error, setError] = useState(""); // New state for error handling
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         const response = await apiClient.get("/users");
-        setUsers(response.data);
+        setUsers(response.data.data || []); // Access the 'data' array from the response
         setLoading(false);
       } catch (error) {
         console.error("Error fetching users", error);
@@ -82,7 +81,7 @@ const Users = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {Array.isArray(users) && users.length > 0 ? (
+          {users.length > 0 ? (
             users.map((user) => (
               <TableRow key={user.id}>
                 <TableCell>{user.id}</TableCell>
