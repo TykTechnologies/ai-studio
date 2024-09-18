@@ -19,6 +19,7 @@ import {
   InputLabel,
   Select,
   Snackbar,
+  TextField,
   Box,
 } from "@mui/material";
 import { Link } from "react-router-dom";
@@ -34,6 +35,7 @@ import {
   StyledDialogTitle,
   StyledDialog,
 } from "../styles/sharedStyles";
+import AddIcon from "@mui/icons-material/Add";
 
 const Users = () => {
   const navigate = useNavigate();
@@ -50,6 +52,8 @@ const Users = () => {
     message: "",
     severity: "success",
   });
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -106,6 +110,9 @@ const Users = () => {
   };
 
   const handleAddToGroup = () => {
+    if (groups.length === 0) {
+      setIsAddingGroup(true);
+    }
     setOpenAddToGroupModal(true);
     handleMenuClose();
   };
@@ -144,6 +151,44 @@ const Users = () => {
       setSnackbar({
         open: true,
         message: "Failed to add user to group",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAddNewGroup = async () => {
+    if (!newGroupName.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Group name cannot be empty",
+        severity: "warning",
+      });
+      return;
+    }
+
+    try {
+      const response = await apiClient.post("/groups", {
+        data: {
+          type: "Group",
+          attributes: {
+            name: newGroupName,
+          },
+        },
+      });
+      const newGroup = response.data.data;
+      setGroups([...groups, newGroup]);
+      setNewGroupName("");
+      setIsAddingGroup(false);
+      setSnackbar({
+        open: true,
+        message: "New group added successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error adding new group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add new group",
         severity: "error",
       });
     }
@@ -231,34 +276,51 @@ const Users = () => {
         open={openAddToGroupModal}
         onClose={handleCloseAddToGroupModal}
       >
-        <StyledDialogTitle>Add User to Group</StyledDialogTitle>
+        <StyledDialogTitle>
+          {isAddingGroup ? "Add New Group" : "Add User to Group"}
+        </StyledDialogTitle>
         <StyledDialogContent>
-          <Typography
-            gutterBottom
-            sx={(theme) => ({ padding: theme.spacing(2) })}
-          >
-            Select a group from the dropdown menu below to add the user to that
-            group. This action will grant the user permissions associated with
-            the selected group.
-          </Typography>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Group</InputLabel>
-            <Select
-              value={selectedGroup}
-              onChange={(e) => setSelectedGroup(e.target.value)}
-            >
-              {groups.map((group) => (
-                <MenuItem key={group.id} value={group.id}>
-                  {group.attributes.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {isAddingGroup ? (
+            <TextField
+              fullWidth
+              label="New Group Name"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              sx={{ mt: 2 }}
+            />
+          ) : (
+            <>
+              <Typography
+                gutterBottom
+                sx={(theme) => ({ padding: theme.spacing(2) })}
+              >
+                Select a group from the dropdown menu below to add the user to
+                that group. This action will grant the user permissions
+                associated with the selected group.
+              </Typography>
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Group</InputLabel>
+                <Select
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                >
+                  {groups.map((group) => (
+                    <MenuItem key={group.id} value={group.id}>
+                      {group.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </>
+          )}
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={handleCloseAddToGroupModal}>Cancel</Button>
-          <Button onClick={handleAddUserToGroup} color="primary">
-            Add to Group
+          <Button
+            onClick={isAddingGroup ? handleAddNewGroup : handleAddUserToGroup}
+            color="primary"
+          >
+            {isAddingGroup ? "Add Group" : "Add to Group"}
           </Button>
         </DialogActions>
       </StyledDialog>

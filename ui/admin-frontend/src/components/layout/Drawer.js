@@ -1,5 +1,4 @@
-import React from "react";
-
+import React, { useState } from "react";
 import Drawer from "@mui/material/Drawer";
 import Toolbar from "@mui/material/Toolbar";
 import List from "@mui/material/List";
@@ -7,48 +6,114 @@ import Divider from "@mui/material/Divider";
 import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import { styled } from "@mui/material/styles";
+import IconButton from "@mui/material/IconButton";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import Collapse from "@mui/material/Collapse";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import PersonIcon from "@mui/icons-material/Person";
-import AppsIcon from "@mui/icons-material/Apps";
 import GroupIcon from "@mui/icons-material/Group";
-import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import StorageIcon from "@mui/icons-material/Storage";
-import MemoryIcon from "@mui/icons-material/Memory";
+import PeopleIcon from "@mui/icons-material/People";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
+
 const drawerWidth = 240;
+const minimizedDrawerWidth = 60;
 
 const menuItems = [
   { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
-  { text: "Users", icon: <PersonIcon />, path: "/users" },
-  { text: "Groups", icon: <GroupIcon />, path: "/groups" },
+  {
+    text: "Team",
+    icon: <PeopleIcon />,
+    subItems: [
+      { text: "Users", icon: <PersonIcon />, path: "/users" },
+      { text: "Groups", icon: <GroupIcon />, path: "/groups" },
+    ],
+  },
 ];
 
 const MyDrawer = () => {
+  const [open, setOpen] = useState(true);
+  const [expandedItems, setExpandedItems] = useState({});
+
+  const handleDrawerToggle = () => {
+    setOpen(!open);
+  };
+
+  const handleExpandClick = (text) => {
+    setExpandedItems((prevState) => ({
+      ...prevState,
+      [text]: !prevState[text],
+    }));
+  };
+
+  const renderMenuItem = (item, depth = 0) => {
+    const commonStyles = {
+      pl: open ? depth * 4 + 2 : 2, // Consistent left padding for all items
+    };
+
+    if (item.subItems) {
+      return (
+        <React.Fragment key={item.text}>
+          <ListItem
+            button
+            onClick={() => handleExpandClick(item.text)}
+            sx={commonStyles}
+          >
+            <ListItemIcon>{item.icon}</ListItemIcon>
+            {open && <ListItemText primary={item.text} />}
+            {open &&
+              (expandedItems[item.text] ? <ExpandLess /> : <ExpandMore />)}
+          </ListItem>
+          <Collapse in={expandedItems[item.text]} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              {item.subItems.map((subItem) =>
+                renderMenuItem(subItem, depth + 1),
+              )}
+            </List>
+          </Collapse>
+        </React.Fragment>
+      );
+    } else {
+      return (
+        <ListItem
+          key={item.text}
+          component={StyledNavLink}
+          to={item.path}
+          end={item.path === "/"}
+          sx={commonStyles}
+        >
+          <ListItemIcon>{item.icon}</ListItemIcon>
+          {open && <ListItemText primary={item.text} />}
+        </ListItem>
+      );
+    }
+  };
+
   return (
     <Drawer
       variant="permanent"
       sx={{
-        width: drawerWidth,
+        width: open ? drawerWidth : minimizedDrawerWidth,
         flexShrink: 0,
-        [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: "border-box" },
+        [`& .MuiDrawer-paper`]: {
+          width: open ? drawerWidth : minimizedDrawerWidth,
+          boxSizing: "border-box",
+          overflowX: "hidden",
+          transition: "width 0.2s",
+        },
       }}
     >
       <Toolbar />
-      <List>
-        {menuItems.map((item) => (
-          <ListItem
-            key={item.text}
-            component={StyledNavLink}
-            to={item.path}
-            end={item.path === "/"}
-          >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.text} />
-          </ListItem>
-        ))}
-      </List>
+      <IconButton
+        onClick={handleDrawerToggle}
+        sx={{ alignSelf: "flex-end", mr: 1 }}
+      >
+        {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+      </IconButton>
+      <List>{menuItems.map((item) => renderMenuItem(item))}</List>
       <Divider />
     </Drawer>
   );

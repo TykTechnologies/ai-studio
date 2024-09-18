@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
-  IconButton,
   CircularProgress,
   Box,
   Table,
@@ -15,7 +14,6 @@ import {
   Grid,
   Button,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
@@ -56,18 +54,6 @@ const UserDetails = () => {
       setUserGroups(response.data.data || []);
     } catch (error) {
       console.error("Error fetching user groups", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRemoveFromGroup = async (groupId) => {
-    setLoading(true);
-    try {
-      await apiClient.delete(`/groups/${groupId}/users/${id}`);
-      await fetchUserGroups();
-    } catch (error) {
-      console.error("Error removing user from group", error);
     } finally {
       setLoading(false);
     }
@@ -124,8 +110,11 @@ const UserDetails = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Group Name</TableCell>
-                  <TableCell align="right">Action</TableCell>
+                  <TableCell>
+                    <Typography variant="h6" color="black">
+                      Group Memberships
+                    </Typography>
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -133,22 +122,11 @@ const UserDetails = () => {
                   userGroups.map((group) => (
                     <StyledTableRow key={group.id}>
                       <TableCell>{group.attributes.name}</TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          edge="end"
-                          aria-label="delete"
-                          onClick={() => handleRemoveFromGroup(group.id)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
                     </StyledTableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={2}>
-                      User is not a member of any groups
-                    </TableCell>
+                    <TableCell>User is not a member of any groups</TableCell>
                   </TableRow>
                 )}
               </TableBody>

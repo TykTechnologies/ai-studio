@@ -12,14 +12,24 @@ import {
   Typography,
   Grid,
   Snackbar,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   StyledPaper,
   TitleBox,
   ContentBox,
   StyledButton,
+  StyledTableRow,
 } from "../../styles/sharedStyles";
 
 const UserForm = () => {
@@ -27,6 +37,7 @@ const UserForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [groups, setGroups] = useState([]);
+  const [userGroups, setUserGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("");
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -36,11 +47,14 @@ const UserForm = () => {
   });
   const navigate = useNavigate();
   const { id } = useParams();
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
 
   useEffect(() => {
     fetchGroups();
     if (id) {
       fetchUser();
+      fetchUserGroups();
     }
   }, [id]);
 
@@ -74,6 +88,20 @@ const UserForm = () => {
     }
   };
 
+  const fetchUserGroups = async () => {
+    try {
+      const response = await apiClient.get(`/users/${id}/groups`);
+      setUserGroups(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching user groups", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch user groups",
+        severity: "error",
+      });
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!name.trim()) newErrors.name = "Name is required";
@@ -83,9 +111,17 @@ const UserForm = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const isFormValid = () => {
+    return (
+      name.trim() !== "" &&
+      email.trim() !== "" &&
+      (id || password.trim() !== "")
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm() || !isFormValid()) return;
 
     const userData = {
       data: {
@@ -99,22 +135,19 @@ const UserForm = () => {
     };
 
     try {
-      let response;
       if (id) {
-        response = await apiClient.patch(`/users/${id}`, userData);
+        await apiClient.patch(`/users/${id}`, userData);
       } else {
-        response = await apiClient.post("/users", userData);
-      }
-
-      const userId = response.data.data.id;
-
-      if (selectedGroup) {
-        await apiClient.post(`/groups/${selectedGroup}/users`, {
-          data: {
-            id: userId.toString(),
-            type: "users",
-          },
-        });
+        const response = await apiClient.post("/users", userData);
+        const newUserId = response.data.data.id;
+        if (selectedGroup) {
+          await apiClient.post(`/groups/${selectedGroup}/users`, {
+            data: {
+              id: newUserId.toString(),
+              type: "users",
+            },
+          });
+        }
       }
 
       setSnackbar({
@@ -139,6 +172,107 @@ const UserForm = () => {
       return;
     }
     setSnackbar({ ...snackbar, open: false });
+  };
+
+  const handleAddNewGroup = async () => {
+    if (!newGroupName.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Group name cannot be empty",
+        severity: "warning",
+      });
+      return;
+    }
+
+    try {
+      const response = await apiClient.post("/groups", {
+        data: {
+          type: "Group",
+          attributes: {
+            name: newGroupName,
+          },
+        },
+      });
+      const newGroup = response.data.data;
+      setGroups([...groups, newGroup]);
+      setSelectedGroup(newGroup.id);
+      setNewGroupName("");
+      setIsAddingGroup(false);
+      setSnackbar({
+        open: true,
+        message: "New group added successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error adding new group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add new group",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAddToGroup = async () => {
+    if (!selectedGroup) {
+      setSnackbar({
+        open: true,
+        message: "Please select a group",
+        severity: "warning",
+      });
+      return;
+    }
+
+    try {
+      await apiClient.post(`/groups/${selectedGroup}/users`, {
+        data: {
+          id: id,
+          type: "users",
+        },
+      });
+      setSnackbar({
+        open: true,
+        message: "User added to group successfully",
+        severity: "success",
+      });
+      fetchUserGroups();
+      setSelectedGroup("");
+    } catch (error) {
+      console.error("Error adding user to group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add user to group",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleRemoveFromGroup = async (groupId) => {
+    if (userGroups.length <= 1) {
+      setSnackbar({
+        open: true,
+        message: "User must be in at least one group",
+        severity: "warning",
+      });
+      return;
+    }
+
+    try {
+      await apiClient.delete(`/groups/${groupId}/users/${id}`);
+      setSnackbar({
+        open: true,
+        message: "User removed from group successfully",
+        severity: "success",
+      });
+      fetchUserGroups();
+    } catch (error) {
+      console.error("Error removing user from group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove user from group",
+        severity: "error",
+      });
+    }
   };
 
   return (
@@ -195,31 +329,85 @@ const UserForm = () => {
               </Grid>
             )}
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Group</InputLabel>
-                <Select
-                  value={selectedGroup}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
-                  required
-                >
-                  <MenuItem value="">
-                    <em>None</em>
-                  </MenuItem>
-                  {groups.map((group) => (
-                    <MenuItem key={group.id} value={group.id}>
-                      {group.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <StyledButton variant="contained" type="submit">
+              <StyledButton
+                variant="contained"
+                type="submit"
+                disabled={!isFormValid()}
+              >
                 {id ? "Update User" : "Add User"}
               </StyledButton>
             </Grid>
           </Grid>
         </Box>
+        {id && (
+          <Box mt={4}>
+            <Typography variant="h6" gutterBottom>
+              User Groups
+            </Typography>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Group Name</TableCell>
+                    {userGroups.length > 1 && (
+                      <TableCell align="right">Action</TableCell>
+                    )}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {userGroups.map((group) => (
+                    <StyledTableRow key={group.id}>
+                      <TableCell>{group.attributes.name}</TableCell>
+                      {userGroups.length > 1 && (
+                        <TableCell align="right">
+                          <IconButton
+                            edge="end"
+                            aria-label="delete"
+                            onClick={() => handleRemoveFromGroup(group.id)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      )}
+                    </StyledTableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell colSpan={userGroups.length > 1 ? 2 : 1}>
+                      <Box display="flex" alignItems="center" mt={2}>
+                        <FormControl fullWidth>
+                          <InputLabel>Add to Group</InputLabel>
+                          <Select
+                            value={selectedGroup}
+                            onChange={(e) => setSelectedGroup(e.target.value)}
+                          >
+                            {groups
+                              .filter(
+                                (group) =>
+                                  !userGroups.some((ug) => ug.id === group.id),
+                              )
+                              .map((group) => (
+                                <MenuItem key={group.id} value={group.id}>
+                                  {group.attributes.name}
+                                </MenuItem>
+                              ))}
+                          </Select>
+                        </FormControl>
+                        <Button
+                          onClick={handleAddToGroup}
+                          startIcon={<AddIcon />}
+                          variant="contained"
+                          sx={{ ml: 2 }}
+                        >
+                          Add
+                        </Button>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
       </ContentBox>
       <Snackbar
         open={snackbar.open}

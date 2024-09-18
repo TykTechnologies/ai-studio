@@ -89,7 +89,7 @@ export const StyledNavLink = styled(NavLink)(({ theme }) => ({
     backgroundColor: theme.palette.custom.teal,
     color: theme.palette.common.black,
     "& .MuiListItemIcon-root": {
-      color: theme.palette.common.white,
+      color: theme.palette.common.black,
     },
   },
   "&:hover": {
