@@ -25,6 +25,7 @@ import {
   FieldLabel,
   FieldValue,
   StyledTableRow,
+  StyledButton,
 } from "../../styles/sharedStyles";
 
 const UserDetails = () => {
@@ -77,13 +78,11 @@ const UserDetails = () => {
   return (
     <StyledPaper>
       <TitleBox>
-        <Typography variant="h4" color="white">
-          User Details
-        </Typography>
+        <Typography variant="h5">User Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/users")}
-          color="inherit"
+          color="white"
         >
           Back to Users
         </Button>
@@ -110,14 +109,13 @@ const UserDetails = () => {
           alignItems="center"
         >
           <Typography variant="h5">Groups</Typography>
-          <Button
+          <StyledButton
             variant="contained"
-            color="primary"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/users/edit/${id}`)}
           >
             Edit User
-          </Button>
+          </StyledButton>
         </Box>
         {loading ? (
           <CircularProgress />

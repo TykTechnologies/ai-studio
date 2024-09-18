@@ -15,7 +15,12 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { StyledPaper, TitleBox, ContentBox } from "../../styles/sharedStyles";
+import {
+  StyledPaper,
+  TitleBox,
+  ContentBox,
+  StyledButton,
+} from "../../styles/sharedStyles";
 
 const UserForm = () => {
   const [name, setName] = useState("");
@@ -139,14 +144,12 @@ const UserForm = () => {
   return (
     <StyledPaper>
       <TitleBox>
-        <Typography variant="h4" color="white">
-          {id ? "Edit User" : "Add User"}
-        </Typography>
+        <Typography variant="h5">{id ? "Edit User" : "Add User"}</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/users"
-          color="inherit"
+          color="white"
         >
           Back to Users
         </Button>
@@ -197,6 +200,7 @@ const UserForm = () => {
                 <Select
                   value={selectedGroup}
                   onChange={(e) => setSelectedGroup(e.target.value)}
+                  required
                 >
                   <MenuItem value="">
                     <em>None</em>
@@ -210,9 +214,9 @@ const UserForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <Button variant="contained" color="primary" type="submit">
+              <StyledButton variant="contained" type="submit">
                 {id ? "Update User" : "Add User"}
-              </Button>
+              </StyledButton>
             </Grid>
           </Grid>
         </Box>

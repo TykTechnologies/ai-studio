@@ -14,9 +14,6 @@ import {
   Alert,
   Menu,
   MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
   FormControl,
   InputLabel,
@@ -32,25 +29,11 @@ import {
   ContentBox,
   StyledTableCell,
   StyledTableRow,
+  StyledButton,
+  StyledDialogContent,
+  StyledDialogTitle,
+  StyledDialog,
 } from "../styles/sharedStyles";
-import { styled } from "@mui/material/styles";
-
-const StyledDialog = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    borderRadius: "12px",
-    backgroundColor: "#2c2c2c",
-  },
-}));
-
-const StyledDialogTitle = styled(DialogTitle)(({ theme }) => ({
-  backgroundColor: "#0B4545",
-  color: theme.palette.common.white,
-  padding: theme.spacing(2),
-}));
-
-const StyledDialogContent = styled(DialogContent)(({ theme }) => ({
-  padding: theme.spacing(3),
-}));
 
 const Users = () => {
   const navigate = useNavigate();
@@ -185,18 +168,10 @@ const Users = () => {
     <Box sx={{ p: 0 }}>
       <StyledPaper>
         <TitleBox>
-          <Typography variant="h5" color="white" sx={{ fontWeight: "bold" }}>
-            Users
-          </Typography>
-          <Button
-            variant="contained"
-            color="secondary"
-            component={Link}
-            to="/users/new"
-            sx={{ borderRadius: 20 }}
-          >
-            Add User
-          </Button>
+          <Typography variant="h5">Users</Typography>
+          <StyledButton variant="contained" component={Link} to="/users/new">
+            Add user
+          </StyledButton>
         </TitleBox>
         <ContentBox>
           <Table>
@@ -244,6 +219,9 @@ const Users = () => {
         onClose={handleMenuClose}
       >
         <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
+        <MenuItem onClick={() => navigate(`/users/edit/${selectedUser?.id}`)}>
+          Edit User
+        </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedUser?.id)}>
           Delete User
         </MenuItem>
@@ -255,6 +233,14 @@ const Users = () => {
       >
         <StyledDialogTitle>Add User to Group</StyledDialogTitle>
         <StyledDialogContent>
+          <Typography
+            gutterBottom
+            sx={(theme) => ({ padding: theme.spacing(2) })}
+          >
+            Select a group from the dropdown menu below to add the user to that
+            group. This action will grant the user permissions associated with
+            the selected group.
+          </Typography>
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Group</InputLabel>
             <Select
