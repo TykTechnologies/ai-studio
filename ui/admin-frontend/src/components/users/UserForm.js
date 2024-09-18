@@ -282,8 +282,8 @@ const UserForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/users"
           color="white"
+          to="/users"
         >
           Back to Users
         </Button>

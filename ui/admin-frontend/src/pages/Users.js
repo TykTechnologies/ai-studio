@@ -214,7 +214,12 @@ const Users = () => {
       <StyledPaper>
         <TitleBox>
           <Typography variant="h5">Users</Typography>
-          <StyledButton variant="contained" component={Link} to="/users/new">
+          <StyledButton
+            variant="contained"
+            startIcon={<AddIcon />}
+            component={Link}
+            to="/users/new"
+          >
             Add user
           </StyledButton>
         </TitleBox>

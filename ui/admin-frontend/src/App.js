@@ -15,10 +15,15 @@ import Toolbar from "@mui/material/Toolbar";
 import MyAppBar from "./components/layout/AppBar";
 import MyDrawer from "./components/layout/Drawer";
 import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+
 import Users from "./pages/Users";
 import UserDetails from "./components/users/UserDetails";
-import Login from "./pages/Login";
 import UserForm from "./components/users/UserForm";
+
+import Groups from "./pages/Groups";
+import GroupDetail from "./components/groups/GroupDetail";
+import GroupForm from "./components/groups/GroupForm";
 
 const drawerWidth = 240;
 
@@ -64,6 +69,23 @@ function App() {
               <Route
                 path="/users/new"
                 element={<PrivateRoute element={<UserForm />} />}
+              />
+
+              <Route
+                path="/groups"
+                element={<PrivateRoute element={<Groups />} />}
+              />
+              <Route
+                path="/groups/:id"
+                element={<PrivateRoute element={<GroupDetail />} />}
+              />
+              <Route
+                path="/groups/edit/:id"
+                element={<PrivateRoute element={<GroupForm />} />}
+              />
+              <Route
+                path="/groups/new"
+                element={<PrivateRoute element={<GroupForm />} />}
               />
 
               {/* Add more routes as needed */}
