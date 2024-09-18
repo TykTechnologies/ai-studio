@@ -3576,14 +3576,14 @@
                 }
             }
         },
-        "/groups/{id}/tools": {
+        "/groups/{id}/tool-catalogues": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get a list of all tools in a specific group",
+                "description": "Get a list of all tool catalogues in a specific group",
                 "consumes": [
                     "application/json"
                 ],
@@ -3593,7 +3593,7 @@
                 "tags": [
                     "groups"
                 ],
-                "summary": "List tools in a group",
+                "summary": "List tool catalogues in a group",
                 "parameters": [
                     {
                         "type": "integer",
@@ -3609,7 +3609,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/api.ToolResponse"
+                                "$ref": "#/definitions/api.ToolCatalogueResponse"
                             }
                         }
                     },
@@ -3633,7 +3633,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Add a tool to a specific group",
+                "description": "Add a tool catalogue to a specific group",
                 "consumes": [
                     "application/json"
                 ],
@@ -3643,7 +3643,7 @@
                 "tags": [
                     "groups"
                 ],
-                "summary": "Add a tool to a group",
+                "summary": "Add a tool catalogue to a group",
                 "parameters": [
                     {
                         "type": "integer",
@@ -3653,12 +3653,12 @@
                         "required": true
                     },
                     {
-                        "description": "Tool to add",
-                        "name": "tool",
+                        "description": "Tool Catalogue to add",
+                        "name": "toolCatalogue",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api.ToolInput"
+                            "$ref": "#/definitions/api.GroupToolCatalogueInput"
                         }
                     }
                 ],
@@ -3681,14 +3681,14 @@
                 }
             }
         },
-        "/groups/{id}/tools/{toolId}": {
+        "/groups/{id}/tool-catalogues/{toolCatalogueId}": {
             "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Remove a tool from a specific group",
+                "description": "Remove a tool catalogue from a specific group",
                 "consumes": [
                     "application/json"
                 ],
@@ -3698,7 +3698,7 @@
                 "tags": [
                     "groups"
                 ],
-                "summary": "Remove a tool from a group",
+                "summary": "Remove a tool catalogue from a group",
                 "parameters": [
                     {
                         "type": "integer",
@@ -3709,8 +3709,8 @@
                     },
                     {
                         "type": "integer",
-                        "description": "Tool ID",
-                        "name": "toolId",
+                        "description": "Tool Catalogue ID",
+                        "name": "toolCatalogueId",
                         "in": "path",
                         "required": true
                     }
@@ -5184,6 +5184,257 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues": {
+            "get": {
+                "description": "Get a list of all tool catalogues",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "List all tool catalogues",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolCatalogueResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new tool catalogue with the provided information",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Create a new tool catalogue",
+                "parameters": [
+                    {
+                        "description": "Tool Catalogue information",
+                        "name": "toolCatalogue",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues/search": {
+            "get": {
+                "description": "Search for tool catalogues using a query string",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Search tool catalogues",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "query",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolCatalogueResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues/{id}": {
+            "get": {
+                "description": "Get details of a tool catalogue by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Get a tool catalogue by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a tool catalogue by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Delete a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Update an existing tool catalogue's information",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Update a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated Tool Catalogue information",
+                        "name": "toolCatalogue",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -6795,6 +7046,23 @@
                 }
             }
         },
+        "api.GroupToolCatalogueInput": {
+            "description": "Group-ToolCatalogue relationship input model",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "api.LLMInput": {
             "description": "LLM input model",
             "type": "object",
@@ -7078,6 +7346,78 @@
                     "properties": {
                         "name": {
                             "type": "string"
+                        }
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ToolCatalogueInput": {
+            "description": "Tool Catalogue input model",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "type": "object",
+                            "properties": {
+                                "icon": {
+                                    "type": "string"
+                                },
+                                "long_description": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "short_description": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.ToolCatalogueResponse": {
+            "description": "Tool Catalogue response model",
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "type": "object",
+                    "properties": {
+                        "icon": {
+                            "type": "string"
+                        },
+                        "long_description": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "short_description": {
+                            "type": "string"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.TagResponse"
+                            }
+                        },
+                        "tools": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolResponse"
+                            }
                         }
                     }
                 },
