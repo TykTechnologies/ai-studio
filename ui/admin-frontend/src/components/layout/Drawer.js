@@ -32,6 +32,14 @@ const menuItems = [
       { text: "Groups", icon: <GroupIcon />, path: "/groups" },
     ],
   },
+  {
+    text: "AI",
+    icon: <PeopleIcon />,
+    subItems: [
+      { text: "LLMs", icon: <PersonIcon />, path: "/llms" },
+      { text: "LLM Settings", icon: <GroupIcon />, path: "/llm-settings" },
+    ],
+  },
 ];
 
 const MyDrawer = () => {

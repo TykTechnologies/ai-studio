@@ -2933,6 +2933,208 @@ paths:
       summary: Remove a catalogue from a group
       tags:
       - groups
+  /groups/{id}/data-catalogues:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all data catalogues in a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.DataCatalogueResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List data catalogues in a group
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/json
+      description: Add a data catalogue to a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Data Catalogue to add
+        in: body
+        name: dataCatalogue
+        required: true
+        schema:
+          $ref: '#/definitions/api.DataCatalogueInput'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a data catalogue to a group
+      tags:
+      - groups
+  /groups/{id}/data-catalogues/{dataCatalogueId}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a data catalogue from a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Data Catalogue ID
+        in: path
+        name: dataCatalogueId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a data catalogue from a group
+      tags:
+      - groups
+  /groups/{id}/tools:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all tools in a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ToolResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List tools in a group
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/json
+      description: Add a tool to a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tool to add
+        in: body
+        name: tool
+        required: true
+        schema:
+          $ref: '#/definitions/api.ToolInput'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a tool to a group
+      tags:
+      - groups
+  /groups/{id}/tools/{toolId}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a tool from a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tool ID
+        in: path
+        name: toolId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a tool from a group
+      tags:
+      - groups
   /groups/{id}/users:
     get:
       consumes:
@@ -4358,6 +4560,39 @@ paths:
       summary: Count apps by user ID
       tags:
       - apps
+  /users/{userId}/groups:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all groups a specific user belongs to
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.GroupResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get groups for a user
+      tags:
+      - groups
   /vendors/embedders:
     get:
       consumes:

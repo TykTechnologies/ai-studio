@@ -24,6 +24,24 @@ type GroupInput struct {
 	} `json:"data"`
 }
 
+// GroupDataCatalogueInput represents the input for adding a data catalogue to a group
+// @Description Group-DataCatalogue relationship input model
+type GroupDataCatalogueInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}
+
+// GroupToolInput represents the input for adding a tool to a group
+// @Description Group-Tool relationship input model
+type GroupToolInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}
+
 // UserGroupInput represents the input for adding a user to a group
 // @Description User-group relationship input model
 type UserGroupInput struct {

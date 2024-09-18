@@ -163,3 +163,107 @@ func TestGroup_CatalogueAssociation(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, group.Catalogues, 0)
 }
+
+func TestGroup_DataCatalogueAssociation(t *testing.T) {
+	db := setupTestDB(t)
+
+	group := &Group{Name: "Test Group"}
+	err := group.Create(db)
+	assert.NoError(t, err)
+
+	dataCatalogue := &DataCatalogue{Name: "Test Data Catalogue"}
+	err = dataCatalogue.Create(db)
+	assert.NoError(t, err)
+
+	// Add DataCatalogue
+	err = group.AddDataCatalogue(db, dataCatalogue)
+	assert.NoError(t, err)
+
+	// Get DataCatalogues
+	err = group.GetDataCatalogues(db)
+	assert.NoError(t, err)
+	assert.Len(t, group.DataCatalogues, 1)
+	assert.Equal(t, dataCatalogue.ID, group.DataCatalogues[0].ID)
+
+	// Remove DataCatalogue
+	err = group.RemoveDataCatalogue(db, dataCatalogue)
+	assert.NoError(t, err)
+
+	err = group.GetDataCatalogues(db)
+	assert.NoError(t, err)
+	assert.Len(t, group.DataCatalogues, 0)
+}
+
+func TestGroup_ToolAssociation(t *testing.T) {
+	db := setupTestDB(t)
+
+	group := &Group{Name: "Test Group"}
+	err := group.Create(db)
+	assert.NoError(t, err)
+
+	tool := &Tool{Name: "Test Tool"}
+	err = tool.Create(db)
+	assert.NoError(t, err)
+
+	// Add Tool
+	err = group.AddTool(db, tool)
+	assert.NoError(t, err)
+
+	// Get Tools
+	err = group.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, group.Tools, 1)
+	assert.Equal(t, tool.ID, group.Tools[0].ID)
+
+	// Remove Tool
+	err = group.RemoveTool(db, tool)
+	assert.NoError(t, err)
+
+	err = group.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, group.Tools, 0)
+}
+
+func TestGroup_GetGroupsByUserID(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create test users and groups
+	user1 := &User{Name: "User 1", Email: "user1@example.com"}
+	user2 := &User{Name: "User 2", Email: "user2@example.com"}
+	err := user1.Create(db)
+	assert.NoError(t, err)
+	err = user2.Create(db)
+	assert.NoError(t, err)
+
+	group1 := &Group{Name: "Group 1"}
+	group2 := &Group{Name: "Group 2"}
+	group3 := &Group{Name: "Group 3"}
+	err = group1.Create(db)
+	assert.NoError(t, err)
+	err = group2.Create(db)
+	assert.NoError(t, err)
+	err = group3.Create(db)
+	assert.NoError(t, err)
+
+	// Associate users with groups
+	err = group1.AddUser(db, user1)
+	assert.NoError(t, err)
+	err = group2.AddUser(db, user1)
+	assert.NoError(t, err)
+	err = group3.AddUser(db, user2)
+	assert.NoError(t, err)
+
+	// Test GetGroupsByUserID
+	var fetchedGroups Groups
+	err = fetchedGroups.GetGroupsByUserID(db, user1.ID)
+	assert.NoError(t, err)
+	assert.Len(t, fetchedGroups, 2)
+	assert.Contains(t, []string{fetchedGroups[0].Name, fetchedGroups[1].Name}, "Group 1")
+	assert.Contains(t, []string{fetchedGroups[0].Name, fetchedGroups[1].Name}, "Group 2")
+
+	fetchedGroups = Groups{}
+	err = fetchedGroups.GetGroupsByUserID(db, user2.ID)
+	assert.NoError(t, err)
+	assert.Len(t, fetchedGroups, 1)
+	assert.Equal(t, "Group 3", fetchedGroups[0].Name)
+}

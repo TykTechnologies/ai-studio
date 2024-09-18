@@ -4,10 +4,12 @@ import "gorm.io/gorm"
 
 type Group struct {
 	gorm.Model
-	ID         uint        `json:"id" gorm:"primaryKey"`
-	Name       string      `json:"name"`
-	Users      []User      `json:"users" gorm:"many2many:user_groups;"`
-	Catalogues []Catalogue `json:"catalogues" gorm:"many2many:group_catalogues;"`
+	ID             uint            `json:"id" gorm:"primaryKey"`
+	Name           string          `json:"name"`
+	Users          []User          `json:"users" gorm:"many2many:user_groups;"`
+	Catalogues     []Catalogue     `json:"catalogues" gorm:"many2many:group_catalogues;"`
+	DataCatalogues []DataCatalogue `json:"data_catalogues" gorm:"many2many:group_datacatalogues;"`
+	Tools          []Tool          `json:"tools" gorm:"many2many:group_tools;"`
 }
 
 type Groups []Group
@@ -68,4 +70,28 @@ func (g *Groups) GetGroupsByUserID(db *gorm.DB, userID uint) error {
 	return db.Joins("JOIN user_groups ON user_groups.group_id = groups.id").
 		Where("user_groups.user_id = ?", userID).
 		Find(g).Error
+}
+
+func (g *Group) AddDataCatalogue(db *gorm.DB, dataCatalogue *DataCatalogue) error {
+	return db.Model(g).Association("DataCatalogues").Append(dataCatalogue)
+}
+
+func (g *Group) RemoveDataCatalogue(db *gorm.DB, dataCatalogue *DataCatalogue) error {
+	return db.Model(g).Association("DataCatalogues").Delete(dataCatalogue)
+}
+
+func (g *Group) GetDataCatalogues(db *gorm.DB) error {
+	return db.Model(g).Association("DataCatalogues").Find(&g.DataCatalogues)
+}
+
+func (g *Group) AddTool(db *gorm.DB, tool *Tool) error {
+	return db.Model(g).Association("Tools").Append(tool)
+}
+
+func (g *Group) RemoveTool(db *gorm.DB, tool *Tool) error {
+	return db.Model(g).Association("Tools").Delete(tool)
+}
+
+func (g *Group) GetTools(db *gorm.DB) error {
+	return db.Model(g).Association("Tools").Find(&g.Tools)
 }

@@ -154,3 +154,85 @@ func (s *Service) GetGroupsByUserID(userID uint) (models.Groups, error) {
 	}
 	return groups, nil
 }
+
+func (s *Service) AddDataCatalogueToGroup(dataCatalogueID, groupID uint) error {
+	dataCatalogue, err := s.GetDataCatalogueByID(dataCatalogueID)
+	if err != nil {
+		return err
+	}
+
+	group, err := s.GetGroupByID(groupID)
+	if err != nil {
+		return err
+	}
+
+	return group.AddDataCatalogue(s.DB, dataCatalogue)
+}
+
+func (s *Service) RemoveDataCatalogueFromGroup(dataCatalogueID, groupID uint) error {
+	dataCatalogue, err := s.GetDataCatalogueByID(dataCatalogueID)
+	if err != nil {
+		return err
+	}
+
+	group, err := s.GetGroupByID(groupID)
+	if err != nil {
+		return err
+	}
+
+	return group.RemoveDataCatalogue(s.DB, dataCatalogue)
+}
+
+func (s *Service) GetGroupDataCatalogues(groupID uint) (models.DataCatalogues, error) {
+	group, err := s.GetGroupByID(groupID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := group.GetDataCatalogues(s.DB); err != nil {
+		return nil, err
+	}
+
+	return group.DataCatalogues, nil
+}
+
+func (s *Service) AddToolToGroup(toolID, groupID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	group, err := s.GetGroupByID(groupID)
+	if err != nil {
+		return err
+	}
+
+	return group.AddTool(s.DB, tool)
+}
+
+func (s *Service) RemoveToolFromGroup(toolID, groupID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	group, err := s.GetGroupByID(groupID)
+	if err != nil {
+		return err
+	}
+
+	return group.RemoveTool(s.DB, tool)
+}
+
+func (s *Service) GetGroupTools(groupID uint) (models.Tools, error) {
+	group, err := s.GetGroupByID(groupID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := group.GetTools(s.DB); err != nil {
+		return nil, err
+	}
+
+	return group.Tools, nil
+}

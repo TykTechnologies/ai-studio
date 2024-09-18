@@ -77,6 +77,12 @@ func (a *API) setupRoutes() {
 		v1.DELETE("/groups/:id/catalogues/:catalogueId", a.removeCatalogueFromGroup)
 		v1.GET("/groups/:id/catalogues", a.listGroupCatalogues)
 		v1.GET("/users/:id/groups", a.getUserGroups)
+		v1.POST("/groups/:id/data-catalogues", a.addDataCatalogueToGroup)
+		v1.DELETE("/groups/:id/data-catalogues/:dataCatalogueId", a.removeDataCatalogueFromGroup)
+		v1.GET("/groups/:id/data-catalogues", a.listGroupDataCatalogues)
+		v1.POST("/groups/:id/tools", a.addToolToGroup)
+		v1.DELETE("/groups/:id/tools/:toolId", a.removeToolFromGroup)
+		v1.GET("/groups/:id/tools", a.listGroupTools)
 
 		// LLM routes
 		v1.POST("/llms", a.createLLM)
