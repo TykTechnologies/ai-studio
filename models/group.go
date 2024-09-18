@@ -9,7 +9,7 @@ type Group struct {
 	Users          []User          `json:"users" gorm:"many2many:user_groups;"`
 	Catalogues     []Catalogue     `json:"catalogues" gorm:"many2many:group_catalogues;"`
 	DataCatalogues []DataCatalogue `json:"data_catalogues" gorm:"many2many:group_datacatalogues;"`
-	Tools          []Tool          `json:"tools" gorm:"many2many:group_tools;"`
+	ToolCatalogues []ToolCatalogue `json:"tool_catalogues" gorm:"many2many:group_toolcatalogues;"`
 }
 
 type Groups []Group
@@ -84,14 +84,14 @@ func (g *Group) GetDataCatalogues(db *gorm.DB) error {
 	return db.Model(g).Association("DataCatalogues").Find(&g.DataCatalogues)
 }
 
-func (g *Group) AddTool(db *gorm.DB, tool *Tool) error {
-	return db.Model(g).Association("Tools").Append(tool)
+func (g *Group) AddToolCatalogue(db *gorm.DB, toolCatalogue *ToolCatalogue) error {
+	return db.Model(g).Association("ToolCatalogues").Append(toolCatalogue)
 }
 
-func (g *Group) RemoveTool(db *gorm.DB, tool *Tool) error {
-	return db.Model(g).Association("Tools").Delete(tool)
+func (g *Group) RemoveToolCatalogue(db *gorm.DB, toolCatalogue *ToolCatalogue) error {
+	return db.Model(g).Association("ToolCatalogues").Delete(toolCatalogue)
 }
 
-func (g *Group) GetTools(db *gorm.DB) error {
-	return db.Model(g).Association("Tools").Find(&g.Tools)
+func (g *Group) GetToolCatalogues(db *gorm.DB) error {
+	return db.Model(g).Association("ToolCatalogues").Find(&g.ToolCatalogues)
 }

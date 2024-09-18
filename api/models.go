@@ -539,3 +539,59 @@ type ChatHistoryRecordResponse struct {
 type ChatHistoryRecordListResponse struct {
 	Data []ChatHistoryRecordResponse `json:"data"`
 }
+
+// ToolCatalogueInput represents the input for tool catalogue-related operations
+// @Description Tool Catalogue input model
+type ToolCatalogueInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name             string `json:"name"`
+			ShortDescription string `json:"short_description"`
+			LongDescription  string `json:"long_description"`
+			Icon             string `json:"icon"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ToolCatalogueResponse represents the response for tool catalogue-related operations
+// @Description Tool Catalogue response model
+type ToolCatalogueResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name             string         `json:"name"`
+		ShortDescription string         `json:"short_description"`
+		LongDescription  string         `json:"long_description"`
+		Icon             string         `json:"icon"`
+		Tools            []ToolResponse `json:"tools"`
+		Tags             []TagResponse  `json:"tags"`
+	} `json:"attributes"`
+}
+
+// ToolCatalogueToolInput represents the input for adding a tool to a tool catalogue
+// @Description Tool Catalogue-Tool relationship input model
+type ToolCatalogueToolInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}
+
+// ToolCatalogueTagInput represents the input for adding a tag to a tool catalogue
+// @Description Tool Catalogue-Tag relationship input model
+type ToolCatalogueTagInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}
+
+// GroupToolCatalogueInput represents the input for adding a tool catalogue to a group
+// @Description Group-ToolCatalogue relationship input model
+type GroupToolCatalogueInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}

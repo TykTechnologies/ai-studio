@@ -80,9 +80,9 @@ func (a *API) setupRoutes() {
 		v1.POST("/groups/:id/data-catalogues", a.addDataCatalogueToGroup)
 		v1.DELETE("/groups/:id/data-catalogues/:dataCatalogueId", a.removeDataCatalogueFromGroup)
 		v1.GET("/groups/:id/data-catalogues", a.listGroupDataCatalogues)
-		v1.POST("/groups/:id/tools", a.addToolToGroup)
-		v1.DELETE("/groups/:id/tools/:toolId", a.removeToolFromGroup)
-		v1.GET("/groups/:id/tools", a.listGroupTools)
+		v1.POST("/groups/:id/tool-catalogues", a.addToolCatalogueToGroup)
+		v1.DELETE("/groups/:id/tool-catalogues/:toolCatalogueId", a.removeToolCatalogueFromGroup)
+		v1.GET("/groups/:id/tool-catalogues", a.listGroupToolCatalogues)
 
 		// LLM routes
 		v1.POST("/llms", a.createLLM)
@@ -136,6 +136,14 @@ func (a *API) setupRoutes() {
 		v1.DELETE("/data-catalogues/:id/datasources/:datasourceId", a.removeDatasourceFromDataCatalogue)
 		v1.GET("/data-catalogues/by-tag", a.getDataCataloguesByTag)
 		v1.GET("/data-catalogues/by-datasource", a.getDataCataloguesByDatasource)
+
+		// ToolCatalogue routes
+		v1.POST("/tool-catalogues", a.createToolCatalogue)
+		v1.GET("/tool-catalogues/:id", a.getToolCatalogue)
+		v1.PATCH("/tool-catalogues/:id", a.updateToolCatalogue)
+		v1.DELETE("/tool-catalogues/:id", a.deleteToolCatalogue)
+		v1.GET("/tool-catalogues", a.listToolCatalogues)
+		v1.GET("/tool-catalogues/search", a.searchToolCatalogues)
 
 		// Credential routes
 		v1.POST("/credentials", a.createCredential)

@@ -43,10 +43,14 @@ const Groups = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [openAddCatalogueModal, setOpenAddCatalogueModal] = useState(false);
+  const [openAddDataCatalogueModal, setOpenAddDataCatalogueModal] =
+    useState(false);
   const [openAddUserModal, setOpenAddUserModal] = useState(false);
   const [catalogues, setCatalogues] = useState([]);
+  const [dataCatalogues, setDataCatalogues] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedCatalogue, setSelectedCatalogue] = useState("");
+  const [selectedDataCatalogue, setSelectedDataCatalogue] = useState("");
   const [selectedUser, setSelectedUser] = useState("");
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -90,6 +94,18 @@ const Groups = () => {
       setCatalogues(response.data.data || []);
     } catch (error) {
       console.error("Error fetching catalogues", error);
+    }
+  };
+
+  const handleAddDataCatalogue = async () => {
+    setOpenAddDataCatalogueModal(true);
+    handleMenuClose();
+    // Fetch data catalogues
+    try {
+      const response = await apiClient.get("/data-catalogues");
+      setDataCatalogues(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching data catalogues", error);
     }
   };
 
@@ -175,6 +191,41 @@ const Groups = () => {
       setSnackbar({
         open: true,
         message: "Failed to add catalogue to group",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAddDataCatalogueConfirm = async () => {
+    if (!selectedDataCatalogue) {
+      setSnackbar({
+        open: true,
+        message: "Please select a data catalogue",
+        severity: "warning",
+      });
+      return;
+    }
+
+    try {
+      await apiClient.post(`/groups/${selectedGroup.id}/data-catalogues`, {
+        data: {
+          id: selectedDataCatalogue,
+          type: "data-catalogues",
+        },
+      });
+      setOpenAddDataCatalogueModal(false);
+      setSelectedDataCatalogue("");
+      fetchGroups();
+      setSnackbar({
+        open: true,
+        message: "Data Catalogue added to group successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error adding data catalogue to group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add data catalogue to group",
         severity: "error",
       });
     }
@@ -282,6 +333,9 @@ const Groups = () => {
         onClose={handleMenuClose}
       >
         <MenuItem onClick={handleAddCatalogue}>Add Catalogue to Group</MenuItem>
+        <MenuItem onClick={handleAddDataCatalogue}>
+          Add Data Catalogue to Group
+        </MenuItem>
         <MenuItem onClick={handleAddUser}>Add User to Group</MenuItem>
         <MenuItem onClick={handleEdit}>Edit Group</MenuItem>
         <MenuItem onClick={handleDelete}>Delete Group</MenuItem>
@@ -319,6 +373,43 @@ const Groups = () => {
             Cancel
           </Button>
           <Button onClick={handleAddCatalogueConfirm} color="primary">
+            Add
+          </Button>
+        </DialogActions>
+      </StyledDialog>
+
+      <StyledDialog
+        open={openAddDataCatalogueModal}
+        onClose={() => setOpenAddDataCatalogueModal(false)}
+      >
+        <StyledDialogTitle>Add Data Catalogue to Group</StyledDialogTitle>
+        <StyledDialogContent>
+          <Typography
+            gutterBottom
+            sx={(theme) => ({ padding: theme.spacing(2) })}
+          >
+            Data Catalogues are collections of data sources that you can make
+            available to a group.
+          </Typography>
+          <FormControl fullWidth>
+            <InputLabel>Data Catalogue</InputLabel>
+            <Select
+              value={selectedDataCatalogue}
+              onChange={(e) => setSelectedDataCatalogue(e.target.value)}
+            >
+              {dataCatalogues.map((dataCatalogue) => (
+                <MenuItem key={dataCatalogue.id} value={dataCatalogue.id}>
+                  {dataCatalogue.attributes.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </StyledDialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenAddDataCatalogueModal(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleAddDataCatalogueConfirm} color="primary">
             Add
           </Button>
         </DialogActions>

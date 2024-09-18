@@ -123,14 +123,14 @@ func TestGroupEndpoints(t *testing.T) {
 	// Test Create Group
 	createGroupInput := GroupInput{
 		Data: struct {
-			Type       string "json:\"type\""
+			Type       string `json:"type"`
 			Attributes struct {
-				Name string "json:\"name\""
-			} "json:\"attributes\""
+				Name string `json:"name"`
+			} `json:"attributes"`
 		}{
 			Type: "groups",
 			Attributes: struct {
-				Name string "json:\"name\""
+				Name string `json:"name"`
 			}{
 				Name: "Test Group",
 			},
@@ -154,14 +154,14 @@ func TestGroupEndpoints(t *testing.T) {
 	// Test Update Group
 	updateGroupInput := GroupInput{
 		Data: struct {
-			Type       string "json:\"type\""
+			Type       string `json:"type"`
 			Attributes struct {
-				Name string "json:\"name\""
-			} "json:\"attributes\""
+				Name string `json:"name"`
+			} `json:"attributes"`
 		}{
 			Type: "groups",
 			Attributes: struct {
-				Name string "json:\"name\""
+				Name string `json:"name"`
 			}{
 				Name: "Updated Group",
 			},
@@ -178,18 +178,18 @@ func TestGroupEndpoints(t *testing.T) {
 	// Test Add User to Group
 	createUserInput := UserInput{
 		Data: struct {
-			Type       string "json:\"type\""
+			Type       string `json:"type"`
 			Attributes struct {
-				Email    string "json:\"email\""
-				Name     string "json:\"name\""
-				Password string "json:\"password,omitempty\""
-			} "json:\"attributes\""
+				Email    string `json:"email"`
+				Name     string `json:"name"`
+				Password string `json:"password,omitempty"`
+			} `json:"attributes"`
 		}{
 			Type: "users",
 			Attributes: struct {
-				Email    string "json:\"email\""
-				Name     string "json:\"name\""
-				Password string "json:\"password,omitempty\""
+				Email    string `json:"email"`
+				Name     string `json:"name"`
+				Password string `json:"password,omitempty"`
 			}{
 				Email:    "groupuser@example.com",
 				Name:     "Group User",
@@ -208,8 +208,8 @@ func TestGroupEndpoints(t *testing.T) {
 
 	addUserToGroupInput := UserGroupInput{
 		Data: struct {
-			Type string "json:\"type\""
-			ID   string "json:\"id\""
+			Type string `json:"type"`
+			ID   string `json:"id"`
 		}{
 			Type: "users",
 			ID:   userID,
@@ -242,7 +242,6 @@ func TestGroupEndpoints(t *testing.T) {
 	}
 
 	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/groups/%s/data-catalogues", groupID), addDataCatalogueInput)
-	fmt.Println(w.Body.String())
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
 	// Test List Group DataCatalogues
@@ -266,43 +265,43 @@ func TestGroupEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, dataCataloguesResponse["data"], 0)
 
-	// Test Add Tool to Group
-	tool, err := api.service.CreateTool("Test Tool", "Description", models.ToolTypeREST, []byte(`{"openapi": "3.0.0"}`), 7)
+	// Test Add ToolCatalogue to Group
+	toolCatalogue, err := api.service.CreateToolCatalogue("Test Tool Catalogue", "Short Desc", "Long Desc", "icon.png")
 	assert.NoError(t, err)
 
-	addToolInput := GroupToolInput{
+	addToolCatalogueInput := GroupToolCatalogueInput{
 		Data: struct {
 			Type string `json:"type"`
 			ID   string `json:"id"`
 		}{
-			Type: "tools",
-			ID:   strconv.FormatUint(uint64(tool.ID), 10),
+			Type: "tool-catalogues",
+			ID:   strconv.FormatUint(uint64(toolCatalogue.ID), 10),
 		},
 	}
 
-	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/groups/%s/tools", groupID), addToolInput)
+	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/groups/%s/tool-catalogues", groupID), addToolCatalogueInput)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
-	// Test List Group Tools
-	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/tools", groupID), nil)
+	// Test List Group ToolCatalogues
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/tool-catalogues", groupID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var toolsResponse map[string][]ToolResponse
-	err = json.Unmarshal(w.Body.Bytes(), &toolsResponse)
+	var toolCataloguesResponse map[string][]ToolCatalogueResponse
+	err = json.Unmarshal(w.Body.Bytes(), &toolCataloguesResponse)
 	assert.NoError(t, err)
-	assert.Len(t, toolsResponse["data"], 1)
-	assert.Equal(t, tool.Name, toolsResponse["data"][0].Attributes.Name)
+	assert.Len(t, toolCataloguesResponse["data"], 1)
+	assert.Equal(t, toolCatalogue.Name, toolCataloguesResponse["data"][0].Attributes.Name)
 
-	// Test Remove Tool from Group
-	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s/tools/%d", groupID, tool.ID), nil)
+	// Test Remove ToolCatalogue from Group
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s/tool-catalogues/%d", groupID, toolCatalogue.ID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
-	// Verify Tool is removed
-	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/tools", groupID), nil)
+	// Verify ToolCatalogue is removed
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/tool-catalogues", groupID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
-	err = json.Unmarshal(w.Body.Bytes(), &toolsResponse)
+	err = json.Unmarshal(w.Body.Bytes(), &toolCataloguesResponse)
 	assert.NoError(t, err)
-	assert.Len(t, toolsResponse["data"], 0)
+	assert.Len(t, toolCataloguesResponse["data"], 0)
 
 	// Test Delete Group
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
@@ -329,21 +328,21 @@ func TestGroupEndpointsErrors(t *testing.T) {
 	w = performRequest(api.router, "DELETE", "/api/v1/groups/999/data-catalogues/1", nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	// Test Add Tool to non-existent Group
-	addToolInput := GroupToolInput{
+	// Test Add ToolCatalogue to non-existent Group
+	addToolCatalogueInput := GroupToolCatalogueInput{
 		Data: struct {
 			Type string `json:"type"`
 			ID   string `json:"id"`
 		}{
-			Type: "tools",
+			Type: "tool-catalogues",
 			ID:   "1",
 		},
 	}
-	w = performRequest(api.router, "POST", "/api/v1/groups/999/tools", addToolInput)
+	w = performRequest(api.router, "POST", "/api/v1/groups/999/tool-catalogues", addToolCatalogueInput)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	// Test Remove Tool from non-existent Group
-	w = performRequest(api.router, "DELETE", "/api/v1/groups/999/tools/1", nil)
+	// Test Remove ToolCatalogue from non-existent Group
+	w = performRequest(api.router, "DELETE", "/api/v1/groups/999/tool-catalogues/1", nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
 	// Create a valid group for further testing
@@ -367,21 +366,21 @@ func TestGroupEndpointsErrors(t *testing.T) {
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%d/data-catalogues/999", group.ID), nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	// Test Add non-existent Tool to Group
-	addToolInput = GroupToolInput{
+	// Test Add non-existent ToolCatalogue to Group
+	addToolCatalogueInput = GroupToolCatalogueInput{
 		Data: struct {
 			Type string `json:"type"`
 			ID   string `json:"id"`
 		}{
-			Type: "tools",
+			Type: "tool-catalogues",
 			ID:   "999",
 		},
 	}
-	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/groups/%d/tools", group.ID), addToolInput)
+	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/groups/%d/tool-catalogues", group.ID), addToolCatalogueInput)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	// Test Remove non-existent Tool from Group
-	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%d/tools/999", group.ID), nil)
+	// Test Remove non-existent ToolCatalogue from Group
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%d/tool-catalogues/999", group.ID), nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 

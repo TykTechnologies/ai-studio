@@ -196,8 +196,8 @@ func (s *Service) GetGroupDataCatalogues(groupID uint) (models.DataCatalogues, e
 	return group.DataCatalogues, nil
 }
 
-func (s *Service) AddToolToGroup(toolID, groupID uint) error {
-	tool, err := s.GetToolByID(toolID)
+func (s *Service) AddToolCatalogueToGroup(toolCatalogueID, groupID uint) error {
+	toolCatalogue, err := s.GetToolCatalogueByID(toolCatalogueID)
 	if err != nil {
 		return err
 	}
@@ -207,11 +207,11 @@ func (s *Service) AddToolToGroup(toolID, groupID uint) error {
 		return err
 	}
 
-	return group.AddTool(s.DB, tool)
+	return group.AddToolCatalogue(s.DB, toolCatalogue)
 }
 
-func (s *Service) RemoveToolFromGroup(toolID, groupID uint) error {
-	tool, err := s.GetToolByID(toolID)
+func (s *Service) RemoveToolCatalogueFromGroup(toolCatalogueID, groupID uint) error {
+	toolCatalogue, err := s.GetToolCatalogueByID(toolCatalogueID)
 	if err != nil {
 		return err
 	}
@@ -221,18 +221,18 @@ func (s *Service) RemoveToolFromGroup(toolID, groupID uint) error {
 		return err
 	}
 
-	return group.RemoveTool(s.DB, tool)
+	return group.RemoveToolCatalogue(s.DB, toolCatalogue)
 }
 
-func (s *Service) GetGroupTools(groupID uint) (models.Tools, error) {
+func (s *Service) GetGroupToolCatalogues(groupID uint) (models.ToolCatalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetTools(s.DB); err != nil {
+	if err := group.GetToolCatalogues(s.DB); err != nil {
 		return nil, err
 	}
 
-	return group.Tools, nil
+	return group.ToolCatalogues, nil
 }

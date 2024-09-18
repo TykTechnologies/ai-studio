@@ -194,34 +194,34 @@ func TestGroup_DataCatalogueAssociation(t *testing.T) {
 	assert.Len(t, group.DataCatalogues, 0)
 }
 
-func TestGroup_ToolAssociation(t *testing.T) {
+func TestGroup_ToolCatalogueAssociation(t *testing.T) {
 	db := setupTestDB(t)
 
 	group := &Group{Name: "Test Group"}
 	err := group.Create(db)
 	assert.NoError(t, err)
 
-	tool := &Tool{Name: "Test Tool"}
-	err = tool.Create(db)
+	toolCatalogue := &ToolCatalogue{Name: "Test Tool Catalogue"}
+	err = toolCatalogue.Create(db)
 	assert.NoError(t, err)
 
-	// Add Tool
-	err = group.AddTool(db, tool)
+	// Add ToolCatalogue
+	err = group.AddToolCatalogue(db, toolCatalogue)
 	assert.NoError(t, err)
 
-	// Get Tools
-	err = group.GetTools(db)
+	// Get ToolCatalogues
+	err = group.GetToolCatalogues(db)
 	assert.NoError(t, err)
-	assert.Len(t, group.Tools, 1)
-	assert.Equal(t, tool.ID, group.Tools[0].ID)
+	assert.Len(t, group.ToolCatalogues, 1)
+	assert.Equal(t, toolCatalogue.ID, group.ToolCatalogues[0].ID)
 
-	// Remove Tool
-	err = group.RemoveTool(db, tool)
+	// Remove ToolCatalogue
+	err = group.RemoveToolCatalogue(db, toolCatalogue)
 	assert.NoError(t, err)
 
-	err = group.GetTools(db)
+	err = group.GetToolCatalogues(db)
 	assert.NoError(t, err)
-	assert.Len(t, group.Tools, 0)
+	assert.Len(t, group.ToolCatalogues, 0)
 }
 
 func TestGroup_GetGroupsByUserID(t *testing.T) {

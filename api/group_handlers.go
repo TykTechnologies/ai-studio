@@ -749,19 +749,19 @@ func (a *API) listGroupDataCatalogues(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogues(dataCatalogues)})
 }
 
-// @Summary Add a tool to a group
-// @Description Add a tool to a specific group
+// @Summary Add a tool catalogue to a group
+// @Description Add a tool catalogue to a specific group
 // @Tags groups
 // @Accept json
 // @Produce json
 // @Param id path int true "Group ID"
-// @Param tool body ToolInput true "Tool to add"
+// @Param toolCatalogue body GroupToolCatalogueInput true "Tool Catalogue to add"
 // @Success 204 "No Content"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /groups/{id}/tools [post]
+// @Router /groups/{id}/tool-catalogues [post]
 // @Security BearerAuth
-func (a *API) addToolToGroup(c *gin.Context) {
+func (a *API) addToolCatalogueToGroup(c *gin.Context) {
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -773,7 +773,7 @@ func (a *API) addToolToGroup(c *gin.Context) {
 		return
 	}
 
-	var input GroupToolInput
+	var input GroupToolCatalogueInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -784,25 +784,25 @@ func (a *API) addToolToGroup(c *gin.Context) {
 		return
 	}
 
-	toolID, err := strconv.ParseUint(input.Data.ID, 10, 32)
+	toolCatalogueID, err := strconv.ParseUint(input.Data.ID, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+			}{{Title: "Bad Request", Detail: "Invalid tool catalogue ID"}},
 		})
 		return
 	}
 
-	err = a.service.AddToolToGroup(uint(toolID), uint(groupID))
+	err = a.service.AddToolCatalogueToGroup(uint(toolCatalogueID), uint(groupID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Bad Request", Detail: "Tool or group not found"}},
+				}{{Title: "Not Found", Detail: "Tool catalogue or group not found"}},
 			})
 			return
 		}
@@ -818,19 +818,19 @@ func (a *API) addToolToGroup(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary Remove a tool from a group
-// @Description Remove a tool from a specific group
+// @Summary Remove a tool catalogue from a group
+// @Description Remove a tool catalogue from a specific group
 // @Tags groups
 // @Accept json
 // @Produce json
 // @Param id path int true "Group ID"
-// @Param toolId path int true "Tool ID"
+// @Param toolCatalogueId path int true "Tool Catalogue ID"
 // @Success 204 "No Content"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /groups/{id}/tools/{toolId} [delete]
+// @Router /groups/{id}/tool-catalogues/{toolCatalogueId} [delete]
 // @Security BearerAuth
-func (a *API) removeToolFromGroup(c *gin.Context) {
+func (a *API) removeToolCatalogueFromGroup(c *gin.Context) {
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -842,25 +842,25 @@ func (a *API) removeToolFromGroup(c *gin.Context) {
 		return
 	}
 
-	toolID, err := strconv.ParseUint(c.Param("toolId"), 10, 32)
+	toolCatalogueID, err := strconv.ParseUint(c.Param("toolCatalogueId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+			}{{Title: "Bad Request", Detail: "Invalid tool catalogue ID"}},
 		})
 		return
 	}
 
-	err = a.service.RemoveToolFromGroup(uint(toolID), uint(groupID))
+	err = a.service.RemoveToolCatalogueFromGroup(uint(toolCatalogueID), uint(groupID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Bad Request", Detail: "Tool or group not found"}},
+				}{{Title: "Not Found", Detail: "Tool catalogue or group not found"}},
 			})
 			return
 		}
@@ -877,18 +877,18 @@ func (a *API) removeToolFromGroup(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary List tools in a group
-// @Description Get a list of all tools in a specific group
+// @Summary List tool catalogues in a group
+// @Description Get a list of all tool catalogues in a specific group
 // @Tags groups
 // @Accept json
 // @Produce json
 // @Param id path int true "Group ID"
-// @Success 200 {array} ToolResponse
+// @Success 200 {array} ToolCatalogueResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /groups/{id}/tools [get]
+// @Router /groups/{id}/tool-catalogues [get]
 // @Security BearerAuth
-func (a *API) listGroupTools(c *gin.Context) {
+func (a *API) listGroupToolCatalogues(c *gin.Context) {
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -900,7 +900,7 @@ func (a *API) listGroupTools(c *gin.Context) {
 		return
 	}
 
-	tools, err := a.service.GetGroupTools(uint(groupID))
+	toolCatalogues, err := a.service.GetGroupToolCatalogues(uint(groupID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -911,5 +911,37 @@ func (a *API) listGroupTools(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues)})
+}
+
+// Helper function to serialize ToolCatalogues
+func serializeToolCatalogues(toolCatalogues models.ToolCatalogues) []ToolCatalogueResponse {
+	result := make([]ToolCatalogueResponse, len(toolCatalogues))
+	for i, tc := range toolCatalogues {
+		result[i] = serializeToolCatalogue(&tc)
+	}
+	return result
+}
+
+// Helper function to serialize a single ToolCatalogue
+func serializeToolCatalogue(tc *models.ToolCatalogue) ToolCatalogueResponse {
+	return ToolCatalogueResponse{
+		Type: "tool-catalogues",
+		ID:   strconv.FormatUint(uint64(tc.ID), 10),
+		Attributes: struct {
+			Name             string         `json:"name"`
+			ShortDescription string         `json:"short_description"`
+			LongDescription  string         `json:"long_description"`
+			Icon             string         `json:"icon"`
+			Tools            []ToolResponse `json:"tools"`
+			Tags             []TagResponse  `json:"tags"`
+		}{
+			Name:             tc.Name,
+			ShortDescription: tc.ShortDescription,
+			LongDescription:  tc.LongDescription,
+			Icon:             tc.Icon,
+			Tools:            serializeTools(tc.Tools),
+			Tags:             serializeTags(tc.Tags),
+		},
+	}
 }
