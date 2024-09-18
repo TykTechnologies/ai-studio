@@ -35,18 +35,23 @@ const GroupDetail = () => {
   const [users, setUsers] = useState([]);
   const [catalogues, setCatalogues] = useState([]);
   const [dataCatalogues, setDataCatalogues] = useState([]);
+  const [toolCatalogues, setToolCatalogues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openAddUserModal, setOpenAddUserModal] = useState(false);
   const [openAddCatalogueModal, setOpenAddCatalogueModal] = useState(false);
   const [openAddDataCatalogueModal, setOpenAddDataCatalogueModal] =
     useState(false);
+  const [openAddToolCatalogueModal, setOpenAddToolCatalogueModal] =
+    useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [availableCatalogues, setAvailableCatalogues] = useState([]);
   const [availableDataCatalogues, setAvailableDataCatalogues] = useState([]);
+  const [availableToolCatalogues, setAvailableToolCatalogues] = useState([]);
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedCatalogue, setSelectedCatalogue] = useState("");
   const [selectedDataCatalogue, setSelectedDataCatalogue] = useState("");
+  const [selectedToolCatalogue, setSelectedToolCatalogue] = useState("");
   const { id } = useParams();
   const navigate = useNavigate();
   const [snackbar, setSnackbar] = useState({
@@ -66,16 +71,19 @@ const GroupDetail = () => {
         usersResponse,
         cataloguesResponse,
         dataCataloguesResponse,
+        toolCataloguesResponse,
       ] = await Promise.all([
         apiClient.get(`/groups/${id}`),
         apiClient.get(`/groups/${id}/users`),
         apiClient.get(`/groups/${id}/catalogues`),
         apiClient.get(`/groups/${id}/data-catalogues`),
+        apiClient.get(`/groups/${id}/tool-catalogues`),
       ]);
       setGroup(groupResponse.data.data);
       setUsers(usersResponse.data.data || []);
       setCatalogues(cataloguesResponse.data.data || []);
       setDataCatalogues(dataCataloguesResponse.data.data || []);
+      setToolCatalogues(toolCataloguesResponse.data.data || []);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching group details", error);
@@ -123,6 +131,22 @@ const GroupDetail = () => {
       );
     } catch (error) {
       console.error("Error fetching data catalogues", error);
+    }
+  };
+
+  const handleAddToolCatalogue = async () => {
+    setOpenAddToolCatalogueModal(true);
+    try {
+      const response = await apiClient.get("/tool-catalogues");
+      const allToolCatalogues = response.data.data || [];
+      const groupToolCatalogueIds = toolCatalogues.map((tc) => tc.id);
+      setAvailableToolCatalogues(
+        allToolCatalogues.filter(
+          (tc) => !groupToolCatalogueIds.includes(tc.id),
+        ),
+      );
+    } catch (error) {
+      console.error("Error fetching tool catalogues", error);
     }
   };
 
@@ -184,6 +208,29 @@ const GroupDetail = () => {
       setSnackbar({
         open: true,
         message: "Failed to remove data catalogue from group",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleRemoveToolCatalogue = async (toolCatalogueId) => {
+    try {
+      await apiClient.delete(
+        `/groups/${id}/tool-catalogues/${toolCatalogueId}`,
+      );
+      setToolCatalogues(
+        toolCatalogues.filter((tc) => tc.id !== toolCatalogueId),
+      );
+      setSnackbar({
+        open: true,
+        message: "Tool Catalogue removed from group successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error removing tool catalogue from group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove tool catalogue from group",
         severity: "error",
       });
     }
@@ -294,6 +341,41 @@ const GroupDetail = () => {
     }
   };
 
+  const handleAddToolCatalogueConfirm = async () => {
+    if (!selectedToolCatalogue) {
+      setSnackbar({
+        open: true,
+        message: "Please select a tool catalogue",
+        severity: "warning",
+      });
+      return;
+    }
+
+    try {
+      await apiClient.post(`/groups/${id}/tool-catalogues`, {
+        data: {
+          id: selectedToolCatalogue,
+          type: "tool-catalogues",
+        },
+      });
+      setOpenAddToolCatalogueModal(false);
+      setSelectedToolCatalogue("");
+      fetchGroupDetails();
+      setSnackbar({
+        open: true,
+        message: "Tool Catalogue added to group successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error adding tool catalogue to group", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add tool catalogue to group",
+        severity: "error",
+      });
+    }
+  };
+
   const handleCloseSnackbar = (event, reason) => {
     if (reason === "clickaway") {
       return;
@@ -319,6 +401,7 @@ const GroupDetail = () => {
       </TitleBox>
       <ContentBox>
         <Typography variant="h6">Name: {group.attributes.name}</Typography>
+
         <Typography variant="h6" style={{ marginTop: "20px" }}>
           Users in Group
         </Typography>
@@ -392,6 +475,31 @@ const GroupDetail = () => {
           onClick={handleAddDataCatalogue}
         >
           Add Data Catalogue
+        </StyledButton>
+
+        <Typography variant="h6" style={{ marginTop: "20px" }}>
+          Tool Catalogues in Group
+        </Typography>
+        <List>
+          {toolCatalogues.map((toolCatalogue) => (
+            <ListItem key={toolCatalogue.id}>
+              <ListItemText primary={toolCatalogue.attributes.name} />
+              <IconButton
+                edge="end"
+                aria-label="delete"
+                onClick={() => handleRemoveToolCatalogue(toolCatalogue.id)}
+              >
+                <DeleteIcon />
+              </IconButton>
+            </ListItem>
+          ))}
+        </List>
+        <StyledButton
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddToolCatalogue}
+        >
+          Add Tool Catalogue
         </StyledButton>
       </ContentBox>
 
@@ -499,6 +607,43 @@ const GroupDetail = () => {
             Cancel
           </Button>
           <Button onClick={handleAddDataCatalogueConfirm} color="primary">
+            Add
+          </Button>
+        </DialogActions>
+      </StyledDialog>
+
+      <StyledDialog
+        open={openAddToolCatalogueModal}
+        onClose={() => setOpenAddToolCatalogueModal(false)}
+      >
+        <StyledDialogTitle>Add Tool Catalogue to Group</StyledDialogTitle>
+        <StyledDialogContent>
+          <Typography
+            gutterBottom
+            sx={(theme) => ({ padding: theme.spacing(2) })}
+          >
+            Tool Catalogues are collections of tools that you can make available
+            to a group.
+          </Typography>
+          <FormControl fullWidth>
+            <InputLabel>Tool Catalogue</InputLabel>
+            <Select
+              value={selectedToolCatalogue}
+              onChange={(e) => setSelectedToolCatalogue(e.target.value)}
+            >
+              {availableToolCatalogues.map((toolCatalogue) => (
+                <MenuItem key={toolCatalogue.id} value={toolCatalogue.id}>
+                  {toolCatalogue.attributes.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </StyledDialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenAddToolCatalogueModal(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleAddToolCatalogueConfirm} color="primary">
             Add
           </Button>
         </DialogActions>
