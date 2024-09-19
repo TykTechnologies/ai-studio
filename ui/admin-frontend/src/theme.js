@@ -26,6 +26,7 @@ const theme = createTheme({
       teal: "#21ecba",
       lightTeal: "rgb(33 236 186 / 7%)",
       hoverTeal: "rgb(33 236 186 / 47%)",
+      emptyStateBackground: "#23ebba11",
     },
     text: {
       light: "#FFFFFF",
@@ -75,6 +76,17 @@ const theme = createTheme({
           borderBottom: "1px solid rgba(255, 255, 255, 0.98)",
         },
       },
+    },
+    MuiPaper: {
+      variants: [
+        {
+          props: { variant: "emptyState" },
+          style: {
+            backgroundColor: "#23ebba11", // Light blue color
+            border: "1px solid #90CAF9", // Slightly darker blue for border
+          },
+        },
+      ],
     },
   },
 });

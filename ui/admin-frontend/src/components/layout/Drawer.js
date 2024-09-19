@@ -16,6 +16,8 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import PersonIcon from "@mui/icons-material/Person";
 import GroupIcon from "@mui/icons-material/Group";
 import PeopleIcon from "@mui/icons-material/People";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import SettingsIcon from "@mui/icons-material/Settings";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
@@ -34,10 +36,10 @@ const menuItems = [
   },
   {
     text: "AI",
-    icon: <PeopleIcon />,
+    icon: <SmartToyIcon />, // Updated icon for AI section
     subItems: [
-      { text: "LLMs", icon: <PersonIcon />, path: "/llms" },
-      { text: "LLM Settings", icon: <GroupIcon />, path: "/llm-settings" },
+      { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" }, // Updated icon for LLMs
+      { text: "LLM Settings", icon: <SettingsIcon />, path: "/llm-settings" }, // Updated icon for LLM Settings
     ],
   },
 ];

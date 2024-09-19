@@ -14,6 +14,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, 
 		LongDescription:  longDescription,
 		LogoURL:          logoURL,
 		Vendor:           vendor,
+		Active:           active,
 	}
 
 	if err := llm.Create(s.DB); err != nil {

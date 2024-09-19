@@ -1,0 +1,347 @@
+import React, { useState, useEffect } from "react";
+import apiClient from "../../utils/apiClient";
+import {
+  TextField,
+  Button,
+  Box,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Typography,
+  Grid,
+  Snackbar,
+  Alert,
+  Switch,
+  FormControlLabel,
+  InputAdornment,
+  IconButton,
+} from "@mui/material";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import {
+  StyledPaper,
+  TitleBox,
+  ContentBox,
+  StyledButton,
+} from "../../styles/sharedStyles";
+import {
+  getVendorName,
+  getVendorLogo,
+  getVendorCodes,
+} from "../../utils/vendorLogos";
+
+const LLMForm = () => {
+  const [llm, setLLM] = useState({
+    name: "",
+    short_description: "",
+    long_description: "",
+    vendor: "",
+    privacy_score: 0,
+    api_endpoint: "",
+    api_key: "",
+    logo_url: "",
+    active: false,
+  });
+  const [vendors, setVendors] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  useEffect(() => {
+    setVendors(getVendorCodes());
+    if (id) {
+      fetchLLM();
+    }
+  }, [id]);
+
+  const fetchVendors = async () => {
+    try {
+      const response = await apiClient.get("/vendors/llm-drivers");
+      setVendors(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching vendors", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch vendors",
+        severity: "error",
+      });
+    }
+  };
+
+  const fetchLLM = async () => {
+    try {
+      const response = await apiClient.get(`/llms/${id}`);
+      setLLM(response.data.data.attributes);
+    } catch (error) {
+      console.error("Error fetching LLM", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch LLM details",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === "privacy_score") {
+      // Ensure the value is a number between 0 and 100
+      const numValue = Math.min(Math.max(parseInt(value) || 0, 0), 100);
+      setLLM({ ...llm, [name]: numValue });
+    } else {
+      setLLM({ ...llm, [name]: value });
+    }
+  };
+
+  const handleSwitchChange = (e) => {
+    setLLM({ ...llm, active: e.target.checked });
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!llm.name.trim()) newErrors.name = "Name is required";
+    if (!llm.vendor.trim()) newErrors.vendor = "Vendor is required";
+    if (llm.privacy_score < 0 || llm.privacy_score > 100)
+      newErrors.privacy_score = "Privacy score must be between 0 and 100";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    const llmData = {
+      data: {
+        type: "LLM",
+        attributes: {
+          ...llm,
+          privacy_score: Number(llm.privacy_score), // Ensure privacy_score is a number
+          active: Boolean(llm.active), // Ensure active is a boolean
+        },
+      },
+    };
+
+    try {
+      if (id) {
+        await apiClient.patch(`/llms/${id}`, llmData);
+      } else {
+        await apiClient.post("/llms", llmData);
+      }
+
+      setSnackbar({
+        open: true,
+        message: id ? "LLM updated successfully" : "LLM created successfully",
+        severity: "success",
+      });
+
+      setTimeout(() => navigate("/llms"), 2000);
+    } catch (error) {
+      console.error("Error saving LLM", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to save LLM. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  return (
+    <StyledPaper>
+      <TitleBox>
+        <Typography variant="h5">{id ? "Edit LLM" : "Add LLM"}</Typography>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/llms"
+          color="white"
+        >
+          Back to LLMs
+        </Button>
+      </TitleBox>
+      <ContentBox>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Name"
+                name="name"
+                value={llm.name}
+                onChange={handleChange}
+                error={!!errors.name}
+                helperText={errors.name}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Short Description"
+                name="short_description"
+                value={llm.short_description}
+                onChange={handleChange}
+                multiline
+                rows={2}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Long Description"
+                name="long_description"
+                value={llm.long_description}
+                onChange={handleChange}
+                multiline
+                rows={4}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Vendor</InputLabel>
+                <Select
+                  name="vendor"
+                  value={llm.vendor}
+                  onChange={handleChange}
+                  error={!!errors.vendor}
+                  required
+                >
+                  {vendors.map((vendorCode) => (
+                    <MenuItem key={vendorCode} value={vendorCode}>
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <img
+                          src={getVendorLogo(vendorCode)}
+                          alt={getVendorName(vendorCode)}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            marginRight: 8,
+                            objectFit: "contain",
+                          }}
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src =
+                              process.env.PUBLIC_URL +
+                              "/images/placeholder-logo.png";
+                          }}
+                        />
+                        {getVendorName(vendorCode)}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Privacy Score"
+                name="privacy_score"
+                type="number"
+                value={llm.privacy_score}
+                onChange={handleChange}
+                error={!!errors.privacy_score}
+                helperText={errors.privacy_score}
+                inputProps={{
+                  min: 0,
+                  max: 100,
+                  step: 1,
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="API Endpoint"
+                name="api_endpoint"
+                value={llm.api_endpoint}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="API Key"
+                name="api_key"
+                type={showApiKey ? "text" : "password"}
+                value={llm.api_key}
+                onChange={handleChange}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        edge="end"
+                      >
+                        {showApiKey ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Logo URL"
+                name="logo_url"
+                value={llm.logo_url}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={llm.active}
+                    onChange={handleSwitchChange}
+                    name="active"
+                    color="primary"
+                  />
+                }
+                label="Active"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <StyledButton variant="contained" type="submit">
+                {id ? "Update LLM" : "Add LLM"}
+              </StyledButton>
+            </Grid>
+          </Grid>
+        </Box>
+      </ContentBox>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </StyledPaper>
+  );
+};
+
+export default LLMForm;

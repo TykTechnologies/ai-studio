@@ -25,6 +25,10 @@ import Groups from "./pages/Groups";
 import GroupDetail from "./components/groups/GroupDetail";
 import GroupForm from "./components/groups/GroupForm";
 
+import LLMList from "./pages/LLMList";
+import LLMDetails from "./components/llms/LLMDetails";
+import LLMForm from "./components/llms/LLMForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -88,6 +92,22 @@ function App() {
                 element={<PrivateRoute element={<GroupForm />} />}
               />
 
+              <Route
+                path="/llms"
+                element={<PrivateRoute element={<LLMList />} />}
+              />
+              <Route
+                path="/llms/:id"
+                element={<PrivateRoute element={<LLMDetails />} />}
+              />
+              <Route
+                path="/llms/edit/:id"
+                element={<PrivateRoute element={<LLMForm />} />}
+              />
+              <Route
+                path="/llms/new"
+                element={<PrivateRoute element={<LLMForm />} />}
+              />
               {/* Add more routes as needed */}
             </Routes>
           </Box>
