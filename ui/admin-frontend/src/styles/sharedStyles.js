@@ -9,6 +9,7 @@ import {
   TableRow,
   Dialog,
   DialogTitle,
+  Accordion,
   DialogContent,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
@@ -101,5 +102,39 @@ export const StyledIconButton = styled(IconButton)(({ theme }) => ({
   color: theme.palette.text.light,
   "&:hover": {
     backgroundColor: theme.palette.custom.lightTeal,
+  },
+}));
+
+export const StyledAccordion = styled(Accordion)(({ theme }) => ({
+  marginTop: theme.spacing(3),
+  boxShadow: "none",
+  "&:before": {
+    display: "none",
+  },
+  "& .MuiAccordionSummary-root": {
+    backgroundColor: theme.palette.custom.lightTeal,
+    borderRadius: `${theme.shape.borderRadius * 3}px`,
+    "&:hover": {
+      backgroundColor: theme.palette.custom.teal,
+    },
+    "&.Mui-expanded": {
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+    },
+  },
+  "& .MuiAccordionSummary-content": {
+    color: theme.palette.text.primary,
+  },
+  "& .MuiAccordionSummary-expandIconWrapper": {
+    color: theme.palette.text.primary,
+  },
+  "& .MuiAccordionDetails-root": {
+    backgroundColor: theme.palette.background.paper,
+    borderBottomLeftRadius: `${theme.shape.borderRadius * 3}px`,
+    borderBottomRightRadius: `${theme.shape.borderRadius * 3}px`,
+    borderTop: `1px solid ${theme.palette.divider}`,
+  },
+  "& .MuiAccordion-root": {
+    transition: theme.transitions.create(["margin", "border-radius"]),
   },
 }));

@@ -10,11 +10,13 @@ import {
   IconButton,
   Tooltip,
   Link,
+  Divider,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
   StyledPaper,
   TitleBox,
@@ -25,12 +27,21 @@ import {
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 
+const SectionTitle = ({ children }) => (
+  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
+    {children}
+  </Typography>
+);
+
 const LLMDetails = () => {
   const [llm, setLLM] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const apiEndpointPlaceholder = "API Endpoint not set";
+  const apiKeyPlaceholder = "API Key not set";
 
   useEffect(() => {
     fetchLLMDetails();
@@ -75,7 +86,8 @@ const LLMDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
-        <Grid container spacing={2} mb={4}>
+        <SectionTitle>LLM Description</SectionTitle>
+        <Grid container spacing={2}>
           <Grid item xs={3}>
             <FieldLabel>Name:</FieldLabel>
           </Grid>
@@ -87,12 +99,6 @@ const LLMDetails = () => {
           </Grid>
           <Grid item xs={9}>
             <FieldValue>{llm.attributes.short_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Long Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{llm.attributes.long_description}</FieldValue>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Vendor:</FieldLabel>
@@ -116,23 +122,52 @@ const LLMDetails = () => {
             <FieldLabel>Privacy Score:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>{llm.attributes.privacy_score}</FieldValue>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <FieldValue>{llm.attributes.privacy_score}</FieldValue>
+              <Tooltip
+                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing."
+                placement="top"
+              >
+                <HelpOutlineIcon
+                  sx={{ ml: 1, fontSize: 20, color: "text.secondary" }}
+                />
+              </Tooltip>
+            </Box>
           </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>Access Details</SectionTitle>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          Some LLMs do not require an API Key for access, or have a default URL
+          (for example Anthropic and OopenAI). If you have an LLM provider that
+          is not on the list, but provides an OpenAPI compatible API, you can
+          use the compatible vendor setting and override the default URL.
+        </Typography>
+        <Grid container spacing={2}>
           <Grid item xs={3}>
             <FieldLabel>API Endpoint:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
-              <FieldValue>{llm.attributes.api_endpoint}</FieldValue>
-              <Tooltip title="Copy to clipboard" placement="top">
-                <IconButton
-                  onClick={() =>
-                    copyToClipboard(llm.attributes.api_endpoint, "API Endpoint")
-                  }
-                >
-                  <ContentCopyIcon />
-                </IconButton>
-              </Tooltip>
+              <FieldValue>
+                {llm.attributes.api_endpoint || apiEndpointPlaceholder}
+              </FieldValue>
+              {llm.attributes.api_endpoint && (
+                <Tooltip title="Copy to clipboard" placement="top">
+                  <IconButton
+                    onClick={() =>
+                      copyToClipboard(
+                        llm.attributes.api_endpoint,
+                        "API Endpoint",
+                      )
+                    }
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
           </Grid>
           <Grid item xs={3}>
@@ -140,18 +175,32 @@ const LLMDetails = () => {
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
-              <FieldValue>{"*".repeat(20)}</FieldValue>
-              <Tooltip title="Copy to clipboard" placement="top">
-                <IconButton
-                  onClick={() =>
-                    copyToClipboard(llm.attributes.api_key, "API Key")
-                  }
-                >
-                  <ContentCopyIcon />
-                </IconButton>
-              </Tooltip>
+              <FieldValue>
+                {llm.attributes.api_key ? "*".repeat(20) : apiKeyPlaceholder}
+              </FieldValue>
+              {llm.attributes.api_key && (
+                <Tooltip title="Copy to clipboard" placement="top">
+                  <IconButton
+                    onClick={() =>
+                      copyToClipboard(llm.attributes.api_key, "API Key")
+                    }
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
           </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>Portal Display Information</SectionTitle>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          The following settings will be used in the Portal UI that your
+          end-users / developers will see when browsing for LLMs to use.
+        </Typography>
+        <Grid container spacing={2}>
           <Grid item xs={3}>
             <FieldLabel>Logo URL:</FieldLabel>
           </Grid>
@@ -198,8 +247,9 @@ const LLMDetails = () => {
             </FieldValue>
           </Grid>
         </Grid>
+
         <Box
-          mb={2}
+          mt={4}
           display="flex"
           justifyContent="space-between"
           alignItems="center"

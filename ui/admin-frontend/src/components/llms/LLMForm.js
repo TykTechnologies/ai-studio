@@ -16,22 +16,36 @@ import {
   FormControlLabel,
   InputAdornment,
   IconButton,
+  Tooltip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   StyledPaper,
   TitleBox,
   ContentBox,
   StyledButton,
+  StyledAccordion,
 } from "../../styles/sharedStyles";
 import {
   getVendorName,
   getVendorLogo,
   getVendorCodes,
 } from "../../utils/vendorLogos";
+import { useTheme } from "@mui/material/styles";
+
+const SectionTitle = ({ children }) => (
+  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
+    {children}
+  </Typography>
+);
 
 const LLMForm = () => {
   const [llm, setLLM] = useState({
@@ -55,6 +69,7 @@ const LLMForm = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
+  const theme = useTheme();
 
   useEffect(() => {
     setVendors(getVendorCodes());
@@ -62,20 +77,6 @@ const LLMForm = () => {
       fetchLLM();
     }
   }, [id]);
-
-  const fetchVendors = async () => {
-    try {
-      const response = await apiClient.get("/vendors/llm-drivers");
-      setVendors(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching vendors", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to fetch vendors",
-        severity: "error",
-      });
-    }
-  };
 
   const fetchLLM = async () => {
     try {
@@ -94,7 +95,6 @@ const LLMForm = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === "privacy_score") {
-      // Ensure the value is a number between 0 and 100
       const numValue = Math.min(Math.max(parseInt(value) || 0, 0), 100);
       setLLM({ ...llm, [name]: numValue });
     } else {
@@ -125,8 +125,8 @@ const LLMForm = () => {
         type: "LLM",
         attributes: {
           ...llm,
-          privacy_score: Number(llm.privacy_score), // Ensure privacy_score is a number
-          active: Boolean(llm.active), // Ensure active is a boolean
+          privacy_score: Number(llm.privacy_score),
+          active: Boolean(llm.active),
         },
       },
     };
@@ -177,6 +177,7 @@ const LLMForm = () => {
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
+          <SectionTitle>LLM Description</SectionTitle>
           <Grid container spacing={3}>
             <Grid item xs={12}>
               <TextField
@@ -263,67 +264,108 @@ const LLMForm = () => {
                   max: 100,
                   step: 1,
                 }}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="API Endpoint"
-                name="api_endpoint"
-                value={llm.api_endpoint}
-                onChange={handleChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="API Key"
-                name="api_key"
-                type={showApiKey ? "text" : "password"}
-                value={llm.api_key}
-                onChange={handleChange}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        edge="end"
-                      >
-                        {showApiKey ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
+                      <Tooltip title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing.">
+                        <HelpOutlineIcon color="action" />
+                      </Tooltip>
                     </InputAdornment>
                   ),
                 }}
               />
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Logo URL"
-                name="logo_url"
-                value={llm.logo_url}
-                onChange={handleChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={llm.active}
-                    onChange={handleSwitchChange}
-                    name="active"
-                    color="primary"
-                  />
-                }
-                label="Active"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <StyledButton variant="contained" type="submit">
-                {id ? "Update LLM" : "Add LLM"}
-              </StyledButton>
-            </Grid>
           </Grid>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Access Details</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Some LLMs do not require an API Key for access, or have a
+                default URL (for example Anthropic and OpenAI). If you have an
+                LLM provider that is not on the list, but provides an OpenAPI
+                compatible API, you can use the compatible vendor setting and
+                override the default URL.
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="API Endpoint"
+                    name="api_endpoint"
+                    value={llm.api_endpoint}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="API Key"
+                    name="api_key"
+                    type={showApiKey ? "text" : "password"}
+                    value={llm.api_key}
+                    onChange={handleChange}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            edge="end"
+                          >
+                            {showApiKey ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Portal Display Information</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                The following settings will be used in the Portal UI that your
+                end-users / developers will see when browsing for LLMs to use.
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Logo URL"
+                    name="logo_url"
+                    value={llm.logo_url}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={llm.active}
+                        onChange={handleSwitchChange}
+                        name="active"
+                        color="primary"
+                      />
+                    }
+                    label="Active"
+                  />
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
+
+          <Box mt={4}>
+            <StyledButton variant="contained" type="submit">
+              {id ? "Update LLM" : "Add LLM"}
+            </StyledButton>
+          </Box>
         </Box>
       </ContentBox>
       <Snackbar
