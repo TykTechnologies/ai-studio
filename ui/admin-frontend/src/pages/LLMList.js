@@ -15,6 +15,7 @@ import {
   MenuItem,
   Snackbar,
   Box,
+  Tooltip,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
@@ -29,6 +30,7 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
+import InfoTooltip from "../components/common/InfoTooltip";
 
 const LLMList = () => {
   const navigate = useNavigate();
@@ -158,7 +160,11 @@ const LLMList = () => {
     <Box sx={{ p: 0 }}>
       <StyledPaper>
         <TitleBox>
-          <Typography variant="h5">LLMs</Typography>
+          <Box display="flex" alignItems="center">
+            <InfoTooltip title="Large Language Models (LLMs) registered here can be used in chat rooms, and are available to developers in the Portal if set to Active. They must be part of a catalog in order to be usable by a group." />
+            <Typography variant="h5">LLMs</Typography>
+          </Box>
+
           <StyledButton
             variant="contained"
             startIcon={<AddIcon />}
