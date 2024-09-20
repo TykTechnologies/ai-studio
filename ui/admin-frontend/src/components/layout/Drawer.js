@@ -19,6 +19,9 @@ import PeopleIcon from "@mui/icons-material/People";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import StorageIcon from "@mui/icons-material/Storage";
+import BuildIcon from "@mui/icons-material/Build";
+import DataObjectIcon from "@mui/icons-material/DataObject";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
@@ -45,7 +48,19 @@ const menuItems = [
         text: "Model Prices",
         icon: <AttachMoneyIcon />,
         path: "/model-prices",
-      }, // New menu item
+      },
+    ],
+  },
+  {
+    text: "Data",
+    icon: <DataObjectIcon />,
+    subItems: [
+      {
+        text: "Vector Sources",
+        icon: <StorageIcon />,
+        path: "/datasources",
+      },
+      { text: "Tools", icon: <BuildIcon />, path: "/tools" },
     ],
   },
 ];

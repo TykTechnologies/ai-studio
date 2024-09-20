@@ -37,6 +37,10 @@ import ModelPriceList from "./pages/ModelPriceList";
 import ModelPriceDetail from "./components/model-prices/ModelPriceDetail";
 import ModelPriceForm from "./components/model-prices/ModelPriceForm";
 
+import DatasourceList from "./pages/DatasourceList";
+import DatasourceDetails from "./components/datasources/DatasourceDetails";
+import DatasourceForm from "./components/datasources/DatasourceForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -149,6 +153,23 @@ function App() {
               <Route
                 path="/model-prices/new"
                 element={<PrivateRoute element={<ModelPriceForm />} />}
+              />
+
+              <Route
+                path="/datasources"
+                element={<PrivateRoute element={<DatasourceList />} />}
+              />
+              <Route
+                path="/datasources/:id"
+                element={<PrivateRoute element={<DatasourceDetails />} />}
+              />
+              <Route
+                path="/datasources/edit/:id"
+                element={<PrivateRoute element={<DatasourceForm />} />}
+              />
+              <Route
+                path="/datasources/new"
+                element={<PrivateRoute element={<DatasourceForm />} />}
               />
 
               {/* Add more routes as needed */}

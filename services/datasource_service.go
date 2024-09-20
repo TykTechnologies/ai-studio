@@ -35,7 +35,7 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 	return datasource, nil
 }
 
-func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
+func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, tagNames []string) (*models.Datasource, error) {
 	datasource, err := s.GetDatasourceByID(id)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,20 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.DBName = dbName
 	datasource.Active = active
 
+	oldTags := []string{}
+	for _, tag := range datasource.Tags {
+		oldTags = append(oldTags, tag.Name)
+	}
+
 	if err := datasource.Update(s.DB); err != nil {
+		return nil, err
+	}
+
+	if err := datasource.RemoveTags(s.DB, oldTags); err != nil {
+		return nil, err
+	}
+
+	if err := datasource.AddTags(s.DB, tagNames); err != nil {
 		return nil, err
 	}
 

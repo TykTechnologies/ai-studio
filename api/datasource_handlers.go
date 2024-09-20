@@ -152,6 +152,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.EmbedAPIKey,
 		input.Data.Attributes.EmbedModel,
 		input.Data.Attributes.Active,
+		input.Data.Attributes.Tags,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

@@ -87,6 +87,20 @@ func (d *Datasource) AddTags(db *gorm.DB, tagNames []string) error {
 	return nil
 }
 
+// Remove tags from a datasource
+func (d *Datasource) RemoveTags(db *gorm.DB, tagNames []string) error {
+	for _, tagName := range tagNames {
+		var tag Tag
+		if err := db.Where("name = ?", tagName).First(&tag).Error; err != nil {
+			return err
+		}
+		if err := db.Model(d).Association("Tags").Delete(&tag); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Filter datasources by minimum privacy score
 func (d *Datasources) GetByMinPrivacyScore(db *gorm.DB, minScore int) error {
 	return db.Preload("Tags").Where("privacy_score >= ?", minScore).Find(d).Error
