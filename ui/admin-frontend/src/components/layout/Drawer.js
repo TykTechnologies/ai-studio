@@ -22,6 +22,7 @@ import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import StorageIcon from "@mui/icons-material/Storage";
 import BuildIcon from "@mui/icons-material/Build";
 import DataObjectIcon from "@mui/icons-material/DataObject";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
@@ -61,6 +62,16 @@ const menuItems = [
         path: "/datasources",
       },
       { text: "Tools", icon: <BuildIcon />, path: "/tools" },
+    ],
+  },
+  // New Catalogs category
+  {
+    text: "Catalogs",
+    icon: <FolderOpenIcon />, // You may want to import this icon
+    subItems: [
+      { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
+      { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
+      { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
     ],
   },
 ];

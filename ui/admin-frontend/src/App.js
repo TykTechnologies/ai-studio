@@ -45,6 +45,10 @@ import ToolList from "./pages/ToolList";
 import ToolDetails from "./components/tools/ToolDetails";
 import ToolForm from "./components/tools/ToolForm";
 
+import CatalogueList from "./pages/CatalogueList";
+import CatalogueDetails from "./components/catalogues/CatalogueDetails";
+import CatalogueForm from "./components/catalogues/CatalogueForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -193,6 +197,22 @@ function App() {
                 element={<PrivateRoute element={<ToolForm />} />}
               />
 
+              <Route
+                path="/catalogs/llms"
+                element={<PrivateRoute element={<CatalogueList />} />}
+              />
+              <Route
+                path="/catalogs/llms/:id"
+                element={<PrivateRoute element={<CatalogueDetails />} />}
+              />
+              <Route
+                path="/catalogs/llms/edit/:id"
+                element={<PrivateRoute element={<CatalogueForm />} />}
+              />
+              <Route
+                path="/catalogs/llms/new"
+                element={<PrivateRoute element={<CatalogueForm />} />}
+              />
               {/* Add more routes as needed */}
             </Routes>
           </Box>

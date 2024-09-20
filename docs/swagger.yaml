@@ -646,6 +646,28 @@ definitions:
       type:
         type: string
     type: object
+  api.OperationInput:
+    description: Operation input model
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              operation:
+                type: string
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.OperationsResponse:
+    description: Tool operations response model
+    properties:
+      operations:
+        items:
+          type: string
+        type: array
+    type: object
   api.TagInput:
     description: Tag input model
     properties:
@@ -4474,6 +4496,121 @@ paths:
       security:
       - BearerAuth: []
       summary: Update a tool
+      tags:
+      - tools
+  /tools/{id}/operations:
+    delete:
+      consumes:
+      - application/json
+      description: Remove an operation from a specific tool
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Operation to remove
+        in: body
+        name: operation
+        required: true
+        schema:
+          $ref: '#/definitions/api.OperationInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ToolResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove operation from tool
+      tags:
+      - tools
+    get:
+      consumes:
+      - application/json
+      description: Get all operations associated with a specific tool
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.OperationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get tool operations
+      tags:
+      - tools
+    post:
+      consumes:
+      - application/json
+      description: Add an operation to a specific tool
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Operation to add
+        in: body
+        name: operation
+        required: true
+        schema:
+          $ref: '#/definitions/api.OperationInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ToolResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add operation to tool
       tags:
       - tools
   /tools/by-type:
