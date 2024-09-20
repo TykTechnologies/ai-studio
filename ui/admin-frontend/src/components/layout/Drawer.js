@@ -18,6 +18,7 @@ import GroupIcon from "@mui/icons-material/Group";
 import PeopleIcon from "@mui/icons-material/People";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import SettingsIcon from "@mui/icons-material/Settings";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
@@ -40,6 +41,11 @@ const menuItems = [
     subItems: [
       { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" },
       { text: "Call Settings", icon: <SettingsIcon />, path: "/llm-settings" },
+      {
+        text: "Model Prices",
+        icon: <AttachMoneyIcon />,
+        path: "/model-prices",
+      }, // New menu item
     ],
   },
 ];

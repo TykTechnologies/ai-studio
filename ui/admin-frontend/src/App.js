@@ -33,6 +33,10 @@ import LLMSettingsList from "./pages/LLMSettingsList";
 import LLMSettingsDetails from "./components/llm-settings/LLMSettingsDetails";
 import LLMSettingsForm from "./components/llm-settings/LLMSettingsForm";
 
+import ModelPriceList from "./pages/ModelPriceList";
+import ModelPriceDetail from "./components/model-prices/ModelPriceDetail";
+import ModelPriceForm from "./components/model-prices/ModelPriceForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -128,6 +132,23 @@ function App() {
               <Route
                 path="/llm-settings/new"
                 element={<PrivateRoute element={<LLMSettingsForm />} />}
+              />
+
+              <Route
+                path="/model-prices"
+                element={<PrivateRoute element={<ModelPriceList />} />}
+              />
+              <Route
+                path="/model-prices/:id"
+                element={<PrivateRoute element={<ModelPriceDetail />} />}
+              />
+              <Route
+                path="/model-prices/edit/:id"
+                element={<PrivateRoute element={<ModelPriceForm />} />}
+              />
+              <Route
+                path="/model-prices/new"
+                element={<PrivateRoute element={<ModelPriceForm />} />}
               />
 
               {/* Add more routes as needed */}
