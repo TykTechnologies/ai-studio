@@ -460,6 +460,7 @@ type ModelPriceInput struct {
 			ModelName string  `json:"model_name"`
 			Vendor    string  `json:"vendor"`
 			CPT       float64 `json:"cpt"`
+			Currency  string  `json:"currency"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -473,6 +474,7 @@ type ModelPriceResponse struct {
 		ModelName string  `json:"model_name"`
 		Vendor    string  `json:"vendor"`
 		CPT       float64 `json:"cpt"`
+		Currency  string  `json:"currency"`
 	} `json:"attributes"`
 }
 

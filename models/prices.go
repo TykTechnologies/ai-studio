@@ -5,10 +5,11 @@ import "gorm.io/gorm"
 type ModelPrice struct {
 	gorm.Model
 
-	ID        uint `gorm:"primaryKey"`
-	ModelName string
-	Vendor    string
-	CPT       float64
+	ID        uint    `gorm:"primaryKey"`
+	ModelName string  `json:"model_name"`
+	Vendor    string  `json:"vendor"`
+	CPT       float64 `json:"cpt"`
+	Currency  string  `json:"currency"`
 }
 
 type ModelPrices []ModelPrice

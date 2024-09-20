@@ -1620,6 +1620,7 @@ func TestModelPriceEndpoints(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			} `json:"attributes"`
 		}{
 			Type: "model-prices",
@@ -1627,10 +1628,12 @@ func TestModelPriceEndpoints(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			}{
 				ModelName: "GPT-3",
 				Vendor:    "OpenAI",
 				CPT:       0.002,
+				Currency:  "USD",
 			},
 		},
 	}
@@ -1659,6 +1662,7 @@ func TestModelPriceEndpoints(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			} `json:"attributes"`
 		}{
 			Type: "model-prices",
@@ -1666,10 +1670,12 @@ func TestModelPriceEndpoints(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			}{
 				ModelName: "GPT-3",
 				Vendor:    "OpenAI",
 				CPT:       0.003,
+				Currency:  "USD",
 			},
 		},
 	}
@@ -1726,6 +1732,7 @@ func TestModelPriceEndpointsErrors(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			} `json:"attributes"`
 		}{
 			Type: "model-prices",
@@ -1733,10 +1740,12 @@ func TestModelPriceEndpointsErrors(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			}{
 				ModelName: "GPT-3",
 				Vendor:    "OpenAI",
 				CPT:       0.003,
+				Currency:  "USD",
 			},
 		},
 	}
@@ -1755,6 +1764,7 @@ func TestModelPriceEndpointsErrors(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			} `json:"attributes"`
 		}{
 			Type: "model-prices",
@@ -1762,10 +1772,12 @@ func TestModelPriceEndpointsErrors(t *testing.T) {
 				ModelName string  `json:"model_name"`
 				Vendor    string  `json:"vendor"`
 				CPT       float64 `json:"cpt"`
+				Currency  string  `json:"currency"`
 			}{
 				ModelName: "",
 				Vendor:    "",
 				CPT:       -1,
+				Currency:  "USD",
 			},
 		},
 	}

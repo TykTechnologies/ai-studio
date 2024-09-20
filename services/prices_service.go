@@ -5,11 +5,12 @@ import (
 )
 
 // CreateModelPrice creates a new model price
-func (s *Service) CreateModelPrice(modelName, vendor string, cpt float64) (*models.ModelPrice, error) {
+func (s *Service) CreateModelPrice(modelName, vendor string, cpt float64, currency string) (*models.ModelPrice, error) {
 	modelPrice := &models.ModelPrice{
 		ModelName: modelName,
 		Vendor:    vendor,
 		CPT:       cpt,
+		Currency:  currency,
 	}
 
 	if err := modelPrice.Create(s.DB); err != nil {
@@ -29,7 +30,7 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 }
 
 // UpdateModelPrice updates an existing model price
-func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt float64) (*models.ModelPrice, error) {
+func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt float64, currency string) (*models.ModelPrice, error) {
 	modelPrice, err := s.GetModelPriceByID(id)
 	if err != nil {
 		return nil, err
@@ -38,6 +39,7 @@ func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt float6
 	modelPrice.ModelName = modelName
 	modelPrice.Vendor = vendor
 	modelPrice.CPT = cpt
+	modelPrice.Currency = currency
 
 	if err := modelPrice.Update(s.DB); err != nil {
 		return nil, err

@@ -66,6 +66,7 @@ func (a *API) createModelPrice(c *gin.Context) {
 		input.Data.Attributes.ModelName,
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
+		input.Data.Attributes.Currency,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -157,6 +158,7 @@ func (a *API) updateModelPrice(c *gin.Context) {
 		input.Data.Attributes.ModelName,
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
+		input.Data.Attributes.Currency,
 	)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -275,10 +277,12 @@ func serializeModelPrice(mp *models.ModelPrice) ModelPriceResponse {
 			ModelName string  `json:"model_name"`
 			Vendor    string  `json:"vendor"`
 			CPT       float64 `json:"cpt"`
+			Currency  string  `json:"currency"`
 		}{
 			ModelName: mp.ModelName,
 			Vendor:    mp.Vendor,
 			CPT:       mp.CPT,
+			Currency:  mp.Currency,
 		},
 	}
 }

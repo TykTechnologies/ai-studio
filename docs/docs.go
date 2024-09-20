@@ -7280,6 +7280,9 @@ const docTemplate = `{
                                 "cpt": {
                                     "type": "number"
                                 },
+                                "currency": {
+                                    "type": "string"
+                                },
                                 "model_name": {
                                     "type": "string"
                                 },
@@ -7304,6 +7307,9 @@ const docTemplate = `{
                     "properties": {
                         "cpt": {
                             "type": "number"
+                        },
+                        "currency": {
+                            "type": "string"
                         },
                         "model_name": {
                             "type": "string"

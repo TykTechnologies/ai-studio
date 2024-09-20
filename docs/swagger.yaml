@@ -616,6 +616,8 @@ definitions:
             properties:
               cpt:
                 type: number
+              currency:
+                type: string
               model_name:
                 type: string
               vendor:
@@ -632,6 +634,8 @@ definitions:
         properties:
           cpt:
             type: number
+          currency:
+            type: string
           model_name:
             type: string
           vendor:
