@@ -36,10 +36,10 @@ const menuItems = [
   },
   {
     text: "AI",
-    icon: <SmartToyIcon />, // Updated icon for AI section
+    icon: <SmartToyIcon />,
     subItems: [
-      { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" }, // Updated icon for LLMs
-      { text: "LLM Settings", icon: <SettingsIcon />, path: "/llm-settings" }, // Updated icon for LLM Settings
+      { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" },
+      { text: "Call Settings", icon: <SettingsIcon />, path: "/llm-settings" },
     ],
   },
 ];

@@ -29,6 +29,10 @@ import LLMList from "./pages/LLMList";
 import LLMDetails from "./components/llms/LLMDetails";
 import LLMForm from "./components/llms/LLMForm";
 
+import LLMSettingsList from "./pages/LLMSettingsList";
+import LLMSettingsDetails from "./components/llm-settings/LLMSettingsDetails";
+import LLMSettingsForm from "./components/llm-settings/LLMSettingsForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -108,6 +112,24 @@ function App() {
                 path="/llms/new"
                 element={<PrivateRoute element={<LLMForm />} />}
               />
+
+              <Route
+                path="/llm-settings"
+                element={<PrivateRoute element={<LLMSettingsList />} />}
+              />
+              <Route
+                path="/llm-settings/:id"
+                element={<PrivateRoute element={<LLMSettingsDetails />} />}
+              />
+              <Route
+                path="/llm-settings/edit/:id"
+                element={<PrivateRoute element={<LLMSettingsForm />} />}
+              />
+              <Route
+                path="/llm-settings/new"
+                element={<PrivateRoute element={<LLMSettingsForm />} />}
+              />
+
               {/* Add more routes as needed */}
             </Routes>
           </Box>
