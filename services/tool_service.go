@@ -5,13 +5,15 @@ import (
 )
 
 // CreateTool creates a new tool with validity checks
-func (s *Service) CreateTool(name, description, toolType string, oasSpec []byte, privacyScore int) (*models.Tool, error) {
+func (s *Service) CreateTool(name, description, toolType string, oasSpec []byte, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
 	tool := &models.Tool{
-		Name:         name,
-		Description:  description,
-		ToolType:     toolType,
-		OASSpec:      oasSpec,
-		PrivacyScore: privacyScore,
+		Name:           name,
+		Description:    description,
+		ToolType:       toolType,
+		OASSpec:        oasSpec,
+		PrivacyScore:   privacyScore,
+		AuthSchemaName: schemaName,
+		AuthKey:        APIKey,
 	}
 
 	if err := tool.Create(s.DB); err != nil {
@@ -22,7 +24,7 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec []byte,
 }
 
 // UpdateTool updates an existing tool with validity checks
-func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpec []byte, privacyScore int) (*models.Tool, error) {
+func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpec []byte, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
 	tool, err := s.GetToolByID(id)
 	if err != nil {
 		return nil, err
@@ -33,6 +35,8 @@ func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpe
 	tool.ToolType = toolType
 	tool.OASSpec = oasSpec
 	tool.PrivacyScore = privacyScore
+	tool.AuthSchemaName = schemaName
+	tool.AuthKey = APIKey
 
 	if err := tool.Update(s.DB); err != nil {
 		return nil, err

@@ -69,6 +69,8 @@ func (a *API) createTool(c *gin.Context) {
 		input.Data.Attributes.ToolType,
 		input.Data.Attributes.OASSpec,
 		input.Data.Attributes.PrivacyScore,
+		input.Data.Attributes.AuthSchemaName,
+		input.Data.Attributes.AuthKey,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -162,6 +164,8 @@ func (a *API) updateTool(c *gin.Context) {
 		input.Data.Attributes.ToolType,
 		input.Data.Attributes.OASSpec,
 		input.Data.Attributes.PrivacyScore,
+		input.Data.Attributes.AuthSchemaName,
+		input.Data.Attributes.AuthKey,
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -309,6 +313,166 @@ func (a *API) searchTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools)})
+}
+
+// @Summary Add operation to tool
+// @Description Add an operation to a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param operation body OperationInput true "Operation to add"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/operations [post]
+// @Security BearerAuth
+func (a *API) addOperationToTool(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	var input OperationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	err = a.service.AddOperationToTool(uint(id), input.Data.Attributes.Operation)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool)})
+}
+
+// @Summary Remove operation from tool
+// @Description Remove an operation from a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param operation body OperationInput true "Operation to remove"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/operations [delete]
+// @Security BearerAuth
+func (a *API) removeOperationFromTool(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	var input OperationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	err = a.service.RemoveOperationFromTool(uint(id), input.Data.Attributes.Operation)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool)})
+}
+
+// @Summary Get tool operations
+// @Description Get all operations associated with a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Success 200 {object} OperationsResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/operations [get]
+// @Security BearerAuth
+func (a *API) getToolOperations(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	operations, err := a.service.GetToolOperations(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": OperationsResponse{Operations: operations}})
 }
 
 func serializeTool(tool *models.Tool) ToolResponse {

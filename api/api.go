@@ -194,6 +194,9 @@ func (a *API) setupRoutes() {
 		v1.GET("/tools", a.getAllTools)
 		v1.GET("/tools/by-type", a.getToolsByType)
 		v1.GET("/tools/search", a.searchTools)
+		v1.POST("/tools/:id/operations", a.addOperationToTool)
+		v1.DELETE("/tools/:id/operations", a.removeOperationFromTool)
+		v1.GET("/tools/:id/operations", a.getToolOperations)
 
 		// Model Price routes
 		v1.POST("/model-prices", a.createModelPrice)

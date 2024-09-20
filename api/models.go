@@ -440,6 +440,12 @@ type ToolResponse struct {
 	} `json:"attributes"`
 }
 
+// OperationsResponse represents the response for tool operations
+// @Description Tool operations response model
+type OperationsResponse struct {
+	Operations []string `json:"operations"`
+}
+
 // OperationInput represents the input for adding or removing operations from a tool
 // @Description Operation input model
 type OperationInput struct {

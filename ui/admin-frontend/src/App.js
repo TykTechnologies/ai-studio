@@ -41,6 +41,10 @@ import DatasourceList from "./pages/DatasourceList";
 import DatasourceDetails from "./components/datasources/DatasourceDetails";
 import DatasourceForm from "./components/datasources/DatasourceForm";
 
+import ToolList from "./pages/ToolList";
+import ToolDetails from "./components/tools/ToolDetails";
+import ToolForm from "./components/tools/ToolForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -170,6 +174,23 @@ function App() {
               <Route
                 path="/datasources/new"
                 element={<PrivateRoute element={<DatasourceForm />} />}
+              />
+
+              <Route
+                path="/tools"
+                element={<PrivateRoute element={<ToolList />} />}
+              />
+              <Route
+                path="/tools/:id"
+                element={<PrivateRoute element={<ToolDetails />} />}
+              />
+              <Route
+                path="/tools/edit/:id"
+                element={<PrivateRoute element={<ToolForm />} />}
+              />
+              <Route
+                path="/tools/new"
+                element={<PrivateRoute element={<ToolForm />} />}
               />
 
               {/* Add more routes as needed */}

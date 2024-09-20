@@ -4,20 +4,20 @@ import "gorm.io/gorm"
 
 func InitModels(db *gorm.DB) error {
 	err := db.AutoMigrate(
-		&User{},
-		&Group{},
-		&LLM{},
+		&User{},  //Done
+		&Group{}, //Done
+		&LLM{},   //Done
 		&Catalogue{},
 		&Tags{},
-		&Datasource{},
+		&Datasource{}, //Done
 		&DataCatalogue{},
 		&Credential{},
 		&App{},
-		&LLMSettings{},
+		&LLMSettings{}, //Done
 		&Chat{},
 		&CMessage{},
 		&Tool{},
-		&ModelPrice{},
+		&ModelPrice{}, //Done
 		&Filter{},
 		&ChatHistoryRecord{},
 		&ToolCatalogue{},
