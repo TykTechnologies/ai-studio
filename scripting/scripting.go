@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/d5/tengo/v2"
+	"github.com/d5/tengo/v2/stdlib"
 )
 
 type ScriptRunner struct {
@@ -23,6 +24,7 @@ func (sr *ScriptRunner) RunFilter(payload string) error {
 	defer sr.mu.Unlock()
 
 	script := tengo.NewScript(sr.source)
+	script.SetImports(stdlib.GetModuleMap(stdlib.AllModuleNames()...))
 
 	// Add the payload to the script environment
 	err := script.Add("payload", payload)

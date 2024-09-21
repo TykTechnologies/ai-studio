@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/gorilla/mux"
@@ -56,28 +57,25 @@ type Proxy struct {
 	mu            sync.RWMutex
 	config        *Config
 	credValidator *CredentialValidator
+	filters       []*models.Filter
 }
 
 type Config struct {
 	Port int
-	// Add other configuration options as needed
 }
 
 func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
-
 	p := &Proxy{
 		service:     service,
 		llms:        make(map[string]*models.LLM),
 		datasources: make(map[string]*models.Datasource),
 		config:      config,
+		filters:     make([]*models.Filter, 0),
 	}
 
-	// These extract the correct auth headers for our internal credential check
 	val := NewCredentialValidator(service, p)
 	val.RegisterValidator(strings.ToLower(string(models.OPENAI)), OpenAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.ANTHROPIC)), AnthropicValidator)
-
-	// for testing
 	val.RegisterValidator("dummy", DummyValidator)
 
 	p.credValidator = val
@@ -148,7 +146,37 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/llm/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST")
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	return p.credValidator.Middleware(r)
+	return p.outboundRequestMiddleware(p.credValidator.Middleware(r))
+}
+
+func (p *Proxy) AddFilter(filter *models.Filter) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.filters = append(p.filters, filter)
+}
+
+func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err)
+			return
+		}
+		r.Body.Close()
+		r.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
+
+		for _, filter := range p.filters {
+			runner := scripting.NewScriptRunner(filter.Script)
+			err := runner.RunFilter(string(bodyBytes))
+			if err != nil {
+				fmt.Println(err)
+				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Policy error: %s", filter.Name), nil)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error) {
@@ -165,13 +193,11 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		// If we fail to send the JSON response, log the error
 		log.Printf("Error sending error response: %v", err)
 	}
 }
 
 func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
-	// Implement LLM request handling
 	vars := mux.Vars(r)
 	llmSlug := vars["llmSlug"]
 
@@ -184,14 +210,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the upstream URL
 	upstreamURL, err := url.Parse(llm.APIEndpoint)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err)
 		return
 	}
 
-	// Create a reverse proxy
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			req.URL.Scheme = upstreamURL.Scheme
@@ -199,7 +223,6 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/%s", llmSlug))
 			req.Host = upstreamURL.Host
 
-			// Set any necessary headers (e.g., API key)
 			er := p.setVendorAuthHeader(req, llm)
 			if er != nil {
 				respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", er)
@@ -207,16 +230,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			// This function is called after the upstream response is received
-			// You can analyze headers here if needed
 			return nil
 		},
 	}
 
-	// Create a response capture
 	capture := newResponseCapture(w)
 
-	// Serve the request using the custom ResponseWriter
 	proxy.ServeHTTP(capture, r)
 
 	app, ok := r.Context().Value("app").(*models.App)
@@ -226,15 +245,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func(r *http.Request) {
-		// Perform your analysis here
 		responseBody := capture.buffer.Bytes()
 		statusCode := capture.statusCode
 
-		// Example: log the response
 		log.Printf("Response status: %d, body length: %d", statusCode, len(responseBody))
 
-		// You can perform more sophisticated analysis here
-		// For example, you could send this data to a monitoring service
 		p.analyzeResponse(llm, app, statusCode, responseBody, r)
 	}(r)
 }

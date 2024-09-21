@@ -2,17 +2,26 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // MockService is a mock implementation of the ServiceInterface
@@ -291,4 +300,331 @@ func TestCredentialValidation(t *testing.T) {
 
 	// Test non-existent Datasource
 	assert.False(t, proxy.credValidator.CheckCredential("valid-token", "nonexistentds", "", r))
+}
+
+func TestOutboundRequestMiddleware(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	blockedFilter := &models.Filter{
+		Name: "BlockedWordFilter",
+		Script: []byte(`
+			text := import("text")
+			fmt := import("fmt")
+			filter := func(p) {
+				if text.contains(p, "blocked") {
+					return false
+				}
+				return true
+			}
+			result := filter(payload)
+			`),
+	}
+	proxy.AddFilter(blockedFilter)
+
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := proxy.outboundRequestMiddleware(testHandler)
+
+	// Test passing request
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(`{"message": "Hello, world!"}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Test blocked request
+	req = httptest.NewRequest("POST", "/test", strings.NewReader(`{"message": "This should be blocked"}`))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestLoadResourcesError(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{}, fmt.Errorf("LLM error"))
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, fmt.Errorf("Datasource error"))
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	err := proxy.loadResources()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get LLMs")
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{{ID: 1, Name: "TestLLM"}}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{{ID: 1, Name: "TestDS"}}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Add(-1)
+			_, _ = proxy.GetLLM("TestLLM")
+			_, _ = proxy.GetDatasource("TestDS")
+		}()
+	}
+	wg.Wait()
+}
+
+func TestEdgeCasesRequests(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{{ID: 1, Name: "TestLLM", APIEndpoint: "http://test-llm.com"}}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{{ID: 1, Name: "TestDS"}}, nil)
+	mockService.On("GetCredentialBySecret", mock.Anything).Return(&models.Credential{ID: 1, Active: true}, nil)
+	mockService.On("GetAppByCredentialID", uint(1)).Return(&models.App{ID: 1, LLMs: []models.LLM{{ID: 1}}, Datasources: []models.Datasource{{ID: 1}}}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+	proxy.loadResources()
+
+	router := mux.NewRouter()
+	router.HandleFunc("/llm/{llmSlug}/{rest:.*}", proxy.handleLLMRequest).Methods("POST")
+	router.HandleFunc("/datasource/{dsSlug}", proxy.handleDatasourceRequest).Methods("POST")
+	testServer := httptest.NewServer(proxy.credValidator.Middleware(router))
+	defer testServer.Close()
+
+	// Test malformed LLM request body
+	req, _ := http.NewRequest("POST", testServer.URL+"/llm/testllm/test", strings.NewReader(`{"invalid json`))
+	req.Header.Set("Authorization", "valid-token")
+	resp, err := http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// Test non-existent LLM
+	req, _ = http.NewRequest("POST", testServer.URL+"/llm/nonexistent/test", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "valid-token")
+	resp, err = http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	// Test malformed datasource request body
+	req, _ = http.NewRequest("POST", testServer.URL+"/datasource/testds", strings.NewReader(`{"invalid json`))
+	req.Header.Set("Authorization", "valid-token")
+	resp, err = http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// Test non-existent datasource
+	req, _ = http.NewRequest("POST", testServer.URL+"/datasource/nonexistent", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "valid-token")
+	resp, err = http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestAnalyzeResponse(t *testing.T) {
+	// Set up a test database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	err = db.AutoMigrate(&analytics.LLMChatRecord{})
+	require.NoError(t, err)
+
+	// Start recording analytics
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	analytics.StartRecording(ctx, db)
+
+	mockService := new(MockService)
+	mockService.On("GetModelPriceByModelNameAndVendor", mock.Anything, mock.Anything).Return(&models.ModelPrice{CPT: 0.001}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	llm := &models.LLM{ID: 1, Name: "TestLLM", Vendor: "TestVendor"}
+	app := &models.App{ID: 1, UserID: 1}
+	statusCode := 200
+	body := []byte(`{"model": "test-model", "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}`)
+	r, _ := http.NewRequest("POST", "http://test.com", nil)
+
+	proxy.analyzeResponse(llm, app, statusCode, body, r)
+
+	// Wait a bit for the goroutine to process the record
+	time.Sleep(100 * time.Millisecond)
+
+	// Retrieve the recorded analytics
+	var recordedAnalytics analytics.LLMChatRecord
+	result := db.First(&recordedAnalytics)
+	assert.NoError(t, result.Error)
+
+	assert.Equal(t, "TestVendor", recordedAnalytics.Vendor)
+	assert.Equal(t, 10, recordedAnalytics.PromptTokens)
+	assert.Equal(t, 20, recordedAnalytics.ResponseTokens)
+	assert.Equal(t, 30, recordedAnalytics.TotalTokens)
+	assert.Equal(t, uint(1), recordedAnalytics.AppID)
+	assert.Equal(t, uint(1), recordedAnalytics.UserID)
+	assert.InDelta(t, 0.03, recordedAnalytics.Cost, 0.001)
+}
+func TestSetVendorAuthHeader(t *testing.T) {
+	mockService := new(MockService)
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	testCases := []struct {
+		vendor   models.Vendor
+		apiKey   string
+		expected string
+	}{
+		{models.OPENAI, "test-openai-key", "Bearer test-openai-key"},
+		{models.ANTHROPIC, "test-anthropic-key", "x-api-key: test-anthropic-key"},
+		// Add more cases for other vendors
+	}
+
+	for _, tc := range testCases {
+		llm := &models.LLM{Vendor: tc.vendor, APIKey: tc.apiKey}
+		req, _ := http.NewRequest("POST", "http://test.com", nil)
+
+		err := proxy.setVendorAuthHeader(req, llm)
+		assert.NoError(t, err)
+
+		switch tc.vendor {
+		case models.OPENAI:
+			assert.Equal(t, tc.expected, req.Header.Get("Authorization"))
+		case models.ANTHROPIC:
+			assert.Equal(t, tc.expected, req.Header.Get("x-api-key"))
+			// Add more cases for other vendors
+		}
+	}
+}
+
+func TestErrorResponses(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	testCases := []struct {
+		status  int
+		message string
+		err     error
+	}{
+		{http.StatusBadRequest, "Bad Request", fmt.Errorf("invalid input")},
+		{http.StatusUnauthorized, "Unauthorized", nil},
+		{http.StatusForbidden, "Forbidden", fmt.Errorf("access denied")},
+		{http.StatusInternalServerError, "Internal Server Error", fmt.Errorf("something went wrong")},
+	}
+
+	for _, tc := range testCases {
+		w = httptest.NewRecorder()
+		respondWithError(w, tc.status, tc.message, tc.err)
+
+		resp := w.Result()
+		body, _ := ioutil.ReadAll(resp.Body)
+
+		assert.Equal(t, tc.status, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+		var errorResp ErrorResponse
+		err := json.Unmarshal(body, &errorResp)
+		assert.NoError(t, err)
+
+		assert.Equal(t, tc.status, errorResp.Status)
+		assert.Equal(t, tc.message, errorResp.Message)
+		if tc.err != nil {
+			assert.Equal(t, tc.err.Error(), errorResp.Error)
+		} else {
+			assert.Empty(t, errorResp.Error)
+		}
+	}
+}
+
+func TestGetDatasourceAndLLM(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{{ID: 1, Name: "TestLLM"}}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{{ID: 1, Name: "TestDS"}}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+	proxy.loadResources()
+
+	// Test GetDatasource
+	ds, ok := proxy.GetDatasource("testds")
+	assert.True(t, ok)
+	assert.NotNil(t, ds)
+	assert.Equal(t, "TestDS", ds.Name)
+
+	ds, ok = proxy.GetDatasource("nonexistent")
+	assert.False(t, ok)
+	assert.Nil(t, ds)
+
+	// Test GetLLM
+	llm, ok := proxy.GetLLM("testllm")
+	assert.True(t, ok)
+	assert.NotNil(t, llm)
+	assert.Equal(t, "TestLLM", llm.Name)
+
+	llm, ok = proxy.GetLLM("nonexistent")
+	assert.False(t, ok)
+	assert.Nil(t, llm)
+}
+
+func TestFilterScriptExecution(t *testing.T) {
+	mockService := new(MockService)
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	testCases := []struct {
+		name     string
+		script   string
+		payload  string
+		expected bool
+	}{
+		{
+			name:     "Allow all",
+			script:   `result = true`,
+			payload:  `{"message": "Hello"}`,
+			expected: true,
+		},
+		{
+			name:     "Block all",
+			script:   `result = false`,
+			payload:  `{"message": "Hello"}`,
+			expected: false,
+		},
+		{
+			name:     "Block specific word",
+			script:   `result = !strings.Contains(strings.ToLower(payload), "block")`,
+			payload:  `{"message": "This should be blocked"}`,
+			expected: false,
+		},
+		{
+			name:     "Allow based on length",
+			script:   `result = len(payload) < 50`,
+			payload:  `{"message": "Short message"}`,
+			expected: true,
+		},
+		{
+			name:     "Block based on length",
+			script:   `result = len(payload) < 50`,
+			payload:  `{"message": "This is a very long message that should be blocked due to its length"}`,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := &models.Filter{
+				Name:   tc.name,
+				Script: []byte(tc.script),
+			}
+			proxy.AddFilter(filter)
+
+			runner := scripting.NewScriptRunner(filter.Script)
+			err := runner.RunFilter(tc.payload)
+
+			if tc.expected {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
 }
