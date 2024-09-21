@@ -126,6 +126,7 @@ func (p *Proxy) loadResources() error {
 	for i := range llms {
 		nameSlug := slug.Make(llms[i].Name)
 		newLLMs[nameSlug] = &llms[i]
+		fmt.Println("Adding LLM: ", nameSlug)
 	}
 
 	newDatasources := make(map[string]*models.Datasource)
@@ -144,7 +145,8 @@ func (p *Proxy) loadResources() error {
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/llm/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST")
+	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST")
+	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST")
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
 	return p.outboundRequestMiddleware(p.credValidator.Middleware(r))
@@ -206,7 +208,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	p.mu.RUnlock()
 
 	if !ok {
-		respondWithError(w, http.StatusNotFound, "LLM not found", nil)
+		respondWithError(w, http.StatusNotFound, "[rest] LLM not found", nil)
 		return
 	}
 
@@ -255,13 +257,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) {
-	llm, app, response, err := switches.AnalyzeResponse(llm, app, statusCode, body, r)
-	if err != nil {
-		log.Printf("failed to analyze response: %v", err)
-		return
-	}
-
-	p.analyzeCompletionResponse(llm, app, response)
+	AnalyzeResponse(p.service, llm, app, statusCode, body, r)
 }
 
 func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
@@ -358,4 +354,93 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 	llm, ok := p.llms[name]
 
 	return llm, ok
+}
+
+func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	llmSlug := vars["llmSlug"]
+
+	p.mu.RLock()
+	llm, ok := p.llms[llmSlug]
+	p.mu.RUnlock()
+
+	if !ok {
+		respondWithError(w, http.StatusNotFound, "[streaming] LLM not found", nil)
+		return
+	}
+
+	upstreamURL, err := url.Parse(llm.APIEndpoint)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err)
+		return
+	}
+
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL.String(), r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to create upstream request", err)
+		return
+	}
+
+	upstreamReq.Header = r.Header.Clone()
+	upstreamReq.Host = upstreamURL.Host
+
+	err = p.setVendorAuthHeader(upstreamReq, llm)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", err)
+		return
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to make upstream request", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, v := range resp.Header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	app, _ := r.Context().Value("app").(*models.App)
+
+	buffer := make([]byte, 1024)
+	var fullResponse []byte
+	for {
+		n, err := resp.Body.Read(buffer)
+		if n > 0 {
+			fullResponse = append(fullResponse, buffer[:n]...)
+			_, err := w.Write(buffer[:n])
+			if err != nil {
+				break
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("Error reading from upstream: %v", err)
+			break
+		}
+	}
+
+	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse)
+}
+
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, r *http.Request, statusCode int, body []byte) {
+	app, ok := r.Context().Value("app").(*models.App)
+	if !ok {
+		log.Println("app context not found")
+		return
+	}
+
+	AnalyzeResponse(p.service, llm, app, statusCode, body, r)
 }

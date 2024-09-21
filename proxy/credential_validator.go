@@ -40,7 +40,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		var llmSlug, dsSlug string
 		switch pathParts[1] {
 		case "llm":
-			llmSlug = pathParts[2]
+			llmSlug = pathParts[3]
 		case "datasource":
 			dsSlug = pathParts[2]
 		default:
@@ -65,7 +65,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		} else if llmSlug != "" {
 			llm, ok := cv.p.GetLLM(llmSlug)
 			if !ok {
-				respondWithError(w, http.StatusNotFound, "LLM not found", nil)
+				respondWithError(w, http.StatusNotFound, "[cred validator] LLM not found", nil)
 				return
 			}
 			extractor, ok := cv.validators[strings.ToLower(string(llm.Vendor))]

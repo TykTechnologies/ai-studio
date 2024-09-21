@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -611,4 +612,120 @@ func TestFilterScriptExecution(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleStreamingLLMRequest(t *testing.T) {
+	// Setup mock upstream server
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("Expected http.ResponseWriter to be an http.Flusher")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		events := []string{
+			"data: {\"content\":\"Hello\"}\n\n",
+			"data: {\"content\":\"World\"}\n\n",
+			"data: {\"content\":\"!\"}\n\n",
+		}
+
+		for _, event := range events {
+			_, err := w.Write([]byte(event))
+			if err != nil {
+				t.Fatalf("Error writing to response: %v", err)
+			}
+			flusher.Flush()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	defer upstream.Close()
+
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{
+		{ID: 1, Name: "StreamingLLM", Vendor: "DUMMY", APIEndpoint: upstream.URL, APIKey: "dummyapikey"},
+	}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+	mockService.On("GetCredentialBySecret", "valid-token").Return(&models.Credential{ID: 1, Active: true}, nil)
+	mockService.On("GetCredentialBySecret", "invalid-token").Return(&models.Credential{ID: 0, Active: false}, nil)
+	mockService.On("GetAppByCredentialID", uint(1)).Return(&models.App{ID: 1, LLMs: []models.LLM{{ID: 1}}}, nil)
+	mockService.On("GetModelPriceByModelNameAndVendor", mock.Anything, mock.Anything).Return(&models.ModelPrice{CPT: 0.001}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+	proxy.credValidator.RegisterValidator("dummy", DummyValidator)
+
+	err := proxy.loadResources()
+	assert.NoError(t, err)
+
+	router := mux.NewRouter()
+	router.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", proxy.handleStreamingLLMRequest).Methods("POST")
+	testServer := httptest.NewServer(proxy.credValidator.Middleware(router))
+	defer testServer.Close()
+
+	t.Run("Valid streaming request", func(t *testing.T) {
+		reqBody := []byte(`{"prompt": "Tell me a story"}`)
+		u := testServer.URL + "/llm/stream/streamingllm/v1/chat/completions"
+		// fmt.Println(u)
+		req, _ := http.NewRequest("POST", u, bytes.NewBuffer(reqBody))
+		req.Header.Set("Dummy-Authorization", "valid-token")
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+
+		scanner := bufio.NewScanner(resp.Body)
+		var events []string
+		for scanner.Scan() {
+			event := scanner.Text()
+			if event != "" {
+				events = append(events, event)
+			}
+		}
+
+		assert.NoError(t, scanner.Err())
+		assert.Len(t, events, 3)
+		fmt.Println(events)
+		if len(events) == 3 {
+			assert.Contains(t, events[0], "Hello")
+			assert.Contains(t, events[1], "World")
+			assert.Contains(t, events[2], "!")
+		}
+
+	})
+
+	t.Run("Invalid LLM", func(t *testing.T) {
+		reqBody := []byte(`{"prompt": "Tell me a story"}`)
+		req, _ := http.NewRequest("POST", testServer.URL+"/llm/stream/nonexistentllm/v1/chat/completions", bytes.NewBuffer(reqBody))
+		req.Header.Set("Dummy-Authorization", "valid-token")
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("Invalid credential", func(t *testing.T) {
+		reqBody := []byte(`{"prompt": "Tell me a story"}`)
+		req, _ := http.NewRequest("POST", testServer.URL+"/llm/stream/streamingllm/v1/chat/completions", bytes.NewBuffer(reqBody))
+		req.Header.Set("Dummy-Authorization", "invalid-token")
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		assert.NotNil(t, resp)
+		if resp == nil {
+			return
+		}
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
 }
