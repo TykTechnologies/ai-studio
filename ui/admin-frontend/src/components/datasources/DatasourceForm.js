@@ -67,9 +67,11 @@ const DatasourceForm = () => {
     url: "",
     active: false,
     tags: [],
-    db_name: "", // Add this line
+    db_name: "",
+    user_id: "", // Add this line
   });
 
+  const [users, setUsers] = useState([]);
   const [vectorStores, setVectorStores] = useState([]);
   const [embedders, setEmbedders] = useState([]);
   const [errors, setErrors] = useState({});
@@ -93,6 +95,7 @@ const DatasourceForm = () => {
       setEmbedders(embedders.map((e) => e.code));
     };
     loadVendors();
+    fetchUsers();
 
     // Fetch datasource data if in edit mode
     if (id) {
@@ -105,6 +108,7 @@ const DatasourceForm = () => {
             tags: datasourceData.tags
               ? datasourceData.tags.map((tag) => tag.attributes.name)
               : [],
+            user_id: datasourceData.user_id.toString(), // Convert user_id to string
           });
           setVectorStoreHelpText(
             getVectorStoreHelpText(datasourceData.db_source_type),
@@ -122,6 +126,15 @@ const DatasourceForm = () => {
       fetchDatasource();
     }
   }, [id]);
+
+  const fetchUsers = async () => {
+    try {
+      const response = await apiClient.get("/users");
+      setUsers(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching users", error);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -166,6 +179,7 @@ const DatasourceForm = () => {
       newErrors.embed_vendor = "Embedding Service Vendor is required";
     if (datasource.privacy_score < 0 || datasource.privacy_score > 100)
       newErrors.privacy_score = "Privacy score must be between 0 and 100";
+    if (!datasource.user_id) newErrors.user_id = "User is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -176,12 +190,14 @@ const DatasourceForm = () => {
 
     const datasourceData = {
       data: {
-        type: "Datasource",
+        type: "datasources",
+        ...(id && { id }), // Include id for PATCH requests
         attributes: {
           ...datasource,
           privacy_score: Number(datasource.privacy_score),
           active: Boolean(datasource.active),
-          tags: datasource.tags, // This is already an array of strings, so we don't need to modify it
+          tags: datasource.tags,
+          user_id: parseInt(datasource.user_id, 10),
         },
       },
     };
@@ -263,6 +279,26 @@ const DatasourceForm = () => {
                 multiline
                 rows={2}
               />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth error={!!errors.user_id}>
+                <InputLabel>User</InputLabel>
+                <Select
+                  name="user_id"
+                  value={datasource.user_id}
+                  onChange={handleChange}
+                  required
+                >
+                  {users.map((user) => (
+                    <MenuItem key={user.id} value={user.id}>
+                      {user.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {errors.user_id && (
+                  <Typography color="error">{errors.user_id}</Typography>
+                )}
+              </FormControl>
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth required error={!!errors.db_source_type}>

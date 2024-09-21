@@ -42,7 +42,7 @@ func TestDatasourceService(t *testing.T) {
 	assert.Equal(t, datasource.Name, fetchedDatasource.Name)
 
 	// Test UpdateDatasource
-	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model", true)
+	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model", true, []string{"AI", "ML"}, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, datasource.ID, updatedDatasource.ID)
 	assert.Equal(t, "Updated Datasource", updatedDatasource.Name)

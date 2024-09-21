@@ -11,7 +11,6 @@ type Chat struct {
 	LLMSettings   *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
 	LLMID         uint         `json:"llm_id"`
 	LLM           *LLM         `gorm:"foreignKey:LLMID" json:"llm"`
-	CPT           float64      `json:"cpt"`
 }
 
 type Chats []Chat

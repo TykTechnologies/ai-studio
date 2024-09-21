@@ -46,6 +46,7 @@ const SectionTitle = ({ children }) => (
 
 const DatasourceDetails = () => {
   const [datasource, setDatasource] = useState(null);
+  const [owner, setOwner] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
   const { id } = useParams();
@@ -68,6 +69,15 @@ const DatasourceDetails = () => {
         },
       };
       setDatasource(processedData);
+
+      // Fetch owner details
+      if (processedData.attributes.user_id) {
+        const ownerResponse = await apiClient.get(
+          `/users/${processedData.attributes.user_id}`,
+        );
+        setOwner(ownerResponse.data.data);
+      }
+
       setLoading(false);
     } catch (error) {
       console.error("Error fetching datasource details", error);
@@ -116,6 +126,12 @@ const DatasourceDetails = () => {
           </Grid>
           <Grid item xs={9}>
             <FieldValue>{datasource.attributes.short_description}</FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Owner:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{owner ? owner.attributes.name : "Unknown"}</FieldValue>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Vector Database Type:</FieldLabel>

@@ -153,6 +153,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.EmbedModel,
 		input.Data.Attributes.Active,
 		input.Data.Attributes.Tags,
+		input.Data.Attributes.UserID,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
