@@ -6,6 +6,7 @@ import {
   CircularProgress,
   Box,
   Button,
+  Grid,
   List,
   ListItem,
   ListItemText,
@@ -21,6 +22,12 @@ import {
   FieldValue,
   StyledButton,
 } from "../../styles/sharedStyles";
+
+const SectionTitle = ({ children }) => (
+  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
+    {children}
+  </Typography>
+);
 
 const CatalogueDetails = () => {
   const [catalogue, setCatalogue] = useState(null);
@@ -39,9 +46,11 @@ const CatalogueDetails = () => {
     try {
       const response = await apiClient.get(`/catalogues/${id}`);
       setCatalogue(response.data.data);
+      setLoading(false);
     } catch (error) {
       console.error("Error fetching catalog details", error);
       setError("Failed to load catalog details");
+      setLoading(false);
     }
   };
 
@@ -49,11 +58,9 @@ const CatalogueDetails = () => {
     try {
       const response = await apiClient.get(`/catalogues/${id}/llms`);
       setLLMs(response.data.data || []);
-      setLoading(false);
     } catch (error) {
       console.error("Error fetching catalog LLMs", error);
-      setError("Failed to load catalog LLMs");
-      setLoading(false);
+      setError("Failed to load LLMs for this catalog");
     }
   };
 
@@ -75,20 +82,38 @@ const CatalogueDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
-        <Box mb={3}>
-          <FieldLabel>Name:</FieldLabel>
-          <FieldValue>{catalogue.attributes.name}</FieldValue>
-        </Box>
+        <SectionTitle>Catalog Information</SectionTitle>
+        <Grid container spacing={2}>
+          <Grid item xs={3}>
+            <FieldLabel>Name:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{catalogue.attributes.name}</FieldValue>
+          </Grid>
+          {catalogue.attributes.description && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Description:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <FieldValue>{catalogue.attributes.description}</FieldValue>
+              </Grid>
+            </>
+          )}
+        </Grid>
 
-        <Typography variant="h6" gutterBottom>
-          LLMs in this Catalog:
-        </Typography>
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>LLMs in this Catalog</SectionTitle>
         <List>
           {llms.length > 0 ? (
             llms.map((llm) => (
               <React.Fragment key={llm.id}>
                 <ListItem>
-                  <ListItemText primary={llm.attributes.name} />
+                  <ListItemText
+                    primary={llm.attributes.name}
+                    secondary={llm.attributes.short_description}
+                  />
                 </ListItem>
                 <Divider />
               </React.Fragment>

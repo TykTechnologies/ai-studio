@@ -49,6 +49,14 @@ import CatalogueList from "./pages/CatalogueList";
 import CatalogueDetails from "./components/catalogues/CatalogueDetails";
 import CatalogueForm from "./components/catalogues/CatalogueForm";
 
+import DataCatalogList from "./pages/DataCatalogList";
+import DataCatalogDetail from "./components/data-catalogs/DataCatalogDetail";
+import DataCatalogForm from "./components/data-catalogs/DataCatalogForm";
+
+import ToolCatalogueList from "./pages/ToolCatalogueList";
+import ToolCatalogueDetails from "./components/tool-catalogues/ToolCatalogueDetails";
+import ToolCatalogueForm from "./components/tool-catalogues/ToolCatalogueForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -212,6 +220,38 @@ function App() {
               <Route
                 path="/catalogs/llms/new"
                 element={<PrivateRoute element={<CatalogueForm />} />}
+              />
+              <Route
+                path="/catalogs/data"
+                element={<PrivateRoute element={<DataCatalogList />} />}
+              />
+              <Route
+                path="/catalogs/data/:id"
+                element={<PrivateRoute element={<DataCatalogDetail />} />}
+              />
+              <Route
+                path="/catalogs/data/edit/:id"
+                element={<PrivateRoute element={<DataCatalogForm />} />}
+              />
+              <Route
+                path="/catalogs/data/new"
+                element={<PrivateRoute element={<DataCatalogForm />} />}
+              />
+              <Route
+                path="/catalogs/tools"
+                element={<PrivateRoute element={<ToolCatalogueList />} />}
+              />
+              <Route
+                path="/catalogs/tools/:id"
+                element={<PrivateRoute element={<ToolCatalogueDetails />} />}
+              />
+              <Route
+                path="/catalogs/tools/edit/:id"
+                element={<PrivateRoute element={<ToolCatalogueForm />} />}
+              />
+              <Route
+                path="/catalogs/tools/new"
+                element={<PrivateRoute element={<ToolCatalogueForm />} />}
               />
               {/* Add more routes as needed */}
             </Routes>

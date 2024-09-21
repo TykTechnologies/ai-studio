@@ -130,11 +130,14 @@ type CatalogueInput struct {
 
 // CatalogueResponse represents the response for catalogue-related operations
 // @Description Catalogue response model
+// CatalogueResponse represents the response for catalogue-related operations
+// @Description Catalogue response model
 type CatalogueResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name string `json:"name"`
+		Name     string   `json:"name"`
+		LLMNames []string `json:"llm_names"`
 	} `json:"attributes"`
 }
 

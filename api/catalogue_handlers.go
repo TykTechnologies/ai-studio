@@ -169,7 +169,7 @@ func (a *API) deleteCatalogue(c *gin.Context) {
 }
 
 // @Summary List all catalogues
-// @Description Get a list of all catalogues
+// @Description Get a list of all catalogues with their associated LLM names
 // @Tags catalogues
 // @Accept json
 // @Produce json
@@ -187,6 +187,19 @@ func (a *API) listCatalogues(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Ensure LLMs are loaded for each catalogue
+	for i := range catalogues {
+		if err := catalogues[i].GetCatalogueLLMs(a.service.DB); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Failed to load LLMs for catalogue"}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
@@ -380,9 +393,11 @@ func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {
 		Type: "catalogues",
 		ID:   strconv.FormatUint(uint64(catalogue.ID), 10),
 		Attributes: struct {
-			Name string `json:"name"`
+			Name     string   `json:"name"`
+			LLMNames []string `json:"llm_names"`
 		}{
-			Name: catalogue.Name,
+			Name:     catalogue.Name,
+			LLMNames: catalogue.LLMNames(),
 		},
 	}
 }
@@ -393,4 +408,41 @@ func serializeCatalogues(catalogues models.Catalogues) []CatalogueResponse {
 		result[i] = serializeCatalogue(&catalogue)
 	}
 	return result
+}
+
+// @Summary Search catalogues by name stub
+// @Description Search for catalogues using a name stub
+// @Tags catalogues
+// @Accept json
+// @Produce json
+// @Param stub query string true "Name stub to search for"
+// @Success 200 {array} CatalogueResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /catalogues/search-by-stub [get]
+// @Security BearerAuth
+func (a *API) searchCataloguesByNameStub(c *gin.Context) {
+	stub := c.Query("stub")
+	if stub == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Name stub is required"}},
+		})
+		return
+	}
+
+	catalogues, err := a.service.SearchCataloguesByNameStub(stub)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
 }

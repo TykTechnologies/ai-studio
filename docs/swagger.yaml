@@ -83,6 +83,10 @@ definitions:
     properties:
       attributes:
         properties:
+          llm_names:
+            items:
+              type: string
+            type: array
           name:
             type: string
         type: object
@@ -742,6 +746,28 @@ definitions:
       type:
         type: string
     type: object
+  api.ToolCatalogueTagInput:
+    description: Tool Catalogue-Tag relationship input model
+    properties:
+      data:
+        properties:
+          id:
+            type: string
+          type:
+            type: string
+        type: object
+    type: object
+  api.ToolCatalogueToolInput:
+    description: Tool Catalogue-Tool relationship input model
+    properties:
+      data:
+        properties:
+          id:
+            type: string
+          type:
+            type: string
+        type: object
+    type: object
   api.ToolInput:
     description: Tool input model
     properties:
@@ -1189,7 +1215,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get a list of all catalogues
+      description: Get a list of all catalogues with their associated LLM names
       produces:
       - application/json
       responses:
@@ -1466,6 +1492,39 @@ paths:
       security:
       - BearerAuth: []
       summary: Search catalogues by name
+      tags:
+      - catalogues
+  /catalogues/search-by-stub:
+    get:
+      consumes:
+      - application/json
+      description: Search for catalogues using a name stub
+      parameters:
+      - description: Name stub to search for
+        in: query
+        name: stub
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.CatalogueResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search catalogues by name stub
       tags:
       - catalogues
   /chat-history-records:
@@ -4318,6 +4377,216 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Update a tool catalogue
+      tags:
+      - tool-catalogues
+  /tool-catalogues/{id}/tags:
+    get:
+      description: Get all tags in a specified tool catalogue
+      parameters:
+      - description: Tool Catalogue ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.TagResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get tags in a tool catalogue
+      tags:
+      - tool-catalogues
+    post:
+      consumes:
+      - application/json
+      description: Add a tag to a specified tool catalogue
+      parameters:
+      - description: Tool Catalogue ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tag to add
+        in: body
+        name: tag
+        required: true
+        schema:
+          $ref: '#/definitions/api.ToolCatalogueTagInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ToolCatalogueResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Add a tag to a tool catalogue
+      tags:
+      - tool-catalogues
+  /tool-catalogues/{id}/tags/{tagId}:
+    delete:
+      description: Remove a tag from a specified tool catalogue
+      parameters:
+      - description: Tool Catalogue ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tag ID
+        in: path
+        name: tagId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a tag from a tool catalogue
+      tags:
+      - tool-catalogues
+  /tool-catalogues/{id}/tools:
+    get:
+      description: Get all tools in a specified tool catalogue
+      parameters:
+      - description: Tool Catalogue ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ToolResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get tools in a tool catalogue
+      tags:
+      - tool-catalogues
+    post:
+      consumes:
+      - application/json
+      description: Add a tool to a specified tool catalogue
+      parameters:
+      - description: Tool Catalogue ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tool to add
+        in: body
+        name: tool
+        required: true
+        schema:
+          $ref: '#/definitions/api.ToolCatalogueToolInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ToolCatalogueResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Add a tool to a tool catalogue
+      tags:
+      - tool-catalogues
+  /tool-catalogues/{id}/tools/{toolId}:
+    delete:
+      description: Remove a tool from a specified tool catalogue
+      parameters:
+      - description: Tool Catalogue ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tool ID
+        in: path
+        name: toolId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a tool from a tool catalogue
       tags:
       - tool-catalogues
   /tool-catalogues/search:

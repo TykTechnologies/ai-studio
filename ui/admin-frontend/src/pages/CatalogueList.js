@@ -23,6 +23,7 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Chip,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
@@ -117,6 +118,7 @@ const CatalogueList = () => {
         severity: "success",
       });
       setModalOpen(false);
+      fetchCatalogues(); // Refresh the list after adding an LLM
     } catch (error) {
       console.error("Error adding LLM to catalog", error);
       setSnackbar({
@@ -138,6 +140,7 @@ const CatalogueList = () => {
         severity: "success",
       });
       setModalOpen(false);
+      fetchCatalogues(); // Refresh the list after removing an LLM
     } catch (error) {
       console.error("Error removing LLM from catalog", error);
       setSnackbar({
@@ -200,6 +203,18 @@ const CatalogueList = () => {
     return <Alert severity="error">{error}</Alert>;
   }
 
+  const getLLMNames = (catalogue) => {
+    if (catalogue.attributes.llm_names) {
+      return catalogue.attributes.llm_names;
+    } else if (
+      catalogue.attributes.llms &&
+      Array.isArray(catalogue.attributes.llms)
+    ) {
+      return catalogue.attributes.llms.map((llm) => llm.attributes.name);
+    }
+    return [];
+  };
+
   return (
     <Box sx={{ p: 0 }}>
       <StyledPaper>
@@ -231,7 +246,8 @@ const CatalogueList = () => {
               <TableHead>
                 <TableRow>
                   <StyledTableCell>Name</StyledTableCell>
-                  <StyledTableCell>Actions</StyledTableCell>
+                  <StyledTableCell>LLMs</StyledTableCell>
+                  <StyledTableCell align="right">Actions</StyledTableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -243,6 +259,18 @@ const CatalogueList = () => {
                   >
                     <TableCell>{catalogue.attributes.name}</TableCell>
                     <TableCell>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {getLLMNames(catalogue).map((llmName, index) => (
+                          <Chip
+                            key={index}
+                            label={llmName}
+                            size="small"
+                            sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+                          />
+                        ))}
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">
                       <IconButton
                         onClick={(event) => handleMenuOpen(event, catalogue)}
                       >

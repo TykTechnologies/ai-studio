@@ -64,14 +64,14 @@ const menuItems = [
       { text: "Tools", icon: <BuildIcon />, path: "/tools" },
     ],
   },
-  // New Catalogs category
+  // Updated Catalogs category
   {
     text: "Catalogs",
-    icon: <FolderOpenIcon />, // You may want to import this icon
+    icon: <FolderOpenIcon />,
     subItems: [
       { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
       { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
-      { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
+      { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" }, // Updated path for Tool Catalogues
     ],
   },
 ];

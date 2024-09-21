@@ -323,3 +323,273 @@ func toTagResponse(tag *models.Tag) TagResponse {
 		},
 	}
 }
+
+// @Summary Add a tool to a tool catalogue
+// @Description Add a tool to a specified tool catalogue
+// @Tags tool-catalogues
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Param tool body ToolCatalogueToolInput true "Tool to add"
+// @Success 200 {object} ToolCatalogueResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tool-catalogues/{id}/tools [post]
+func (a *API) addToolToToolCatalogue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	var input ToolCatalogueToolInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", err.Error()}}})
+		return
+	}
+
+	toolID, err := strconv.ParseUint(input.Data.ID, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid tool ID format"}}})
+		return
+	}
+
+	err = a.service.AddToolToToolCatalogue(uint(toolID), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	toolCatalogue, err := a.service.GetToolCatalogueByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+}
+
+// @Summary Remove a tool from a tool catalogue
+// @Description Remove a tool from a specified tool catalogue
+// @Tags tool-catalogues
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Param toolId path int true "Tool ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tool-catalogues/{id}/tools/{toolId} [delete]
+func (a *API) removeToolFromToolCatalogue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	toolID, err := strconv.ParseUint(c.Param("toolId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid tool ID format"}}})
+		return
+	}
+
+	err = a.service.RemoveToolFromToolCatalogue(uint(toolID), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary Get tools in a tool catalogue
+// @Description Get all tools in a specified tool catalogue
+// @Tags tool-catalogues
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Success 200 {array} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tool-catalogues/{id}/tools [get]
+func (a *API) getToolCatalogueTools(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	tools, err := a.service.GetToolCatalogueTools(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, toToolResponses(tools))
+}
+
+// @Summary Add a tag to a tool catalogue
+// @Description Add a tag to a specified tool catalogue
+// @Tags tool-catalogues
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Param tag body ToolCatalogueTagInput true "Tag to add"
+// @Success 200 {object} ToolCatalogueResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tool-catalogues/{id}/tags [post]
+func (a *API) addTagToToolCatalogue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	var input ToolCatalogueTagInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", err.Error()}}})
+		return
+	}
+
+	tagID, err := strconv.ParseUint(input.Data.ID, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid tag ID format"}}})
+		return
+	}
+
+	err = a.service.AddTagToToolCatalogue(uint(tagID), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	toolCatalogue, err := a.service.GetToolCatalogueByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+}
+
+// @Summary Remove a tag from a tool catalogue
+// @Description Remove a tag from a specified tool catalogue
+// @Tags tool-catalogues
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Param tagId path int true "Tag ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tool-catalogues/{id}/tags/{tagId} [delete]
+func (a *API) removeTagFromToolCatalogue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	tagID, err := strconv.ParseUint(c.Param("tagId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid tag ID format"}}})
+		return
+	}
+
+	err = a.service.RemoveTagFromToolCatalogue(uint(tagID), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary Get tags in a tool catalogue
+// @Description Get all tags in a specified tool catalogue
+// @Tags tool-catalogues
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Success 200 {array} TagResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tool-catalogues/{id}/tags [get]
+func (a *API) getToolCatalogueTags(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	tags, err := a.service.GetToolCatalogueTags(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, toTagResponses(tags))
+}

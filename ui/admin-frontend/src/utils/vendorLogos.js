@@ -1,7 +1,7 @@
 const vendorData = {
   openai: {
     name: "OpenAI",
-    logo: "/logos/chatgp-logo.png",
+    logo: "/logos/chatgpt-logo.png",
   },
   google_ai: {
     name: "Google AI",

@@ -510,7 +510,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get a list of all catalogues",
+                "description": "Get a list of all catalogues with their associated LLM names",
                 "consumes": [
                     "application/json"
                 ],
@@ -612,6 +612,58 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Name stub to search for",
                         "name": "name",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.CatalogueResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/catalogues/search-by-stub": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Search for catalogues using a name stub",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "catalogues"
+                ],
+                "summary": "Search catalogues by name stub",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Name stub to search for",
+                        "name": "stub",
                         "in": "query",
                         "required": true
                     }
@@ -5454,6 +5506,322 @@ const docTemplate = `{
                 }
             }
         },
+        "/tool-catalogues/{id}/tags": {
+            "get": {
+                "description": "Get all tags in a specified tool catalogue",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Get tags in a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.TagResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Add a tag to a specified tool catalogue",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Add a tag to a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tag to add",
+                        "name": "tag",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueTagInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues/{id}/tags/{tagId}": {
+            "delete": {
+                "description": "Remove a tag from a specified tool catalogue",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Remove a tag from a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Tag ID",
+                        "name": "tagId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues/{id}/tools": {
+            "get": {
+                "description": "Get all tools in a specified tool catalogue",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Get tools in a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Add a tool to a specified tool catalogue",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Add a tool to a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tool to add",
+                        "name": "tool",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueToolInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolCatalogueResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues/{id}/tools/{toolId}": {
+            "delete": {
+                "description": "Remove a tool from a specified tool catalogue",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Remove a tool from a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "toolId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tools": {
             "get": {
                 "security": [
@@ -6643,6 +7011,12 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "llm_names": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
                         "name": {
                             "type": "string"
                         }
@@ -7651,6 +8025,40 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.ToolCatalogueTagInput": {
+            "description": "Tool Catalogue-Tag relationship input model",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.ToolCatalogueToolInput": {
+            "description": "Tool Catalogue-Tool relationship input model",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
                 }
             }
         },

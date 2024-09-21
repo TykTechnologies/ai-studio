@@ -15,6 +15,15 @@ func NewCatalogue() *Catalogue {
 	return &Catalogue{}
 }
 
+// Add this new method
+func (c *Catalogue) LLMNames() []string {
+	names := make([]string, len(c.LLMs))
+	for i, llm := range c.LLMs {
+		names[i] = llm.Name
+	}
+	return names
+}
+
 func (c *Catalogue) Get(db *gorm.DB, id uint) error {
 	return db.Preload("LLMs", func(db *gorm.DB) *gorm.DB {
 		return db.Where("active = ?", true)

@@ -102,6 +102,7 @@ func (a *API) setupRoutes() {
 		v1.DELETE("/catalogues/:id", a.deleteCatalogue)
 		v1.GET("/catalogues", a.listCatalogues)
 		v1.GET("/catalogues/search", a.searchCatalogues)
+		v1.GET("/catalogues/search-by-stub", a.searchCataloguesByNameStub) // Add this line
 		v1.POST("/catalogues/:id/llms", a.addLLMToCatalogue)
 		v1.DELETE("/catalogues/:id/llms/:llmId", a.removeLLMFromCatalogue)
 		v1.GET("/catalogues/:id/llms", a.listCatalogueLLMs)
@@ -144,6 +145,12 @@ func (a *API) setupRoutes() {
 		v1.DELETE("/tool-catalogues/:id", a.deleteToolCatalogue)
 		v1.GET("/tool-catalogues", a.listToolCatalogues)
 		v1.GET("/tool-catalogues/search", a.searchToolCatalogues)
+		v1.POST("/tool-catalogues/:id/tools", a.addToolToToolCatalogue)
+		v1.DELETE("/tool-catalogues/:id/tools/:toolId", a.removeToolFromToolCatalogue)
+		v1.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
+		v1.POST("/tool-catalogues/:id/tags", a.addTagToToolCatalogue)
+		v1.DELETE("/tool-catalogues/:id/tags/:tagId", a.removeTagFromToolCatalogue)
+		v1.GET("/tool-catalogues/:id/tags", a.getToolCatalogueTags)
 
 		// Credential routes
 		v1.POST("/credentials", a.createCredential)
