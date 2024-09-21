@@ -23,6 +23,8 @@ import StorageIcon from "@mui/icons-material/Storage";
 import BuildIcon from "@mui/icons-material/Build";
 import DataObjectIcon from "@mui/icons-material/DataObject";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import SettingsInputComponentIcon from "@mui/icons-material/SettingsInputComponent";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
@@ -64,14 +66,19 @@ const menuItems = [
       { text: "Tools", icon: <BuildIcon />, path: "/tools" },
     ],
   },
-  // Updated Catalogs category
+  // New Gateway category
+  {
+    text: "Gateway",
+    icon: <SettingsInputComponentIcon />,
+    subItems: [{ text: "Filters", icon: <FilterListIcon />, path: "/filters" }],
+  },
   {
     text: "Catalogs",
     icon: <FolderOpenIcon />,
     subItems: [
       { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
       { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
-      { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" }, // Updated path for Tool Catalogues
+      { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
     ],
   },
 ];

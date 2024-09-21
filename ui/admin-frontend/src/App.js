@@ -57,6 +57,10 @@ import ToolCatalogueList from "./pages/ToolCatalogueList";
 import ToolCatalogueDetails from "./components/tool-catalogues/ToolCatalogueDetails";
 import ToolCatalogueForm from "./components/tool-catalogues/ToolCatalogueForm";
 
+import FilterList from "./pages/FilterList";
+import FilterDetails from "./components/filters/FilterDetails";
+import FilterForm from "./components/filters/FilterForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -252,6 +256,23 @@ function App() {
               <Route
                 path="/catalogs/tools/new"
                 element={<PrivateRoute element={<ToolCatalogueForm />} />}
+              />
+
+              <Route
+                path="/filters"
+                element={<PrivateRoute element={<FilterList />} />}
+              />
+              <Route
+                path="/filters/:id"
+                element={<PrivateRoute element={<FilterDetails />} />}
+              />
+              <Route
+                path="/filters/edit/:id"
+                element={<PrivateRoute element={<FilterForm />} />}
+              />
+              <Route
+                path="/filters/new"
+                element={<PrivateRoute element={<FilterForm />} />}
               />
               {/* Add more routes as needed */}
             </Routes>
