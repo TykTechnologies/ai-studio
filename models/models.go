@@ -11,14 +11,14 @@ func InitModels(db *gorm.DB) error {
 		&Tags{},
 		&Datasource{},    //Done
 		&DataCatalogue{}, //Done
-		&Credential{},
-		&App{},
-		&LLMSettings{}, //Done
+		&Credential{},    // Done [partially handled by Apps]
+		&App{},           // Done
+		&LLMSettings{},   //Done
 		&Chat{},
 		&CMessage{},
 		&Tool{},       //Done
 		&ModelPrice{}, //Done
-		&Filter{},
+		&Filter{},     // Done
 		&ChatHistoryRecord{},
 		&ToolCatalogue{}, // Done
 	)

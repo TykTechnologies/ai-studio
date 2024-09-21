@@ -41,7 +41,7 @@ func (a *App) Create(db *gorm.DB) error {
 
 // Get an app by ID
 func (a *App) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Credential").First(a, id).Error
+	return db.Preload("Credential").Preload("Datasources").Preload("LLMs").First(a, id).Error
 }
 
 // Update an existing app

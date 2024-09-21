@@ -61,6 +61,10 @@ import FilterList from "./pages/FilterList";
 import FilterDetails from "./components/filters/FilterDetails";
 import FilterForm from "./components/filters/FilterForm";
 
+import AppList from "./pages/AppList";
+import AppDetails from "./components/apps/AppDetails";
+import AppForm from "./components/apps/AppForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -273,6 +277,23 @@ function App() {
               <Route
                 path="/filters/new"
                 element={<PrivateRoute element={<FilterForm />} />}
+              />
+
+              <Route
+                path="/apps"
+                element={<PrivateRoute element={<AppList />} />}
+              />
+              <Route
+                path="/apps/:id"
+                element={<PrivateRoute element={<AppDetails />} />}
+              />
+              <Route
+                path="/apps/edit/:id"
+                element={<PrivateRoute element={<AppForm />} />}
+              />
+              <Route
+                path="/apps/new"
+                element={<PrivateRoute element={<AppForm />} />}
               />
               {/* Add more routes as needed */}
             </Routes>

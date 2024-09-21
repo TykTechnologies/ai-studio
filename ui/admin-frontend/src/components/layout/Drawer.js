@@ -25,11 +25,73 @@ import DataObjectIcon from "@mui/icons-material/DataObject";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import SettingsInputComponentIcon from "@mui/icons-material/SettingsInputComponent";
+import AppsIcon from "@mui/icons-material/Apps";
+import WebIcon from "@mui/icons-material/Web";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
 const drawerWidth = 240;
 const minimizedDrawerWidth = 60;
+
+// const menuItems = [
+//   { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+//   {
+//     text: "Team",
+//     icon: <PeopleIcon />,
+//     subItems: [
+//       { text: "Users", icon: <PersonIcon />, path: "/users" },
+//       { text: "Groups", icon: <GroupIcon />, path: "/groups" },
+//     ],
+//   },
+//   {
+//     text: "AI",
+//     icon: <SmartToyIcon />,
+//     subItems: [
+//       { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" },
+//       { text: "Call Settings", icon: <SettingsIcon />, path: "/llm-settings" },
+//       {
+//         text: "Model Prices",
+//         icon: <AttachMoneyIcon />,
+//         path: "/model-prices",
+//       },
+//     ],
+//   },
+//   {
+//     text: "Data",
+//     icon: <DataObjectIcon />,
+//     subItems: [
+//       {
+//         text: "Vector Sources",
+//         icon: <StorageIcon />,
+//         path: "/datasources",
+//       },
+//       { text: "Tools", icon: <BuildIcon />, path: "/tools" },
+//     ],
+//   },
+//   // New Gateway category
+//   {
+//     text: "Gateway",
+//     icon: <SettingsInputComponentIcon />,
+//     subItems: [{ text: "Filters", icon: <FilterListIcon />, path: "/filters" }],
+//   },
+//   {
+//     text: "Portal",
+//     icon: <WebIcon />, // You may want to import a suitable icon for Portal
+//     subItems: [
+//       { text: "Apps", icon: <AppsIcon />, path: "/apps" },
+//       // Add other Portal-related items here if needed
+//     ],
+//   },
+//   {
+//     text: "Catalogs",
+//     icon: <FolderOpenIcon />,
+//     subItems: [
+//       { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
+//       { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
+//       { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
+//     ],
+//   },
+// ];
 
 const menuItems = [
   { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -66,19 +128,25 @@ const menuItems = [
       { text: "Tools", icon: <BuildIcon />, path: "/tools" },
     ],
   },
-  // New Gateway category
   {
     text: "Gateway",
     icon: <SettingsInputComponentIcon />,
     subItems: [{ text: "Filters", icon: <FilterListIcon />, path: "/filters" }],
   },
   {
-    text: "Catalogs",
-    icon: <FolderOpenIcon />,
+    text: "Portal",
+    icon: <WebIcon />,
     subItems: [
-      { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
-      { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
-      { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
+      { text: "Apps", icon: <AppsIcon />, path: "/apps" },
+      {
+        text: "Catalogs",
+        icon: <FolderOpenIcon />,
+        subItems: [
+          { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
+          { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
+          { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
+        ],
+      },
     ],
   },
 ];
@@ -100,7 +168,7 @@ const MyDrawer = () => {
 
   const renderMenuItem = (item, depth = 0) => {
     const commonStyles = {
-      pl: open ? depth * 4 + 2 : 2, // Consistent left padding for all items
+      pl: open ? depth * 4 + 2 : 2,
     };
 
     if (item.subItems) {
@@ -112,7 +180,15 @@ const MyDrawer = () => {
             sx={commonStyles}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
-            {open && <ListItemText primary={item.text} />}
+            {open && (
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  variant: depth > 0 ? "body2" : "body1",
+                  color: depth > 0 ? "text.secondary" : "text.primary",
+                }}
+              />
+            )}
             {open &&
               (expandedItems[item.text] ? <ExpandLess /> : <ExpandMore />)}
           </ListItem>
@@ -135,7 +211,15 @@ const MyDrawer = () => {
           sx={commonStyles}
         >
           <ListItemIcon>{item.icon}</ListItemIcon>
-          {open && <ListItemText primary={item.text} />}
+          {open && (
+            <ListItemText
+              primary={item.text}
+              primaryTypographyProps={{
+                variant: depth > 0 ? "body2" : "body1",
+                color: depth > 0 ? "text.secondary" : "text.primary",
+              }}
+            />
+          )}
         </ListItem>
       );
     }

@@ -5,6 +5,12 @@ const theme = createTheme({
     fontFamily: ["Inter", "sans-serif"].join(","),
     fontOpticalSizing: "auto",
     fontStyle: "normal",
+    body1: {
+      fontSize: "0.99rem",
+    },
+    body2: {
+      fontSize: "0.89rem",
+    },
   },
   palette: {
     mode: "light",
