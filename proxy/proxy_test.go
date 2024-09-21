@@ -150,21 +150,21 @@ func TestLLMRequestHandling(t *testing.T) {
 
 	// Create a test server
 	router := mux.NewRouter()
-	router.HandleFunc("/llm/{llmSlug}/{rest:.*}", proxy.handleLLMRequest).Methods("POST")
+	router.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", proxy.handleLLMRequest).Methods("POST")
 	testServer := httptest.NewServer(proxy.credValidator.Middleware(router))
 	defer testServer.Close()
 
 	// Test valid request
 	reqBody := []byte(`{"prompt": "Hello, world!"}`)
-	req, _ := http.NewRequest("POST", testServer.URL+"/llm/dummyllm/v1/chat/completions", bytes.NewBuffer(reqBody))
+	req, _ := http.NewRequest("POST", testServer.URL+"/llm/rest/dummyllm/v1/chat/completions", bytes.NewBuffer(reqBody))
 	req.Header.Set("Dummy-Authorization", "valid-token")
 	resp, err := http.DefaultClient.Do(req)
-
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Check the response from the upstream server
 	body, err := ioutil.ReadAll(resp.Body)
+	fmt.Println(string(body))
 	assert.NoError(t, err)
 	var responseBody map[string]interface{}
 	err = json.Unmarshal(body, &responseBody)
@@ -173,7 +173,7 @@ func TestLLMRequestHandling(t *testing.T) {
 	assert.Equal(t, "Hello, how can I assist you today?", responseBody["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})["content"])
 
 	// Test invalid credential
-	req, _ = http.NewRequest("POST", testServer.URL+"/llm/dummyllm/v1/chat/completions", bytes.NewBuffer(reqBody))
+	req, _ = http.NewRequest("POST", testServer.URL+"/llm/rest/dummyllm/v1/chat/completions", bytes.NewBuffer(reqBody))
 	req.Header.Set("Dummy-Authorization", "invalid-token")
 	resp, err = http.DefaultClient.Do(req)
 
@@ -181,7 +181,7 @@ func TestLLMRequestHandling(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 	// Test missing credential
-	req, _ = http.NewRequest("POST", testServer.URL+"/llm/dummyllm/v1/chat/completions", bytes.NewBuffer(reqBody))
+	req, _ = http.NewRequest("POST", testServer.URL+"/llm/rest/dummyllm/v1/chat/completions", bytes.NewBuffer(reqBody))
 	resp, err = http.DefaultClient.Do(req)
 
 	assert.NoError(t, err)
@@ -407,14 +407,14 @@ func TestEdgeCasesRequests(t *testing.T) {
 	defer testServer.Close()
 
 	// Test malformed LLM request body
-	req, _ := http.NewRequest("POST", testServer.URL+"/llm/testllm/test", strings.NewReader(`{"invalid json`))
+	req, _ := http.NewRequest("POST", testServer.URL+"/llm/rest/testllm/test", strings.NewReader(`{"invalid json`))
 	req.Header.Set("Authorization", "valid-token")
 	resp, err := http.DefaultClient.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	// Test non-existent LLM
-	req, _ = http.NewRequest("POST", testServer.URL+"/llm/nonexistent/test", strings.NewReader(`{}`))
+	req, _ = http.NewRequest("POST", testServer.URL+"/llm/rest/nonexistent/test", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "valid-token")
 	resp, err = http.DefaultClient.Do(req)
 	assert.NoError(t, err)

@@ -194,3 +194,47 @@ func (o *ProxyDummyResponse) GetModel() string {
 
 	return o.Model
 }
+
+type AnthropicStreamingChunkType struct {
+	Type string `json:"type"`
+}
+
+type AnthropicStreamingChunkDelta struct {
+	Type  string `json:"type"`
+	Delta struct {
+		StopReason   string `json:"stop_reason"`
+		StopSequence any    `json:"stop_sequence"`
+	} `json:"delta"`
+	Usage struct {
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage"`
+}
+
+type AnthropicStreamingChunkStart struct {
+	Type    string `json:"type"`
+	Message struct {
+		ID           string `json:"id"`
+		Type         string `json:"type"`
+		Role         string `json:"role"`
+		Content      []any  `json:"content"`
+		Model        string `json:"model"`
+		StopReason   any    `json:"stop_reason"`
+		StopSequence any    `json:"stop_sequence"`
+		Usage        struct {
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+		} `json:"usage"`
+	} `json:"message"`
+}
+
+type AnthropicStreamingChunkCBStart struct {
+	Type         string `json:"type"`
+	Index        int    `json:"index"`
+	ContentBlock struct {
+		Type  string `json:"type"`
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Input struct {
+		} `json:"input"`
+	} `json:"content_block"`
+}

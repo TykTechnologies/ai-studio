@@ -164,3 +164,52 @@ func (o *OpenAIResponse) GetToolCount() int {
 func (o *OpenAIResponse) GetModel() string {
 	return o.Model
 }
+
+type OpenAIStreamingResponse struct {
+	ID                string `json:"id"`
+	Object            string `json:"object"`
+	Created           int    `json:"created"`
+	Model             string `json:"model"`
+	SystemFingerprint string `json:"system_fingerprint"`
+	Choices           []struct {
+		Index        int                    `json:"index"`
+		Delta        map[string]interface{} `json:"delta"`
+		Logprobs     any                    `json:"logprobs"`
+		FinishReason string                 `json:"finish_reason"`
+	} `json:"choices"`
+	Usage struct {
+		CompletionTokens int `json:"completion_tokens"`
+		PromptTokens     int `json:"prompt_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
+}
+
+func (o *OpenAIStreamingResponse) GetPromptTokens() int {
+	return o.Usage.PromptTokens
+}
+
+func (o *OpenAIStreamingResponse) GetResponseTokens() int {
+	return o.Usage.CompletionTokens
+}
+
+func (o *OpenAIStreamingResponse) GetChoiceCount() int {
+	return len(o.Choices)
+}
+
+func (o *OpenAIStreamingResponse) GetToolCount() int {
+	cnt := 0
+	if len(o.Choices) > 0 {
+		for _, v := range o.Choices {
+			if v.FinishReason == "tool_calls" {
+				if _, ok := v.Delta["tool_calls"]; ok {
+					cnt += len(v.Delta["tool_calls"].([]interface{}))
+				}
+			}
+		}
+	}
+	return cnt
+}
+
+func (o *OpenAIStreamingResponse) GetModel() string {
+	return o.Model
+}

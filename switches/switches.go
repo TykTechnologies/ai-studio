@@ -285,6 +285,106 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 	return nil, nil, nil, fmt.Errorf("[analyse response] unknown vendor: %s", llm.Vendor)
 }
 
+func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps [][]byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
+	var response models.ITokenResponse
+	switch llm.Vendor {
+	case models.OPENAI:
+		aggregate := &responses.GenericResponse{}
+		for _, body := range resps {
+			tempResp := &responses.OpenAIStreamingResponse{}
+			err := json.Unmarshal(body, tempResp)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			aggregate.Choices += tempResp.GetChoiceCount()
+			aggregate.ToolCalls += tempResp.GetToolCount()
+
+			if tempResp.Usage.CompletionTokens > 0 {
+				aggregate.PromptTokens = tempResp.Usage.PromptTokens
+				aggregate.CompletionTokens = tempResp.Usage.CompletionTokens
+			}
+
+			return llm, app, aggregate, nil
+		}
+
+	case models.ANTHROPIC:
+		aggregate := &responses.GenericResponse{
+			Choices: 1,
+		}
+		for _, body := range resps {
+			tempResp := map[string]interface{}{}
+			err := json.Unmarshal(body, tempResp)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			tp, ok := tempResp["type"]
+			if !ok {
+				switch tp {
+				case "message_start":
+					startMsg := &responses.AnthropicStreamingChunkStart{}
+					err := json.Unmarshal(body, startMsg)
+					if err != nil {
+						return nil, nil, nil, err
+					}
+
+					aggregate.PromptTokens = startMsg.Message.Usage.InputTokens
+				case "message_delta":
+					deltaMsg := &responses.AnthropicStreamingChunkDelta{}
+					err := json.Unmarshal(body, deltaMsg)
+					if err != nil {
+						return nil, nil, nil, err
+					}
+
+					aggregate.CompletionTokens += deltaMsg.Usage.OutputTokens
+
+				case "content_block_start":
+					startBlock := &responses.AnthropicStreamingChunkCBStart{}
+					err := json.Unmarshal(body, startBlock)
+					if err != nil {
+						return nil, nil, nil, err
+					}
+
+					if startBlock.ContentBlock.Type == "tool_use" {
+						aggregate.ToolCalls += 1
+					}
+				}
+			}
+
+			return llm, app, aggregate, nil
+		}
+
+	case models.MOCK_VENDOR:
+		response = &responses.DummyResponse{}
+		return llm, app, response, nil
+
+	case models.HUGGINGFACE:
+		// does not do token counts
+		return llm, app, &responses.DummyResponse{
+			Model: "huggingFace"}, nil
+
+	case models.OLLAMA:
+		return llm, app, &responses.DummyResponse{
+			Model: "ollama"}, nil
+
+	case models.VERTEX:
+		return llm, app, &responses.DummyResponse{
+			Model: "vertex"}, nil
+
+	case models.GOOGLEAI:
+		return llm, app, &responses.DummyResponse{
+			Model: "google-ai"}, nil
+
+	case "TestVendor":
+		return llm, app, &responses.DummyResponse{
+			Model: "test-vendor"}, nil
+
+	}
+
+	return nil, nil, nil, fmt.Errorf("[analyse response] unknown vendor: %s", llm.Vendor)
+}
+
 func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	switch llm.Vendor {
 	case models.OPENAI:

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -222,7 +224,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		Director: func(req *http.Request) {
 			req.URL.Scheme = upstreamURL.Scheme
 			req.URL.Host = upstreamURL.Host
-			req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/%s", llmSlug))
+			req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
 			req.Host = upstreamURL.Host
 
 			er := p.setVendorAuthHeader(req, llm)
@@ -375,6 +377,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Construct the full upstream path by removing the prefix
+	upstreamPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
+	upstreamURL.Path = path.Join(upstreamURL.Path, upstreamPath)
+
+	// Preserve query parameters
+	upstreamURL.RawQuery = r.URL.RawQuery
+
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL.String(), r.Body)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to create upstream request", err)
@@ -409,10 +418,18 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 
 	app, _ := r.Context().Value("app").(*models.App)
 
+	// We need this for anthropic tracking
 	buffer := make([]byte, 1024)
+	responses := make([][]byte, 0)
 	var fullResponse []byte
 	for {
 		n, err := resp.Body.Read(buffer)
+
+		// copy the buffer for tracking
+		bCopy := make([]byte, n)
+		copy(bCopy, buffer[:n])
+		responses = append(responses, bCopy)
+
 		if n > 0 {
 			fullResponse = append(fullResponse, buffer[:n]...)
 			_, err := w.Write(buffer[:n])
@@ -432,15 +449,23 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse)
+	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, responses)
 }
 
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, r *http.Request, statusCode int, body []byte) {
-	app, ok := r.Context().Value("app").(*models.App)
-	if !ok {
-		log.Println("app context not found")
-		return
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, chunks [][]byte) {
+	AnalyzeStreamingResponse(p.service, llm, app, code, chunks, req)
+}
+
+func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
+	// Read the body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
 	}
 
-	AnalyzeResponse(p.service, llm, app, statusCode, body, r)
+	// Restore the io.ReadCloser to its original state
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	// Return the body
+	return body, nil
 }

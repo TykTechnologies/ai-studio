@@ -65,7 +65,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		} else if llmSlug != "" {
 			llm, ok := cv.p.GetLLM(llmSlug)
 			if !ok {
-				respondWithError(w, http.StatusNotFound, "[cred validator] LLM not found", nil)
+				respondWithError(w, http.StatusNotFound, "[cred validator] LLM not found "+llmSlug, nil)
 				return
 			}
 			extractor, ok := cv.validators[strings.ToLower(string(llm.Vendor))]
