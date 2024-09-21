@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -169,7 +170,6 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 			runner := scripting.NewScriptRunner(filter.Script)
 			err := runner.RunFilter(string(bodyBytes))
 			if err != nil {
-				fmt.Println(err)
 				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Policy error: %s", filter.Name), nil)
 				return
 			}
@@ -240,7 +240,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 	app, ok := r.Context().Value("app").(*models.App)
 	if !ok {
-		respondWithError(w, http.StatusInternalServerError, "app context not found", nil)
+		slog.Error("app context not found")
 		return
 	}
 

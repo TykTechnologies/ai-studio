@@ -161,3 +161,36 @@ func (o *DummyResponse) GetModel() string {
 
 	return o.Model
 }
+
+type ProxyDummyResponse struct {
+	Model string `json:"model"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
+}
+
+func (o *ProxyDummyResponse) GetPromptTokens() int {
+	return o.Usage.PromptTokens
+}
+
+func (o *ProxyDummyResponse) GetResponseTokens() int {
+	return o.Usage.CompletionTokens
+}
+
+func (o *ProxyDummyResponse) GetChoiceCount() int {
+	return 0
+}
+
+func (o *ProxyDummyResponse) GetToolCount() int {
+	return 0
+}
+
+func (o *ProxyDummyResponse) GetModel() string {
+	if o.Model == "" {
+		return "dummy"
+	}
+
+	return o.Model
+}

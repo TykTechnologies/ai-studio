@@ -271,9 +271,18 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 		}
 		response.(*responses.GoogleAIChatResponse).SetModel(modelName)
 		return llm, app, response, nil
+
+	case "TestVendor":
+		response := &responses.ProxyDummyResponse{}
+		err := json.Unmarshal(body, response)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		return llm, app, response, nil
 	}
 
-	return nil, nil, nil, fmt.Errorf("unknown vendor: %s", llm.Vendor)
+	return nil, nil, nil, fmt.Errorf("[analyse response] unknown vendor: %s", llm.Vendor)
 }
 
 func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
@@ -294,7 +303,7 @@ func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
 
 	default:
-		return fmt.Errorf("unknown vendor: %s", llm.Vendor)
+		return fmt.Errorf("[auth header] unknown vendor: %s", llm.Vendor)
 	}
 
 	return nil
