@@ -42,7 +42,6 @@ func TestToolCatalogueEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var response ToolCatalogueResponse
-	fmt.Println(w.Body.String())
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Tool Catalogue", response.Attributes.Name)

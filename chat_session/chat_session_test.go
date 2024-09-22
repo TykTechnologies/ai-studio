@@ -547,7 +547,7 @@ func TestChatSession_PrivacyScoreValidation(t *testing.T) {
 // 		OASSpec:             spec,
 // 	}
 
-// 	session, _ := NewChatSession(chat, ChatMessage, db)
+// 	session, _ := NewChatSession(chat, ChatMessage, db, services.NewService(db), nil, nil, nil)
 // 	session.AddTool("weather", weathertool)
 
 // 	err = session.Start()
@@ -555,7 +555,7 @@ func TestChatSession_PrivacyScoreValidation(t *testing.T) {
 
 // 	// Send a message
 // 	select {
-// 	case session.Input() <- &UserMessage{Payload: "What is the weather like today in Auckland, New Zealand, and in New York City, USA?"}:
+// 	case session.Input() <- &models.UserMessage{Payload: "What is the weather like today in Auckland, New Zealand, and in New York City, USA?"}:
 // 	default:
 // 		assert.Fail(t, "Failed to send message")
 // 	}
@@ -582,6 +582,86 @@ func TestChatSession_PrivacyScoreValidation(t *testing.T) {
 // 		}
 // 	}
 
+// }
+
+// func TestChatSession_Live_Weather_Streaming(t *testing.T) {
+// 	if os.Getenv("WEATHERBIT_KEY") == "" {
+// 		t.Skip("Skipping live test, set WEATHERBIT_KEY to run this test")
+// 	}
+
+// 	db := setupTestDB(t)
+// 	chat := &models.Chat{
+// 		LLM: &models.LLM{
+// 			Name:   "claude-3-5-sonnet-20240620",
+// 			Vendor: models.ANTHROPIC,
+// 			APIKey: os.Getenv("ANTHROPIC_KEY"),
+// 		},
+// 		LLMSettings: &models.LLMSettings{
+// 			ModelName: "claude-3-5-sonnet-20240620",
+// 		},
+// 		// LLM: &models.LLM{
+// 		// 	Name:   "gpt-4-turbo",
+// 		// 	Vendor: models.OPENAI,
+// 		// 	APIKey: os.Getenv("OPENAI_KEY"),
+// 		// },
+// 		// LLMSettings: &models.LLMSettings{
+// 		// 	ModelName: "gpt-4-turbo",
+// 		// },
+// 	}
+
+// 	spec, err := os.ReadFile("../universalclient/testdata/weatherbit.json")
+// 	assert.NoError(t, err)
+
+// 	weathertool := models.Tool{
+// 		Name:                "weather forecast",
+// 		Description:         "Get the weather forecast for a given location",
+// 		ToolType:            models.ToolTypeREST,
+// 		AvailableOperations: "ReturnsadailyforecastGivenLatLon",
+// 		AuthKey:             os.Getenv("WEATHERBIT_KEY"),
+// 		OASSpec:             spec,
+// 	}
+
+// 	session, _ := NewChatSession(chat, ChatStream, db, services.NewService(db), nil, nil, nil)
+// 	session.AddTool("weather", weathertool)
+
+// 	err = session.Start()
+// 	assert.NoError(t, err)
+
+// 	// Send a message
+// 	select {
+// 	case session.Input() <- &models.UserMessage{Payload: "What is the weather like today in Auckland, New Zealand, and in New York City, USA?"}:
+// 	default:
+// 		assert.Fail(t, "Failed to send message")
+// 	}
+
+// 	// Wait for streaming responses
+// 	var fullResponse strings.Builder
+// 	t0 := time.Now()
+// 	timeout := time.After(60 * time.Second)
+
+// 	for {
+// 		select {
+// 		case chunk := <-session.OutputStream():
+// 			fmt.Print(string(chunk))
+// 			fullResponse.Write(chunk)
+// 		case err := <-session.Errors():
+// 			fmt.Println("\n[ERROR]", err)
+// 			assert.Fail(t, "Error received")
+// 		case <-timeout:
+// 			assert.Fail(t, "Timeout waiting for complete response")
+// 			return
+// 		default:
+// 			if time.Since(t0) > 60*time.Second {
+// 				// Check if we have a complete response
+// 				if strings.Contains(fullResponse.String(), "New York City") &&
+// 					strings.Contains(fullResponse.String(), "Auckland") {
+// 					fmt.Println("\n\nFull response received:")
+// 					fmt.Println(fullResponse.String())
+// 					return
+// 				}
+// 			}
+// 		}
+// 	}
 // }
 
 // func TestChatSession_Live_Petstore(t *testing.T) {

@@ -798,11 +798,18 @@ func (c *Client) buildParametersSchema(operation *v3.Operation) map[string]inter
 		}
 	}
 
-	return map[string]interface{}{
+	r := map[string]interface{}{
 		"type":       "object",
 		"properties": properties,
 		"required":   required,
 	}
+
+	// asJson, _ := json.MarshalIndent(r, "", "  ")
+	// fmt.Println("======= TOOL SCHEMA =======")
+	// fmt.Println(string(asJson))
+	// fmt.Println("======= END  SCHEMA =======")
+
+	return r
 }
 
 func (c *Client) SchemaToMap(schema *base.Schema) map[string]interface{} {

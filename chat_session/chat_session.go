@@ -214,7 +214,11 @@ func (cs *ChatSession) Start() error {
 				tools := cs.prepareTools()
 
 				// Handle the message from the user
-				cs.HandleUserMessage(msg, docs, tools)
+				_, err = cs.HandleUserMessage(msg, docs, tools)
+				if err != nil {
+					cs.errors <- fmt.Errorf("error handling user message: %v", err)
+					continue
+				}
 
 			case resp := <-cs.llmResponses:
 				// handle any response from the LLM
@@ -406,7 +410,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 
 		toolCallResp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
 		if err != nil {
-			cs.sendError(fmt.Errorf("error generating content after tool call: %v", err))
+			cs.sendError(fmt.Errorf("[toolcall] error generating content after tool call: %v", err))
 			return err
 		}
 
@@ -430,10 +434,10 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	return nil
 }
 
-func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.Document, tools []llms.Tool) (string, error) {
+func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.Document, tools []llms.Tool) (*llms.ContentResponse, error) {
 	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 	if cs.caller == nil {
-		return "", fmt.Errorf("LLM driver is not initialized")
+		return nil, fmt.Errorf("LLM driver is not initialized")
 	}
 
 	ctx, done := context.WithTimeout(context.Background(), 300*time.Second)
@@ -442,25 +446,25 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	pl := cs.prepHumanMessage(msg.Payload, docs).Content
 	err := cs.chatHistory.AddUserMessage(context.Background(), pl)
 	if err != nil {
-		return "", fmt.Errorf("error adding message to history: %v", err)
+		return nil, fmt.Errorf("error adding message to history: %v", err)
 	}
 
 	messages, err := cs.getMessages()
 	if err != nil {
-		return "", fmt.Errorf("error getting chat history: %v", err)
+		return nil, fmt.Errorf("error getting chat history: %v", err)
 	}
 
 	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
-		return "", fmt.Errorf("error generating content: %v", err)
+		return nil, fmt.Errorf("[userMessage handler] error generating content: %v", err)
 	}
 
 	select {
 	case <-ctx.Done():
-		return "", fmt.Errorf("context cancelled")
+		return nil, fmt.Errorf("context cancelled")
 	case cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: opts}:
 	default:
-		return "", fmt.Errorf("could not send response to llm responses channel")
+		return nil, fmt.Errorf("could not send response to llm responses channel")
 	}
 
 	mc := llms.TextParts(llms.ChatMessageTypeHuman, pl)
@@ -477,7 +481,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		cs.service,
 	)
 
-	return resp.Choices[0].Content, nil
+	return resp, nil
 }
 
 type CallParams struct {

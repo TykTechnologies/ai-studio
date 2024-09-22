@@ -541,40 +541,6 @@
               "type": "number",
               "format": "double"
             }
-          },
-          {
-            "name": "units",
-            "in": "query",
-            "description": "Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a>",
-            "style": "form",
-            "explode": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/units"
-                },
-                {
-                  "description": "Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a>"
-                }
-              ]
-            }
-          },
-          {
-            "name": "lang",
-            "in": "query",
-            "description": "Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a>",
-            "style": "form",
-            "explode": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/lang"
-                },
-                {
-                  "description": "Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a>"
-                }
-              ]
-            }
           }
         ],
         "responses": {
