@@ -2,3 +2,4 @@
 .aider*
 *.db
 midsommar
+tools/gendata/gendata

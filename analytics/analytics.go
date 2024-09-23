@@ -32,6 +32,7 @@ type LLMChatRecord struct {
 	ChatID         string
 	AppID          uint
 	Cost           float64
+	Currency       string
 }
 
 // logs content
@@ -146,6 +147,7 @@ func RecordContentMessage(
 	rec.ChatID = chatID
 	rec.AppID = appID
 	rec.Cost = cpt * float64(totalTokens)
+	rec.Currency = price.Currency
 
 	// LLM Response
 	chatLog := &LLMChatLogEntry{}

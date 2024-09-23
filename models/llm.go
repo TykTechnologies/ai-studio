@@ -21,9 +21,9 @@ type LLM struct {
 }
 
 const (
-	OPENAI      Vendor = "openai"
-	ANTHROPIC   Vendor = "anthropic"
-	BEDROCK     Vendor = "bedrock"
+	OPENAI    Vendor = "openai"
+	ANTHROPIC Vendor = "anthropic"
+	// BEDROCK     Vendor = "bedrock"
 	VERTEX      Vendor = "vertex"
 	GOOGLEAI    Vendor = "google_ai"
 	HUGGINGFACE Vendor = "huggingface"

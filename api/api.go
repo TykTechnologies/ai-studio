@@ -231,6 +231,17 @@ func (a *API) setupRoutes() {
 		v1.GET("/chat-history-records", a.listChatHistoryRecords)
 		v1.DELETE("/chat-history-records/:id", a.deleteChatHistoryRecord)
 
+		// Analytics routes
+		v1.GET("/analytics/chat-records-per-day", a.getChatRecordsPerDay)
+		v1.GET("/analytics/tool-calls-per-day", a.getToolCallsPerDay)
+		v1.GET("/analytics/chat-records-per-user", a.getChatRecordsPerUser)
+		v1.GET("/analytics/cost-analysis", a.getCostAnalysis)
+		v1.GET("/analytics/most-used-llm-models", a.getMostUsedLLMModels)
+		v1.GET("/analytics/tool-usage-statistics", a.getToolUsageStatistics)
+		v1.GET("/analytics/unique-users-per-day", a.getUniqueUsersPerDay)
+		v1.GET("/analytics/token-usage-per-user", a.getTokenUsagePerUser)
+		v1.GET("/analytics/token-usage-per-app", a.getTokenUsagePerApp)
+
 		a.SetupWebSocketRoute()
 	}
 }
