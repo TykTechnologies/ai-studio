@@ -48,12 +48,13 @@ func (s *Service) DeleteTag(id uint) error {
 	return tag.Delete(s.DB)
 }
 
-func (s *Service) GetAllTags() (models.Tags, error) {
+func (s *Service) GetAllTags(pageSize int, pageNumber int, all bool) (models.Tags, int64, int, error) {
 	var tags models.Tags
-	if err := tags.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := tags.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return tags, nil
+	return tags, totalCount, totalPages, nil
 }
 
 func (s *Service) SearchTagsByNameStub(stub string) (models.Tags, error) {

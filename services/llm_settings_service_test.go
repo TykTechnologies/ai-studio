@@ -50,7 +50,7 @@ func TestLLMSettingsService(t *testing.T) {
 	assert.Equal(t, 0.8, updatedSettings.Temperature)
 
 	// Test GetAllLLMSettings
-	allSettings, err := service.GetAllLLMSettings()
+	allSettings, _, _, err := service.GetAllLLMSettings(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, *allSettings, 1)
 
@@ -88,7 +88,7 @@ func TestLLMSettingsService_MultipleSettings(t *testing.T) {
 	service.CreateLLMSettings(settings3)
 
 	// Test GetAllLLMSettings
-	allSettings, err := service.GetAllLLMSettings()
+	allSettings, _, _, err := service.GetAllLLMSettings(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, *allSettings, 3)
 
@@ -110,7 +110,7 @@ func TestLLMSettingsService_MultipleSettings(t *testing.T) {
 	}
 
 	// Verify updates
-	updatedSettings, err := service.GetAllLLMSettings()
+	updatedSettings, _, _, err := service.GetAllLLMSettings(10, 1, true)
 	assert.NoError(t, err)
 	for _, s := range *updatedSettings {
 		assert.Equal(t, 150, s.MaxTokens)
@@ -123,7 +123,7 @@ func TestLLMSettingsService_MultipleSettings(t *testing.T) {
 	}
 
 	// Verify all settings are deleted
-	remainingSettings, err := service.GetAllLLMSettings()
+	remainingSettings, _, _, err := service.GetAllLLMSettings(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, *remainingSettings, 0)
 }

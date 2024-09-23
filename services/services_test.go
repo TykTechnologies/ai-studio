@@ -47,7 +47,7 @@ func TestUserService(t *testing.T) {
 	assert.NotNil(t, authenticatedUser)
 
 	// Test GetAllUsers
-	users, err := service.GetAllUsers()
+	users, _, _, err := service.GetAllUsers(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, users, 1)
 
@@ -87,7 +87,7 @@ func TestGroupService(t *testing.T) {
 	assert.Equal(t, "Updated Group", updatedGroup.Name)
 
 	// Test GetAllGroups
-	groups, err := service.GetAllGroups()
+	groups, _, _, err := service.GetAllGroups(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, groups, 1)
 
@@ -173,7 +173,7 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, updatedLLM.Name, fetchedLLMByName.Name)
 
 	// Test GetAllLLMs
-	allLLMs, err := service.GetAllLLMs()
+	allLLMs, _, _, err := service.GetAllLLMs(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allLLMs, 1)
 	assert.Equal(t, updatedLLM.ID, (allLLMs)[0].ID)
@@ -197,7 +197,7 @@ func TestLLMService(t *testing.T) {
 	llm2, _ := service.CreateLLM("GPT-4", "key2", "https://api2.com", 85, "GPT-4 short", "GPT-4 long", "https://gpt4-logo.com", models.OPENAI, true)
 	service.CreateLLM("BERT", "key3", "https://api3.com", 60, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true)
 
-	allLLMs, err = service.GetAllLLMs()
+	allLLMs, _, _, err = service.GetAllLLMs(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allLLMs, 3)
 
@@ -344,7 +344,7 @@ func TestCatalogueService(t *testing.T) {
 	assert.Equal(t, "Updated Catalogue", updatedCatalogue.Name)
 
 	// Test GetAllCatalogues
-	catalogues, err := service.GetAllCatalogues()
+	catalogues, _, _, err := service.GetAllCatalogues(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, catalogues, 1)
 
@@ -394,7 +394,7 @@ func TestCatalogueService_MultipleCatalogues(t *testing.T) {
 	catalogue3, _ := service.CreateCatalogue("Natural Language Processing")
 
 	// Test GetAllCatalogues
-	allCatalogues, err := service.GetAllCatalogues()
+	allCatalogues, _, _, err := service.GetAllCatalogues(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allCatalogues, 3)
 

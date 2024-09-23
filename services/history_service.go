@@ -77,18 +77,18 @@ func (s *Service) GetChatHistoryRecordByChatID(chatID uint) (*models.ChatHistory
 }
 
 // ListChatHistoryRecordsByUserID retrieves all ChatHistoryRecords for a given UserID
-func (s *Service) ListChatHistoryRecordsByUserID(userID uint) ([]models.ChatHistoryRecord, error) {
-	return models.ListChatHistoryRecordsByUserID(s.DB, userID)
+func (s *Service) ListChatHistoryRecordsByUserID(userID uint, pageSize int, pageNumber int, all bool) ([]models.ChatHistoryRecord, int64, int, error) {
+	return models.ListChatHistoryRecordsByUserID(s.DB, userID, pageSize, pageNumber, all)
 }
 
 // ListChatHistoryRecordsByUserIDPaginated retrieves ChatHistoryRecords for a given UserID with pagination
-func (s *Service) ListChatHistoryRecordsByUserIDPaginated(userID uint, page, pageSize int) ([]models.ChatHistoryRecord, int64, error) {
-	return models.ListChatHistoryRecordsByUserIDPaginated(s.DB, userID, page, pageSize)
+func (s *Service) ListChatHistoryRecordsByUserIDPaginated(userID uint, pageSize int, pageNumber int, all bool) ([]models.ChatHistoryRecord, int64, int, error) {
+	return models.ListChatHistoryRecordsByUserIDPaginated(s.DB, userID, pageSize, pageNumber, all)
 }
 
 // SearchChatHistoryRecords searches for ChatHistoryRecords by name for a given UserID
-func (s *Service) SearchChatHistoryRecords(userID uint, query string) ([]models.ChatHistoryRecord, error) {
-	return models.SearchChatHistoryRecords(s.DB, userID, query)
+func (s *Service) SearchChatHistoryRecords(userID uint, query string, pageSize int, pageNumber int, all bool) ([]models.ChatHistoryRecord, int64, int, error) {
+	return models.SearchChatHistoryRecords(s.DB, userID, query, pageSize, pageNumber, all)
 }
 
 // GetLatestChatHistoryRecord retrieves the most recent ChatHistoryRecord for a given UserID

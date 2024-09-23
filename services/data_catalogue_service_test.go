@@ -89,7 +89,7 @@ func TestDataCatalogueService(t *testing.T) {
 	assert.Len(t, fetchedDataCatalogue.Datasources, 0)
 
 	// Test GetAllDataCatalogues
-	allDataCatalogues, err := service.GetAllDataCatalogues()
+	allDataCatalogues, _, _, err := service.GetAllDataCatalogues(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allDataCatalogues, 1)
 	assert.Equal(t, dataCatalogue.ID, allDataCatalogues[0].ID)
@@ -135,7 +135,7 @@ func TestDataCatalogueService_MultipleDataCataloguesScenario(t *testing.T) {
 	dc3, _ := service.CreateDataCatalogue("Catalogue 3", "Short 3", "Long 3", "icon3.png")
 
 	// Test GetAllDataCatalogues
-	allDataCatalogues, err := service.GetAllDataCatalogues()
+	allDataCatalogues, _, _, err := service.GetAllDataCatalogues(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allDataCatalogues, 3)
 

@@ -43,7 +43,7 @@ func TestTagService(t *testing.T) {
 	assert.Equal(t, "Updated Tag", updatedTag.Name)
 
 	// Test GetAllTags
-	allTags, err := service.GetAllTags()
+	allTags, _, _, err := service.GetAllTags(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allTags, 1)
 	assert.Equal(t, updatedTag.ID, allTags[0].ID)
@@ -81,7 +81,7 @@ func TestTagService_MultipleTagsScenario(t *testing.T) {
 	tag3, _ := service.CreateTag("Natural Language Processing")
 
 	// Test GetAllTags
-	allTags, err := service.GetAllTags()
+	allTags, _, _, err := service.GetAllTags(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allTags, 3)
 

@@ -89,12 +89,13 @@ func (s *Service) GetCatalogueLLMs(catalogueID uint) (models.LLMs, error) {
 	return catalogue.LLMs, nil
 }
 
-func (s *Service) GetAllCatalogues() (models.Catalogues, error) {
+func (s *Service) GetAllCatalogues(pageSize int, pageNumber int, all bool) (models.Catalogues, int64, int, error) {
 	var catalogues models.Catalogues
-	if err := catalogues.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := catalogues.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return catalogues, nil
+	return catalogues, totalCount, totalPages, nil
 }
 
 func (s *Service) SearchCataloguesByNameStub(stub string) (models.Catalogues, error) {

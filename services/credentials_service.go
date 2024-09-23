@@ -77,12 +77,13 @@ func (s *Service) DeactivateCredential(id uint) error {
 }
 
 // GetAllCredentials retrieves all credentials
-func (s *Service) GetAllCredentials() (models.Credentials, error) {
+func (s *Service) GetAllCredentials(pageSize int, pageNumber int, all bool) (models.Credentials, int64, int, error) {
 	var credentials models.Credentials
-	if err := credentials.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := credentials.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return credentials, nil
+	return credentials, totalCount, totalPages, nil
 }
 
 // GetActiveCredentials retrieves all active credentials

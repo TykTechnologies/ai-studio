@@ -95,12 +95,13 @@ func (s *Service) DeleteDatasource(id uint) error {
 	return datasource.Delete(s.DB)
 }
 
-func (s *Service) GetAllDatasources() (models.Datasources, error) {
+func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (models.Datasources, int64, int, error) {
 	var datasources models.Datasources
-	if err := datasources.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := datasources.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return datasources, nil
+	return datasources, totalCount, totalPages, nil
 }
 
 func (s *Service) GetActiveDatasources() (models.Datasources, error) {

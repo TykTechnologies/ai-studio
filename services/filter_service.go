@@ -52,9 +52,9 @@ func (s *Service) DeleteFilter(id uint) error {
 	return filter.Delete(s.DB)
 }
 
-func (s *Service) GetAllFilters() ([]models.Filter, error) {
+func (s *Service) GetAllFilters(pageSize int, pageNumber int, all bool) ([]models.Filter, int64, int, error) {
 	filter := models.NewFilter()
-	return filter.GetAll(s.DB)
+	return filter.GetAll(s.DB, pageSize, pageNumber, all)
 }
 
 func (s *Service) GetFilterByName(name string) (*models.Filter, error) {

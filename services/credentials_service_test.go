@@ -64,7 +64,7 @@ func TestCredentialService(t *testing.T) {
 	assert.False(t, deactivatedCredential.Active)
 
 	// Test GetAllCredentials
-	allCredentials, err := service.GetAllCredentials()
+	allCredentials, _, _, err := service.GetAllCredentials(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allCredentials, 2)
 
@@ -95,7 +95,7 @@ func TestCredentialService_MultipleCredentials(t *testing.T) {
 	service.ActivateCredential(credential3.ID)
 
 	// Test GetAllCredentials
-	allCredentials, err := service.GetAllCredentials()
+	allCredentials, _, _, err := service.GetAllCredentials(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allCredentials, 3)
 

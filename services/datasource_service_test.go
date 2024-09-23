@@ -19,76 +19,135 @@ func setupTestDBForDatasources(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestDatasourceService(t *testing.T) {
+func TestCreateDatasource(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	// Create a user for testing
-	user, err := service.CreateUser("test@example.com", "Test User", "password123")
-	assert.NoError(t, err)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
 
-	// Test CreateDatasource
 	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, datasource)
 	assert.NotZero(t, datasource.ID)
 	assert.Equal(t, "Test Datasource", datasource.Name)
 	assert.Len(t, datasource.Tags, 2)
+}
 
-	// Test GetDatasourceByID
+func TestGetDatasourceByID(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
 	fetchedDatasource, err := service.GetDatasourceByID(datasource.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, datasource.ID, fetchedDatasource.ID)
 	assert.Equal(t, datasource.Name, fetchedDatasource.Name)
+}
 
-	// Test UpdateDatasource
+func TestUpdateDatasource(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
 	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model", true, []string{"AI", "ML"}, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, datasource.ID, updatedDatasource.ID)
 	assert.Equal(t, "Updated Datasource", updatedDatasource.Name)
 	assert.Equal(t, 80, updatedDatasource.PrivacyScore)
+}
 
-	// Test GetAllDatasources
-	allDatasources, err := service.GetAllDatasources()
+func TestGetAllDatasources(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
+	allDatasources, _, _, err := service.GetAllDatasources(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allDatasources, 1)
-	assert.Equal(t, updatedDatasource.ID, allDatasources[0].ID)
+	assert.Equal(t, datasource.ID, allDatasources[0].ID)
+}
 
-	// Test SearchDatasources
-	searchedDatasources, err := service.SearchDatasources("Updated")
+func TestSearchDatasources(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
+	searchedDatasources, err := service.SearchDatasources("Test")
 	assert.NoError(t, err)
 	assert.Len(t, searchedDatasources, 1)
-	assert.Equal(t, updatedDatasource.ID, searchedDatasources[0].ID)
+	assert.Equal(t, datasource.ID, searchedDatasources[0].ID)
+}
 
-	// Test GetDatasourcesByTag
+func TestGetDatasourcesByTag(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
 	datasourcesByTag, err := service.GetDatasourcesByTag("AI")
 	assert.NoError(t, err)
 	assert.Len(t, datasourcesByTag, 1)
-	assert.Equal(t, updatedDatasource.ID, datasourcesByTag[0].ID)
+	assert.Equal(t, datasource.ID, datasourcesByTag[0].ID)
+}
 
-	// Test AddTagsToDatasource
-	err = service.AddTagsToDatasource(datasource.ID, []string{"NLP"})
+func TestAddTagsToDatasource(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
+	err := service.AddTagsToDatasource(datasource.ID, []string{"NLP"})
 	assert.NoError(t, err)
-	updatedDatasource, _ = service.GetDatasourceByID(datasource.ID)
+	updatedDatasource, _ := service.GetDatasourceByID(datasource.ID)
 	assert.Len(t, updatedDatasource.Tags, 3)
+}
 
-	// Test GetDatasourcesByPrivacyScoreRange
-	datasourcesByScore, err := service.GetDatasourcesByPrivacyScoreRange(70, 90)
+func TestGetDatasourcesByPrivacyScoreRange(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
+	datasourcesByScore, err := service.GetDatasourcesByPrivacyScoreRange(70, 80)
 	assert.NoError(t, err)
 	assert.Len(t, datasourcesByScore, 1)
-	assert.Equal(t, updatedDatasource.ID, datasourcesByScore[0].ID)
+	assert.Equal(t, datasource.ID, datasourcesByScore[0].ID)
+}
 
-	// Test GetDatasourcesByUserID
+func TestGetDatasourcesByUserID(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
 	datasourcesByUser, err := service.GetDatasourcesByUserID(user.ID)
 	assert.NoError(t, err)
 	assert.Len(t, datasourcesByUser, 1)
-	assert.Equal(t, updatedDatasource.ID, datasourcesByUser[0].ID)
+	assert.Equal(t, datasource.ID, datasourcesByUser[0].ID)
+}
 
-	// Test DeleteDatasource
-	err = service.DeleteDatasource(datasource.ID)
+func TestDeleteDatasource(t *testing.T) {
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+
+	err := service.DeleteDatasource(datasource.ID)
 	assert.NoError(t, err)
 
-	// Verify datasource is deleted
 	_, err = service.GetDatasourceByID(datasource.ID)
 	assert.Error(t, err)
 }
@@ -106,7 +165,7 @@ func TestDatasourceService_MultipleDatasourcesScenario(t *testing.T) {
 	ds3, _ := service.CreateDatasource("Datasource 3", "Short 3", "Long 3", "icon3.png", "https://ds3.com", 90, user.ID, []string{"AI", "NLP"}, "conn_string3", "source_type3", "api_key3", "db3", "embed_vendor3", "embed_url3", "embed_api_key3", "embed_model3", true)
 
 	// Test GetAllDatasources
-	allDatasources, err := service.GetAllDatasources()
+	allDatasources, _, _, err := service.GetAllDatasources(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allDatasources, 3)
 

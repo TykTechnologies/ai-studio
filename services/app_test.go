@@ -20,21 +20,16 @@ func setupTestDBForApps(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestAppService(t *testing.T) {
+func TestCreateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	// Create a test user
-	user, err := service.CreateUser("test@example.com", "Test User", "password123")
-	assert.NoError(t, err)
-
-	// Create test datasources and LLMs
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true)
 
-	// Test CreateApp with valid privacy scores
 	app, err := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID})
 	assert.NoError(t, err)
 	assert.NotNil(t, app)
@@ -43,12 +38,21 @@ func TestAppService(t *testing.T) {
 	assert.Len(t, app.Datasources, 2)
 	assert.Len(t, app.LLMs, 2)
 
-	// Test CreateApp with invalid privacy scores
 	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid", true)
 	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID})
 	assert.Error(t, err)
+}
 
-	// Test GetAppByID
+func TestGetApp(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+
 	fetchedApp, err := service.GetAppByID(app.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, app.ID, fetchedApp.ID)
@@ -56,7 +60,27 @@ func TestAppService(t *testing.T) {
 	assert.Equal(t, app.Description, fetchedApp.Description)
 	assert.Equal(t, app.UserID, fetchedApp.UserID)
 
-	// Test UpdateApp with valid privacy scores
+	namedApp, err := service.GetAppByName("Test App")
+	assert.NoError(t, err)
+	assert.Equal(t, app.ID, namedApp.ID)
+
+	userApps, err := service.GetAppsByUserID(user.ID)
+	assert.NoError(t, err)
+	assert.Len(t, userApps, 1)
+	assert.Equal(t, app.ID, userApps[0].ID)
+}
+
+func TestUpdateApp(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true)
+
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+
 	updatedApp, err := service.UpdateApp(app.ID, "Updated App", "Updated Description", []uint{ds1.ID}, []uint{llm2.ID})
 	assert.NoError(t, err)
 	assert.Equal(t, app.ID, updatedApp.ID)
@@ -65,74 +89,113 @@ func TestAppService(t *testing.T) {
 	assert.Len(t, updatedApp.Datasources, 1)
 	assert.Len(t, updatedApp.LLMs, 1)
 
-	// Test UpdateApp with invalid privacy scores
+	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid", true)
 	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID})
 	assert.Error(t, err)
+}
 
-	// Test GetAppsByUserID
-	userApps, err := service.GetAppsByUserID(user.ID)
-	assert.NoError(t, err)
-	assert.Len(t, userApps, 1)
-	assert.Equal(t, app.ID, userApps[0].ID)
+func TestAppCredentialActivation(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
 
-	// Test GetAppByName
-	namedApp, err := service.GetAppByName("Updated App")
-	assert.NoError(t, err)
-	assert.Equal(t, app.ID, namedApp.ID)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 
-	// Test ActivateAppCredential
-	err = service.ActivateAppCredential(app.ID)
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+
+	err := service.ActivateAppCredential(app.ID)
 	assert.NoError(t, err)
 	activatedApp, _ := service.GetAppByID(app.ID)
 	assert.True(t, activatedApp.Credential.Active)
 
-	// Test DeactivateAppCredential
 	err = service.DeactivateAppCredential(app.ID)
 	assert.NoError(t, err)
 	deactivatedApp, _ := service.GetAppByID(app.ID)
 	assert.False(t, deactivatedApp.Credential.Active)
+}
 
-	// Test AddDatasourceToApp and GetAppDatasources
+func TestAppDatasourceOperations(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+
 	newDS, _ := service.CreateDatasource("NewDS", "Short", "Long", "icon.png", "https://newds.com", 65, user.ID, []string{}, "conn_string_new", "source_type_new", "api_key_new", "db1", "embed_vendor_new", "embed_url_new", "embed_api_key_new", "embed_model_new", true)
-	err = service.AddDatasourceToApp(app.ID, newDS.ID)
+	err := service.AddDatasourceToApp(app.ID, newDS.ID)
 	assert.NoError(t, err)
 
 	appDatasources, err := service.GetAppDatasources(app.ID)
 	assert.NoError(t, err)
-	assert.Len(t, appDatasources, 3)
-	assert.Contains(t, []uint{appDatasources[0].ID, appDatasources[1].ID, appDatasources[2].ID}, newDS.ID)
+	assert.Len(t, appDatasources, 2)
+	assert.Contains(t, []uint{appDatasources[0].ID, appDatasources[1].ID}, newDS.ID)
 
-	// Test RemoveDatasourceFromApp
 	err = service.RemoveDatasourceFromApp(app.ID, newDS.ID)
 	assert.NoError(t, err)
 
 	appDatasources, err = service.GetAppDatasources(app.ID)
 	assert.NoError(t, err)
-	assert.Len(t, appDatasources, 2)
+	assert.Len(t, appDatasources, 1)
+}
 
-	// Test AddLLMToApp and GetAppLLMs
-	newLLM, _ := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", 85, "NewShort", "NewLong", "https://newlogo.com", models.OPENAI, true)
+func TestAppLLMOperations(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{}, []uint{})
+	err := service.AddLLMToApp(app.ID, llm1.ID)
+	assert.NoError(t, err)
+	err = service.AddDatasourceToApp(app.ID, ds1.ID)
+	assert.NoError(t, err)
+
+	newLLM, err := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", 85, "NewShort", "NewLong", "https://newlogo.com", models.OPENAI, true)
+	assert.NoError(t, err)
+
 	err = service.AddLLMToApp(app.ID, newLLM.ID)
 	assert.NoError(t, err)
 
-	appLLMs, err := service.GetAppLLMs(app.ID)
+	appLLMs, totalCount, totalPages, err := service.GetAppLLMs(app.ID, 10, 1, true)
 	assert.NoError(t, err)
-	assert.Len(t, appLLMs, 3)
-	assert.Contains(t, []uint{appLLMs[0].ID, appLLMs[1].ID, appLLMs[2].ID}, newLLM.ID)
+	assert.Len(t, appLLMs, 2)
+	if len(appLLMs) == 2 {
+		assert.Equal(t, int64(2), totalCount)
+		assert.Equal(t, 1, totalPages)
+		assert.Contains(t, []uint{appLLMs[0].ID, appLLMs[1].ID}, newLLM.ID)
+		assert.Contains(t, []uint{appLLMs[0].ID, appLLMs[1].ID}, llm1.ID)
+	}
 
-	// Test RemoveLLMFromApp
 	err = service.RemoveLLMFromApp(app.ID, newLLM.ID)
 	assert.NoError(t, err)
 
-	appLLMs, err = service.GetAppLLMs(app.ID)
+	appLLMs, totalCount, totalPages, err = service.GetAppLLMs(app.ID, 10, 1, true)
 	assert.NoError(t, err)
-	assert.Len(t, appLLMs, 2)
+	assert.Len(t, appLLMs, 1)
+	assert.Equal(t, int64(1), totalCount)
+	assert.Equal(t, 1, totalPages)
+	assert.Equal(t, llm1.ID, appLLMs[0].ID)
+}
 
-	// Test DeleteApp
-	err = service.DeleteApp(app.ID)
+func TestDeleteApp(t *testing.T) {
+	db := setupTestDBForApps(t)
+	service := NewService(db)
+
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
+
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+
+	err := service.DeleteApp(app.ID)
 	assert.NoError(t, err)
 
-	// Verify app is deleted
 	_, err = service.GetAppByID(app.ID)
 	assert.Error(t, err)
 }
@@ -169,7 +232,7 @@ func TestAppServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test GetAppLLMs with non-existent app
-	_, err = service.GetAppLLMs(9999)
+	_, _, _, err = service.GetAppLLMs(9999, 10, 1, true)
 	assert.Error(t, err)
 
 	// Test CreateApp with non-existent datasource

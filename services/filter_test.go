@@ -49,7 +49,7 @@ func TestFilterService(t *testing.T) {
 	assert.Equal(t, "updated script", string(updatedFilter.Script))
 
 	// Test GetAllFilters
-	filters, err := service.GetAllFilters()
+	filters, _, _, err := service.GetAllFilters(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, filters, 1)
 	assert.Equal(t, updatedFilter.ID, filters[0].ID)
@@ -99,7 +99,7 @@ func TestFilterService_MultipleFilters(t *testing.T) {
 	filter3, _ := service.CreateFilter("Filter 3", "Description 3", []byte("script 3"))
 
 	// Test GetAllFilters
-	allFilters, err := service.GetAllFilters()
+	allFilters, _, _, err := service.GetAllFilters(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allFilters, 3)
 	assert.ElementsMatch(t, []uint{filter1.ID, filter2.ID, filter3.ID}, []uint{allFilters[0].ID, allFilters[1].ID, allFilters[2].ID})
@@ -111,7 +111,7 @@ func TestFilterService_MultipleFilters(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify updates
-	updatedFilters, err := service.GetAllFilters()
+	updatedFilters, _, _, err := service.GetAllFilters(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, updatedFilters, 3)
 	assert.Contains(t, []string{"Updated Filter 1", "Updated Filter 2", "Filter 3"}, updatedFilters[0].Name)
@@ -125,7 +125,7 @@ func TestFilterService_MultipleFilters(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify deletions
-	remainingFilters, err := service.GetAllFilters()
+	remainingFilters, _, _, err := service.GetAllFilters(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, remainingFilters, 1)
 	assert.Equal(t, filter3.ID, remainingFilters[0].ID)

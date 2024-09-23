@@ -39,12 +39,14 @@ func (s *Service) DeleteLLMSettings(id uint) error {
 }
 
 // GetAllLLMSettings retrieves all LLMSettings
-func (s *Service) GetAllLLMSettings() (*models.LLMSettingsSlice, error) {
+// GetAllLLMSettings retrieves all LLMSettings with pagination
+func (s *Service) GetAllLLMSettings(pageSize int, pageNumber int, all bool) (*models.LLMSettingsSlice, int64, int, error) {
 	var settings models.LLMSettingsSlice
-	if err := settings.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := settings.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return &settings, nil
+	return &settings, totalCount, totalPages, nil
 }
 
 // GetLLMSettingsByModel retrieves LLMSettings by model name

@@ -47,7 +47,7 @@ func TestModelPriceService(t *testing.T) {
 	t.Run("GetAllModelPrices", func(t *testing.T) {
 		service.CreateModelPrice("Model1", "Vendor1", 0.0001, "USD")
 		service.CreateModelPrice("Model2", "Vendor2", 0.0002, "USD")
-		modelPrices, err := service.GetAllModelPrices()
+		modelPrices, _, _, err := service.GetAllModelPrices(10, 1, true)
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(modelPrices), 2)
 	})

@@ -110,12 +110,13 @@ func (s *Service) RemoveDatasourceFromDataCatalogue(dataCatalogueID, datasourceI
 	return dataCatalogue.RemoveDatasource(s.DB, datasource)
 }
 
-func (s *Service) GetAllDataCatalogues() (models.DataCatalogues, error) {
+func (s *Service) GetAllDataCatalogues(pageSize int, pageNumber int, all bool) (models.DataCatalogues, int64, int, error) {
 	var dataCatalogues models.DataCatalogues
-	if err := dataCatalogues.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := dataCatalogues.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return dataCatalogues, nil
+	return dataCatalogues, totalCount, totalPages, nil
 }
 
 func (s *Service) SearchDataCatalogues(query string) (models.DataCatalogues, error) {

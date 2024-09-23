@@ -24,7 +24,7 @@ func TestToolService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateTool
-	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, []byte("OAS Spec"), 8)
+	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, []byte("OAS Spec"), 8, "apiKey", "secret")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.NotZero(t, tool.ID)
@@ -39,7 +39,7 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, tool.PrivacyScore, fetchedTool.PrivacyScore)
 
 	// Test UpdateTool
-	updatedTool, err := service.UpdateTool(tool.ID, "Updated Tool", "Updated Description", models.ToolTypeREST, []byte("Updated OAS Spec"), 9)
+	updatedTool, err := service.UpdateTool(tool.ID, "Updated Tool", "Updated Description", models.ToolTypeREST, []byte("Updated OAS Spec"), 9, "updatedApiKey", "updatedSecret")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, updatedTool.ID)
 	assert.Equal(t, "Updated Tool", updatedTool.Name)
@@ -52,7 +52,7 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, tool.ID, namedTool.ID)
 
 	// Test GetAllTools
-	allTools, err := service.GetAllTools()
+	allTools, _, _, err := service.GetAllTools(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allTools, 1)
 	assert.Equal(t, tool.ID, allTools[0].ID)
@@ -157,7 +157,7 @@ func TestToolService_MultipleTool(t *testing.T) {
 	tool3, _ := service.CreateTool("Tool 3", "Description 3", "GraphQL", []byte("OAS Spec 3"), 9, "authKey", "authValue")
 
 	// Test GetAllTools
-	allTools, err := service.GetAllTools()
+	allTools, _, _, err := service.GetAllTools(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, allTools, 3)
 	assert.ElementsMatch(t, []uint{tool1.ID, tool2.ID, tool3.ID}, []uint{allTools[0].ID, allTools[1].ID, allTools[2].ID})

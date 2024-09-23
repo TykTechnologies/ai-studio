@@ -120,10 +120,8 @@ func (a *App) GetLLMs(db *gorm.DB, pageSize, pageNumber int, all bool) ([]LLM, i
 	var totalCount int64
 	var totalPages int
 
-	// Count total number of LLMs
-	if err := db.Model(&LLM{}).Where("id = ?", a.ID).Count(&totalCount).Error; err != nil {
-		return nil, 0, 0, err
-	}
+	// Count total number of LLMs associated with this app
+	totalCount = db.Model(a).Association("LLMs").Count()
 
 	// Calculate total pages
 	totalPages = int(totalCount) / pageSize
@@ -131,20 +129,20 @@ func (a *App) GetLLMs(db *gorm.DB, pageSize, pageNumber int, all bool) ([]LLM, i
 		totalPages++
 	}
 
-	// Base query
-	query := db.Where("id = ?", a.ID)
-
 	if all {
-		// Fetch all LLMs
-		if err := query.Find(&llms).Error; err != nil {
+		// Fetch all LLMs associated with this app
+		if err := db.Model(a).Association("LLMs").Find(&llms); err != nil {
 			return nil, 0, 0, err
 		}
 	} else {
 		// Apply pagination
 		offset := (pageNumber - 1) * pageSize
-		if err := query.Offset(offset).Limit(pageSize).Find(&llms).Error; err != nil {
+		if err := db.Preload("LLMs", func(db *gorm.DB) *gorm.DB {
+			return db.Offset(offset).Limit(pageSize)
+		}).First(a).Error; err != nil {
 			return nil, 0, 0, err
 		}
+		llms = a.LLMs
 	}
 
 	return llms, totalCount, totalPages, nil

@@ -103,12 +103,13 @@ func (s *Service) DeleteChat(id uint) error {
 }
 
 // ListChats retrieves all chats
-func (s *Service) ListChats() (models.Chats, error) {
+func (s *Service) ListChats(pageSize int, pageNumber int, all bool) (models.Chats, int64, int, error) {
 	var chats models.Chats
-	if err := chats.List(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := chats.List(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return chats, nil
+	return chats, totalCount, totalPages, nil
 }
 
 // GetChatsByGroupID retrieves all chats associated with a specific group

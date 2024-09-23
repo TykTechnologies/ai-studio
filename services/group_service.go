@@ -89,12 +89,13 @@ func (s *Service) GetGroupUsers(groupID uint) (models.Users, error) {
 	return group.Users, nil
 }
 
-func (s *Service) GetAllGroups() (models.Groups, error) {
+func (s *Service) GetAllGroups(pageSize int, pageNumber int, all bool) (models.Groups, int64, int, error) {
 	var groups models.Groups
-	if err := groups.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := groups.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return groups, nil
+	return groups, totalCount, totalPages, nil
 }
 
 func (s *Service) SearchGroupsByNameStub(stub string) (models.Groups, error) {
@@ -224,15 +225,16 @@ func (s *Service) RemoveToolCatalogueFromGroup(toolCatalogueID, groupID uint) er
 	return group.RemoveToolCatalogue(s.DB, toolCatalogue)
 }
 
-func (s *Service) GetGroupToolCatalogues(groupID uint) (models.ToolCatalogues, error) {
+func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber int, all bool) (models.ToolCatalogues, int64, int, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 
-	if err := group.GetToolCatalogues(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := group.GetToolCatalogues(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 
-	return group.ToolCatalogues, nil
+	return group.ToolCatalogues, totalCount, totalPages, nil
 }

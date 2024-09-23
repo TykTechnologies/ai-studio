@@ -300,17 +300,18 @@ func (s *Service) RemoveLLMFromApp(appID, llmID uint) error {
 }
 
 // GetAppLLMs retrieves all LLMs associated with an app
-func (s *Service) GetAppLLMs(appID uint) ([]models.LLM, error) {
+func (s *Service) GetAppLLMs(appID uint, pageSize int, pageNumber int, all bool) ([]models.LLM, int64, int, error) {
 	app, err := s.GetAppByID(appID)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 
-	if err := app.GetLLMs(s.DB); err != nil {
-		return nil, err
+	llms, totalCount, totalPages, err := app.GetLLMs(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 
-	return app.LLMs, nil
+	return llms, totalCount, totalPages, nil
 }
 
 // ListApps returns all apps

@@ -74,12 +74,13 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 }
 
 // GetAllTools retrieves all tools
-func (s *Service) GetAllTools() ([]models.Tool, error) {
+func (s *Service) GetAllTools(pageSize int, pageNumber int, all bool) ([]models.Tool, int64, int, error) {
 	var tools models.Tools
-	if err := tools.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := tools.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return tools, nil
+	return tools, totalCount, totalPages, nil
 }
 
 // GetToolsByType retrieves all tools of a specific type

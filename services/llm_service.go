@@ -73,12 +73,13 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 	return llm, nil
 }
 
-func (s *Service) GetAllLLMs() (models.LLMs, error) {
-	llms := models.LLMs{}
-	if err := llms.GetAll(s.DB); err != nil {
-		return nil, err
+func (s *Service) GetAllLLMs(pageSize int, pageNumber int, all bool) (models.LLMs, int64, int, error) {
+	var llms models.LLMs
+	totalCount, totalPages, err := llms.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return llms, nil
+	return llms, totalCount, totalPages, nil
 }
 
 func (s *Service) GetActiveLLMs() (models.LLMs, error) {

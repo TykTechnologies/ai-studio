@@ -69,12 +69,13 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	return user, nil
 }
 
-func (s *Service) GetAllUsers() (models.Users, error) {
+func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool) (models.Users, int64, int, error) {
 	var users models.Users
-	if err := users.GetAll(s.DB); err != nil {
-		return nil, err
+	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all)
+	if err != nil {
+		return nil, 0, 0, err
 	}
-	return users, nil
+	return users, totalCount, totalPages, nil
 }
 
 func (s *Service) SearchUsersByEmailStub(stub string) (models.Users, error) {

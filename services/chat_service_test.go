@@ -51,7 +51,7 @@ func TestChatService(t *testing.T) {
 	assert.Len(t, updatedChat.Groups, 1)
 
 	// Test ListChats
-	chats, err := service.ListChats()
+	chats, _, _, err := service.ListChats(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, chats, 1)
 
