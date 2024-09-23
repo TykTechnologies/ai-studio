@@ -54,8 +54,26 @@ func (u *User) SetPassword(password string) error {
 	return nil
 }
 
-func (u *Users) GetAll(db *gorm.DB) error {
-	return db.Find(u).Error
+func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&User{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(u).Error
+	return totalCount, totalPages, err
 }
 
 func (u *Users) GetByGroupID(db *gorm.DB, groupID uint) error {

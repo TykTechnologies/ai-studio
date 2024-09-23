@@ -45,8 +45,26 @@ func (ls *LLMSettings) Delete(db *gorm.DB) error {
 }
 
 // Get all LLMSettings
-func (ls *LLMSettingsSlice) GetAll(db *gorm.DB) error {
-	return db.Find(ls).Error
+func (ls *LLMSettingsSlice) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&LLMSettings{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(ls).Error
+	return totalCount, totalPages, err
 }
 
 // Get LLMSettings by Model

@@ -56,33 +56,75 @@ func (chr *ChatHistoryRecord) GetByChatID(db *gorm.DB, chatID uint) error {
 }
 
 // ListByUserID retrieves all ChatHistoryRecords for a given UserID
-func ListChatHistoryRecordsByUserID(db *gorm.DB, userID uint) ([]ChatHistoryRecord, error) {
+func ListChatHistoryRecordsByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
 	var records []ChatHistoryRecord
-	err := db.Where("user_id = ?", userID).Find(&records).Error
-	return records, err
-}
+	var totalCount int64
+	query := db.Model(&ChatHistoryRecord{}).Where("user_id = ?", userID)
 
-// ListByUserIDPaginated retrieves ChatHistoryRecords for a given UserID with pagination
-func ListChatHistoryRecordsByUserIDPaginated(db *gorm.DB, userID uint, page, pageSize int) ([]ChatHistoryRecord, int64, error) {
-	var records []ChatHistoryRecord
-	var total int64
-
-	offset := (page - 1) * pageSize
-
-	err := db.Model(&ChatHistoryRecord{}).Where("user_id = ?", userID).Count(&total).Error
-	if err != nil {
-		return nil, 0, err
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
 	}
 
-	err = db.Where("user_id = ?", userID).Offset(offset).Limit(pageSize).Find(&records).Error
-	return records, total, err
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(&records).Error
+	return records, totalCount, totalPages, err
 }
 
-// SearchChatHistoryRecords searches for ChatHistoryRecords by name for a given UserID
-func SearchChatHistoryRecords(db *gorm.DB, userID uint, query string) ([]ChatHistoryRecord, error) {
+// ListChatHistoryRecordsByUserIDPaginated retrieves ChatHistoryRecords for a given UserID with pagination
+func ListChatHistoryRecordsByUserIDPaginated(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
 	var records []ChatHistoryRecord
-	err := db.Where("user_id = ? AND name LIKE ?", userID, "%"+query+"%").Find(&records).Error
-	return records, err
+	var totalCount int64
+	query := db.Model(&ChatHistoryRecord{}).Where("user_id = ?", userID)
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(&records).Error
+	return records, totalCount, totalPages, err
+}
+
+// SearchChatHistoryRecords searches for ChatHistoryRecords by name for a given UserID with pagination
+func SearchChatHistoryRecords(db *gorm.DB, userID uint, query string, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
+	var records []ChatHistoryRecord
+	var totalCount int64
+	searchQuery := db.Model(&ChatHistoryRecord{}).Where("user_id = ? AND name LIKE ?", userID, "%"+query+"%")
+
+	if err := searchQuery.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		searchQuery = searchQuery.Offset(offset).Limit(pageSize)
+	}
+
+	err := searchQuery.Find(&records).Error
+	return records, totalCount, totalPages, err
 }
 
 // GetLatestChatHistoryRecord retrieves the most recent ChatHistoryRecord for a given UserID

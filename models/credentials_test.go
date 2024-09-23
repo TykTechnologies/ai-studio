@@ -98,7 +98,7 @@ func TestCredentials_GetAll(t *testing.T) {
 	}
 
 	var credentials Credentials
-	err := credentials.GetAll(db)
+	_, _, err := credentials.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, credentials, 3)
 }

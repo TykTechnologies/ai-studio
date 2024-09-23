@@ -54,8 +54,26 @@ func (c *Catalogue) GetCatalogueLLMs(db *gorm.DB) error {
 	return db.Model(c).Association("LLMs").Find(&c.LLMs)
 }
 
-func (c *Catalogues) GetAll(db *gorm.DB) error {
-	return db.Preload("LLMs").Find(c).Error
+func (c *Catalogues) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Catalogue{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("LLMs").Find(c).Error
+	return totalCount, totalPages, err
 }
 
 func (c *Catalogues) GetByNameStub(db *gorm.DB, stub string) error {

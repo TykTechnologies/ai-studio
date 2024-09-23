@@ -102,7 +102,7 @@ func TestChats_List(t *testing.T) {
 
 	// List all chats
 	var retrievedChats Chats
-	err := retrievedChats.List(db)
+	_, _, err := retrievedChats.List(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, retrievedChats, 3)
 }

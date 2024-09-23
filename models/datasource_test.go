@@ -59,7 +59,7 @@ func TestDatasources_GetAll(t *testing.T) {
 	}
 
 	var fetchedDS Datasources
-	err := fetchedDS.GetAll(db)
+	_, _, err := fetchedDS.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedDS, 3)
 }

@@ -75,7 +75,7 @@ func TestLLMSettings_GetAll(t *testing.T) {
 
 	// Test GetAll
 	var fetchedSettings LLMSettingsSlice
-	err := fetchedSettings.GetAll(db)
+	_, _, err := fetchedSettings.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedSettings, 3)
 	assert.Equal(t, "Model1", fetchedSettings[0].ModelName)

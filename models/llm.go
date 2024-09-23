@@ -57,8 +57,26 @@ func (l *LLM) GetByName(db *gorm.DB, name string) error {
 	return db.Where("name = ?", name).First(l).Error
 }
 
-func (l *LLMs) GetAll(db *gorm.DB) error {
-	return db.Find(l).Error
+func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&LLM{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(l).Error
+	return totalCount, totalPages, err
 }
 
 func (l *LLMs) GetByNameStub(db *gorm.DB, stub string) error {

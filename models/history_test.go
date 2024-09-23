@@ -96,7 +96,7 @@ func TestListChatHistoryRecordsByUserID(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	records, err := ListChatHistoryRecordsByUserID(db, 1)
+	records, _, _, err := ListChatHistoryRecordsByUserID(db, 1, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, records, 5)
 }
@@ -116,7 +116,7 @@ func TestListChatHistoryRecordsByUserIDPaginated(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	records, total, err := ListChatHistoryRecordsByUserIDPaginated(db, 1, 2, 5)
+	records, total, _, err := ListChatHistoryRecordsByUserIDPaginated(db, 1, 5, 1, false)
 	assert.NoError(t, err)
 	assert.Len(t, records, 5)
 	assert.Equal(t, int64(15), total)
@@ -137,7 +137,7 @@ func TestSearchChatHistoryRecords(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	results, err := SearchChatHistoryRecords(db, 1, "Beta")
+	results, _, _, err := SearchChatHistoryRecords(db, 1, "Beta", 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "Beta Chat", results[0].Name)

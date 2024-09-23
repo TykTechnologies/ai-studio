@@ -35,10 +35,27 @@ func (f *Filter) Delete(db *gorm.DB) error {
 }
 
 // GetAll retrieves all filters
-func (f *Filter) GetAll(db *gorm.DB) ([]Filter, error) {
+func (f *Filter) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) ([]Filter, int64, int, error) {
 	var filters []Filter
-	err := db.Find(&filters).Error
-	return filters, err
+	var totalCount int64
+	query := db.Model(&Filter{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(&filters).Error
+	return filters, totalCount, totalPages, err
 }
 
 // GetByName gets a filter by its name

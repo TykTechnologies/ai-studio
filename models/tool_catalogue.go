@@ -60,8 +60,26 @@ func (tc *ToolCatalogue) RemoveTool(db *gorm.DB, tool *Tool) error {
 }
 
 // Get all tool catalogues
-func (tc *ToolCatalogues) GetAll(db *gorm.DB) error {
-	return db.Preload("Tools").Preload("Tags").Find(tc).Error
+func (tc *ToolCatalogues) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&ToolCatalogue{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Tools").Preload("Tags").Find(tc).Error
+	return totalCount, totalPages, err
 }
 
 // Search tool catalogues by name, short description, and long description

@@ -35,8 +35,26 @@ func (mp *ModelPrice) Delete(db *gorm.DB) error {
 }
 
 // GetAll retrieves all ModelPrices
-func (mps *ModelPrices) GetAll(db *gorm.DB) error {
-	return db.Find(mps).Error
+func (mps *ModelPrices) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&ModelPrice{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(mps).Error
+	return totalCount, totalPages, err
 }
 
 // GetByVendor retrieves all ModelPrices for a specific vendor

@@ -71,8 +71,26 @@ func (c *Credential) Deactivate(db *gorm.DB) error {
 
 type Credentials []Credential
 
-func (cl *Credentials) GetAll(db *gorm.DB) error {
-	return db.Find(cl).Error
+func (cl *Credentials) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Credential{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(cl).Error
+	return totalCount, totalPages, err
 }
 
 func (cl *Credentials) GetActive(db *gorm.DB) error {

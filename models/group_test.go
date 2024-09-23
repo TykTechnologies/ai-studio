@@ -89,7 +89,7 @@ func TestGroup_GroupsGetAll(t *testing.T) {
 
 	// Test GetAll
 	var fetchedGroups Groups
-	err := fetchedGroups.GetAll(db)
+	_, _, err := fetchedGroups.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedGroups, 3)
 	assert.Equal(t, "Group 1", fetchedGroups[0].Name)
@@ -210,7 +210,7 @@ func TestGroup_ToolCatalogueAssociation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Get ToolCatalogues
-	err = group.GetToolCatalogues(db)
+	_, _, err = group.GetToolCatalogues(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, group.ToolCatalogues, 1)
 	assert.Equal(t, toolCatalogue.ID, group.ToolCatalogues[0].ID)
@@ -219,7 +219,7 @@ func TestGroup_ToolCatalogueAssociation(t *testing.T) {
 	err = group.RemoveToolCatalogue(db, toolCatalogue)
 	assert.NoError(t, err)
 
-	err = group.GetToolCatalogues(db)
+	_, _, err = group.GetToolCatalogues(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, group.ToolCatalogues, 0)
 }

@@ -115,8 +115,39 @@ func (a *App) GetDatasources(db *gorm.DB) error {
 	return db.Model(a).Association("Datasources").Find(&a.Datasources)
 }
 
-func (a *App) GetLLMs(db *gorm.DB) error {
-	return db.Model(a).Association("LLMs").Find(&a.LLMs)
+func (a *App) GetLLMs(db *gorm.DB, pageSize, pageNumber int, all bool) ([]LLM, int64, int, error) {
+	var llms []LLM
+	var totalCount int64
+	var totalPages int
+
+	// Count total number of LLMs
+	if err := db.Model(&LLM{}).Where("id = ?", a.ID).Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	// Calculate total pages
+	totalPages = int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	// Base query
+	query := db.Where("id = ?", a.ID)
+
+	if all {
+		// Fetch all LLMs
+		if err := query.Find(&llms).Error; err != nil {
+			return nil, 0, 0, err
+		}
+	} else {
+		// Apply pagination
+		offset := (pageNumber - 1) * pageSize
+		if err := query.Offset(offset).Limit(pageSize).Find(&llms).Error; err != nil {
+			return nil, 0, 0, err
+		}
+	}
+
+	return llms, totalCount, totalPages, nil
 }
 
 func (a *App) List(db *gorm.DB) (Apps, error) {

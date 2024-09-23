@@ -89,7 +89,7 @@ func TestLLMs_GetAll(t *testing.T) {
 
 	// Test GetAll
 	var fetchedLLMs LLMs
-	err := fetchedLLMs.GetAll(db)
+	_, _, err := fetchedLLMs.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedLLMs, 3)
 	assert.Equal(t, "LLM1", fetchedLLMs[0].Name)

@@ -36,8 +36,26 @@ func (c *Chat) Delete(db *gorm.DB) error {
 }
 
 // List all chats
-func (cs *Chats) List(db *gorm.DB) error {
-	return db.Preload("Groups").Preload("LLMSettings").Preload("LLM").Find(cs).Error
+func (cs *Chats) List(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Chat{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Groups").Preload("LLMSettings").Preload("LLM").Find(cs).Error
+	return totalCount, totalPages, err
 }
 
 // Get chats by group ID

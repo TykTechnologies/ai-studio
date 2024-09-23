@@ -59,7 +59,7 @@ func TestTags_GetAll(t *testing.T) {
 
 	// Test GetAll
 	var fetchedTags Tags
-	err := fetchedTags.GetAll(db)
+	_, _, err := fetchedTags.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedTags, 3)
 	assert.Equal(t, "Tag 1", fetchedTags[0].Name)

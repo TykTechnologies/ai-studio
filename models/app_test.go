@@ -114,7 +114,7 @@ func TestApp_Update(t *testing.T) {
 	assert.Len(t, updatedApp.Datasources, 1)
 	assert.Equal(t, datasource.ID, updatedApp.Datasources[0].ID)
 
-	err = updatedApp.GetLLMs(db)
+	_, _, _, err = updatedApp.GetLLMs(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, updatedApp.LLMs, 1)
 	assert.Equal(t, llm.ID, updatedApp.LLMs[0].ID)
@@ -136,7 +136,7 @@ func TestApp_Update(t *testing.T) {
 	assert.Len(t, finalApp.Datasources, 1)
 	assert.Equal(t, datasource.ID, finalApp.Datasources[0].ID)
 
-	err = finalApp.GetLLMs(db)
+	_, _, _, err = finalApp.GetLLMs(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, finalApp.LLMs, 1)
 	assert.Equal(t, llm.ID, finalApp.LLMs[0].ID)
@@ -298,7 +298,7 @@ func TestApp_LLMAssociation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Get LLMs
-	err = app.GetLLMs(db)
+	_, _, _, err = app.GetLLMs(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, app.LLMs, 1)
 	assert.Equal(t, llm.ID, app.LLMs[0].ID)
@@ -307,7 +307,7 @@ func TestApp_LLMAssociation(t *testing.T) {
 	err = app.RemoveLLM(db, llm)
 	assert.NoError(t, err)
 
-	err = app.GetLLMs(db)
+	_, _, _, err = app.GetLLMs(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, app.LLMs, 0)
 }

@@ -121,7 +121,7 @@ func TestDataCatalogues_GetAll(t *testing.T) {
 
 	// Test GetAll
 	var fetchedCatalogues DataCatalogues
-	err := fetchedCatalogues.GetAll(db)
+	_, _, err := fetchedCatalogues.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedCatalogues, 3)
 	assert.Equal(t, "Catalogue 1", fetchedCatalogues[0].Name)

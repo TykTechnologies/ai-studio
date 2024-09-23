@@ -56,8 +56,26 @@ func (t *Tool) GetByName(db *gorm.DB, name string) error {
 }
 
 // GetAll retrieves all tools
-func (t *Tools) GetAll(db *gorm.DB) error {
-	return db.Find(t).Error
+func (t *Tools) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Tool{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(t).Error
+	return totalCount, totalPages, err
 }
 
 // GetByType retrieves all tools of a specific type

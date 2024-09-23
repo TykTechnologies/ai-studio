@@ -62,8 +62,26 @@ func (dc *DataCatalogue) RemoveDatasource(db *gorm.DB, datasource *Datasource) e
 }
 
 // Get all data catalogues
-func (dc *DataCatalogues) GetAll(db *gorm.DB) error {
-	return db.Preload("Datasources").Preload("Tags").Find(dc).Error
+func (dc *DataCatalogues) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&DataCatalogue{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Datasources").Preload("Tags").Find(dc).Error
+	return totalCount, totalPages, err
 }
 
 // Search data catalogues by name, short description, and long description

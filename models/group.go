@@ -22,6 +22,28 @@ func (g *Group) Get(db *gorm.DB, id uint) error {
 	return db.First(g, id).Error
 }
 
+func (gs *Groups) List(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Group{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(gs).Error
+	return totalCount, totalPages, err
+}
+
 func (g *Group) Create(db *gorm.DB) error {
 	return db.Create(g).Error
 }
@@ -46,8 +68,26 @@ func (g *Group) GetGroupUsers(db *gorm.DB) error {
 	return db.Model(g).Association("Users").Find(&g.Users)
 }
 
-func (g *Groups) GetAll(db *gorm.DB) error {
-	return db.Find(g).Error
+func (g *Groups) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Group{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(g).Error
+	return totalCount, totalPages, err
 }
 
 func (g *Groups) GetByNameStub(db *gorm.DB, stub string) error {
@@ -92,6 +132,42 @@ func (g *Group) RemoveToolCatalogue(db *gorm.DB, toolCatalogue *ToolCatalogue) e
 	return db.Model(g).Association("ToolCatalogues").Delete(toolCatalogue)
 }
 
-func (g *Group) GetToolCatalogues(db *gorm.DB) error {
-	return db.Model(g).Association("ToolCatalogues").Find(&g.ToolCatalogues)
+func (g *Group) GetToolCatalogues(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+
+	// Count total number of ToolCatalogues
+	countQuery := db.Table("tool_catalogues").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Where("group_toolcatalogues.group_id = ?", g.ID)
+
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	// Calculate total pages
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	// Base query
+	query := db.Table("tool_catalogues").
+		Select("tool_catalogues.*").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Where("group_toolcatalogues.group_id = ?", g.ID)
+
+	if all {
+		// Fetch all ToolCatalogues
+		if err := query.Find(&g.ToolCatalogues).Error; err != nil {
+			return 0, 0, err
+		}
+	} else {
+		// Apply pagination
+		offset := (pageNumber - 1) * pageSize
+		if err := query.Offset(offset).Limit(pageSize).Find(&g.ToolCatalogues).Error; err != nil {
+			return 0, 0, err
+		}
+	}
+
+	return totalCount, totalPages, nil
 }

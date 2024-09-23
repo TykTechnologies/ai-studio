@@ -122,7 +122,7 @@ func TestGetAll(t *testing.T) {
 	}
 
 	var fetchedUsers Users
-	err := fetchedUsers.GetAll(db)
+	_, _, err := fetchedUsers.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedUsers, 2)
 }

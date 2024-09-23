@@ -127,7 +127,7 @@ func TestTools_GetAll(t *testing.T) {
 	}
 
 	var fetchedTools Tools
-	err := fetchedTools.GetAll(db)
+	_, _, err := fetchedTools.GetAll(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedTools, 3)
 }
