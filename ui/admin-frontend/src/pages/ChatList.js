@@ -1,0 +1,280 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import apiClient from "../utils/apiClient";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+  IconButton,
+  CircularProgress,
+  Alert,
+  Menu,
+  MenuItem,
+  Snackbar,
+  Box,
+} from "@mui/material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import AddIcon from "@mui/icons-material/Add";
+import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import {
+  StyledPaper,
+  TitleBox,
+  ContentBox,
+  StyledTableCell,
+  StyledTableRow,
+  StyledButton,
+} from "../styles/sharedStyles";
+import InfoTooltip from "../components/common/InfoTooltip";
+
+const ChatList = () => {
+  const navigate = useNavigate();
+  const [chats, setChats] = useState([]);
+  const [llms, setLLMs] = useState({});
+  const [llmSettings, setLLMSettings] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+
+  useEffect(() => {
+    fetchChats();
+    fetchLLMs();
+    fetchLLMSettings();
+  }, []);
+
+  const fetchChats = async () => {
+    try {
+      const response = await apiClient.get("/chats");
+      setChats(response.data.data || []);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching chats", error);
+      setError("Failed to load chats");
+      setLoading(false);
+    }
+  };
+
+  const fetchLLMs = async () => {
+    try {
+      const response = await apiClient.get("/llms");
+      const llmMap = {};
+      response.data.data.forEach((llm) => {
+        llmMap[llm.id] = llm.attributes.name;
+      });
+      setLLMs(llmMap);
+    } catch (error) {
+      console.error("Error fetching LLMs", error);
+    }
+  };
+
+  const fetchLLMSettings = async () => {
+    try {
+      const response = await apiClient.get("/llm-settings");
+      const settingsMap = {};
+      response.data.data.forEach((setting) => {
+        settingsMap[setting.id] = setting.attributes.model_name;
+      });
+      setLLMSettings(settingsMap);
+    } catch (error) {
+      console.error("Error fetching LLM Settings", error);
+    }
+  };
+
+  const handleMenuOpen = (event, chat) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedChat(chat);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await apiClient.delete(`/chats/${id}`);
+      setChats(chats.filter((chat) => chat.id !== id));
+      setSnackbar({
+        open: true,
+        message: "Chat deleted successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error deleting chat", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete chat",
+        severity: "error",
+      });
+    }
+    handleMenuClose();
+  };
+
+  const handleChatClick = (chat) => {
+    navigate(`/chats/${chat.id}`);
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedChats = [...chats].sort((a, b) => {
+    if (sortConfig.key === null) return 0;
+    let aValue = a.attributes[sortConfig.key];
+    let bValue = b.attributes[sortConfig.key];
+    if (sortConfig.key === "llm_id") {
+      aValue = llms[a.attributes.llm_id] || "";
+      bValue = llms[b.attributes.llm_id] || "";
+    } else if (sortConfig.key === "llm_settings_id") {
+      aValue = llmSettings[a.attributes.llm_settings_id] || "";
+      bValue = llmSettings[b.attributes.llm_settings_id] || "";
+    }
+    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const handleAddChat = () => {
+    navigate("/chats/new");
+  };
+
+  if (loading) {
+    return <CircularProgress />;
+  }
+
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
+  return (
+    <Box sx={{ p: 0 }}>
+      <StyledPaper>
+        <TitleBox>
+          <Box display="flex" alignItems="center">
+            <InfoTooltip title="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to thir group. They can be associated with one or more groups." />
+            <Typography variant="h5">Chat Rooms</Typography>
+          </Box>
+
+          <StyledButton
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddChat}
+          >
+            Add Chat Room
+          </StyledButton>
+        </TitleBox>
+        <ContentBox>
+          {chats.length === 0 ? (
+            <EmptyStateWidget
+              title="No chat rooms created yet"
+              description="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to thir group. They can be associated with one or more groups. Create a new chat room by clicking the button below."
+              buttonText="Add Chat Room"
+              buttonIcon={<AddIcon />}
+              onButtonClick={handleAddChat}
+            />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <StyledTableCell onClick={() => handleSort("name")}>
+                    Name
+                  </StyledTableCell>
+                  <StyledTableCell onClick={() => handleSort("llm_id")}>
+                    LLM
+                  </StyledTableCell>
+                  <StyledTableCell
+                    onClick={() => handleSort("llm_settings_id")}
+                  >
+                    LLM Settings
+                  </StyledTableCell>
+                  <StyledTableCell>Groups</StyledTableCell>
+                  <StyledTableCell align="right">Actions</StyledTableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sortedChats.map((chat) => (
+                  <StyledTableRow
+                    key={chat.id}
+                    onClick={() => handleChatClick(chat)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell>{chat.attributes.name}</TableCell>
+                    <TableCell>
+                      {llms[chat.attributes.llm_id] || "Unknown LLM"}
+                    </TableCell>
+                    <TableCell>
+                      {llmSettings[chat.attributes.llm_settings_id] ||
+                        "Unknown Settings"}
+                    </TableCell>
+                    <TableCell>
+                      {chat.attributes.groups
+                        .map((group) => group.attributes.name)
+                        .join(", ")}
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        onClick={(event) => handleMenuOpen(event, chat)}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </TableCell>
+                  </StyledTableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </ContentBox>
+      </StyledPaper>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => navigate(`/chats/edit/${selectedChat?.id}`)}>
+          Edit Chat Room
+        </MenuItem>
+        <MenuItem onClick={() => handleDelete(selectedChat?.id)}>
+          Delete Chat Room
+        </MenuItem>
+      </Menu>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default ChatList;

@@ -65,6 +65,10 @@ import AppList from "./pages/AppList";
 import AppDetails from "./components/apps/AppDetails";
 import AppForm from "./components/apps/AppForm";
 
+import ChatList from "./pages/ChatList";
+import ChatDetails from "./components/chats/ChatDetails";
+import ChatForm from "./components/chats/ChatForm";
+
 const drawerWidth = 240;
 
 // Dev mode flag
@@ -294,6 +298,23 @@ function App() {
               <Route
                 path="/apps/new"
                 element={<PrivateRoute element={<AppForm />} />}
+              />
+
+              <Route
+                path="/chats"
+                element={<PrivateRoute element={<ChatList />} />}
+              />
+              <Route
+                path="/chats/:id"
+                element={<PrivateRoute element={<ChatDetails />} />}
+              />
+              <Route
+                path="/chats/edit/:id"
+                element={<PrivateRoute element={<ChatForm />} />}
+              />
+              <Route
+                path="/chats/new"
+                element={<PrivateRoute element={<ChatForm />} />}
               />
               {/* Add more routes as needed */}
             </Routes>

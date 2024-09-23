@@ -27,71 +27,12 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import SettingsInputComponentIcon from "@mui/icons-material/SettingsInputComponent";
 import AppsIcon from "@mui/icons-material/Apps";
 import WebIcon from "@mui/icons-material/Web";
+import ChatIcon from "@mui/icons-material/Chat";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
 const drawerWidth = 240;
 const minimizedDrawerWidth = 60;
-
-// const menuItems = [
-//   { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
-//   {
-//     text: "Team",
-//     icon: <PeopleIcon />,
-//     subItems: [
-//       { text: "Users", icon: <PersonIcon />, path: "/users" },
-//       { text: "Groups", icon: <GroupIcon />, path: "/groups" },
-//     ],
-//   },
-//   {
-//     text: "AI",
-//     icon: <SmartToyIcon />,
-//     subItems: [
-//       { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" },
-//       { text: "Call Settings", icon: <SettingsIcon />, path: "/llm-settings" },
-//       {
-//         text: "Model Prices",
-//         icon: <AttachMoneyIcon />,
-//         path: "/model-prices",
-//       },
-//     ],
-//   },
-//   {
-//     text: "Data",
-//     icon: <DataObjectIcon />,
-//     subItems: [
-//       {
-//         text: "Vector Sources",
-//         icon: <StorageIcon />,
-//         path: "/datasources",
-//       },
-//       { text: "Tools", icon: <BuildIcon />, path: "/tools" },
-//     ],
-//   },
-//   // New Gateway category
-//   {
-//     text: "Gateway",
-//     icon: <SettingsInputComponentIcon />,
-//     subItems: [{ text: "Filters", icon: <FilterListIcon />, path: "/filters" }],
-//   },
-//   {
-//     text: "Portal",
-//     icon: <WebIcon />, // You may want to import a suitable icon for Portal
-//     subItems: [
-//       { text: "Apps", icon: <AppsIcon />, path: "/apps" },
-//       // Add other Portal-related items here if needed
-//     ],
-//   },
-//   {
-//     text: "Catalogs",
-//     icon: <FolderOpenIcon />,
-//     subItems: [
-//       { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
-//       { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
-//       { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
-//     ],
-//   },
-// ];
 
 const menuItems = [
   { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -138,6 +79,7 @@ const menuItems = [
     icon: <WebIcon />,
     subItems: [
       { text: "Apps", icon: <AppsIcon />, path: "/apps" },
+      { text: "Chat Rooms", icon: <ChatIcon />, path: "/chats" }, // Add this line
       {
         text: "Catalogs",
         icon: <FolderOpenIcon />,
