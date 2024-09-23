@@ -8,9 +8,24 @@ import {
   Grid,
   Button,
   Chip,
+  Divider,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  TimeScale,
+} from "chart.js";
+import "chartjs-adapter-date-fns";
+import DateRangePicker from "../common/DateRangePicker";
 import {
   StyledPaper,
   TitleBox,
@@ -20,17 +35,43 @@ import {
   StyledButton,
 } from "../../styles/sharedStyles";
 
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  TimeScale,
+);
+
 const ChatDetails = () => {
   const [chat, setChat] = useState(null);
   const [llm, setLLM] = useState(null);
   const [llmSettings, setLLMSettings] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [interactionsData, setInteractionsData] = useState(null);
+  const [startDate, setStartDate] = useState(
+    new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
+  );
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const { id } = useParams();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchChatDetails();
   }, [id]);
+
+  useEffect(() => {
+    if (chat) {
+      fetchChatInteractions();
+    }
+  }, [chat, startDate, endDate]);
 
   const fetchChatDetails = async () => {
     try {
@@ -54,6 +95,69 @@ const ChatDetails = () => {
     }
   };
 
+  const fetchChatInteractions = async () => {
+    try {
+      const response = await apiClient.get(
+        "/analytics/chat-interactions-for-chat",
+        {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+            chat_id: id,
+          },
+        },
+      );
+      setInteractionsData(response.data);
+    } catch (error) {
+      console.error("Error fetching chat interactions", error);
+    }
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Interactions",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "Chat Interactions Over Time",
+      },
+    },
+  };
+
+  const chartData = {
+    labels: interactionsData?.labels || [],
+    datasets: [
+      {
+        label: "Interactions",
+        data: interactionsData?.data || [],
+        borderColor: "rgb(75, 192, 192)",
+        tension: 0.1,
+      },
+    ],
+  };
+
   if (loading) return <CircularProgress />;
   if (!chat) return <Typography>Chat not found</Typography>;
 
@@ -70,6 +174,26 @@ const ChatDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
+        <Typography variant="h6" gutterBottom>
+          Chat Interactions
+        </Typography>
+        <Box height={300}>
+          <Line options={chartOptions} data={chartData} />
+        </Box>
+        <Box mt={2}>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+          />
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="h6" gutterBottom>
+          Chat Information
+        </Typography>
         <Grid container spacing={2}>
           <Grid item xs={3}>
             <FieldLabel>Name:</FieldLabel>

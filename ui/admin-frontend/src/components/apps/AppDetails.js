@@ -12,6 +12,19 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  TimeScale,
+} from "chart.js";
+import "chartjs-adapter-date-fns";
 import {
   StyledPaper,
   TitleBox,
@@ -20,6 +33,18 @@ import {
   FieldValue,
   StyledButton,
 } from "../../styles/sharedStyles";
+import DateRangePicker from "../common/DateRangePicker";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  TimeScale,
+);
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -34,12 +59,22 @@ const AppDetails = () => {
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
+  const [startDate, setStartDate] = useState(
+    new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
+  );
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const { id } = useParams();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchAppDetails();
-  }, [id]);
+    fetchTokenUsageAndCost();
+  }, [id, startDate, endDate]);
 
   const fetchAppDetails = async () => {
     try {
@@ -58,6 +93,20 @@ const AppDetails = () => {
     } catch (error) {
       console.error("Error fetching app details", error);
       setLoading(false);
+    }
+  };
+
+  const fetchTokenUsageAndCost = async () => {
+    try {
+      const response = await apiClient.get(
+        `/analytics/token-usage-and-cost-for-app`,
+        {
+          params: { start_date: startDate, end_date: endDate, app_id: id },
+        },
+      );
+      setTokenUsageAndCostData(response.data);
+    } catch (error) {
+      console.error("Error fetching token usage and cost data", error);
     }
   };
 
@@ -104,6 +153,81 @@ const AppDetails = () => {
   if (loading) return <CircularProgress />;
   if (!app) return <Typography>App not found</Typography>;
 
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: "index",
+      intersect: false,
+    },
+    stacked: false,
+    plugins: {
+      title: {
+        display: true,
+        text: "Token Usage and Cost Over Time",
+      },
+    },
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        type: "linear",
+        display: true,
+        position: "left",
+        title: {
+          display: true,
+          text: "Token Usage",
+        },
+      },
+      y1: {
+        type: "linear",
+        display: true,
+        position: "right",
+        title: {
+          display: true,
+          text: "Cost",
+        },
+        grid: {
+          drawOnChartArea: false,
+        },
+      },
+    },
+  };
+
+  const chartData = {
+    labels: tokenUsageAndCostData?.labels || [],
+    datasets: [
+      {
+        label: "Token Usage",
+        data: tokenUsageAndCostData?.datasets[0]?.data || [],
+        borderColor: "rgb(75, 192, 192)",
+        yAxisID: "y",
+      },
+      {
+        label: "Cost",
+        data: tokenUsageAndCostData?.datasets[1]?.data || [],
+        borderColor: "rgb(255, 99, 132)",
+        yAxisID: "y1",
+      },
+    ],
+  };
+
+  const handleStartDateChange = (newDate) => {
+    setStartDate(newDate);
+  };
+
+  const handleEndDateChange = (newDate) => {
+    setEndDate(newDate);
+  };
+
   return (
     <StyledPaper>
       <TitleBox>
@@ -117,6 +241,21 @@ const AppDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
+        <SectionTitle>App Token Usage and Cost</SectionTitle>
+        <Box height={300}>
+          <Line options={chartOptions} data={chartData} />
+        </Box>
+        <Box mt={2} mb={4}>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={handleStartDateChange}
+            onEndDateChange={handleEndDateChange}
+          />
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
         <SectionTitle>App Information</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={3}>

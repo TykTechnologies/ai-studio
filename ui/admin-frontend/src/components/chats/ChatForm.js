@@ -28,7 +28,7 @@ const ChatForm = () => {
     name: "",
     llm_settings_id: "",
     llm_id: "",
-    groups: [],
+    groups: [], // Change this line
   });
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
@@ -59,7 +59,7 @@ const ChatForm = () => {
         name: chatData.name,
         llm_settings_id: chatData.llm_settings_id,
         llm_id: chatData.llm_id,
-        groups: chatData.groups.map((group) => group.id),
+        groups: chatData.groups.map((group) => group.id.toString()), // Change this line
       });
     } catch (error) {
       console.error("Error fetching chat", error);
@@ -128,7 +128,7 @@ const ChatForm = () => {
           ...chat,
           llm_settings_id: parseInt(chat.llm_settings_id, 10),
           llm_id: parseInt(chat.llm_id, 10),
-          groups: chat.groups.map((groupId) => ({ id: parseInt(groupId, 10) })),
+          group_ids: chat.groups.map((groupId) => parseInt(groupId, 10)), // Change this line
         },
       },
     };

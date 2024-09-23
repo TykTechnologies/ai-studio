@@ -17,6 +17,20 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+  TimeScale,
+} from "chart.js";
+import "chartjs-adapter-date-fns";
+import DateRangePicker from "../../components/common/DateRangePicker";
 import {
   StyledPaper,
   TitleBox,
@@ -26,6 +40,17 @@ import {
   StyledButton,
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  ChartTooltip,
+  Legend,
+  TimeScale,
+);
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -37,6 +62,15 @@ const LLMDetails = () => {
   const [llm, setLLM] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
+  const [vendorUsageData, setVendorUsageData] = useState(null);
+  const [startDate, setStartDate] = useState(
+    new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
+  );
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -47,6 +81,12 @@ const LLMDetails = () => {
     fetchLLMDetails();
   }, [id]);
 
+  useEffect(() => {
+    if (llm) {
+      fetchVendorUsage();
+    }
+  }, [llm, startDate, endDate]);
+
   const fetchLLMDetails = async () => {
     try {
       const response = await apiClient.get(`/llms/${id}`);
@@ -55,6 +95,21 @@ const LLMDetails = () => {
     } catch (error) {
       console.error("Error fetching LLM details", error);
       setLoading(false);
+    }
+  };
+
+  const fetchVendorUsage = async () => {
+    try {
+      const response = await apiClient.get(`/analytics/vendor-usage`, {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          vendor: llm.attributes.vendor,
+        },
+      });
+      setVendorUsageData(response.data);
+    } catch (error) {
+      console.error("Error fetching vendor usage data", error);
     }
   };
 
@@ -68,6 +123,51 @@ const LLMDetails = () => {
         console.error("Could not copy text: ", err);
       },
     );
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Token Usage",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "Vendor Token Usage Over Time",
+      },
+    },
+  };
+
+  const chartData = {
+    labels: vendorUsageData?.labels || [],
+    datasets: [
+      {
+        label: "Token Usage",
+        data: vendorUsageData?.data || [],
+        borderColor: "rgb(75, 192, 192)",
+        tension: 0.1,
+      },
+    ],
   };
 
   if (loading) return <CircularProgress />;
@@ -86,6 +186,23 @@ const LLMDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
+        <SectionTitle>Vendor Usage Statistics</SectionTitle>
+        <Box height={300}>
+          {" "}
+          {/* Reduced height from 400 to 250 */}
+          <Line options={chartOptions} data={chartData} />
+        </Box>
+        <Box mt={2}>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+          />
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
         <SectionTitle>LLM Description</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={3}>

@@ -219,10 +219,10 @@ const LLMSettingsForm = () => {
       const response = await apiClient.get(`/llm-settings/${id}`);
       setSetting(response.data.data.attributes);
     } catch (error) {
-      console.error("Error fetching LLM Setting", error);
+      console.error("Error fetching LLM Call Settings", error);
       setSnackbar({
         open: true,
-        message: "Failed to fetch LLM Setting details",
+        message: "Failed to fetch LLM Call Settings details",
         severity: "error",
       });
     }
@@ -312,17 +312,17 @@ const LLMSettingsForm = () => {
       setSnackbar({
         open: true,
         message: id
-          ? "LLM Setting updated successfully"
-          : "LLM Setting created successfully",
+          ? "LLM Call Settings updated successfully"
+          : "LLM Call Settings created successfully",
         severity: "success",
       });
 
       setTimeout(() => navigate("/llm-settings"), 2000);
     } catch (error) {
-      console.error("Error saving LLM Setting", error);
+      console.error("Error saving LLM Call Settings", error);
       setSnackbar({
         open: true,
-        message: "Failed to save LLM Setting. Please try again.",
+        message: "Failed to save LLM Call Settings. Please try again.",
         severity: "error",
       });
     }
@@ -393,7 +393,7 @@ const LLMSettingsForm = () => {
     <StyledPaper>
       <TitleBox>
         <Typography variant="h5">
-          {id ? "Edit LLM Setting" : "Add LLM Setting"}
+          {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
         </Typography>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -401,7 +401,7 @@ const LLMSettingsForm = () => {
           to="/llm-settings"
           color="white"
         >
-          Back to LLM Settings
+          Back to LLM Call Settings
         </Button>
       </TitleBox>
       <ContentBox>
@@ -531,7 +531,7 @@ const LLMSettingsForm = () => {
 
           <Box mt={4}>
             <StyledButton variant="contained" type="submit">
-              {id ? "Update LLM Setting" : "Add LLM Setting"}
+              {id ? "Update LLM Call Settings" : "Add LLM Call Settings"}
             </StyledButton>
           </Box>
         </Box>

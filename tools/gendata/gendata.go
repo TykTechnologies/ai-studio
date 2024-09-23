@@ -21,6 +21,18 @@ const (
 	maxToolCallsPerDay   = 100
 )
 
+var vendorModels = map[string][]string{
+	string(models.ANTHROPIC): {"Claude-Sonnet", "Claude-Haiku", "Claude-Opus"},
+	string(models.VERTEX):    {"llama-3b", "Claude-Sonnet", "Claude-Haiku"},
+	string(models.OPENAI):    {"GPT-3.5-turbo", "GPT-4", "GPT-4o"},
+}
+
+var vendorCurrencies = map[string][]string{
+	string(models.ANTHROPIC): {"USD"},
+	string(models.VERTEX):    {"EUR", "USD"},
+	string(models.OPENAI):    {"USD"},
+}
+
 func main() {
 	dbConnStr := flag.String("db", "", "Database connection string")
 	dbType := flag.String("type", "mysql", "Database type (mysql, postgres, sqlite)")
@@ -96,9 +108,10 @@ func generateTestData(db *gorm.DB) {
 }
 
 func createChatRecord(db *gorm.DB, date time.Time) {
+	vendor := randomChatVendor()
 	record := &analytics.LLMChatRecord{
-		Name:           randomChatModelName(),
-		Vendor:         randomChatVendor(),
+		Name:           randomChatModelName(vendor),
+		Vendor:         vendor,
 		TotalTimeMS:    rand.Intn(10000) + 500,
 		PromptTokens:   rand.Intn(200) + 50,
 		ResponseTokens: rand.Intn(500) + 100,
@@ -110,15 +123,16 @@ func createChatRecord(db *gorm.DB, date time.Time) {
 		ChatID:         fmt.Sprintf("chat_%d", rand.Int()),
 		AppID:          uint(rand.Intn(10) + 1),
 		Cost:           rand.Float64() * 0.5,
-		Currency:       randomCurrency(),
+		Currency:       randomCurrency(vendor),
 	}
 	db.Create(record)
 }
 
 func createChatLogEntry(db *gorm.DB, date time.Time) {
+	vendor := randomChatVendor()
 	entry := &analytics.LLMChatLogEntry{
-		Name:      randomChatModelName(),
-		Vendor:    randomChatVendor(),
+		Name:      randomChatModelName(vendor),
+		Vendor:    vendor,
 		TimeStamp: randomTimeOnDate(date),
 		Prompt:    randomPrompt(),
 		Response:  randomResponse(),
@@ -138,8 +152,8 @@ func createToolCallRecord(db *gorm.DB, date time.Time) {
 	db.Create(record)
 }
 
-func randomChatModelName() string {
-	models := []string{"GPT-3.5-turbo", "GPT-4", "Claude-v1", "Claude-instant-v1", "PaLM"}
+func randomChatModelName(vendor string) string {
+	models := vendorModels[vendor]
 	return models[rand.Intn(len(models))]
 }
 
@@ -179,8 +193,8 @@ func randomTimeOnDate(date time.Time) time.Time {
 	return date.Add(time.Duration(rand.Intn(24*60*60)) * time.Second)
 }
 
-func randomCurrency() string {
-	currencies := []string{"USD", "EUR", "GBP", "JPY", "CAD", "AUD"}
+func randomCurrency(vendor string) string {
+	currencies := vendorCurrencies[vendor]
 	return currencies[rand.Intn(len(currencies))]
 }
 

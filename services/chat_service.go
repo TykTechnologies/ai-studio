@@ -48,18 +48,45 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		return nil, err
 	}
 
+	// Start a transaction
+	tx := s.DB.Begin()
+
 	chat.Name = name
 	chat.LLMSettingsID = llmSettingsID
 	chat.LLMID = llmID
 
-	// Update groups
-	var groups []models.Group
-	if err := s.DB.Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+	// Update the chat's basic information
+	if err := tx.Save(chat).Error; err != nil {
+		tx.Rollback()
 		return nil, err
 	}
-	chat.Groups = groups
 
-	if err := chat.Update(s.DB); err != nil {
+	// Clear existing associations
+	if err := tx.Model(chat).Association("Groups").Clear(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// Add new group associations
+	if len(groupIDs) > 0 {
+		var groups []models.Group
+		if err := tx.Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		if err := tx.Model(chat).Association("Groups").Append(groups); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	// Reload the chat to get the updated data
+	if err := s.DB.Preload("Groups").First(chat, id).Error; err != nil {
 		return nil, err
 	}
 

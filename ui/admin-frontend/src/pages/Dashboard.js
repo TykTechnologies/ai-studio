@@ -9,6 +9,12 @@ import {
   Button,
   Stack,
   Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { Line, Bar } from "react-chartjs-2";
 import { styled } from "@mui/material/styles";
@@ -41,6 +47,8 @@ const Dashboard = () => {
   const [llmModelData, setLLMModelData] = useState(null);
   const [toolUsageData, setToolUsageData] = useState(null);
   const [userActivityData, setUserActivityData] = useState(null);
+  const [vendorModelCostData, setVendorModelCostData] = useState([]);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -62,6 +70,7 @@ const Dashboard = () => {
         llmModelResponse,
         toolUsageResponse,
         userActivityResponse,
+        vendorModelCostResponse,
       ] = await Promise.all([
         apiClient.get("/analytics/chat-records-per-day", {
           params: { start_date: startDate, end_date: endDate },
@@ -78,6 +87,9 @@ const Dashboard = () => {
         apiClient.get("/analytics/unique-users-per-day", {
           params: { start_date: startDate, end_date: endDate },
         }),
+        apiClient.get("/analytics/total-cost-per-vendor-and-model", {
+          params: { start_date: startDate, end_date: endDate },
+        }),
       ]);
 
       setChatData(chatResponse.data);
@@ -85,6 +97,7 @@ const Dashboard = () => {
       setLLMModelData(llmModelResponse.data);
       setToolUsageData(toolUsageResponse.data);
       setUserActivityData(userActivityResponse.data);
+      setVendorModelCostData(vendorModelCostResponse.data);
     } catch (error) {
       console.error("Error fetching dashboard data", error);
     }
@@ -167,6 +180,10 @@ const Dashboard = () => {
     color: theme.palette.text.secondary,
   }));
 
+  const toggleTableExpansion = () => {
+    setIsTableExpanded(!isTableExpanded);
+  };
+
   const SectionTitle = ({ title, helpText }) => (
     <StyledSectionTitle>
       <StyledTitle variant="h5" gutterBottom>
@@ -175,6 +192,35 @@ const Dashboard = () => {
       <StyledHelpText variant="body2">{helpText}</StyledHelpText>
     </StyledSectionTitle>
   );
+
+  const ChartPaper = styled(Paper)(({ theme }) => ({
+    padding: theme.spacing(3),
+    paddingBottom: theme.spacing(6), // Increased bottom padding
+    height: 450, // Increased height to accommodate the extra padding
+  }));
+
+  const StyledTableCell = styled(TableCell)(({ theme }) => ({
+    "&.MuiTableCell-head": {
+      backgroundColor: theme.palette.custom.purpleLight,
+      color: theme.palette.common.white,
+    },
+  }));
+
+  const StyledTableRow = styled(TableRow)(({ theme }) => ({
+    "&:nth-of-type(odd)": {
+      backgroundColor: theme.palette.custom.lightTeal,
+    },
+    "&:nth-of-type(even)": {
+      backgroundColor: theme.palette.common.white,
+    },
+    "&:hover": {
+      backgroundColor: theme.palette.custom.hoverTeal,
+    },
+    // Remove last border
+    "&:last-child td, &:last-child th": {
+      border: 0,
+    },
+  }));
 
   return (
     <div>
@@ -215,7 +261,7 @@ const Dashboard = () => {
         />
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
-            <Paper elevation={3} style={{ padding: "20px", height: "400px" }}>
+            <ChartPaper elevation={3}>
               <Typography variant="h6" gutterBottom>
                 Unique Users per Day
               </Typography>
@@ -225,10 +271,10 @@ const Dashboard = () => {
                   data={createLineChartData(userActivityData, "Unique Users")}
                 />
               )}
-            </Paper>
+            </ChartPaper>
           </Grid>
           <Grid item xs={12} md={6}>
-            <Paper elevation={3} style={{ padding: "20px", height: "400px" }}>
+            <ChartPaper elevation={3}>
               <Typography variant="h6" gutterBottom>
                 Chat Interactions per Day
               </Typography>
@@ -238,7 +284,7 @@ const Dashboard = () => {
                   data={createLineChartData(chatData, "Chat Interactions")}
                 />
               )}
-            </Paper>
+            </ChartPaper>
           </Grid>
         </Grid>
       </Box>
@@ -252,7 +298,7 @@ const Dashboard = () => {
         />
         <Grid container spacing={3}>
           <Grid item xs={12}>
-            <Paper elevation={3} style={{ padding: "20px", height: "400px" }}>
+            <ChartPaper elevation={3}>
               <Typography variant="h6" gutterBottom>
                 Cost Analysis by Currency
               </Typography>
@@ -261,6 +307,48 @@ const Dashboard = () => {
                   options={chartOptions}
                   data={createMultiLineChartData(costData)}
                 />
+              )}
+            </ChartPaper>
+          </Grid>
+          <Grid item xs={12}>
+            <Paper elevation={3} style={{ padding: "20px" }}>
+              <Typography variant="h6" gutterBottom>
+                Total Cost per Vendor and Model
+              </Typography>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <StyledTableCell>Vendor</StyledTableCell>
+                      <StyledTableCell>Model</StyledTableCell>
+                      <StyledTableCell align="right">
+                        Total Cost
+                      </StyledTableCell>
+                      <StyledTableCell>Currency</StyledTableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {vendorModelCostData
+                      .slice(0, isTableExpanded ? undefined : 5)
+                      .map((row, index) => (
+                        <StyledTableRow key={index}>
+                          <StyledTableCell>{row.vendor}</StyledTableCell>
+                          <StyledTableCell>{row.model}</StyledTableCell>
+                          <StyledTableCell align="right">
+                            {row.totalCost.toFixed(2)}
+                          </StyledTableCell>
+                          <StyledTableCell>{row.currency}</StyledTableCell>
+                        </StyledTableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {vendorModelCostData.length > 5 && (
+                <Box mt={2} textAlign="center">
+                  <Button onClick={toggleTableExpansion}>
+                    {isTableExpanded ? "Collapse" : "Expand"}
+                  </Button>
+                </Box>
               )}
             </Paper>
           </Grid>
@@ -276,7 +364,7 @@ const Dashboard = () => {
         />
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
-            <Paper elevation={3} style={{ padding: "20px", height: "400px" }}>
+            <ChartPaper elevation={3}>
               <Typography variant="h6" gutterBottom>
                 Most Used LLM Models
               </Typography>
@@ -286,10 +374,10 @@ const Dashboard = () => {
                   data={createBarChartData(llmModelData, "LLM Models")}
                 />
               )}
-            </Paper>
+            </ChartPaper>
           </Grid>
           <Grid item xs={12} md={6}>
-            <Paper elevation={3} style={{ padding: "20px", height: "400px" }}>
+            <ChartPaper elevation={3}>
               <Typography variant="h6" gutterBottom>
                 Tool Usage Statistics
               </Typography>
@@ -299,7 +387,7 @@ const Dashboard = () => {
                   data={createBarChartData(toolUsageData, "Tool Usage")}
                 />
               )}
-            </Paper>
+            </ChartPaper>
           </Grid>
         </Grid>
       </Box>

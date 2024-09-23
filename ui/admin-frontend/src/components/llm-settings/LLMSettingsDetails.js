@@ -14,6 +14,20 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+  TimeScale,
+} from "chart.js";
+import "chartjs-adapter-date-fns";
+import DateRangePicker from "../common/DateRangePicker";
 import {
   StyledPaper,
   TitleBox,
@@ -22,6 +36,17 @@ import {
   FieldValue,
   StyledButton,
 } from "../../styles/sharedStyles";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  ChartTooltip,
+  Legend,
+  TimeScale,
+);
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -43,6 +68,15 @@ const TooltipLabel = ({ label, tooltip }) => (
 const LLMSettingsDetails = () => {
   const [setting, setSetting] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [usageData, setUsageData] = useState(null);
+  const [startDate, setStartDate] = useState(
+    new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
+  );
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -50,33 +84,114 @@ const LLMSettingsDetails = () => {
     fetchSettingDetails();
   }, [id]);
 
+  useEffect(() => {
+    if (setting) {
+      fetchUsageData();
+    }
+  }, [setting, startDate, endDate]);
+
   const fetchSettingDetails = async () => {
     try {
       const response = await apiClient.get(`/llm-settings/${id}`);
       setSetting(response.data.data);
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching LLM Setting details", error);
+      console.error("Error fetching LLM Call Settings details", error);
       setLoading(false);
     }
   };
 
+  const fetchUsageData = async () => {
+    try {
+      const response = await apiClient.get(`/analytics/model-usage`, {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          model_name: setting.attributes.model_name,
+        },
+      });
+      setUsageData(response.data);
+    } catch (error) {
+      console.error("Error fetching model usage data", error);
+    }
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Token Usage",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "Model Usage Over Time",
+      },
+    },
+  };
+
+  const chartData = {
+    labels: usageData?.labels || [],
+    datasets: [
+      {
+        label: "Token Usage",
+        data: usageData?.data || [],
+        borderColor: "rgb(75, 192, 192)",
+        tension: 0.1,
+      },
+    ],
+  };
+
   if (loading) return <CircularProgress />;
-  if (!setting) return <Typography>LLM Setting not found</Typography>;
+  if (!setting) return <Typography>LLM Call Settings not found</Typography>;
 
   return (
     <StyledPaper>
       <TitleBox>
-        <Typography variant="h5">LLM Setting Details</Typography>
+        <Typography variant="h5">LLM Call Settings Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/llm-settings")}
           color="white"
         >
-          Back to LLM Settings
+          Back to LLM Call Settings
         </Button>
       </TitleBox>
       <ContentBox>
+        <SectionTitle>Model Usage Statistics</SectionTitle>
+        <Box height={300}>
+          <Line options={chartOptions} data={chartData} />
+        </Box>
+        <Box mt={2}>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+          />
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
         <SectionTitle>Basic Information</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={4}>
@@ -165,7 +280,7 @@ const LLMSettingsDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/llm-settings/edit/${id}`)}
           >
-            Edit LLM Setting
+            Edit LLM Call Settings
           </StyledButton>
         </Box>
       </ContentBox>

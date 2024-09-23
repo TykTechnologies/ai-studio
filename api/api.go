@@ -241,6 +241,12 @@ func (a *API) setupRoutes() {
 		v1.GET("/analytics/unique-users-per-day", a.getUniqueUsersPerDay)
 		v1.GET("/analytics/token-usage-per-user", a.getTokenUsagePerUser)
 		v1.GET("/analytics/token-usage-per-app", a.getTokenUsagePerApp)
+		v1.GET("/analytics/token-usage-for-app", a.getTokenUsageForApp)
+		v1.GET("/analytics/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
+		v1.GET("/analytics/chat-interactions-for-chat", a.getChatInteractionsForChat)
+		v1.GET("/analytics/model-usage", a.getModelUsage)
+		v1.GET("/analytics/vendor-usage", a.getVendorUsage)
+		v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 
 		a.SetupWebSocketRoute()
 	}
