@@ -29,6 +29,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 
 ChartJS.register(
   CategoryScale,
@@ -332,7 +333,27 @@ const Dashboard = () => {
                       .slice(0, isTableExpanded ? undefined : 5)
                       .map((row, index) => (
                         <StyledTableRow key={index}>
-                          <StyledTableCell>{row.vendor}</StyledTableCell>
+                          <StyledTableCell>
+                            <Box sx={{ display: "flex", alignItems: "center" }}>
+                              <img
+                                src={getVendorLogo(row.vendor)}
+                                alt={getVendorName(row.vendor)}
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  marginRight: 8,
+                                  objectFit: "contain",
+                                }}
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src =
+                                    process.env.PUBLIC_URL +
+                                    "/images/placeholder-logo.png";
+                                }}
+                              />
+                              {getVendorName(row.vendor)}
+                            </Box>
+                          </StyledTableCell>
                           <StyledTableCell>{row.model}</StyledTableCell>
                           <StyledTableCell align="right">
                             {row.totalCost.toFixed(2)}
