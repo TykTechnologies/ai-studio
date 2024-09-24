@@ -18,6 +18,12 @@ import {
 } from "@mui/material";
 import { Line, Bar } from "react-chartjs-2";
 import { styled } from "@mui/material/styles";
+
+import AddIcon from "@mui/icons-material/Add";
+import CircularProgress from "@mui/material/CircularProgress";
+
+import DataUsageIcon from "@mui/icons-material/DataUsage";
+
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -42,6 +48,100 @@ ChartJS.register(
   Legend,
 );
 
+const NoDataMessage = ({ message }) => (
+  <Box
+    display="flex"
+    flexDirection="column"
+    alignItems="center"
+    justifyContent="center"
+    height="100%"
+  >
+    <DataUsageIcon sx={{ fontSize: 60, color: "text.secondary", mb: 2 }} />
+    <Typography variant="body1" color="text.secondary">
+      {message}
+    </Typography>
+  </Box>
+);
+
+const PortalCatalogWidget = ({ onCreateCatalog }) => (
+  <Box
+    sx={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      height: "100%",
+      textAlign: "center",
+      p: 4,
+      mt: 3,
+      backgroundColor: (theme) => theme.palette.custom.lightTeal,
+      boxShadow: (theme) => theme.shadows[4],
+      borderRadius: (theme) => theme.shape.borderRadius,
+    }}
+  >
+    <Typography variant="h4" gutterBottom>
+      Grant devs access to LLMs with the AI Gateway
+    </Typography>
+    <Typography variant="body1" paragraph>
+      Techical users can use the AI Gateway to access both streaming and
+      non-streaming APIs of the most popular AI models.
+    </Typography>
+    <Button
+      variant="contained"
+      sx={{
+        backgroundColor: (theme) => theme.palette.custom.purpleDark,
+        color: "white",
+        "&:hover": {
+          backgroundColor: (theme) => theme.palette.custom.purpleLight,
+        },
+      }}
+      onClick={onCreateCatalog}
+      startIcon={<AddIcon />}
+    >
+      Create your Portal Catalog
+    </Button>
+  </Box>
+);
+
+const GetStartedWidget = ({ onStartWizard }) => (
+  <Box
+    sx={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      height: "100%",
+      textAlign: "center",
+      p: 4,
+      backgroundColor: (theme) => theme.palette.custom.lightTeal,
+      boxShadow: (theme) => theme.shadows[4],
+      borderRadius: (theme) => theme.shape.borderRadius,
+    }}
+  >
+    <Typography variant="h4" gutterBottom>
+      Get started with your first smart chat room
+    </Typography>
+    <Typography variant="body1" paragraph>
+      Chat rooms enable non-technical users to benefit from the full power of AI
+      in your organisation, safely and securely.
+    </Typography>
+    <Button
+      variant="contained"
+      sx={{
+        backgroundColor: (theme) => theme.palette.custom.purpleDark,
+        color: "white",
+        "&:hover": {
+          backgroundColor: (theme) => theme.palette.custom.purpleLight,
+        },
+      }}
+      onClick={onStartWizard}
+      startIcon={<AddIcon />}
+    >
+      Start Wizard
+    </Button>
+  </Box>
+);
+
 const Dashboard = () => {
   const [chatData, setChatData] = useState(null);
   const [costData, setCostData] = useState({});
@@ -50,6 +150,10 @@ const Dashboard = () => {
   const [userActivityData, setUserActivityData] = useState(null);
   const [vendorModelCostData, setVendorModelCostData] = useState([]);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
+
+  const [llms, setLLMs] = useState([]);
+  const [llmsLoading, setLLMsLoading] = useState(true);
+
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -64,6 +168,16 @@ const Dashboard = () => {
   }, []);
 
   const fetchData = async () => {
+    try {
+      const llmResponse = await apiClient.get("/llms");
+      setLLMs(llmResponse.data.data || []);
+    } catch (error) {
+      console.error("Error fetching LLMs", error);
+      setLLMs([]);
+    } finally {
+      setLLMsLoading(false);
+    }
+
     try {
       const [
         chatResponse,
@@ -225,193 +339,242 @@ const Dashboard = () => {
 
   return (
     <div>
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
-      >
-        <Typography variant="h4">Dashboard</Typography>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <TextField
-            label="Start Date"
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size="small"
+      {llmsLoading ? (
+        <CircularProgress />
+      ) : llms.length === 0 ? (
+        <>
+          <GetStartedWidget
+            onStartWizard={() => {
+              /* Implement wizard start logic */
+            }}
           />
-          <TextField
-            label="End Date"
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size="small"
+          <PortalCatalogWidget
+            onCreateCatalog={() => {
+              /* Implement catalog creation logic */
+            }}
           />
-          <Button variant="contained" onClick={handleDateChange} size="small">
-            Update
-          </Button>
-        </Stack>
-      </Box>
+        </>
+      ) : (
+        <>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={3}
+          >
+            <Typography variant="h4">Dashboard</Typography>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <TextField
+                label="Start Date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+              />
+              <TextField
+                label="End Date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+              />
+              <Button
+                variant="contained"
+                onClick={handleDateChange}
+                size="small"
+              >
+                Update
+              </Button>
+            </Stack>
+          </Box>
 
-      <Box mb={4}>
-        <SectionTitle
-          title="Conversations"
-          helpText="Overview of user engagement and chat activity"
-        />
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <ChartPaper elevation={3}>
-              <Typography variant="h6" gutterBottom>
-                Unique Users per Day
-              </Typography>
-              {userActivityData && (
-                <Line
-                  options={chartOptions}
-                  data={createLineChartData(userActivityData, "Unique Users")}
-                />
-              )}
-            </ChartPaper>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <ChartPaper elevation={3}>
-              <Typography variant="h6" gutterBottom>
-                Chat Interactions per Day
-              </Typography>
-              {chatData && (
-                <Line
-                  options={chartOptions}
-                  data={createLineChartData(chatData, "Chat Interactions")}
-                />
-              )}
-            </ChartPaper>
-          </Grid>
-        </Grid>
-      </Box>
+          <Box mb={4}>
+            <SectionTitle
+              title="Conversations"
+              helpText="Overview of user engagement and chat activity"
+            />
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Unique Users per Day
+                  </Typography>
+                  {userActivityData ? (
+                    <Line
+                      options={chartOptions}
+                      data={createLineChartData(
+                        userActivityData,
+                        "Unique Users",
+                      )}
+                    />
+                  ) : (
+                    <NoDataMessage message="No user activity data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Chat Interactions per Day
+                  </Typography>
+                  {chatData ? (
+                    <Line
+                      options={chartOptions}
+                      data={createLineChartData(chatData, "Chat Interactions")}
+                    />
+                  ) : (
+                    <NoDataMessage message="No chat interaction data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
+            </Grid>
+          </Box>
 
-      <Divider sx={{ my: 4 }} />
+          <Divider sx={{ my: 4 }} />
 
-      <Box mb={4}>
-        <SectionTitle
-          title="Cost Analysis"
-          helpText="Breakdown of costs for different currencies and usage of LLM models"
-        />
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <ChartPaper elevation={3}>
-              <Typography variant="h6" gutterBottom>
-                Cost Analysis by Currency
-              </Typography>
-              {Object.keys(costData).length > 0 && (
-                <Line
-                  options={chartOptions}
-                  data={createMultiLineChartData(costData)}
-                />
-              )}
-            </ChartPaper>
-          </Grid>
-          <Grid item xs={12}>
-            <Paper elevation={3} style={{ padding: "20px" }}>
-              <Typography variant="h6" gutterBottom>
-                Total Cost per Vendor and Model
-              </Typography>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <StyledTableCell>Vendor</StyledTableCell>
-                      <StyledTableCell>Model</StyledTableCell>
-                      <StyledTableCell align="right">
-                        Total Cost
-                      </StyledTableCell>
-                      <StyledTableCell>Currency</StyledTableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {vendorModelCostData
-                      .slice(0, isTableExpanded ? undefined : 5)
-                      .map((row, index) => (
-                        <StyledTableRow key={index}>
-                          <StyledTableCell>
-                            <Box sx={{ display: "flex", alignItems: "center" }}>
-                              <img
-                                src={getVendorLogo(row.vendor)}
-                                alt={getVendorName(row.vendor)}
-                                style={{
-                                  width: 24,
-                                  height: 24,
-                                  marginRight: 8,
-                                  objectFit: "contain",
-                                }}
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.src =
-                                    process.env.PUBLIC_URL +
-                                    "/images/placeholder-logo.png";
-                                }}
-                              />
-                              {getVendorName(row.vendor)}
-                            </Box>
-                          </StyledTableCell>
-                          <StyledTableCell>{row.model}</StyledTableCell>
-                          <StyledTableCell align="right">
-                            {row.totalCost.toFixed(2)}
-                          </StyledTableCell>
-                          <StyledTableCell>{row.currency}</StyledTableCell>
-                        </StyledTableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              {vendorModelCostData.length > 5 && (
-                <Box mt={2} textAlign="center">
-                  <Button onClick={toggleTableExpansion}>
-                    {isTableExpanded ? "Collapse" : "Expand"}
-                  </Button>
-                </Box>
-              )}
-            </Paper>
-          </Grid>
-        </Grid>
-      </Box>
+          <Box mb={4}>
+            <SectionTitle
+              title="Cost Analysis"
+              helpText="Breakdown of costs for different currencies and usage of LLM models"
+            />
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Cost Analysis by Currency
+                  </Typography>
+                  {Object.keys(costData).length > 0 ? (
+                    <Line
+                      options={chartOptions}
+                      data={createMultiLineChartData(costData)}
+                    />
+                  ) : (
+                    <NoDataMessage message="No cost analysis data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
+              <Grid item xs={12}>
+                <Paper elevation={3} style={{ padding: "20px" }}>
+                  <Typography variant="h6" gutterBottom>
+                    Total Cost per Vendor and Model
+                  </Typography>
+                  {vendorModelCostData.length > 0 ? (
+                    <>
+                      <TableContainer>
+                        <Table>
+                          <TableHead>
+                            <TableRow>
+                              <StyledTableCell>Vendor</StyledTableCell>
+                              <StyledTableCell>Model</StyledTableCell>
+                              <StyledTableCell align="right">
+                                Total Cost
+                              </StyledTableCell>
+                              <StyledTableCell>Currency</StyledTableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {vendorModelCostData
+                              .slice(0, isTableExpanded ? undefined : 5)
+                              .map((row, index) => (
+                                <StyledTableRow key={index}>
+                                  <StyledTableCell>
+                                    <Box
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <img
+                                        src={getVendorLogo(row.vendor)}
+                                        alt={getVendorName(row.vendor)}
+                                        style={{
+                                          width: 24,
+                                          height: 24,
+                                          marginRight: 8,
+                                          objectFit: "contain",
+                                        }}
+                                        onError={(e) => {
+                                          e.target.onerror = null;
+                                          e.target.src =
+                                            process.env.PUBLIC_URL +
+                                            "/images/placeholder-logo.png";
+                                        }}
+                                      />
+                                      {getVendorName(row.vendor)}
+                                    </Box>
+                                  </StyledTableCell>
+                                  <StyledTableCell>{row.model}</StyledTableCell>
+                                  <StyledTableCell align="right">
+                                    {row.totalCost.toFixed(2)}
+                                  </StyledTableCell>
+                                  <StyledTableCell>
+                                    {row.currency}
+                                  </StyledTableCell>
+                                </StyledTableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      {vendorModelCostData.length > 5 && (
+                        <Box mt={2} textAlign="center">
+                          <Button onClick={toggleTableExpansion}>
+                            {isTableExpanded ? "Collapse" : "Expand"}
+                          </Button>
+                        </Box>
+                      )}
+                    </>
+                  ) : (
+                    <NoDataMessage message="No vendor and model cost data available for the selected period." />
+                  )}
+                </Paper>
+              </Grid>
+            </Grid>
+          </Box>
 
-      <Divider sx={{ my: 4 }} />
+          <Divider sx={{ my: 4 }} />
 
-      <Box mb={4}>
-        <SectionTitle
-          title="Model and Tool Usage"
-          helpText="Analysis of most used LLM models and tools"
-        />
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <ChartPaper elevation={3}>
-              <Typography variant="h6" gutterBottom>
-                Most Used LLM Models
-              </Typography>
-              {llmModelData && (
-                <Bar
-                  options={chartOptions}
-                  data={createBarChartData(llmModelData, "LLM Models")}
-                />
-              )}
-            </ChartPaper>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <ChartPaper elevation={3}>
-              <Typography variant="h6" gutterBottom>
-                Tool Usage Statistics
-              </Typography>
-              {toolUsageData && (
-                <Bar
-                  options={chartOptions}
-                  data={createBarChartData(toolUsageData, "Tool Usage")}
-                />
-              )}
-            </ChartPaper>
-          </Grid>
-        </Grid>
-      </Box>
+          <Box mb={4}>
+            <SectionTitle
+              title="Model and Tool Usage"
+              helpText="Analysis of most used LLM models and tools"
+            />
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Most Used LLM Models
+                  </Typography>
+                  {llmModelData ? (
+                    <Bar
+                      options={chartOptions}
+                      data={createBarChartData(llmModelData, "LLM Models")}
+                    />
+                  ) : (
+                    <NoDataMessage message="No LLM model usage data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Tool Usage Statistics
+                  </Typography>
+                  {toolUsageData ? (
+                    <Bar
+                      options={chartOptions}
+                      data={createBarChartData(toolUsageData, "Tool Usage")}
+                    />
+                  ) : (
+                    <NoDataMessage message="No tool usage data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
+            </Grid>
+          </Box>
+        </>
+      )}
     </div>
   );
 };
