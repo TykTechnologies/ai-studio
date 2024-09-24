@@ -305,7 +305,6 @@ func (a *AuthService) sendEmail(to, subject, body string) error {
 
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		fmt.Println("AuthMiddleware running")
 		if a.Config.TestMode {
 			c.Next()
 			return

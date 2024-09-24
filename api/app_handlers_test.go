@@ -98,14 +98,24 @@ func TestAppEndpoints(t *testing.T) {
 	assert.Equal(t, "Updated App", listResponse["data"][0].Attributes.Name)
 
 	// Test Search Apps
-	w = performRequest(api.router, "GET", "/api/v1/apps/search?searchTerm=Updated", nil)
+	w = performRequest(api.router, "GET", "/api/v1/apps/search?search_term=Updated", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	if w.Code != http.StatusOK {
+		fmt.Println(w.Body.String())
+	}
 
 	var searchResponse map[string][]AppResponse
 	err = json.Unmarshal(w.Body.Bytes(), &searchResponse)
 	assert.NoError(t, err)
-	assert.Len(t, searchResponse["data"], 1)
-	assert.Equal(t, "Updated App", searchResponse["data"][0].Attributes.Name)
+	assert.GreaterOrEqual(t, len(searchResponse), 1)
+	if len(searchResponse) > 0 {
+		assert.Len(t, searchResponse["data"], 1)
+
+		if len(searchResponse["data"]) > 0 {
+			assert.Equal(t, "Updated App", searchResponse["data"][0].Attributes.Name)
+		}
+	}
 
 	// Test Count Apps
 	w = performRequest(api.router, "GET", "/api/v1/apps/count", nil)
