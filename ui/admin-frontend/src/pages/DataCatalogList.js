@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -29,6 +29,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const DataCatalogList = () => {
   const navigate = useNavigate();
@@ -43,21 +45,40 @@ const DataCatalogList = () => {
     severity: "success",
   });
 
-  useEffect(() => {
-    fetchDataCatalogs();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchDataCatalogs = async () => {
+  const fetchDataCatalogs = useCallback(async () => {
     try {
-      const response = await apiClient.get("/data-catalogues");
+      setLoading(true);
+      const response = await apiClient.get("/data-catalogues", {
+        params: {
+          page,
+          page_size: pageSize,
+        },
+      });
       setDataCatalogs(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching data catalogs", error);
       setError("Failed to load data catalogs");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, updatePaginationData]);
+
+  useEffect(() => {
+    fetchDataCatalogs();
+  }, [fetchDataCatalogs]);
 
   const handleMenuOpen = (event, catalog) => {
     event.stopPropagation();
@@ -72,12 +93,12 @@ const DataCatalogList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/data-catalogues/${id}`);
-      setDataCatalogs(dataCatalogs.filter((catalog) => catalog.id !== id));
       setSnackbar({
         open: true,
         message: "Data catalog deleted successfully",
         severity: "success",
       });
+      fetchDataCatalogs();
     } catch (error) {
       console.error("Error deleting data catalog", error);
       setSnackbar({
@@ -108,11 +129,11 @@ const DataCatalogList = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if (loading) {
+  if (loading && dataCatalogs.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && dataCatalogs.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -142,62 +163,75 @@ const DataCatalogList = () => {
               onButtonClick={handleAddDataCatalog}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell>Name</StyledTableCell>
-                  <StyledTableCell>Description</StyledTableCell>
-                  <StyledTableCell>Data Sources</StyledTableCell>
-                  <StyledTableCell>Tags</StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {dataCatalogs.map((catalog) => (
-                  <StyledTableRow
-                    key={catalog.id}
-                    onClick={() => handleCatalogClick(catalog.id)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{catalog.attributes.name}</TableCell>
-                    <TableCell>
-                      {catalog.attributes.short_description}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                        {catalog.attributes.datasources.map((datasource) => (
-                          <Chip
-                            key={datasource.id}
-                            label={datasource.attributes.name}
-                            size="small"
-                            sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                          />
-                        ))}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                        {catalog.attributes.tags.map((tag) => (
-                          <Chip
-                            key={tag.id}
-                            label={tag.attributes.name}
-                            size="small"
-                            sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                          />
-                        ))}
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, catalog)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell>Name</StyledTableCell>
+                    <StyledTableCell>Description</StyledTableCell>
+                    <StyledTableCell>Data Sources</StyledTableCell>
+                    <StyledTableCell>Tags</StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {dataCatalogs.map((catalog) => (
+                    <StyledTableRow
+                      key={catalog.id}
+                      onClick={() => handleCatalogClick(catalog.id)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{catalog.attributes.name}</TableCell>
+                      <TableCell>
+                        {catalog.attributes.short_description}
+                      </TableCell>
+                      <TableCell>
+                        <Box
+                          sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
+                        >
+                          {catalog.attributes.datasources.map((datasource) => (
+                            <Chip
+                              key={datasource.id}
+                              label={datasource.attributes.name}
+                              size="small"
+                              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+                            />
+                          ))}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Box
+                          sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
+                        >
+                          {catalog.attributes.tags.map((tag) => (
+                            <Chip
+                              key={tag.id}
+                              label={tag.attributes.name}
+                              size="small"
+                              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+                            />
+                          ))}
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, catalog)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

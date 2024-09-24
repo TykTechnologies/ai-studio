@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -34,6 +34,8 @@ import {
   StyledDialog,
 } from "../styles/sharedStyles";
 import AddIcon from "@mui/icons-material/Add";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const Groups = () => {
   const navigate = useNavigate();
@@ -63,21 +65,40 @@ const Groups = () => {
     severity: "success",
   });
 
-  useEffect(() => {
-    fetchGroups();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchGroups = async () => {
+  const fetchGroups = useCallback(async () => {
     try {
-      const response = await apiClient.get("/groups");
+      setLoading(true);
+      const response = await apiClient.get("/groups", {
+        params: {
+          page,
+          page_size: pageSize,
+        },
+      });
       setGroups(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching groups", error);
       setError("Failed to load groups");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, updatePaginationData]);
+
+  useEffect(() => {
+    fetchGroups();
+  }, [fetchGroups]);
 
   const handleMenuOpen = (event, group) => {
     event.stopPropagation();
@@ -321,11 +342,11 @@ const Groups = () => {
     navigate(`/groups/${group.id}`);
   };
 
-  if (loading) {
+  if (loading && groups.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && groups.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -369,6 +390,13 @@ const Groups = () => {
             ))}
           </TableBody>
         </Table>
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </ContentBox>
 
       <Menu

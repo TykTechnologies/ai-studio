@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -28,6 +28,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const LLMSettingsList = () => {
   const navigate = useNavigate();
@@ -43,21 +45,42 @@ const LLMSettingsList = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
-  useEffect(() => {
-    fetchLLMSettings();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchLLMSettings = async () => {
+  const fetchLLMSettings = useCallback(async () => {
     try {
-      const response = await apiClient.get("/llm-settings");
+      setLoading(true);
+      const response = await apiClient.get("/llm-settings", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
       setLLMSettings(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching LLM Settings", error);
       setError("Failed to load LLM Settings");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchLLMSettings();
+  }, [fetchLLMSettings]);
 
   const handleMenuOpen = (event, setting) => {
     event.stopPropagation();
@@ -72,12 +95,12 @@ const LLMSettingsList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/llm-settings/${id}`);
-      setLLMSettings(llmSettings.filter((setting) => setting.id !== id));
       setSnackbar({
         open: true,
         message: "LLM Setting deleted successfully",
         severity: "success",
       });
+      fetchLLMSettings();
     } catch (error) {
       console.error("Error deleting LLM Setting", error);
       setSnackbar({
@@ -108,24 +131,15 @@ const LLMSettingsList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedSettings = [...llmSettings].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue = a.attributes[sortConfig.key];
-    const bValue = b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddSetting = () => {
     navigate("/llm-settings/new");
   };
 
-  if (loading) {
+  if (loading && llmSettings.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && llmSettings.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -156,42 +170,51 @@ const LLMSettingsList = () => {
               onButtonClick={handleAddSetting}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("model_name")}>
-                    Model Name
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("temperature")}>
-                    Temperature
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("max_tokens")}>
-                    Max Tokens
-                  </StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedSettings.map((setting) => (
-                  <StyledTableRow
-                    key={setting.id}
-                    onClick={() => handleSettingClick(setting)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{setting.attributes.model_name}</TableCell>
-                    <TableCell>{setting.attributes.temperature}</TableCell>
-                    <TableCell>{setting.attributes.max_tokens}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, setting)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("model_name")}>
+                      Model Name
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("temperature")}>
+                      Temperature
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("max_tokens")}>
+                      Max Tokens
+                    </StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {llmSettings.map((setting) => (
+                    <StyledTableRow
+                      key={setting.id}
+                      onClick={() => handleSettingClick(setting)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{setting.attributes.model_name}</TableCell>
+                      <TableCell>{setting.attributes.temperature}</TableCell>
+                      <TableCell>{setting.attributes.max_tokens}</TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, setting)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

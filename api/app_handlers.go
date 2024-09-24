@@ -396,16 +396,15 @@ func serializeApp(app *models.App) AppResponse {
 // @Accept json
 // @Produce json
 // @Param page query int false "Page number"
-// @Param pageSize query int false "Page size"
+// @Param page_size query int false "Page size"
 // @Success 200 {array} AppResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /apps [get]
 // @Security BearerAuth
 func (a *API) listApps(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+	pageSize, pageNumber, all := getPaginationParams(c)
 
-	apps, err := a.service.ListAppsWithPagination(page, pageSize)
+	apps, totalCount, totalPages, err := a.service.ListAppsWithPagination(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -416,6 +415,8 @@ func (a *API) listApps(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
 }
 
@@ -424,14 +425,16 @@ func (a *API) listApps(c *gin.Context) {
 // @Tags apps
 // @Accept json
 // @Produce json
-// @Param searchTerm query string true "Search term"
+// @Param search_term query string true "Search term"
+// @Param page query int false "Page number"
+// @Param page_size query int false "Page size"
 // @Success 200 {array} AppResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /apps/search [get]
 // @Security BearerAuth
 func (a *API) searchApps(c *gin.Context) {
-	searchTerm := c.Query("searchTerm")
+	searchTerm := c.Query("search_term")
 	if searchTerm == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -442,7 +445,9 @@ func (a *API) searchApps(c *gin.Context) {
 		return
 	}
 
-	apps, err := a.service.SearchApps(searchTerm)
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -453,6 +458,8 @@ func (a *API) searchApps(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
 }
 

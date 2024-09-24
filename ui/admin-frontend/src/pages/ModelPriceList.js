@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -37,6 +37,8 @@ import {
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const ModelPriceList = () => {
   const navigate = useNavigate();
@@ -54,21 +56,42 @@ const ModelPriceList = () => {
   const [openUpdatePriceModal, setOpenUpdatePriceModal] = useState(false);
   const [updatedPrice, setUpdatedPrice] = useState(0);
 
-  useEffect(() => {
-    fetchModelPrices();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchModelPrices = async () => {
+  const fetchModelPrices = useCallback(async () => {
     try {
-      const response = await apiClient.get("/model-prices");
+      setLoading(true);
+      const response = await apiClient.get("/model-prices", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
       setModelPrices(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching Model Prices", error);
       setError("Failed to load Model Prices");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchModelPrices();
+  }, [fetchModelPrices]);
 
   const handleMenuOpen = (event, price) => {
     event.stopPropagation();
@@ -83,12 +106,12 @@ const ModelPriceList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/model-prices/${id}`);
-      setModelPrices(modelPrices.filter((price) => price.id !== id));
       setSnackbar({
         open: true,
         message: "Model Price deleted successfully",
         severity: "success",
       });
+      fetchModelPrices();
     } catch (error) {
       console.error("Error deleting Model Price", error);
       setSnackbar({
@@ -119,15 +142,6 @@ const ModelPriceList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedPrices = [...modelPrices].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue = a.attributes[sortConfig.key];
-    const bValue = b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddPrice = () => {
     navigate("/model-prices/new");
   };
@@ -154,20 +168,6 @@ const ModelPriceList = () => {
         },
       });
 
-      setModelPrices(
-        modelPrices.map((price) =>
-          price.id === selectedPrice.id
-            ? {
-                ...price,
-                attributes: {
-                  ...price.attributes,
-                  cpt: parseFloat(updatedPrice),
-                },
-              }
-            : price,
-        ),
-      );
-
       setSnackbar({
         open: true,
         message: "Model Price updated successfully",
@@ -175,6 +175,7 @@ const ModelPriceList = () => {
       });
 
       handleCloseUpdatePriceModal();
+      fetchModelPrices();
     } catch (error) {
       console.error("Error updating Model Price", error);
       setSnackbar({
@@ -185,11 +186,11 @@ const ModelPriceList = () => {
     }
   };
 
-  if (loading) {
+  if (loading && modelPrices.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && modelPrices.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -220,55 +221,64 @@ const ModelPriceList = () => {
               onButtonClick={handleAddPrice}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("model_name")}>
-                    Model Name
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("vendor")}>
-                    Vendor
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("cpt")}>
-                    Cost per Token
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("currency")}>
-                    Currency
-                  </StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedPrices.map((price) => (
-                  <StyledTableRow
-                    key={price.id}
-                    onClick={() => handlePriceClick(price)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{price.attributes.model_name}</TableCell>
-                    <TableCell>
-                      <Box display="flex" alignItems="center">
-                        <img
-                          src={getVendorLogo(price.attributes.vendor)}
-                          alt={price.attributes.vendor}
-                          style={{ width: 24, height: 24, marginRight: 8 }}
-                        />
-                        {getVendorName(price.attributes.vendor)}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{price.attributes.cpt}</TableCell>
-                    <TableCell>{price.attributes.currency}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, price)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("model_name")}>
+                      Model Name
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("vendor")}>
+                      Vendor
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("cpt")}>
+                      Cost per Token
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("currency")}>
+                      Currency
+                    </StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {modelPrices.map((price) => (
+                    <StyledTableRow
+                      key={price.id}
+                      onClick={() => handlePriceClick(price)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{price.attributes.model_name}</TableCell>
+                      <TableCell>
+                        <Box display="flex" alignItems="center">
+                          <img
+                            src={getVendorLogo(price.attributes.vendor)}
+                            alt={price.attributes.vendor}
+                            style={{ width: 24, height: 24, marginRight: 8 }}
+                          />
+                          {getVendorName(price.attributes.vendor)}
+                        </Box>
+                      </TableCell>
+                      <TableCell>{price.attributes.cpt}</TableCell>
+                      <TableCell>{price.attributes.currency}</TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, price)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

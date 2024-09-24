@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -28,6 +28,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const FilterList = () => {
   const navigate = useNavigate();
@@ -43,21 +45,42 @@ const FilterList = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
-  useEffect(() => {
-    fetchFilters();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchFilters = async () => {
+  const fetchFilters = useCallback(async () => {
     try {
-      const response = await apiClient.get("/filters");
-      setFilters(response.data || []); // Remove the .data here
-      setLoading(false);
+      setLoading(true);
+      const response = await apiClient.get("/filters", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
+      setFilters(response.data || []);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching filters", error);
       setError("Failed to load filters");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchFilters();
+  }, [fetchFilters]);
 
   const handleMenuOpen = (event, filter) => {
     event.stopPropagation();
@@ -72,12 +95,12 @@ const FilterList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/filters/${id}`);
-      setFilters(filters.filter((filter) => filter.id !== id));
       setSnackbar({
         open: true,
         message: "Filter deleted successfully",
         severity: "success",
       });
+      fetchFilters();
     } catch (error) {
       console.error("Error deleting filter", error);
       setSnackbar({
@@ -108,24 +131,15 @@ const FilterList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedFilters = [...filters].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue = a.attributes[sortConfig.key];
-    const bValue = b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddFilter = () => {
     navigate("/filters/new");
   };
 
-  if (loading) {
+  if (loading && filters.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && filters.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -156,36 +170,45 @@ const FilterList = () => {
               onButtonClick={handleAddFilter}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableCell>
-                  <StyledTableCell>Description</StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedFilters.map((filter) => (
-                  <StyledTableRow
-                    key={filter.id}
-                    onClick={() => handleFilterClick(filter)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{filter.attributes.name}</TableCell>
-                    <TableCell>{filter.attributes.description}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, filter)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("name")}>
+                      Name
+                    </StyledTableCell>
+                    <StyledTableCell>Description</StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filters.map((filter) => (
+                    <StyledTableRow
+                      key={filter.id}
+                      onClick={() => handleFilterClick(filter)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{filter.attributes.name}</TableCell>
+                      <TableCell>{filter.attributes.description}</TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, filter)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

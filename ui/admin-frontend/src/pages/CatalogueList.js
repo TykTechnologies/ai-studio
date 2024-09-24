@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -37,6 +37,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const CatalogueList = () => {
   const navigate = useNavigate();
@@ -56,21 +58,40 @@ const CatalogueList = () => {
   const [catalogueLLMs, setCatalogueLLMs] = useState([]);
   const [selectedLLM, setSelectedLLM] = useState("");
 
-  useEffect(() => {
-    fetchCatalogues();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchCatalogues = async () => {
+  const fetchCatalogues = useCallback(async () => {
     try {
-      const response = await apiClient.get("/catalogues");
+      setLoading(true);
+      const response = await apiClient.get("/catalogues", {
+        params: {
+          page,
+          page_size: pageSize,
+        },
+      });
       setCatalogues(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching catalogues", error);
       setError("Failed to load catalogues");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, updatePaginationData]);
+
+  useEffect(() => {
+    fetchCatalogues();
+  }, [fetchCatalogues]);
 
   const handleMenuOpen = (event, catalogue) => {
     event.stopPropagation();
@@ -118,7 +139,7 @@ const CatalogueList = () => {
         severity: "success",
       });
       setModalOpen(false);
-      fetchCatalogues(); // Refresh the list after adding an LLM
+      fetchCatalogues();
     } catch (error) {
       console.error("Error adding LLM to catalog", error);
       setSnackbar({
@@ -140,7 +161,7 @@ const CatalogueList = () => {
         severity: "success",
       });
       setModalOpen(false);
-      fetchCatalogues(); // Refresh the list after removing an LLM
+      fetchCatalogues();
     } catch (error) {
       console.error("Error removing LLM from catalog", error);
       setSnackbar({
@@ -195,14 +216,6 @@ const CatalogueList = () => {
     navigate(`/catalogs/llms/${id}`);
   };
 
-  if (loading) {
-    return <CircularProgress />;
-  }
-
-  if (error) {
-    return <Alert severity="error">{error}</Alert>;
-  }
-
   const getLLMNames = (catalogue) => {
     if (catalogue.attributes.llm_names) {
       return catalogue.attributes.llm_names;
@@ -215,6 +228,14 @@ const CatalogueList = () => {
     return [];
   };
 
+  if (loading && catalogues.length === 0) {
+    return <CircularProgress />;
+  }
+
+  if (error && catalogues.length === 0) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
   return (
     <Box sx={{ p: 0 }}>
       <StyledPaper>
@@ -223,7 +244,6 @@ const CatalogueList = () => {
             <InfoTooltip title="Catalogs are collections of LLMs that can be assigned to groups." />
             <Typography variant="h5">Catalogs</Typography>
           </Box>
-
           <StyledButton
             variant="contained"
             startIcon={<AddIcon />}
@@ -242,45 +262,56 @@ const CatalogueList = () => {
               onButtonClick={handleAddCatalogue}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell>Name</StyledTableCell>
-                  <StyledTableCell>LLMs</StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {catalogues.map((catalogue) => (
-                  <StyledTableRow
-                    key={catalogue.id}
-                    onClick={() => handleCatalogueClick(catalogue.id)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{catalogue.attributes.name}</TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                        {getLLMNames(catalogue).map((llmName, index) => (
-                          <Chip
-                            key={index}
-                            label={llmName}
-                            size="small"
-                            sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                          />
-                        ))}
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, catalogue)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell>Name</StyledTableCell>
+                    <StyledTableCell>LLMs</StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {catalogues.map((catalogue) => (
+                    <StyledTableRow
+                      key={catalogue.id}
+                      onClick={() => handleCatalogueClick(catalogue.id)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{catalogue.attributes.name}</TableCell>
+                      <TableCell>
+                        <Box
+                          sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
+                        >
+                          {getLLMNames(catalogue).map((llmName, index) => (
+                            <Chip
+                              key={index}
+                              label={llmName}
+                              size="small"
+                              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+                            />
+                          ))}
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, catalogue)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

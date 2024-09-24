@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -15,7 +15,6 @@ import {
   MenuItem,
   Snackbar,
   Box,
-  Tooltip,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
@@ -31,6 +30,8 @@ import {
 } from "../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const LLMList = () => {
   const navigate = useNavigate();
@@ -46,21 +47,42 @@ const LLMList = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
-  useEffect(() => {
-    fetchLLMs();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchLLMs = async () => {
+  const fetchLLMs = useCallback(async () => {
     try {
-      const response = await apiClient.get("/llms");
+      setLoading(true);
+      const response = await apiClient.get("/llms", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
       setLLMs(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching LLMs", error);
       setError("Failed to load LLMs");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchLLMs();
+  }, [fetchLLMs]);
 
   const handleMenuOpen = (event, llm) => {
     event.stopPropagation();
@@ -75,12 +97,12 @@ const LLMList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/llms/${id}`);
-      setLLMs(llms.filter((llm) => llm.id !== id));
       setSnackbar({
         open: true,
         message: "LLM deleted successfully",
         severity: "success",
       });
+      fetchLLMs();
     } catch (error) {
       console.error("Error deleting LLM", error);
       setSnackbar({
@@ -99,12 +121,12 @@ const LLMList = () => {
         attributes: { ...llm.attributes, active: !llm.attributes.active },
       };
       await apiClient.patch(`/llms/${llm.id}`, { data: updatedLLM });
-      setLLMs(llms.map((l) => (l.id === llm.id ? updatedLLM : l)));
       setSnackbar({
         open: true,
         message: `LLM ${updatedLLM.attributes.active ? "activated" : "deactivated"} successfully`,
         severity: "success",
       });
+      fetchLLMs();
     } catch (error) {
       console.error("Error toggling LLM active state", error);
       setSnackbar({
@@ -135,24 +157,15 @@ const LLMList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedLLMs = [...llms].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue = a.attributes[sortConfig.key];
-    const bValue = b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddLLM = () => {
     navigate("/llms/new");
   };
 
-  if (loading) {
+  if (loading && llms.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && llms.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -183,74 +196,85 @@ const LLMList = () => {
               onButtonClick={handleAddLLM}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableCell>
-                  <StyledTableCell>Short Description</StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("vendor")}>
-                    Vendor
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("privacy_score")}>
-                    Privacy Score
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("active")}>
-                    Active
-                  </StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedLLMs.map((llm) => (
-                  <StyledTableRow
-                    key={llm.id}
-                    onClick={() => handleLLMClick(llm)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{llm.attributes.name}</TableCell>
-                    <TableCell>{llm.attributes.short_description}</TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
-                        <img
-                          src={getVendorLogo(llm.attributes.vendor)}
-                          alt={getVendorName(llm.attributes.vendor)}
-                          style={{
-                            width: 24,
-                            height: 24,
-                            marginRight: 8,
-                            objectFit: "contain",
-                          }}
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src =
-                              process.env.PUBLIC_URL +
-                              "/images/placeholder-logo.png";
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("name")}>
+                      Name
+                    </StyledTableCell>
+                    <StyledTableCell>Short Description</StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("vendor")}>
+                      Vendor
+                    </StyledTableCell>
+                    <StyledTableCell
+                      onClick={() => handleSort("privacy_score")}
+                    >
+                      Privacy Score
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("active")}>
+                      Active
+                    </StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {llms.map((llm) => (
+                    <StyledTableRow
+                      key={llm.id}
+                      onClick={() => handleLLMClick(llm)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{llm.attributes.name}</TableCell>
+                      <TableCell>{llm.attributes.short_description}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <img
+                            src={getVendorLogo(llm.attributes.vendor)}
+                            alt={getVendorName(llm.attributes.vendor)}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              marginRight: 8,
+                              objectFit: "contain",
+                            }}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src =
+                                process.env.PUBLIC_URL +
+                                "/images/placeholder-logo.png";
+                            }}
+                          />
+                          {getVendorName(llm.attributes.vendor)}
+                        </Box>
+                      </TableCell>
+                      <TableCell>{llm.attributes.privacy_score}</TableCell>
+                      <TableCell>
+                        <FiberManualRecordIcon
+                          sx={{
+                            color: llm.attributes.active ? "green" : "red",
                           }}
                         />
-                        {getVendorName(llm.attributes.vendor)}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{llm.attributes.privacy_score}</TableCell>
-                    <TableCell>
-                      <FiberManualRecordIcon
-                        sx={{
-                          color: llm.attributes.active ? "green" : "red",
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, llm)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, llm)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

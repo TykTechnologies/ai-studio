@@ -311,3 +311,43 @@ func TestApp_LLMAssociation(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, app.LLMs, 0)
 }
+
+// func TestCreate100Apps(t *testing.T) {
+// 	// Create a temporary database file
+// 	dbFile := "../midsommar.db"
+
+// 	// Open a connection to the SQLite database
+// 	db, err := gorm.Open(sqlite.Open(dbFile), &gorm.Config{})
+// 	if err != nil {
+// 		t.Fatalf("Failed to connect to database: %v", err)
+// 	}
+
+// 	// Auto-migrate the App model and related models
+// 	err = db.AutoMigrate(&App{}, &Credential{}, &Datasource{}, &LLM{})
+// 	if err != nil {
+// 		t.Fatalf("Failed to migrate database: %v", err)
+// 	}
+
+// 	// Create 100 App entries
+// 	for i := 1; i <= 100; i++ {
+// 		app := App{
+// 			Name:        fmt.Sprintf("App %d", i),
+// 			Description: fmt.Sprintf("Description for App %d", i),
+// 			UserID:      uint(i%10 + 1), // Cycle through 10 user IDs
+// 		}
+
+// 		err := app.Create(db)
+// 		if err != nil {
+// 			t.Errorf("Failed to create App %d: %v", i, err)
+// 		}
+// 	}
+
+// 	// Verify that 100 Apps were created
+// 	var count int64
+// 	db.Model(&App{}).Count(&count)
+// 	if count != 100 {
+// 		t.Errorf("Expected 100 Apps, but found %d", count)
+// 	}
+
+// 	t.Logf("Successfully created 100 App entries in the database")
+// }

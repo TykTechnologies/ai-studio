@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -36,6 +36,8 @@ import {
   StyledDialog,
 } from "../styles/sharedStyles";
 import AddIcon from "@mui/icons-material/Add";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const Users = () => {
   const navigate = useNavigate();
@@ -55,25 +57,50 @@ const Users = () => {
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchData = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
-      const [usersResponse, groupsResponse] = await Promise.all([
-        apiClient.get("/users"),
-        apiClient.get("/groups"),
-      ]);
-      setUsers(usersResponse.data.data || []);
-      setGroups(groupsResponse.data.data || []);
-      setLoading(false);
+      setLoading(true);
+      const response = await apiClient.get("/users", {
+        params: {
+          page,
+          page_size: pageSize,
+        },
+      });
+      setUsers(response.data.data || []);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
-      console.error("Error fetching data", error);
-      setError("Failed to load data");
+      console.error("Error fetching users", error);
+      setError("Failed to load users");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, updatePaginationData]);
+
+  const fetchGroups = useCallback(async () => {
+    try {
+      const response = await apiClient.get("/groups");
+      setGroups(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching groups", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+    fetchGroups();
+  }, [fetchUsers, fetchGroups]);
 
   const handleMenuOpen = (event, user) => {
     event.stopPropagation();
@@ -88,12 +115,12 @@ const Users = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/users/${id}`);
-      setUsers(users.filter((user) => user.id !== id));
       setSnackbar({
         open: true,
         message: "User deleted successfully",
         severity: "success",
       });
+      fetchUsers();
     } catch (error) {
       console.error("Error deleting user", error);
       setSnackbar({
@@ -145,7 +172,7 @@ const Users = () => {
         severity: "success",
       });
       handleCloseAddToGroupModal();
-      fetchData();
+      fetchUsers();
     } catch (error) {
       console.error("Error adding user to group", error);
       setSnackbar({
@@ -201,11 +228,11 @@ const Users = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if (loading) {
+  if (loading && users.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && users.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -260,6 +287,13 @@ const Users = () => {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </ContentBox>
       </StyledPaper>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -15,7 +15,6 @@ import {
   MenuItem,
   Snackbar,
   Box,
-  Tooltip,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
@@ -29,6 +28,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const AppList = () => {
   const navigate = useNavigate();
@@ -45,22 +46,46 @@ const AppList = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
-  useEffect(() => {
-    fetchApps();
-    fetchUsers();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchApps = async () => {
+  const fetchApps = useCallback(async () => {
     try {
-      const response = await apiClient.get("/apps");
+      setLoading(true);
+      const response = await apiClient.get("/apps", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
       setApps(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching apps", error);
       setError("Failed to load apps");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchApps();
+  }, [fetchApps]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -88,12 +113,12 @@ const AppList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/apps/${id}`);
-      setApps(apps.filter((app) => app.id !== id));
       setSnackbar({
         open: true,
         message: "App deleted successfully",
         severity: "success",
       });
+      fetchApps();
     } catch (error) {
       console.error("Error deleting app", error);
       setSnackbar({
@@ -124,30 +149,15 @@ const AppList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedApps = [...apps].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue =
-      sortConfig.key === "user_id"
-        ? users[a.attributes.user_id]
-        : a.attributes[sortConfig.key];
-    const bValue =
-      sortConfig.key === "user_id"
-        ? users[b.attributes.user_id]
-        : b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddApp = () => {
     navigate("/apps/new");
   };
 
-  if (loading) {
+  if (loading && apps.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && apps.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -156,10 +166,9 @@ const AppList = () => {
       <StyledPaper>
         <TitleBox>
           <Box display="flex" alignItems="center">
-            <InfoTooltip title="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search daata sources." />
+            <InfoTooltip title="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources." />
             <Typography variant="h5">Apps</Typography>
           </Box>
-
           <StyledButton
             variant="contained"
             startIcon={<AddIcon />}
@@ -172,48 +181,57 @@ const AppList = () => {
           {apps.length === 0 ? (
             <EmptyStateWidget
               title="No apps configured yet"
-              description="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search daata sources. Click the button below to add a new app configuration."
+              description="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources. Click the button below to add a new app configuration."
               buttonText="Add App"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddApp}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableCell>
-                  <StyledTableCell>Description</StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("user_id")}>
-                    User
-                  </StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedApps.map((app) => (
-                  <StyledTableRow
-                    key={app.id}
-                    onClick={() => handleAppClick(app)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{app.attributes.name}</TableCell>
-                    <TableCell>{app.attributes.description}</TableCell>
-                    <TableCell>
-                      {users[app.attributes.user_id] || "Unknown"}
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, app)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("name")}>
+                      Name
+                    </StyledTableCell>
+                    <StyledTableCell>Description</StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("user_id")}>
+                      User
+                    </StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {apps.map((app) => (
+                    <StyledTableRow
+                      key={app.id}
+                      onClick={() => handleAppClick(app)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{app.attributes.name}</TableCell>
+                      <TableCell>{app.attributes.description}</TableCell>
+                      <TableCell>
+                        {users[app.attributes.user_id] || "Unknown"}
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, app)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

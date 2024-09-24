@@ -155,26 +155,72 @@ func (a *App) List(db *gorm.DB) (Apps, error) {
 }
 
 // ListWithPagination returns a paginated list of apps
-func (a *App) ListWithPagination(db *gorm.DB, page, pageSize int) (Apps, error) {
-	var apps Apps
-	offset := (page - 1) * pageSize
-	err := db.Offset(offset).Limit(pageSize).Preload("Credential").Find(&apps).Error
-	return apps, err
+func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&App{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Find(a).Error
+	return totalCount, totalPages, err
 }
 
 // ListByUserID returns all apps for a specific user with pagination
-func (a *App) ListByUserID(db *gorm.DB, userID uint, page, pageSize int) (Apps, error) {
-	var apps Apps
-	offset := (page - 1) * pageSize
-	err := db.Where("user_id = ?", userID).Offset(offset).Limit(pageSize).Preload("Credential").Find(&apps).Error
-	return apps, err
+func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&App{}).Where("user_id = ?", userID)
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Find(a).Error
+	return totalCount, totalPages, err
 }
 
-// Search returns apps matching the given search term
-func (a *App) Search(db *gorm.DB, searchTerm string) (Apps, error) {
-	var apps Apps
-	err := db.Where("name LIKE ? OR description LIKE ?", "%"+searchTerm+"%", "%"+searchTerm+"%").Preload("Credential").Find(&apps).Error
-	return apps, err
+// Search returns apps matching the given search term with pagination
+func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber int, all bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&App{}).Where("name LIKE ? OR description LIKE ?", "%"+searchTerm+"%", "%"+searchTerm+"%")
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Find(a).Error
+	return totalCount, totalPages, err
 }
 
 // Count returns the total number of apps

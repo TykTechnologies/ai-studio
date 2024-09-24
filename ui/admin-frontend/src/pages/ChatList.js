@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -28,6 +28,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const ChatList = () => {
   const navigate = useNavigate();
@@ -45,23 +47,47 @@ const ChatList = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
-  useEffect(() => {
-    fetchChats();
-    fetchLLMs();
-    fetchLLMSettings();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchChats = async () => {
+  const fetchChats = useCallback(async () => {
     try {
-      const response = await apiClient.get("/chats");
+      setLoading(true);
+      const response = await apiClient.get("/chats", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
       setChats(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching chats", error);
       setError("Failed to load chats");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchChats();
+  }, [fetchChats]);
+
+  useEffect(() => {
+    fetchLLMs();
+    fetchLLMSettings();
+  }, []);
 
   const fetchLLMs = async () => {
     try {
@@ -102,12 +128,12 @@ const ChatList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/chats/${id}`);
-      setChats(chats.filter((chat) => chat.id !== id));
       setSnackbar({
         open: true,
         message: "Chat deleted successfully",
         severity: "success",
       });
+      fetchChats();
     } catch (error) {
       console.error("Error deleting chat", error);
       setSnackbar({
@@ -138,31 +164,15 @@ const ChatList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedChats = [...chats].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    let aValue = a.attributes[sortConfig.key];
-    let bValue = b.attributes[sortConfig.key];
-    if (sortConfig.key === "llm_id") {
-      aValue = llms[a.attributes.llm_id] || "";
-      bValue = llms[b.attributes.llm_id] || "";
-    } else if (sortConfig.key === "llm_settings_id") {
-      aValue = llmSettings[a.attributes.llm_settings_id] || "";
-      bValue = llmSettings[b.attributes.llm_settings_id] || "";
-    }
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddChat = () => {
     navigate("/chats/new");
   };
 
-  if (loading) {
+  if (loading && chats.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && chats.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -171,7 +181,7 @@ const ChatList = () => {
       <StyledPaper>
         <TitleBox>
           <Box display="flex" alignItems="center">
-            <InfoTooltip title="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to thir group. They can be associated with one or more groups." />
+            <InfoTooltip title="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to their group. They can be associated with one or more groups." />
             <Typography variant="h5">Chat Rooms</Typography>
           </Box>
 
@@ -187,61 +197,70 @@ const ChatList = () => {
           {chats.length === 0 ? (
             <EmptyStateWidget
               title="No chat rooms created yet"
-              description="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to thir group. They can be associated with one or more groups. Create a new chat room by clicking the button below."
+              description="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to their group. They can be associated with one or more groups. Create a new chat room by clicking the button below."
               buttonText="Add Chat Room"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddChat}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("llm_id")}>
-                    LLM
-                  </StyledTableCell>
-                  <StyledTableCell
-                    onClick={() => handleSort("llm_settings_id")}
-                  >
-                    LLM Settings
-                  </StyledTableCell>
-                  <StyledTableCell>Groups</StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedChats.map((chat) => (
-                  <StyledTableRow
-                    key={chat.id}
-                    onClick={() => handleChatClick(chat)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{chat.attributes.name}</TableCell>
-                    <TableCell>
-                      {llms[chat.attributes.llm_id] || "Unknown LLM"}
-                    </TableCell>
-                    <TableCell>
-                      {llmSettings[chat.attributes.llm_settings_id] ||
-                        "Unknown Settings"}
-                    </TableCell>
-                    <TableCell>
-                      {chat.attributes.groups
-                        .map((group) => group.attributes.name)
-                        .join(", ")}
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, chat)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("name")}>
+                      Name
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("llm_id")}>
+                      LLM
+                    </StyledTableCell>
+                    <StyledTableCell
+                      onClick={() => handleSort("llm_settings_id")}
+                    >
+                      LLM Settings
+                    </StyledTableCell>
+                    <StyledTableCell>Groups</StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {chats.map((chat) => (
+                    <StyledTableRow
+                      key={chat.id}
+                      onClick={() => handleChatClick(chat)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{chat.attributes.name}</TableCell>
+                      <TableCell>
+                        {llms[chat.attributes.llm_id] || "Unknown LLM"}
+                      </TableCell>
+                      <TableCell>
+                        {llmSettings[chat.attributes.llm_settings_id] ||
+                          "Unknown Settings"}
+                      </TableCell>
+                      <TableCell>
+                        {chat.attributes.groups
+                          .map((group) => group.attributes.name)
+                          .join(", ")}
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, chat)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

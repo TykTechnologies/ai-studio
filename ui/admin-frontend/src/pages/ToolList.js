@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -15,7 +15,6 @@ import {
   MenuItem,
   Snackbar,
   Box,
-  Tooltip,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
@@ -29,6 +28,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const ToolList = () => {
   const navigate = useNavigate();
@@ -44,21 +45,42 @@ const ToolList = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
-  useEffect(() => {
-    fetchTools();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchTools = async () => {
+  const fetchTools = useCallback(async () => {
     try {
-      const response = await apiClient.get("/tools");
+      setLoading(true);
+      const response = await apiClient.get("/tools", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
       setTools(response.data.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching tools", error);
       setError("Failed to load tools");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
+  useEffect(() => {
+    fetchTools();
+  }, [fetchTools]);
 
   const handleMenuOpen = (event, tool) => {
     event.stopPropagation();
@@ -73,12 +95,12 @@ const ToolList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/tools/${id}`);
-      setTools(tools.filter((tool) => tool.id !== id));
       setSnackbar({
         open: true,
         message: "Tool deleted successfully",
         severity: "success",
       });
+      fetchTools();
     } catch (error) {
       console.error("Error deleting tool", error);
       setSnackbar({
@@ -109,24 +131,15 @@ const ToolList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedTools = [...tools].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue = a.attributes[sortConfig.key];
-    const bValue = b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddTool = () => {
     navigate("/tools/new");
   };
 
-  if (loading) {
+  if (loading && tools.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && tools.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -135,7 +148,7 @@ const ToolList = () => {
       <StyledPaper>
         <TitleBox>
           <Box display="flex" alignItems="center">
-            <InfoTooltip title="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI thas the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request." />
+            <InfoTooltip title="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request." />
             <Typography variant="h5">Tools</Typography>
           </Box>
 
@@ -151,46 +164,57 @@ const ToolList = () => {
           {tools.length === 0 ? (
             <EmptyStateWidget
               title="No tools added yet"
-              description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI thas the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request. Click the button below to add a new tool configuration."
+              description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request. Click the button below to add a new tool configuration."
               buttonText="Add Tool"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddTool}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableCell>
-                  <StyledTableCell>Description</StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("privacy_score")}>
-                    Privacy Score
-                  </StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedTools.map((tool) => (
-                  <StyledTableRow
-                    key={tool.id}
-                    onClick={() => handleToolClick(tool)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{tool.attributes.name}</TableCell>
-                    <TableCell>{tool.attributes.description}</TableCell>
-                    <TableCell>{tool.attributes.privacy_score}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, tool)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("name")}>
+                      Name
+                    </StyledTableCell>
+                    <StyledTableCell>Description</StyledTableCell>
+                    <StyledTableCell
+                      onClick={() => handleSort("privacy_score")}
+                    >
+                      Privacy Score
+                    </StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {tools.map((tool) => (
+                    <StyledTableRow
+                      key={tool.id}
+                      onClick={() => handleToolClick(tool)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{tool.attributes.name}</TableCell>
+                      <TableCell>{tool.attributes.description}</TableCell>
+                      <TableCell>{tool.attributes.privacy_score}</TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, tool)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

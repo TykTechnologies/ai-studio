@@ -321,21 +321,24 @@ func (s *Service) ListApps() (models.Apps, error) {
 }
 
 // ListAppsWithPagination returns a paginated list of apps
-func (s *Service) ListAppsWithPagination(page, pageSize int) (models.Apps, error) {
-	app := models.NewApp()
-	return app.ListWithPagination(s.DB, page, pageSize)
+func (s *Service) ListAppsWithPagination(pageSize, pageNumber int, all bool) (models.Apps, int64, int, error) {
+	var apps models.Apps
+	totalCount, totalPages, err := apps.ListWithPagination(s.DB, pageSize, pageNumber, all)
+	return apps, totalCount, totalPages, err
 }
 
 // ListAppsByUserID returns all apps for a specific user with pagination
-func (s *Service) ListAppsByUserID(userID uint, page, pageSize int) (models.Apps, error) {
-	app := models.NewApp()
-	return app.ListByUserID(s.DB, userID, page, pageSize)
+func (s *Service) ListAppsByUserID(userID uint, pageSize, pageNumber int, all bool) (models.Apps, int64, int, error) {
+	var apps models.Apps
+	totalCount, totalPages, err := apps.ListByUserID(s.DB, userID, pageSize, pageNumber, all)
+	return apps, totalCount, totalPages, err
 }
 
-// SearchApps returns apps matching the given search term
-func (s *Service) SearchApps(searchTerm string) (models.Apps, error) {
-	app := models.NewApp()
-	return app.Search(s.DB, searchTerm)
+// SearchApps returns apps matching the given search term with pagination
+func (s *Service) SearchApps(searchTerm string, pageSize, pageNumber int, all bool) (models.Apps, int64, int, error) {
+	var apps models.Apps
+	totalCount, totalPages, err := apps.Search(s.DB, searchTerm, pageSize, pageNumber, all)
+	return apps, totalCount, totalPages, err
 }
 
 // CountApps returns the total number of apps

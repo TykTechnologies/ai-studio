@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -37,6 +37,8 @@ import {
   fetchVendors,
 } from "../utils/vendorUtils";
 import InfoTooltip from "../components/common/InfoTooltip";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const DatasourceList = () => {
   const navigate = useNavigate();
@@ -53,6 +55,39 @@ const DatasourceList = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [vendors, setVendors] = useState({ embedders: [], vectorStores: [] });
 
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
+
+  const fetchDatasources = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get("/datasources", {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortConfig.key,
+          sort_direction: sortConfig.direction,
+        },
+      });
+      setDatasources(response.data.data || []);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
+    } catch (error) {
+      console.error("Error fetching datasources", error);
+      setError("Failed to load datasources");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, sortConfig, updatePaginationData]);
+
   useEffect(() => {
     const initializePage = async () => {
       const fetchedVendors = await fetchVendors();
@@ -60,19 +95,7 @@ const DatasourceList = () => {
       fetchDatasources();
     };
     initializePage();
-  }, []);
-
-  const fetchDatasources = async () => {
-    try {
-      const response = await apiClient.get("/datasources");
-      setDatasources(response.data.data || []);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching datasources", error);
-      setError("Failed to load datasources");
-      setLoading(false);
-    }
-  };
+  }, [fetchDatasources]);
 
   const handleMenuOpen = (event, datasource) => {
     event.stopPropagation();
@@ -87,12 +110,12 @@ const DatasourceList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/datasources/${id}`);
-      setDatasources(datasources.filter((ds) => ds.id !== id));
       setSnackbar({
         open: true,
         message: "Datasource deleted successfully",
         severity: "success",
       });
+      fetchDatasources();
     } catch (error) {
       console.error("Error deleting datasource", error);
       setSnackbar({
@@ -113,28 +136,11 @@ const DatasourceList = () => {
           attributes: {
             ...datasource.attributes,
             active: !datasource.attributes.active,
-            // Convert tags to an array of strings
             tags: datasource.attributes.tags.map((tag) => tag.attributes.name),
           },
         },
       };
       await apiClient.patch(`/datasources/${datasource.id}`, updatedDatasource);
-
-      // Update local state, keeping the original tag structure
-      setDatasources(
-        datasources.map((ds) =>
-          ds.id === datasource.id
-            ? {
-                ...ds,
-                attributes: {
-                  ...ds.attributes,
-                  active: !ds.attributes.active,
-                },
-              }
-            : ds,
-        ),
-      );
-
       setSnackbar({
         open: true,
         message: `Datasource ${
@@ -142,6 +148,7 @@ const DatasourceList = () => {
         } successfully`,
         severity: "success",
       });
+      fetchDatasources();
     } catch (error) {
       console.error("Error toggling datasource active state", error);
       setSnackbar({
@@ -172,24 +179,15 @@ const DatasourceList = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedDatasources = [...datasources].sort((a, b) => {
-    if (sortConfig.key === null) return 0;
-    const aValue = a.attributes[sortConfig.key];
-    const bValue = b.attributes[sortConfig.key];
-    if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleAddDatasource = () => {
     navigate("/datasources/new");
   };
 
-  if (loading) {
+  if (loading && datasources.length === 0) {
     return <CircularProgress />;
   }
 
-  if (error) {
+  if (error && datasources.length === 0) {
     return <Alert severity="error">{error}</Alert>;
   }
 
@@ -198,7 +196,7 @@ const DatasourceList = () => {
       <StyledPaper>
         <TitleBox>
           <Box display="flex" alignItems="center">
-            <InfoTooltip title="Vector data sources are used to store and retrieve data to enhance conversations with your models. These can be created using embedding providers that vecotrise the content you wish to search, and make for an excellent way to enhance your chat room effectiveness for your users, or to better inform responses in your AI Applications" />
+            <InfoTooltip title="Vector data sources are used to store and retrieve data to enhance conversations with your models. These can be created using embedding providers that vectorise the content you wish to search, and make for an excellent way to enhance your chat room effectiveness for your users, or to better inform responses in your AI Applications" />
             <Typography variant="h5">Vector Data Sources</Typography>
           </Box>
 
@@ -214,115 +212,132 @@ const DatasourceList = () => {
           {datasources.length === 0 ? (
             <EmptyStateWidget
               title="No vector DBs yet"
-              description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vecotrize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
+              description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vectorize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
               buttonText="Add Datasource"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddDatasource}
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableCell>
-                  <StyledTableCell>Short Description</StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("db_source_type")}>
-                    DB Source Type
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("embed_vendor")}>
-                    Embed Vendor
-                  </StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("privacy_score")}>
-                    Privacy Score
-                  </StyledTableCell>
-                  <StyledTableCell>Tags</StyledTableCell>
-                  <StyledTableCell onClick={() => handleSort("active")}>
-                    Active
-                  </StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedDatasources.map((datasource) => (
-                  <StyledTableRow
-                    key={datasource.id}
-                    onClick={() => handleDatasourceClick(datasource)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <TableCell>{datasource.attributes.name}</TableCell>
-                    <TableCell>
-                      {datasource.attributes.short_description}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
-                        <img
-                          src={getVectorStoreLogo(
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <StyledTableCell onClick={() => handleSort("name")}>
+                      Name
+                    </StyledTableCell>
+                    <StyledTableCell>Short Description</StyledTableCell>
+                    <StyledTableCell
+                      onClick={() => handleSort("db_source_type")}
+                    >
+                      DB Source Type
+                    </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("embed_vendor")}>
+                      Embed Vendor
+                    </StyledTableCell>
+                    <StyledTableCell
+                      onClick={() => handleSort("privacy_score")}
+                    >
+                      Privacy Score
+                    </StyledTableCell>
+                    <StyledTableCell>Tags</StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("active")}>
+                      Active
+                    </StyledTableCell>
+                    <StyledTableCell align="right">Actions</StyledTableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {datasources.map((datasource) => (
+                    <StyledTableRow
+                      key={datasource.id}
+                      onClick={() => handleDatasourceClick(datasource)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell>{datasource.attributes.name}</TableCell>
+                      <TableCell>
+                        {datasource.attributes.short_description}
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <img
+                            src={getVectorStoreLogo(
+                              datasource.attributes.db_source_type,
+                            )}
+                            alt={getVectorStoreName(
+                              datasource.attributes.db_source_type,
+                            )}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              marginRight: 8,
+                              objectFit: "contain",
+                            }}
+                          />
+                          {getVectorStoreName(
                             datasource.attributes.db_source_type,
                           )}
-                          alt={getVectorStoreName(
-                            datasource.attributes.db_source_type,
-                          )}
-                          style={{
-                            width: 24,
-                            height: 24,
-                            marginRight: 8,
-                            objectFit: "contain",
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <img
+                            src={getEmbedderLogo(
+                              datasource.attributes.embed_vendor,
+                            )}
+                            alt={getEmbedderName(
+                              datasource.attributes.embed_vendor,
+                            )}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              marginRight: 8,
+                              objectFit: "contain",
+                            }}
+                          />
+                          {getEmbedderName(datasource.attributes.embed_vendor)}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {datasource.attributes.privacy_score}
+                      </TableCell>
+                      <TableCell>
+                        {datasource.attributes.tags.map((tag) => (
+                          <Chip
+                            key={tag.id}
+                            label={tag.attributes.name}
+                            size="small"
+                            sx={{ mr: 0.5, mb: 0.5 }}
+                          />
+                        ))}
+                      </TableCell>
+                      <TableCell>
+                        <FiberManualRecordIcon
+                          sx={{
+                            color: datasource.attributes.active
+                              ? "green"
+                              : "red",
                           }}
                         />
-                        {getVectorStoreName(
-                          datasource.attributes.db_source_type,
-                        )}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
-                        <img
-                          src={getEmbedderLogo(
-                            datasource.attributes.embed_vendor,
-                          )}
-                          alt={getEmbedderName(
-                            datasource.attributes.embed_vendor,
-                          )}
-                          style={{
-                            width: 24,
-                            height: 24,
-                            marginRight: 8,
-                            objectFit: "contain",
-                          }}
-                        />
-                        {getEmbedderName(datasource.attributes.embed_vendor)}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{datasource.attributes.privacy_score}</TableCell>
-                    <TableCell>
-                      {datasource.attributes.tags.map((tag) => (
-                        <Chip
-                          key={tag.id}
-                          label={tag.attributes.name}
-                          size="small"
-                          sx={{ mr: 0.5, mb: 0.5 }}
-                        />
-                      ))}
-                    </TableCell>
-                    <TableCell>
-                      <FiberManualRecordIcon
-                        sx={{
-                          color: datasource.attributes.active ? "green" : "red",
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, datasource)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, datasource)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </StyledTableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </>
           )}
         </ContentBox>
       </StyledPaper>

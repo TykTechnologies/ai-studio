@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
   Typography,
   CircularProgress,
   Box,
-  Button,
   Table,
   TableBody,
   TableCell,
@@ -20,7 +19,6 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   StyledPaper,
   TitleBox,
@@ -30,6 +28,8 @@ import {
   StyledButton,
 } from "../styles/sharedStyles";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
 
 const ToolCatalogueList = () => {
   const [toolCatalogues, setToolCatalogues] = useState([]);
@@ -44,21 +44,40 @@ const ToolCatalogueList = () => {
   });
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchToolCatalogues();
-  }, []);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchToolCatalogues = async () => {
+  const fetchToolCatalogues = useCallback(async () => {
     try {
-      const response = await apiClient.get("/tool-catalogues");
+      setLoading(true);
+      const response = await apiClient.get("/tool-catalogues", {
+        params: {
+          page,
+          page_size: pageSize,
+        },
+      });
       setToolCatalogues(response.data || []);
-      setLoading(false);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+      setError("");
     } catch (error) {
       console.error("Error fetching tool catalogues", error);
       setError("Failed to load tool catalogues");
+    } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, updatePaginationData]);
+
+  useEffect(() => {
+    fetchToolCatalogues();
+  }, [fetchToolCatalogues]);
 
   const handleMenuOpen = (event, catalogue) => {
     setAnchorEl(event.currentTarget);
@@ -72,12 +91,12 @@ const ToolCatalogueList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/tool-catalogues/${id}`);
-      setToolCatalogues(toolCatalogues.filter((cat) => cat.id !== id));
       setSnackbar({
         open: true,
         message: "Tool catalogue deleted successfully",
         severity: "success",
       });
+      fetchToolCatalogues();
     } catch (error) {
       console.error("Error deleting tool catalogue", error);
       setSnackbar({
@@ -108,8 +127,9 @@ const ToolCatalogueList = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if (loading) return <CircularProgress />;
-  if (error) return <Typography color="error">{error}</Typography>;
+  if (loading && toolCatalogues.length === 0) return <CircularProgress />;
+  if (error && toolCatalogues.length === 0)
+    return <Typography color="error">{error}</Typography>;
 
   return (
     <StyledPaper>
@@ -133,64 +153,73 @@ const ToolCatalogueList = () => {
             onButtonClick={handleAddToolCatalogue}
           />
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <StyledTableCell>Name</StyledTableCell>
-                <StyledTableCell>Description</StyledTableCell>
-                <StyledTableCell>Tools</StyledTableCell>
-                <StyledTableCell>Tags</StyledTableCell>
-                <StyledTableCell align="right">Actions</StyledTableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {toolCatalogues.map((catalogue) => (
-                <StyledTableRow
-                  key={catalogue.id}
-                  onClick={() => handleCatalogueClick(catalogue.id)}
-                >
-                  <TableCell>{catalogue.attributes.name}</TableCell>
-                  <TableCell>
-                    {catalogue.attributes.short_description}
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {catalogue.attributes.tools.map((tool) => (
-                        <Chip
-                          key={tool.id}
-                          label={tool.attributes.name}
-                          size="small"
-                          sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                        />
-                      ))}
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {catalogue.attributes.tags.map((tag) => (
-                        <Chip
-                          key={tag.id}
-                          label={tag.attributes.name}
-                          size="small"
-                          sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                        />
-                      ))}
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleMenuOpen(event, catalogue);
-                      }}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                  </TableCell>
-                </StyledTableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <StyledTableCell>Name</StyledTableCell>
+                  <StyledTableCell>Description</StyledTableCell>
+                  <StyledTableCell>Tools</StyledTableCell>
+                  <StyledTableCell>Tags</StyledTableCell>
+                  <StyledTableCell align="right">Actions</StyledTableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {toolCatalogues.map((catalogue) => (
+                  <StyledTableRow
+                    key={catalogue.id}
+                    onClick={() => handleCatalogueClick(catalogue.id)}
+                  >
+                    <TableCell>{catalogue.attributes.name}</TableCell>
+                    <TableCell>
+                      {catalogue.attributes.short_description}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {catalogue.attributes.tools.map((tool) => (
+                          <Chip
+                            key={tool.id}
+                            label={tool.attributes.name}
+                            size="small"
+                            sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+                          />
+                        ))}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {catalogue.attributes.tags.map((tag) => (
+                          <Chip
+                            key={tag.id}
+                            label={tag.attributes.name}
+                            size="small"
+                            sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+                          />
+                        ))}
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleMenuOpen(event, catalogue);
+                        }}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </TableCell>
+                  </StyledTableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <PaginationControls
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </>
         )}
       </ContentBox>
       <Menu
