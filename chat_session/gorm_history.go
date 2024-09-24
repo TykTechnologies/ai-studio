@@ -31,7 +31,7 @@ func WithLimit(limit int) GormChatMessageHistoryOption {
 }
 
 // NewGormChatMessageHistory creates a new GormChatMessageHistory
-func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference *uint, userID *uint, options ...GormChatMessageHistoryOption) *GormChatMessageHistory {
+func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference *uint, userID *uint, systemPrompt string, options ...GormChatMessageHistoryOption) *GormChatMessageHistory {
 	h := &GormChatMessageHistory{
 		DB:      db,
 		Limit:   100, // Default limit
@@ -70,6 +70,13 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference *uint,
 		err := db.Create(chr).Error
 		if err != nil {
 			slog.Error("failed to create chat history record", "error", err)
+		}
+
+		if systemPrompt != "" {
+			err := h.AddSystemMessage(context.Background(), systemPrompt)
+			if err != nil {
+				slog.Error("failed to add system prompt", "error", err)
+			}
 		}
 	}
 
@@ -142,6 +149,12 @@ func (h *GormChatMessageHistory) AddAIMessage(ctx context.Context, text string) 
 // AddUserMessage adds a user message to the chat message history
 func (h *GormChatMessageHistory) AddUserMessage(ctx context.Context, text string) error {
 	mc := llms.TextParts(llms.ChatMessageTypeHuman, text)
+	return h.addMessage(ctx, mc)
+}
+
+// AddSystemMessage adds a system message to the chat message history
+func (h *GormChatMessageHistory) AddSystemMessage(ctx context.Context, text string) error {
+	mc := llms.TextParts(llms.ChatMessageTypeSystem, text)
 	return h.addMessage(ctx, mc)
 }
 

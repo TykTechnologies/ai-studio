@@ -232,7 +232,12 @@ const LLMSettingsForm = () => {
     const { name, value } = e.target;
     setSetting((prevSetting) => ({
       ...prevSetting,
-      [name]: name === "model_name" ? value : parseFloat(value) || 0,
+      [name]:
+        name === "system_prompt"
+          ? value
+          : name === "model_name"
+            ? value
+            : parseFloat(value) || 0,
     }));
   };
 
@@ -525,6 +530,18 @@ const LLMSettingsForm = () => {
                 value={setting.repetition_penalty}
                 onChange={handleChange}
                 tooltip="Penalizes repetition: 1.0 means no penalty, >1.0 discourages repetition. Typically between 1.0 and 1.5"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TooltipTextField
+                fullWidth
+                label="System Prompt"
+                name="system_prompt"
+                value={setting.system_prompt}
+                onChange={handleChange}
+                multiline
+                rows={4}
+                tooltip="A long-form text prompt that sets the context or behavior for the language model"
               />
             </Grid>
           </Grid>

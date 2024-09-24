@@ -290,7 +290,7 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 
 func (cs *ChatSession) initSession() error {
 	// History for the chat session
-	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, &cs.chatRef.ID, cs.userID)
+	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, &cs.chatRef.ID, cs.userID, cs.chatRef.LLMSettings.SystemPrompt)
 
 	// create the LLM client
 	llm, err := cs.fetchDriver(nil)

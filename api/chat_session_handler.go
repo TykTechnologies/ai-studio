@@ -111,7 +111,7 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
-	history := chat_session.NewGormChatMessageHistory(a.service.DB, sessionID, nil, &userID)
+	history := chat_session.NewGormChatMessageHistory(a.service.DB, sessionID, nil, &userID, "") // ignore system prompt as we are pulling from DB
 
 	chat, err := history.GetAssociatedChat(context.Background())
 	if err != nil {

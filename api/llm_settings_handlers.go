@@ -43,6 +43,7 @@ func (a *API) createLLMSettings(c *gin.Context) {
 		Temperature:       input.Data.Attributes.Temperature,
 		TopK:              input.Data.Attributes.TopK,
 		TopP:              input.Data.Attributes.TopP,
+		SystemPrompt:      input.Data.Attributes.SystemPrompt,
 	}
 
 	createdSettings, err := a.service.CreateLLMSettings(settings)
@@ -144,6 +145,7 @@ func (a *API) updateLLMSettings(c *gin.Context) {
 		Temperature:       input.Data.Attributes.Temperature,
 		TopK:              input.Data.Attributes.TopK,
 		TopP:              input.Data.Attributes.TopP,
+		SystemPrompt:      input.Data.Attributes.SystemPrompt,
 	}
 
 	updatedSettings, err := a.service.UpdateLLMSettings(settings)
@@ -278,6 +280,7 @@ func serializeLLMSettings(settings *models.LLMSettings) LLMSettingsResponse {
 			Temperature       float64                `json:"temperature"`
 			TopK              int                    `json:"top_k"`
 			TopP              float64                `json:"top_p"`
+			SystemPrompt      string                 `json:"system_prompt"`
 		}{
 			ModelName:         settings.ModelName,
 			MaxLength:         settings.MaxLength,
@@ -290,6 +293,7 @@ func serializeLLMSettings(settings *models.LLMSettings) LLMSettingsResponse {
 			Temperature:       settings.Temperature,
 			TopK:              settings.TopK,
 			TopP:              settings.TopP,
+			SystemPrompt:      settings.SystemPrompt,
 		},
 	}
 }

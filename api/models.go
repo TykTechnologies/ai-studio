@@ -359,6 +359,7 @@ type LLMSettingsInput struct {
 			Temperature       float64                `json:"temperature"`
 			TopK              int                    `json:"top_k"`
 			TopP              float64                `json:"top_p"`
+			SystemPrompt      string                 `json:"system_prompt"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -379,6 +380,7 @@ type LLMSettingsResponse struct {
 		Temperature       float64                `json:"temperature"`
 		TopK              int                    `json:"top_k"`
 		TopP              float64                `json:"top_p"`
+		SystemPrompt      string                 `json:"system_prompt"`
 	} `json:"attributes"`
 }
 

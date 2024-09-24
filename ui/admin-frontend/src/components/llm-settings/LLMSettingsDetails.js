@@ -274,6 +274,33 @@ const LLMSettingsDetails = () => {
           </Grid>
         </Grid>
 
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>System Prompt</SectionTitle>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <TooltipLabel
+              label="System Prompt:"
+              tooltip="A long-form text prompt that sets the context or behavior for the language model"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <FieldValue
+              sx={{
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                maxHeight: "200px",
+                overflowY: "auto",
+                padding: "10px",
+                border: "1px solid #e0e0e0",
+                borderRadius: "4px",
+              }}
+            >
+              {setting.attributes.system_prompt || "No system prompt set"}
+            </FieldValue>
+          </Grid>
+        </Grid>
+
         <Box mt={4} display="flex" justifyContent="flex-end">
           <StyledButton
             variant="contained"
