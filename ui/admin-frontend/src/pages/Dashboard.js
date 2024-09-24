@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from "react";
+
+import { useNavigate } from "react-router-dom";
+
 import apiClient from "../utils/apiClient";
 import {
   Typography,
@@ -20,9 +23,14 @@ import { Line, Bar } from "react-chartjs-2";
 import { styled } from "@mui/material/styles";
 
 import AddIcon from "@mui/icons-material/Add";
+
+import CloseIcon from "@mui/icons-material/Close";
+
 import CircularProgress from "@mui/material/CircularProgress";
 
 import DataUsageIcon from "@mui/icons-material/DataUsage";
+
+import ChatRoomWizard from "../components/wizards/ChatRoomWizard";
 
 import {
   Chart as ChartJS,
@@ -36,6 +44,7 @@ import {
   Legend,
 } from "chart.js";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
+import IconButton from "@mui/material/IconButton";
 
 ChartJS.register(
   CategoryScale,
@@ -63,7 +72,7 @@ const NoDataMessage = ({ message }) => (
   </Box>
 );
 
-const PortalCatalogWidget = ({ onCreateCatalog }) => (
+const GetStartedWidget = ({ openChatRoomWizard, onClose }) => (
   <Box
     sx={{
       display: "flex",
@@ -73,51 +82,23 @@ const PortalCatalogWidget = ({ onCreateCatalog }) => (
       height: "100%",
       textAlign: "center",
       p: 4,
-      mt: 3,
+      mb: 4,
       backgroundColor: (theme) => theme.palette.custom.lightTeal,
       boxShadow: (theme) => theme.shadows[4],
       borderRadius: (theme) => theme.shape.borderRadius,
+      position: "relative",
     }}
   >
-    <Typography variant="h4" gutterBottom>
-      Grant devs access to LLMs with the AI Gateway
-    </Typography>
-    <Typography variant="body1" paragraph>
-      Techical users can use the AI Gateway to access both streaming and
-      non-streaming APIs of the most popular AI models.
-    </Typography>
-    <Button
-      variant="contained"
+    <IconButton
+      onClick={onClose}
       sx={{
-        backgroundColor: (theme) => theme.palette.custom.purpleDark,
-        color: "white",
-        "&:hover": {
-          backgroundColor: (theme) => theme.palette.custom.purpleLight,
-        },
+        position: "absolute",
+        top: 8,
+        right: 8,
       }}
-      onClick={onCreateCatalog}
-      startIcon={<AddIcon />}
     >
-      Create your Portal Catalog
-    </Button>
-  </Box>
-);
-
-const GetStartedWidget = ({ onStartWizard }) => (
-  <Box
-    sx={{
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      height: "100%",
-      textAlign: "center",
-      p: 4,
-      backgroundColor: (theme) => theme.palette.custom.lightTeal,
-      boxShadow: (theme) => theme.shadows[4],
-      borderRadius: (theme) => theme.shape.borderRadius,
-    }}
-  >
+      <CloseIcon />
+    </IconButton>
     <Typography variant="h4" gutterBottom>
       Get started with your first smart chat room
     </Typography>
@@ -134,15 +115,28 @@ const GetStartedWidget = ({ onStartWizard }) => (
           backgroundColor: (theme) => theme.palette.custom.purpleLight,
         },
       }}
-      onClick={onStartWizard}
+      onClick={openChatRoomWizard}
       startIcon={<AddIcon />}
     >
-      Start Wizard
+      Create Chat Room
     </Button>
   </Box>
 );
 
 const Dashboard = () => {
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+
+  const [isChatRoomWizardOpen, setIsChatRoomWizardOpen] = useState(false);
+
+  const openChatRoomWizard = () => {
+    setIsChatRoomWizardOpen(true);
+  };
+
+  const closeChatRoomWizard = () => {
+    setIsChatRoomWizardOpen(false);
+    fetchData();
+  };
+
   const [chatData, setChatData] = useState(null);
   const [costData, setCostData] = useState({});
   const [llmModelData, setLLMModelData] = useState(null);
@@ -153,6 +147,15 @@ const Dashboard = () => {
 
   const [llms, setLLMs] = useState([]);
   const [llmsLoading, setLLMsLoading] = useState(true);
+  const [chats, setChats] = useState([]);
+  const [chatsLoading, setChatsLoading] = useState(true);
+
+  const [showGetStartedWidget, setShowGetStartedWidget] = useState(true);
+
+  const hideGetStartedWidget = () => {
+    setShowGetStartedWidget(false);
+    localStorage.setItem("hideGetStartedWidget", "true");
+  };
 
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000)
@@ -167,20 +170,24 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const hideGetStarted =
+      localStorage.getItem("hideGetStartedWidget") === "true";
+    const shouldShowWidget = !hideGetStarted && chats.length === 0;
+    setShowGetStartedWidget(shouldShowWidget);
+  }, [chats.length]);
+
   const fetchData = async () => {
     try {
-      const llmResponse = await apiClient.get("/llms");
+      const [llmResponse, chatResponse] = await Promise.all([
+        apiClient.get("/llms"),
+        apiClient.get("/chats"),
+      ]);
       setLLMs(llmResponse.data.data || []);
-    } catch (error) {
-      console.error("Error fetching LLMs", error);
-      setLLMs([]);
-    } finally {
-      setLLMsLoading(false);
-    }
+      setChats(chatResponse.data.data || []);
 
-    try {
       const [
-        chatResponse,
+        chatDataResponse,
         costResponse,
         llmModelResponse,
         toolUsageResponse,
@@ -207,14 +214,35 @@ const Dashboard = () => {
         }),
       ]);
 
-      setChatData(chatResponse.data);
+      setChatData(chatDataResponse.data);
       setCostData(costResponse.data);
       setLLMModelData(llmModelResponse.data);
       setToolUsageData(toolUsageResponse.data);
       setUserActivityData(userActivityResponse.data);
       setVendorModelCostData(vendorModelCostResponse.data);
     } catch (error) {
-      console.error("Error fetching dashboard data", error);
+      console.error("Error fetching data:", error);
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+        console.error("Response headers:", error.response.headers);
+      } else if (error.request) {
+        console.error("No response received:", error.request);
+      } else {
+        console.error("Error setting up request:", error.message);
+      }
+      // Set default values for all state variables
+      setLLMs([]);
+      setChats([]);
+      setChatData(null);
+      setCostData({});
+      setLLMModelData(null);
+      setToolUsageData(null);
+      setUserActivityData(null);
+      setVendorModelCostData([]);
+    } finally {
+      setLLMsLoading(false);
+      setChatsLoading(false);
     }
   };
 
@@ -339,23 +367,16 @@ const Dashboard = () => {
 
   return (
     <div>
-      {llmsLoading ? (
+      {llmsLoading || chatsLoading ? (
         <CircularProgress />
-      ) : llms.length === 0 ? (
-        <>
-          <GetStartedWidget
-            onStartWizard={() => {
-              /* Implement wizard start logic */
-            }}
-          />
-          <PortalCatalogWidget
-            onCreateCatalog={() => {
-              /* Implement catalog creation logic */
-            }}
-          />
-        </>
       ) : (
         <>
+          {chats.length === 0 && showGetStartedWidget && (
+            <GetStartedWidget
+              openChatRoomWizard={openChatRoomWizard}
+              onClose={hideGetStartedWidget}
+            />
+          )}
           <Box
             display="flex"
             justifyContent="space-between"
@@ -575,6 +596,12 @@ const Dashboard = () => {
           </Box>
         </>
       )}
+
+      <ChatRoomWizard
+        open={isChatRoomWizardOpen}
+        onClose={closeChatRoomWizard}
+        fetchData={fetchData}
+      />
     </div>
   );
 };
