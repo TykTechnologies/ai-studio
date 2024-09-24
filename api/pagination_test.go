@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +23,22 @@ func TestPagination_LLMPagination(t *testing.T) {
 	assert.NoError(t, err)
 
 	service := services.NewService(db)
-	api := NewAPI(service, true)
+
+	config := auth.Config{
+		DB:                  db,
+		Service:             service,
+		CookieName:          "session",
+		CookieSecure:        true,
+		CookieHTTPOnly:      true,
+		CookieSameSite:      http.SameSiteStrictMode,
+		ResetTokenExpiry:    time.Hour,
+		FrontendURL:         "http://example.com",
+		RegistrationAllowed: true,
+		AdminEmail:          "admin@example.com",
+		TestMode:            true,
+	}
+
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()))
 
 	// Create multiple LLMs
 	for i := 1; i <= 15; i++ {
@@ -103,7 +120,21 @@ func TestPagination_UserPagination(t *testing.T) {
 	assert.NoError(t, err)
 
 	service := services.NewService(db)
-	api := NewAPI(service, true)
+	config := auth.Config{
+		DB:                  db,
+		Service:             service,
+		CookieName:          "session",
+		CookieSecure:        true,
+		CookieHTTPOnly:      true,
+		CookieSameSite:      http.SameSiteStrictMode,
+		ResetTokenExpiry:    time.Hour,
+		FrontendURL:         "http://example.com",
+		RegistrationAllowed: true,
+		AdminEmail:          "admin@example.com",
+		TestMode:            true,
+	}
+
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()))
 
 	// Create multiple users
 	for i := 1; i <= 15; i++ {

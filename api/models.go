@@ -608,3 +608,158 @@ type GroupToolCatalogueInput struct {
 		ID   string `json:"id"`
 	} `json:"data"`
 }
+
+// LoginInput represents the input for login operations
+// @Description Login input model
+type LoginInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Email    string `json:"email"`
+			Password string `json:"password"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// RegisterInput represents the input for registration operations
+// @Description Register input model
+type RegisterInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Email    string `json:"email"`
+			Name     string `json:"name"`
+			Password string `json:"password"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ForgotPasswordInput represents the input for forgot password operations
+// @Description Forgot Password input model
+type ForgotPasswordInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Email string `json:"email"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ResetPasswordInput represents the input for reset password operations
+// @Description Reset Password input model
+type ResetPasswordInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Token    string `json:"token"`
+			Password string `json:"password"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// VerifyEmailInput represents the input for email verification operations
+// @Description Verify Email input model
+type VerifyEmailInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Token string `json:"token"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ResendVerificationInput represents the input for resending verification email operations
+// @Description Resend Verification input model
+type ResendVerificationInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Email string `json:"email"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// AuthResponse represents the response for successful authentication operations
+// @Description Auth response model
+type AuthResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Token string `json:"token"`
+		User  struct {
+			ID    string `json:"id"`
+			Email string `json:"email"`
+			Name  string `json:"name"`
+		} `json:"user"`
+	} `json:"attributes"`
+}
+
+// LoginResponse represents the response for successful login
+type LoginResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// RegisterResponse represents the response for successful registration
+type RegisterResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// LogoutResponse represents the response for successful logout
+type LogoutResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ForgotPasswordResponse represents the response for forgot password request
+type ForgotPasswordResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ResetPasswordResponse represents the response for successful password reset
+type ResetPasswordResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// VerifyEmailResponse represents the response for successful email verification
+type VerifyEmailResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ResendVerificationResponse represents the response for resending verification email
+type ResendVerificationResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Message string `json:"message"`
+		} `json:"attributes"`
+	} `json:"data"`
+}

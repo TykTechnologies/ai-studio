@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -25,7 +27,22 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 	assert.NoError(t, err)
 
 	service := services.NewService(db)
-	api := NewAPI(service, true)
+
+	config := auth.Config{
+		DB:                  db,
+		Service:             service,
+		CookieName:          "session",
+		CookieSecure:        true,
+		CookieHTTPOnly:      true,
+		CookieSameSite:      http.SameSiteStrictMode,
+		ResetTokenExpiry:    time.Hour,
+		FrontendURL:         "http://example.com",
+		RegistrationAllowed: true,
+		AdminEmail:          "admin@example.com",
+		TestMode:            true,
+	}
+
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()))
 
 	return api, db
 }
@@ -1075,6 +1092,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				SystemPrompt      string                 `json:"system_prompt"`
 			} `json:"attributes"`
 		}{
 			Type: "llm-settings",
@@ -1090,6 +1108,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				SystemPrompt      string                 `json:"system_prompt"`
 			}{
 				ModelName:         "TestModel",
 				MaxLength:         100,
@@ -1102,6 +1121,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature:       0.7,
 				TopK:              40,
 				TopP:              0.9,
+				SystemPrompt:      "Test prompt",
 			},
 		},
 	}
@@ -1136,6 +1156,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				SystemPrompt      string                 `json:"system_prompt"`
 			} `json:"attributes"`
 		}{
 			Type: "llm-settings",
@@ -1151,6 +1172,7 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 				Temperature       float64                `json:"temperature"`
 				TopK              int                    `json:"top_k"`
 				TopP              float64                `json:"top_p"`
+				SystemPrompt      string                 `json:"system_prompt"`
 			}{
 				ModelName:         "UpdatedTestModel",
 				MaxLength:         120,
