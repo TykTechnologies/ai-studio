@@ -195,15 +195,19 @@ func (a *API) deleteToolCatalogue(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /tool-catalogues [get]
 func (a *API) listToolCatalogues(c *gin.Context) {
-	toolCatalogues, err := a.service.GetAllToolCatalogues()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	toolCatalogues, totalCount, totalPages, err := a.service.GetAllToolCatalogues(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
-		}{{"Internal Server Error", err.Error()}}})
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, toToolCatalogueResponses(toolCatalogues))
 }
 

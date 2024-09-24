@@ -80,6 +80,7 @@ func TestFilterEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var listResponse []FilterResponse
+	fmt.Println(w.Body.String())
 	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 	assert.NoError(t, err)
 	assert.Len(t, listResponse, 1)

@@ -215,7 +215,9 @@ func (a *API) deleteDatasource(c *gin.Context) {
 // @Router /datasources [get]
 // @Security BearerAuth
 func (a *API) listDatasources(c *gin.Context) {
-	datasources, err := a.service.GetAllDatasources()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	datasources, totalCount, totalPages, err := a.service.GetAllDatasources(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -226,6 +228,8 @@ func (a *API) listDatasources(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
 }
 

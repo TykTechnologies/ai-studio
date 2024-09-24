@@ -229,7 +229,9 @@ func (a *API) deleteModelPrice(c *gin.Context) {
 // @Router /model-prices [get]
 // @Security BearerAuth
 func (a *API) getAllModelPrices(c *gin.Context) {
-	modelPrices, err := a.service.GetAllModelPrices()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	modelPrices, totalCount, totalPages, err := a.service.GetAllModelPrices(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -240,6 +242,8 @@ func (a *API) getAllModelPrices(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrices(modelPrices)})
 }
 

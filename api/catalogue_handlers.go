@@ -178,7 +178,9 @@ func (a *API) deleteCatalogue(c *gin.Context) {
 // @Router /catalogues [get]
 // @Security BearerAuth
 func (a *API) listCatalogues(c *gin.Context) {
-	catalogues, err := a.service.GetAllCatalogues()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	catalogues, totalCount, totalPages, err := a.service.GetAllCatalogues(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -188,6 +190,9 @@ func (a *API) listCatalogues(c *gin.Context) {
 		})
 		return
 	}
+
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
 	// Ensure LLMs are loaded for each catalogue
 	for i := range catalogues {

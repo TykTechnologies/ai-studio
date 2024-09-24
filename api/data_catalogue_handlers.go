@@ -189,7 +189,9 @@ func (a *API) deleteDataCatalogue(c *gin.Context) {
 // @Router /data-catalogues [get]
 // @Security BearerAuth
 func (a *API) listDataCatalogues(c *gin.Context) {
-	dataCatalogues, err := a.service.GetAllDataCatalogues()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	dataCatalogues, totalCount, totalPages, err := a.service.GetAllDataCatalogues(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -200,6 +202,8 @@ func (a *API) listDataCatalogues(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogues(dataCatalogues)})
 }
 

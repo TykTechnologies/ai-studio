@@ -207,7 +207,9 @@ func (a *API) deleteLLMSettings(c *gin.Context) {
 // @Router /llm-settings [get]
 // @Security BearerAuth
 func (a *API) listLLMSettings(c *gin.Context) {
-	settings, err := a.service.GetAllLLMSettings()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	settings, totalCount, totalPages, err := a.service.GetAllLLMSettings(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -218,6 +220,8 @@ func (a *API) listLLMSettings(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeLLMSettingsSlice(settings)})
 }
 

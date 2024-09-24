@@ -190,7 +190,9 @@ func (a *API) deleteChat(c *gin.Context) {
 // @Router /chats [get]
 // @Security BearerAuth
 func (a *API) listChats(c *gin.Context) {
-	chats, err := a.service.ListChats()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	chats, totalCount, totalPages, err := a.service.ListChats(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -201,6 +203,8 @@ func (a *API) listChats(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats)})
 }
 

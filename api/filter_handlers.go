@@ -178,7 +178,9 @@ func (a *API) deleteFilter(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /filters [get]
 func (a *API) listFilters(c *gin.Context) {
-	filters, err := a.service.GetAllFilters()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	filters, totalCount, totalPages, err := a.service.GetAllFilters(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -187,6 +189,8 @@ func (a *API) listFilters(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, toFilterResponses(filters))
 }
 

@@ -178,7 +178,9 @@ func (a *API) deleteUser(c *gin.Context) {
 // @Router /users [get]
 // @Security BearerAuth
 func (a *API) listUsers(c *gin.Context) {
-	users, err := a.service.GetAllUsers()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	users, totalCount, totalPages, err := a.service.GetAllUsers(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -189,6 +191,8 @@ func (a *API) listUsers(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
 }
 

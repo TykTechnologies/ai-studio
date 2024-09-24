@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -45,6 +46,27 @@ func NewAPI(service *services.Service, disableCORS bool) *API {
 
 func (a *API) Run(addr string) error {
 	return a.router.Run(addr)
+}
+
+// getPaginationParams extracts pagination parameters from the request
+// If no parameters are provided, it returns default values for "all" pagination
+func getPaginationParams(c *gin.Context) (int, int, bool) {
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "0"))
+	pageNumber, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	allStr := c.DefaultQuery("all", "false")
+	all := false
+
+	if strings.ToLower(allStr) == "true" {
+		all = true
+	}
+
+	if pageSize == 0 {
+		// divide by zero!
+		pageSize = 1
+		all = true
+	}
+
+	return pageSize, pageNumber, all
 }
 
 func (a *API) setupRoutes() {

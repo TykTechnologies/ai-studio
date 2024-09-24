@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -285,4 +286,104 @@ func TestLLMs_GetByPrivacyScoreRange(t *testing.T) {
 	err := fetchedLLMs.GetByPrivacyScoreRange(db, 80, 70)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedLLMs, 0)
+}
+
+func TestLLMs_GetAll_Pagination(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create 25 test LLMs
+	for i := 1; i <= 25; i++ {
+		llm := &LLM{
+			Name:        fmt.Sprintf("LLM%d", i),
+			APIKey:      fmt.Sprintf("key%d", i),
+			APIEndpoint: fmt.Sprintf("https://api%d.com", i),
+		}
+		err := llm.Create(db)
+		assert.NoError(t, err)
+	}
+
+	testCases := []struct {
+		name           string
+		pageSize       int
+		pageNumber     int
+		all            bool
+		expectedCount  int
+		expectedTotal  int64
+		expectedPages  int
+		expectedFirst  string
+		expectedLast   string
+	}{
+		{
+			name:           "First page of 10",
+			pageSize:       10,
+			pageNumber:     1,
+			all:            false,
+			expectedCount:  10,
+			expectedTotal:  25,
+			expectedPages:  3,
+			expectedFirst:  "LLM1",
+			expectedLast:   "LLM10",
+		},
+		{
+			name:           "Second page of 10",
+			pageSize:       10,
+			pageNumber:     2,
+			all:            false,
+			expectedCount:  10,
+			expectedTotal:  25,
+			expectedPages:  3,
+			expectedFirst:  "LLM11",
+			expectedLast:   "LLM20",
+		},
+		{
+			name:           "Last page of 10",
+			pageSize:       10,
+			pageNumber:     3,
+			all:            false,
+			expectedCount:  5,
+			expectedTotal:  25,
+			expectedPages:  3,
+			expectedFirst:  "LLM21",
+			expectedLast:   "LLM25",
+		},
+		{
+			name:           "Page size larger than total",
+			pageSize:       30,
+			pageNumber:     1,
+			all:            false,
+			expectedCount:  25,
+			expectedTotal:  25,
+			expectedPages:  1,
+			expectedFirst:  "LLM1",
+			expectedLast:   "LLM25",
+		},
+		{
+			name:           "Get all LLMs",
+			pageSize:       10,
+			pageNumber:     1,
+			all:            true,
+			expectedCount:  25,
+			expectedTotal:  25,
+			expectedPages:  3,
+			expectedFirst:  "LLM1",
+			expectedLast:   "LLM25",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var fetchedLLMs LLMs
+			totalCount, totalPages, err := fetchedLLMs.GetAll(db, tc.pageSize, tc.pageNumber, tc.all)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedTotal, totalCount)
+			assert.Equal(t, tc.expectedPages, totalPages)
+			assert.Len(t, fetchedLLMs, tc.expectedCount)
+
+			if len(fetchedLLMs) > 0 {
+				assert.Equal(t, tc.expectedFirst, fetchedLLMs[0].Name)
+				assert.Equal(t, tc.expectedLast, fetchedLLMs[len(fetchedLLMs)-1].Name)
+			}
+		})
+	}
 }

@@ -227,7 +227,9 @@ func (a *API) deleteTool(c *gin.Context) {
 // @Router /tools [get]
 // @Security BearerAuth
 func (a *API) getAllTools(c *gin.Context) {
-	tools, err := a.service.GetAllTools()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	tools, totalCount, totalPages, err := a.service.GetAllTools(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -238,6 +240,8 @@ func (a *API) getAllTools(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools)})
 }
 

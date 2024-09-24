@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -126,4 +127,128 @@ func TestLLMSettingsService_MultipleSettings(t *testing.T) {
 	remainingSettings, _, _, err := service.GetAllLLMSettings(10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, *remainingSettings, 0)
+}
+
+func setupTestDBForLLMPagination(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	err = models.InitModels(db)
+	assert.NoError(t, err)
+
+	return db
+}
+
+func TestLLMServicePagination(t *testing.T) {
+	db := setupTestDBForLLMPagination(t)
+	service := NewService(db)
+
+	// Create 25 test LLMs
+	for i := 1; i <= 25; i++ {
+		_, err := service.CreateLLM(
+			fmt.Sprintf("LLM%d", i),
+			fmt.Sprintf("key%d", i),
+			fmt.Sprintf("https://api%d.com", i),
+			75,
+			"Short desc",
+			"Long desc",
+			"https://logo.test",
+			models.OPENAI,
+			true,
+		)
+		assert.NoError(t, err)
+	}
+
+	testCases := []struct {
+		name          string
+		pageSize      int
+		pageNumber    int
+		all           bool
+		expectedCount int
+		expectedTotal int64
+		expectedPages int
+		expectedFirst string
+		expectedLast  string
+	}{
+		{
+			name:          "First page of 10",
+			pageSize:      10,
+			pageNumber:    1,
+			all:           false,
+			expectedCount: 10,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM1",
+			expectedLast:  "LLM10",
+		},
+		{
+			name:          "Second page of 10",
+			pageSize:      10,
+			pageNumber:    2,
+			all:           false,
+			expectedCount: 10,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM11",
+			expectedLast:  "LLM20",
+		},
+		{
+			name:          "Last page of 10",
+			pageSize:      10,
+			pageNumber:    3,
+			all:           false,
+			expectedCount: 5,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM21",
+			expectedLast:  "LLM25",
+		},
+		{
+			name:          "Page size larger than total",
+			pageSize:      30,
+			pageNumber:    1,
+			all:           false,
+			expectedCount: 25,
+			expectedTotal: 25,
+			expectedPages: 1,
+			expectedFirst: "LLM1",
+			expectedLast:  "LLM25",
+		},
+		{
+			name:          "Get all LLMs",
+			pageSize:      10,
+			pageNumber:    1,
+			all:           true,
+			expectedCount: 25,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM1",
+			expectedLast:  "LLM25",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			llms, totalCount, totalPages, err := service.GetAllLLMs(tc.pageSize, tc.pageNumber, tc.all)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedTotal, totalCount)
+			assert.Equal(t, tc.expectedPages, totalPages)
+			assert.Len(t, llms, tc.expectedCount)
+
+			if len(llms) > 0 {
+				assert.Equal(t, tc.expectedFirst, llms[0].Name)
+				assert.Equal(t, tc.expectedLast, llms[len(llms)-1].Name)
+			}
+		})
+	}
+
+	// Test invalid page number
+	t.Run("Invalid page number", func(t *testing.T) {
+		llms, totalCount, totalPages, err := service.GetAllLLMs(10, 10, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(25), totalCount)
+		assert.Equal(t, 3, totalPages)
+		assert.Len(t, llms, 0)
+	})
 }

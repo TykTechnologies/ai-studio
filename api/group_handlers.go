@@ -179,7 +179,9 @@ func (a *API) deleteGroup(c *gin.Context) {
 // @Router /groups [get]
 // @Security BearerAuth
 func (a *API) listGroups(c *gin.Context) {
-	groups, err := a.service.GetAllGroups()
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	groups, totalCount, totalPages, err := a.service.GetAllGroups(pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -190,6 +192,8 @@ func (a *API) listGroups(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
 }
 
@@ -900,7 +904,9 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 		return
 	}
 
-	toolCatalogues, err := a.service.GetGroupToolCatalogues(uint(groupID))
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	toolCatalogues, totalCount, totalPages, err := a.service.GetGroupToolCatalogues(uint(groupID), pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -911,6 +917,8 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues)})
 }
 
