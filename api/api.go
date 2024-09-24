@@ -32,13 +32,15 @@ type API struct {
 	service     *services.Service
 	router      *gin.Engine
 	disableCORS bool
+	auth        *auth.AuthService
 }
 
-func NewAPI(service *services.Service, disableCORS bool) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService) *API {
 	api := &API{
 		service:     service,
 		router:      gin.Default(),
 		disableCORS: disableCORS,
+		auth:        authService,
 	}
 	api.setupRoutes()
 	return api
@@ -74,43 +76,57 @@ func (a *API) setupRoutes() {
 		a.router.Use(a.corsMiddleware())
 	}
 
-	a.router.Use(a.authMiddleware())
-
 	v1 := a.router.Group("/api/v1")
 	{
-		// User routes
-		v1.POST("/users", a.createUser)
-		v1.GET("/users/:id", a.getUser)
-		v1.PATCH("/users/:id", a.updateUser)
-		v1.DELETE("/users/:id", a.deleteUser)
-		v1.GET("/users", a.listUsers)
-		v1.GET("/users/:id/catalogues", a.getUserAccessibleCatalogues)
+		// Public routes
+		v1.POST("/auth/login", a.handleLogin)
+		v1.POST("/auth/register", a.handleRegister)
+		v1.POST("/auth/forgot-password", a.handleForgotPassword)
+		v1.POST("/auth/reset-password", a.handleResetPassword)
+		v1.GET("/auth/verify-email", a.handleVerifyEmail)
+		v1.POST("/auth/resend-verification", a.handleResendVerification)
 
-		// Group routes
-		v1.POST("/groups", a.createGroup)
-		v1.GET("/groups/:id", a.getGroup)
-		v1.PATCH("/groups/:id", a.updateGroup)
-		v1.DELETE("/groups/:id", a.deleteGroup)
-		v1.GET("/groups", a.listGroups)
-		v1.POST("/groups/:id/users", a.addUserToGroup)
-		v1.DELETE("/groups/:id/users/:userId", a.removeUserFromGroup)
-		v1.GET("/groups/:id/users", a.listGroupUsers)
-		v1.POST("/groups/:id/catalogues", a.addCatalogueToGroup)
-		v1.DELETE("/groups/:id/catalogues/:catalogueId", a.removeCatalogueFromGroup)
-		v1.GET("/groups/:id/catalogues", a.listGroupCatalogues)
-		v1.GET("/users/:id/groups", a.getUserGroups)
-		v1.POST("/groups/:id/data-catalogues", a.addDataCatalogueToGroup)
-		v1.DELETE("/groups/:id/data-catalogues/:dataCatalogueId", a.removeDataCatalogueFromGroup)
-		v1.GET("/groups/:id/data-catalogues", a.listGroupDataCatalogues)
-		v1.POST("/groups/:id/tool-catalogues", a.addToolCatalogueToGroup)
-		v1.DELETE("/groups/:id/tool-catalogues/:toolCatalogueId", a.removeToolCatalogueFromGroup)
-		v1.GET("/groups/:id/tool-catalogues", a.listGroupToolCatalogues)
+		// Protected routes
+		protected := v1.Group("/")
+		protected.Use(a.auth.AuthMiddleware())
+		{
+			protected.POST("/auth/logout", a.handleLogout)
 
-		// LLM routes
-		v1.POST("/llms", a.createLLM)
-		v1.GET("/llms/:id", a.getLLM)
-		v1.PATCH("/llms/:id", a.updateLLM)
-		v1.DELETE("/llms/:id", a.deleteLLM)
+			// User routes
+			protected.GET("/users/:id", a.getUser)
+			protected.PATCH("/users/:id", a.updateUser)
+			protected.DELETE("/users/:id", a.deleteUser)
+			protected.GET("/users", a.listUsers)
+			protected.GET("/users/:id/catalogues", a.getUserAccessibleCatalogues)
+
+			// Group routes
+			protected.POST("/groups", a.createGroup)
+			protected.GET("/groups/:id", a.getGroup)
+			protected.PATCH("/groups/:id", a.updateGroup)
+			protected.DELETE("/groups/:id", a.deleteGroup)
+			protected.GET("/groups", a.listGroups)
+			protected.POST("/groups/:id/users", a.addUserToGroup)
+			protected.DELETE("/groups/:id/users/:userId", a.removeUserFromGroup)
+			protected.GET("/groups/:id/users", a.listGroupUsers)
+			protected.POST("/groups/:id/catalogues", a.addCatalogueToGroup)
+			protected.DELETE("/groups/:id/catalogues/:catalogueId", a.removeCatalogueFromGroup)
+			protected.GET("/groups/:id/catalogues", a.listGroupCatalogues)
+			protected.GET("/users/:id/groups", a.getUserGroups)
+			protected.POST("/groups/:id/data-catalogues", a.addDataCatalogueToGroup)
+			protected.DELETE("/groups/:id/data-catalogues/:dataCatalogueId", a.removeDataCatalogueFromGroup)
+			protected.GET("/groups/:id/data-catalogues", a.listGroupDataCatalogues)
+			protected.POST("/groups/:id/tool-catalogues", a.addToolCatalogueToGroup)
+			protected.DELETE("/groups/:id/tool-catalogues/:toolCatalogueId", a.removeToolCatalogueFromGroup)
+			protected.GET("/groups/:id/tool-catalogues", a.listGroupToolCatalogues)
+
+			// LLM routes
+			protected.POST("/llms", a.createLLM)
+			protected.GET("/llms/:id", a.getLLM)
+			protected.PATCH("/llms/:id", a.updateLLM)
+			protected.DELETE("/llms/:id", a.deleteLLM)
+		}
+	}
+}
 		v1.GET("/llms", a.listLLMs)
 		v1.GET("/llms/search", a.searchLLMs)
 		v1.GET("/llms/max-privacy-score", a.getLLMsByMaxPrivacyScore)
