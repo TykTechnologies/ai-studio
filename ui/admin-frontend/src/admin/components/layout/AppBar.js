@@ -2,13 +2,12 @@ import React from "react";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
-
-import NotificationsIcon from "@mui/icons-material/Notifications";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { useNavigate } from "react-router-dom";
 import { styled } from "@mui/material/styles";
 import logo from "./logo.svg"; // Make sure this path is correct
 import { StyledIconButton } from "../../styles/sharedStyles";
+import apiClient from "../../utils/apiClient"; // Make sure this path is correct
 
 const Logo = styled("img")(({ theme }) => ({
   height: "40px", // Adjust this value to fit your needs
@@ -18,9 +17,20 @@ const Logo = styled("img")(({ theme }) => ({
 const MyAppBar = () => {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      // Call the logout API
+      await apiClient.post("/logout");
+
+      // Clear any local storage items if needed
+      localStorage.removeItem("token");
+
+      // Redirect to login page
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // You might want to show an error message to the user here
+    }
   };
 
   return (

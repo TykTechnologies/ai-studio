@@ -9,6 +9,7 @@ type UserInput struct {
 			Email    string `json:"email"`
 			Name     string `json:"name"`
 			Password string `json:"password,omitempty"`
+			IsAdmin  bool   `json:"is_admin"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -57,8 +58,9 @@ type UserResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email string `json:"email"`
-		Name  string `json:"name"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		IsAdmin bool   `json:"is_admin"`
 	} `json:"attributes"`
 }
 

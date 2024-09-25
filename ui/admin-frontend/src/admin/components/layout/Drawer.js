@@ -35,7 +35,7 @@ const drawerWidth = 240;
 const minimizedDrawerWidth = 60;
 
 const menuItems = [
-  { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+  { text: "Dashboard", icon: <DashboardIcon />, path: "/dash" },
   {
     text: "Team",
     icon: <PeopleIcon />,

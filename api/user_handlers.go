@@ -31,7 +31,7 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.CreateUser(input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.Password)
+	user, err := a.service.CreateUser(input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.Password, input.Data.Attributes.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -117,7 +117,7 @@ func (a *API) updateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.UpdateUser(uint(id), input.Data.Attributes.Email, input.Data.Attributes.Name)
+	user, err := a.service.UpdateUser(uint(id), input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -227,11 +227,13 @@ func serializeUser(user *models.User) UserResponse {
 		Type: "users",
 		ID:   strconv.FormatUint(uint64(user.ID), 10),
 		Attributes: struct {
-			Email string `json:"email"`
-			Name  string `json:"name"`
+			Email   string `json:"email"`
+			Name    string `json:"name"`
+			IsAdmin bool   `json:"is_admin"`
 		}{
-			Email: user.Email,
-			Name:  user.Name,
+			Email:   user.Email,
+			Name:    user.Name,
+			IsAdmin: user.IsAdmin,
 		},
 	}
 }

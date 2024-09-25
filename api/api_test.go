@@ -66,18 +66,20 @@ func TestUserEndpoints(t *testing.T) {
 	// Test Create User
 	createUserInput := UserInput{
 		Data: struct {
-			Type       string "json:\"type\""
+			Type       string `json:"type"`
 			Attributes struct {
-				Email    string "json:\"email\""
-				Name     string "json:\"name\""
-				Password string "json:\"password,omitempty\""
-			} "json:\"attributes\""
+				Email    string `json:"email"`
+				Name     string `json:"name"`
+				Password string `json:"password,omitempty"`
+				IsAdmin  bool   `json:"is_admin"`
+			} `json:"attributes"`
 		}{
 			Type: "users",
 			Attributes: struct {
-				Email    string "json:\"email\""
-				Name     string "json:\"name\""
-				Password string "json:\"password,omitempty\""
+				Email    string `json:"email"`
+				Name     string `json:"name"`
+				Password string `json:"password,omitempty"`
+				IsAdmin  bool   `json:"is_admin"`
 			}{
 				Email:    "test@example.com",
 				Name:     "Test User",
@@ -103,18 +105,20 @@ func TestUserEndpoints(t *testing.T) {
 	// Test Update User
 	updateUserInput := UserInput{
 		Data: struct {
-			Type       string "json:\"type\""
+			Type       string `json:"type"`
 			Attributes struct {
-				Email    string "json:\"email\""
-				Name     string "json:\"name\""
-				Password string "json:\"password,omitempty\""
-			} "json:\"attributes\""
+				Email    string `json:"email"`
+				Name     string `json:"name"`
+				Password string `json:"password,omitempty"`
+				IsAdmin  bool   `json:"is_admin"`
+			} `json:"attributes"`
 		}{
 			Type: "users",
 			Attributes: struct {
-				Email    string "json:\"email\""
-				Name     string "json:\"name\""
-				Password string "json:\"password,omitempty\""
+				Email    string `json:"email"`
+				Name     string `json:"name"`
+				Password string `json:"password,omitempty"`
+				IsAdmin  bool   `json:"is_admin"`
 			}{
 				Email: "updated@example.com",
 				Name:  "Updated User",
@@ -200,6 +204,7 @@ func TestGroupEndpoints(t *testing.T) {
 				Email    string `json:"email"`
 				Name     string `json:"name"`
 				Password string `json:"password,omitempty"`
+				IsAdmin  bool   `json:"is_admin"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -207,10 +212,12 @@ func TestGroupEndpoints(t *testing.T) {
 				Email    string `json:"email"`
 				Name     string `json:"name"`
 				Password string `json:"password,omitempty"`
+				IsAdmin  bool   `json:"is_admin"`
 			}{
 				Email:    "groupuser@example.com",
 				Name:     "Group User",
 				Password: "password123",
+				IsAdmin:  false,
 			},
 		},
 	}
@@ -789,7 +796,7 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123")
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false)
 	assert.NoError(t, err)
 
 	// Create a group
@@ -896,7 +903,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a user for testing
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123")
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true)
 	assert.NoError(t, err)
 
 	// Test Create Datasource

@@ -87,7 +87,10 @@ func (a *API) setupRoutes() {
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
+	v1.Use(a.auth.AdminOnly())
 
+	// logout
+	v1.POST("/logout", a.handleLogout)
 	// User routes
 	v1.POST("/users", a.createUser)
 	v1.GET("/users/:id", a.getUser)
@@ -285,12 +288,24 @@ func (a *API) setupRoutes() {
 
 func (a *API) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+
+		// Allow the specific origin
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+
+		// Allow credentials
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Allow specific headers
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Total-Count, X-Total-Pages")
+
+		// Expose headers
 		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Total-Count, X-Total-Pages")
+
+		// Allow methods
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 
+		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -299,35 +314,6 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-// @Security BearerAuth
-// func (a *API) authMiddleware() gin.HandlerFunc {
-// 	return func(c *gin.Context) {
-// 		authHeader := c.GetHeader("Authorization")
-// 		if authHeader == "" {
-// 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"errors": []gin.H{{"title": "Unauthorized", "detail": "Missing Authorization header"}}})
-// 			return
-// 		}
-
-// 		bearerToken := strings.Split(authHeader, " ")
-// 		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" {
-// 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"errors": []gin.H{{"title": "Unauthorized", "detail": "Invalid Authorization header format"}}})
-// 			return
-// 		}
-
-// 		token := bearerToken[1]
-// 		// TODO: Implement token validation logic here
-// 		// For now, we'll just check if the token is not empty
-// 		if token == "" {
-// 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"errors": []gin.H{{"title": "Unauthorized", "detail": "Invalid token"}}})
-// 			return
-// 		}
-
-// 		c.Set("user_id", a.GetUserID())
-
-// 		c.Next()
-// 	}
-// }
 
 func (a *API) GetUserID() uint {
 	return 0

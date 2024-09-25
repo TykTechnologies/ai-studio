@@ -17,6 +17,7 @@ type User struct {
 	ResetTokenExpiry  time.Time
 	EmailVerified     bool
 	VerificationToken string
+	IsAdmin           bool
 }
 
 type Users []User

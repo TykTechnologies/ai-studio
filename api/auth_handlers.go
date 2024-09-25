@@ -33,7 +33,18 @@ func (a *API) handleLogin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
+	u, err := a.service.GetUserByEmail(input.Data.Attributes.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "is_admin": u.IsAdmin})
 }
 
 // @Summary Register user

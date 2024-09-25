@@ -40,6 +40,7 @@ type Config struct {
 	CookieSameSite      http.SameSite
 	RegistrationAllowed bool
 	AdminEmail          string
+	FromEmail           string
 	SMTPHost            string
 	SMTPPort            int
 	SMTPUsername        string
@@ -135,6 +136,7 @@ func (a *AuthService) ValidatePasswordComplexity(password string) error {
 
 	return nil
 }
+
 func (a *AuthService) Register(email, name, password string) error {
 	if !a.Config.RegistrationAllowed {
 		return errors.New("registration is currently disabled")
@@ -173,10 +175,17 @@ func (a *AuthService) Register(email, name, password string) error {
 		return err
 	}
 
+	// Check if this is the first user
+	var count int64
+	if err := a.Config.DB.Model(&models.User{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to count users: %w", err)
+	}
+
 	user := &models.User{
 		Email:    email,
 		Name:     name,
 		Password: string(hashedPassword),
+		IsAdmin:  count == 0, // Set as admin if this is the first user
 	}
 
 	if err := user.Create(a.Config.DB); err != nil {
@@ -203,6 +212,7 @@ func (a *AuthService) Register(email, name, password string) error {
 
 	return nil
 }
+
 func (a *AuthService) ResendVerificationEmail(email string) error {
 	user := &models.User{}
 	if err := user.GetByEmail(a.Config.DB, email); err != nil {
@@ -294,8 +304,9 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 	return a.sendEmail(a.Config.AdminEmail, subject, body)
 }
 func (a *AuthService) sendEmail(to, subject, body string) error {
+	fmt.Println("Sending email to: ", to)
 	m := mail.NewMessage()
-	m.SetHeader("From", a.Config.SMTPUsername)
+	m.SetHeader("From", a.Config.FromEmail)
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/plain", body)
@@ -323,12 +334,36 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		}
 
 		c.Set("user", user)
+		fmt.Println("========= USER IS:", user)
+		c.Next()
+	}
+}
+
+func (a *AuthService) AdminOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.Config.TestMode {
+			c.Next()
+			return
+		}
+		u, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		user := u.(*models.User)
+		if !user.IsAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+			return
+		}
+
 		c.Next()
 	}
 }
 
 func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
 	userInterface, exists := c.Get("user")
+	fmt.Println("LOGOUT USER IS:", userInterface)
 	if !exists {
 		return nil, errors.New("user not found in context")
 	}

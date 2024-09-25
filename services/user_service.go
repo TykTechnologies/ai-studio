@@ -6,10 +6,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateUser(email, name, password string) (*models.User, error) {
+func (s *Service) CreateUser(email, name, password string, isAdmin bool) (*models.User, error) {
 	user := &models.User{
-		Email: email,
-		Name:  name,
+		Email:   email,
+		Name:    name,
+		IsAdmin: isAdmin,
 	}
 
 	if err := user.SetPassword(password); err != nil {
@@ -31,7 +32,15 @@ func (s *Service) GetUserByID(id uint) (*models.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateUser(id uint, email, name string) (*models.User, error) {
+func (s *Service) GetUserByEmail(email string) (*models.User, error) {
+	user := models.NewUser()
+	if err := user.GetByEmail(s.DB, email); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool) (*models.User, error) {
 	user, err := s.GetUserByID(id)
 	if err != nil {
 		return nil, err
@@ -39,6 +48,7 @@ func (s *Service) UpdateUser(id uint, email, name string) (*models.User, error) 
 
 	user.Email = email
 	user.Name = name
+	user.IsAdmin = isAdmin
 
 	if err := user.Update(s.DB); err != nil {
 		return nil, err

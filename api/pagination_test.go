@@ -142,6 +142,7 @@ func TestPagination_UserPagination(t *testing.T) {
 			fmt.Sprintf("user%d@example.com", i),
 			fmt.Sprintf("User %d", i),
 			"password123",
+			false,
 		)
 		assert.NoError(t, err)
 	}
