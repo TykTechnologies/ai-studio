@@ -87,6 +87,13 @@ const UserDetails = () => {
           <Grid item xs={9}>
             <FieldValue>{user.attributes.email}</FieldValue>
           </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>Admin:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{user.attributes.is_admin ? "Yes" : "No"}</FieldValue>
+          </Grid>
         </Grid>
         <Box
           mb={2}

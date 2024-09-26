@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+
+import { Switch, FormControlLabel } from "@mui/material";
+
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -36,6 +39,9 @@ const UserForm = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  const [isAdmin, setIsAdmin] = useState(false);
+
   const [groups, setGroups] = useState([]);
   const [userGroups, setUserGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("");
@@ -78,6 +84,7 @@ const UserForm = () => {
       const userData = response.data.data;
       setName(userData.attributes.name);
       setEmail(userData.attributes.email);
+      setIsAdmin(userData.attributes.is_admin);
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -122,13 +129,13 @@ const UserForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm() || !isFormValid()) return;
-
     const userData = {
       data: {
         type: "User",
         attributes: {
           name,
           email,
+          is_admin: isAdmin,
           ...(password && { password }),
         },
       },
@@ -328,6 +335,18 @@ const UserForm = () => {
                 />
               </Grid>
             )}
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={isAdmin}
+                    onChange={(e) => setIsAdmin(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Admin User"
+              />
+            </Grid>
             <Grid item xs={12}>
               <StyledButton
                 variant="contained"

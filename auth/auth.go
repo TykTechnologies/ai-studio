@@ -372,7 +372,6 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		}
 
 		c.Set("user", user)
-		fmt.Println("========= USER IS:", user)
 		c.Next()
 	}
 }
@@ -401,7 +400,6 @@ func (a *AuthService) AdminOnly() gin.HandlerFunc {
 
 func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
 	userInterface, exists := c.Get("user")
-	fmt.Println("LOGOUT USER IS:", userInterface)
 	if !exists {
 		return nil, errors.New("user not found in context")
 	}

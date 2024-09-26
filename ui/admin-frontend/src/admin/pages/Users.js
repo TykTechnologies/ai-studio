@@ -257,6 +257,7 @@ const Users = () => {
                 <StyledTableCell>ID</StyledTableCell>
                 <StyledTableCell>Name</StyledTableCell>
                 <StyledTableCell>Email</StyledTableCell>
+                <StyledTableCell>Is Admin</StyledTableCell>
                 <StyledTableCell align="right">Actions</StyledTableCell>
               </TableRow>
             </TableHead>
@@ -271,6 +272,9 @@ const Users = () => {
                     <TableCell>{user.id}</TableCell>
                     <TableCell>{user.attributes.name}</TableCell>
                     <TableCell>{user.attributes.email}</TableCell>
+                    <TableCell>
+                      {user.attributes.is_admin ? "Yes" : "No"}
+                    </TableCell>
                     <TableCell align="right">
                       <IconButton
                         onClick={(event) => handleMenuOpen(event, user)}
