@@ -6,11 +6,11 @@ import pubClient from "../../admin/utils/pubClient";
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setError(null);
     try {
       const response = await pubClient.post("/auth/login", {
         data: {
@@ -24,7 +24,27 @@ const Login = () => {
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError("Invalid email or password");
+      if (err.response) {
+        switch (err.response.status) {
+          case 401:
+            setError("Invalid email or password");
+            break;
+          case 400:
+            if (
+              err.response.data.errors &&
+              err.response.data.errors.length > 0
+            ) {
+              setError(err.response.data.errors[0].detail);
+            } else {
+              setError("Bad request. Please check your input.");
+            }
+            break;
+          default:
+            setError("An unexpected error occurred. Please try again.");
+        }
+      } else {
+        setError("An unexpected error occurred. Please try again.");
+      }
     }
   };
 
