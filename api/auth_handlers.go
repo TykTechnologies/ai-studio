@@ -2,7 +2,9 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -260,4 +262,43 @@ func (a *API) handleResendVerification(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Verification email resent"})
+}
+
+// @Summary Get current user
+// @Description Get the details of the currently logged-in user
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Success 200 {object} UserResponse
+// @Failure 401 {object} ErrorResponse
+// @Router /api/v1/me [get]
+// @Security BearerAuth
+func (a *API) handleMe(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+
+	u, ok := user.(*models.User)
+	if !ok {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+
+	response := UserResponse{
+		Type: "user",
+		ID:   strconv.Itoa(int(u.ID)),
+		Attributes: struct {
+			Email   string `json:"email"`
+			Name    string `json:"name"`
+			IsAdmin bool   `json:"is_admin"`
+		}{
+			Email:   u.Email,
+			Name:    u.Name,
+			IsAdmin: u.IsAdmin,
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
 }

@@ -112,7 +112,7 @@ func main() {
 
 	appConf := GetConfigFromEnv()
 
-	config := auth.Config{
+	config := &auth.Config{
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",
@@ -125,6 +125,10 @@ func main() {
 		AdminEmail:          appConf.AdminEmail,
 		FromEmail:           appConf.FromEmail,
 		TestMode:            false,
+		SMTPPort:            appConf.SMTPPort,
+		SMTPHost:            appConf.SMTPServer,
+		SMTPUsername:        appConf.SMTPUser,
+		SMTPPassword:        appConf.SMTPPass,
 	}
 
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)

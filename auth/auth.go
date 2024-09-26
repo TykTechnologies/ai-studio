@@ -1,12 +1,15 @@
 package auth
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
+	"text/template"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -48,14 +51,14 @@ type Config struct {
 	TestMode            bool
 }
 type AuthService struct {
-	Config     Config
+	Config     *Config
 	DB         *gorm.DB
 	Service    *services.Service
 	TokenStore map[string]*models.User
 	Mailer     Mailer
 }
 
-func NewAuthService(config Config, mailer Mailer) *AuthService {
+func NewAuthService(config *Config, mailer Mailer) *AuthService {
 	return &AuthService{
 		Config: config,
 		Mailer: mailer,
@@ -112,7 +115,23 @@ func (a *AuthService) ResetPassword(email string) error {
 	}
 
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", a.Config.FrontendURL, resetToken)
-	emailBody := fmt.Sprintf("Click the following link to reset your password: %s", resetLink)
+
+	emailBody := ""
+	tmpl, err := template.ParseFiles("./templates/reset.tmpl")
+	if err != nil {
+		emailBody = fmt.Sprintf("Click the following link to reset your password: %s", resetLink)
+	} else {
+		var buf bytes.Buffer
+		err = tmpl.Execute(&buf, map[string]string{
+			"ResetLink": resetLink,
+			"Name":      user.Name,
+		})
+		if err != nil {
+			emailBody = fmt.Sprintf("Click the following link to reset your password: %s", resetLink)
+		} else {
+			emailBody = buf.String()
+		}
+	}
 
 	if err := a.sendEmail(user.Email, "Password Reset", emailBody); err != nil {
 		return fmt.Errorf("failed to send password reset email: %w", err)
@@ -201,9 +220,9 @@ func (a *AuthService) Register(email, name, password string) error {
 		return fmt.Errorf("failed to add user to default group: %w", err)
 	}
 
-	if err := a.sendVerificationEmail(user); err != nil {
-		return fmt.Errorf("failed to send verification email: %w", err)
-	}
+	// if err := a.sendVerificationEmail(user); err != nil {
+	// 	return fmt.Errorf("failed to send verification email: %w", err)
+	// }
 
 	if err := a.notifyAdmin(user); err != nil {
 		// Log the error, but don't return it to prevent leaking information
@@ -300,6 +319,21 @@ func (a *AuthService) sendVerificationEmail(user *models.User) error {
 func (a *AuthService) notifyAdmin(user *models.User) error {
 	subject := "New User Registration"
 	body := fmt.Sprintf("A new user has registered:\nName: %s\nEmail: %s", user.Name, user.Email)
+	tmpl, err := template.ParseFiles("./templates/admin-notify.tmpl")
+	if err != nil {
+		slog.Error("Failed to parse admin notification template", "error", err)
+	} else {
+		var buf bytes.Buffer
+		err = tmpl.Execute(&buf, map[string]string{
+			"Name":  user.Name,
+			"Email": user.Email,
+		})
+		if err != nil {
+			slog.Error("Failed to execute admin notification template", "error", err)
+		} else {
+			body = buf.String()
+		}
+	}
 
 	return a.sendEmail(a.Config.AdminEmail, subject, body)
 }
@@ -311,6 +345,10 @@ func (a *AuthService) sendEmail(to, subject, body string) error {
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/plain", body)
 
+	if a.Config.SMTPHost == "" {
+		slog.Warn("smtp host not set, not sending email")
+		return nil
+	}
 	return a.Mailer.DialAndSend(m)
 }
 

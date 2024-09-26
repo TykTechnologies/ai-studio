@@ -85,13 +85,17 @@ func (a *API) setupRoutes() {
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
 
+	authed := public.Group("/common")
+	authed.Use(a.auth.AuthMiddleware())
+	authed.POST("/logout", a.handleLogout)
+	authed.GET("/me", a.handleMe)
+
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
 	v1.Use(a.auth.AdminOnly())
 
-	// logout
-	v1.POST("/logout", a.handleLogout)
 	// User routes
+	v1.POST("/logout", a.handleLogout)
 	v1.POST("/users", a.createUser)
 	v1.GET("/users/:id", a.getUser)
 	v1.PATCH("/users/:id", a.updateUser)
