@@ -217,7 +217,7 @@ const DatasourceForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/datasources"), 2000);
+      setTimeout(() => navigate("/admin/datasources"), 2000);
     } catch (error) {
       console.error("Error saving datasource", error);
       setSnackbar({
@@ -247,7 +247,7 @@ const DatasourceForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/datasources"
+          to="/admin/datasources"
           color="white"
         >
           Back to Datasources

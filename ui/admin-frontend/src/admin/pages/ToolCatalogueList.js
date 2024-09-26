@@ -109,15 +109,15 @@ const ToolCatalogueList = () => {
   };
 
   const handleEdit = (id) => {
-    navigate(`/catalogs/tools/edit/${id}`);
+    navigate(`/admin/catalogs/tools/edit/${id}`);
   };
 
   const handleAddToolCatalogue = () => {
-    navigate("/catalogs/tools/new");
+    navigate("/admin/catalogs/tools/new");
   };
 
   const handleCatalogueClick = (id) => {
-    navigate(`/catalogs/tools/${id}`);
+    navigate(`/admin/catalogs/tools/${id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {

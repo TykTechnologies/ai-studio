@@ -146,7 +146,7 @@ const ChatForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/chats"), 2000);
+      setTimeout(() => navigate("/admin/chats"), 2000);
     } catch (error) {
       console.error("Error saving chat", error);
       setSnackbar({
@@ -173,7 +173,7 @@ const ChatForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/chats"
+          to="/admin/chats"
           color="white"
         >
           Back to Chat Rooms

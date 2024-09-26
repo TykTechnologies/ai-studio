@@ -113,7 +113,7 @@ const LLMSettingsList = () => {
   };
 
   const handleSettingClick = (setting) => {
-    navigate(`/llm-settings/${setting.id}`);
+    navigate(`/admin/llm-settings/${setting.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -132,7 +132,7 @@ const LLMSettingsList = () => {
   };
 
   const handleAddSetting = () => {
-    navigate("/llm-settings/new");
+    navigate("/admin/llm-settings/new");
   };
 
   if (loading && llmSettings.length === 0) {
@@ -225,7 +225,9 @@ const LLMSettingsList = () => {
         onClose={handleMenuClose}
       >
         <MenuItem
-          onClick={() => navigate(`/llm-settings/edit/${selectedSetting?.id}`)}
+          onClick={() =>
+            navigate(`/admin/llm-settings/edit/${selectedSetting?.id}`)
+          }
         >
           Edit Setting
         </MenuItem>

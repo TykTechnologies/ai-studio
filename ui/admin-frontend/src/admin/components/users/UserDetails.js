@@ -67,7 +67,7 @@ const UserDetails = () => {
         <Typography variant="h5">User Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/users")}
+          onClick={() => navigate("/admin/users")}
           color="white"
         >
           Back to Users
@@ -98,7 +98,7 @@ const UserDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/users/edit/${id}`)}
+            onClick={() => navigate(`/admin/users/edit/${id}`)}
           >
             Edit User
           </StyledButton>

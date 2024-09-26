@@ -123,7 +123,7 @@ const DataCatalogForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/catalogs/data"), 2000);
+      setTimeout(() => navigate("/admin/catalogs/data"), 2000);
     } catch (error) {
       console.error("Error saving data catalog", error);
       setSnackbar({
@@ -226,7 +226,7 @@ const DataCatalogForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/catalogs/data"
+          to="/admin/catalogs/data"
           color="inherit"
         >
           Back to Data Catalogs

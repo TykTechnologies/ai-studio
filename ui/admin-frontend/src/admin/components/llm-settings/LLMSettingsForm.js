@@ -322,7 +322,7 @@ const LLMSettingsForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/llm-settings"), 2000);
+      setTimeout(() => navigate("/admin/llm-settings"), 2000);
     } catch (error) {
       console.error("Error saving LLM Call Settings", error);
       setSnackbar({
@@ -403,7 +403,7 @@ const LLMSettingsForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/llm-settings"
+          to="/admin/llm-settings"
           color="white"
         >
           Back to LLM Call Settings

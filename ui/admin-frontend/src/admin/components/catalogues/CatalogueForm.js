@@ -110,7 +110,7 @@ const CatalogueForm = () => {
       // Now handle LLM additions/removals
       await updateCatalogueLLMs(catalogueId);
 
-      setTimeout(() => navigate("/catalogs/llms"), 2000);
+      setTimeout(() => navigate("/admin/catalogs/llms"), 2000);
     } catch (error) {
       console.error("Error saving catalog", error);
       setSnackbar({
@@ -191,7 +191,7 @@ const CatalogueForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/catalogs/llms"
+          to="/admin/catalogs/llms"
           color="inherit"
         >
           Back to Catalogs

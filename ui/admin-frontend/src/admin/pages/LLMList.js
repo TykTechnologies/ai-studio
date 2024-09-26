@@ -139,7 +139,7 @@ const LLMList = () => {
   };
 
   const handleLLMClick = (llm) => {
-    navigate(`/llms/${llm.id}`);
+    navigate(`/admin/llms/${llm.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -158,7 +158,7 @@ const LLMList = () => {
   };
 
   const handleAddLLM = () => {
-    navigate("/llms/new");
+    navigate("/admin/llms/new");
   };
 
   if (loading && llms.length === 0) {
@@ -284,7 +284,9 @@ const LLMList = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={() => navigate(`/llms/edit/${selectedLLM?.id}`)}>
+        <MenuItem
+          onClick={() => navigate(`/admin/llms/edit/${selectedLLM?.id}`)}
+        >
           Edit LLM
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedLLM?.id)}>

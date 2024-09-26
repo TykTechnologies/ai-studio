@@ -165,7 +165,7 @@ const ChatList = () => {
   };
 
   const handleAddChat = () => {
-    navigate("/chats/new");
+    navigate("/admin/chats/new");
   };
 
   if (loading && chats.length === 0) {

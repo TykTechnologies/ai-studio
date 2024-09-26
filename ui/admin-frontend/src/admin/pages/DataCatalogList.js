@@ -115,7 +115,7 @@ const DataCatalogList = () => {
   };
 
   const handleAddDataCatalog = () => {
-    navigate("/catalogs/data/new");
+    navigate("/admin/catalogs/data/new");
   };
 
   const handleCatalogClick = (id) => {

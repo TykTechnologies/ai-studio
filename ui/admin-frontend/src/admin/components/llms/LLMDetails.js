@@ -179,7 +179,7 @@ const LLMDetails = () => {
         <Typography variant="h5">LLM Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/llms")}
+          onClick={() => navigate("/admin/llms")}
           color="white"
         >
           Back to LLMs
@@ -375,7 +375,7 @@ const LLMDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/llms/edit/${id}`)}
+            onClick={() => navigate(`/admin/llms/edit/${id}`)}
           >
             Edit LLM
           </StyledButton>

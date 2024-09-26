@@ -137,7 +137,7 @@ const ModelPriceForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/model-prices"), 2000);
+      setTimeout(() => navigate("/admin/model-prices"), 2000);
     } catch (error) {
       console.error("Error saving Model Price", error);
       setSnackbar({
@@ -180,7 +180,7 @@ const ModelPriceForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/model-prices"
+          to="/admin/model-prices"
           color="white"
         >
           Back to Model Prices

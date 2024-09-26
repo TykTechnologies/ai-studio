@@ -209,7 +209,7 @@ const CatalogueList = () => {
   };
 
   const handleAddCatalogue = () => {
-    navigate("/catalogs/llms/new");
+    navigate("/admin/catalogs/llms/new");
   };
 
   const handleCatalogueClick = (id) => {

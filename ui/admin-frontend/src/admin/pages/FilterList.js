@@ -132,7 +132,7 @@ const FilterList = () => {
   };
 
   const handleAddFilter = () => {
-    navigate("/filters/new");
+    navigate("/admin/filters/new");
   };
 
   if (loading && filters.length === 0) {

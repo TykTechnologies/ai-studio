@@ -57,7 +57,7 @@ const ModelPriceDetail = () => {
         <Typography variant="h5">Model Price Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/model-prices")}
+          onClick={() => navigate("/admin/model-prices")}
           color="white"
         >
           Back to Model Prices
@@ -103,7 +103,7 @@ const ModelPriceDetail = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/model-prices/edit/${id}`)}
+            onClick={() => navigate(`/admin/model-prices/edit/${id}`)}
           >
             Edit Model Price
           </StyledButton>

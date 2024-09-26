@@ -156,7 +156,7 @@ const UserForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/users"), 2000);
+      setTimeout(() => navigate("/admin/users"), 2000);
     } catch (error) {
       console.error("Error saving user", error);
       setSnackbar({
@@ -283,7 +283,7 @@ const UserForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           color="white"
-          to="/users"
+          to="/admin/users"
         >
           Back to Users
         </Button>

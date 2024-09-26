@@ -180,7 +180,7 @@ const DatasourceList = () => {
   };
 
   const handleAddDatasource = () => {
-    navigate("/datasources/new");
+    navigate("/admin/datasources/new");
   };
 
   if (loading && datasources.length === 0) {

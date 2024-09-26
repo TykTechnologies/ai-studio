@@ -155,7 +155,7 @@ const Groups = () => {
   };
 
   const handleEdit = () => {
-    navigate(`/groups/edit/${selectedGroup.id}`);
+    navigate(`/admin/groups/edit/${selectedGroup.id}`);
     handleMenuClose();
   };
 
@@ -339,7 +339,7 @@ const Groups = () => {
   };
 
   const handleGroupClick = (group) => {
-    navigate(`/groups/${group.id}`);
+    navigate(`/admin/groups/${group.id}`);
   };
 
   if (loading && groups.length === 0) {
@@ -358,7 +358,7 @@ const Groups = () => {
           variant="contained"
           startIcon={<AddIcon />}
           component={Link}
-          to="/groups/new"
+          to="/admin/groups/new"
         >
           Add Group
         </StyledButton>

@@ -64,7 +64,7 @@ const DataCatalogDetail = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/catalogs/data"
+          to="/admin/catalogs/data"
           color="inherit"
         >
           Back to Data Catalogs
@@ -144,7 +144,7 @@ const DataCatalogDetail = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/catalogs/data/edit/${id}`)}
+            onClick={() => navigate(`/admin/catalogs/data/edit/${id}`)}
           >
             Edit Data Catalog
           </StyledButton>

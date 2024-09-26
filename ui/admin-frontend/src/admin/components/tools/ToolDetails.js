@@ -72,7 +72,7 @@ const ToolDetails = () => {
         <Typography variant="h5">Tool Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/tools")}
+          onClick={() => navigate("/admin/tools")}
           color="white"
         >
           Back to Tools
@@ -179,7 +179,7 @@ const ToolDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/tools/edit/${id}`)}
+            onClick={() => navigate(`/admin/tools/edit/${id}`)}
           >
             Edit Tool
           </StyledButton>

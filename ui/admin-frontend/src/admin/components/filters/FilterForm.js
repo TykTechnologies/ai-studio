@@ -99,7 +99,7 @@ const FilterForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/filters"), 2000);
+      setTimeout(() => navigate("/admin/filters"), 2000);
     } catch (error) {
       console.error("Error saving filter", error);
       setSnackbar({
@@ -126,7 +126,7 @@ const FilterForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/filters"
+          to="/admin/filters"
           color="white"
         >
           Back to Filters

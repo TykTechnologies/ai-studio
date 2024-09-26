@@ -234,7 +234,7 @@ const AppDetails = () => {
         <Typography variant="h5">App Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/apps")}
+          onClick={() => navigate("/admin/apps")}
           color="white"
         >
           Back to Apps
@@ -338,7 +338,7 @@ const AppDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/apps/edit/${id}`)}
+            onClick={() => navigate(`/admin/apps/edit/${id}`)}
           >
             Edit App
           </StyledButton>

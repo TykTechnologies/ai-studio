@@ -133,7 +133,7 @@ const Users = () => {
   };
 
   const handleUserClick = (user) => {
-    navigate(`/users/${user.id}`);
+    navigate(`/admin/users/${user.id}`);
   };
 
   const handleAddToGroup = () => {
@@ -245,7 +245,7 @@ const Users = () => {
             variant="contained"
             startIcon={<AddIcon />}
             component={Link}
-            to="/users/new"
+            to="/admin/users/new"
           >
             Add user
           </StyledButton>
@@ -303,7 +303,9 @@ const Users = () => {
         onClose={handleMenuClose}
       >
         <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
-        <MenuItem onClick={() => navigate(`/users/edit/${selectedUser?.id}`)}>
+        <MenuItem
+          onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
+        >
           Edit User
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedUser?.id)}>

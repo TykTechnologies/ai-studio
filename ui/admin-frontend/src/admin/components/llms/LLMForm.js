@@ -144,7 +144,7 @@ const LLMForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/llms"), 2000);
+      setTimeout(() => navigate("/admin/llms"), 2000);
     } catch (error) {
       console.error("Error saving LLM", error);
       setSnackbar({
@@ -169,7 +169,7 @@ const LLMForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/llms"
+          to="/admin/llms"
           color="white"
         >
           Back to LLMs

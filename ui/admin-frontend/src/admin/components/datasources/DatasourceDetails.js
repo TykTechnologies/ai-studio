@@ -106,7 +106,7 @@ const DatasourceDetails = () => {
         <Typography variant="h5">Datasource Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/datasources")}
+          onClick={() => navigate("/admin/datasources")}
           color="white"
         >
           Back to Datasources
@@ -401,7 +401,7 @@ const DatasourceDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/datasources/edit/${id}`)}
+            onClick={() => navigate(`/admin/datasources/edit/${id}`)}
           >
             Edit Datasource
           </StyledButton>

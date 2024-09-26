@@ -56,7 +56,7 @@ const GroupForm = () => {
       } else {
         await apiClient.post("/groups", groupData);
       }
-      navigate("/groups");
+      navigate("/admin/groups");
     } catch (error) {
       console.error("Error saving group", error);
       setError("Failed to save group");
@@ -75,7 +75,7 @@ const GroupForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           color="white"
-          onClick={() => navigate("/groups")}
+          onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
         </Button>

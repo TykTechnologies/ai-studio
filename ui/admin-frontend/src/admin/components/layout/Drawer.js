@@ -35,25 +35,29 @@ const drawerWidth = 240;
 const minimizedDrawerWidth = 60;
 
 const menuItems = [
-  { text: "Dashboard", icon: <DashboardIcon />, path: "/dash" },
+  { text: "Dashboard", icon: <DashboardIcon />, path: "/admin/dash" },
   {
     text: "Team",
     icon: <PeopleIcon />,
     subItems: [
-      { text: "Users", icon: <PersonIcon />, path: "/users" },
-      { text: "Groups", icon: <GroupIcon />, path: "/groups" },
+      { text: "Users", icon: <PersonIcon />, path: "/admin/users" },
+      { text: "Groups", icon: <GroupIcon />, path: "/admin/groups" },
     ],
   },
   {
     text: "AI",
     icon: <SmartToyIcon />,
     subItems: [
-      { text: "LLMs", icon: <SmartToyIcon />, path: "/llms" },
-      { text: "Call Settings", icon: <SettingsIcon />, path: "/llm-settings" },
+      { text: "LLMs", icon: <SmartToyIcon />, path: "/admin/llms" },
+      {
+        text: "Call Settings",
+        icon: <SettingsIcon />,
+        path: "/admin/llm-settings",
+      },
       {
         text: "Model Prices",
         icon: <AttachMoneyIcon />,
-        path: "/model-prices",
+        path: "/admin/model-prices",
       },
     ],
   },
@@ -64,29 +68,39 @@ const menuItems = [
       {
         text: "Vector Sources",
         icon: <StorageIcon />,
-        path: "/datasources",
+        path: "/admin/datasources",
       },
-      { text: "Tools", icon: <BuildIcon />, path: "/tools" },
+      { text: "Tools", icon: <BuildIcon />, path: "/admin/tools" },
     ],
   },
   {
     text: "Gateway",
     icon: <SettingsInputComponentIcon />,
-    subItems: [{ text: "Filters", icon: <FilterListIcon />, path: "/filters" }],
+    subItems: [
+      { text: "Filters", icon: <FilterListIcon />, path: "/admin/filters" },
+    ],
   },
   {
     text: "Portal",
     icon: <WebIcon />,
     subItems: [
-      { text: "Apps", icon: <AppsIcon />, path: "/apps" },
-      { text: "Chat Rooms", icon: <ChatIcon />, path: "/chats" }, // Add this line
+      { text: "Apps", icon: <AppsIcon />, path: "/admin/apps" },
+      { text: "Chat Rooms", icon: <ChatIcon />, path: "/admin/chats" }, // Add this line
       {
         text: "Catalogs",
         icon: <FolderOpenIcon />,
         subItems: [
-          { text: "LLMs", icon: <SmartToyIcon />, path: "/catalogs/llms" },
-          { text: "Data", icon: <DataObjectIcon />, path: "/catalogs/data" },
-          { text: "Tools", icon: <BuildIcon />, path: "/catalogs/tools" },
+          {
+            text: "LLMs",
+            icon: <SmartToyIcon />,
+            path: "/admin/catalogs/llms",
+          },
+          {
+            text: "Data",
+            icon: <DataObjectIcon />,
+            path: "/admin/catalogs/data",
+          },
+          { text: "Tools", icon: <BuildIcon />, path: "/admin/catalogs/tools" },
         ],
       },
     ],
@@ -149,7 +163,7 @@ const MyDrawer = () => {
           key={item.text}
           component={StyledNavLink}
           to={item.path}
-          end={item.path === "/"}
+          end={item.path === "/admin/"}
           sx={commonStyles}
         >
           <ListItemIcon>{item.icon}</ListItemIcon>

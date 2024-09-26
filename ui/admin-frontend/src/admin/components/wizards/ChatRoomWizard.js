@@ -362,7 +362,10 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                     variant="contained"
                     color="primary"
                     onClick={() => {
-                      window.open(`/chat/${createdChatRoomId}`, "_blank");
+                      window.open(
+                        `/portal/chat/${createdChatRoomId}`,
+                        "_blank",
+                      );
                       onClose();
                     }}
                   >

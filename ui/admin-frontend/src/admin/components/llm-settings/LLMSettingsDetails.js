@@ -170,7 +170,7 @@ const LLMSettingsDetails = () => {
         <Typography variant="h5">LLM Call Settings Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/llm-settings")}
+          onClick={() => navigate("/admin/llm-settings")}
           color="white"
         >
           Back to LLM Call Settings
@@ -305,7 +305,7 @@ const LLMSettingsDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/llm-settings/edit/${id}`)}
+            onClick={() => navigate(`/admin/llm-settings/edit/${id}`)}
           >
             Edit LLM Call Settings
           </StyledButton>

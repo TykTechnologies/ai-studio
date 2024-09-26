@@ -65,7 +65,7 @@ const ToolCatalogueDetails = () => {
         <Typography variant="h5">Tool Catalog Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/catalogs/tools")}
+          onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
           Back to Tool Catalogs
@@ -146,7 +146,7 @@ const ToolCatalogueDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/catalogs/tools/edit/${id}`)}
+            onClick={() => navigate(`/admin/catalogs/tools/edit/${id}`)}
           >
             Edit Tool Catalog
           </StyledButton>

@@ -394,7 +394,7 @@ const GroupDetail = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           color="white"
-          onClick={() => navigate("/groups")}
+          onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
         </Button>

@@ -135,7 +135,7 @@ const ToolCatalogueForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/catalogs/tools"), 2000);
+      setTimeout(() => navigate("/admin/catalogs/tools"), 2000);
     } catch (error) {
       console.error("Error saving tool catalogue", error);
       setSnackbar({
@@ -237,7 +237,7 @@ const ToolCatalogueForm = () => {
         </Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/catalogs/tools")}
+          onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
           Back to Tool Catalogs

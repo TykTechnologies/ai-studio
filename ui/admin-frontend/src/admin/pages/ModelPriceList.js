@@ -124,7 +124,7 @@ const ModelPriceList = () => {
   };
 
   const handlePriceClick = (price) => {
-    navigate(`/model-prices/${price.id}`);
+    navigate(`/admin/model-prices/${price.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -143,7 +143,7 @@ const ModelPriceList = () => {
   };
 
   const handleAddPrice = () => {
-    navigate("/model-prices/new");
+    navigate("/admin/model-prices/new");
   };
 
   const handleOpenUpdatePriceModal = () => {
@@ -290,7 +290,9 @@ const ModelPriceList = () => {
       >
         <MenuItem onClick={handleOpenUpdatePriceModal}>Update Price</MenuItem>
         <MenuItem
-          onClick={() => navigate(`/model-prices/edit/${selectedPrice?.id}`)}
+          onClick={() =>
+            navigate(`/admin/model-prices/edit/${selectedPrice?.id}`)
+          }
         >
           Edit Price
         </MenuItem>

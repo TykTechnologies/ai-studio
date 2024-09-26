@@ -167,7 +167,7 @@ const ChatDetails = () => {
         <Typography variant="h5">Chat Room Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/chats")}
+          onClick={() => navigate("/admin/chats")}
           color="white"
         >
           Back to Chat Rooms
@@ -231,7 +231,7 @@ const ChatDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/chats/edit/${id}`)}
+            onClick={() => navigate(`/admin/chats/edit/${id}`)}
           >
             Edit Chat Room
           </StyledButton>

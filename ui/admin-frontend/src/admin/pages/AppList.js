@@ -150,7 +150,7 @@ const AppList = () => {
   };
 
   const handleAddApp = () => {
-    navigate("/apps/new");
+    navigate("/admin/apps/new");
   };
 
   if (loading && apps.length === 0) {

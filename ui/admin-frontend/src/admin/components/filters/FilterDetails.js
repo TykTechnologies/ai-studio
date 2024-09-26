@@ -57,7 +57,7 @@ const FilterDetails = () => {
         <Typography variant="h5">Filter Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/filters")}
+          onClick={() => navigate("/admin/filters")}
           color="white"
         >
           Back to Filters
@@ -100,7 +100,7 @@ const FilterDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/filters/edit/${id}`)}
+            onClick={() => navigate(`/admin/filters/edit/${id}`)}
           >
             Edit Filter
           </StyledButton>

@@ -113,7 +113,7 @@ const ToolList = () => {
   };
 
   const handleToolClick = (tool) => {
-    navigate(`/tools/${tool.id}`);
+    navigate(`/admin/tools/${tool.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -132,7 +132,7 @@ const ToolList = () => {
   };
 
   const handleAddTool = () => {
-    navigate("/tools/new");
+    navigate("/admin/tools/new");
   };
 
   if (loading && tools.length === 0) {
@@ -224,7 +224,9 @@ const ToolList = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={() => navigate(`/tools/edit/${selectedTool?.id}`)}>
+        <MenuItem
+          onClick={() => navigate(`/admin/tools/edit/${selectedTool?.id}`)}
+        >
           Edit Tool
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedTool?.id)}>

@@ -75,7 +75,7 @@ const CatalogueDetails = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/catalogs/llms"
+          to="/admin/catalogs/llms"
           color="inherit"
         >
           Back to Catalogs
@@ -129,7 +129,7 @@ const CatalogueDetails = () => {
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/catalogs/llms/edit/${id}`)}
+            onClick={() => navigate(`/admin/catalogs/llms/edit/${id}`)}
           >
             Edit Catalog
           </StyledButton>

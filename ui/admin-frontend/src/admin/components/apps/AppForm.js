@@ -207,7 +207,7 @@ const AppForm = () => {
         severity: "success",
       });
 
-      setTimeout(() => navigate("/apps"), 2000);
+      setTimeout(() => navigate("/admin/apps"), 2000);
     } catch (error) {
       console.error("Error saving app", error);
       setSnackbar({
@@ -232,7 +232,7 @@ const AppForm = () => {
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/apps"
+          to="/admin/apps"
           color="white"
         >
           Back to Apps
