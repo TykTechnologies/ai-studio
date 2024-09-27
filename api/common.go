@@ -1,11 +1,18 @@
 package api
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // getCatalogueLLMs godoc
@@ -382,4 +389,506 @@ func (a *API) getUserChatHistoryRecords(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// createUserApp godoc
+// @Summary Create a new app for the authenticated user
+// @Description Create a new app associated with the authenticated user, checking for catalogue access and privacy score compatibility
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param app body CreateAppRequest true "App creation request"
+// @Success 201 {object} AppResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps [post]
+func (a *API) createUserApp(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	var req CreateAppRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	// Check if user has access to the specified datasources and LLMs
+	accessibleDataSources, err := currentUser.GetAccessibleDataSources(a.service.DB)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to retrieve accessible data sources"}}})
+		return
+	}
+
+	accessibleLLMs, err := currentUser.GetAccessibleLLMs(a.service.DB)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to retrieve accessible LLMs"}}})
+		return
+	}
+
+	// Validate access to specified datasources and LLMs
+	for _, dsID := range req.DataSourceIDs {
+		if !containsDataSource(accessibleDataSources, dsID) {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "User does not have access to one or more specified data sources"}}})
+			return
+		}
+	}
+
+	for _, llmID := range req.LLMIDs {
+		if !containsLLM(accessibleLLMs, llmID) {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "User does not have access to one or more specified LLMs"}}})
+			return
+		}
+	}
+
+	// Create the app
+	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs)
+	if err != nil {
+		// Check for specific error types and return appropriate responses
+		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Data source privacy score cannot be higher than LLM privacy score"}}})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		}
+		return
+	}
+
+	// Send email notification to admin
+	if err := a.sendAdminAppNotification(app); err != nil {
+		// Log the error, but don't return it to the user
+		log.Printf("Failed to send admin notification: %v", err)
+	}
+
+	// Prepare the response
+	response := AppResponse{
+		Type: "app",
+		ID:   strconv.FormatUint(uint64(app.ID), 10),
+		Attributes: struct {
+			Name          string `json:"name"`
+			Description   string `json:"description"`
+			UserID        uint   `json:"user_id"`
+			CredentialID  uint   `json:"credential_id"`
+			DatasourceIDs []uint `json:"datasource_ids"`
+			LLMIDs        []uint `json:"llm_ids"`
+		}{
+			Name:         app.Name,
+			Description:  app.Description,
+			UserID:       app.UserID,
+			CredentialID: app.CredentialID,
+		},
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
+// Helper functions to check if a data source or LLM is in the accessible list
+func containsDataSource(dataSources []models.Datasource, id uint) bool {
+	for _, ds := range dataSources {
+		if ds.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func containsLLM(llms []models.LLM, id uint) bool {
+	for _, llm := range llms {
+		if llm.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// CreateAppRequest represents the request body for creating a new app
+type CreateAppRequest struct {
+	Name          string `json:"name" binding:"required"`
+	Description   string `json:"description" binding:"required"`
+	DataSourceIDs []uint `json:"data_source_ids" binding:"required"`
+	LLMIDs        []uint `json:"llm_ids" binding:"required"`
+}
+
+func (a *API) sendAdminAppNotification(app *models.App) error {
+	subject := "New App Created"
+	appDetailsURL := fmt.Sprintf("%s/admin/apps/%d", a.config.FrontendURL, app.ID)
+
+	var body string
+	tmpl, err := template.ParseFiles("./templates/admin-app-notification.tmpl")
+	if err != nil {
+		// If template is not found, use a simple string
+		body = fmt.Sprintf("A new app has been created:\n\nName: %s\nDescription: %s\nCreated by User ID: %d\n\nView app details: %s",
+			app.Name, app.Description, app.UserID, appDetailsURL)
+	} else {
+		var buf bytes.Buffer
+		err = tmpl.Execute(&buf, map[string]interface{}{
+			"AppName":        app.Name,
+			"AppDescription": app.Description,
+			"UserID":         app.UserID,
+			"AppDetailsURL":  appDetailsURL,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute email template: %w", err)
+		}
+		body = buf.String()
+	}
+
+	return a.auth.SendEmail(a.config.AdminEmail, subject, body)
+}
+
+// getUserAccessibleDataSources godoc
+// @Summary Get accessible data sources for the authenticated user
+// @Description Get the list of data sources accessible to the authenticated user
+// @Tags common
+// @Accept json
+// @Produce json
+// @Success 200 {array} DatasourceResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/accessible-datasources [get]
+func (a *API) getUserAccessibleDataSources(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	dataSources, err := currentUser.GetAccessibleDataSources(a.service.DB)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := make([]DatasourceResponse, len(dataSources))
+	for i, ds := range dataSources {
+		response[i] = DatasourceResponse{
+			Type: "datasource",
+			ID:   strconv.FormatUint(uint64(ds.ID), 10),
+			Attributes: struct {
+				Name             string        `json:"name"`
+				ShortDescription string        `json:"short_description"`
+				LongDescription  string        `json:"long_description"`
+				Icon             string        `json:"icon"`
+				Url              string        `json:"url"`
+				PrivacyScore     int           `json:"privacy_score"`
+				UserID           uint          `json:"user_id"`
+				Tags             []TagResponse `json:"tags"`
+				DBConnString     string        `json:"db_conn_string"`
+				DBSourceType     string        `json:"db_source_type"`
+				DBConnAPIKey     string        `json:"db_conn_api_key"`
+				DBName           string        `json:"db_name"`
+				EmbedVendor      string        `json:"embed_vendor"`
+				EmbedUrl         string        `json:"embed_url"`
+				EmbedAPIKey      string        `json:"embed_api_key"`
+				EmbedModel       string        `json:"embed_model"`
+				Active           bool          `json:"active"`
+			}{
+				Name:             ds.Name,
+				ShortDescription: ds.ShortDescription,
+				LongDescription:  ds.LongDescription,
+				Icon:             ds.Icon,
+				PrivacyScore:     ds.PrivacyScore,
+				UserID:           ds.UserID,
+				Tags:             serializeTags(ds.Tags),
+				DBSourceType:     ds.DBSourceType,
+				DBName:           ds.DBName,
+				EmbedVendor:      string(ds.EmbedVendor),
+				EmbedModel:       ds.EmbedModel,
+				Active:           ds.Active,
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// getUserAccessibleLLMs godoc
+// @Summary Get accessible LLMs for the authenticated user
+// @Description Get the list of LLMs accessible to the authenticated user
+// @Tags common
+// @Accept json
+// @Produce json
+// @Success 200 {array} LLMResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/accessible-llms [get]
+func (a *API) getUserAccessibleLLMs(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	llms, err := currentUser.GetAccessibleLLMs(a.service.DB)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := make([]LLMResponse, len(llms))
+	for i, llm := range llms {
+		response[i] = LLMResponse{
+			Type: "llm",
+			ID:   strconv.FormatUint(uint64(llm.ID), 10),
+			Attributes: struct {
+				Name             string `json:"name"`
+				APIKey           string `json:"api_key"`
+				APIEndpoint      string `json:"api_endpoint"`
+				PrivacyScore     int    `json:"privacy_score"`
+				ShortDescription string `json:"short_description"`
+				LongDescription  string `json:"long_description"`
+				LogoURL          string `json:"logo_url"`
+				Vendor           string `json:"vendor"`
+				Active           bool   `json:"active"`
+			}{
+				Name:             llm.Name,
+				PrivacyScore:     llm.PrivacyScore,
+				ShortDescription: llm.ShortDescription,
+				LongDescription:  llm.LongDescription,
+				LogoURL:          llm.LogoURL,
+				Vendor:           string(llm.Vendor),
+				Active:           llm.Active,
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// getUserApps godoc
+// @Summary Get apps for the authenticated user
+// @Description Get the list of apps created by the authenticated user
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number"
+// @Param page_size query int false "Page size"
+// @Param all query bool false "Fetch all records"
+// @Success 200 {object} AppListResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps [get]
+func (a *API) getUserApps(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	apps, totalCount, totalPages, err := a.service.ListAppsByUserID(currentUser.ID, pageSize, pageNumber, all)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := make([]AppResponse, len(apps))
+	for i, app := range apps {
+		response[i] = AppResponse{
+			Type: "app",
+			ID:   strconv.FormatUint(uint64(app.ID), 10),
+			Attributes: struct {
+				Name          string `json:"name"`
+				Description   string `json:"description"`
+				UserID        uint   `json:"user_id"`
+				CredentialID  uint   `json:"credential_id"`
+				DatasourceIDs []uint `json:"datasource_ids"`
+				LLMIDs        []uint `json:"llm_ids"`
+			}{
+				Name:         app.Name,
+				Description:  app.Description,
+				UserID:       app.UserID,
+				CredentialID: app.CredentialID,
+				DatasourceIDs: func() []uint {
+					ids := make([]uint, len(app.Datasources))
+					for i, ds := range app.Datasources {
+						ids[i] = ds.ID
+					}
+					return ids
+				}(),
+				LLMIDs: func() []uint {
+					ids := make([]uint, len(app.LLMs))
+					for i, llm := range app.LLMs {
+						ids[i] = llm.ID
+					}
+					return ids
+				}(),
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, AppListResponse{
+		Data: response,
+		Meta: struct {
+			TotalCount int64 `json:"total_count"`
+			TotalPages int   `json:"total_pages"`
+			PageSize   int   `json:"page_size"`
+			PageNumber int   `json:"page_number"`
+		}{
+			TotalCount: totalCount,
+			TotalPages: totalPages,
+			PageSize:   pageSize,
+			PageNumber: pageNumber,
+		},
+	})
+}
+
+// getUserAppDetails godoc
+// @Summary Get details of a specific app for the authenticated user
+// @Description Get the details of a specific app, including its credential, for the authenticated user
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param id path int true "App ID"
+// @Success 200 {object} AppDetailResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps/{id} [get]
+func (a *API) getUserAppDetails(c *gin.Context) {
+    user, exists := c.Get("user")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+            Title  string `json:"title"`
+            Detail string `json:"detail"`
+        }{{Title: "Unauthorized", Detail: "User not found in context"}}})
+        return
+    }
+    currentUser := user.(*models.User)
+
+    appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+            Title  string `json:"title"`
+            Detail string `json:"detail"`
+        }{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+        return
+    }
+
+    app, err := a.service.GetAppByID(uint(appID))
+    if err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+                Title  string `json:"title"`
+                Detail string `json:"detail"`
+            }{{Title: "Not Found", Detail: "App not found"}}})
+        } else {
+            c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+                Title  string `json:"title"`
+                Detail string `json:"detail"`
+            }{{Title: "Internal Server Error", Detail: err.Error()}}})
+        }
+        return
+    }
+
+    // Check if the current user owns the app
+    if app.UserID != currentUser.ID {
+        c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+            Title  string `json:"title"`
+            Detail string `json:"detail"`
+        }{{Title: "Forbidden", Detail: "You don't have permission to access this app"}}})
+        return
+    }
+
+    // Fetch the associated credential
+    credential, err := a.service.GetCredentialByID(app.CredentialID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+            Title  string `json:"title"`
+            Detail string `json:"detail"`
+        }{{Title: "Internal Server Error", Detail: "Failed to retrieve app credential"}}})
+        return
+    }
+
+    response := AppDetailResponse{
+        Type: "app",
+        ID:   strconv.FormatUint(uint64(app.ID), 10),
+        Attributes: struct {
+            Name          string           `json:"name"`
+            Description   string           `json:"description"`
+            UserID        uint             `json:"user_id"`
+            CredentialID  uint             `json:"credential_id"`
+            DatasourceIDs []uint           `json:"datasource_ids"`
+            LLMIDs        []uint           `json:"llm_ids"`
+            Credential    CredentialDetail `json:"credential"`
+        }{
+            Name:         app.Name,
+            Description:  app.Description,
+            UserID:       app.UserID,
+            CredentialID: app.CredentialID,
+            DatasourceIDs: func() []uint {
+                ids := make([]uint, len(app.Datasources))
+                for i, ds := range app.Datasources {
+                    ids[i] = ds.ID
+                }
+                return ids
+            }(),
+            LLMIDs: func() []uint {
+                ids := make([]uint, len(app.LLMs))
+                for i, llm := range app.LLMs {
+                    ids[i] = llm.ID
+                }
+                return ids
+            }(),
+            Credential: CredentialDetail{
+                KeyID:  credential.KeyID,
+                Secret: credential.Secret,
+                Active: credential.Active,
+            },
+        },
+    }
+
+    c.JSON(http.StatusOK, response)
 }

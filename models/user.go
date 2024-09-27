@@ -124,3 +124,27 @@ func (u *User) GetAccessibleToolCatalogues(db *gorm.DB) ([]ToolCatalogue, error)
 		Find(&toolCatalogues).Error
 	return toolCatalogues, err
 }
+
+func (u *User) GetAccessibleDataSources(db *gorm.DB) ([]Datasource, error) {
+	var dataSources []Datasource
+	err := db.Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.datasource_id = datasources.id").
+		Joins("JOIN data_catalogues ON data_catalogues.id = data_catalogue_data_sources.data_catalogue_id").
+		Joins("JOIN group_datacatalogues ON group_datacatalogues.data_catalogue_id = data_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_datacatalogues.group_id").
+		Where("user_groups.user_id = ?", u.ID).
+		Distinct().
+		Find(&dataSources).Error
+	return dataSources, err
+}
+
+func (u *User) GetAccessibleLLMs(db *gorm.DB) ([]LLM, error) {
+	var llms []LLM
+	err := db.Joins("JOIN catalogue_llms ON catalogue_llms.llm_id = llms.id").
+		Joins("JOIN catalogues ON catalogues.id = catalogue_llms.catalogue_id").
+		Joins("JOIN group_catalogues ON group_catalogues.catalogue_id = catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_catalogues.group_id").
+		Where("user_groups.user_id = ?", u.ID).
+		Distinct().
+		Find(&llms).Error
+	return llms, err
+}

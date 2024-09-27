@@ -783,3 +783,36 @@ type UserWithEntitlementsResponse struct {
 		} `json:"entitlements"`
 	} `json:"attributes"`
 }
+
+// AppListResponse represents the response for listing apps
+type AppListResponse struct {
+	Data []AppResponse `json:"data"`
+	Meta struct {
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+		PageSize   int   `json:"page_size"`
+		PageNumber int   `json:"page_number"`
+	} `json:"meta"`
+}
+
+// AppDetailResponse represents the detailed response for app-related operations
+type AppDetailResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name          string           `json:"name"`
+		Description   string           `json:"description"`
+		UserID        uint             `json:"user_id"`
+		CredentialID  uint             `json:"credential_id"`
+		DatasourceIDs []uint           `json:"datasource_ids"`
+		LLMIDs        []uint           `json:"llm_ids"`
+		Credential    CredentialDetail `json:"credential"`
+	} `json:"attributes"`
+}
+
+// CredentialDetail represents the credential details
+type CredentialDetail struct {
+	KeyID  string `json:"key_id"`
+	Secret string `json:"secret"`
+	Active bool   `json:"active"`
+}

@@ -135,7 +135,7 @@ func main() {
 	authService := auth.NewAuthService(config, mailer)
 
 	// Create a new API instance
-	api := api.NewAPI(service, true, authService) // true to disable CORS for development
+	api := api.NewAPI(service, true, authService, config) // true to disable CORS for development
 
 	// Run the API
 	if err := api.Run(":8080"); err != nil {

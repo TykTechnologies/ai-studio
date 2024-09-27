@@ -133,7 +133,7 @@ func (a *AuthService) ResetPassword(email string) error {
 		}
 	}
 
-	if err := a.sendEmail(user.Email, "Password Reset", emailBody); err != nil {
+	if err := a.SendEmail(user.Email, "Password Reset", emailBody); err != nil {
 		return fmt.Errorf("failed to send password reset email: %w", err)
 	}
 
@@ -255,7 +255,7 @@ func (a *AuthService) ResendVerificationEmail(email string) error {
 	verificationLink := fmt.Sprintf("%s/verify-email?token=%s", a.Config.FrontendURL, verificationToken)
 	emailBody := fmt.Sprintf("Click the following link to verify your email: %s", verificationLink)
 
-	if err := a.sendEmail(user.Email, "Email Verification", emailBody); err != nil {
+	if err := a.SendEmail(user.Email, "Email Verification", emailBody); err != nil {
 		return fmt.Errorf("failed to send verification email: %w", err)
 	}
 
@@ -313,7 +313,7 @@ func (a *AuthService) sendVerificationEmail(user *models.User) error {
 	verificationLink := fmt.Sprintf("https://yourdomain.com/verify-email?token=%s", verificationToken)
 	emailBody := fmt.Sprintf("Click the following link to verify your email: %s", verificationLink)
 
-	return a.sendEmail(user.Email, "Email Verification", emailBody)
+	return a.SendEmail(user.Email, "Email Verification", emailBody)
 }
 
 func (a *AuthService) notifyAdmin(user *models.User) error {
@@ -335,9 +335,9 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 		}
 	}
 
-	return a.sendEmail(a.Config.AdminEmail, subject, body)
+	return a.SendEmail(a.Config.AdminEmail, subject, body)
 }
-func (a *AuthService) sendEmail(to, subject, body string) error {
+func (a *AuthService) SendEmail(to, subject, body string) error {
 	fmt.Println("Sending email to: ", to)
 	m := mail.NewMessage()
 	m.SetHeader("From", a.Config.FromEmail)

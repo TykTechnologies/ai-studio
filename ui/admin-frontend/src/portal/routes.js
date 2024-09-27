@@ -8,6 +8,9 @@ import ResetPassword from "./pages/ResetPassword";
 import PortalDashboard from "./pages/PortalDashboard";
 import LLMListView from "./components/LLMListView";
 import DataSourceListView from "./components/DataSourceListView";
+import AppBuilder from "./components/AppBuilder";
+import AppListView from "./components/AppListView";
+import AppDetailView from "./components/AppDetailView";
 
 const portalRoutes = [
   <Route key="auth" element={<AuthLayout />}>
@@ -21,6 +24,9 @@ const portalRoutes = [
     <Route path="dashboard" element={<PortalDashboard />} />
     <Route path="llms/:catalogueId" element={<LLMListView />} />
     <Route path="databases/:catalogueId" element={<DataSourceListView />} />
+    <Route path="app/new" element={<AppBuilder />} />
+    <Route path="apps" element={<AppListView />} />
+    <Route path="apps/:id" element={<AppDetailView />} />
     {/* Add other portal routes that require the drawer here */}
   </Route>,
 ];

@@ -31,16 +31,18 @@ import (
 type API struct {
 	service     *services.Service
 	router      *gin.Engine
+	config      *auth.Config
 	disableCORS bool
 	auth        *auth.AuthService
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config) *API {
 	api := &API{
 		service:     service,
 		router:      gin.Default(),
 		disableCORS: disableCORS,
 		auth:        authService,
+		config:      config,
 	}
 	api.setupRoutes()
 	return api
@@ -94,6 +96,11 @@ func (a *API) setupRoutes() {
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
 	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
+	authed.GET("/apps", a.getUserApps)
+	authed.POST("/apps", a.createUserApp)
+	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
+	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
+	authed.GET("/apps/:id", a.getUserAppDetails)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())

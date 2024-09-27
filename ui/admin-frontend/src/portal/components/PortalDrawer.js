@@ -16,6 +16,8 @@ import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import AppsIcon from "@mui/icons-material/Apps";
+
 import pubClient from "../../admin/utils/pubClient";
 
 const drawerWidth = 240;
@@ -162,6 +164,12 @@ const PortalDrawer = () => {
             </Collapse>
           </List>
         </Collapse>
+        <ListItem button component={Link} to="/portal/apps">
+          <ListItemIcon>
+            <AppsIcon />
+          </ListItemIcon>
+          <ListItemText primary="My Apps" />
+        </ListItem>
       </List>
     </Drawer>
   );

@@ -41,7 +41,7 @@ func setupTestAPIForCommonTests(t *testing.T) (*API, *gorm.DB, *services.Service
 	}
 
 	authService := auth.NewAuthService(&config, newMockMailer())
-	api := NewAPI(service, true, authService)
+	api := NewAPI(service, true, authService, nil)
 
 	return api, db, service
 }
