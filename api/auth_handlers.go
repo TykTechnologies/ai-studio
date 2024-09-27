@@ -264,12 +264,12 @@ func (a *API) handleResendVerification(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Verification email resent"})
 }
 
-// @Summary Get current user
-// @Description Get the details of the currently logged-in user
+// @Summary Get current user with entitlements
+// @Description Get the details of the currently logged-in user including their entitlements
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Success 200 {object} UserResponse
+// @Success 200 {object} UserWithEntitlementsResponse
 // @Failure 401 {object} ErrorResponse
 // @Router /api/v1/me [get]
 // @Security BearerAuth
@@ -286,19 +286,125 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
-	response := UserResponse{
+	// Get user's groups
+	groups, err := a.service.GetGroupsByUserID(u.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// Get unique entitlements across all groups
+	catalogues := make(map[uint]models.Catalogue)
+	dataCatalogues := make(map[uint]models.DataCatalogue)
+	toolCatalogues := make(map[uint]models.ToolCatalogue)
+	chats := make(map[uint]models.Chat)
+
+	for _, group := range groups {
+		// Get catalogues for this group
+		groupCatalogues, err := a.service.GetGroupCatalogues(group.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+		for _, catalogue := range groupCatalogues {
+			catalogues[catalogue.ID] = catalogue
+		}
+
+		// Get data catalogues for this group
+		groupDataCatalogues, err := a.service.GetGroupDataCatalogues(group.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+		for _, dataCatalogue := range groupDataCatalogues {
+			dataCatalogues[dataCatalogue.ID] = dataCatalogue
+		}
+
+		// Get tool catalogues for this group
+		groupToolCatalogues, _, _, err := a.service.GetGroupToolCatalogues(group.ID, 1, 1, true)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+		for _, toolCatalogue := range groupToolCatalogues {
+			toolCatalogues[toolCatalogue.ID] = toolCatalogue
+		}
+
+		// Get chats for this group
+		groupChats, err := a.service.GetChatsByGroupID(group.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+		for _, chat := range groupChats {
+			chats[chat.ID] = chat
+		}
+	}
+
+	response := UserWithEntitlementsResponse{
 		Type: "user",
 		ID:   strconv.Itoa(int(u.ID)),
 		Attributes: struct {
-			Email   string `json:"email"`
-			Name    string `json:"name"`
-			IsAdmin bool   `json:"is_admin"`
+			Email        string `json:"email"`
+			Name         string `json:"name"`
+			IsAdmin      bool   `json:"is_admin"`
+			Entitlements struct {
+				Catalogues     []CatalogueResponse     `json:"catalogues"`
+				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
+				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
+				Chats          []ChatResponse          `json:"chats"`
+			} `json:"entitlements"`
 		}{
 			Email:   u.Email,
 			Name:    u.Name,
 			IsAdmin: u.IsAdmin,
+			Entitlements: struct {
+				Catalogues     []CatalogueResponse     `json:"catalogues"`
+				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
+				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
+				Chats          []ChatResponse          `json:"chats"`
+			}{
+				Catalogues:     serializeCatalogues(mapToSlice(catalogues)),
+				DataCatalogues: serializeDataCatalogues(mapToSlice(dataCatalogues)),
+				ToolCatalogues: serializeToolCatalogues(mapToSlice(toolCatalogues)),
+				Chats:          serializeChats(mapToSlice(chats)),
+			},
 		},
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// Helper function to convert map to slice
+func mapToSlice[T any](m map[uint]T) []T {
+	slice := make([]T, 0, len(m))
+	for _, v := range m {
+		slice = append(slice, v)
+	}
+	return slice
 }

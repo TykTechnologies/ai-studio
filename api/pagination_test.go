@@ -24,7 +24,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 
 	service := services.NewService(db)
 
-	config := auth.Config{
+	config := &auth.Config{
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",
@@ -120,7 +120,7 @@ func TestPagination_UserPagination(t *testing.T) {
 	assert.NoError(t, err)
 
 	service := services.NewService(db)
-	config := auth.Config{
+	config := &auth.Config{
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",

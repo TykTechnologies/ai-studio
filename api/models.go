@@ -765,3 +765,21 @@ type ResendVerificationResponse struct {
 		} `json:"attributes"`
 	} `json:"data"`
 }
+
+// UserWithEntitlementsResponse represents the response for the current user with entitlements
+// @Description User with entitlements response model
+type UserWithEntitlementsResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Email        string `json:"email"`
+		Name         string `json:"name"`
+		IsAdmin      bool   `json:"is_admin"`
+		Entitlements struct {
+			Catalogues     []CatalogueResponse     `json:"catalogues"`
+			DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
+			ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
+			Chats          []ChatResponse          `json:"chats"`
+		} `json:"entitlements"`
+	} `json:"attributes"`
+}

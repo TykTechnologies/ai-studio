@@ -28,7 +28,7 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 
 	service := services.NewService(db)
 
-	config := auth.Config{
+	config := &auth.Config{
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",

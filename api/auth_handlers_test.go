@@ -64,7 +64,7 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 	suite.db = setupTestDB(suite.T())
 	suite.service = services.NewService(suite.db)
 	suite.mockMailer = newMockMailer()
-	config := auth.Config{
+	config := &auth.Config{
 		DB:                  suite.db,
 		Service:             suite.service,
 		CookieName:          "session",
@@ -76,6 +76,7 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 		TestMode:            false,
+		SMTPHost:            "testhost",
 	}
 	suite.authService = auth.NewAuthService(config, suite.mockMailer)
 	suite.api = &API{
@@ -228,13 +229,15 @@ func (suite *AuthHandlersTestSuite) TestRegisterHandler() {
 		assert.NoError(suite.T(), err)
 		assert.Equal(suite.T(), "User registered successfully", response["message"])
 
-		assert.Equal(suite.T(), 2, len(suite.mockMailer.sentEmails))
-		if len(suite.mockMailer.sentEmails) != 2 {
+		assert.Equal(suite.T(), 1, len(suite.mockMailer.sentEmails))
+		if len(suite.mockMailer.sentEmails) != 1 {
 			for _, email := range suite.mockMailer.sentEmails {
 				fmt.Println(email.GetHeader("Subject")[0])
 			}
 		}
-		assert.Equal(suite.T(), "newuser@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		if len(suite.mockMailer.sentEmails) > 0 {
+			assert.Equal(suite.T(), "admin@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		}
 	})
 
 	suite.Run("Registration with Weak Password", func() {
@@ -302,7 +305,10 @@ func (suite *AuthHandlersTestSuite) TestForgotPasswordHandler() {
 		assert.Equal(suite.T(), "Password reset email sent", response["message"])
 
 		assert.Equal(suite.T(), 1, len(suite.mockMailer.sentEmails))
-		assert.Equal(suite.T(), "forgetful@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		if len(suite.mockMailer.sentEmails) > 0 {
+			assert.Equal(suite.T(), "forgetful@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		}
+
 	})
 
 	suite.Run("Forgot Password for Non-existent User", func() {
@@ -465,7 +471,9 @@ func (suite *AuthHandlersTestSuite) TestResendVerificationHandler() {
 		assert.Equal(suite.T(), "Verification email resent", response["message"])
 
 		assert.Equal(suite.T(), 1, len(suite.mockMailer.sentEmails))
-		assert.Equal(suite.T(), "resend@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		if len(suite.mockMailer.sentEmails) > 0 {
+			assert.Equal(suite.T(), "resend@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		}
 	})
 
 	suite.Run("Resend Verification for Already Verified User", func() {

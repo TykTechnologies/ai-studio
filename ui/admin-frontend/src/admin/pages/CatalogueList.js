@@ -125,7 +125,7 @@ const CatalogueList = () => {
 
   const handleEdit = (event, id) => {
     event.stopPropagation();
-    navigate(`/catalogs/llms/edit/${id}`);
+    navigate(`/admin/catalogs/llms/edit/${id}`);
   };
 
   const handleAddLLM = async () => {
@@ -213,7 +213,7 @@ const CatalogueList = () => {
   };
 
   const handleCatalogueClick = (id) => {
-    navigate(`/catalogs/llms/${id}`);
+    navigate(`/admin/catalogs/llms/${id}`);
   };
 
   const getLLMNames = (catalogue) => {

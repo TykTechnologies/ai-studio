@@ -102,3 +102,25 @@ func (u *User) GetAccessibleCatalogues(db *gorm.DB) ([]Catalogue, error) {
 		Find(&catalogues).Error
 	return catalogues, err
 }
+
+func (u *User) GetAccessibleDataCatalogues(db *gorm.DB) ([]DataCatalogue, error) {
+	var dataCatalogues []DataCatalogue
+	err := db.Table("data_catalogues").
+		Joins("JOIN group_datacatalogues ON group_datacatalogues.data_catalogue_id = data_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_datacatalogues.group_id").
+		Where("user_groups.user_id = ?", u.ID).
+		Distinct().
+		Find(&dataCatalogues).Error
+	return dataCatalogues, err
+}
+
+func (u *User) GetAccessibleToolCatalogues(db *gorm.DB) ([]ToolCatalogue, error) {
+	var toolCatalogues []ToolCatalogue
+	err := db.Table("tool_catalogues").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
+		Where("user_groups.user_id = ?", u.ID).
+		Distinct().
+		Find(&toolCatalogues).Error
+	return toolCatalogues, err
+}

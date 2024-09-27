@@ -85,10 +85,15 @@ func (a *API) setupRoutes() {
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
 
+	// routes for portal users
 	authed := public.Group("/common")
 	authed.Use(a.auth.AuthMiddleware())
 	authed.POST("/logout", a.handleLogout)
 	authed.GET("/me", a.handleMe)
+	authed.GET("/catalogues/:id/llms", a.getCatalogueLLMs)
+	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
+	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
+	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
