@@ -1,17 +1,16 @@
 import React from "react";
+import { Box, Toolbar } from "@mui/material";
 import { Outlet } from "react-router-dom";
-import { Box, CssBaseline, Toolbar } from "@mui/material";
 import PortalAppBar from "../components/PortalAppBar";
 import PortalDrawer from "../components/PortalDrawer";
 
 const PortalLayout = () => {
   return (
     <Box sx={{ display: "flex" }}>
-      <CssBaseline />
       <PortalAppBar />
       <PortalDrawer />
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Toolbar />
+        <Toolbar /> {/* This creates space below the AppBar */}
         <Outlet />
       </Box>
     </Box>

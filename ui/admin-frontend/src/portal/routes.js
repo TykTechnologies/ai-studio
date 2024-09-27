@@ -1,12 +1,12 @@
 import React from "react";
 import { Route } from "react-router-dom";
 import AuthLayout from "./layouts/AuthLayout";
-import PortalLayout from "./layouts/PortalLayout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import PortalDashboard from "./pages/PortalDashboard";
+import LLMListView from "./components/LLMListView";
 
 const portalRoutes = [
   <Route key="auth" element={<AuthLayout />}>
@@ -16,8 +16,9 @@ const portalRoutes = [
     <Route path="forgot-password" element={<ForgotPassword />} />
     <Route path="reset-password" element={<ResetPassword />} />
   </Route>,
-  <Route key="portal" element={<PortalLayout />}>
+  <Route key="portal">
     <Route path="dashboard" element={<PortalDashboard />} />
+    <Route path="llms/:catalogueId" element={<LLMListView />} />
     {/* Add other portal routes that require the drawer here */}
   </Route>,
 ];

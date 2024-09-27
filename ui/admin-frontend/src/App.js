@@ -19,6 +19,7 @@ import ForgotPassword from "./portal/pages/ForgotPassword";
 import adminRoutes from "./admin/routes";
 import portalRoutes from "./portal/routes";
 import ResetPassword from "./portal/pages/ResetPassword";
+import PortalLayout from "./portal/layouts/PortalLayout";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -115,7 +116,7 @@ function App() {
             path="/portal/*"
             element={
               isAuthenticated ? (
-                <MainLayout />
+                <PortalLayout /> // Change this to PortalLayout
               ) : (
                 <Navigate to="/login" replace />
               )
