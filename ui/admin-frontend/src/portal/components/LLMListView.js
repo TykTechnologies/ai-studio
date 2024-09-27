@@ -12,8 +12,10 @@ import {
   Container,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
+import LLMDetailModal from "./LLMDetailModal";
+import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
 
-const defaultLogo = "/generic-llm-logo.png"; // Replace with actual path to default logo
+const defaultLogo = "/generic-llm-logo.png";
 
 const LLMListView = () => {
   const [llms, setLLMs] = useState([]);
@@ -21,6 +23,8 @@ const LLMListView = () => {
   const [error, setError] = useState(null);
   const { catalogueId } = useParams();
   const navigate = useNavigate();
+  const [openModal, setOpenModal] = useState(false);
+  const [selectedLLM, setSelectedLLM] = useState(null);
 
   useEffect(() => {
     const fetchLLMs = async () => {
@@ -42,6 +46,15 @@ const LLMListView = () => {
 
   const handleBuildApp = (llmId) => {
     navigate(`/portal/app/new?llm=${llmId}`);
+  };
+
+  const handleOpenModal = (llm) => {
+    setSelectedLLM(llm);
+    setOpenModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setOpenModal(false);
   };
 
   if (loading) {
@@ -78,33 +91,57 @@ const LLMListView = () => {
                 alt={`${llm.attributes.name} logo`}
               />
               <CardContent sx={{ flexGrow: 1 }}>
-                <Typography gutterBottom variant="h5" component="div">
+                <Typography gutterBottom variant="h6" component="div">
                   {llm.attributes.name}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {llm.attributes.short_description}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
-                >
-                  Vendor: {llm.attributes.vendor}
-                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
+                  <img
+                    src={getVendorLogo(llm.attributes.vendor)}
+                    alt={getVendorName(llm.attributes.vendor)}
+                    style={{
+                      width: 24,
+                      height: 24,
+                      marginRight: 8,
+                      objectFit: "contain",
+                    }}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src =
+                        process.env.PUBLIC_URL + "/images/placeholder-logo.png";
+                    }}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {getVendorName(llm.attributes.vendor)}
+                  </Typography>
+                </Box>
               </CardContent>
-              <Box sx={{ p: 2 }}>
+              <Box
+                sx={{ p: 2, display: "flex", justifyContent: "space-between" }}
+              >
+                <Button variant="outlined" onClick={() => handleOpenModal(llm)}>
+                  More
+                </Button>
                 <Button
                   variant="contained"
-                  fullWidth
                   onClick={() => handleBuildApp(llm.id)}
                 >
-                  Build an App with this LLM
+                  Build App
                 </Button>
               </Box>
             </Card>
           </Grid>
         ))}
       </Grid>
+      {selectedLLM && (
+        <LLMDetailModal
+          llm={selectedLLM}
+          open={openModal}
+          handleClose={handleCloseModal}
+        />
+      )}
     </Container>
   );
 };
