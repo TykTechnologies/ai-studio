@@ -183,63 +183,6 @@ func (a *API) listChatHistoryRecords(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// // listChatHistoryRecords godoc
-// // @Summary List chat history records
-// // @Description List chat history records for a given user
-// // @Tags chat-history
-// // @Accept json
-// // @Produce json
-// // @Param user_id query int true "User ID"
-// // @Param page query int false "Page number"
-// // @Param page_size query int false "Page size"
-// // @Success 200 {object} ChatHistoryRecordListResponse
-// // @Failure 400 {object} ErrorResponse
-// // @Failure 500 {object} ErrorResponse
-// // @Router /chat-history-records [get]
-// func (a *API) listChatHistoryRecords(c *gin.Context) {// 	userID, err := strconv.ParseUint(c.Query("user_id"), 10, 64)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-// 			Title  string `json:"title"`
-// 			Detail string `json:"detail"`
-// 		}{{Title: "Bad Request", Detail: "Invalid user ID format"}}})
-// 		return
-// 	}
-
-// 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-// 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-
-// 	records, total, err := a.service.ListChatHistoryRecordsByUserIDPaginated(uint(userID), page, pageSize)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-// 			Title  string `json:"title"`
-// 			Detail string `json:"detail"`
-// 		}{{Title: "Internal Server Error", Detail: err.Error()}}})
-// 		return
-// 	}
-
-// 	response := ChatHistoryRecordListResponse{Data: make([]ChatHistoryRecordResponse, len(records))}
-// 	for i, record := range records {
-// 		response.Data[i] = ChatHistoryRecordResponse{
-// 			Type: "chat_history_record",
-// 			ID:   strconv.FormatUint(uint64(record.ID), 10),
-// 			Attributes: struct {
-// 				SessionID string `json:"session_id"`
-// 				ChatID    uint   `json:"chat_id"`
-// 				UserID    uint   `json:"user_id"`
-// 				Name      string `json:"name"`
-// 			}{
-// 				SessionID: record.SessionID,
-// 				ChatID:    record.ChatID,
-// 				UserID:    record.UserID,
-// 				Name:      record.Name,
-// 			},
-// 		}
-// 	}
-
-// 	c.Header("X-Total-Count", strconv.FormatInt(total, 10))
-// 	c.JSON(http.StatusOK, response)
-// }
-
 // deleteChatHistoryRecord godoc
 // @Summary Delete a chat history record
 // @Description Delete a chat history record by its ID

@@ -972,3 +972,47 @@ func (a *API) deleteUserApp(c *gin.Context) {
 type SuccessResponse struct {
 	Message string `json:"message"`
 }
+
+// listChatHistoryRecords godoc
+// @Summary List chat history records
+// @Description List chat history records for a given user
+// @Tags chat-history
+// @Accept json
+// @Produce json
+// @Param user_id query int true "User ID"
+// @Param page query int false "Page number"
+// @Param page_size query int false "Page size"
+// @Param all query bool false "Retrieve all records"
+// @Success 200 {object} ChatHistoryRecordListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /chat-history-records [get]
+func (a *API) listChatHistoryRecordsForMe(c *gin.Context) {
+	user, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "Not Authorized"}}})
+		return
+	}
+
+	userID := user.(*models.User).ID
+
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	records, totalCount, totalPages, err := a.service.ListChatHistoryRecordsByUserIDPaginated(uint(userID), pageSize, pageNumber, all)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := ChatHistoryRecordListResponse{Data: serializeChatHistoryRecords(records)}
+
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
+	c.JSON(http.StatusOK, response)
+}

@@ -10,6 +10,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { Link } from "react-router-dom";
+import DashboardIcon from "@mui/icons-material/Dashboard";
 import ChatIcon from "@mui/icons-material/Chat";
 import CodeIcon from "@mui/icons-material/Code";
 import StorageIcon from "@mui/icons-material/Storage";
@@ -28,6 +29,7 @@ const PortalDrawer = () => {
   const [openDev, setOpenDev] = useState(true);
   const [openLLMs, setOpenLLMs] = useState(false);
   const [openDatabases, setOpenDatabases] = useState(false);
+  const [openChatRooms, setOpenChatRooms] = useState(true);
   const theme = useTheme();
 
   useEffect(() => {
@@ -72,6 +74,10 @@ const PortalDrawer = () => {
     setOpenDatabases(!openDatabases);
   };
 
+  const handleChatRoomsClick = () => {
+    setOpenChatRooms(!openChatRooms);
+  };
+
   return (
     <Drawer
       variant="permanent"
@@ -98,12 +104,17 @@ const PortalDrawer = () => {
           padding: "16px",
         }}
       >
-        <ListItem
-          button
-          component={Link}
-          to="/portal/chat-rooms"
-          sx={{ mb: 1 }}
-        >
+        <ListItem button component={Link} to="/portal/dashboard" sx={{ mb: 1 }}>
+          <ListItemIcon>
+            <DashboardIcon />
+          </ListItemIcon>
+          <ListItemText
+            primary="Dashboard"
+            primaryTypographyProps={{ noWrap: true }}
+          />
+        </ListItem>
+
+        <ListItem button onClick={handleChatRoomsClick} sx={{ mb: 1 }}>
           <ListItemIcon>
             <ChatIcon />
           </ListItemIcon>
@@ -111,24 +122,29 @@ const PortalDrawer = () => {
             primary="Chat Rooms"
             primaryTypographyProps={{ noWrap: true }}
           />
+          {openChatRooms ? <ExpandLess /> : <ExpandMore />}
         </ListItem>
-        {userEntitlements?.chats.map((chat) => (
-          <ListItem
-            key={chat.id}
-            button
-            component={Link}
-            to={`/portal/chat-rooms/${chat.id}`}
-            sx={{ pl: 4, mb: 1 }}
-          >
-            <ListItemIcon>
-              <ChatBubbleOutlineIcon />
-            </ListItemIcon>
-            <ListItemText
-              primary={chat.attributes.name}
-              primaryTypographyProps={{ noWrap: true }}
-            />
-          </ListItem>
-        ))}
+        <Collapse in={openChatRooms} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            {userEntitlements?.chats.map((chat) => (
+              <ListItem
+                key={chat.id}
+                button
+                component={Link}
+                to={`/portal/chat-rooms/${chat.id}`}
+                sx={{ pl: 4, mb: 1 }}
+              >
+                <ListItemIcon>
+                  <ChatBubbleOutlineIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary={chat.attributes.name}
+                  primaryTypographyProps={{ noWrap: true }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Collapse>
         <ListItem button onClick={handleDevClick} sx={{ mb: 1 }}>
           <ListItemIcon>
             <CodeIcon />

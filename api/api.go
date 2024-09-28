@@ -102,6 +102,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
 	authed.GET("/apps/:id", a.getUserAppDetails)
 	authed.DELETE("/apps/:id", a.deleteUserApp)
+	authed.GET("/history", a.listChatHistoryRecordsForMe)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
@@ -224,10 +225,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
-	v1.GET("/apps", a.listApps)                          // New route
-	v1.GET("/apps/search", a.searchApps)                 // New route
-	v1.GET("/apps/count", a.countApps)                   // New route
-	v1.GET("/users/:id/apps/count", a.countAppsByUserID) // New route
+	v1.GET("/apps", a.listApps)
+	v1.GET("/apps/search", a.searchApps)
+	v1.GET("/apps/count", a.countApps)
+	v1.GET("/users/:id/apps/count", a.countAppsByUserID)
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)
