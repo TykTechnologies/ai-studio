@@ -11,6 +11,7 @@ import DataSourceListView from "./components/DataSourceListView";
 import AppBuilder from "./components/AppBuilder";
 import AppListView from "./components/AppListView";
 import AppDetailView from "./components/AppDetailView";
+import ChatView from "./components/ChatView";
 
 const portalRoutes = [
   <Route key="auth" element={<AuthLayout />}>
@@ -27,6 +28,7 @@ const portalRoutes = [
     <Route path="app/new" element={<AppBuilder />} />
     <Route path="apps" element={<AppListView />} />
     <Route path="apps/:id" element={<AppDetailView />} />
+    <Route path="chat/:chatId" element={<ChatView />} />
     {/* Add other portal routes that require the drawer here */}
   </Route>,
 ];

@@ -131,7 +131,7 @@ const PortalDrawer = () => {
                 key={chat.id}
                 button
                 component={Link}
-                to={`/portal/chat-rooms/${chat.id}`}
+                to={`/portal/chat/${chat.id}`}
                 sx={{ pl: 4, mb: 1 }}
               >
                 <ListItemIcon>

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"encoding/json"
@@ -90,11 +91,14 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		return
 	}
 
+	log.Println("Attempting to upgrade connection to WebSocket")
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	log.Println("WebSocket connection established")
 	defer conn.Close()
 
 	// Get session ID from query parameter
@@ -131,18 +135,23 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	defer chatSession.Stop()
 
 	// Send the session ID to the client
+	fmt.Println("sending session ID")
 	sendWSMessage(conn, "session_id", chatSession.ID())
 
 	// Add this connection to the hub
 	hub := NewChatHub()
+	fmt.Println("Creating chat hub")
 	hub.AddSession(chatSession.ID(), conn)
 	defer hub.RemoveSession(chatSession.ID())
 
 	// Handle incoming messages
+	fmt.Println("listening for inbound messages")
 	go handleIncomingMessages(conn, chatSession)
 
 	// Handle outgoing messages
+	fmt.Println("Handling outgoing messages")
 	handleOutgoingMessages(conn, chatSession)
+	fmt.Println("CLOSED")
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
@@ -210,8 +219,8 @@ func handleIncomingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) 
 func handleOutgoingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
 	for {
 		select {
-		case msg := <-cs.OutputMessage():
-			sendWSMessage(conn, "ai_message", msg.Payload)
+		// case msg := <-cs.OutputMessage():
+		// 	sendWSMessage(conn, "ai_message", msg.Payload)
 		case chunk := <-cs.OutputStream():
 			sendWSMessage(conn, "stream_chunk", string(chunk))
 		case err := <-cs.Errors():

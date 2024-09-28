@@ -1,7 +1,8 @@
 import axios from "axios";
+import config from "../../config";
 
 const apiClient = axios.create({
-  baseURL: "http://localhost:8080/api/v1",
+  baseURL: `${config.API_BASE_URL}/api/v1`,
   withCredentials: true, // This is important for handling cookies
 });
 
