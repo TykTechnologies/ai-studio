@@ -10,7 +10,6 @@ import {
   Button,
   CircularProgress,
   Container,
-  Modal,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
 import {
@@ -20,6 +19,7 @@ import {
   getEmbedderLogo,
   fetchVendors,
 } from "../../admin/utils/vendorUtils";
+import DetailModal from "./DetailModal";
 
 const defaultIcon = "/generic-datasource-icon.png";
 
@@ -63,6 +63,7 @@ const DataSourceListView = () => {
 
   const handleCloseModal = () => {
     setOpenModal(false);
+    setSelectedDataSource(null);
   };
 
   const handleUseDataSource = (dataSourceId) => {
@@ -102,7 +103,7 @@ const DataSourceListView = () => {
                 image={dataSource.attributes.icon || defaultIcon}
                 alt={`${dataSource.attributes.name} icon`}
                 onError={(e) => {
-                  e.target.onerror = null; // Prevent infinite loop
+                  e.target.onerror = null;
                   e.target.src = defaultIcon;
                 }}
               />
@@ -134,93 +135,66 @@ const DataSourceListView = () => {
           </Grid>
         ))}
       </Grid>
-      <Modal
-        open={openModal}
-        onClose={handleCloseModal}
-        aria-labelledby="data-source-modal-title"
-        aria-describedby="data-source-modal-description"
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: 400,
-            bgcolor: "background.paper",
-            boxShadow: 24,
-            p: 4,
-            maxHeight: "80vh",
-            overflowY: "auto",
-          }}
+      {selectedDataSource && (
+        <DetailModal
+          open={openModal}
+          handleClose={handleCloseModal}
+          title={selectedDataSource.attributes.name}
         >
-          {selectedDataSource && (
-            <>
-              <Typography
-                id="data-source-modal-title"
-                variant="h6"
-                component="h2"
-              >
-                {selectedDataSource.attributes.name}
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle1">Database Type:</Typography>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <img
+                src={getVectorStoreLogo(
+                  selectedDataSource.attributes.db_source_type,
+                )}
+                alt={getVectorStoreName(
+                  selectedDataSource.attributes.db_source_type,
+                )}
+                style={{
+                  width: 24,
+                  height: 24,
+                  marginRight: 8,
+                  objectFit: "contain",
+                }}
+              />
+              <Typography>
+                {getVectorStoreName(
+                  selectedDataSource.attributes.db_source_type,
+                )}
               </Typography>
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1">Database Type:</Typography>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <img
-                    src={getVectorStoreLogo(
-                      selectedDataSource.attributes.db_source_type,
-                    )}
-                    alt={getVectorStoreName(
-                      selectedDataSource.attributes.db_source_type,
-                    )}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      marginRight: 8,
-                      objectFit: "contain",
-                    }}
-                  />
-                  <Typography>
-                    {getVectorStoreName(
-                      selectedDataSource.attributes.db_source_type,
-                    )}
-                  </Typography>
-                </Box>
-              </Box>
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1">Embed Vendor:</Typography>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <img
-                    src={getEmbedderLogo(
-                      selectedDataSource.attributes.embed_vendor,
-                    )}
-                    alt={getEmbedderName(
-                      selectedDataSource.attributes.embed_vendor,
-                    )}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      marginRight: 8,
-                      objectFit: "contain",
-                    }}
-                  />
-                  <Typography>
-                    {getEmbedderName(
-                      selectedDataSource.attributes.embed_vendor,
-                    )}
-                  </Typography>
-                </Box>
-              </Box>
-              <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                Embedding Model: {selectedDataSource.attributes.embed_model}
+            </Box>
+          </Box>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle1">Embed Vendor:</Typography>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <img
+                src={getEmbedderLogo(
+                  selectedDataSource.attributes.embed_vendor,
+                )}
+                alt={getEmbedderName(
+                  selectedDataSource.attributes.embed_vendor,
+                )}
+                style={{
+                  width: 24,
+                  height: 24,
+                  marginRight: 8,
+                  objectFit: "contain",
+                }}
+              />
+              <Typography>
+                {getEmbedderName(selectedDataSource.attributes.embed_vendor)}
               </Typography>
-              <Typography variant="body1" sx={{ mt: 2 }}>
-                {selectedDataSource.attributes.long_description}
-              </Typography>
-            </>
-          )}
-        </Box>
-      </Modal>
+            </Box>
+          </Box>
+          <Typography variant="subtitle1" sx={{ mt: 2 }}>
+            Embedding Model: {selectedDataSource.attributes.embed_model}
+          </Typography>
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            {selectedDataSource.attributes.long_description}
+          </Typography>
+        </DetailModal>
+      )}
     </Container>
   );
 };

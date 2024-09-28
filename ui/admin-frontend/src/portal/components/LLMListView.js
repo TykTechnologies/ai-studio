@@ -12,7 +12,7 @@ import {
   Container,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
-import LLMDetailModal from "./LLMDetailModal";
+import DetailModal from "./DetailModal";
 import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
 
 const defaultLogo = "/generic-llm-logo.png";
@@ -136,11 +136,32 @@ const LLMListView = () => {
         ))}
       </Grid>
       {selectedLLM && (
-        <LLMDetailModal
-          llm={selectedLLM}
+        <DetailModal
           open={openModal}
           handleClose={handleCloseModal}
-        />
+          title={selectedLLM.attributes.name}
+        >
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            {selectedLLM.attributes.long_description}
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
+            <Typography variant="subtitle1">Vendor:</Typography>
+            <img
+              src={getVendorLogo(selectedLLM.attributes.vendor)}
+              alt={getVendorName(selectedLLM.attributes.vendor)}
+              style={{
+                width: 24,
+                height: 24,
+                marginLeft: 8,
+                marginRight: 8,
+                objectFit: "contain",
+              }}
+            />
+            <Typography>
+              {getVendorName(selectedLLM.attributes.vendor)}
+            </Typography>
+          </Box>
+        </DetailModal>
       )}
     </Container>
   );

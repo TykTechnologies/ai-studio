@@ -12,8 +12,13 @@ const style = {
   boxShadow: 24,
   p: 4,
 };
-
-const LLMDetailModal = ({ llm, open, handleClose }) => {
+const LLMDetailModal = ({
+  llm,
+  open,
+  handleClose,
+  modalStyle,
+  headerStyle,
+}) => {
   return (
     <Modal
       open={open}
@@ -21,19 +26,23 @@ const LLMDetailModal = ({ llm, open, handleClose }) => {
       aria-labelledby="modal-modal-title"
       aria-describedby="modal-modal-description"
     >
-      <Box sx={style}>
-        <Typography id="modal-modal-title" variant="h6" component="h2">
-          {llm.attributes.name}
-        </Typography>
-        <Typography id="modal-modal-description" sx={{ mt: 2 }}>
-          Vendor: {llm.attributes.vendor}
-        </Typography>
-        <Typography sx={{ mt: 2 }}>
-          {llm.attributes.long_description}
-        </Typography>
-        <Button onClick={handleClose} sx={{ mt: 2 }}>
-          Close
-        </Button>
+      <Box sx={{ ...style, ...modalStyle }}>
+        <Box sx={headerStyle}>
+          <Typography id="modal-modal-title" variant="h6" component="h2">
+            {llm.attributes.name}
+          </Typography>
+        </Box>
+        <Box sx={{ p: 3 }}>
+          <Typography id="modal-modal-description" sx={{ mt: 2 }}>
+            Vendor: {llm.attributes.vendor}
+          </Typography>
+          <Typography sx={{ mt: 2 }}>
+            {llm.attributes.long_description}
+          </Typography>
+          <Button onClick={handleClose} sx={{ mt: 2 }}>
+            Close
+          </Button>
+        </Box>
       </Box>
     </Modal>
   );

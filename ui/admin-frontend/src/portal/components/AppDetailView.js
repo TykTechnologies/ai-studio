@@ -15,8 +15,16 @@ import {
   DialogContentText,
   DialogTitle,
 } from "@mui/material";
+
+import { IconButton } from "@mui/material";
+
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
+
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+
 import pubClient from "../../admin/utils/pubClient";
 
 const SectionTitle = ({ children }) => (
@@ -40,6 +48,9 @@ const AppDetailView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const [showSecret, setShowSecret] = useState(false);
+
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -58,6 +69,21 @@ const AppDetailView = () => {
 
     fetchAppDetails();
   }, [id]);
+
+  const toggleSecretVisibility = () => {
+    setShowSecret(!showSecret);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard
+      .writeText(app.attributes.credential.secret)
+      .then(() => {
+        console.log("Secret copied to clipboard");
+      })
+      .catch((err) => {
+        console.error("Failed to copy text: ", err);
+      });
+  };
 
   const handleDeleteClick = () => {
     setDeleteDialogOpen(true);
@@ -150,7 +176,24 @@ const AppDetailView = () => {
           <FieldLabel>Secret:</FieldLabel>
         </Grid>
         <Grid item xs={9}>
-          <FieldValue>{app.attributes.credential.secret}</FieldValue>
+          <Box display="flex" alignItems="center">
+            <FieldValue>
+              {showSecret
+                ? app.attributes.credential.secret
+                : "••••••••••••••••"}
+            </FieldValue>
+            <IconButton onClick={() => setShowSecret(!showSecret)} size="small">
+              {showSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
+            </IconButton>
+            <IconButton
+              onClick={() =>
+                navigator.clipboard.writeText(app.attributes.credential.secret)
+              }
+              size="small"
+            >
+              <ContentCopyIcon />
+            </IconButton>
+          </Box>
         </Grid>
         <Grid item xs={3}>
           <FieldLabel>Active:</FieldLabel>

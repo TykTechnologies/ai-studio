@@ -13,6 +13,8 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
+  Card,
+  CardContent,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
 
@@ -168,115 +170,119 @@ const AppBuilder = () => {
       <Typography variant="h4" component="h1" gutterBottom>
         Create New App
       </Typography>
-      {error && (
-        <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-      <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-        <TextField
-          fullWidth
-          label="App Name"
-          value={appName}
-          onChange={(e) => setAppName(e.target.value)}
-          required
-          margin="normal"
-        />
-        <TextField
-          fullWidth
-          label="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-          multiline
-          rows={4}
-          margin="normal"
-        />
-        <Box sx={{ mt: 3, mb: 2 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            Data Sources (Optional)
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Select Data Source</InputLabel>
-              <Select
-                value={currentDataSource}
-                onChange={(e) => setCurrentDataSource(e.target.value)}
-                label="Select Data Source"
-              >
-                {dataSources.map((ds) => (
-                  <MenuItem key={ds.id} value={ds.id}>
-                    {ds.attributes.name}
-                  </MenuItem>
+      <Card>
+        <CardContent>
+          {error && (
+            <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
+            <TextField
+              fullWidth
+              label="App Name"
+              value={appName}
+              onChange={(e) => setAppName(e.target.value)}
+              required
+              margin="normal"
+            />
+            <TextField
+              fullWidth
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+              multiline
+              rows={4}
+              margin="normal"
+            />
+            <Box sx={{ mt: 3, mb: 2 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Data Sources (Optional)
+              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                <FormControl fullWidth sx={{ mr: 1 }}>
+                  <InputLabel>Select Data Source</InputLabel>
+                  <Select
+                    value={currentDataSource}
+                    onChange={(e) => setCurrentDataSource(e.target.value)}
+                    label="Select Data Source"
+                  >
+                    {dataSources.map((ds) => (
+                      <MenuItem key={ds.id} value={ds.id}>
+                        {ds.attributes.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button onClick={handleAddDataSource} variant="outlined">
+                  Add
+                </Button>
+              </Box>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                {selectedDataSources.map((ds) => (
+                  <Chip
+                    key={ds.id}
+                    label={ds.attributes.name}
+                    onDelete={() => handleRemoveDataSource(ds.id)}
+                  />
                 ))}
-              </Select>
-            </FormControl>
-            <Button onClick={handleAddDataSource} variant="outlined">
-              Add
+              </Box>
+            </Box>
+            <Box sx={{ mt: 3, mb: 2 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                LLMs (Optional)
+              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                <FormControl fullWidth sx={{ mr: 1 }}>
+                  <InputLabel>Select LLM</InputLabel>
+                  <Select
+                    value={currentLLM}
+                    onChange={(e) => setCurrentLLM(e.target.value)}
+                    label="Select LLM"
+                  >
+                    {llms.map((llm) => (
+                      <MenuItem key={llm.id} value={llm.id}>
+                        {llm.attributes.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button onClick={handleAddLLM} variant="outlined">
+                  Add
+                </Button>
+              </Box>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                {selectedLLMs.map((llm) => (
+                  <Chip
+                    key={llm.id}
+                    label={llm.attributes.name}
+                    onDelete={() => handleRemoveLLM(llm.id)}
+                  />
+                ))}
+              </Box>
+            </Box>
+            <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+              You must select at least one Data Source or one LLM for your app.
+              You can add multiple of each if needed. You will not be able to
+              add more later without admin support. Not all LLMs and Data
+              sources are allowed to be used together in an app due to data
+              security, please ensure the data sources and LLMs you select are
+              compatible. Once your App has been approved, you will be able to
+              start building your app using the credentials provided.
+            </Alert>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={!isFormValid}
+              sx={{ mt: 2 }}
+            >
+              Create App
             </Button>
           </Box>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-            {selectedDataSources.map((ds) => (
-              <Chip
-                key={ds.id}
-                label={ds.attributes.name}
-                onDelete={() => handleRemoveDataSource(ds.id)}
-              />
-            ))}
-          </Box>
-        </Box>
-        <Box sx={{ mt: 3, mb: 2 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            LLMs (Optional)
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Select LLM</InputLabel>
-              <Select
-                value={currentLLM}
-                onChange={(e) => setCurrentLLM(e.target.value)}
-                label="Select LLM"
-              >
-                {llms.map((llm) => (
-                  <MenuItem key={llm.id} value={llm.id}>
-                    {llm.attributes.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Button onClick={handleAddLLM} variant="outlined">
-              Add
-            </Button>
-          </Box>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-            {selectedLLMs.map((llm) => (
-              <Chip
-                key={llm.id}
-                label={llm.attributes.name}
-                onDelete={() => handleRemoveLLM(llm.id)}
-              />
-            ))}
-          </Box>
-        </Box>
-        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-          You must select at least one Data Source or one LLM for your app. You
-          can add multiple of each if needed. You will not be able to add more
-          later without admin support. Not all LLMs and Data sources are allowed
-          to be used together in an app due to data security, please ensure the
-          data sources and LLMs you select are compatible. Once your App has
-          been approved, you will be able to start building your app using the
-          credentials provided.
-        </Alert>
-        <Button
-          type="submit"
-          variant="contained"
-          color="primary"
-          disabled={!isFormValid}
-          sx={{ mt: 2 }}
-        >
-          Create App
-        </Button>
-      </Box>
+        </CardContent>
+      </Card>
     </Container>
   );
 };

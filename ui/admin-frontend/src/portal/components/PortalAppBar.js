@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AppBar, Toolbar, Typography, IconButton } from "@mui/material";
+import { AppBar, Toolbar, Typography, IconButton, Box } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import LogoutIcon from "@mui/icons-material/Logout";
 import apiClient from "../../admin/utils/pubClient";
@@ -31,7 +31,6 @@ const PortalAppBar = () => {
     }
   };
 
-  // If logged out, render nothing (or a loading state)
   if (isLoggedOut) {
     return null;
   }
@@ -39,13 +38,32 @@ const PortalAppBar = () => {
   return (
     <AppBar
       position="fixed"
-      sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
+      sx={(theme) => ({
+        zIndex: theme.zIndex.drawer + 1,
+        backgroundColor: "white",
+        boxShadow: "none",
+        borderBottom: "none",
+      })}
     >
       <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Midsommar Portal
-        </Typography>
-        <IconButton color="inherit" onClick={handleLogout}>
+        <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
+          <img
+            src="/sun-logo.png"
+            alt="Midsommar Logo"
+            style={{
+              height: "25px",
+              marginRight: "5px",
+            }}
+          />
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{ color: "black", mt: "5px" }}
+          >
+            Midsommar
+          </Typography>
+        </Box>
+        <IconButton onClick={handleLogout} sx={{ color: "black" }}>
           <LogoutIcon />
         </IconButton>
       </Toolbar>

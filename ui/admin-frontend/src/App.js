@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { ThemeProvider } from "@mui/material/styles";
+
+import portalTheme from "./portal/theme/portalTheme";
+
 import theme from "./admin/theme";
 import {
   BrowserRouter as Router,
@@ -66,7 +69,7 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={isAdmin ? theme : portalTheme}>
       <Router>
         <CssBaseline />
         <Routes>
