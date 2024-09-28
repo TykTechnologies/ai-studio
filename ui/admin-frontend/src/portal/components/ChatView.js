@@ -6,10 +6,26 @@ import {
   Typography,
   Paper,
   CircularProgress,
+  Grid,
 } from "@mui/material";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import config from "../../config";
+import FloatingSection from "./FloatingSection";
 
 const ChatView = () => {
+  const [currentlyUsing, setCurrentlyUsing] = useState([]);
+  const [databases, setDatabases] = useState([
+    { id: "db1", name: "User Database" },
+    { id: "db2", name: "Product Database" },
+    { id: "db3", name: "Order Database" },
+  ]);
+  const [tools, setTools] = useState([
+    { id: "tool1", name: "Text Summarizer" },
+    { id: "tool2", name: "Image Generator" },
+    { id: "tool3", name: "Code Analyzer" },
+  ]);
   const { chatId } = useParams();
   const location = useLocation();
   const [messages, setMessages] = useState([]);
@@ -57,11 +73,10 @@ const ChatView = () => {
       };
     };
 
-    // Add a delay before connecting
     const timer = setTimeout(() => {
       console.log("Attempting to connect to WebSocket:", wsUrl);
       setupWebSocket();
-    }, 1000); // 1 second delay
+    }, 1000);
 
     return () => {
       clearTimeout(timer);
@@ -148,6 +163,82 @@ const ChatView = () => {
     }
   }, [messages]);
 
+  const renderMessageContent = (content) => {
+    return (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ node, ...props }) => <Typography {...props} />,
+          a: ({ node, ...props }) => (
+            <a target="_blank" rel="noopener noreferrer" {...props} />
+          ),
+          code: ({ node, inline, ...props }) => (
+            <code
+              style={{
+                backgroundColor: "#f0f0f0",
+                padding: inline ? "2px 4px" : "10px",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                display: inline ? "inline" : "block",
+              }}
+              {...props}
+            />
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    );
+  };
+
+  const onDragEnd = (result) => {
+    const { source, destination } = result;
+
+    if (!destination) {
+      return;
+    }
+
+    let sourceList, setSourceList, destList, setDestList;
+
+    if (source.droppableId === "currentlyUsing") {
+      sourceList = currentlyUsing;
+      setSourceList = setCurrentlyUsing;
+    } else if (source.droppableId === "databases") {
+      sourceList = databases;
+      setSourceList = setDatabases;
+    } else if (source.droppableId === "tools") {
+      sourceList = tools;
+      setSourceList = setTools;
+    }
+
+    if (destination.droppableId === "currentlyUsing") {
+      destList = currentlyUsing;
+      setDestList = setCurrentlyUsing;
+    } else if (destination.droppableId === "databases") {
+      destList = databases;
+      setDestList = setDatabases;
+    } else if (destination.droppableId === "tools") {
+      destList = tools;
+      setDestList = setTools;
+    }
+
+    const [reorderedItem] = sourceList.splice(source.index, 1);
+    destList.splice(destination.index, 0, reorderedItem);
+
+    setSourceList([...sourceList]);
+    setDestList([...destList]);
+  };
+
+  const removeFromCurrentlyUsing = (id) => {
+    const item = currentlyUsing.find((i) => i.id === id);
+    setCurrentlyUsing(currentlyUsing.filter((i) => i.id !== id));
+    if (item.id.startsWith("db")) {
+      setDatabases([...databases, item]);
+    } else if (item.id.startsWith("tool")) {
+      setTools([...tools, item]);
+    }
+  };
+
   if (isLoading) {
     return (
       <Box
@@ -175,53 +266,84 @@ const ChatView = () => {
   }
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        height: "calc(100vh - 64px)",
-      }}
-    >
-      <Paper
-        ref={chatWindowRef}
-        elevation={3}
-        sx={{
-          flex: 1,
-          overflowY: "auto",
-          p: 2,
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-        }}
-      >
-        {messages.map((message, index) => (
+    <DragDropContext onDragEnd={onDragEnd}>
+      <Grid container spacing={2} sx={{ height: "calc(100vh - 110px)" }}>
+        <Grid item xs={9}>
           <Box
-            key={index}
             sx={{
-              alignSelf: message.type === "user" ? "flex-end" : "flex-start",
-              backgroundColor:
-                message.type === "user" ? "primary.light" : "grey.200",
-              borderRadius: 2,
-              p: 1,
-              maxWidth: "70%",
-              opacity: message.isComplete ? 1 : 0.7,
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
             }}
           >
-            <Typography>{message.content}</Typography>
+            <Paper
+              ref={chatWindowRef}
+              elevation={3}
+              sx={{
+                flex: 1,
+                overflowY: "auto",
+                p: 2,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
+              {messages.map((message, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    alignSelf:
+                      message.type === "user" ? "flex-end" : "flex-start",
+                    backgroundColor:
+                      message.type === "user" ? "primary.light" : "grey.200",
+                    borderRadius: 2,
+                    p: 1,
+                    maxWidth: "70%",
+                    opacity: message.isComplete ? 1 : 0.7,
+                  }}
+                >
+                  {renderMessageContent(message.content)}
+                </Box>
+              ))}
+            </Paper>
+            <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Type your message here..."
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                disabled={!isConnected}
+              />
+            </Box>
           </Box>
-        ))}
-      </Paper>
-      <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Type your message here..."
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          disabled={!isConnected}
-        />
-      </Box>
-    </Box>
+        </Grid>
+        <Grid item xs={3}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              gap: 2,
+            }}
+          >
+            <FloatingSection
+              title="Currently Using..."
+              items={currentlyUsing}
+              droppableId="currentlyUsing"
+              onRemove={removeFromCurrentlyUsing}
+              emptyText="Drag tools and databases here to use them in the chat"
+            />
+            <FloatingSection
+              title="Databases"
+              items={databases}
+              droppableId="databases"
+            />
+            <FloatingSection title="Tools" items={tools} droppableId="tools" />
+          </Box>
+        </Grid>
+      </Grid>
+    </DragDropContext>
   );
 };
 
