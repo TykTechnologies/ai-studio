@@ -189,6 +189,13 @@ func (s *Service) DeleteApp(id uint) error {
 		return err
 	}
 
+	// Delete the associated credential
+	if app.CredentialID != 0 {
+		if err := s.DeleteCredential(app.CredentialID); err != nil {
+			return err
+		}
+	}
+
 	return app.Delete(s.DB)
 }
 

@@ -798,97 +798,177 @@ func (a *API) getUserApps(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /common/apps/{id} [get]
 func (a *API) getUserAppDetails(c *gin.Context) {
-    user, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
-            Title  string `json:"title"`
-            Detail string `json:"detail"`
-        }{{Title: "Unauthorized", Detail: "User not found in context"}}})
-        return
-    }
-    currentUser := user.(*models.User)
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
 
-    appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-            Title  string `json:"title"`
-            Detail string `json:"detail"`
-        }{{Title: "Bad Request", Detail: "Invalid app ID"}}})
-        return
-    }
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+		return
+	}
 
-    app, err := a.service.GetAppByID(uint(appID))
-    if err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
-                Title  string `json:"title"`
-                Detail string `json:"detail"`
-            }{{Title: "Not Found", Detail: "App not found"}}})
-        } else {
-            c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-                Title  string `json:"title"`
-                Detail string `json:"detail"`
-            }{{Title: "Internal Server Error", Detail: err.Error()}}})
-        }
-        return
-    }
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "App not found"}}})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		}
+		return
+	}
 
-    // Check if the current user owns the app
-    if app.UserID != currentUser.ID {
-        c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
-            Title  string `json:"title"`
-            Detail string `json:"detail"`
-        }{{Title: "Forbidden", Detail: "You don't have permission to access this app"}}})
-        return
-    }
+	// Check if the current user owns the app
+	if app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to access this app"}}})
+		return
+	}
 
-    // Fetch the associated credential
-    credential, err := a.service.GetCredentialByID(app.CredentialID)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-            Title  string `json:"title"`
-            Detail string `json:"detail"`
-        }{{Title: "Internal Server Error", Detail: "Failed to retrieve app credential"}}})
-        return
-    }
+	// Fetch the associated credential
+	credential, err := a.service.GetCredentialByID(app.CredentialID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to retrieve app credential"}}})
+		return
+	}
 
-    response := AppDetailResponse{
-        Type: "app",
-        ID:   strconv.FormatUint(uint64(app.ID), 10),
-        Attributes: struct {
-            Name          string           `json:"name"`
-            Description   string           `json:"description"`
-            UserID        uint             `json:"user_id"`
-            CredentialID  uint             `json:"credential_id"`
-            DatasourceIDs []uint           `json:"datasource_ids"`
-            LLMIDs        []uint           `json:"llm_ids"`
-            Credential    CredentialDetail `json:"credential"`
-        }{
-            Name:         app.Name,
-            Description:  app.Description,
-            UserID:       app.UserID,
-            CredentialID: app.CredentialID,
-            DatasourceIDs: func() []uint {
-                ids := make([]uint, len(app.Datasources))
-                for i, ds := range app.Datasources {
-                    ids[i] = ds.ID
-                }
-                return ids
-            }(),
-            LLMIDs: func() []uint {
-                ids := make([]uint, len(app.LLMs))
-                for i, llm := range app.LLMs {
-                    ids[i] = llm.ID
-                }
-                return ids
-            }(),
-            Credential: CredentialDetail{
-                KeyID:  credential.KeyID,
-                Secret: credential.Secret,
-                Active: credential.Active,
-            },
-        },
-    }
+	response := AppDetailResponse{
+		Type: "app",
+		ID:   strconv.FormatUint(uint64(app.ID), 10),
+		Attributes: struct {
+			Name          string           `json:"name"`
+			Description   string           `json:"description"`
+			UserID        uint             `json:"user_id"`
+			CredentialID  uint             `json:"credential_id"`
+			DatasourceIDs []uint           `json:"datasource_ids"`
+			LLMIDs        []uint           `json:"llm_ids"`
+			Credential    CredentialDetail `json:"credential"`
+		}{
+			Name:         app.Name,
+			Description:  app.Description,
+			UserID:       app.UserID,
+			CredentialID: app.CredentialID,
+			DatasourceIDs: func() []uint {
+				ids := make([]uint, len(app.Datasources))
+				for i, ds := range app.Datasources {
+					ids[i] = ds.ID
+				}
+				return ids
+			}(),
+			LLMIDs: func() []uint {
+				ids := make([]uint, len(app.LLMs))
+				for i, llm := range app.LLMs {
+					ids[i] = llm.ID
+				}
+				return ids
+			}(),
+			Credential: CredentialDetail{
+				KeyID:  credential.KeyID,
+				Secret: credential.Secret,
+				Active: credential.Active,
+			},
+		},
+	}
 
-    c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, response)
+}
+
+// Add this to your common.go file
+
+// deleteUserApp godoc
+// @Summary Delete an app owned by the authenticated user
+// @Description Delete an app if it's owned by the authenticated user
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param id path int true "App ID"
+// @Success 200 {object} SuccessResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps/{id} [delete]
+func (a *API) deleteUserApp(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+		return
+	}
+
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "App not found"}}})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		}
+		return
+	}
+
+	// Check if the current user owns the app
+	if app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to delete this app"}}})
+		return
+	}
+
+	// Delete the app
+	if err := a.service.DeleteApp(uint(appID)); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to delete the app"}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse{
+		Message: "App successfully deleted",
+	})
+}
+
+// Add this struct if you haven't already defined it
+type SuccessResponse struct {
+	Message string `json:"message"`
 }

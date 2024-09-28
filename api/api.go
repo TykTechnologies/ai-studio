@@ -101,6 +101,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
 	authed.GET("/apps/:id", a.getUserAppDetails)
+	authed.DELETE("/apps/:id", a.deleteUserApp)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())

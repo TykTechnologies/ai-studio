@@ -9,8 +9,14 @@ import {
   Divider,
   Chip,
   Paper,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DeleteIcon from "@mui/icons-material/Delete";
 import pubClient from "../../admin/utils/pubClient";
 
 const SectionTitle = ({ children }) => (
@@ -33,6 +39,7 @@ const AppDetailView = () => {
   const [app, setApp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -51,6 +58,26 @@ const AppDetailView = () => {
 
     fetchAppDetails();
   }, [id]);
+
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await pubClient.delete(`/common/apps/${id}`);
+      setDeleteDialogOpen(false);
+      navigate("/portal/apps", { replace: true });
+    } catch (err) {
+      console.error("Error deleting app:", err);
+      setError("Failed to delete app. Please try again later.");
+      setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+  };
 
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
@@ -138,14 +165,34 @@ const AppDetailView = () => {
       <Box mt={4}>
         <Button
           variant="contained"
-          color="primary"
-          onClick={() => {
-            /* Add logic to navigate to app editing page */
-          }}
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={handleDeleteClick}
         >
-          Edit App
+          Delete App
         </Button>
       </Box>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">{"Confirm Deletion"}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            Are you sure you want to delete the app "{app.attributes.name}"?
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };
