@@ -487,7 +487,7 @@ func serializeTool(tool *models.Tool) ToolResponse {
 			Name           string   `json:"name"`
 			Description    string   `json:"description"`
 			ToolType       string   `json:"tool_type"`
-			OASSpec        []byte   `json:"oas_spec"`
+			OASSpec        string   `json:"oas_spec"`
 			PrivacyScore   int      `json:"privacy_score"`
 			Operations     []string `json:"operations"`
 			AuthKey        string   `json:"auth_key"`

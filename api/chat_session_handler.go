@@ -1,10 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -14,6 +19,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 var upgrader = websocket.Upgrader{
@@ -370,7 +377,26 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		return
 	}
 
-	err := a.AddToolToChatSession(sessionID, input.ToolID, input.Tool)
+	toolId, err := strconv.Atoi(input.ToolID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Invalid tool ID", Detail: "Tool ID must be a valid number"}}})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolId))
+	tool.OASSpec, err = decodeToUTF8(tool.OASSpec)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error decoding OAS spec", Detail: err.Error()}}})
+		return
+	}
+
+	err = a.AddToolToChatSession(sessionID, input.ToolID, *tool)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -380,6 +406,16 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Tool added successfully"})
+}
+
+func byteArrayToUTF8StringBuffer(data []byte) string {
+	buf := bytes.Buffer{}
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		buf.WriteRune(r)
+		data = data[size:]
+	}
+	return buf.String()
 }
 
 // removeToolFromChatSession handles removing a tool from an active chat session
@@ -397,4 +433,23 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Tool removed successfully"})
+}
+
+func decodeToUTF8(s string) (string, error) {
+	// Step 1: Decode base64
+	decodedBytes, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return "", fmt.Errorf("base64 decoding failed: %v", err)
+	}
+
+	// Step 2 & 3: Convert to UTF-8
+	// This example assumes the original encoding was Windows-1252 (a common encoding)
+	// Replace this with the correct encoding if known
+	reader := transform.NewReader(strings.NewReader(string(decodedBytes)), charmap.Windows1252.NewDecoder())
+	utf8Bytes, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("conversion to UTF-8 failed: %v", err)
+	}
+
+	return string(utf8Bytes), nil
 }

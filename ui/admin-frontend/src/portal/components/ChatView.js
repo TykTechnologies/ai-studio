@@ -13,7 +13,6 @@ import remarkGfm from "remark-gfm";
 import config from "../../config";
 import FloatingSection from "./FloatingSection";
 import pubClient from "../../admin/utils/pubClient";
-
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
   const [databases, setDatabases] = useState([]);
@@ -25,6 +24,7 @@ const ChatView = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
   const ws = useRef(null);
   const chatWindowRef = useRef(null);
 
@@ -106,12 +106,12 @@ const ChatView = () => {
       }
     };
   }, [chatId, location.search]);
-
   const handleIncomingMessage = (data) => {
     console.log("Handling incoming message:", data);
 
     if (data.type === "session_id") {
       console.log("Received session ID:", data.payload);
+      setSessionId(data.payload);
       localStorage.setItem("chatSessionId", data.payload);
     } else if (data.type === "stream_chunk") {
       setMessages((prevMessages) => {
@@ -255,26 +255,71 @@ const ChatView = () => {
     setSourceList([...sourceList]);
     setDestList([...destList]);
   };
-  const removeFromCurrentlyUsing = (item) => {
-    setCurrentlyUsing(
-      currentlyUsing.filter((i) => i.uniqueId !== item.uniqueId),
-    );
-    if (item.type === "database") {
-      setDatabases([
-        ...databases,
-        { ...item, id: item.uniqueId.split("-")[1] },
-      ]);
-    } else if (item.type === "tool") {
-      setTools([...tools, { ...item, id: item.uniqueId.split("-")[1] }]);
+  const removeFromCurrentlyUsing = async (item) => {
+    try {
+      let response;
+      if (item.type === "database") {
+        response = await pubClient.delete(
+          `/common/chat-sessions/${sessionId}/datasources/${item.id}`,
+        );
+      } else if (item.type === "tool") {
+        response = await pubClient.delete(
+          `/common/chat-sessions/${sessionId}/tools/${item.id}`,
+        );
+      }
+
+      if (response.status === 200 || response.status === 204) {
+        setCurrentlyUsing((prevItems) =>
+          prevItems.filter((i) => i.uniqueId !== item.uniqueId),
+        );
+        if (item.type === "database") {
+          setDatabases((prevDatabases) => [...prevDatabases, item]);
+        } else if (item.type === "tool") {
+          setTools((prevTools) => [...prevTools, item]);
+        }
+      } else {
+        console.error("Failed to remove item from chat session");
+      }
+    } catch (error) {
+      console.error("Error removing item from chat session:", error);
     }
   };
-  const addToCurrentlyUsing = (item) => {
-    const uniqueId = `${item.type}-${item.id}`;
-    setCurrentlyUsing([...currentlyUsing, { ...item, uniqueId }]);
-    if (item.type === "database") {
-      setDatabases(databases.filter((db) => db.id !== item.id));
-    } else if (item.type === "tool") {
-      setTools(tools.filter((tool) => tool.id !== item.id));
+  const addToCurrentlyUsing = async (item) => {
+    try {
+      let response;
+      if (item.type === "database") {
+        response = await pubClient.post(
+          `/common/chat-sessions/${sessionId}/datasources`,
+          { datasource_id: parseInt(item.id) },
+        );
+      } else if (item.type === "tool") {
+        response = await pubClient.post(
+          `/common/chat-sessions/${sessionId}/tools`,
+          {
+            tool_id: item.id,
+          },
+        );
+      }
+
+      if (response.status === 200 || response.status === 201) {
+        const uniqueId = `${item.type}-${item.id}`;
+        setCurrentlyUsing((prevItems) => [...prevItems, { ...item, uniqueId }]);
+        if (item.type === "database") {
+          setDatabases((prevDatabases) =>
+            prevDatabases.filter((db) => db.id !== item.id),
+          );
+        } else if (item.type === "tool") {
+          setTools((prevTools) =>
+            prevTools.filter((tool) => tool.id !== item.id),
+          );
+        }
+      } else {
+        console.error("Failed to add item to chat session", response);
+        // Optionally, you can set an error state here to display to the user
+      }
+    } catch (error) {
+      console.error("Error adding item to chat session:", error);
+      // Optionally, you can set an error state here to display to the user
     }
   };
 
@@ -333,7 +378,7 @@ const ChatView = () => {
                   alignSelf:
                     message.type === "user" ? "flex-end" : "flex-start",
                   backgroundColor:
-                    message.type === "user" ? "primary.light" : "grey.200",
+                    message.type === "user" ? "#e3f2fd" : "grey.200",
                   borderRadius: 2,
                   p: 1,
                   maxWidth: "70%",

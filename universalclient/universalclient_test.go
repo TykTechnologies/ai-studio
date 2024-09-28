@@ -3,14 +3,24 @@ package universalclient
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/pb33f/libopenapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestClientCallOperation(t *testing.T) {
@@ -648,3 +658,42 @@ func TestValidateSpec(t *testing.T) {
 // 	// fmt.Println(result)
 
 // }
+
+func TestFileEncoding(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("../midsommar.db"), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	x := services.NewService(db)
+	tool, err := x.GetToolByID(4)
+	assert.NoError(t, err)
+
+	ok := utf8.Valid([]byte(tool.OASSpec))
+	assert.True(t, ok)
+
+	decodedData, err := decodeToUTF8(tool.OASSpec)
+	assert.NoError(t, err)
+
+	ok = utf8.Valid([]byte(decodedData))
+	assert.True(t, ok)
+}
+
+func decodeToUTF8(s string) (string, error) {
+	// Step 1: Decode base64
+	decodedBytes, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return "", fmt.Errorf("base64 decoding failed: %v", err)
+	}
+
+	// Step 2 & 3: Convert to UTF-8
+	// This example assumes the original encoding was Windows-1252 (a common encoding)
+	// Replace this with the correct encoding if known
+	reader := transform.NewReader(strings.NewReader(string(decodedBytes)), charmap.Windows1252.NewDecoder())
+	utf8Bytes, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("conversion to UTF-8 failed: %v", err)
+	}
+
+	return string(utf8Bytes), nil
+}

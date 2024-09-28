@@ -263,7 +263,7 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 				opts = append(opts, universalclient.WithAuth(schemaName, t.AuthKey))
 			}
 
-			uc, err := universalclient.NewClient(t.OASSpec, "", opts...)
+			uc, err := universalclient.NewClient([]byte(t.OASSpec), "", opts...)
 			if err != nil {
 				cs.errors <- fmt.Errorf("error creating universal client: %v", err)
 				continue
@@ -645,7 +645,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			opts = append(opts, universalclient.WithResponseFormat(universalclient.ResponseFormatJSON))
 
-			uc, err := universalclient.NewClient(toolDef.OASSpec, "", opts...)
+			uc, err := universalclient.NewClient([]byte(toolDef.OASSpec), "", opts...)
 			if err != nil {
 				return false, fmt.Errorf("error creating tool client: %v", err)
 			}

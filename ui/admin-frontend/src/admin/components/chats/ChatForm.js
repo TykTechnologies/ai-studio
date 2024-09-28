@@ -31,6 +31,7 @@ const ChatForm = () => {
     llm_id: "",
     groups: [],
     filters: [],
+    oas_spec: "", // Added OAS Spec field
   });
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
@@ -81,6 +82,7 @@ const ChatForm = () => {
         llm_id: chatData.llm_id,
         groups: chatData.groups.map((group) => group.id.toString()),
         filters: chatData.filters.map((filter) => filter.id.toString()),
+        oas_spec: chatData.oas_spec || "", // No decoding needed
       });
     } catch (error) {
       console.error("Error fetching chat", error);
@@ -165,6 +167,7 @@ const ChatForm = () => {
           llm_id: parseInt(chat.llm_id, 10),
           group_ids: chat.groups.map((groupId) => parseInt(groupId, 10)),
           filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
+          oas_spec: chat.oas_spec, // Send OAS Spec as-is, without encoding
         },
       },
     };
@@ -355,6 +358,17 @@ const ChatForm = () => {
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="OAS Spec"
+                name="oas_spec"
+                value={chat.oas_spec}
+                onChange={handleChange}
+                multiline
+                rows={6}
+              />
             </Grid>
           </Grid>
 

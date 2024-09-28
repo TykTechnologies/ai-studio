@@ -13,7 +13,7 @@ type Tool struct {
 	Description string `json:"description"`
 
 	ToolType            string `json:"tool_type"`
-	OASSpec             []byte `json:"oas_spec"`
+	OASSpec             string `json:"oas_spec"`
 	AvailableOperations string `json:"available_operations"`
 	PrivacyScore        int    `json:"privacy_score"`
 	AuthKey             string `json:"auth_key"`

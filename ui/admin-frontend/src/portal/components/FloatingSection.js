@@ -4,7 +4,13 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 const FloatingSection = ({ title, items, onRemove, onAdd, emptyText }) => {
   return (
-    <Box sx={{ border: "1px solid #ccc", borderRadius: 2, p: 2 }}>
+    <Box
+      sx={{
+        border: "1px solid #ccc",
+        borderRadius: 2,
+        p: 2,
+      }}
+    >
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
