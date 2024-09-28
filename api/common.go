@@ -1016,3 +1016,62 @@ func (a *API) listChatHistoryRecordsForMe(c *gin.Context) {
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, response)
 }
+
+// getUserAccessibleTools godoc
+// @Summary Get accessible tools for the authenticated user
+// @Description Get the list of tools accessible to the authenticated user based on their group memberships
+// @Tags common
+// @Accept json
+// @Produce json
+// @Success 200 {array} ToolResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/accessible-tools [get]
+func (a *API) getUserAccessibleTools(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Println("User not found in context: ", user)
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	tools, err := a.service.GetAccessibleToolsForUser(currentUser.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := make([]ToolResponse, len(tools))
+	for i, tool := range tools {
+		response[i] = ToolResponse{
+			Type: "tool",
+			ID:   strconv.FormatUint(uint64(tool.ID), 10),
+			Attributes: struct {
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        []byte   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				Operations     []string `json:"operations"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+			}{
+				Name:         tool.Name,
+				Description:  tool.Description,
+				ToolType:     tool.ToolType,
+				PrivacyScore: tool.PrivacyScore,
+				Operations:   tool.GetOperations(),
+				// Note: We're not including OASSpec and AuthKey for security reasons
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}

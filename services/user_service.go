@@ -109,3 +109,8 @@ func (s *Service) GetUserAccessibleCatalogues(userID uint) (models.Catalogues, e
 
 	return catalogues, nil
 }
+
+func (s *Service) GetAccessibleToolsForUser(userID uint) ([]models.Tool, error) {
+	user := &models.User{ID: userID}
+	return user.GetAccessibleTools(s.DB)
+}

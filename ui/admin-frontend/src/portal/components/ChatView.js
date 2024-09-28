@@ -10,22 +10,14 @@ import {
 } from "@mui/material";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import config from "../../config";
 import FloatingSection from "./FloatingSection";
+import pubClient from "../../admin/utils/pubClient";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
-  const [databases, setDatabases] = useState([
-    { id: "db1", name: "User Database" },
-    { id: "db2", name: "Product Database" },
-    { id: "db3", name: "Order Database" },
-  ]);
-  const [tools, setTools] = useState([
-    { id: "tool1", name: "Text Summarizer" },
-    { id: "tool2", name: "Image Generator" },
-    { id: "tool3", name: "Code Analyzer" },
-  ]);
+  const [databases, setDatabases] = useState([]);
+  const [tools, setTools] = useState([]);
   const { chatId } = useParams();
   const location = useLocation();
   const [messages, setMessages] = useState([]);
@@ -37,44 +29,73 @@ const ChatView = () => {
   const chatWindowRef = useRef(null);
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [databasesResponse, toolsResponse] = await Promise.all([
+          pubClient.get("/common/accessible-datasources"),
+          pubClient.get("/common/accessible-tools"),
+        ]);
+
+        const newDatabases = databasesResponse.data.map((db) => ({
+          id: db.id.toString(),
+          name: db.attributes.name,
+          type: "database",
+          description: db.attributes.short_description,
+          icon: db.attributes.icon,
+        }));
+
+        const newTools = toolsResponse.data.map((tool) => ({
+          id: tool.id.toString(),
+          name: tool.attributes.name,
+          type: "tool",
+          description: tool.attributes.description,
+          toolType: tool.attributes.tool_type,
+        }));
+
+        setDatabases(newDatabases);
+        setTools(newTools);
+        // Console logs removed
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setError("Failed to load databases and tools");
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const sessionId = searchParams.get("continue_id");
     const wsUrl = `${config.API_BASE_URL}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`;
-
-    console.log("Preparing to connect to WebSocket:", wsUrl);
-
     const setupWebSocket = () => {
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
-        console.log("WebSocket connection established");
         setIsConnected(true);
         setIsLoading(false);
       };
 
       ws.current.onmessage = (event) => {
-        console.log("Received message:", event.data);
         const data = JSON.parse(event.data);
         handleIncomingMessage(data);
       };
 
       ws.current.onerror = (error) => {
-        console.error("WebSocket error:", error);
         setError(`Failed to connect to chat. Error: ${error.message}`);
         setIsLoading(false);
       };
 
       ws.current.onclose = (event) => {
-        console.log(
-          `WebSocket connection closed: ${event.code} ${event.reason}`,
-        );
         setIsConnected(false);
         setError(`Connection closed: ${event.reason || "Unknown reason"}`);
       };
     };
 
     const timer = setTimeout(() => {
-      console.log("Attempting to connect to WebSocket:", wsUrl);
       setupWebSocket();
     }, 1000);
 
@@ -192,6 +213,7 @@ const ChatView = () => {
   };
 
   const onDragEnd = (result) => {
+    console.log("onDragEnd result:", result);
     const { source, destination } = result;
 
     if (!destination) {
@@ -222,20 +244,37 @@ const ChatView = () => {
       setDestList = setTools;
     }
 
+    if (!sourceList || !destList) {
+      console.error("Source or destination list is undefined");
+      return;
+    }
+
     const [reorderedItem] = sourceList.splice(source.index, 1);
     destList.splice(destination.index, 0, reorderedItem);
 
     setSourceList([...sourceList]);
     setDestList([...destList]);
   };
-
-  const removeFromCurrentlyUsing = (id) => {
-    const item = currentlyUsing.find((i) => i.id === id);
-    setCurrentlyUsing(currentlyUsing.filter((i) => i.id !== id));
-    if (item.id.startsWith("db")) {
-      setDatabases([...databases, item]);
-    } else if (item.id.startsWith("tool")) {
-      setTools([...tools, item]);
+  const removeFromCurrentlyUsing = (item) => {
+    setCurrentlyUsing(
+      currentlyUsing.filter((i) => i.uniqueId !== item.uniqueId),
+    );
+    if (item.type === "database") {
+      setDatabases([
+        ...databases,
+        { ...item, id: item.uniqueId.split("-")[1] },
+      ]);
+    } else if (item.type === "tool") {
+      setTools([...tools, { ...item, id: item.uniqueId.split("-")[1] }]);
+    }
+  };
+  const addToCurrentlyUsing = (item) => {
+    const uniqueId = `${item.type}-${item.id}`;
+    setCurrentlyUsing([...currentlyUsing, { ...item, uniqueId }]);
+    if (item.type === "database") {
+      setDatabases(databases.filter((db) => db.id !== item.id));
+    } else if (item.type === "tool") {
+      setTools(tools.filter((tool) => tool.id !== item.id));
     }
   };
 
@@ -266,84 +305,88 @@ const ChatView = () => {
   }
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <Grid container spacing={2} sx={{ height: "calc(100vh - 110px)" }}>
-        <Grid item xs={9}>
-          <Box
+    <Grid container spacing={2} sx={{ height: "calc(100vh - 110px)" }}>
+      <Grid item xs={9}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+          }}
+        >
+          <Paper
+            ref={chatWindowRef}
+            elevation={3}
             sx={{
+              flex: 1,
+              overflowY: "auto",
+              p: 2,
               display: "flex",
               flexDirection: "column",
-              height: "100%",
-            }}
-          >
-            <Paper
-              ref={chatWindowRef}
-              elevation={3}
-              sx={{
-                flex: 1,
-                overflowY: "auto",
-                p: 2,
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-              }}
-            >
-              {messages.map((message, index) => (
-                <Box
-                  key={index}
-                  sx={{
-                    alignSelf:
-                      message.type === "user" ? "flex-end" : "flex-start",
-                    backgroundColor:
-                      message.type === "user" ? "primary.light" : "grey.200",
-                    borderRadius: 2,
-                    p: 1,
-                    maxWidth: "70%",
-                    opacity: message.isComplete ? 1 : 0.7,
-                  }}
-                >
-                  {renderMessageContent(message.content)}
-                </Box>
-              ))}
-            </Paper>
-            <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
-              <TextField
-                fullWidth
-                variant="outlined"
-                placeholder="Type your message here..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                disabled={!isConnected}
-              />
-            </Box>
-          </Box>
-        </Grid>
-        <Grid item xs={3}>
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              height: "100%",
               gap: 2,
             }}
           >
-            <FloatingSection
-              title="Currently Using..."
-              items={currentlyUsing}
-              droppableId="currentlyUsing"
-              onRemove={removeFromCurrentlyUsing}
-              emptyText="Drag tools and databases here to use them in the chat"
+            {messages.map((message, index) => (
+              <Box
+                key={index}
+                sx={{
+                  alignSelf:
+                    message.type === "user" ? "flex-end" : "flex-start",
+                  backgroundColor:
+                    message.type === "user" ? "primary.light" : "grey.200",
+                  borderRadius: 2,
+                  p: 1,
+                  maxWidth: "70%",
+                  opacity: message.isComplete ? 1 : 0.7,
+                }}
+              >
+                {renderMessageContent(message.content)}
+              </Box>
+            ))}
+          </Paper>
+          <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Type your message here..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              disabled={!isConnected}
             />
-            <FloatingSection
-              title="Databases"
-              items={databases}
-              droppableId="databases"
-            />
-            <FloatingSection title="Tools" items={tools} droppableId="tools" />
           </Box>
-        </Grid>
+        </Box>
       </Grid>
-    </DragDropContext>
+      <Grid item xs={3}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            gap: 2,
+          }}
+        >
+          <FloatingSection
+            key="currentlyUsing"
+            title="Currently Using..."
+            items={currentlyUsing}
+            onRemove={removeFromCurrentlyUsing}
+            emptyText="Click + on tools and databases to use them in the chat"
+          />
+          <FloatingSection
+            key="databases"
+            title="Databases"
+            items={databases}
+            onAdd={(item) => addToCurrentlyUsing(item)}
+          />
+          <FloatingSection
+            key="tools"
+            title="Tools"
+            items={tools}
+            onAdd={(item) => addToCurrentlyUsing(item)}
+          />
+        </Box>
+      </Grid>
+    </Grid>
   );
 };
 

@@ -148,3 +148,16 @@ func (u *User) GetAccessibleLLMs(db *gorm.DB) ([]LLM, error) {
 		Find(&llms).Error
 	return llms, err
 }
+
+func (u *User) GetAccessibleTools(db *gorm.DB) ([]Tool, error) {
+	var tools []Tool
+	err := db.Table("tools").
+		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_id = tools.id").
+		Joins("JOIN tool_catalogues ON tool_catalogues.id = tool_catalogue_tools.tool_catalogue_id").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
+		Where("user_groups.user_id = ?", u.ID).
+		Distinct().
+		Find(&tools).Error
+	return tools, err
+}

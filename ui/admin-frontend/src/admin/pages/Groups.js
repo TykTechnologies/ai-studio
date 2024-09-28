@@ -137,7 +137,7 @@ const Groups = () => {
     handleMenuClose();
     try {
       const response = await apiClient.get("/tool-catalogues");
-      setToolCatalogues(response.data.data || []);
+      setToolCatalogues(response.data || []);
     } catch (error) {
       console.error("Error fetching tool catalogues", error);
     }

@@ -83,6 +83,7 @@ const GroupDetail = () => {
       setUsers(usersResponse.data.data || []);
       setCatalogues(cataloguesResponse.data.data || []);
       setDataCatalogues(dataCataloguesResponse.data.data || []);
+      // Extract the data array from the response
       setToolCatalogues(toolCataloguesResponse.data.data || []);
       setLoading(false);
     } catch (error) {
@@ -138,13 +139,20 @@ const GroupDetail = () => {
     setOpenAddToolCatalogueModal(true);
     try {
       const response = await apiClient.get("/tool-catalogues");
-      const allToolCatalogues = response.data.data || [];
+      console.log("Tool catalogues response:", response.data);
+
+      const allToolCatalogues = response.data || [];
+      console.log("All tool catalogues:", allToolCatalogues);
+
       const groupToolCatalogueIds = toolCatalogues.map((tc) => tc.id);
-      setAvailableToolCatalogues(
-        allToolCatalogues.filter(
-          (tc) => !groupToolCatalogueIds.includes(tc.id),
-        ),
+      console.log("Group tool catalogue IDs:", groupToolCatalogueIds);
+
+      const availableTCs = allToolCatalogues.filter(
+        (tc) => !groupToolCatalogueIds.includes(tc.id),
       );
+      console.log("Available tool catalogues:", availableTCs);
+
+      setAvailableToolCatalogues(availableTCs);
     } catch (error) {
       console.error("Error fetching tool catalogues", error);
     }
