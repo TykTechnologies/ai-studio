@@ -50,6 +50,7 @@ const ChatDetails = () => {
   const [chat, setChat] = useState(null);
   const [llm, setLLM] = useState(null);
   const [llmSettings, setLLMSettings] = useState(null);
+  const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [interactionsData, setInteractionsData] = useState(null);
   const [startDate, setStartDate] = useState(
@@ -77,6 +78,7 @@ const ChatDetails = () => {
     try {
       const chatResponse = await apiClient.get(`/chats/${id}`);
       setChat(chatResponse.data.data);
+      setFilters(chatResponse.data.data.attributes.filters || []);
 
       const llmResponse = await apiClient.get(
         `/llms/${chatResponse.data.data.attributes.llm_id}`,
@@ -200,6 +202,16 @@ const ChatDetails = () => {
           </Grid>
           <Grid item xs={9}>
             <FieldValue>{chat.attributes.name}</FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Filters:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {filters.map((filter) => (
+                <Chip key={filter.id} label={filter.attributes.name} />
+              ))}
+            </Box>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>LLM Settings:</FieldLabel>

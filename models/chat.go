@@ -11,23 +11,66 @@ type Chat struct {
 	LLMSettings   *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
 	LLMID         uint         `json:"llm_id"`
 	LLM           *LLM         `gorm:"foreignKey:LLMID" json:"llm"`
+	Filters       []*Filter    `gorm:"many2many:chat_filters;"`
 }
 
 type Chats []Chat
 
 // Create a new chat
 func (c *Chat) Create(db *gorm.DB) error {
-	return db.Create(c).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		// Create the chat
+		if err := tx.Create(c).Error; err != nil {
+			return err
+		}
+
+		// Handle Groups association
+		if len(c.Groups) > 0 {
+			if err := tx.Model(c).Association("Groups").Replace(c.Groups); err != nil {
+				return err
+			}
+		}
+
+		// Handle Filters association
+		if len(c.Filters) > 0 {
+			if err := tx.Model(c).Association("Filters").Replace(c.Filters); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // Get a chat by ID
 func (c *Chat) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Groups").Preload("LLMSettings").Preload("LLM").First(c, id).Error
+	return db.Preload("Groups").Preload("LLMSettings").Preload("LLM").Preload("Filters").First(c, id).Error
 }
 
 // Update an existing chat
 func (c *Chat) Update(db *gorm.DB) error {
-	return db.Save(c).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		// Update the chat's fields
+		if err := tx.Model(c).Updates(Chat{
+			Name:          c.Name,
+			LLMSettingsID: c.LLMSettingsID,
+			LLMID:         c.LLMID,
+		}).Error; err != nil {
+			return err
+		}
+
+		// Handle Groups association
+		if err := tx.Model(c).Association("Groups").Replace(c.Groups); err != nil {
+			return err
+		}
+
+		// Handle Filters association
+		if err := tx.Model(c).Association("Filters").Replace(c.Filters); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // Delete a chat

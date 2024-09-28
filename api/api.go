@@ -301,7 +301,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/vendor-usage", a.getVendorUsage)
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 
-	a.SetupWebSocketRoute()
+	a.SetupWebSocketRoute(authed)
 }
 
 func (a *API) corsMiddleware() gin.HandlerFunc {

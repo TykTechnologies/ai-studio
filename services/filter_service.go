@@ -64,3 +64,18 @@ func (s *Service) GetFilterByName(name string) (*models.Filter, error) {
 	}
 	return filter, nil
 }
+
+func (s *Service) GetFiltersByChatID(chatID uint) ([]*models.Filter, error) {
+	chat := &models.Chat{}
+	err := chat.Get(s.DB, chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filters []*models.Filter
+	for i, _ := range chat.Filters {
+		filters = append(filters, chat.Filters[i])
+	}
+
+	return filters, nil
+}

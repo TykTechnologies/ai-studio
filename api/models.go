@@ -396,6 +396,7 @@ type ChatInput struct {
 			LLMSettingsID uint   `json:"llm_settings_id"`
 			LLMID         uint   `json:"llm_id"`
 			GroupIDs      []uint `json:"group_ids"`
+			FilterIDs     []uint `json:"filter_ids"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -406,10 +407,11 @@ type ChatResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name          string          `json:"name"`
-		LLMSettingsID uint            `json:"llm_settings_id"`
-		LLMID         uint            `json:"llm_id"`
-		Groups        []GroupResponse `json:"groups"`
+		Name          string           `json:"name"`
+		LLMSettingsID uint             `json:"llm_settings_id"`
+		LLMID         uint             `json:"llm_id"`
+		Groups        []GroupResponse  `json:"groups"`
+		Filters       []FilterResponse `json:"filters"`
 	} `json:"attributes"`
 }
 

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"strconv"
+
 	"encoding/json"
 	"log"
 	"net/http"
@@ -51,9 +53,42 @@ func (h *ChatHub) RemoveSession(sessionID string) {
 }
 
 func (a *API) HandleChatWebSocket(c *gin.Context) {
-	// ws://your-server/ws/chat?session_id=<previously_received_session_id>
+	// ws://your-server/ws/chat/:chat_id?session_id=<optional_previously_received_session_id>
 
-	userID := c.GetInt("user_id")
+	uObj, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not found"}},
+		})
+		return
+	}
+	thisUser := uObj.(*models.User)
+	userID := int(thisUser.ID)
+
+	chatID, err := strconv.ParseUint(c.Param("chat_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid chat ID", Detail: "Chat ID must be a valid number"}},
+		})
+		return
+	}
+
+	chat, err := a.service.GetChatByID(uint(chatID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Chat not found", Detail: "No chat found with the provided ID"}},
+		})
+		return
+	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -79,7 +114,7 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 
 	if chatSession == nil {
 		// Create a new session if no existing session was loaded
-		chatSession, err = a.createNewSession(uint(userID))
+		chatSession, err = a.createNewSession(chat, uint(userID))
 		if err != nil {
 			log.Println("Error creating new session:", err)
 			sendWSMessage(conn, "error", "Failed to create new session")
@@ -123,7 +158,7 @@ func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.
 		chat_session.ChatStream,
 		a.service.DB,
 		a.service,
-		nil, // Add filters if needed
+		chat.Filters,
 		&userID,
 		&sessionID,
 	)
@@ -134,17 +169,7 @@ func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.
 	return chatSession, nil
 }
 
-func (a *API) createNewSession(userID uint) (*chat_session.ChatSession, error) {
-	// Create a new Chat model
-	chat := &models.Chat{
-		// Set default values for the chat
-		// You might want to set the LLM, LLMSettings, etc. here
-	}
-	err := chat.Create(a.service.DB)
-	if err != nil {
-		return nil, err
-	}
-
+func (a *API) createNewSession(chat *models.Chat, userID uint) (*chat_session.ChatSession, error) {
 	chatSession, err := chat_session.NewChatSession(
 		chat,
 		chat_session.ChatStream,
@@ -207,8 +232,8 @@ func sendWSMessage(conn *websocket.Conn, msgType string, payload string) {
 }
 
 // Add this method to your API struct to set up the WebSocket route
-func (a *API) SetupWebSocketRoute() {
-	a.router.GET("/ws/chat", func(c *gin.Context) {
+func (a *API) SetupWebSocketRoute(r *gin.RouterGroup) {
+	r.GET("/ws/chat/:chat_id", func(c *gin.Context) {
 		a.HandleChatWebSocket(c)
 	})
 }

@@ -13,6 +13,7 @@ import {
   Snackbar,
   Alert,
   Chip,
+  CircularProgress,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -28,27 +29,46 @@ const ChatForm = () => {
     name: "",
     llm_settings_id: "",
     llm_id: "",
-    groups: [], // Change this line
+    groups: [],
+    filters: [],
   });
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
+  const [allFilters, setAllFilters] = useState([]);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
     severity: "success",
   });
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
+
   const navigate = useNavigate();
   const { id } = useParams();
 
   useEffect(() => {
-    fetchLLMs();
-    fetchLLMSettings();
-    fetchGroups();
-    if (id) {
-      fetchChat();
-    }
+    const fetchData = async () => {
+      setLoading(true);
+      setApiError(null);
+      try {
+        await Promise.all([
+          fetchFilters(),
+          fetchLLMs(),
+          fetchLLMSettings(),
+          fetchGroups(),
+          id ? fetchChat() : Promise.resolve(),
+        ]);
+      } catch (error) {
+        console.error("Error fetching data", error);
+        setApiError("An error occurred while fetching data. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [id]);
 
   const fetchChat = async () => {
@@ -59,15 +79,12 @@ const ChatForm = () => {
         name: chatData.name,
         llm_settings_id: chatData.llm_settings_id,
         llm_id: chatData.llm_id,
-        groups: chatData.groups.map((group) => group.id.toString()), // Change this line
+        groups: chatData.groups.map((group) => group.id.toString()),
+        filters: chatData.filters.map((filter) => filter.id.toString()),
       });
     } catch (error) {
       console.error("Error fetching chat", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to fetch chat details",
-        severity: "error",
-      });
+      throw error;
     }
   };
 
@@ -77,6 +94,7 @@ const ChatForm = () => {
       setLLMs(response.data.data);
     } catch (error) {
       console.error("Error fetching LLMs", error);
+      throw error;
     }
   };
 
@@ -86,6 +104,7 @@ const ChatForm = () => {
       setLLMSettings(response.data.data);
     } catch (error) {
       console.error("Error fetching LLM settings", error);
+      throw error;
     }
   };
 
@@ -95,6 +114,18 @@ const ChatForm = () => {
       setAllGroups(response.data.data);
     } catch (error) {
       console.error("Error fetching groups", error);
+      throw error;
+    }
+  };
+
+  const fetchFilters = async () => {
+    try {
+      const response = await apiClient.get("/filters");
+      setAllFilters(response.data || []);
+      console.log("Fetched filters:", response.data);
+    } catch (error) {
+      console.error("Error fetching filters", error);
+      throw error;
     }
   };
 
@@ -105,6 +136,10 @@ const ChatForm = () => {
 
   const handleGroupChange = (event) => {
     setChat({ ...chat, groups: event.target.value });
+  };
+
+  const handleFilterChange = (event) => {
+    setChat({ ...chat, filters: event.target.value });
   };
 
   const validateForm = () => {
@@ -128,7 +163,8 @@ const ChatForm = () => {
           ...chat,
           llm_settings_id: parseInt(chat.llm_settings_id, 10),
           llm_id: parseInt(chat.llm_id, 10),
-          group_ids: chat.groups.map((groupId) => parseInt(groupId, 10)), // Change this line
+          group_ids: chat.groups.map((groupId) => parseInt(groupId, 10)),
+          filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
         },
       },
     };
@@ -163,6 +199,32 @@ const ChatForm = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
+
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (apiError) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <Typography color="error">{apiError}</Typography>
+      </Box>
+    );
+  }
 
   return (
     <StyledPaper>
@@ -260,6 +322,35 @@ const ChatForm = () => {
                   {allGroups.map((group) => (
                     <MenuItem key={group.id} value={group.id}>
                       {group.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Filters</InputLabel>
+                <Select
+                  multiple
+                  value={chat.filters}
+                  onChange={handleFilterChange}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {selected.map((value) => {
+                        const filter = allFilters.find((f) => f.id === value);
+                        return (
+                          <Chip
+                            key={value}
+                            label={filter ? filter.attributes.name : "Unknown"}
+                          />
+                        );
+                      })}
+                    </Box>
+                  )}
+                >
+                  {allFilters.map((filter) => (
+                    <MenuItem key={filter.id} value={filter.id}>
+                      {filter.attributes.name}
                     </MenuItem>
                   ))}
                 </Select>

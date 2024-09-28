@@ -146,7 +146,7 @@ const ChatList = () => {
   };
 
   const handleChatClick = (chat) => {
-    navigate(`/chats/${chat.id}`);
+    navigate(`/admin/chats/${chat.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -270,7 +270,9 @@ const ChatList = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={() => navigate(`/chats/edit/${selectedChat?.id}`)}>
+        <MenuItem
+          onClick={() => navigate(`/admin/chats/edit/${selectedChat?.id}`)}
+        >
           Edit Chat Room
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedChat?.id)}>

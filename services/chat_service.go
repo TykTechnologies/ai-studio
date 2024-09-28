@@ -7,11 +7,19 @@ import (
 )
 
 // CreateChat creates a new chat
-func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint) (*models.Chat, error) {
+func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint) (*models.Chat, error) {
 	chat := &models.Chat{
 		Name:          name,
 		LLMSettingsID: llmSettingsID,
 		LLMID:         llmID,
+	}
+
+	for _, filterID := range filterIDs {
+		filter := &models.Filter{}
+		if err := filter.Get(s.DB, filterID); err != nil {
+			return nil, err
+		}
+		chat.Filters = append(chat.Filters, filter)
 	}
 
 	// Fetch the groups
@@ -42,7 +50,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
-func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint) (*models.Chat, error) {
+func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint) (*models.Chat, error) {
 	chat, err := s.GetChatByID(id)
 	if err != nil {
 		return nil, err
@@ -54,6 +62,14 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 	chat.Name = name
 	chat.LLMSettingsID = llmSettingsID
 	chat.LLMID = llmID
+
+	for _, filterID := range filterIDs {
+		filter := &models.Filter{}
+		if err := filter.Get(s.DB, filterID); err != nil {
+			return nil, err
+		}
+		chat.Filters = append(chat.Filters, filter)
+	}
 
 	// Update the chat's basic information
 	if err := tx.Save(chat).Error; err != nil {

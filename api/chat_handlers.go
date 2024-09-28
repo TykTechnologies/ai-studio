@@ -36,6 +36,7 @@ func (a *API) createChat(c *gin.Context) {
 		input.Data.Attributes.LLMSettingsID,
 		input.Data.Attributes.LLMID,
 		input.Data.Attributes.GroupIDs,
+		input.Data.Attributes.FilterIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -84,7 +85,22 @@ func (a *API) getChat(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat)})
+	// Fetch filters associated with the chat
+	filters, err := a.service.GetFiltersByChatID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to fetch filters"}},
+		})
+		return
+	}
+
+	response := serializeChat(chat)
+	response.Attributes.Filters = serializeFilters(filters)
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
 // @Summary Update a chat
@@ -129,6 +145,7 @@ func (a *API) updateChat(c *gin.Context) {
 		input.Data.Attributes.LLMSettingsID,
 		input.Data.Attributes.LLMID,
 		input.Data.Attributes.GroupIDs,
+		input.Data.Attributes.FilterIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -250,15 +267,17 @@ func serializeChat(chat *models.Chat) ChatResponse {
 		Type: "chats",
 		ID:   strconv.FormatUint(uint64(chat.ID), 10),
 		Attributes: struct {
-			Name          string          `json:"name"`
-			LLMSettingsID uint            `json:"llm_settings_id"`
-			LLMID         uint            `json:"llm_id"`
-			Groups        []GroupResponse `json:"groups"`
+			Name          string           `json:"name"`
+			LLMSettingsID uint             `json:"llm_settings_id"`
+			LLMID         uint             `json:"llm_id"`
+			Groups        []GroupResponse  `json:"groups"`
+			Filters       []FilterResponse `json:"filters"`
 		}{
 			Name:          chat.Name,
 			LLMSettingsID: chat.LLMSettingsID,
 			LLMID:         chat.LLMID,
 			Groups:        serializeGroups(chat.Groups),
+			Filters:       serializeFilters(chat.Filters),
 		},
 	}
 }
@@ -269,4 +288,12 @@ func serializeChats(chats models.Chats) []ChatResponse {
 		result[i] = serializeChat(&chat)
 	}
 	return result
+}
+
+func serializeFilters(f []*models.Filter) []FilterResponse {
+	arr := make([]models.Filter, len(f))
+	for i, filter := range f {
+		arr[i] = *filter
+	}
+	return toFilterResponses(arr)
 }
