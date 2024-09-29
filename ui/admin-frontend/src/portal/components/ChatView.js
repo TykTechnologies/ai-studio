@@ -7,12 +7,15 @@ import {
   Paper,
   CircularProgress,
   Grid,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import config from "../../config";
 import FloatingSection from "./FloatingSection";
 import pubClient from "../../admin/utils/pubClient";
+
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
   const [databases, setDatabases] = useState([]);
@@ -27,6 +30,11 @@ const ChatView = () => {
   const [sessionId, setSessionId] = useState(null);
   const ws = useRef(null);
   const chatWindowRef = useRef(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "error",
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,8 +62,6 @@ const ChatView = () => {
 
         setDatabases(newDatabases);
         setTools(newTools);
-        // Console logs removed
-
         setIsLoading(false);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -106,6 +112,7 @@ const ChatView = () => {
       }
     };
   }, [chatId, location.search]);
+
   const handleIncomingMessage = (data) => {
     console.log("Handling incoming message:", data);
 
@@ -212,49 +219,6 @@ const ChatView = () => {
     );
   };
 
-  const onDragEnd = (result) => {
-    console.log("onDragEnd result:", result);
-    const { source, destination } = result;
-
-    if (!destination) {
-      return;
-    }
-
-    let sourceList, setSourceList, destList, setDestList;
-
-    if (source.droppableId === "currentlyUsing") {
-      sourceList = currentlyUsing;
-      setSourceList = setCurrentlyUsing;
-    } else if (source.droppableId === "databases") {
-      sourceList = databases;
-      setSourceList = setDatabases;
-    } else if (source.droppableId === "tools") {
-      sourceList = tools;
-      setSourceList = setTools;
-    }
-
-    if (destination.droppableId === "currentlyUsing") {
-      destList = currentlyUsing;
-      setDestList = setCurrentlyUsing;
-    } else if (destination.droppableId === "databases") {
-      destList = databases;
-      setDestList = setDatabases;
-    } else if (destination.droppableId === "tools") {
-      destList = tools;
-      setDestList = setTools;
-    }
-
-    if (!sourceList || !destList) {
-      console.error("Source or destination list is undefined");
-      return;
-    }
-
-    const [reorderedItem] = sourceList.splice(source.index, 1);
-    destList.splice(destination.index, 0, reorderedItem);
-
-    setSourceList([...sourceList]);
-    setDestList([...destList]);
-  };
   const removeFromCurrentlyUsing = async (item) => {
     try {
       let response;
@@ -284,6 +248,7 @@ const ChatView = () => {
       console.error("Error removing item from chat session:", error);
     }
   };
+
   const addToCurrentlyUsing = async (item) => {
     try {
       let response;
@@ -315,12 +280,31 @@ const ChatView = () => {
         }
       } else {
         console.error("Failed to add item to chat session", response);
-        // Optionally, you can set an error state here to display to the user
+        setSnackbar({
+          open: true,
+          message: "Failed to add item to chat session",
+          severity: "error",
+        });
       }
     } catch (error) {
       console.error("Error adding item to chat session:", error);
-      // Optionally, you can set an error state here to display to the user
+      let errorMessage = "Failed to add item to chat session";
+      if (error.response && error.response.data && error.response.data.errors) {
+        errorMessage = error.response.data.errors[0].detail || errorMessage;
+      }
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: "error",
+      });
     }
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
   };
 
   if (isLoading) {
@@ -350,88 +334,104 @@ const ChatView = () => {
   }
 
   return (
-    <Grid container spacing={2} sx={{ height: "calc(100vh - 110px)" }}>
-      <Grid item xs={9}>
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-          }}
-        >
-          <Paper
-            ref={chatWindowRef}
-            elevation={3}
+    <>
+      <Grid container spacing={2} sx={{ height: "calc(100vh - 110px)" }}>
+        <Grid item xs={9}>
+          <Box
             sx={{
-              flex: 1,
-              overflowY: "auto",
-              p: 2,
               display: "flex",
               flexDirection: "column",
+              height: "100%",
+            }}
+          >
+            <Paper
+              ref={chatWindowRef}
+              elevation={3}
+              sx={{
+                flex: 1,
+                overflowY: "auto",
+                p: 2,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
+              {messages.map((message, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    alignSelf:
+                      message.type === "user" ? "flex-end" : "flex-start",
+                    backgroundColor:
+                      message.type === "user" ? "#e3f2fd" : "grey.200",
+                    borderRadius: 2,
+                    p: 1,
+                    maxWidth: "70%",
+                    opacity: message.isComplete ? 1 : 0.7,
+                  }}
+                >
+                  {renderMessageContent(message.content)}
+                </Box>
+              ))}
+            </Paper>
+            <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Type your message here..."
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                disabled={!isConnected}
+              />
+            </Box>
+          </Box>
+        </Grid>
+        <Grid item xs={3}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
               gap: 2,
             }}
           >
-            {messages.map((message, index) => (
-              <Box
-                key={index}
-                sx={{
-                  alignSelf:
-                    message.type === "user" ? "flex-end" : "flex-start",
-                  backgroundColor:
-                    message.type === "user" ? "#e3f2fd" : "grey.200",
-                  borderRadius: 2,
-                  p: 1,
-                  maxWidth: "70%",
-                  opacity: message.isComplete ? 1 : 0.7,
-                }}
-              >
-                {renderMessageContent(message.content)}
-              </Box>
-            ))}
-          </Paper>
-          <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Type your message here..."
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              disabled={!isConnected}
+            <FloatingSection
+              key="currentlyUsing"
+              title="Currently Using..."
+              items={currentlyUsing}
+              onRemove={removeFromCurrentlyUsing}
+              emptyText="Click + on tools and databases to use them in the chat"
+            />
+            <FloatingSection
+              key="databases"
+              title="Databases"
+              items={databases}
+              onAdd={(item) => addToCurrentlyUsing(item)}
+            />
+            <FloatingSection
+              key="tools"
+              title="Tools"
+              items={tools}
+              onAdd={(item) => addToCurrentlyUsing(item)}
             />
           </Box>
-        </Box>
+        </Grid>
       </Grid>
-      <Grid item xs={3}>
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            gap: 2,
-          }}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
         >
-          <FloatingSection
-            key="currentlyUsing"
-            title="Currently Using..."
-            items={currentlyUsing}
-            onRemove={removeFromCurrentlyUsing}
-            emptyText="Click + on tools and databases to use them in the chat"
-          />
-          <FloatingSection
-            key="databases"
-            title="Databases"
-            items={databases}
-            onAdd={(item) => addToCurrentlyUsing(item)}
-          />
-          <FloatingSection
-            key="tools"
-            title="Tools"
-            items={tools}
-            onAdd={(item) => addToCurrentlyUsing(item)}
-          />
-        </Box>
-      </Grid>
-    </Grid>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </>
   );
 };
 

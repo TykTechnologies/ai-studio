@@ -131,7 +131,7 @@ const AppList = () => {
   };
 
   const handleAppClick = (app) => {
-    navigate(`/apps/${app.id}`);
+    navigate(`/admin/apps/${app.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -241,7 +241,9 @@ const AppList = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={() => navigate(`/apps/edit/${selectedApp?.id}`)}>
+        <MenuItem
+          onClick={() => navigate(`/admin/apps/edit/${selectedApp?.id}`)}
+        >
           Edit App
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedApp?.id)}>

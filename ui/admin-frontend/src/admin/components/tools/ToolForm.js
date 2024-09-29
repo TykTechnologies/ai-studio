@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -12,7 +12,6 @@ import {
   InputAdornment,
   Chip,
   Paper,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
 } from "@mui/material";
@@ -27,6 +26,7 @@ import {
   StyledButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
+import { styled } from "@mui/system";
 
 const SectionTitle = ({ children, tooltip }) => (
   <Box sx={{ display: "flex", alignItems: "center", mt: 3, mb: 2 }}>
@@ -111,6 +111,34 @@ const OperationsInput = ({ value, onChange }) => {
   );
 };
 
+const findInvalidCharPosition = (inputString) => {
+  const validPattern = /^[\x20-\x7E\n\r\t]*$/;
+  const lines = inputString.split("\n");
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum];
+    for (let colNum = 0; colNum < line.length; colNum++) {
+      const char = line[colNum];
+      if (!validPattern.test(char)) {
+        return {
+          line: lineNum + 1, // Adding 1 because line numbers typically start at 1
+          column: colNum + 1, // Adding 1 because column numbers typically start at 1
+          char: char,
+        };
+      }
+    }
+  }
+
+  return null; // No invalid character found
+};
+
+const StyledTextField = styled(TextField)({
+  "& .MuiInputBase-root": {
+    fontFamily: "monospace",
+    fontSize: "14px",
+  },
+});
+
 const ToolForm = () => {
   const [tool, setTool] = useState({
     name: "",
@@ -129,6 +157,7 @@ const ToolForm = () => {
   });
   const navigate = useNavigate();
   const { id } = useParams();
+  const [oasSpecError, setOasSpecError] = useState(null);
 
   useEffect(() => {
     if (id) {
@@ -181,6 +210,16 @@ const ToolForm = () => {
     if (name === "privacy_score") {
       const numValue = Math.min(Math.max(parseInt(value) || 0, 0), 100);
       setTool({ ...tool, [name]: numValue });
+    } else if (name === "oas_spec") {
+      const invalidChar = findInvalidCharPosition(value);
+      if (invalidChar) {
+        setOasSpecError(
+          `Invalid character '${invalidChar.char}' found at line ${invalidChar.line}, column ${invalidChar.column}`,
+        );
+      } else {
+        setOasSpecError(null);
+      }
+      setTool({ ...tool, [name]: value });
     } else {
       setTool({ ...tool, [name]: value });
     }
@@ -356,14 +395,17 @@ const ToolForm = () => {
           </SectionTitle>
           <Grid container spacing={3}>
             <Grid item xs={12}>
-              <TextField
+              <StyledTextField
                 fullWidth
-                label="OpenAPI Specification"
+                label="OAS Spec"
                 name="oas_spec"
                 value={tool.oas_spec}
                 onChange={handleChange}
+                error={!!oasSpecError}
+                helperText={oasSpecError}
                 multiline
-                rows={6}
+                rows={12}
+                variant="outlined"
               />
             </Grid>
           </Grid>

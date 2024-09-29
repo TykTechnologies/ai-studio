@@ -3,15 +3,25 @@ import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import LogoutIcon from "@mui/icons-material/Logout";
+import LaunchIcon from "@mui/icons-material/Launch"; // Changed to Launch icon
 import { useNavigate } from "react-router-dom";
 import { styled } from "@mui/material/styles";
-import logo from "./logo.svg"; // Make sure this path is correct
+import logo from "./logo.svg";
 import { StyledIconButton } from "../../styles/sharedStyles";
-import apiClient from "../../utils/apiClient"; // Make sure this path is correct
+import apiClient from "../../utils/apiClient";
 
 const Logo = styled("img")(({ theme }) => ({
-  height: "40px", // Adjust this value to fit your needs
+  height: "40px",
   marginRight: theme.spacing(2),
+}));
+
+const StyledLink = styled("a")(({ theme }) => ({
+  color: "white",
+  textDecoration: "none",
+  display: "flex",
+  alignItems: "center",
+  marginRight: theme.spacing(2),
+  cursor: "pointer",
 }));
 
 const MyAppBar = () => {
@@ -19,17 +29,11 @@ const MyAppBar = () => {
 
   const handleLogout = async () => {
     try {
-      // Call the logout API
       await apiClient.post("/logout");
-
-      // Clear any local storage items if needed
       localStorage.removeItem("token");
-
-      // Redirect to login page
       navigate("/login");
     } catch (error) {
       console.error("Logout failed:", error);
-      // You might want to show an error message to the user here
     }
   };
 
@@ -38,7 +42,7 @@ const MyAppBar = () => {
       position="fixed"
       sx={{
         zIndex: (theme) => theme.zIndex.drawer + 1,
-        backgroundColor: "#03031c", // Teal color
+        backgroundColor: "#03031c",
       }}
     >
       <Toolbar>
@@ -51,6 +55,15 @@ const MyAppBar = () => {
         >
           AI Portal
         </Typography>
+
+        <StyledLink
+          href="/portal/dashboard"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <LaunchIcon sx={{ mr: 1 }} />
+          Portal Dashboard
+        </StyledLink>
 
         <StyledIconButton color="inherit" onClick={handleLogout}>
           <LogoutIcon />

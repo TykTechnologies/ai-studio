@@ -8,12 +8,12 @@ WORKDIR /app
 ADD . /app
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install gunicorn
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Make port 8000 available for the app
+# Make port 5000 available for the app
 EXPOSE 8000
 
-# Run the server using Gunicorn when the container launches
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "lc_server:app"]
+
+# Run lc_server.py when the container launches
+CMD ["python", "lc_server.py"]

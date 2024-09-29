@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/llms"
@@ -59,12 +60,16 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference *uint,
 		if h.ChatID != nil {
 			cid = int(*h.ChatID)
 		}
+
+		// Set the name to "Chat on HH:MM dayname monthname"
+		currentTime := time.Now()
+		name := currentTime.Format("Chat on 15:04 Monday January")
 		// create a record of this Chat Session
 		chr := &models.ChatHistoryRecord{
 			SessionID: session,
 			ChatID:    uint(cid),
 			UserID:    uint(uid),
-			Name:      fmt.Sprintf("Chat %d", *h.ChatID),
+			Name:      name,
 		}
 
 		err := db.Create(chr).Error
