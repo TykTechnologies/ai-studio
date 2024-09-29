@@ -161,7 +161,7 @@ const DatasourceList = () => {
   };
 
   const handleDatasourceClick = (datasource) => {
-    navigate(`/datasources/${datasource.id}`);
+    navigate(`/admin/datasources/${datasource.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -349,7 +349,7 @@ const DatasourceList = () => {
       >
         <MenuItem
           onClick={() =>
-            navigate(`/datasources/edit/${selectedDatasource?.id}`)
+            navigate(`/admin/datasources/edit/${selectedDatasource?.id}`)
           }
         >
           Edit Datasource
