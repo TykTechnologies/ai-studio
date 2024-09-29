@@ -6,13 +6,14 @@ WORKDIR /app
 
 # Add the current directory contents into the container at /app
 ADD . /app
+
 # Install any needed packages specified in requirements.txt
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install gunicorn
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install gunicorn
 
 # Make port 8000 available for the app
 EXPOSE 8000
 
 # Run the server using Gunicorn when the container launches
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "run_server:StandaloneApplication(app)"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "lc_server:app"]
