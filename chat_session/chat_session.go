@@ -521,7 +521,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		&mc,
 		resp,
 		cs.chatRef.LLM.Vendor,
-		cs.chatRef.LLM.Name,
+		cs.chatRef.LLMSettings.ModelName,
 		cs.ID(),
 		0,
 		0,

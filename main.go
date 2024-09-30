@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -133,6 +135,11 @@ func main() {
 
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
 	authService := auth.NewAuthService(config, mailer)
+
+	// analytics
+	ctx, stopRec := context.WithCancel(context.Background())
+	defer stopRec()
+	analytics.StartRecording(ctx, db)
 
 	// Create a new API instance
 	api := api.NewAPI(service, true, authService, config) // true to disable CORS for development

@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 // UserInput represents the input for user-related operations
 // @Description User input model
 type UserInput struct {
@@ -817,4 +819,16 @@ type CredentialDetail struct {
 	KeyID  string `json:"key_id"`
 	Secret string `json:"secret"`
 	Active bool   `json:"active"`
+}
+
+// CMessageResponse represents the response structure for a CMessage
+type CMessageResponse struct {
+    Type       string `json:"type"`
+    ID         string `json:"id"`
+    Attributes struct {
+        Session   string    `json:"session"`
+        Content   string    `json:"content"`
+        CreatedAt time.Time `json:"created_at"`
+        ChatID    uint      `json:"chat_id"`
+    } `json:"attributes"`
 }

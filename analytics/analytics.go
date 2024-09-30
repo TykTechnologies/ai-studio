@@ -134,6 +134,15 @@ func RecordContentMessage(
 		cpt = price.CPT
 	}
 
+	if price == nil {
+		price = &models.ModelPrice{
+			CPT:       0.0,
+			ModelName: name,
+			Vendor:    string(vendor),
+			Currency:  "USD",
+		}
+	}
+
 	rec.Choices = len(cr.Choices)
 	rec.Name = name
 	rec.Vendor = string(vendor)

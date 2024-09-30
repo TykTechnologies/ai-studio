@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -1074,4 +1075,169 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// getLastCMessagesForSession godoc
+// @Summary Get last messages for a session
+// @Description Get the last X messages for a given session ID, ordered from oldest to newest
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param session_id path string true "Session ID"
+// @Param limit query int false "Number of messages to retrieve (default 10)"
+// @Success 200 {array} CMessageResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/sessions/{session_id}/messages [get]
+func (a *API) getLastCMessagesForSession(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	sessionID := c.Param("session_id")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+
+	// Check if the user has access to this session
+	chatHistoryRecord, err := a.service.GetChatHistoryRecordBySessionID(sessionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Session not found"}}})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		}
+		return
+	}
+
+	if chatHistoryRecord.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to access this session"}}})
+		return
+	}
+
+	messages, err := a.service.GetLastCMessagesForSession(sessionID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := make([]CMessageResponse, len(messages))
+	for i, msg := range messages {
+		response[i] = CMessageResponse{
+			Type: "cmessage",
+			ID:   strconv.FormatUint(uint64(msg.ID), 10),
+			Attributes: struct {
+				Session   string    `json:"session"`
+				Content   string    `json:"content"`
+				CreatedAt time.Time `json:"created_at"`
+				ChatID    uint      `json:"chat_id"`
+			}{
+				Session:   msg.Session,
+				Content:   string(msg.Content),
+				CreatedAt: msg.CreatedAt,
+				ChatID:    msg.ChatID,
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// updateChatHistoryRecordName godoc
+// @Summary Update the name of a chat history record
+// @Description Update the name of a chat history record for the authenticated user
+// @Tags chat-history
+// @Accept json
+// @Produce json
+// @Param session_id path string true "Session ID"
+// @Param name body string true "New name for the chat history record"
+// @Success 200 {object} SuccessResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/chat-history-records/{session_id}/name [put]
+func (a *API) updateChatHistoryRecordName(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	sessionID := c.Param("session_id")
+
+	var requestBody struct {
+		Name string `json:"name" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	// Get the ChatHistoryRecord
+	chatHistoryRecord := &models.ChatHistoryRecord{}
+	err := chatHistoryRecord.GetBySessionID(a.service.DB, sessionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat history record not found"}}})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		}
+		return
+	}
+
+	// Check if the current user owns this chat history record
+	if chatHistoryRecord.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to update this chat history record"}}})
+		return
+	}
+
+	// Update the name
+	err = chatHistoryRecord.UpdateName(a.service.DB, requestBody.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to update chat history record name"}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse{
+		Message: "Chat history record name updated successfully",
+	})
 }

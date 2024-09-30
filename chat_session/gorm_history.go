@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/llms"
@@ -67,7 +68,7 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference uint, 
 			SessionID: session,
 			ChatID:    uint(cid),
 			UserID:    uint(uid),
-			Name:      fmt.Sprintf("Chat %d", h.ChatID),
+			Name:      time.Now().Format("3PM on Monday (02/01/06)"),
 		}
 
 		err := db.Create(chr).Error

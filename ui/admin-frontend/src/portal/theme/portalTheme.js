@@ -14,6 +14,13 @@ const portalTheme = createTheme({
     },
   },
   components: {
+    MuiTypography: {
+      styleOverrides: {
+        h5: {
+          color: "#000000 !important", // This will make all h5 Typography components black
+        },
+      },
+    },
     MuiAppBar: {
       styleOverrides: {
         root: {

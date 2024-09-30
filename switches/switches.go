@@ -50,15 +50,13 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 
 	switch vendor {
 	case models.OPENAI:
-		dat, ok := choice.GenerationInfo["usage"]
-		if ok {
-			usage := dat.(map[string]interface{})
-			promptTokens = keyValueOrZero(usage, "prompt_tokens")
-			responseTokens = keyValueOrZero(usage, "response_tokens")
-			totalTokens = promptTokens + responseTokens
+		usage := choice.GenerationInfo
+		promptTokens = keyValueOrZero(usage, "PromptTokens")
+		responseTokens = keyValueOrZero(usage, "TotalTokens")
+		totalTokens = promptTokens + responseTokens
+		fmt.Println(totalTokens)
+		return totalTokens, promptTokens, responseTokens
 
-			return totalTokens, promptTokens, responseTokens
-		}
 	case models.ANTHROPIC:
 		dat, ok := choice.GenerationInfo["usage"]
 		if ok {

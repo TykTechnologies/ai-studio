@@ -40,6 +40,11 @@ const ChatView = () => {
   const [sessionId, setSessionId] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
+  const [hasUpdatedChatName, setHasUpdatedChatName] = useState(false);
+  const [isNewChat, setIsNewChat] = useState(true);
+  const [chatName, setChatName] = useState("");
+
   const ws = useRef(null);
   const chatWindowRef = useRef(null);
 
@@ -59,6 +64,36 @@ const ChatView = () => {
       ws.current = null;
     }
   };
+
+  const updateChatName = useCallback(
+    async (name) => {
+      if (sessionId) {
+        try {
+          let truncatedName = name.trim().slice(0, 60);
+          if (name.length > 60) {
+            truncatedName += "...";
+          }
+          console.log("Updating chat name to:", truncatedName);
+          await pubClient.put(
+            `/common/chat-history-records/${sessionId}/name`,
+            { name: truncatedName },
+          );
+          setChatName(truncatedName);
+          console.log("Chat name updated successfully");
+        } catch (error) {
+          console.error("Error updating chat name:", error);
+          setSnackbar({
+            open: true,
+            message: "Failed to update chat name",
+            severity: "error",
+          });
+        }
+      } else {
+        console.warn("Cannot update chat name: sessionId is not set");
+      }
+    },
+    [sessionId],
+  );
 
   const scrollToBottom = () => {
     if (messageContainerRef.current) {
@@ -167,10 +202,14 @@ const ChatView = () => {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
+    const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
     const wsUrl = `${config.API_BASE_URL}/common/ws/chat/${chatId}${
       sessionId ? `?session_id=${sessionId}` : ""
     }`;
+
+    setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
+    setHasUpdatedChatName(false);
 
     const setupWebSocket = () => {
       closeWebSocket();
@@ -181,7 +220,14 @@ const ChatView = () => {
         setIsConnected(true);
         setIsLoading(false);
         setError(null);
-        setMessages([]);
+
+        // If there's a continue_id, fetch the chat history
+        if (continueId) {
+          fetchChatHistory(continueId);
+          setSessionId(continueId);
+        } else {
+          setMessages([]);
+        }
       };
 
       ws.current.onmessage = (event) => {
@@ -213,6 +259,39 @@ const ChatView = () => {
       closeWebSocket();
     };
   }, [chatId, location.search]);
+
+  const fetchChatHistory = useCallback(async (sessionId) => {
+    setIsFetchingHistory(true);
+    try {
+      const response = await pubClient.get(
+        `/common/sessions/${sessionId}/messages?limit=100`,
+      );
+      const historicalMessages = response.data
+        .map((msg) => {
+          const parsedContent = JSON.parse(msg.attributes.content);
+          if (parsedContent.role === "system") {
+            return null; // Ignore system messages
+          }
+          let content = parsedContent.text;
+          if (parsedContent.role === "human") {
+            const messageMatch = content.match(/Message:\s*([\s\S]*)/);
+            content = messageMatch ? messageMatch[1].trim() : content;
+          }
+          return {
+            type: parsedContent.role === "human" ? "user" : "ai",
+            content: content,
+            isComplete: true,
+          };
+        })
+        .filter((msg) => msg !== null); // Remove null entries (system messages)
+      setMessages(historicalMessages);
+    } catch (error) {
+      console.error("Error fetching chat history:", error);
+      setError("Failed to load chat history");
+    } finally {
+      setIsFetchingHistory(false);
+    }
+  }, []);
 
   const onDrop = useCallback(
     (acceptedFiles) => {
@@ -274,50 +353,42 @@ const ChatView = () => {
       console.log("Received session ID:", data.payload);
       setSessionId(data.payload);
       localStorage.setItem("chatSessionId", data.payload);
-    } else if (data.type === "stream_chunk") {
+    } else if (data.type === "stream_chunk" || data.type === "ai_message") {
       setIsLoading(false);
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
         const lastMessage = newMessages[newMessages.length - 1];
-        if (
-          lastMessage &&
-          lastMessage.type === "ai" &&
-          !lastMessage.isComplete
-        ) {
-          newMessages[newMessages.length - 1] = {
-            ...lastMessage,
-            content: lastMessage.content + data.payload,
-          };
-        } else {
-          newMessages.push({
-            type: "ai",
-            content: data.payload,
-            isComplete: false,
-          });
+        let content = data.payload;
+
+        if (data.type === "ai_message") {
+          content = JSON.parse(data.payload).text;
         }
-        return newMessages;
-      });
-    } else if (data.type === "ai_message") {
-      setIsLoading(false);
-      setMessages((prevMessages) => {
-        const newMessages = [...prevMessages];
-        const lastMessage = newMessages[newMessages.length - 1];
+
         if (
           lastMessage &&
           lastMessage.type === "ai" &&
-          !lastMessage.isComplete
+          !lastMessage.isComplete &&
+          data.type === "stream_chunk"
         ) {
           newMessages[newMessages.length - 1] = {
             ...lastMessage,
-            content: data.payload,
-            isComplete: true,
+            content: lastMessage.content + content,
           };
         } else {
           newMessages.push({
             type: "ai",
-            content: data.payload,
-            isComplete: true,
+            content: content,
+            isComplete: data.type === "ai_message",
           });
+
+          // If this is a new chat, we haven't updated the chat name yet, and this is a complete AI message
+          if (isNewChat && !hasUpdatedChatName && data.type === "ai_message") {
+            console.log("Attempting to update chat name");
+            const newName = content.slice(0, 100).trim();
+            updateChatName(newName);
+            setHasUpdatedChatName(true);
+            setIsNewChat(false);
+          }
         }
         return newMessages;
       });
@@ -347,8 +418,16 @@ const ChatView = () => {
           isComplete: true,
         },
       ]);
+
+      // Update chat name only if it's a new chat and hasn't been updated yet
+      if (isNewChat && !hasUpdatedChatName) {
+        updateChatName(inputMessage.trim());
+        setHasUpdatedChatName(true);
+        setIsNewChat(false); // Set isNewChat to false after updating the name
+      }
+
       setInputMessage("");
-      setUploadedFiles([]); // Clear uploaded files after sending
+      setUploadedFiles([]);
     }
   };
 
@@ -495,7 +574,7 @@ const ChatView = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if (isLoading) {
+  if (isLoading || isFetchingHistory) {
     return (
       <Box
         display="flex"

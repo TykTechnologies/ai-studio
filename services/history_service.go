@@ -95,3 +95,8 @@ func (s *Service) SearchChatHistoryRecords(userID uint, query string, pageSize i
 func (s *Service) GetLatestChatHistoryRecord(userID uint) (*models.ChatHistoryRecord, error) {
 	return models.GetLatestChatHistoryRecord(s.DB, userID)
 }
+
+// GetLastCMessagesForSession retrieves the last X CMessage records for a given session ID
+func (s *Service) GetLastCMessagesForSession(sessionID string, limit int) ([]models.CMessage, error) {
+	return models.GetLastCMessagesForSession(s.DB, sessionID, limit)
+}

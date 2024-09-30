@@ -10,6 +10,7 @@ import {
   CardActions,
   CircularProgress,
   Box,
+  Pagination,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
@@ -23,32 +24,36 @@ const PortalDashboard = () => {
   const [chatRooms, setChatRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [appsResponse, historyResponse, chatRoomsResponse] =
-          await Promise.all([
-            pubClient.get("/common/apps"),
-            pubClient.get("/common/history?page_size=5&page=1"),
-            pubClient.get("/common/me"),
-          ]);
-        setApps(appsResponse.data.data);
-        setChatHistory(historyResponse.data.data);
-        setChatRooms(
-          chatRoomsResponse.data.attributes.entitlements.chats || [],
-        );
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to fetch data. Please try again later.");
-        setLoading(false);
-      }
-    };
-
     fetchData();
-  }, []);
+  }, [currentPage]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [appsResponse, historyResponse, chatRoomsResponse] =
+        await Promise.all([
+          pubClient.get("/common/apps"),
+          pubClient.get(`/common/history?page_size=5&page=${currentPage}`),
+          pubClient.get("/common/me"),
+        ]);
+      setApps(appsResponse.data.data);
+      setChatHistory(historyResponse.data.data);
+      setChatRooms(chatRoomsResponse.data.attributes.entitlements.chats || []);
+      setTotalPages(
+        parseInt(historyResponse.headers["x-total-pages"], 10) || 1,
+      );
+      setLoading(false);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Failed to fetch data. Please try again later.");
+      setLoading(false);
+    }
+  };
 
   const handleCreateApp = () => {
     navigate("/portal/app/new");
@@ -60,6 +65,10 @@ const PortalDashboard = () => {
 
   const handleStartNewChat = (chatId) => {
     navigate(`/portal/chat/${chatId}`);
+  };
+
+  const handlePageChange = (event, value) => {
+    setCurrentPage(value);
   };
 
   if (loading) {
@@ -107,8 +116,8 @@ const PortalDashboard = () => {
 
       {chatRooms.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
-            Quick Start Chat
+          <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
+            Jump into a new chat...
           </Typography>
           <Grid container spacing={2}>
             {chatRooms.map((chat) => (
@@ -155,7 +164,7 @@ const PortalDashboard = () => {
 
       {chatHistory.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
+          <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Continue where you left off
           </Typography>
           <Grid container spacing={3}>
@@ -163,7 +172,7 @@ const PortalDashboard = () => {
               <Grid item xs={12} sm={6} md={4} key={record.id}>
                 <Card>
                   <CardContent>
-                    <Typography variant="h6" component="div">
+                    <Typography variant="h7" component="div">
                       {record.attributes.name}
                     </Typography>
                   </CardContent>
@@ -191,6 +200,14 @@ const PortalDashboard = () => {
               </Grid>
             ))}
           </Grid>
+          <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+            <Pagination
+              count={totalPages}
+              page={currentPage}
+              onChange={handlePageChange}
+              color="primary"
+            />
+          </Box>
         </Box>
       )}
     </Container>
