@@ -49,7 +49,6 @@ type ChatSession struct {
 	stop           chan struct{}
 	errors         chan error
 	preProcessors  []func(*models.UserMessage) error
-	scriptRunners  []*scripting.ScriptRunner
 	caller         llms.Model
 	mode           ChatMode
 	datasources    map[uint]*models.Datasource
@@ -58,6 +57,7 @@ type ChatSession struct {
 	service        *services.Service
 	userID         uint
 	files          map[string]string
+	filters        []*models.Filter
 }
 
 type ChatResponse struct {
@@ -90,6 +90,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		service:        svc,
 		files:          map[string]string{},
 		userID:         *userID,
+		filters:        withFilters,
 	}
 
 	// Perform initial privacy check
@@ -225,7 +226,14 @@ func (cs *ChatSession) Start() error {
 				// prep tools
 				tools := cs.prepareTools()
 
-				// Check file references
+				// secure file references
+				scanFailureResponse, ok := cs.scanFiles(msg.FileRef)
+				if !ok {
+					cs.errors <- fmt.Errorf(scanFailureResponse)
+					continue
+				}
+
+				// Add file references
 				files := make(map[string]string)
 				if len(msg.FileRef) > 0 {
 					for i, _ := range msg.FileRef {
@@ -357,6 +365,28 @@ func (cs *ChatSession) preProcessMessage(msg *models.UserMessage) error {
 		}
 	}
 	return nil
+}
+
+func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
+	for i, _ := range refs {
+		content, ok := cs.GetFileReference(refs[i])
+		if ok {
+			for i2, _ := range cs.filters {
+				sr := scripting.NewScriptRunner(cs.filters[i2].Script)
+				if sr == nil {
+					cs.errors <- fmt.Errorf("error creating script runner")
+					continue
+				}
+
+				if err := sr.RunFilter(content); err != nil {
+					return fmt.Sprintf("filter denied content in %s", refs[i]), false
+				}
+			}
+
+		}
+	}
+
+	return "", true
 }
 
 func (cs *ChatSession) joinDocuments(docs []schema.Document, separator string) string {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -28,6 +29,9 @@ type AppConf struct {
 	AllowRegistrations bool
 	AdminEmail         string
 	SiteURL            string
+	ServerPort         string
+	CertFile           string
+	KeyFile            string
 }
 
 func GetConfigFromEnv() *AppConf {
@@ -92,10 +96,29 @@ func GetConfigFromEnv() *AppConf {
 		log.Println("Warning: SITE_URL environment variable is not set")
 	}
 
+	conf.ServerPort = os.Getenv("SERVER_PORT")
+	if conf.ServerPort == "" {
+		log.Println("Warning: SERVER_PORT environment variable is not set, defaulting to 8080")
+		conf.ServerPort = "8080"
+	}
+
+	conf.CertFile = os.Getenv("CERT_FILE")
+	conf.KeyFile = os.Getenv("KEY_FILE")
+	if conf.KeyFile == "" || conf.CertFile == "" {
+		log.Println("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
+	}
+
 	return conf
 }
 
+func printWelcome() {
+	fmt.Printf("Starting Tyk AI Portal %v\n", VERSION)
+	fmt.Println("Copyright Tyk Technologies, 2024")
+}
+
 func main() {
+	printWelcome()
+
 	// Open a connection to the SQLite database
 	// If the file doesn't exist, it will be created
 	db, err := gorm.Open(sqlite.Open("midsommar.db"), &gorm.Config{})
@@ -145,7 +168,9 @@ func main() {
 	api := api.NewAPI(service, true, authService, config) // true to disable CORS for development
 
 	// Run the API
-	if err := api.Run(":8080"); err != nil {
+	listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
+	log.Println("server listening on", listenOn)
+	if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 }

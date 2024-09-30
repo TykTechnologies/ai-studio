@@ -37,6 +37,7 @@ type API struct {
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config) *API {
+	gin.SetMode(gin.ReleaseMode)
 	api := &API{
 		service:     service,
 		router:      gin.Default(),
@@ -48,7 +49,11 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	return api
 }
 
-func (a *API) Run(addr string) error {
+func (a *API) Run(addr string, certFile string, keyFile string) error {
+	if certFile != "" && keyFile != "" {
+		return a.router.RunTLS(addr, certFile, keyFile)
+	}
+
 	return a.router.Run(addr)
 }
 

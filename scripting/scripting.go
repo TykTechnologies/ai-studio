@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/TykTechnologies/midsommar/v2/scriptExtensions"
 	"github.com/d5/tengo/v2"
 	"github.com/d5/tengo/v2/stdlib"
 )
@@ -24,7 +25,10 @@ func (sr *ScriptRunner) RunFilter(payload string) error {
 	defer sr.mu.Unlock()
 
 	script := tengo.NewScript(sr.source)
-	script.SetImports(stdlib.GetModuleMap(stdlib.AllModuleNames()...))
+	customModules := scriptExtensions.GetModules()
+	stdModules := stdlib.GetModuleMap(stdlib.AllModuleNames()...)
+	stdModules.AddBuiltinModule("tyk", customModules)
+	script.SetImports(stdModules)
 
 	// Add the payload to the script environment
 	err := script.Add("payload", payload)
