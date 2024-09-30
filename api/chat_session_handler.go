@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -33,8 +35,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type ChatMessage struct {
-	Type    string `json:"type"`
-	Payload string `json:"payload"`
+	Type     string   `json:"type"`
+	Payload  string   `json:"payload"`
+	FileRefs []string `json:"file_refs"`
 }
 
 type ChatHub struct {
@@ -246,7 +249,7 @@ func handleIncomingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) 
 		}
 
 		if chatMessage.Type == "user_message" {
-			cs.Input() <- &models.UserMessage{Payload: chatMessage.Payload}
+			cs.Input() <- &models.UserMessage{Payload: chatMessage.Payload, FileRef: chatMessage.FileRefs}
 		}
 	}
 }
@@ -452,4 +455,80 @@ func decodeToUTF8(s string) (string, error) {
 	}
 
 	return string(utf8Bytes), nil
+}
+
+func (a *API) UploadFileToSession(c *gin.Context) {
+	sessionID := c.Param("session_id")
+
+	// Get the chat session
+	hub := getChatHub()
+	session, exists := hub.GetSession(sessionID)
+	if !exists {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Session not found", Detail: "Chat session does not exist"}}})
+		return
+	}
+
+	// Get the file from the request
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Invalid file", Detail: err.Error()}}})
+		return
+	}
+	defer file.Close()
+
+	// Check if the file type is supported
+	if !isSupportedFileType(header.Filename) {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unsupported file type", Detail: "Only code-related source files, text, or markdown are supported"}}})
+		return
+	}
+
+	// Read the file contents
+	contents, err := readFileContents(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error reading file", Detail: err.Error()}}})
+		return
+	}
+
+	// Add the file reference to the chat session
+	session.AddFileReference(header.Filename, contents)
+
+	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
+}
+
+func isSupportedFileType(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	supportedExtensions := []string{
+		".txt", ".md", ".markdown", // Text and Markdown
+		".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs", ".rb", ".php", // Common programming languages
+		".html", ".css", ".json", ".xml", ".yaml", ".yml", // Web-related files
+		".sh", ".bash", // Shell scripts
+		".sql", // SQL files
+	}
+
+	for _, supportedExt := range supportedExtensions {
+		if ext == supportedExt {
+			return true
+		}
+	}
+	return false
+}
+
+func readFileContents(file multipart.File) (string, error) {
+	contents, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("error reading file: %v", err)
+	}
+	return string(contents), nil
 }

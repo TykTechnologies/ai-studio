@@ -57,6 +57,7 @@ type ChatSession struct {
 	db             *gorm.DB
 	service        *services.Service
 	userID         *uint
+	files          map[string]string
 }
 
 type ChatResponse struct {
@@ -87,6 +88,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		tools:          map[string]models.Tool{},
 		llmResponses:   make(chan *LLMResponseWrapper, 100),
 		service:        svc,
+		files:          map[string]string{},
 	}
 
 	// Perform initial privacy check
@@ -166,6 +168,15 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 	return nil
 }
 
+func (cs *ChatSession) AddFileReference(filename, contents string) {
+	cs.files[filename] = contents
+}
+
+func (cs *ChatSession) GetFileReference(filename string) (string, bool) {
+	contents, ok := cs.files[filename]
+	return contents, ok
+}
+
 func (cs *ChatSession) RemoveTool(id string) {
 	delete(cs.tools, id)
 }
@@ -213,8 +224,21 @@ func (cs *ChatSession) Start() error {
 				// prep tools
 				tools := cs.prepareTools()
 
+				// Check file references
+				files := make(map[string]string)
+				if len(msg.FileRef) > 0 {
+					for i, _ := range msg.FileRef {
+						fileContents, ok := cs.GetFileReference(msg.FileRef[i])
+						if !ok {
+							cs.errors <- fmt.Errorf("file reference not found: %s", msg.FileRef[i])
+							continue
+						}
+						files[msg.FileRef[i]] = fileContents
+					}
+				}
+
 				// Handle the message from the user
-				_, err = cs.HandleUserMessage(msg, docs, tools)
+				_, err = cs.HandleUserMessage(msg, docs, tools, files)
 				if err != nil {
 					cs.errors <- fmt.Errorf("error handling user message: %v", err)
 					continue
@@ -434,7 +458,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	return nil
 }
 
-func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.Document, tools []llms.Tool) (*llms.ContentResponse, error) {
+func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.Document, tools []llms.Tool, files map[string]string) (*llms.ContentResponse, error) {
 	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 	if cs.caller == nil {
 		return nil, fmt.Errorf("LLM driver is not initialized")
@@ -442,6 +466,19 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 
 	ctx, done := context.WithTimeout(context.Background(), 300*time.Second)
 	defer done()
+
+	if len(files) > 0 {
+		if docs == nil {
+			docs = []schema.Document{}
+		}
+
+		for fName, _ := range files {
+			newDoc := schema.Document{
+				PageContent: fmt.Sprintf("File: %s \n %s", fName, files[fName]),
+			}
+			docs = append(docs, newDoc)
+		}
+	}
 
 	pl := cs.prepHumanMessage(msg.Payload, docs).Content
 	err := cs.chatHistory.AddUserMessage(context.Background(), pl)

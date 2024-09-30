@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+
+import { Chip } from "@mui/material";
 import { useParams, useLocation } from "react-router-dom";
 import {
   Box,
@@ -19,6 +21,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import config from "../../config";
 import FloatingSection from "./FloatingSection";
+import { useDropzone } from "react-dropzone";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import pubClient from "../../admin/utils/pubClient";
 
 const ChatView = () => {
@@ -33,6 +38,8 @@ const ChatView = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sessionId, setSessionId] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const ws = useRef(null);
   const chatWindowRef = useRef(null);
 
@@ -204,6 +211,59 @@ const ChatView = () => {
     };
   }, [chatId, location.search]);
 
+  const onDrop = useCallback(
+    (acceptedFiles) => {
+      setIsUploading(true);
+      const uploadPromises = acceptedFiles.map((file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return pubClient
+          .post(`/common/chat-sessions/${sessionId}/upload`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          })
+          .then(() => ({ name: file.name, size: file.size }))
+          .catch((error) => {
+            setSnackbar({
+              open: true,
+              message: `Failed to upload ${file.name}: ${error.response?.data?.errors?.[0]?.detail || error.message}`,
+              severity: "error",
+            });
+            return null;
+          });
+      });
+
+      Promise.all(uploadPromises).then((fileInfos) => {
+        const successfulUploads = fileInfos.filter((info) => info !== null);
+        setUploadedFiles((prev) => [...prev, ...successfulUploads]);
+        setIsUploading(false);
+        if (successfulUploads.length > 0) {
+          setSnackbar({
+            open: true,
+            message: `Successfully uploaded ${successfulUploads.length} file(s)`,
+            severity: "success",
+          });
+        }
+      });
+    },
+    [sessionId, setSnackbar],
+  );
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop,
+    noClick: true,
+    noKeyboard: true,
+  });
+
+  const renderUploadIndicator = () => {
+    if (isUploading) {
+      return <CircularProgress size={20} />;
+    }
+    if (uploadedFiles.length > 0) {
+      return <CheckCircleOutlineIcon color="success" />;
+    }
+    return null;
+  };
+
   const handleIncomingMessage = (data) => {
     console.log("Handling incoming message:", data);
 
@@ -268,14 +328,24 @@ const ChatView = () => {
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (inputMessage.trim() && isConnected) {
-      const message = { type: "user_message", payload: inputMessage.trim() };
+    if ((inputMessage.trim() || uploadedFiles.length > 0) && isConnected) {
+      const message = {
+        type: "user_message",
+        payload: inputMessage.trim(),
+        file_refs: uploadedFiles.map((file) => file.name),
+      };
       ws.current.send(JSON.stringify(message));
       setMessages((prevMessages) => [
         ...prevMessages,
-        { type: "user", content: inputMessage.trim(), isComplete: true },
+        {
+          type: "user",
+          content: inputMessage.trim(),
+          fileRefs: uploadedFiles.map((file) => file.name),
+          isComplete: true,
+        },
       ]);
       setInputMessage("");
+      setUploadedFiles([]); // Clear uploaded files after sending
     }
   };
 
@@ -551,8 +621,10 @@ const ChatView = () => {
           <Box
             component="form"
             onSubmit={handleSendMessage}
-            sx={{ p: 1, borderTop: 0, height: "64px" }}
+            sx={{ p: 1, borderTop: 0, height: "64px", position: "relative" }}
+            {...getRootProps()}
           >
+            <input {...getInputProps()} />
             <TextField
               fullWidth
               variant="outlined"
@@ -560,8 +632,59 @@ const ChatView = () => {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               disabled={!isConnected}
+              InputProps={{
+                endAdornment: (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    {uploadedFiles.length > 0 && (
+                      <Chip
+                        icon={<AttachFileIcon />}
+                        label={uploadedFiles.length}
+                        size="small"
+                        onDelete={() => setUploadedFiles([])} // Add ability to clear uploaded files
+                      />
+                    )}
+                    {renderUploadIndicator()}
+                    <IconButton onClick={open} size="small">
+                      <AttachFileIcon />
+                    </IconButton>
+                  </Box>
+                ),
+              }}
             />
+            {isDragActive && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(0, 0, 0, 0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Typography variant="body2">
+                  Drop files here to upload
+                </Typography>
+              </Box>
+            )}
           </Box>
+          <Snackbar
+            open={snackbar.open}
+            autoHideDuration={6000}
+            onClose={handleCloseSnackbar}
+            anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+          >
+            <Alert
+              onClose={handleCloseSnackbar}
+              severity={snackbar.severity}
+              sx={{ width: "100%" }}
+            >
+              {snackbar.message}
+            </Alert>
+          </Snackbar>
         </Grid>
 
         <Grid item xs={3} sx={{ height: "100%", overflowY: "auto" }}>

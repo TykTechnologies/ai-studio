@@ -108,6 +108,7 @@ func (a *API) setupRoutes() {
 	authed.DELETE("/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
 	authed.POST("/chat-sessions/:session_id/tools", a.addToolToChatSession)
 	authed.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
+	authed.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
