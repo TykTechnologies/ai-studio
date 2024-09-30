@@ -9,7 +9,12 @@ import {
   Grid,
   Snackbar,
   Alert,
+  Button,
 } from "@mui/material";
+
+import IconButton from "@mui/material/IconButton";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import config from "../../config";
@@ -30,11 +35,85 @@ const ChatView = () => {
   const [sessionId, setSessionId] = useState(null);
   const ws = useRef(null);
   const chatWindowRef = useRef(null);
+
+  const messageContainerRef = useRef(null);
+
+  const [autoScroll, setAutoScroll] = useState(true);
+
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
     severity: "error",
   });
+
+  const closeWebSocket = () => {
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (messageContainerRef.current) {
+      const scrollHeight = messageContainerRef.current.scrollHeight;
+      const height = messageContainerRef.current.clientHeight;
+      const maxScrollTop = scrollHeight - height;
+      messageContainerRef.current.scrollTo({
+        top: maxScrollTop > 0 ? maxScrollTop : 0,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (autoScroll) {
+      scrollToBottom();
+    }
+  }, [messages, autoScroll]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (messageContainerRef.current) {
+        const { scrollHeight, clientHeight, scrollTop } =
+          messageContainerRef.current;
+        const isScrolledToBottom = scrollHeight - clientHeight <= scrollTop + 1;
+        setAutoScroll(isScrolledToBottom);
+      }
+    };
+
+    const messageContainer = messageContainerRef.current;
+    if (messageContainer) {
+      messageContainer.addEventListener("scroll", handleScroll);
+    }
+
+    return () => {
+      if (messageContainer) {
+        messageContainer.removeEventListener("scroll", handleScroll);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const messageContainer = messageContainerRef.current;
+
+    if (!messageContainer) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (autoScroll) {
+        scrollToBottom();
+      }
+    });
+
+    resizeObserver.observe(messageContainer);
+
+    return () => {
+      resizeObserver.unobserve(messageContainer);
+    };
+  }, [autoScroll]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -74,15 +153,28 @@ const ChatView = () => {
   }, []);
 
   useEffect(() => {
+    setMessages([]);
+    setIsLoading(true);
+    setError(null);
+  }, [chatId]);
+
+  useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const sessionId = searchParams.get("continue_id");
-    const wsUrl = `${config.API_BASE_URL}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`;
+    const wsUrl = `${config.API_BASE_URL}/common/ws/chat/${chatId}${
+      sessionId ? `?session_id=${sessionId}` : ""
+    }`;
+
     const setupWebSocket = () => {
+      closeWebSocket();
+
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
         setIsConnected(true);
         setIsLoading(false);
+        setError(null);
+        setMessages([]);
       };
 
       ws.current.onmessage = (event) => {
@@ -97,19 +189,18 @@ const ChatView = () => {
 
       ws.current.onclose = (event) => {
         setIsConnected(false);
-        setError(`Connection closed: ${event.reason || "Unknown reason"}`);
+        if (!event.wasClean) {
+          setError(
+            `Connection closed unexpectedly: ${event.reason || "Unknown reason"}`,
+          );
+        }
       };
     };
 
-    const timer = setTimeout(() => {
-      setupWebSocket();
-    }, 1000);
+    setupWebSocket();
 
     return () => {
-      clearTimeout(timer);
-      if (ws.current) {
-        ws.current.close();
-      }
+      closeWebSocket();
     };
   }, [chatId, location.search]);
 
@@ -121,6 +212,7 @@ const ChatView = () => {
       setSessionId(data.payload);
       localStorage.setItem("chatSessionId", data.payload);
     } else if (data.type === "stream_chunk") {
+      setIsLoading(false);
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
         const lastMessage = newMessages[newMessages.length - 1];
@@ -143,6 +235,7 @@ const ChatView = () => {
         return newMessages;
       });
     } else if (data.type === "ai_message") {
+      setIsLoading(false);
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
         const lastMessage = newMessages[newMessages.length - 1];
@@ -167,6 +260,7 @@ const ChatView = () => {
       });
     } else if (data.type === "error") {
       setError(data.payload);
+      setIsLoading(false);
     } else {
       console.warn("Received unknown message type:", data.type);
     }
@@ -185,35 +279,56 @@ const ChatView = () => {
     }
   };
 
-  useEffect(() => {
-    if (chatWindowRef.current) {
-      chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
-    }
-  }, [messages]);
-
   const renderMessageContent = (content) => {
-    return (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          p: ({ node, ...props }) => <Typography {...props} />,
-          a: ({ node, ...props }) => (
-            <a target="_blank" rel="noopener noreferrer" {...props} />
-          ),
-          code: ({ node, inline, ...props }) => (
+    const components = {
+      p: ({ node, ...props }) => <Typography {...props} />,
+      a: ({ node, ...props }) => (
+        <a target="_blank" rel="noopener noreferrer" {...props} />
+      ),
+      code: ({ node, inline, className, children, ...props }) => {
+        const match = /language-(\w+)/.exec(className || "");
+
+        if (inline) {
+          return (
+            <code className="inline-code" {...props}>
+              {children}
+            </code>
+          );
+        }
+
+        return match ? (
+          <pre
+            style={{
+              margin: "8px 0",
+              padding: "10px",
+              backgroundColor: "#f0f0f0",
+              borderRadius: "4px",
+              overflowX: "auto",
+            }}
+          >
             <code
+              className={className}
               style={{
-                backgroundColor: "#f0f0f0",
-                padding: inline ? "2px 4px" : "10px",
-                borderRadius: "4px",
                 fontFamily: "monospace",
-                display: inline ? "inline" : "block",
+                fontSize: "0.9em",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
               }}
               {...props}
-            />
-          ),
-        }}
-      >
+            >
+              {children}
+            </code>
+          </pre>
+        ) : (
+          <code className={className} {...props}>
+            {children}
+          </code>
+        );
+      },
+    };
+
+    return (
+      <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>
     );
@@ -327,72 +442,137 @@ const ChatView = () => {
         justifyContent="center"
         alignItems="center"
         height="100vh"
+        flexDirection="column"
       >
-        <Typography color="error">{error}</Typography>
+        <Typography color="error" gutterBottom>
+          {error}
+        </Typography>
+        <Button variant="contained" onClick={() => setError(null)}>
+          Dismiss
+        </Button>
       </Box>
     );
   }
 
   return (
-    <>
-      <Grid container spacing={2} sx={{ height: "calc(100vh - 110px)" }}>
-        <Grid item xs={9}>
-          <Box
+    <Box
+      sx={{
+        height: "85vh",
+        display: "flex",
+        flexDirection: "column",
+        "& .inline-code": {
+          display: "inline-block",
+          padding: "2px 4px",
+          color: "#232629",
+          backgroundColor: "rgb(240, 240, 240)",
+          borderRadius: "3px",
+          fontFamily: "monospace",
+          fontSize: "0.9em",
+        },
+      }}
+    >
+      <Grid container sx={{ flexGrow: 1, overflow: "hidden" }}>
+        <Grid
+          item
+          xs={9}
+          sx={{ height: "100%", display: "flex", flexDirection: "column" }}
+        >
+          <Paper
+            elevation={0}
             sx={{
+              flexGrow: 1,
               display: "flex",
               flexDirection: "column",
+              overflow: "hidden",
               height: "100%",
             }}
           >
-            <Paper
-              ref={chatWindowRef}
-              elevation={3}
+            <Box
+              ref={messageContainerRef}
               sx={{
-                flex: 1,
+                flexGrow: 1,
                 overflowY: "auto",
-                p: 2,
                 display: "flex",
                 flexDirection: "column",
-                gap: 2,
+                scrollBehavior: "smooth",
+                "&::-webkit-scrollbar": {
+                  width: "0.4em",
+                },
+                "&::-webkit-scrollbar-track": {
+                  boxShadow: "inset 0 0 6px rgba(0,0,0,0.00)",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: "rgba(0,0,0,.1)",
+                  outline: "1px solid slategrey",
+                },
               }}
             >
               {messages.map((message, index) => (
                 <Box
                   key={index}
                   sx={{
-                    alignSelf:
-                      message.type === "user" ? "flex-end" : "flex-start",
-                    backgroundColor:
-                      message.type === "user" ? "#e3f2fd" : "grey.200",
-                    borderRadius: 2,
-                    p: 1,
-                    maxWidth: "70%",
+                    width: "100%",
+                    p: 2,
+                    borderTop: index > 0 ? "1px solid #e0e0e0" : "none",
+                    borderBottom:
+                      index === messages.length - 1
+                        ? "1px solid #e0e0e0"
+                        : "none",
                     opacity: message.isComplete ? 1 : 0.7,
                   }}
                 >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ fontWeight: "bold", mb: 1 }}
+                  >
+                    {message.type === "user" ? "You:" : "Assistant:"}
+                  </Typography>
                   {renderMessageContent(message.content)}
                 </Box>
               ))}
-            </Paper>
-            <Box component="form" onSubmit={handleSendMessage} sx={{ p: 2 }}>
-              <TextField
-                fullWidth
-                variant="outlined"
-                placeholder="Type your message here..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                disabled={!isConnected}
-              />
             </Box>
+
+            {!autoScroll && (
+              <IconButton
+                onClick={scrollToBottom}
+                sx={{
+                  position: "absolute",
+                  bottom: 70,
+                  right: 20,
+                  backgroundColor: "background.paper",
+                  "&:hover": { backgroundColor: "action.hover" },
+                }}
+              >
+                <KeyboardArrowDownIcon />
+              </IconButton>
+            )}
+          </Paper>
+
+          <Box
+            component="form"
+            onSubmit={handleSendMessage}
+            sx={{ p: 1, borderTop: 0, height: "64px" }}
+          >
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Type your message here..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              disabled={!isConnected}
+            />
           </Box>
         </Grid>
-        <Grid item xs={3}>
+
+        <Grid item xs={3} sx={{ height: "100%", overflowY: "auto" }}>
           <Box
             sx={{
               display: "flex",
               flexDirection: "column",
               height: "100%",
-              gap: 2,
+              gap: 1,
+              p: 1,
+              overflowY: "auto",
             }}
           >
             <FloatingSection
@@ -417,6 +597,7 @@ const ChatView = () => {
           </Box>
         </Grid>
       </Grid>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
@@ -431,7 +612,7 @@ const ChatView = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </>
+    </Box>
   );
 };
 
