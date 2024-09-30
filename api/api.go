@@ -1,12 +1,18 @@
 package api
 
 import (
+	"crypto/rand"
+	"log"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/csrf"
 )
 
 // @title           Midsommar API
@@ -45,6 +51,28 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		auth:        authService,
 		config:      config,
 	}
+
+	// Generate a random 32-byte key for CSRF
+	csrfKey := make([]byte, 32)
+	_, err := rand.Read(csrfKey)
+	if err != nil {
+		log.Fatalf("Failed to generate CSRF key: %v", err)
+	}
+
+	// Add CSRF middleware
+	csrfMiddleware := csrf.Protect(
+		csrfKey,
+		csrf.Secure(true), // Set to false for HTTP in development
+		csrf.Path("/"),
+	)
+
+	api.router.Use(func(c *gin.Context) {
+		csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c.Request = r
+			c.Next()
+		})).ServeHTTP(c.Writer, c.Request)
+	})
+
 	api.setupRoutes()
 	return api
 }
@@ -79,8 +107,15 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 }
 func (a *API) setupRoutes() {
 	if a.disableCORS {
+		a.router.Use(a.devCorsMiddleware())
+	} else {
 		a.router.Use(a.corsMiddleware())
 	}
+
+	a.router.GET("/csrf-token", func(c *gin.Context) {
+		c.Header("X-CSRF-Token", csrf.Token(c.Request))
+		c.Status(http.StatusOK)
+	})
 
 	public := a.router.Group("/")
 
@@ -317,7 +352,7 @@ func (a *API) setupRoutes() {
 	a.SetupWebSocketRoute(authed)
 }
 
-func (a *API) corsMiddleware() gin.HandlerFunc {
+func (a *API) devCorsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
@@ -343,6 +378,19 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 		}
 
 		c.Next()
+	}
+}
+
+func (a *API) corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cors.New(cors.Config{
+			AllowOrigins:     []string{"http://localhost:3000"}, // Update with your frontend URL
+			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"},
+			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
+		})(c)
 	}
 }
 
