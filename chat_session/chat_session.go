@@ -314,7 +314,19 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 
 func (cs *ChatSession) initSession() error {
 	// History for the chat session
-	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, &cs.chatRef.ID, cs.userID, cs.chatRef.LLMSettings.SystemPrompt)
+	if cs.db == nil {
+		return fmt.Errorf("no database connection")
+	}
+
+	if cs.chatRef == nil {
+		return fmt.Errorf("no chat reference")
+	}
+
+	if cs.chatRef.LLMSettings == nil {
+		return fmt.Errorf("no LLM settings")
+	}
+
+	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, cs.chatRef.ID, cs.userID, cs.chatRef.LLMSettings.SystemPrompt)
 
 	// create the LLM client
 	llm, err := cs.fetchDriver(nil)

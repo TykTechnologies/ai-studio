@@ -13,7 +13,7 @@ type CMessage struct {
 	Session   string `gorm:"index"`
 	Content   []byte
 	CreatedAt time.Time
-	ChatID    *uint `gorm:"index"`
+	ChatID    uint `gorm:"index"`
 }
 
 type ChatHistoryRecord struct {
@@ -59,22 +59,36 @@ func (chr *ChatHistoryRecord) GetByChatID(db *gorm.DB, chatID uint) error {
 func ListChatHistoryRecordsByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
 	var records []ChatHistoryRecord
 	var totalCount int64
-	query := db.Model(&ChatHistoryRecord{}).Where("user_id = ?", userID)
 
+	// Subquery to get SessionIDs with more than one CMessage
+	subQuery := db.Model(&CMessage{}).
+		Select("session").
+		Group("session").
+		Having("COUNT(*) > 1")
+
+	// Main query
+	query := db.Model(&ChatHistoryRecord{}).
+		Where("user_id = ?", userID).
+		Where("session_id IN (?)", subQuery)
+
+	// Count total records
 	if err := query.Count(&totalCount).Error; err != nil {
 		return nil, 0, 0, err
 	}
 
+	// Calculate total pages
 	totalPages := int(totalCount) / pageSize
 	if int(totalCount)%pageSize != 0 {
 		totalPages++
 	}
 
+	// Apply pagination if not retrieving all records
 	if !all {
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
+	// Execute the query
 	err := query.Find(&records).Error
 	return records, totalCount, totalPages, err
 }
@@ -83,22 +97,36 @@ func ListChatHistoryRecordsByUserID(db *gorm.DB, userID uint, pageSize int, page
 func ListChatHistoryRecordsByUserIDPaginated(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
 	var records []ChatHistoryRecord
 	var totalCount int64
-	query := db.Model(&ChatHistoryRecord{}).Where("user_id = ?", userID)
 
+	// Subquery to get SessionIDs with more than one CMessage
+	subQuery := db.Model(&CMessage{}).
+		Select("session").
+		Group("session").
+		Having("COUNT(*) > 1")
+
+	// Main query
+	query := db.Model(&ChatHistoryRecord{}).
+		Where("user_id = ?", userID).
+		Where("session_id IN (?)", subQuery)
+
+	// Count total records
 	if err := query.Count(&totalCount).Error; err != nil {
 		return nil, 0, 0, err
 	}
 
+	// Calculate total pages
 	totalPages := int(totalCount) / pageSize
 	if int(totalCount)%pageSize != 0 {
 		totalPages++
 	}
 
+	// Apply pagination if not retrieving all records
 	if !all {
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
+	// Execute the query
 	err := query.Find(&records).Error
 	return records, totalCount, totalPages, err
 }

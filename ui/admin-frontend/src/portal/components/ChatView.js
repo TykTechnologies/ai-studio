@@ -204,7 +204,10 @@ const ChatView = () => {
       };
     };
 
-    setupWebSocket();
+    const delay = 1000; // 1 second delay, adjust as needed
+    const timer = setTimeout(() => {
+      setupWebSocket();
+    }, delay);
 
     return () => {
       closeWebSocket();
