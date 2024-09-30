@@ -56,7 +56,7 @@ type ChatSession struct {
 	tools          map[string]models.Tool
 	db             *gorm.DB
 	service        *services.Service
-	userID         *uint
+	userID         uint
 	files          map[string]string
 }
 
@@ -89,6 +89,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		llmResponses:   make(chan *LLMResponseWrapper, 100),
 		service:        svc,
 		files:          map[string]string{},
+		userID:         *userID,
 	}
 
 	// Perform initial privacy check

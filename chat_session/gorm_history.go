@@ -33,12 +33,13 @@ func WithLimit(limit int) GormChatMessageHistoryOption {
 }
 
 // NewGormChatMessageHistory creates a new GormChatMessageHistory
-func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference uint, userID *uint, systemPrompt string, options ...GormChatMessageHistoryOption) *GormChatMessageHistory {
+func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference uint, userID uint, systemPrompt string, options ...GormChatMessageHistoryOption) *GormChatMessageHistory {
 	h := &GormChatMessageHistory{
 		DB:      db,
 		Limit:   100, // Default limit
 		Session: session,
 		ChatID:  chatReference,
+		UserID:  userID,
 	}
 
 	for _, option := range options {
@@ -54,8 +55,8 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference uint, 
 	// otherwise we create it
 	if !sessionRecordExists {
 		uid := 0
-		if h.ChatID != 0 {
-			uid = int(h.ChatID)
+		if h.UserID != 0 {
+			uid = int(h.UserID)
 		}
 
 		cid := 0
