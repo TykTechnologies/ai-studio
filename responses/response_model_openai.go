@@ -2,6 +2,18 @@ package responses
 
 import "github.com/tmc/langchaingo/llms"
 
+type OpenAIRequest struct {
+	Model    string `json:"model"`
+	Messages []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+	Stream        bool `json:"stream"`
+	StreamOptions struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options"`
+}
+
 type OpenAIResponse struct {
 	ID                string                  `json:"id,omitempty"`
 	Created           int64                   `json:"created,omitempty"`
@@ -177,11 +189,13 @@ type OpenAIStreamingResponse struct {
 		Logprobs     any                    `json:"logprobs"`
 		FinishReason string                 `json:"finish_reason"`
 	} `json:"choices"`
-	Usage struct {
-		CompletionTokens int `json:"completion_tokens"`
-		PromptTokens     int `json:"prompt_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
+	Usage *OAIUsage `json:"usage"`
+}
+
+type OAIUsage struct {
+	CompletionTokens int `json:"completion_tokens"`
+	PromptTokens     int `json:"prompt_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 func (o *OpenAIStreamingResponse) GetPromptTokens() int {

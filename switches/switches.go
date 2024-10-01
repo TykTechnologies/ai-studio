@@ -191,11 +191,13 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 		// embedding replies have the same usage section
 		if strings.Contains(strings.ToLower(r.URL.Path), OpenAICompletionsEndpoint) ||
 			strings.Contains(strings.ToLower(r.URL.Path), OpenAIEmbeddingsEndpoint) {
+
 			response = &responses.OpenAIResponse{}
 			err := json.Unmarshal(body, response)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal llm rest response: %w", err)
 			}
+
 			return llm, app, response, nil
 		}
 	case models.ANTHROPIC:
@@ -281,36 +283,44 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 	return nil, nil, nil, fmt.Errorf("[analyse response] unknown vendor: %s", llm.Vendor)
 }
 
-func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps [][]byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
+func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	var response models.ITokenResponse
 	switch llm.Vendor {
 	case models.OPENAI:
 		aggregate := &responses.GenericResponse{}
-		for _, body := range resps {
-			tempResp := &responses.OpenAIStreamingResponse{}
-			err := json.Unmarshal(body, tempResp)
-			if err != nil {
-				return nil, nil, nil, err
+		strBody := string(resps)
+		parts := strings.Split(strBody, "\n")
+
+		for _, p := range parts {
+			pBody := strings.TrimPrefix(p, "data:")
+			if pBody != "" && strings.Trim(pBody, " ") != "[DONE]" {
+				tempResp := &responses.OpenAIStreamingResponse{}
+				err := json.Unmarshal([]byte(pBody), tempResp)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to unmarshal streaming chunk %v (%s)", err, pBody)
+				}
+
+				aggregate.Choices += tempResp.GetChoiceCount()
+				aggregate.ToolCalls += tempResp.GetToolCount()
+
+				if tempResp.Usage != nil {
+					aggregate.PromptTokens = tempResp.Usage.PromptTokens
+					aggregate.CompletionTokens = tempResp.Usage.CompletionTokens
+				}
 			}
-
-			aggregate.Choices += tempResp.GetChoiceCount()
-			aggregate.ToolCalls += tempResp.GetToolCount()
-
-			if tempResp.Usage.CompletionTokens > 0 {
-				aggregate.PromptTokens = tempResp.Usage.PromptTokens
-				aggregate.CompletionTokens = tempResp.Usage.CompletionTokens
-			}
-
-			return llm, app, aggregate, nil
 		}
+
+		return llm, app, aggregate, nil
 
 	case models.ANTHROPIC:
 		aggregate := &responses.GenericResponse{
 			Choices: 1,
 		}
-		for _, body := range resps {
+
+		parts := strings.Split(string(resps), "\n")
+		for _, body := range parts {
 			tempResp := map[string]interface{}{}
-			err := json.Unmarshal(body, tempResp)
+			err := json.Unmarshal([]byte(body), tempResp)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -320,7 +330,7 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 				switch tp {
 				case "message_start":
 					startMsg := &responses.AnthropicStreamingChunkStart{}
-					err := json.Unmarshal(body, startMsg)
+					err := json.Unmarshal([]byte(body), startMsg)
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -328,7 +338,7 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 					aggregate.PromptTokens = startMsg.Message.Usage.InputTokens
 				case "message_delta":
 					deltaMsg := &responses.AnthropicStreamingChunkDelta{}
-					err := json.Unmarshal(body, deltaMsg)
+					err := json.Unmarshal([]byte(body), deltaMsg)
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -337,7 +347,7 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 
 				case "content_block_start":
 					startBlock := &responses.AnthropicStreamingChunkCBStart{}
-					err := json.Unmarshal(body, startBlock)
+					err := json.Unmarshal([]byte(body), startBlock)
 					if err != nil {
 						return nil, nil, nil, err
 					}

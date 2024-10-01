@@ -19,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -214,6 +215,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error(), err)
+		return
+	}
+
 	upstreamURL, err := url.Parse(llm.APIEndpoint)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err)
@@ -362,6 +368,41 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 	return llm, ok
 }
 
+func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
+	// OpenAI is special because it requires specific usage inclusion
+	if llm.Vendor == models.OPENAI {
+		b, err := readBodyWithoutConsuming(r)
+		if err != nil {
+			return err
+		}
+
+		var req responses.OpenAIRequest
+		if err := json.Unmarshal(b, &req); err != nil {
+			return err
+		}
+
+		if isStreamingChannel {
+			if !req.Stream {
+				return fmt.Errorf("streaming is required for this endpoint")
+			}
+
+			if !req.StreamOptions.IncludeUsage {
+				return fmt.Errorf("streaming without usage is not allowed")
+			}
+
+			return nil
+		}
+
+		// not a streaming endpoint, but they are streaming
+		if req.Stream {
+			fmt.Println("streaming is not allowed for this endpoint")
+			return fmt.Errorf("streaming is not allowed for this endpoint")
+		}
+	}
+
+	return nil
+}
+
 func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	llmSlug := vars["llmSlug"]
@@ -372,6 +413,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 
 	if !ok {
 		respondWithError(w, http.StatusNotFound, "[streaming] LLM not found", nil)
+		return
+	}
+
+	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error(), err)
 		return
 	}
 
@@ -422,22 +468,21 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 
 	app, _ := r.Context().Value("app").(*models.App)
 
-	// We need this for anthropic tracking
+	var fullResponse bytes.Buffer
+	var responses [][]byte
+
 	buffer := make([]byte, 1024)
-	responses := make([][]byte, 0)
-	var fullResponse []byte
 	for {
 		n, err := resp.Body.Read(buffer)
-
-		// copy the buffer for tracking
-		bCopy := make([]byte, n)
-		copy(bCopy, buffer[:n])
-		responses = append(responses, bCopy)
-
 		if n > 0 {
-			fullResponse = append(fullResponse, buffer[:n]...)
-			_, err := w.Write(buffer[:n])
+			chunk := make([]byte, n)
+			copy(chunk, buffer[:n])
+			responses = append(responses, chunk)
+			fullResponse.Write(chunk)
+
+			_, err := w.Write(chunk)
 			if err != nil {
+				log.Printf("Error writing to client: %v", err)
 				break
 			}
 			if f, ok := w.(http.Flusher); ok {
@@ -453,11 +498,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, responses)
+	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes())
 }
 
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, chunks [][]byte) {
-	AnalyzeStreamingResponse(p.service, llm, app, code, chunks, req)
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte) {
+	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, req)
 }
 
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {

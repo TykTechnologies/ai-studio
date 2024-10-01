@@ -2,13 +2,32 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
 	"github.com/sashabaranov/go-openai"
 )
+
+func handleStreamingResponse(stream *openai.ChatCompletionStream) {
+	defer stream.Close()
+
+	fmt.Println("Streaming Response:")
+	for {
+		response, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err != nil {
+			log.Printf("Error receiving stream response: %v", err)
+			return
+		}
+		fmt.Print(response.Choices[0].Delta.Content)
+	}
+}
 
 func main() {
 	// Command-line flags will be defined here
@@ -17,6 +36,8 @@ func main() {
 	prompt := flag.String("prompt", "", "Prompt to send to the model (required)")
 	apiKey := flag.String("api-key", "", "OpenAI API key (optional, defaults to OPENAI_API_KEY env var)")
 	apiEndpoint := flag.String("api-endpoint", "", "OpenAI API endpoint (optional)")
+
+	streaming := flag.Bool("streaming", false, "Enable streaming mode")
 
 	flag.Parse()
 
@@ -39,24 +60,60 @@ func main() {
 	}
 
 	client := openai.NewClientWithConfig(config)
-
-	resp, err := client.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: *modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: *prompt,
+	if *streaming {
+		stream, err := client.CreateChatCompletionStream(
+			context.Background(),
+			openai.ChatCompletionRequest{
+				StreamOptions: &openai.StreamOptions{IncludeUsage: true},
+				Model:         *modelName,
+				Messages: []openai.ChatCompletionMessage{
+					{
+						Role:    openai.ChatMessageRoleUser,
+						Content: *prompt,
+					},
 				},
 			},
-		},
-	)
+		)
+		if err != nil {
+			log.Fatalf("Error creating chat completion stream: %v", err)
+		}
+		defer stream.Close()
 
-	if err != nil {
-		log.Fatalf("Error creating chat completion: %v", err)
+		fmt.Println("Streaming Response:")
+		for {
+			response, err := stream.Recv()
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			if err != nil {
+				log.Printf("Error receiving stream response: %v", err)
+				return
+			}
+			if len(response.Choices) > 0 {
+				fmt.Print(response.Choices[0].Delta.Content)
+			}
+		}
+	} else {
+		resp, err := client.CreateChatCompletion(
+			context.Background(),
+			openai.ChatCompletionRequest{
+				Model: *modelName,
+				Messages: []openai.ChatCompletionMessage{
+					{
+						Role:    openai.ChatMessageRoleUser,
+						Content: *prompt,
+					},
+				},
+			},
+		)
+
+		if err != nil {
+			log.Fatalf("Error creating chat completion: %v", err)
+		}
+
+		fmt.Println("Response:")
+		if len(resp.Choices) > 0 {
+			fmt.Println(resp.Choices[0].Message.Content)
+		}
 	}
-
-	fmt.Println("Response:")
-	fmt.Println(resp.Choices[0].Message.Content)
 }
