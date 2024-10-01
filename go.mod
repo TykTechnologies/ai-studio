@@ -17,6 +17,7 @@ require (
 	github.com/gosimple/slug v1.14.0
 	github.com/joho/godotenv v1.5.1
 	github.com/pb33f/libopenapi v0.18.0
+	github.com/sashabaranov/go-openai v1.31.0
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggo/swag v1.16.3
 	github.com/tmc/langchaingo v0.1.12

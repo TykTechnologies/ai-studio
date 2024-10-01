@@ -59,9 +59,6 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 
 	case models.ANTHROPIC:
 		dat := choice.GenerationInfo
-		fmt.Println("ANTHROPIC")
-		fmt.Println(choice.GenerationInfo)
-
 		promptTokens = keyValueOrZero(dat, "InputTokens")
 		responseTokens = keyValueOrZero(dat, "OutputTokens")
 		totalTokens = promptTokens + responseTokens
@@ -76,8 +73,6 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 		return totalTokens, promptTokens, responseTokens
 
 	case models.VERTEX:
-		fmt.Println("VERTEX")
-		fmt.Println(choice.GenerationInfo)
 		promptTokens := keyValueInt32OrZero(choice.GenerationInfo, "input_tokens")
 		responseTokens := keyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
 		totalTokens := promptTokens + responseTokens

@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/go-mail/mail"
 	"github.com/joho/godotenv"
@@ -166,6 +167,14 @@ func main() {
 
 	// Create a new API instance
 	api := api.NewAPI(service, true, authService, config) // true to disable CORS for development
+
+	// start the Proxy
+
+	pConfig := &proxy.Config{
+		Port: 9090,
+	}
+	p := proxy.NewProxy(service, pConfig)
+	go p.Start()
 
 	// Run the API
 	listenOn := fmt.Sprintf(":%s", appConf.ServerPort)

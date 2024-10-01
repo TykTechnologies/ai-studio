@@ -242,17 +242,21 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 	proxy.ServeHTTP(capture, r)
 
-	app, ok := r.Context().Value("app").(*models.App)
-	if !ok {
+	appObj := r.Context().Value("app")
+	if appObj == nil {
 		slog.Error("app context not found")
+		return
+	}
+
+	app, ok := appObj.(*models.App)
+	if !ok {
+		slog.Error("app context invalid")
 		return
 	}
 
 	go func(r *http.Request) {
 		responseBody := capture.buffer.Bytes()
 		statusCode := capture.statusCode
-
-		log.Printf("Response status: %d, body length: %d", statusCode, len(responseBody))
 
 		p.analyzeResponse(llm, app, statusCode, responseBody, r)
 	}(r)

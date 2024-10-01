@@ -9,11 +9,13 @@ import (
 func OpenAIValidator(r *http.Request) (string, error) {
 	h := r.Header.Get("Authorization")
 	if h == "" {
+		fmt.Println("missing authorization header")
 		return "", fmt.Errorf("missing authorization header")
 	}
 
 	split := strings.Split(h, "Bearer ")
 	if len(split) != 2 {
+		fmt.Println("missing Bearer part")
 		return "", fmt.Errorf("invalid authorization header")
 	}
 

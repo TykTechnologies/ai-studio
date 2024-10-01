@@ -80,7 +80,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		if !cv.CheckCredential(token, dsSlug, llmSlug, r) {
+		var ok bool
+		ok, r = cv.CheckCredential(token, dsSlug, llmSlug, r)
+
+		if !ok {
 			respondWithError(w, http.StatusUnauthorized, "invalid credential", nil)
 			return
 		}
@@ -89,15 +92,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string, r *http.Request) bool {
+func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(token)
 	if err != nil || !cred.Active {
-		return false
+		return false, r
 	}
 
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
-		return false
+		return false, r
 	}
 
 	ctx := context.WithValue(r.Context(), "app", app)
@@ -106,32 +109,33 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string, r 
 	if dsSlug != "" {
 		ds, ok := cv.p.GetDatasource(dsSlug)
 		if !ok {
-			return false
+			return false, r
 		}
 		for _, d := range app.Datasources {
 			if d.ID == ds.ID {
-				return true
+				return true, r
 			}
 		}
 
-		return false
+		return false, r
 	}
 
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
 		if !ok {
-			return false
+			return false, r
 		}
+
 		for _, l := range app.LLMs {
 			if l.ID == llm.ID {
-				return true
+				return true, r
 			}
 		}
 
-		return false
+		return false, r
 	}
 
-	return false
+	return false, r
 }
 
 // func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
