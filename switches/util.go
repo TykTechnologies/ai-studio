@@ -130,3 +130,13 @@ func keyValueOrZero(dat map[string]any, key string) int {
 	}
 	return 0
 }
+
+func keyValueInt32OrZero(dat map[string]any, key string) int {
+	if val, ok := dat[key]; ok {
+		val, ok := val.(int32)
+		if ok {
+			return int(val)
+		}
+	}
+	return 0
+}

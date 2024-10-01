@@ -3757,27 +3757,27 @@
           },
           "so2": {
             "type": "number",
-            "description": "Concentration of SO2 (µg/m³)",
+            "description": "Concentration of SO2 (ug/m3)",
             "example": 50
           },
           "no2": {
             "type": "number",
-            "description": "Concentration of NO2 (µg/m³)",
+            "description": "Concentration of NO2 (ug/m3)",
             "example": 25
           },
           "o3": {
             "type": "number",
-            "description": "Concentration of O3 (µg/m³)",
+            "description": "Concentration of O3 (ug/m3)",
             "example": 2
           },
           "pm25": {
             "type": "number",
-            "description": "Concentration of PM 2.5 (µg/m³)",
+            "description": "Concentration of PM 2.5 (ug/m3)",
             "example": 230
           },
           "pm10": {
             "type": "number",
-            "description": "Concentration of PM 10 (µg/m³)",
+            "description": "Concentration of PM 10 (ug/m3)",
             "example": 150
           }
         }
@@ -3852,27 +3852,27 @@
           },
           "so2": {
             "type": "number",
-            "description": "Concentration of SO2 (µg/m³)",
+            "description": "Concentration of SO2 (ug/m3)",
             "example": 50
           },
           "no2": {
             "type": "number",
-            "description": "Concentration of NO2 (µg/m³)",
+            "description": "Concentration of NO2 (ug/m3)",
             "example": 25
           },
           "o3": {
             "type": "number",
-            "description": "Concentration of O3 (µg/m³)",
+            "description": "Concentration of O3 (ug/m3)",
             "example": 2
           },
           "pm25": {
             "type": "number",
-            "description": "Concentration of PM 2.5 (µg/m³)",
+            "description": "Concentration of PM 2.5 (ug/m3)",
             "example": 230
           },
           "pm10": {
             "type": "number",
-            "description": "Concentration of PM 10 (µg/m³)",
+            "description": "Concentration of PM 10 (ug/m3)",
             "example": 150
           }
         }

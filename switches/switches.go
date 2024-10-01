@@ -58,15 +58,16 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 		return totalTokens, promptTokens, responseTokens
 
 	case models.ANTHROPIC:
-		dat, ok := choice.GenerationInfo["usage"]
-		if ok {
-			usage := dat.(map[string]interface{})
-			promptTokens = keyValueOrZero(usage, "input_tokens")
-			responseTokens = keyValueOrZero(usage, "output_tokens")
-			totalTokens = promptTokens + responseTokens
+		dat := choice.GenerationInfo
+		fmt.Println("ANTHROPIC")
+		fmt.Println(choice.GenerationInfo)
 
-			return totalTokens, promptTokens, responseTokens
-		}
+		promptTokens = keyValueOrZero(dat, "InputTokens")
+		responseTokens = keyValueOrZero(dat, "OutputTokens")
+		totalTokens = promptTokens + responseTokens
+
+		return totalTokens, promptTokens, responseTokens
+
 	case models.OLLAMA:
 		promptTokens := keyValueOrZero(choice.GenerationInfo, "PromptTokens")
 		responseTokens := keyValueOrZero(choice.GenerationInfo, "CompletionTokens")
@@ -75,15 +76,17 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 		return totalTokens, promptTokens, responseTokens
 
 	case models.VERTEX:
-		promptTokens := keyValueOrZero(choice.GenerationInfo, "input_tokens")
-		responseTokens := keyValueOrZero(choice.GenerationInfo, "output_tokens")
+		fmt.Println("VERTEX")
+		fmt.Println(choice.GenerationInfo)
+		promptTokens := keyValueInt32OrZero(choice.GenerationInfo, "input_tokens")
+		responseTokens := keyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
 		totalTokens := promptTokens + responseTokens
 
 		return totalTokens, promptTokens, responseTokens
 
 	case models.GOOGLEAI:
-		promptTokens := keyValueOrZero(choice.GenerationInfo, "input_tokens")
-		responseTokens := keyValueOrZero(choice.GenerationInfo, "output_tokens")
+		promptTokens := keyValueInt32OrZero(choice.GenerationInfo, "input_tokens")
+		responseTokens := keyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
 		totalTokens := promptTokens + responseTokens
 
 		return totalTokens, promptTokens, responseTokens
