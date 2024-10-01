@@ -21,8 +21,8 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	AnalyzeCompletionResponse(service, llm, app, response)
 }
 
-func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, r *http.Request) {
-	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, statusCode, responses, r)
+func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, r *http.Request, chunks [][]byte) {
+	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, statusCode, responses, r, chunks)
 	if err != nil {
 		log.Printf("failed to analyze response: %v", err)
 		return

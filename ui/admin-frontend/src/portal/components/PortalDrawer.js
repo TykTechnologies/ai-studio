@@ -19,6 +19,7 @@ import ExpandMore from "@mui/icons-material/ExpandMore";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import AppsIcon from "@mui/icons-material/Apps";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 
 import pubClient from "../../admin/utils/pubClient";
 const drawerWidth = 280; // Increased drawer width
@@ -110,6 +111,15 @@ const PortalDrawer = () => {
           </ListItemIcon>
           <ListItemText
             primary="Dashboard"
+            primaryTypographyProps={{ noWrap: true }}
+          />
+        </ListItem>
+        <ListItem button component={Link} to="/portal/app/new" sx={{ mb: 1 }}>
+          <ListItemIcon>
+            <AddCircleOutlineIcon />
+          </ListItemIcon>
+          <ListItemText
+            primary="Create App"
             primaryTypographyProps={{ noWrap: true }}
           />
         </ListItem>

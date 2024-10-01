@@ -207,6 +207,7 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 			if err != nil {
 				return nil, nil, nil, err
 			}
+
 			return llm, app, response, nil
 		}
 	case models.MOCK_VENDOR:
@@ -283,7 +284,7 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 	return nil, nil, nil, fmt.Errorf("[analyse response] unknown vendor: %s", llm.Vendor)
 }
 
-func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
+func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	var response models.ITokenResponse
 	switch llm.Vendor {
 	case models.OPENAI:
@@ -317,16 +318,23 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 			Choices: 1,
 		}
 
-		parts := strings.Split(string(resps), "\n")
-		for _, body := range parts {
+		asStr := string(resps)
+		parts := strings.Split(asStr, "\n")
+		for _, part := range parts {
+			if part == "" || strings.Index(part, "event:") == 0 {
+				continue
+			}
+
+			body := strings.TrimPrefix(part, "data:")
+
 			tempResp := map[string]interface{}{}
-			err := json.Unmarshal([]byte(body), tempResp)
+			err := json.Unmarshal([]byte(body), &tempResp)
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 			tp, ok := tempResp["type"]
-			if !ok {
+			if ok {
 				switch tp {
 				case "message_start":
 					startMsg := &responses.AnthropicStreamingChunkStart{}
@@ -357,9 +365,9 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 					}
 				}
 			}
-
-			return llm, app, aggregate, nil
 		}
+
+		return llm, app, aggregate, nil
 
 	case models.MOCK_VENDOR:
 		response = &responses.DummyResponse{}

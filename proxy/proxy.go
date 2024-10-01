@@ -246,6 +246,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 	capture := newResponseCapture(w)
 
+	fmt.Println(r.Header["Content-Encoding"])
+
 	proxy.ServeHTTP(capture, r)
 
 	appObj := r.Context().Value("app")
@@ -498,11 +500,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes())
+	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), responses)
 }
 
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte) {
-	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, req)
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, chunks [][]byte) {
+	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, req, chunks)
 }
 
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {

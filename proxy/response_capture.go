@@ -35,22 +35,22 @@ func (rc *responseCapture) WriteHeader(statusCode int) {
 }
 
 func (rc *responseCapture) Write(b []byte) (int, error) {
-    rc.buffer.Write(b)
-    if rc.Header().Get("Content-Encoding") == "gzip" {
-        reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
-        if err != nil {
-            return 0, err
-        }
-        defer reader.Close()
-        decompressed, err := io.ReadAll(reader)
-        if err != nil {
-            return 0, err
-        }
-        rc.buffer = bytes.NewBuffer(decompressed)
-    }
-    return rc.ResponseWriter.Write(b)
+	rc.buffer.Write(b)
+	if rc.Header().Get("Content-Encoding") == "gzip" {
+		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
+		if err != nil {
+			return 0, err
+		}
+		defer reader.Close()
+		decompressed, err := io.ReadAll(reader)
+		if err != nil {
+			return 0, err
+		}
+		rc.buffer = bytes.NewBuffer(decompressed)
+	}
+	return rc.ResponseWriter.Write(b)
 }
 
 func (rc *responseCapture) CapturedBody() []byte {
-    return rc.buffer.Bytes()
+	return rc.buffer.Bytes()
 }
