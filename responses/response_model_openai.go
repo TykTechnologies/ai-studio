@@ -14,6 +14,23 @@ type OpenAIRequest struct {
 	} `json:"stream_options"`
 }
 
+type AnthropicRequest struct {
+	Model     string `json:"model"`
+	Messages  []any  `json:"messages"`
+	MaxTokens int    `json:"max_tokens"`
+
+	System        string         `json:"-"`
+	MultiSystem   []any          `json:"-"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+	StopSequences []string       `json:"stop_sequences,omitempty"`
+	Stream        bool           `json:"stream,omitempty"`
+	Temperature   *float32       `json:"temperature,omitempty"`
+	TopP          *float32       `json:"top_p,omitempty"`
+	TopK          *int           `json:"top_k,omitempty"`
+	Tools         []any          `json:"tools,omitempty"`
+	ToolChoice    *ToolChoice    `json:"tool_choice,omitempty"`
+}
+
 type OpenAIResponse struct {
 	ID                string                  `json:"id,omitempty"`
 	Created           int64                   `json:"created,omitempty"`

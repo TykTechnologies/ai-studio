@@ -245,9 +245,6 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	capture := newResponseCapture(w)
-
-	fmt.Println(r.Header["Content-Encoding"])
-
 	proxy.ServeHTTP(capture, r)
 
 	appObj := r.Context().Value("app")
@@ -372,7 +369,8 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 
 func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
 	// OpenAI is special because it requires specific usage inclusion
-	if llm.Vendor == models.OPENAI {
+	switch llm.Vendor {
+	case models.OPENAI:
 		b, err := readBodyWithoutConsuming(r)
 		if err != nil {
 			return err
@@ -400,6 +398,31 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 			fmt.Println("streaming is not allowed for this endpoint")
 			return fmt.Errorf("streaming is not allowed for this endpoint")
 		}
+
+	case models.ANTHROPIC:
+		b, err := readBodyWithoutConsuming(r)
+		if err != nil {
+			return err
+		}
+
+		var req responses.AnthropicRequest
+		if err := json.Unmarshal(b, &req); err != nil {
+			return err
+		}
+
+		if isStreamingChannel {
+			if !req.Stream {
+				return fmt.Errorf("streaming is required for this endpoint")
+			}
+			return nil
+		}
+
+		// not a streaming endpoint, but they are streaming
+		if req.Stream {
+			fmt.Println("streaming is not allowed for this endpoint")
+			return fmt.Errorf("streaming is not allowed for this endpoint")
+		}
+
 	}
 
 	return nil
