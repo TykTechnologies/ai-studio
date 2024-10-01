@@ -7,11 +7,12 @@ import (
 )
 
 // CreateChat creates a new chat
-func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint) (*models.Chat, error) {
+func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int) (*models.Chat, error) {
 	chat := &models.Chat{
-		Name:          name,
-		LLMSettingsID: llmSettingsID,
-		LLMID:         llmID,
+		Name:                name,
+		LLMSettingsID:       llmSettingsID,
+		LLMID:               llmID,
+		RagResultsPerSource: ragN,
 	}
 
 	for _, filterID := range filterIDs {
@@ -50,7 +51,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
-func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint) (*models.Chat, error) {
+func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int) (*models.Chat, error) {
 	chat, err := s.GetChatByID(id)
 	if err != nil {
 		return nil, err
@@ -62,6 +63,7 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 	chat.Name = name
 	chat.LLMSettingsID = llmSettingsID
 	chat.LLMID = llmID
+	chat.RagResultsPerSource = ragN
 
 	for _, filterID := range filterIDs {
 		filter := &models.Filter{}

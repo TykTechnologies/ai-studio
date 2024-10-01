@@ -399,6 +399,7 @@ type ChatInput struct {
 			LLMID         uint   `json:"llm_id"`
 			GroupIDs      []uint `json:"group_ids"`
 			FilterIDs     []uint `json:"filter_ids"`
+			RagN          int    `json:"rag_n"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -414,6 +415,7 @@ type ChatResponse struct {
 		LLMID         uint             `json:"llm_id"`
 		Groups        []GroupResponse  `json:"groups"`
 		Filters       []FilterResponse `json:"filters"`
+		RagN          int              `json:"rag_n"`
 	} `json:"attributes"`
 }
 
@@ -823,12 +825,12 @@ type CredentialDetail struct {
 
 // CMessageResponse represents the response structure for a CMessage
 type CMessageResponse struct {
-    Type       string `json:"type"`
-    ID         string `json:"id"`
-    Attributes struct {
-        Session   string    `json:"session"`
-        Content   string    `json:"content"`
-        CreatedAt time.Time `json:"created_at"`
-        ChatID    uint      `json:"chat_id"`
-    } `json:"attributes"`
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Session   string    `json:"session"`
+		Content   string    `json:"content"`
+		CreatedAt time.Time `json:"created_at"`
+		ChatID    uint      `json:"chat_id"`
+	} `json:"attributes"`
 }

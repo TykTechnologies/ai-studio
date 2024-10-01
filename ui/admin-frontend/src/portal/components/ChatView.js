@@ -73,13 +73,11 @@ const ChatView = () => {
           if (name.length > 60) {
             truncatedName += "...";
           }
-          console.log("Updating chat name to:", truncatedName);
           await pubClient.put(
             `/common/chat-history-records/${sessionId}/name`,
             { name: truncatedName },
           );
           setChatName(truncatedName);
-          console.log("Chat name updated successfully");
         } catch (error) {
           console.error("Error updating chat name:", error);
           setSnackbar({
@@ -347,10 +345,7 @@ const ChatView = () => {
   };
 
   const handleIncomingMessage = (data) => {
-    console.log("Handling incoming message:", data);
-
     if (data.type === "session_id") {
-      console.log("Received session ID:", data.payload);
       setSessionId(data.payload);
       localStorage.setItem("chatSessionId", data.payload);
     } else if (data.type === "stream_chunk" || data.type === "ai_message") {
@@ -383,7 +378,6 @@ const ChatView = () => {
 
           // If this is a new chat, we haven't updated the chat name yet, and this is a complete AI message
           if (isNewChat && !hasUpdatedChatName && data.type === "ai_message") {
-            console.log("Attempting to update chat name");
             const newName = content.slice(0, 100).trim();
             updateChatName(newName);
             setHasUpdatedChatName(true);

@@ -4,14 +4,15 @@ import "gorm.io/gorm"
 
 type Chat struct {
 	gorm.Model
-	ID            uint         `gorm:"primaryKey" json:"id"`
-	Name          string       `json:"name"`
-	Groups        []Group      `gorm:"many2many:chat_groups;"`
-	LLMSettingsID uint         `json:"llm_settings_id"`
-	LLMSettings   *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
-	LLMID         uint         `json:"llm_id"`
-	LLM           *LLM         `gorm:"foreignKey:LLMID" json:"llm"`
-	Filters       []*Filter    `gorm:"many2many:chat_filters;"`
+	ID                  uint         `gorm:"primaryKey" json:"id"`
+	Name                string       `json:"name"`
+	Groups              []Group      `gorm:"many2many:chat_groups;"`
+	LLMSettingsID       uint         `json:"llm_settings_id"`
+	LLMSettings         *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
+	LLMID               uint         `json:"llm_id"`
+	LLM                 *LLM         `gorm:"foreignKey:LLMID" json:"llm"`
+	Filters             []*Filter    `gorm:"many2many:chat_filters;"`
+	RagResultsPerSource int          `json:"rag_results_per_source"`
 }
 
 type Chats []Chat

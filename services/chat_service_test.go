@@ -28,7 +28,7 @@ func TestChatService(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test CreateChat
-	chat, err := service.CreateChat("Test Chat", llmSettings.ID, llm.ID, []uint{group1.ID, group2.ID})
+	chat, err := service.CreateChat("Test Chat", llmSettings.ID, llm.ID, []uint{group1.ID, group2.ID}, 5)
 	assert.NoError(t, err)
 	assert.NotNil(t, chat)
 	assert.Equal(t, "Test Chat", chat.Name)
@@ -88,7 +88,7 @@ func TestChatServiceErrors(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test UpdateChat with non-existent ID
-	_, err = service.UpdateChat(999, "Updated Chat", 1, 1, []uint{1})
+	_, err = service.UpdateChat(999, "Updated Chat", 1, 1, []uint{1}, 5)
 	assert.Error(t, err)
 
 	// Test DeleteChat with non-existent ID
@@ -96,7 +96,7 @@ func TestChatServiceErrors(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test CreateChat with non-existent group IDs
-	_, err = service.CreateChat("Test Chat", 1, 1, []uint{9999999})
+	_, err = service.CreateChat("Test Chat", 1, 1, []uint{9999999}, 5)
 	assert.Error(t, err)
 
 	// Test GetChatsByGroupID with non-existent group ID

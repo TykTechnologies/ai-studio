@@ -37,6 +37,7 @@ func (a *API) createChat(c *gin.Context) {
 		input.Data.Attributes.LLMID,
 		input.Data.Attributes.GroupIDs,
 		input.Data.Attributes.FilterIDs,
+		input.Data.Attributes.RagN,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -146,6 +147,7 @@ func (a *API) updateChat(c *gin.Context) {
 		input.Data.Attributes.LLMID,
 		input.Data.Attributes.GroupIDs,
 		input.Data.Attributes.FilterIDs,
+		input.Data.Attributes.RagN,
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -272,12 +274,14 @@ func serializeChat(chat *models.Chat) ChatResponse {
 			LLMID         uint             `json:"llm_id"`
 			Groups        []GroupResponse  `json:"groups"`
 			Filters       []FilterResponse `json:"filters"`
+			RagN          int              `json:"rag_n"`
 		}{
 			Name:          chat.Name,
 			LLMSettingsID: chat.LLMSettingsID,
 			LLMID:         chat.LLMID,
 			Groups:        serializeGroups(chat.Groups),
 			Filters:       serializeFilters(chat.Filters),
+			RagN:          chat.RagResultsPerSource,
 		},
 	}
 }

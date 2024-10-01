@@ -31,7 +31,7 @@ const ChatForm = () => {
     llm_id: "",
     groups: [],
     filters: [],
-    oas_spec: "", // Added OAS Spec field
+    rag_n: "",
   });
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
@@ -83,6 +83,7 @@ const ChatForm = () => {
         groups: chatData.groups.map((group) => group.id.toString()),
         filters: chatData.filters.map((filter) => filter.id.toString()),
         oas_spec: chatData.oas_spec || "", // No decoding needed
+        rag_n: chatData.rag_n || "", // Include rag_n from API response
       });
     } catch (error) {
       console.error("Error fetching chat", error);
@@ -143,13 +144,15 @@ const ChatForm = () => {
   const handleFilterChange = (event) => {
     setChat({ ...chat, filters: event.target.value });
   };
-
   const validateForm = () => {
     const newErrors = {};
     if (!chat.name.trim()) newErrors.name = "Name is required";
     if (!chat.llm_settings_id)
       newErrors.llm_settings_id = "LLM Settings is required";
     if (!chat.llm_id) newErrors.llm_id = "LLM is required";
+    if (chat.rag_n && (isNaN(chat.rag_n) || chat.rag_n < 0)) {
+      newErrors.rag_n = "RAG N must be a non-negative number";
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -157,7 +160,6 @@ const ChatForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-
     const chatData = {
       data: {
         type: "Chat",
@@ -167,7 +169,7 @@ const ChatForm = () => {
           llm_id: parseInt(chat.llm_id, 10),
           group_ids: chat.groups.map((groupId) => parseInt(groupId, 10)),
           filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
-          oas_spec: chat.oas_spec, // Send OAS Spec as-is, without encoding
+          rag_n: chat.rag_n ? parseInt(chat.rag_n, 10) : null,
         },
       },
     };
@@ -359,15 +361,16 @@ const ChatForm = () => {
                 </Select>
               </FormControl>
             </Grid>
+
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="OAS Spec"
-                name="oas_spec"
-                value={chat.oas_spec}
+                label="RAG Results or Source to Include for Model"
+                name="rag_n"
+                type="number"
+                value={chat.rag_n}
                 onChange={handleChange}
-                multiline
-                rows={6}
+                inputProps={{ min: 0 }}
               />
             </Grid>
           </Grid>
