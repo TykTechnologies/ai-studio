@@ -131,7 +131,7 @@ func (u *User) GetAccessibleDataSources(db *gorm.DB) ([]Datasource, error) {
 		Joins("JOIN data_catalogues ON data_catalogues.id = data_catalogue_data_sources.data_catalogue_id").
 		Joins("JOIN group_datacatalogues ON group_datacatalogues.data_catalogue_id = data_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_datacatalogues.group_id").
-		Where("user_groups.user_id = ?", u.ID).
+		Where("user_groups.user_id = ? AND datasources.active = ?", u.ID, true).
 		Distinct().
 		Find(&dataSources).Error
 	return dataSources, err
@@ -143,7 +143,7 @@ func (u *User) GetAccessibleLLMs(db *gorm.DB) ([]LLM, error) {
 		Joins("JOIN catalogues ON catalogues.id = catalogue_llms.catalogue_id").
 		Joins("JOIN group_catalogues ON group_catalogues.catalogue_id = catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_catalogues.group_id").
-		Where("user_groups.user_id = ?", u.ID).
+		Where("user_groups.user_id = ? AND llms.active = ?", u.ID, true).
 		Distinct().
 		Find(&llms).Error
 	return llms, err

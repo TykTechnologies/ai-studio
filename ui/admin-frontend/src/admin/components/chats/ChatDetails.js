@@ -239,6 +239,15 @@ const ChatDetails = () => {
           </Grid>
         </Grid>
 
+        <Grid item xs={3}>
+          <FieldLabel>Tool Support:</FieldLabel>
+        </Grid>
+        <Grid item xs={9}>
+          <FieldValue>
+            {chat.attributes.tool_support ? "Enabled" : "Disabled"}
+          </FieldValue>
+        </Grid>
+
         <Box mt={4}>
           <StyledButton
             variant="contained"

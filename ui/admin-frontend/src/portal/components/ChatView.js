@@ -45,6 +45,8 @@ const ChatView = () => {
   const [isNewChat, setIsNewChat] = useState(true);
   const [chatName, setChatName] = useState("");
 
+  const [showTools, setShowTools] = useState(true);
+
   const ws = useRef(null);
   const chatWindowRef = useRef(null);
 
@@ -158,6 +160,35 @@ const ChatView = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const cachedEntitlements = localStorage.getItem("userEntitlements");
+        let userEntitlements;
+
+        if (cachedEntitlements) {
+          const parsedData = JSON.parse(cachedEntitlements);
+          userEntitlements = parsedData.data; // The actual data is nested under 'data'
+        } else {
+          const response = await pubClient.get("/me");
+          userEntitlements = response.data.attributes.entitlements;
+          localStorage.setItem(
+            "userEntitlements",
+            JSON.stringify({ data: userEntitlements, timestamp: Date.now() }),
+          );
+        }
+
+        const currentChat = userEntitlements.chats.find(
+          (chat) => chat.id === chatId,
+        );
+        if (currentChat) {
+          setShowTools(currentChat.attributes.tool_support);
+        } else {
+          console.warn(`Chat with id ${chatId} not found in user entitlements`);
+        }
+      } catch (error) {
+        console.error("Error fetching user entitlements:", error);
+        setError("Failed to load user entitlements");
+      }
+
+      try {
         const [databasesResponse, toolsResponse] = await Promise.all([
           pubClient.get("/common/accessible-datasources"),
           pubClient.get("/common/accessible-tools"),
@@ -190,7 +221,7 @@ const ChatView = () => {
     };
 
     fetchData();
-  }, []);
+  }, [chatId]);
 
   useEffect(() => {
     setMessages([]);
@@ -787,12 +818,14 @@ const ChatView = () => {
               items={databases}
               onAdd={(item) => addToCurrentlyUsing(item)}
             />
-            <FloatingSection
-              key="tools"
-              title="Tools"
-              items={tools}
-              onAdd={(item) => addToCurrentlyUsing(item)}
-            />
+            {showTools && (
+              <FloatingSection
+                key="tools"
+                title="Tools"
+                items={tools}
+                onAdd={(item) => addToCurrentlyUsing(item)}
+              />
+            )}
           </Box>
         </Grid>
       </Grid>

@@ -72,7 +72,6 @@ func setupVertexDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 		ctx,
 		googleai.WithCloudProject(project),
 		googleai.WithCloudLocation(location),
-		googleai.WithAPIKey(connDef.APIKey),
 	)
 
 	if err != nil {

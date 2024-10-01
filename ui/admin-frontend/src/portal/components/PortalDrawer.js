@@ -23,7 +23,7 @@ import AppsIcon from "@mui/icons-material/Apps";
 import pubClient from "../../admin/utils/pubClient";
 const drawerWidth = 280; // Increased drawer width
 const CACHE_KEY = "userEntitlements";
-const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+const CACHE_EXPIRY = 10000; // 10s
 const PortalDrawer = () => {
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [openDev, setOpenDev] = useState(true);

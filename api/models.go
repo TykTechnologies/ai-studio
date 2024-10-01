@@ -400,6 +400,7 @@ type ChatInput struct {
 			GroupIDs      []uint `json:"group_ids"`
 			FilterIDs     []uint `json:"filter_ids"`
 			RagN          int    `json:"rag_n"`
+			ToolSupport   bool   `json:"tool_support"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -416,6 +417,7 @@ type ChatResponse struct {
 		Groups        []GroupResponse  `json:"groups"`
 		Filters       []FilterResponse `json:"filters"`
 		RagN          int              `json:"rag_n"`
+		ToolSupport   bool             `json:"tool_support"`
 	} `json:"attributes"`
 }
 

@@ -15,6 +15,9 @@ import {
   Chip,
   CircularProgress,
 } from "@mui/material";
+
+import { FormControlLabel, Switch } from "@mui/material";
+
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
@@ -32,6 +35,7 @@ const ChatForm = () => {
     groups: [],
     filters: [],
     rag_n: "",
+    tool_support: false,
   });
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
@@ -144,6 +148,11 @@ const ChatForm = () => {
   const handleFilterChange = (event) => {
     setChat({ ...chat, filters: event.target.value });
   };
+
+  const handleSwitchChange = (event) => {
+    setChat({ ...chat, tool_support: event.target.checked });
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!chat.name.trim()) newErrors.name = "Name is required";
@@ -170,6 +179,7 @@ const ChatForm = () => {
           group_ids: chat.groups.map((groupId) => parseInt(groupId, 10)),
           filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
           rag_n: chat.rag_n ? parseInt(chat.rag_n, 10) : null,
+          tool_support: chat.tool_support,
         },
       },
     };
@@ -360,6 +370,20 @@ const ChatForm = () => {
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={chat.tool_support}
+                    onChange={handleSwitchChange}
+                    name="tool_support"
+                    color="primary"
+                  />
+                }
+                label="Enable Tool Support"
+              />
             </Grid>
 
             <Grid item xs={12}>

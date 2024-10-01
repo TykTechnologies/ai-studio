@@ -113,51 +113,54 @@ const PortalDashboard = () => {
           </Button>
         </Paper>
       )}
-
       {chatRooms.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Jump into a new chat...
           </Typography>
           <Grid container spacing={2}>
-            {chatRooms.map((chat) => (
-              <Grid item xs={6} sm={4} md={3} key={chat.id}>
-                <Card
-                  sx={{
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <CardContent>
-                    <Box sx={{ display: "flex", alignItems: "center" }}>
-                      <ChatIcon
-                        sx={{ mr: 1, fontSize: 20, color: "text.secondary" }}
-                      />
-                      <Typography variant="body1" component="div" noWrap>
-                        {chat.attributes.name}
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                  <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
-                    <Button
-                      size="small"
-                      onClick={() => handleStartNewChat(chat.id)}
-                      endIcon={<ArrowForwardIcon />}
-                      sx={{
-                        color: "black",
-                        "&:hover": {
-                          backgroundColor: "rgba(0, 0, 0, 0.04)",
-                        },
-                      }}
-                    >
-                      Start Chat
-                    </Button>
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
+            {chatRooms
+              .sort((a, b) =>
+                a.attributes.name.localeCompare(b.attributes.name),
+              )
+              .map((chat) => (
+                <Grid item xs={6} sm={4} md={3} key={chat.id}>
+                  <Card
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <CardContent>
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <ChatIcon
+                          sx={{ mr: 1, fontSize: 20, color: "text.secondary" }}
+                        />
+                        <Typography variant="body1" component="div" noWrap>
+                          {chat.attributes.name}
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                    <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
+                      <Button
+                        size="small"
+                        onClick={() => handleStartNewChat(chat.id)}
+                        endIcon={<ArrowForwardIcon />}
+                        sx={{
+                          color: "black",
+                          "&:hover": {
+                            backgroundColor: "rgba(0, 0, 0, 0.04)",
+                          },
+                        }}
+                      >
+                        Start Chat
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
           </Grid>
         </Box>
       )}
