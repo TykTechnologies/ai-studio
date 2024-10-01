@@ -39,3 +39,16 @@ func DummyValidator(r *http.Request) (string, error) {
 
 	return h, nil
 }
+
+func GoogleAIValidator(r *http.Request) (string, error) {
+	params := r.URL.Query()
+	h := params.Get("key")
+	if h == "" {
+		h2 := r.Header.Get("x-goog-api-key")
+		if h2 == "" {
+			return "", fmt.Errorf("missing authorization key or header")
+		}
+	}
+
+	return h, nil
+}

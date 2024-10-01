@@ -27,6 +27,65 @@ type GoogleAIChatResponse struct {
 	Model string `json:"model"`
 }
 
+type GoogleAIStreamChunk struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+			Role string `json:"role"`
+		} `json:"content"`
+		FinishReason  string `json:"finishReason"`
+		Index         int    `json:"index"`
+		SafetyRatings []struct {
+			Category    string `json:"category"`
+			Probability string `json:"probability"`
+		} `json:"safetyRatings"`
+	} `json:"candidates"`
+	UsageMetadata struct {
+		PromptTokenCount     int `json:"promptTokenCount"`
+		CandidatesTokenCount int `json:"candidatesTokenCount"`
+		TotalTokenCount      int `json:"totalTokenCount"`
+	} `json:"usageMetadata"`
+}
+
+// type GoogleAIChatResponse struct {
+// 	Candidates []struct {
+// 		Content struct {
+// 			Contents      []any  `json:"contents"`
+// 			Tools         []any  `json:"tools"`
+// 			CreateTime    string `json:"createTime"`
+// 			UpdateTime    string `json:"updateTime"`
+// 			UsageMetadata struct {
+// 			} `json:"usageMetadata"`
+// 			Name              string `json:"name"`
+// 			DisplayName       string `json:"displayName"`
+// 			Model             string `json:"model"`
+// 			SystemInstruction struct {
+// 			} `json:"systemInstruction"`
+// 			ToolConfig struct {
+// 			} `json:"toolConfig"`
+// 		} `json:"content"`
+// 		FinishReason     string `json:"finishReason"`
+// 		SafetyRatings    []any  `json:"safetyRatings"`
+// 		CitationMetadata struct {
+// 		} `json:"citationMetadata"`
+// 		TokenCount     int `json:"tokenCount"`
+// 		AvgLogprobs    int `json:"avgLogprobs"`
+// 		LogprobsResult struct {
+// 		} `json:"logprobsResult"`
+// 		Index int `json:"index"`
+// 	} `json:"candidates"`
+// 	PromptFeedback struct {
+// 	} `json:"promptFeedback"`
+// 	UsageMetadata struct {
+// 		PromptTokenCount        int `json:"promptTokenCount"`
+// 		CachedContentTokenCount int `json:"cachedContentTokenCount"`
+// 		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+// 		TotalTokenCount         int `json:"totalTokenCount"`
+// 	} `json:"usageMetadata"`
+// }
+
 func (o *GoogleAIChatResponse) GetPromptTokens() int {
 	return o.UsageMetadata.PromptTokenCount
 }

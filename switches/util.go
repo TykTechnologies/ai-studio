@@ -117,6 +117,28 @@ func extractModelIDFromGoogleURL(url string) (string, error) {
 		return match[1], nil
 	}
 
+	// If no match is found, try different pattern
+	return extractModelIDFromGoogleURLAlternate(url)
+}
+
+func extractModelIDFromGoogleURLAlternate(url string) (string, error) {
+	// Regular expression pattern to match the MODEL-ID in the new URL format
+	pattern := `/v1beta/models/([^/:]+)`
+
+	// Compile the regular expression
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("failed to compile regex: %v", err)
+	}
+
+	// Find the first match in the URL
+	match := re.FindStringSubmatch(url)
+
+	if len(match) > 1 {
+		// If a match is found, return the captured group (MODEL-ID)
+		return match[1], nil
+	}
+
 	// If no match is found, return an error
 	return "", fmt.Errorf("model ID not found in URL")
 }

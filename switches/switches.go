@@ -20,11 +20,13 @@ import (
 )
 
 const (
-	OpenAICompletionsEndpoint         = "/v1/chat/completions"
-	OpenAIEmbeddingsEndpoint          = "/v1/embeddings"
-	AnthropicCompletionsEndpoint      = "/v1/messages"
-	OllamaChatCompletionsEndpoint     = "/api/chat"
-	OllamaGenerateCompletionsEndpoint = "/api/generate"
+	OpenAICompletionsEndpoint            = "/v1/chat/completions"
+	OpenAIEmbeddingsEndpoint             = "/v1/embeddings"
+	AnthropicCompletionsEndpoint         = "/v1/messages"
+	OllamaChatCompletionsEndpoint        = "/api/chat"
+	OllamaGenerateCompletionsEndpoint    = "/api/generate"
+	GoogleAICompletionsEndpoint          = ":generateContent"
+	GoogleAIStreamingCompletionsEndpoint = ":streamGenerateContent"
 )
 
 var AVAILABLE_LLM_DRIVERS = []models.Vendor{
@@ -54,7 +56,6 @@ func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int,
 		promptTokens = keyValueOrZero(usage, "PromptTokens")
 		responseTokens = keyValueOrZero(usage, "TotalTokens")
 		totalTokens = promptTokens + responseTokens
-		fmt.Println(totalTokens)
 		return totalTokens, promptTokens, responseTokens
 
 	case models.ANTHROPIC:
@@ -210,6 +211,7 @@ func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []by
 
 			return llm, app, response, nil
 		}
+
 	case models.MOCK_VENDOR:
 		response = &responses.DummyResponse{}
 		err := json.Unmarshal(body, response)
@@ -344,6 +346,8 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 					}
 
 					aggregate.PromptTokens = startMsg.Message.Usage.InputTokens
+					aggregate.Model = startMsg.Message.Model
+
 				case "message_delta":
 					deltaMsg := &responses.AnthropicStreamingChunkDelta{}
 					err := json.Unmarshal([]byte(body), deltaMsg)
@@ -387,8 +391,37 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 			Model: "vertex"}, nil
 
 	case models.GOOGLEAI:
-		return llm, app, &responses.DummyResponse{
-			Model: "google-ai"}, nil
+		aggregate := &responses.GenericResponse{
+			Choices: 1,
+		}
+
+		modelName, _ := extractModelIDFromGoogleURL(r.URL.Path)
+		if modelName == "" {
+			modelName = "googleai-gemini-no-id"
+		}
+
+		aggregate.Model = modelName
+
+		asStr := string(resps)
+		parts := strings.Split(asStr, "\n")
+		for _, part := range parts {
+			if part == "" {
+				continue
+			}
+
+			body := strings.TrimPrefix(part, "data:")
+
+			gResp := &responses.GoogleAIStreamChunk{}
+			err := json.Unmarshal([]byte(body), &gResp)
+			if err != nil {
+				continue
+			}
+
+			aggregate.PromptTokens = gResp.UsageMetadata.PromptTokenCount
+			aggregate.CompletionTokens = gResp.UsageMetadata.CandidatesTokenCount
+		}
+
+		return llm, app, aggregate, nil
 
 	case "TestVendor":
 		return llm, app, &responses.DummyResponse{
@@ -408,7 +441,18 @@ func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	case "DUMMY":
 		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
 	case models.GOOGLEAI:
-		r.Header.Set("x-goog-api-key", llm.APIKey)
+		params := r.URL.Query()
+		_, ok := params["key"]
+		if ok {
+			params.Del("key")
+			params.Add("key", llm.APIKey)
+			r.URL.RawQuery = params.Encode()
+		}
+
+		hKey := r.Header.Get("x-goog-api-key")
+		if hKey != "" {
+			r.Header.Set("x-goog-api-key", llm.APIKey)
+		}
 	case models.OLLAMA:
 		r.Header.Set("Authorization", llm.APIKey)
 	case models.HUGGINGFACE:

@@ -80,6 +80,7 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val := NewCredentialValidator(service, p)
 	val.RegisterValidator(strings.ToLower(string(models.OPENAI)), OpenAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.ANTHROPIC)), AnthropicValidator)
+	val.RegisterValidator(strings.ToLower(string(models.GOOGLEAI)), GoogleAIValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 
 	p.credValidator = val
@@ -423,6 +424,24 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 			return fmt.Errorf("streaming is not allowed for this endpoint")
 		}
 
+	case models.GOOGLEAI:
+		isStream := false
+		if strings.Contains(strings.ToLower(r.URL.Path), ":streamgeneratecontent") {
+			isStream = true
+		}
+
+		if isStreamingChannel {
+			if !isStream {
+				return fmt.Errorf("streaming is required for this endpoint")
+			}
+			return nil
+		}
+
+		// not a streaming endpoint, but they are streaming
+		if isStream {
+			fmt.Println("streaming is not allowed for this endpoint")
+			return fmt.Errorf("streaming is not allowed for this endpoint")
+		}
 	}
 
 	return nil
