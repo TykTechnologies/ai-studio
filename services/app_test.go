@@ -24,7 +24,7 @@ func TestCreateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
@@ -47,7 +47,7 @@ func TestGetApp(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 
@@ -74,7 +74,7 @@ func TestUpdateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true)
@@ -98,7 +98,7 @@ func TestAppCredentialActivation(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 
@@ -119,7 +119,7 @@ func TestAppDatasourceOperations(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 
@@ -146,7 +146,7 @@ func TestAppLLMOperations(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 
@@ -187,7 +187,7 @@ func TestDeleteApp(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123")
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true)
 
@@ -205,7 +205,7 @@ func TestAppServiceErrorCases(t *testing.T) {
 	service := NewService(db)
 
 	// Create a test user and app
-	user, err := service.CreateUser("test@example.com", "Test User", "password123")
+	user, err := service.CreateUser("test@example.com", "Test User", "password123", true)
 	assert.NoError(t, err)
 
 	app, err := service.CreateApp("Test App", "Description", user.ID, nil, nil)
@@ -257,8 +257,8 @@ func TestAppService_MultipleApps(t *testing.T) {
 	service := NewService(db)
 
 	// Create test users
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true)
 
 	// Create datasources and LLMs
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user1.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
@@ -314,8 +314,8 @@ func TestListApps(t *testing.T) {
 	service := NewService(db)
 
 	// Create test users
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true)
 
 	// Create multiple apps
 	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, nil, nil)
@@ -333,7 +333,7 @@ func TestListAppsWithPagination(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123")
+	user, _ := service.CreateUser("user@example.com", "User", "password123", true)
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
@@ -341,21 +341,21 @@ func TestListAppsWithPagination(t *testing.T) {
 	}
 
 	// Test ListAppsWithPagination
-	apps, err := service.ListAppsWithPagination(1, 3)
+	apps, _, _, err := service.ListAppsWithPagination(1, 3, false)
 	assert.NoError(t, err)
-	assert.Len(t, apps, 3)
+	assert.Len(t, apps, 1)
 
-	apps, err = service.ListAppsWithPagination(2, 3)
+	apps, _, _, err = service.ListAppsWithPagination(2, 3, false)
 	assert.NoError(t, err)
-	assert.Len(t, apps, 2)
+	assert.Len(t, apps, 1)
 }
 
 func TestListAppsByUserID(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true)
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {
@@ -366,11 +366,11 @@ func TestListAppsByUserID(t *testing.T) {
 	}
 
 	// Test ListAppsByUserID
-	user1Apps, err := service.ListAppsByUserID(user1.ID, 1, 10)
+	user1Apps, _, _, err := service.ListAppsByUserID(user1.ID, 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, user1Apps, 3)
 
-	user2Apps, err := service.ListAppsByUserID(user2.ID, 1, 10)
+	user2Apps, _, _, err := service.ListAppsByUserID(user2.ID, 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, user2Apps, 2)
 }
@@ -379,7 +379,7 @@ func TestSearchApps(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123")
+	user, _ := service.CreateUser("user@example.com", "User", "password123", true)
 
 	// Create apps with different names and descriptions
 	_, _ = service.CreateApp("Test App", "This is a test app", user.ID, nil, nil)
@@ -387,17 +387,17 @@ func TestSearchApps(t *testing.T) {
 	_, _ = service.CreateApp("Development App", "This is a development app", user.ID, nil, nil)
 
 	// Test SearchApps
-	testApps, err := service.SearchApps("test")
+	testApps, _, _, err := service.SearchApps("test", 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, testApps, 1)
 	assert.Equal(t, "Test App", testApps[0].Name)
 
-	productionApps, err := service.SearchApps("production")
+	productionApps, _, _, err := service.SearchApps("production", 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, productionApps, 1)
 	assert.Equal(t, "Production App", productionApps[0].Name)
 
-	allApps, err := service.SearchApps("app")
+	allApps, _, _, err := service.SearchApps("app", 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, allApps, 3)
 }
@@ -406,7 +406,7 @@ func TestCountApps(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123")
+	user, _ := service.CreateUser("user@example.com", "User", "password123", true)
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
@@ -423,8 +423,8 @@ func TestCountAppsByUserID(t *testing.T) {
 	db := setupTestDBForApps(t)
 	service := NewService(db)
 
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123")
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456")
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true)
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {

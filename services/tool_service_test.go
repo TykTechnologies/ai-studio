@@ -24,7 +24,7 @@ func TestToolService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateTool
-	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, []byte("OAS Spec"), 8, "apiKey", "secret")
+	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.NotZero(t, tool.ID)
@@ -39,7 +39,7 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, tool.PrivacyScore, fetchedTool.PrivacyScore)
 
 	// Test UpdateTool
-	updatedTool, err := service.UpdateTool(tool.ID, "Updated Tool", "Updated Description", models.ToolTypeREST, []byte("Updated OAS Spec"), 9, "updatedApiKey", "updatedSecret")
+	updatedTool, err := service.UpdateTool(tool.ID, "Updated Tool", "Updated Description", models.ToolTypeREST, "Updated OAS Spec", 9, "updatedApiKey", "updatedSecret")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, updatedTool.ID)
 	assert.Equal(t, "Updated Tool", updatedTool.Name)
@@ -123,7 +123,7 @@ func TestToolServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test UpdateTool with non-existent ID
-	_, err = service.UpdateTool(9999, "Non-existent Tool", "Description", models.ToolTypeREST, []byte("OAS Spec"), 8, "authKey", "authValue")
+	_, err = service.UpdateTool(9999, "Non-existent Tool", "Description", models.ToolTypeREST, "OAS Spec", 8, "authKey", "authValue")
 	assert.Error(t, err)
 
 	// Test GetToolByName with non-existent name
@@ -152,9 +152,9 @@ func TestToolService_MultipleTool(t *testing.T) {
 	service := NewService(db)
 
 	// Create multiple tools
-	tool1, _ := service.CreateTool("Tool 1", "Description 1", models.ToolTypeREST, []byte("OAS Spec 1"), 7, "authKey", "authValue")
-	tool2, _ := service.CreateTool("Tool 2", "Description 2", models.ToolTypeREST, []byte("OAS Spec 2"), 8, "authKey", "authValue")
-	tool3, _ := service.CreateTool("Tool 3", "Description 3", "GraphQL", []byte("OAS Spec 3"), 9, "authKey", "authValue")
+	tool1, _ := service.CreateTool("Tool 1", "Description 1", models.ToolTypeREST, "OAS Spec 1", 7, "authKey", "authValue")
+	tool2, _ := service.CreateTool("Tool 2", "Description 2", models.ToolTypeREST, "OAS Spec 2", 8, "authKey", "authValue")
+	tool3, _ := service.CreateTool("Tool 3", "Description 3", "GraphQL", "OAS Spec 3", 9, "authKey", "authValue")
 
 	// Test GetAllTools
 	allTools, _, _, err := service.GetAllTools(10, 1, true)

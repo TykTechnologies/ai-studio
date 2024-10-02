@@ -25,7 +25,7 @@ func TestUserService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateUser
-	user, err := service.CreateUser("test@example.com", "Test User", "password123")
+	user, err := service.CreateUser("test@example.com", "Test User", "password123", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.NotZero(t, user.ID)
@@ -36,7 +36,7 @@ func TestUserService(t *testing.T) {
 	assert.Equal(t, user.Email, fetchedUser.Email)
 
 	// Test UpdateUser
-	updatedUser, err := service.UpdateUser(user.ID, "updated@example.com", "Updated User")
+	updatedUser, err := service.UpdateUser(user.ID, "updated@example.com", "Updated User", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "updated@example.com", updatedUser.Email)
 	assert.Equal(t, "Updated User", updatedUser.Name)
@@ -98,7 +98,7 @@ func TestGroupService(t *testing.T) {
 	assert.Equal(t, "Updated Group", searchedGroups[0].Name)
 
 	// Test AddUserToGroup
-	user, err := service.CreateUser("test@example.com", "Test User", "password123")
+	user, err := service.CreateUser("test@example.com", "Test User", "password123", true)
 	assert.NoError(t, err)
 
 	err = service.AddUserToGroup(user.ID, group.ID)
@@ -438,7 +438,7 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	service := NewService(db)
 
 	// Create a user
-	user, err := service.CreateUser("test@example.com", "Test User", "password123")
+	user, err := service.CreateUser("test@example.com", "Test User", "password123", true)
 	assert.NoError(t, err)
 
 	// Create groups

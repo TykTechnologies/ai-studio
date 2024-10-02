@@ -94,10 +94,23 @@ func TestListChatHistoryRecordsByUserID(t *testing.T) {
 		}
 		err := record.Create(db)
 		assert.NoError(t, err)
+
+		// Create 5 CMessage objects for each ChatHistoryRecord
+		for j := 1; j <= 5; j++ {
+			message := &CMessage{
+				Session:   record.SessionID,
+				Content:   []byte("Test Message " + strconv.Itoa(j) + " for Session " + record.SessionID),
+				ChatID:    record.ChatID,
+				CreatedAt: time.Now(),
+			}
+			err := db.Create(message).Error
+			assert.NoError(t, err)
+		}
 	}
 
-	records, _, _, err := ListChatHistoryRecordsByUserID(db, 1, 10, 1, true)
+	records, total, _, err := ListChatHistoryRecordsByUserID(db, 1, 10, 1, true)
 	assert.NoError(t, err)
+	assert.Equal(t, int64(5), total)
 	assert.Len(t, records, 5)
 }
 
@@ -114,6 +127,19 @@ func TestListChatHistoryRecordsByUserIDPaginated(t *testing.T) {
 		}
 		err := record.Create(db)
 		assert.NoError(t, err)
+
+		// Create 5 CMessage objects for each ChatHistoryRecord
+		for j := 1; j <= 5; j++ {
+			message := &CMessage{
+				Session:   record.SessionID,
+				Content:   []byte("Test Message " + strconv.Itoa(j) + " for Session " + record.SessionID),
+				ChatID:    record.ChatID,
+				CreatedAt: time.Now(),
+			}
+			err := db.Create(message).Error
+			assert.NoError(t, err)
+		}
+
 	}
 
 	records, total, _, err := ListChatHistoryRecordsByUserIDPaginated(db, 1, 5, 1, false)
