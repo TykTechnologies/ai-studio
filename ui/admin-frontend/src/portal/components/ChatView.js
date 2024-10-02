@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-
+import { useNavigate } from "react-router-dom";
 import { Chip } from "@mui/material";
 import { useParams, useLocation } from "react-router-dom";
 import {
@@ -25,6 +25,7 @@ import { useDropzone } from "react-dropzone";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import pubClient from "../../admin/utils/pubClient";
+import TextareaAutosize from "@mui/material/TextareaAutosize";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -44,6 +45,8 @@ const ChatView = () => {
   const [hasUpdatedChatName, setHasUpdatedChatName] = useState(false);
   const [isNewChat, setIsNewChat] = useState(true);
   const [chatName, setChatName] = useState("");
+  const navigate = useNavigate();
+  const [showError, setShowError] = useState(false);
 
   const [showTools, setShowTools] = useState(true);
 
@@ -64,6 +67,30 @@ const ChatView = () => {
     if (ws.current) {
       ws.current.close();
       ws.current = null;
+    }
+  };
+
+  useEffect(() => {
+    let errorTimer;
+    if (error) {
+      errorTimer = setTimeout(() => {
+        setShowError(true);
+      }, 2000); // 2 seconds delay before showing error
+    }
+    return () => clearTimeout(errorTimer);
+  }, [error]);
+
+  const dismissError = () => {
+    setError(null);
+    setShowError(false);
+    // Reload the chat by navigating to the same route
+    navigate(0);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSendMessage(e);
     }
   };
 
@@ -612,7 +639,7 @@ const ChatView = () => {
     );
   }
 
-  if (error) {
+  if (showError && error) {
     return (
       <Box
         display="flex"
@@ -624,8 +651,8 @@ const ChatView = () => {
         <Typography color="error" gutterBottom>
           {error}
         </Typography>
-        <Button variant="contained" onClick={() => setError(null)}>
-          Dismiss
+        <Button variant="contained" onClick={dismissError}>
+          Dismiss and Reload
         </Button>
       </Box>
     );
@@ -728,18 +755,23 @@ const ChatView = () => {
           <Box
             component="form"
             onSubmit={handleSendMessage}
-            sx={{ p: 1, borderTop: 0, height: "64px", position: "relative" }}
+            sx={{ p: 1, borderTop: 0, minHeight: "64px", position: "relative" }}
             {...getRootProps()}
           >
             <input {...getInputProps()} />
             <TextField
               fullWidth
               variant="outlined"
-              placeholder="Type your message here..."
+              placeholder="Type your message here... (Cmd+Enter or Ctrl+Enter to send)"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={!isConnected}
+              multiline
+              minRows={1}
+              maxRows={4}
               InputProps={{
+                inputComponent: TextareaAutosize,
                 endAdornment: (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     {uploadedFiles.length > 0 && (
@@ -747,7 +779,7 @@ const ChatView = () => {
                         icon={<AttachFileIcon />}
                         label={uploadedFiles.length}
                         size="small"
-                        onDelete={() => setUploadedFiles([])} // Add ability to clear uploaded files
+                        onDelete={() => setUploadedFiles([])}
                       />
                     )}
                     {renderUploadIndicator()}
