@@ -213,7 +213,7 @@ const LLMList = () => {
                       Privacy Score
                     </StyledTableCell>
                     <StyledTableCell onClick={() => handleSort("active")}>
-                      Active
+                      Proxied
                     </StyledTableCell>
                     <StyledTableCell align="right">Actions</StyledTableCell>
                   </TableRow>

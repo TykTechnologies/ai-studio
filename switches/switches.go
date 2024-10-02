@@ -70,7 +70,7 @@ func GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
 	}
 
 	vn := v()
-	if vn.ProvidesEmbedder() {
+	if !vn.ProvidesEmbedder() {
 		return nil, fmt.Errorf("vendor does not provide an embedder")
 	}
 

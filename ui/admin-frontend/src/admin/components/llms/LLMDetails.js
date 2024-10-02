@@ -349,7 +349,7 @@ const LLMDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Active:</FieldLabel>
+            <FieldLabel>Loaded into Gateway:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <FieldValue>

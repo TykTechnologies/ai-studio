@@ -352,7 +352,7 @@ const LLMForm = () => {
                         color="primary"
                       />
                     }
-                    label="Active"
+                    label="Enabled in Proxy"
                   />
                 </Grid>
               </Grid>

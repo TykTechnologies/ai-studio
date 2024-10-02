@@ -44,7 +44,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		case "datasource":
 			dsSlug = pathParts[2]
 		default:
-			respondWithError(w, http.StatusBadRequest, "invalid request path", nil)
+			respondWithError(w, http.StatusBadRequest, "invalid request path, options are llm or datasource", nil)
 			return
 		}
 

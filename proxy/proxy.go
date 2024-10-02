@@ -80,6 +80,7 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val.RegisterValidator(strings.ToLower(string(models.OPENAI)), OpenAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.ANTHROPIC)), AnthropicValidator)
 	val.RegisterValidator(strings.ToLower(string(models.GOOGLEAI)), GoogleAIValidator)
+	val.RegisterValidator(strings.ToLower(string(models.VERTEX)), VertexValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 
 	p.credValidator = val
@@ -379,6 +380,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	llmSlug := vars["llmSlug"]
+	fmt.Println("Streaming request for LLM: ", llmSlug)
 
 	p.mu.RLock()
 	llm, ok := p.llms[llmSlug]
@@ -421,6 +423,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", err)
 		return
 	}
+
+	fmt.Println("upstreamReq: ", upstreamReq.URL.String())
 
 	client := &http.Client{}
 	resp, err := client.Do(upstreamReq)
