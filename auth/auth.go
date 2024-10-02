@@ -390,6 +390,7 @@ func (a *AuthService) AdminOnly() gin.HandlerFunc {
 
 		user := u.(*models.User)
 		if !user.IsAdmin {
+			fmt.Println("User is not admin")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
 			return
 		}

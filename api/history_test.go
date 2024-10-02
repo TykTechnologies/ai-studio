@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestChatHistoryRecordEndpoints(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	api, db := setupTestAPI(t)
 
 	group, err := api.service.CreateGroup("Test Group")
 	assert.NoError(t, err)
@@ -20,7 +22,7 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create a test chat
-	chat, err := api.service.CreateChat("Test Chat", 1, 1, []uint{group.ID})
+	chat, err := api.service.CreateChat("Test Chat", 1, 1, []uint{group.ID}, nil, 1, false)
 	assert.NoError(t, err)
 
 	// Test Create ChatHistoryRecord
@@ -47,6 +49,18 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 				Name:      "Test Chat History",
 			},
 		},
+	}
+
+	// Chat history needs more than 1 message to be created
+	for j := 1; j <= 5; j++ {
+		message := &models.CMessage{
+			Session:   "test-session",
+			Content:   []byte("Test Message "),
+			ChatID:    chat.ID,
+			CreatedAt: time.Now(),
+		}
+		err := db.Create(message).Error
+		assert.NoError(t, err)
 	}
 
 	w := performRequest(api.router, "POST", "/api/v1/chat-history-records", createChatHistoryRecordInput)
@@ -77,7 +91,9 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 	assert.NoError(t, err)
 	assert.Len(t, listResponse.Data, 1)
-	assert.Equal(t, "Test Chat History", listResponse.Data[0].Attributes.Name)
+	if len(listResponse.Data) > 0 {
+		assert.Equal(t, "Test Chat History", listResponse.Data[0].Attributes.Name)
+	}
 
 	// Test Delete ChatHistoryRecord
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/chat-history-records/%s", recordID), nil)

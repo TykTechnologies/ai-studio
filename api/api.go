@@ -66,19 +66,22 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		log.Fatalf("Failed to generate CSRF key: %v", err)
 	}
 
-	// Add CSRF middleware
-	csrfMiddleware := csrf.Protect(
-		csrfKey,
-		csrf.Secure(true), // Set to false for HTTP in development
-		csrf.Path("/"),
-	)
+	// no CSRF for tests
+	if !config.TestMode {
+		// Add CSRF middleware
+		csrfMiddleware := csrf.Protect(
+			csrfKey,
+			csrf.Secure(true), // Set to false for HTTP in development
+			csrf.Path("/"),
+		)
 
-	api.router.Use(func(c *gin.Context) {
-		csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c.Request = r
-			c.Next()
-		})).ServeHTTP(c.Writer, c.Request)
-	})
+		api.router.Use(func(c *gin.Context) {
+			csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				c.Request = r
+				c.Next()
+			})).ServeHTTP(c.Writer, c.Request)
+		})
+	}
 
 	api.setupRoutes()
 	return api

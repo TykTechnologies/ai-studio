@@ -38,7 +38,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 		TestMode:            true,
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), nil)
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), config, nil, emptyFile)
 
 	// Create multiple LLMs
 	for i := 1; i <= 15; i++ {
@@ -134,7 +134,7 @@ func TestPagination_UserPagination(t *testing.T) {
 		TestMode:            true,
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), nil)
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), config, nil, emptyFile)
 
 	// Create multiple users
 	for i := 1; i <= 15; i++ {

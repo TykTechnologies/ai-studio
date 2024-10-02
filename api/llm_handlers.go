@@ -53,7 +53,9 @@ func (a *API) createLLM(c *gin.Context) {
 	}
 
 	if llm.Active {
-		a.proxy.Reload()
+		if a.proxy != nil {
+			a.proxy.Reload()
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": serializeLLM(llm)})
@@ -165,7 +167,9 @@ func (a *API) updateLLM(c *gin.Context) {
 	}
 
 	if thisLLM.Active && !input.Data.Attributes.Active {
-		a.proxy.Reload()
+		if a.proxy != nil {
+			a.proxy.Reload()
+		}
 	}
 
 	if !thisLLM.Active && input.Data.Attributes.Active {

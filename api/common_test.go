@@ -41,7 +41,7 @@ func setupTestAPIForCommonTests(t *testing.T) (*API, *gorm.DB, *services.Service
 	}
 
 	authService := auth.NewAuthService(&config, newMockMailer())
-	api := NewAPI(service, true, authService, nil)
+	api := NewAPI(service, true, authService, &config, nil, emptyFile)
 
 	return api, db, service
 }
@@ -163,14 +163,35 @@ func TestCommon_TestGetToolCatalogueTools(t *testing.T) {
 }
 
 func TestCommon_TestGetUserChatHistoryRecords(t *testing.T) {
-	api, _, _ := setupTestAPIForCommonTests(t)
+	api, db, _ := setupTestAPIForCommonTests(t)
 
 	// Create a test user
 	user := createTestUser(t, api.service)
 
 	// Create test chat history records for the user
-	createTestChatHistoryRecord(t, api.service, user.ID, "Session1")
-	createTestChatHistoryRecord(t, api.service, user.ID, "Session2")
+	c1 := createTestChatHistoryRecord(t, api.service, user.ID, "Session1")
+	for j := 1; j <= 5; j++ {
+		message := &models.CMessage{
+			Session:   c1.SessionID,
+			Content:   []byte("Test Message"),
+			ChatID:    c1.ChatID,
+			CreatedAt: time.Now(),
+		}
+		err := db.Create(message).Error
+		assert.NoError(t, err)
+	}
+
+	c2 := createTestChatHistoryRecord(t, api.service, user.ID, "Session2")
+	for j := 1; j <= 5; j++ {
+		message := &models.CMessage{
+			Session:   c2.SessionID,
+			Content:   []byte("Test Message"),
+			ChatID:    c2.ChatID,
+			CreatedAt: time.Now(),
+		}
+		err := db.Create(message).Error
+		assert.NoError(t, err)
+	}
 
 	// Set up the request
 	w := httptest.NewRecorder()
@@ -188,7 +209,9 @@ func TestCommon_TestGetUserChatHistoryRecords(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Len(t, response, 2)
-	assert.ElementsMatch(t, []string{"Session1", "Session2"}, []string{response[0].Attributes.SessionID, response[1].Attributes.SessionID})
+	if len(response) == 2 {
+		assert.ElementsMatch(t, []string{"Session1", "Session2"}, []string{response[0].Attributes.SessionID, response[1].Attributes.SessionID})
+	}
 }
 
 // Helper functions for creating test data
@@ -230,7 +253,7 @@ func createTestDatasource(t *testing.T, service *services.Service, name string) 
 }
 
 func createTestTool(t *testing.T, service *services.Service, name string) *models.Tool {
-	tool, err := service.CreateTool(name, "Description", models.ToolTypeREST, []byte("OAS Spec"), 8, "apiKey", "secret")
+	tool, err := service.CreateTool(name, "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
 	assert.NoError(t, err)
 	return tool
 }
