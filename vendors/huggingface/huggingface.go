@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/tmc/langchaingo/embeddings"
@@ -54,8 +55,22 @@ func (v *HuggingFace) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImp
 
 func (v *HuggingFace) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	mName := extractHuggingfaceModelID(r.URL.Path)
+	out, err := helpers.CopyRequestBody(r)
+	if err != nil {
+		return llm, app, nil, err
+	}
+
+	outTokens := helpers.EstimateTokenCount(string(out))
+	respTokens := helpers.EstimateTokenCount(string(body))
 
 	return llm, app, &responses.DummyResponse{
+		Usage: struct {
+			PromptTokens   int `json:"prompt_tokens"`
+			ResponseTokens int `json:"response_tokens"`
+		}{
+			PromptTokens:   outTokens,
+			ResponseTokens: respTokens,
+		},
 		Model: mName}, nil
 }
 
@@ -70,6 +85,10 @@ func (v *HuggingFace) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error
 }
 
 func (v *HuggingFace) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
+	if isStreamingChannel {
+		return fmt.Errorf("streaming is not supported for huggingface")
+	}
+
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
+	"unicode"
 )
 
 func KeyValueOrZero(dat map[string]any, key string) int {
@@ -43,4 +45,35 @@ func CopyRequestBody(r *http.Request) ([]byte, error) {
 
 	// Return the copied body
 	return body, nil
+}
+
+func EstimateTokenCount(text string) int {
+    // Constants for estimation
+    const (
+        averageWordLength = 4.7
+        tokensPerWord     = 1.3
+    )
+
+    // Split the text into words
+    words := strings.FieldsFunc(text, func(r rune) bool {
+        return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+    })
+
+    // Count the number of words
+    wordCount := len(words)
+
+    // Estimate the number of tokens
+    estimatedTokens := int(float64(wordCount) * tokensPerWord)
+
+    // Add an estimate for punctuation and special characters
+    nonAlphanumericCount := 0
+    for _, char := range text {
+        if !unicode.IsLetter(char) && !unicode.IsNumber(char) && !unicode.IsSpace(char) {
+            nonAlphanumericCount++
+        }
+    }
+
+    estimatedTokens += nonAlphanumericCount
+
+    return estimatedTokens
 }

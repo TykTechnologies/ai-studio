@@ -81,6 +81,7 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val.RegisterValidator(strings.ToLower(string(models.ANTHROPIC)), AnthropicValidator)
 	val.RegisterValidator(strings.ToLower(string(models.GOOGLEAI)), GoogleAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.VERTEX)), VertexValidator)
+	val.RegisterValidator(strings.ToLower(string(models.HUGGINGFACE)), HuggingFaceValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 
 	p.credValidator = val

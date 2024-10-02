@@ -67,3 +67,18 @@ func VertexValidator(r *http.Request) (string, error) {
 
 	return split[1], nil
 }
+
+func HuggingFaceValidator(r *http.Request) (string, error) {
+	h := r.Header.Get("Authorization")
+	if h == "" {
+		return "", fmt.Errorf("missing authorization header")
+	}
+
+	split := strings.Split(h, "Bearer ")
+	if len(split) != 2 {
+		fmt.Println("missing Bearer part")
+		return "", fmt.Errorf("invalid authorization header")
+	}
+
+	return split[1], nil
+}
