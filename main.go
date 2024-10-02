@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -21,6 +23,9 @@ import (
 	"gorm.io/gorm"
 )
 
+//go:embed ui/admin-frontend/build
+var staticFiles embed.FS
+
 type AppConf struct {
 	SMTPServer         string
 	SMTPPort           int
@@ -33,6 +38,7 @@ type AppConf struct {
 	ServerPort         string
 	CertFile           string
 	KeyFile            string
+	DisableCors        bool
 }
 
 func GetConfigFromEnv() *AppConf {
@@ -109,6 +115,10 @@ func GetConfigFromEnv() *AppConf {
 		log.Println("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
+	if os.Getenv("DEVMODE") != "" {
+		conf.DisableCors = true
+	}
+
 	return conf
 }
 
@@ -174,12 +184,23 @@ func main() {
 	go p.Start()
 
 	// Create a new API instance
-	api := api.NewAPI(service, true, authService, config, p) // true to disable CORS for development
+	api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles) // true to disable CORS for development
 
+	//listEmbeddedFiles(staticFiles)
 	// Run the API
 	listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
 	log.Println("server listening on", listenOn)
 	if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
+}
+
+func listEmbeddedFiles(fsys embed.FS) error {
+	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Path: %s, IsDir: %t\n", path, d.IsDir())
+		return nil
+	})
 }

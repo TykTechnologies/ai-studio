@@ -2,6 +2,8 @@ package api
 
 import (
 	"crypto/rand"
+	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 	"strconv"
@@ -42,9 +44,10 @@ type API struct {
 	disableCORS bool
 	auth        *auth.AuthService
 	proxy       *proxy.Proxy
+	staticFiles embed.FS
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
 	gin.SetMode(gin.ReleaseMode)
 	api := &API{
 		service:     service,
@@ -53,6 +56,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		auth:        authService,
 		config:      config,
 		proxy:       proxy,
+		staticFiles: staticFiles,
 	}
 
 	// Generate a random 32-byte key for CSRF
@@ -88,6 +92,15 @@ func (a *API) Run(addr string, certFile string, keyFile string) error {
 	return a.router.Run(addr)
 }
 
+// Helper function to create a sub-filesystem
+func sub(fsys embed.FS, dir string) http.FileSystem {
+	sub, err := fs.Sub(fsys, dir)
+	if err != nil {
+		panic(err)
+	}
+	return http.FS(sub)
+}
+
 // getPaginationParams extracts pagination parameters from the request
 // If no parameters are provided, it returns default values for "all" pagination
 func getPaginationParams(c *gin.Context) (int, int, bool) {
@@ -114,6 +127,66 @@ func (a *API) setupRoutes() {
 	} else {
 		a.router.Use(a.corsMiddleware())
 	}
+
+	a.router.GET("/sun.ico", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/x-icon", faviconFile)
+	})
+
+	a.router.GET("/sun-logo.png", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/png", faviconFile)
+	})
+
+	a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/png", faviconFile)
+	})
+
+	a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/png", faviconFile)
+	})
+
+	// Serve static files from /build/static
+	staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
+	if err != nil {
+		log.Fatal(err)
+	}
+	a.router.StaticFS("/static", http.FS(staticFS))
+
+	// Serve logos from /build/logos
+	logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
+	if err != nil {
+		log.Fatal(err)
+	}
+	a.router.StaticFS("/logos", http.FS(logosFS))
+
+	// Serve index.html for all other routes
+	a.router.NoRoute(func(c *gin.Context) {
+		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Could not read index.html")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+	})
 
 	a.router.GET("/csrf-token", func(c *gin.Context) {
 		c.Header("X-CSRF-Token", csrf.Token(c.Request))
