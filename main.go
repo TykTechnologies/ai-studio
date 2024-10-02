@@ -165,9 +165,6 @@ func main() {
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
 
-	// Create a new API instance
-	api := api.NewAPI(service, true, authService, config) // true to disable CORS for development
-
 	// start the Proxy
 
 	pConfig := &proxy.Config{
@@ -175,6 +172,9 @@ func main() {
 	}
 	p := proxy.NewProxy(service, pConfig)
 	go p.Start()
+
+	// Create a new API instance
+	api := api.NewAPI(service, true, authService, config, p) // true to disable CORS for development
 
 	// Run the API
 	listenOn := fmt.Sprintf(":%s", appConf.ServerPort)

@@ -52,6 +52,10 @@ func (a *API) createLLM(c *gin.Context) {
 		return
 	}
 
+	if llm.Active {
+		a.proxy.Reload()
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"data": serializeLLM(llm)})
 }
 
@@ -127,6 +131,17 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 
+	thisLLM, err := a.service.GetLLMByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "LLM not found"}},
+		})
+		return
+	}
+
 	llm, err := a.service.UpdateLLM(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -147,6 +162,14 @@ func (a *API) updateLLM(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	if thisLLM.Active && !input.Data.Attributes.Active {
+		a.proxy.Reload()
+	}
+
+	if !thisLLM.Active && input.Data.Attributes.Active {
+		a.proxy.Reload()
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})

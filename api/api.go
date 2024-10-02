@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -40,9 +41,10 @@ type API struct {
 	config      *auth.Config
 	disableCORS bool
 	auth        *auth.AuthService
+	proxy       *proxy.Proxy
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy) *API {
 	gin.SetMode(gin.ReleaseMode)
 	api := &API{
 		service:     service,
@@ -50,6 +52,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		disableCORS: disableCORS,
 		auth:        authService,
 		config:      config,
+		proxy:       proxy,
 	}
 
 	// Generate a random 32-byte key for CSRF

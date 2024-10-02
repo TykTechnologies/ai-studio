@@ -90,7 +90,7 @@ func (v *Vertex) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 }
 
 func (v *Vertex) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
-	return nil
+	return fmt.Errorf("vertex APIs are strongly tied to the gcloud client libraries and use gRPC, so they are not available in the proxy")
 }
 
 func (v *Vertex) ProvidesEmbedder() bool {
