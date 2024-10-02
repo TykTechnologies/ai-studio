@@ -2,14 +2,12 @@ package ollamaVendor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/responses"
+	openaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/openai"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
@@ -72,23 +70,13 @@ func (v *Ollama) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, er
 }
 
 func (v *Ollama) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	if strings.Contains(strings.ToLower(r.URL.Path), OllamaChatCompletionsEndpoint) ||
-		strings.Contains(strings.ToLower(r.URL.Path), OllamaGenerateCompletionsEndpoint) {
-
-		response := &responses.OllamaGenerateResponse{}
-		err := json.Unmarshal(body, response)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return llm, app, response, nil
-	}
-
-	return llm, app, nil, fmt.Errorf("unknown completions endpoint")
+	oai := openaiVendor.New()
+	return oai.AnalyzeResponse(llm, app, statusCode, body, r)
 }
 
 func (v *Ollama) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	return llm, app, &responses.DummyResponse{
-		Model: "ollama"}, nil
+	oai := openaiVendor.New()
+	return oai.AnalyzeStreamingResponse(llm, app, statusCode, resps, r, chunks)
 }
 
 func (v *Ollama) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
@@ -97,7 +85,8 @@ func (v *Ollama) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 }
 
 func (v *Ollama) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
-	return nil
+	oai := openaiVendor.New()
+	return oai.ProxyScreenRequest(llm, r, isStreamingChannel)
 }
 
 func (v *Ollama) ProvidesEmbedder() bool {
