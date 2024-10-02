@@ -19,7 +19,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -369,82 +368,12 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 }
 
 func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
-	// OpenAI is special because it requires specific usage inclusion
-	switch llm.Vendor {
-	case models.OPENAI:
-		b, err := readBodyWithoutConsuming(r)
-		if err != nil {
-			return err
-		}
-
-		var req responses.OpenAIRequest
-		if err := json.Unmarshal(b, &req); err != nil {
-			return err
-		}
-
-		if isStreamingChannel {
-			if !req.Stream {
-				return fmt.Errorf("streaming is required for this endpoint")
-			}
-
-			if !req.StreamOptions.IncludeUsage {
-				return fmt.Errorf("streaming without usage is not allowed")
-			}
-
-			return nil
-		}
-
-		// not a streaming endpoint, but they are streaming
-		if req.Stream {
-			fmt.Println("streaming is not allowed for this endpoint")
-			return fmt.Errorf("streaming is not allowed for this endpoint")
-		}
-
-	case models.ANTHROPIC:
-		b, err := readBodyWithoutConsuming(r)
-		if err != nil {
-			return err
-		}
-
-		var req responses.AnthropicRequest
-		if err := json.Unmarshal(b, &req); err != nil {
-			return err
-		}
-
-		if isStreamingChannel {
-			if !req.Stream {
-				return fmt.Errorf("streaming is required for this endpoint")
-			}
-			return nil
-		}
-
-		// not a streaming endpoint, but they are streaming
-		if req.Stream {
-			fmt.Println("streaming is not allowed for this endpoint")
-			return fmt.Errorf("streaming is not allowed for this endpoint")
-		}
-
-	case models.GOOGLEAI:
-		isStream := false
-		if strings.Contains(strings.ToLower(r.URL.Path), ":streamgeneratecontent") {
-			isStream = true
-		}
-
-		if isStreamingChannel {
-			if !isStream {
-				return fmt.Errorf("streaming is required for this endpoint")
-			}
-			return nil
-		}
-
-		// not a streaming endpoint, but they are streaming
-		if isStream {
-			fmt.Println("streaming is not allowed for this endpoint")
-			return fmt.Errorf("streaming is not allowed for this endpoint")
-		}
+	v, ok := switches.VendorMap[llm.Vendor]
+	if !ok {
+		return fmt.Errorf("vendor not found")
 	}
 
-	return nil
+	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
 }
 
 func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request) {
