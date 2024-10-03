@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Typography,
   CircularProgress,
@@ -14,13 +14,13 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  IconButton,
+  Card,
+  CardContent,
 } from "@mui/material";
-
-import { IconButton } from "@mui/material";
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
-
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -33,8 +33,8 @@ const SectionTitle = ({ children }) => (
   </Typography>
 );
 
-const FieldLabel = ({ children }) => (
-  <Typography variant="subtitle2" color="text.secondary">
+const FieldLabel = ({ children, sx }) => (
+  <Typography variant="subtitle2" color="text.secondary" sx={sx}>
     {children}
   </Typography>
 );
@@ -45,40 +45,46 @@ const FieldValue = ({ children }) => (
 
 const AppDetailView = () => {
   const [app, setApp] = useState(null);
+  const [accessibleLLMs, setAccessibleLLMs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
   const [showSecret, setShowSecret] = useState(false);
 
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentHost = window.location.hostname;
 
   useEffect(() => {
-    const fetchAppDetails = async () => {
+    const fetchData = async () => {
       try {
-        const response = await pubClient.get(`/common/apps/${id}`);
-        setApp(response.data);
+        const [appResponse, llmsResponse] = await Promise.all([
+          pubClient.get(`/common/apps/${id}`),
+          pubClient.get("/common/accessible-llms"),
+        ]);
+        setApp(appResponse.data);
+        setAccessibleLLMs(llmsResponse.data);
         setLoading(false);
       } catch (err) {
-        console.error("Error fetching app details:", err);
-        setError("Failed to load app details. Please try again later.");
+        console.error("Error fetching data:", err);
+        setError("Failed to load data. Please try again later.");
         setLoading(false);
       }
     };
 
-    fetchAppDetails();
+    fetchData();
   }, [id]);
 
   const toggleSecretVisibility = () => {
     setShowSecret(!showSecret);
   };
 
-  const copyToClipboard = () => {
+  const copyToClipboard = (text) => {
     navigator.clipboard
-      .writeText(app.attributes.credential.secret)
+      .writeText(text)
       .then(() => {
-        console.log("Secret copied to clipboard");
+        console.log("Text copied to clipboard");
       })
       .catch((err) => {
         console.error("Failed to copy text: ", err);
@@ -105,116 +111,209 @@ const AppDetailView = () => {
     setDeleteDialogOpen(false);
   };
 
+  const generateSlug = (name) => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+  };
+
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!app) return <Typography>App not found</Typography>;
 
+  const appLLMs = accessibleLLMs.filter((llm) =>
+    app.attributes.llm_ids.includes(Number(llm.id)),
+  );
+
   return (
-    <Paper sx={{ p: 3 }}>
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
-      >
-        <Typography variant="h5">App Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/portal/apps")}
+    <Box>
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={3}
         >
-          Back to Apps
-        </Button>
-      </Box>
+          <Typography variant="h5" sx={{ color: "black" }}>
+            App Details
+          </Typography>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate("/portal/apps")}
+          >
+            Back to Apps
+          </Button>
+        </Box>
 
-      <SectionTitle>App Information</SectionTitle>
-      <Grid container spacing={2}>
-        <Grid item xs={3}>
-          <FieldLabel>Name:</FieldLabel>
+        <SectionTitle>App Information</SectionTitle>
+        <Grid container spacing={2}>
+          <Grid item xs={3}>
+            <FieldLabel>Name:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{app.attributes.name}</FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Description:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{app.attributes.description}</FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Data Sources:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              {app.attributes.datasource_ids.map((id) => (
+                <Chip key={id} label={`Data Source ${id}`} />
+              ))}
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>LLMs:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              {app.attributes.llm_ids.map((id) => (
+                <Chip key={id} label={`LLM ${id}`} />
+              ))}
+            </Box>
+          </Grid>
         </Grid>
-        <Grid item xs={9}>
-          <FieldValue>{app.attributes.name}</FieldValue>
-        </Grid>
-        <Grid item xs={3}>
-          <FieldLabel>Description:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <FieldValue>{app.attributes.description}</FieldValue>
-        </Grid>
-        <Grid item xs={3}>
-          <FieldLabel>Data Sources:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <Box display="flex" flexWrap="wrap" gap={1}>
-            {app.attributes.datasource_ids.map((id) => (
-              <Chip key={id} label={`Data Source ${id}`} />
-            ))}
-          </Box>
-        </Grid>
-        <Grid item xs={3}>
-          <FieldLabel>LLMs:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <Box display="flex" flexWrap="wrap" gap={1}>
-            {app.attributes.llm_ids.map((id) => (
-              <Chip key={id} label={`LLM ${id}`} />
-            ))}
-          </Box>
-        </Grid>
-      </Grid>
 
-      <Divider sx={{ my: 3 }} />
+        <Divider sx={{ my: 3 }} />
 
-      <SectionTitle>Credential Information</SectionTitle>
-      <Grid container spacing={2}>
-        <Grid item xs={3}>
-          <FieldLabel>Key ID:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <FieldValue>{app.attributes.credential.keyID}</FieldValue>
-        </Grid>
-        <Grid item xs={3}>
-          <FieldLabel>Secret:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <Box display="flex" alignItems="center">
+        <SectionTitle>Credential Information</SectionTitle>
+        <Grid container spacing={2}>
+          <Grid item xs={3}>
+            <FieldLabel>Key ID:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{app.attributes.credential.keyID}</FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Secret:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" alignItems="center">
+              <FieldValue>
+                {showSecret
+                  ? app.attributes.credential.secret
+                  : "••••••••••••••••"}
+              </FieldValue>
+              <IconButton onClick={toggleSecretVisibility} size="small">
+                {showSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
+              </IconButton>
+              <IconButton
+                onClick={() =>
+                  copyToClipboard(app.attributes.credential.secret)
+                }
+                size="small"
+              >
+                <ContentCopyIcon />
+              </IconButton>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Active:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
             <FieldValue>
-              {showSecret
-                ? app.attributes.credential.secret
-                : "••••••••••••••••"}
+              {app.attributes.credential.active ? "Yes" : "No"}
             </FieldValue>
-            <IconButton onClick={() => setShowSecret(!showSecret)} size="small">
-              {showSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
-            </IconButton>
-            <IconButton
-              onClick={() =>
-                navigator.clipboard.writeText(app.attributes.credential.secret)
-              }
-              size="small"
-            >
-              <ContentCopyIcon />
-            </IconButton>
-          </Box>
+          </Grid>
         </Grid>
-        <Grid item xs={3}>
-          <FieldLabel>Active:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <FieldValue>
-            {app.attributes.credential.active ? "Yes" : "No"}
-          </FieldValue>
-        </Grid>
-      </Grid>
 
-      <Box mt={4}>
-        <Button
-          variant="contained"
-          color="error"
-          startIcon={<DeleteIcon />}
-          onClick={handleDeleteClick}
-        >
-          Delete App
-        </Button>
-      </Box>
+        <Box mt={4}>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={handleDeleteClick}
+          >
+            Delete App
+          </Button>
+        </Box>
+      </Paper>
+
+      <Paper sx={{ p: 3 }}>
+        <SectionTitle>LLM Access Details</SectionTitle>
+        {appLLMs.map((llm) => (
+          <Card key={llm.id} sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6">{llm.attributes.name}</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                {llm.attributes.short_description}
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <FieldLabel sx={{ minWidth: "100px" }}>REST API:</FieldLabel>
+                  <Box
+                    sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                  >
+                    <Typography
+                      variant="body2"
+                      component="code"
+                      sx={{
+                        fontFamily: "monospace",
+                        bgcolor: "background.paper",
+                        p: 1,
+                        borderRadius: 1,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {`//${currentHost}:9090/api/llm/rest/${generateSlug(llm.attributes.name)}/`}
+                    </Typography>
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(
+                          `//${currentHost}:9090/api/llm/rest/${generateSlug(llm.attributes.name)}/`,
+                        )
+                      }
+                      size="small"
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Box>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <FieldLabel sx={{ minWidth: "100px" }}>
+                    STREAM API:
+                  </FieldLabel>
+                  <Box
+                    sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                  >
+                    <Typography
+                      variant="body2"
+                      component="code"
+                      sx={{
+                        fontFamily: "monospace",
+                        bgcolor: "background.paper",
+                        p: 1,
+                        borderRadius: 1,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {`//${currentHost}:9090/api/llm/stream/${generateSlug(llm.attributes.name)}/`}
+                    </Typography>
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(
+                          `//${currentHost}:9090/api/llm/stream/${generateSlug(llm.attributes.name)}/`,
+                        )
+                      }
+                      size="small"
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Paper>
 
       <Dialog
         open={deleteDialogOpen}
@@ -236,7 +335,7 @@ const AppDetailView = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Paper>
+    </Box>
   );
 };
 

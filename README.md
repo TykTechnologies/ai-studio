@@ -65,3 +65,14 @@ The back end is very straightforward, there are three levels:
 3. The API layer - This is an interface to the service layer via a REST API.
 
 The front-end is split into two sections: admin and portal, each have their own layouts and components. The admin section is for managing the AI models, tools, and data sources,  and the portal is for interacting with the AI models.
+
+## Building a Final Binary
+
+```
+cd midsommar/ui/admin-frontend/src
+npm run build
+cd ../../..
+go build
+```
+
+That will process all the static files and embed them into the binary. The binary will now be a full server that serves the UI and the API from the same port.ß
