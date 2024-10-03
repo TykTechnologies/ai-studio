@@ -83,6 +83,7 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val.RegisterValidator(strings.ToLower(string(models.VERTEX)), VertexValidator)
 	val.RegisterValidator(strings.ToLower(string(models.HUGGINGFACE)), HuggingFaceValidator)
 	val.RegisterValidator(strings.ToLower(string(models.OLLAMA)), OpenAIValidator)
+	val.RegisterValidator(strings.ToLower(string(models.MOCK_VENDOR)), MockValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 
 	p.credValidator = val
@@ -451,6 +452,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	var responses [][]byte
 
 	buffer := make([]byte, 1024)
+	isErr := false
 	for {
 		n, err := resp.Body.Read(buffer)
 		if n > 0 {
@@ -462,6 +464,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			_, err := w.Write(chunk)
 			if err != nil {
 				log.Printf("Error writing to client: %v", err)
+				isErr = true
 				break
 			}
 			if f, ok := w.(http.Flusher); ok {
@@ -473,11 +476,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 		if err != nil {
 			log.Printf("Error reading from upstream: %v", err)
+			isErr = true
 			break
 		}
 	}
 
-	go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), responses)
+	if !isErr {
+		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), responses)
+	}
 }
 
 func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, chunks [][]byte) {

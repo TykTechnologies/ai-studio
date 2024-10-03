@@ -68,8 +68,9 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		FrontendURL:         "http://example.com",
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
+		SMTPHost:            "dummy.host.com",
 	}
-	suite.authService = auth.NewAuthService(config, mockMailer)
+	suite.authService = auth.NewAuthService(&config, mockMailer)
 }
 
 func (suite *AuthServiceTestSuite) TearDownTest() {
@@ -166,8 +167,10 @@ func (suite *AuthServiceTestSuite) TestResetPassword() {
 
 		// Check if email was sent
 		assert.Equal(suite.T(), 1, len(mockMailer.sentEmails))
-		assert.Equal(suite.T(), "test@example.com", mockMailer.sentEmails[0].GetHeader("To")[0])
-		assert.Equal(suite.T(), "Password Reset", mockMailer.sentEmails[0].GetHeader("Subject")[0])
+		if len(mockMailer.sentEmails) > 0 {
+			assert.Equal(suite.T(), "test@example.com", mockMailer.sentEmails[0].GetHeader("To")[0])
+			assert.Equal(suite.T(), "Password Reset", mockMailer.sentEmails[0].GetHeader("Subject")[0])
+		}
 	})
 
 	suite.Run("Reset password failure - user not found", func() {

@@ -1,4 +1,4 @@
-package switches
+package mockVendor
 
 import (
 	"context"

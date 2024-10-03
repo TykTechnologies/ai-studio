@@ -43,10 +43,8 @@ func TestRecordContentMessage(t *testing.T) {
 			{
 				Content: "Test content",
 				GenerationInfo: map[string]interface{}{
-					"usage": map[string]interface{}{
-						"prompt_tokens":   10,
-						"response_tokens": 20,
-					},
+					"PromptTokens":   10,
+					"ResponseTokens": 20,
 				},
 			},
 		},
@@ -174,10 +172,8 @@ func TestCostCalculation(t *testing.T) {
 			{
 				Content: "Test content",
 				GenerationInfo: map[string]interface{}{
-					"usage": map[string]interface{}{
-						"prompt_tokens":   10,
-						"response_tokens": 20,
-					},
+					"PromptTokens":   10,
+					"ResponseTokens": 20,
 				},
 			},
 		},
@@ -226,10 +222,8 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 			{
 				Content: "Test content",
 				GenerationInfo: map[string]interface{}{
-					"usage": map[string]interface{}{
-						"prompt_tokens":   10,
-						"response_tokens": 20,
-					},
+					"PromptTokens":   10,
+					"ResponseTokens": 20,
 				},
 			},
 		},

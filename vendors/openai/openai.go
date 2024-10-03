@@ -34,7 +34,7 @@ func (v *OpenAI) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 
 	usage := choice.GenerationInfo
 	promptTokens = helpers.KeyValueOrZero(usage, "PromptTokens")
-	responseTokens = helpers.KeyValueOrZero(usage, "TotalTokens")
+	responseTokens = helpers.KeyValueOrZero(usage, "ResponseTokens")
 	totalTokens = promptTokens + responseTokens
 
 	return totalTokens, promptTokens, responseTokens

@@ -40,6 +40,15 @@ func DummyValidator(r *http.Request) (string, error) {
 	return h, nil
 }
 
+func MockValidator(r *http.Request) (string, error) {
+	h := r.Header.Get("Authorization")
+	if h == "" {
+		return "", fmt.Errorf("missing authorization header")
+	}
+
+	return h, nil
+}
+
 func GoogleAIValidator(r *http.Request) (string, error) {
 	params := r.URL.Query()
 	h := params.Get("key")

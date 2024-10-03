@@ -13,6 +13,35 @@ import (
 	"github.com/tmc/langchaingo/schema"
 )
 
+type MockResponse struct {
+	Model string `json:"model"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
+}
+
+func (o *MockResponse) GetPromptTokens() int {
+	return o.Usage.PromptTokens
+}
+
+func (o *MockResponse) GetResponseTokens() int {
+	return o.Usage.CompletionTokens
+}
+
+func (o *MockResponse) GetChoiceCount() int {
+	return 1
+}
+
+func (o *MockResponse) GetToolCount() int {
+	return 0
+}
+
+func (o *MockResponse) GetModel() string {
+	return o.Model
+}
+
 type Mock struct{}
 
 func New() models.LLMVendorProvider {
@@ -37,7 +66,7 @@ func (v *Mock) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, erro
 }
 
 func (v *Mock) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	response = &responses.DummyResponse{Model: "test-vendor"}
+	response := &MockResponse{Model: "test-vendor"}
 	err := json.Unmarshal(body, response)
 	if err != nil {
 		return nil, nil, nil, err

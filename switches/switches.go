@@ -4,12 +4,14 @@ package switches
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	anthropicVendor "github.com/TykTechnologies/midsommar/v2/vendors/anthropic"
 	googleaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/googleai"
 	hfVendor "github.com/TykTechnologies/midsommar/v2/vendors/huggingface"
+	mockVendor "github.com/TykTechnologies/midsommar/v2/vendors/mock"
 	ollamaVendor "github.com/TykTechnologies/midsommar/v2/vendors/ollama"
 	openaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/openai"
 	vertexVendor "github.com/TykTechnologies/midsommar/v2/vendors/vertex"
@@ -42,12 +44,14 @@ var VendorMap = map[models.Vendor]newVendorFunc{
 	models.VERTEX:      vertexVendor.New,
 	models.GOOGLEAI:    googleaiVendor.New,
 	models.HUGGINGFACE: hfVendor.New,
+	models.MOCK_VENDOR: mockVendor.New,
 }
 
 // Handles token count finding for analytics, different vendors have different response types and we nee dto handle all of them
 func GetTokenCounts(choice *llms.ContentChoice, vendor models.Vendor) (int, int, int) {
 	v, ok := VendorMap[vendor]
 	if !ok {
+		slog.Warn("vendor not in supported vendor map")
 		return 0, 0, 0
 	}
 
