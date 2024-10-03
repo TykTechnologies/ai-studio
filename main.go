@@ -1,6 +1,8 @@
 package main
 
 import (
+	"gorm.io/driver/postgres"
+
 	"context"
 	"embed"
 	"fmt"
@@ -39,6 +41,8 @@ type AppConf struct {
 	CertFile           string
 	KeyFile            string
 	DisableCors        bool
+	DatabaseURL        string
+	DatabaseType       string
 }
 
 func GetConfigFromEnv() *AppConf {
@@ -119,6 +123,22 @@ func GetConfigFromEnv() *AppConf {
 		conf.DisableCors = true
 	}
 
+	conf.DatabaseURL = os.Getenv("DATABASE_URL")
+	if conf.DatabaseURL == "" {
+		log.Println("Warning: DATABASE_URL environment variable is not set, defaulting to SQLite")
+		conf.DatabaseURL = "midsommar.db"
+	}
+
+	conf.DatabaseType = os.Getenv("DATABASE_TYPE")
+	if conf.DatabaseType == "" {
+		log.Println("Warning: DATABASE_TYPE environment variable is not set, defaulting to sqlite")
+		conf.DatabaseType = "sqlite"
+	}
+
+	if conf.DatabaseType != "sqlite" && conf.DatabaseType != "postgres" {
+		log.Fatalf("Unsupported DATABASE_TYPE: %s. Supported types are 'sqlite' and 'postgres'", conf.DatabaseType)
+	}
+
 	return conf
 }
 
@@ -129,13 +149,33 @@ func printWelcome() {
 
 func main() {
 	printWelcome()
+	appConf := GetConfigFromEnv()
 
-	// Open a connection to the SQLite database
-	// If the file doesn't exist, it will be created
-	db, err := gorm.Open(sqlite.Open("midsommar.db"), &gorm.Config{})
+	var dialector gorm.Dialector
+	switch appConf.DatabaseType {
+	case "sqlite":
+		dialector = sqlite.Open(appConf.DatabaseURL)
+	case "postgres":
+		dialector = postgres.Open(appConf.DatabaseURL)
+	default:
+		log.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
+
+	// Test the database connection
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to get database instance: %v", err)
+	}
+	err = sqlDB.Ping()
+	if err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
+	log.Println("Successfully connected to the database")
 
 	// Auto Migrate the schemas
 	err = models.InitModels(db)
@@ -145,8 +185,6 @@ func main() {
 
 	// Create a new service instance
 	service := services.NewService(db)
-
-	appConf := GetConfigFromEnv()
 
 	config := &auth.Config{
 		DB:                  db,
