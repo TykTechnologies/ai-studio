@@ -401,6 +401,10 @@ const LLMForm = () => {
               <Typography>Filters</Typography>
             </AccordionSummary>
             <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Filters added here are executed in the AI Gateway when a request
+                flows through the REST endpoint.
+              </Typography>
               {filtersLoading ? (
                 <Typography>Loading filters...</Typography>
               ) : filters === null ? (
