@@ -18,6 +18,8 @@ type LLM struct {
 	LogoURL string `json:"logo"`
 	Vendor  Vendor `json:"vendor"`
 	Active  bool   `json:"active"`
+
+	Filters []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
 }
 
 const (
@@ -38,15 +40,18 @@ func NewLLM() *LLM {
 }
 
 func (l *LLM) Get(db *gorm.DB, id uint) error {
-	return db.First(l, id).Error
+	return db.Preload("Filters").First(l, id).Error
 }
 
 func (l *LLM) Create(db *gorm.DB) error {
-	return db.Create(l).Error
+	return db.Create(l).Association("Filters").Replace(l.Filters)
 }
 
 func (l *LLM) Update(db *gorm.DB) error {
-	return db.Save(l).Error
+	if err := db.Save(l).Error; err != nil {
+		return err
+	}
+	return db.Model(l).Association("Filters").Replace(l.Filters)
 }
 
 func (l *LLM) Delete(db *gorm.DB) error {
@@ -54,7 +59,7 @@ func (l *LLM) Delete(db *gorm.DB) error {
 }
 
 func (l *LLM) GetByName(db *gorm.DB, name string) error {
-	return db.Where("name = ?", name).First(l).Error
+	return db.Preload("Filters").Where("name = ?", name).First(l).Error
 }
 
 func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
@@ -80,21 +85,21 @@ func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int6
 }
 
 func (l *LLMs) GetByNameStub(db *gorm.DB, stub string) error {
-	return db.Where("name LIKE ?", stub+"%").Find(l).Error
+	return db.Preload("Filters").Where("name LIKE ?", stub+"%").Find(l).Error
 }
 
 func (l *LLMs) GetByMaxPrivacyScore(db *gorm.DB, score int) error {
-	return db.Where("privacy_score <= ?", score).Find(l).Error
+	return db.Preload("Filters").Where("privacy_score <= ?", score).Find(l).Error
 }
 
 func (l *LLMs) GetByMinPrivacyScore(db *gorm.DB, score int) error {
-	return db.Where("privacy_score >= ?", score).Find(l).Error
+	return db.Preload("Filters").Where("privacy_score >= ?", score).Find(l).Error
 }
 
 func (l *LLMs) GetByPrivacyScoreRange(db *gorm.DB, min, max int) error {
-	return db.Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error
+	return db.Preload("Filters").Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error
 }
 
 func (l *LLMs) GetActiveLLMs(db *gorm.DB) error {
-	return db.Where("active = ?", true).Find(l).Error
+	return db.Preload("Filters").Where("active = ?", true).Find(l).Error
 }

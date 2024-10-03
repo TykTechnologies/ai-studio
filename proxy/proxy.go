@@ -18,6 +18,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -372,6 +373,19 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 }
 
 func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
+	bodyBytes, err := helpers.CopyRequestBody(r)
+	if err != nil {
+		return err
+	}
+
+	for _, filter := range llm.Filters {
+		runner := scripting.NewScriptRunner(filter.Script)
+		err := runner.RunFilter(string(bodyBytes))
+		if err != nil {
+			return fmt.Errorf("Policy error: %s", filter.Name)
+		}
+	}
+
 	v, ok := switches.VendorMap[llm.Vendor]
 	if !ok {
 		return fmt.Errorf("vendor not found")

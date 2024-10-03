@@ -99,6 +99,7 @@ type LLMInput struct {
 			LogoURL          string `json:"logo_url"`
 			Vendor           string `json:"vendor"`
 			Active           bool   `json:"active"`
+			Filters          []int  `json:"filters"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -109,15 +110,16 @@ type LLMResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name             string `json:"name"`
-		APIKey           string `json:"api_key"`
-		APIEndpoint      string `json:"api_endpoint"`
-		PrivacyScore     int    `json:"privacy_score"`
-		ShortDescription string `json:"short_description"`
-		LongDescription  string `json:"long_description"`
-		LogoURL          string `json:"logo_url"`
-		Vendor           string `json:"vendor"`
-		Active           bool   `json:"active"`
+		Name             string           `json:"name"`
+		APIKey           string           `json:"api_key"`
+		APIEndpoint      string           `json:"api_endpoint"`
+		PrivacyScore     int              `json:"privacy_score"`
+		ShortDescription string           `json:"short_description"`
+		LongDescription  string           `json:"long_description"`
+		LogoURL          string           `json:"logo_url"`
+		Vendor           string           `json:"vendor"`
+		Active           bool             `json:"active"`
+		Filters          []FilterResponse `json:"filters"`
 	} `json:"attributes"`
 }
 

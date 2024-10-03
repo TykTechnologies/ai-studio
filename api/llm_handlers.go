@@ -31,6 +31,12 @@ func (a *API) createLLM(c *gin.Context) {
 		return
 	}
 
+	filters := []*models.Filter{}
+	for _, f := range input.Data.Attributes.Filters {
+		a.service.GetFilterByID(uint(f))
+		filters = append(filters, &models.Filter{ID: uint(f)})
+	}
+
 	llm, err := a.service.CreateLLM(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.APIKey,
@@ -41,6 +47,7 @@ func (a *API) createLLM(c *gin.Context) {
 		input.Data.Attributes.LogoURL,
 		models.Vendor(input.Data.Attributes.Vendor),
 		input.Data.Attributes.Active,
+		filters,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -144,6 +151,12 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 
+	filters := []*models.Filter{}
+	for _, f := range input.Data.Attributes.Filters {
+		a.service.GetFilterByID(uint(f))
+		filters = append(filters, &models.Filter{ID: uint(f)})
+	}
+
 	llm, err := a.service.UpdateLLM(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -155,6 +168,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.LogoURL,
 		models.Vendor(input.Data.Attributes.Vendor),
 		input.Data.Attributes.Active,
+		filters,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -419,15 +433,16 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 		Type: "llms",
 		ID:   strconv.FormatUint(uint64(llm.ID), 10),
 		Attributes: struct {
-			Name             string `json:"name"`
-			APIKey           string `json:"api_key"`
-			APIEndpoint      string `json:"api_endpoint"`
-			PrivacyScore     int    `json:"privacy_score"`
-			ShortDescription string `json:"short_description"`
-			LongDescription  string `json:"long_description"`
-			LogoURL          string `json:"logo_url"`
-			Vendor           string `json:"vendor"`
-			Active           bool   `json:"active"`
+			Name             string           `json:"name"`
+			APIKey           string           `json:"api_key"`
+			APIEndpoint      string           `json:"api_endpoint"`
+			PrivacyScore     int              `json:"privacy_score"`
+			ShortDescription string           `json:"short_description"`
+			LongDescription  string           `json:"long_description"`
+			LogoURL          string           `json:"logo_url"`
+			Vendor           string           `json:"vendor"`
+			Active           bool             `json:"active"`
+			Filters          []FilterResponse `json:"filters"`
 		}{
 			Name:             llm.Name,
 			APIKey:           llm.APIKey,
@@ -438,6 +453,7 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			LogoURL:          llm.LogoURL,
 			Vendor:           string(llm.Vendor),
 			Active:           llm.Active,
+			Filters:          serializeFilters(llm.Filters),
 		},
 	}
 }

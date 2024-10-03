@@ -90,15 +90,16 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 			Type: "llm",
 			ID:   strconv.FormatUint(uint64(llm.ID), 10),
 			Attributes: struct {
-				Name             string `json:"name"`
-				APIKey           string `json:"api_key"`
-				APIEndpoint      string `json:"api_endpoint"`
-				PrivacyScore     int    `json:"privacy_score"`
-				ShortDescription string `json:"short_description"`
-				LongDescription  string `json:"long_description"`
-				LogoURL          string `json:"logo_url"`
-				Vendor           string `json:"vendor"`
-				Active           bool   `json:"active"`
+				Name             string           `json:"name"`
+				APIKey           string           `json:"api_key"`
+				APIEndpoint      string           `json:"api_endpoint"`
+				PrivacyScore     int              `json:"privacy_score"`
+				ShortDescription string           `json:"short_description"`
+				LongDescription  string           `json:"long_description"`
+				LogoURL          string           `json:"logo_url"`
+				Vendor           string           `json:"vendor"`
+				Active           bool             `json:"active"`
+				Filters          []FilterResponse `json:"filters"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -674,15 +675,16 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 			Type: "llm",
 			ID:   strconv.FormatUint(uint64(llm.ID), 10),
 			Attributes: struct {
-				Name             string `json:"name"`
-				APIKey           string `json:"api_key"`
-				APIEndpoint      string `json:"api_endpoint"`
-				PrivacyScore     int    `json:"privacy_score"`
-				ShortDescription string `json:"short_description"`
-				LongDescription  string `json:"long_description"`
-				LogoURL          string `json:"logo_url"`
-				Vendor           string `json:"vendor"`
-				Active           bool   `json:"active"`
+				Name             string           `json:"name"`
+				APIKey           string           `json:"api_key"`
+				APIEndpoint      string           `json:"api_endpoint"`
+				PrivacyScore     int              `json:"privacy_score"`
+				ShortDescription string           `json:"short_description"`
+				LongDescription  string           `json:"long_description"`
+				LogoURL          string           `json:"logo_url"`
+				Vendor           string           `json:"vendor"`
+				Active           bool             `json:"active"`
+				Filters          []FilterResponse `json:"filters"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,

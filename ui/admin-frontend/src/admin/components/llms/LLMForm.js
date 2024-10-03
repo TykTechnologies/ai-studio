@@ -19,6 +19,7 @@ import {
   Tooltip,
   AccordionSummary,
   AccordionDetails,
+  Chip,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -57,8 +58,13 @@ const LLMForm = () => {
     api_key: "",
     logo_url: "",
     active: false,
+    filters: [],
   });
   const [vendors, setVendors] = useState([]);
+  const [filters, setFilters] = useState(null);
+
+  const [filtersLoading, setFiltersLoading] = useState(true);
+
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -72,15 +78,42 @@ const LLMForm = () => {
 
   useEffect(() => {
     setVendors(getVendorCodes());
+    fetchFilters();
     if (id) {
       fetchLLM();
     }
   }, [id]);
 
+  const fetchFilters = async () => {
+    setFiltersLoading(true);
+    try {
+      const response = await apiClient.get("/filters");
+      if (Array.isArray(response.data)) {
+        setFilters(response.data);
+      } else {
+        throw new Error("Invalid response format");
+      }
+    } catch (error) {
+      console.error("Error fetching filters", error);
+      setFilters([]);
+      setSnackbar({
+        open: true,
+        message: `Failed to fetch filters: ${error.message || "Unknown error"}`,
+        severity: "error",
+      });
+    } finally {
+      setFiltersLoading(false);
+    }
+  };
+
   const fetchLLM = async () => {
     try {
       const response = await apiClient.get(`/llms/${id}`);
-      setLLM(response.data.data.attributes);
+      const llmData = response.data.data.attributes;
+      setLLM({
+        ...llmData,
+        filters: llmData.filters.map((filter) => filter.id.toString()),
+      });
     } catch (error) {
       console.error("Error fetching LLM", error);
       setSnackbar({
@@ -96,6 +129,9 @@ const LLMForm = () => {
     if (name === "privacy_score") {
       const numValue = Math.min(Math.max(parseInt(value) || 0, 0), 100);
       setLLM({ ...llm, [name]: numValue });
+    } else if (name === "filters") {
+      const stringFilters = value.map((filterId) => filterId.toString());
+      setLLM({ ...llm, filters: stringFilters });
     } else {
       setLLM({ ...llm, [name]: value });
     }
@@ -126,6 +162,7 @@ const LLMForm = () => {
           ...llm,
           privacy_score: Number(llm.privacy_score),
           active: Boolean(llm.active),
+          filters: llm.filters.map((filterId) => parseInt(filterId, 10)),
         },
       },
     };
@@ -356,6 +393,56 @@ const LLMForm = () => {
                   />
                 </Grid>
               </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Filters</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              {filtersLoading ? (
+                <Typography>Loading filters...</Typography>
+              ) : filters === null ? (
+                <Typography>
+                  Error loading filters. Please try again.
+                </Typography>
+              ) : filters.length === 0 ? (
+                <Typography>No filters available.</Typography>
+              ) : (
+                <FormControl fullWidth>
+                  <InputLabel>Filters</InputLabel>
+                  <Select
+                    multiple
+                    name="filters"
+                    value={llm.filters || []}
+                    onChange={handleChange}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {selected.map((value) => {
+                          const filter = filters.find((f) => f.id === value);
+                          return (
+                            <Chip
+                              key={value}
+                              label={
+                                filter
+                                  ? filter.attributes.name
+                                  : "Unknown Filter"
+                              }
+                            />
+                          );
+                        })}
+                      </Box>
+                    )}
+                  >
+                    {filters.map((filter) => (
+                      <MenuItem key={filter.id} value={filter.id.toString()}>
+                        {filter.attributes.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
             </AccordionDetails>
           </StyledAccordion>
 

@@ -4,7 +4,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool) (*models.LLM, error) {
+func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool, filters []*models.Filter) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -15,6 +15,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, 
 		LogoURL:          logoURL,
 		Vendor:           vendor,
 		Active:           active,
+		Filters:          filters,
 	}
 
 	if err := llm.Create(s.DB); err != nil {
@@ -32,7 +33,7 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	return llm, nil
 }
 
-func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool) (*models.LLM, error) {
+func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool, filters []*models.Filter) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -47,6 +48,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string, privacySc
 	llm.LogoURL = logoURL
 	llm.Vendor = vendor
 	llm.Active = active
+	llm.Filters = filters
 
 	if err := llm.Update(s.DB); err != nil {
 		return nil, err
