@@ -9,6 +9,13 @@ import {
   Button,
   Divider,
   Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -34,6 +41,8 @@ import {
   StyledButton,
 } from "../../styles/sharedStyles";
 import DateRangePicker from "../common/DateRangePicker";
+import PaginationControls from "../common/PaginationControls";
+import usePagination from "../../hooks/usePagination";
 
 ChartJS.register(
   CategoryScale,
@@ -51,6 +60,51 @@ const SectionTitle = ({ children }) => (
     {children}
   </Typography>
 );
+const ExpandableMessage = ({ message, isCode = false }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const truncate = (str, n) => {
+    return str.length > n ? str.substr(0, n - 1) + "..." : str;
+  };
+
+  const formatMessage = (msg) => {
+    try {
+      // Attempt to parse as JSON
+      const parsed = JSON.parse(msg);
+      return JSON.stringify(parsed, null, 2);
+    } catch (e) {
+      // If parsing fails, return as plain text
+      return msg;
+    }
+  };
+
+  const displayMessage = expanded
+    ? formatMessage(message)
+    : truncate(message, 150);
+
+  return (
+    <Box>
+      <Typography
+        component={isCode ? "code" : "pre"}
+        style={{
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          backgroundColor: isCode ? "#f5f5f5" : "transparent",
+          padding: isCode ? "8px" : "0",
+          borderRadius: isCode ? "4px" : "0",
+          fontFamily: isCode ? "monospace" : "inherit",
+        }}
+      >
+        {displayMessage}
+      </Typography>
+      {message.length > 150 && (
+        <Button onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Collapse" : "Expand"}
+        </Button>
+      )}
+    </Box>
+  );
+};
 
 const AppDetails = () => {
   const [app, setApp] = useState(null);
@@ -60,6 +114,7 @@ const AppDetails = () => {
   const [datasources, setDatasources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
+  const [proxyLogs, setProxyLogs] = useState([]);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -71,10 +126,20 @@ const AppDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
+
   useEffect(() => {
     fetchAppDetails();
     fetchTokenUsageAndCost();
-  }, [id, startDate, endDate]);
+    fetchProxyLogs();
+  }, [id, startDate, endDate, page, pageSize]);
 
   const fetchAppDetails = async () => {
     try {
@@ -107,6 +172,27 @@ const AppDetails = () => {
       setTokenUsageAndCostData(response.data);
     } catch (error) {
       console.error("Error fetching token usage and cost data", error);
+    }
+  };
+
+  const fetchProxyLogs = async () => {
+    try {
+      const response = await apiClient.get(`/analytics/proxy-logs-for-app`, {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          app_id: id,
+          page,
+          page_size: pageSize,
+        },
+      });
+      setProxyLogs(response.data.data);
+      updatePaginationData(
+        response.data.meta.total_count,
+        response.data.meta.total_pages,
+      );
+    } catch (error) {
+      console.error("Error fetching proxy logs", error);
     }
   };
 
@@ -328,6 +414,75 @@ const AppDetails = () => {
             </Grid>
           </>
         )}
+
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>Proxy Logs</SectionTitle>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Timestamp
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Vendor
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Response Code
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Request
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Response
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {proxyLogs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    {new Date(log.attributes.time_stamp).toLocaleString()}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    {log.attributes.vendor}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    {log.attributes.response_code}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    <pre>
+                      <code>
+                        <ExpandableMessage
+                          message={log.attributes.request_body}
+                        />
+                      </code>
+                    </pre>
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    <pre>
+                      <code>
+                        <ExpandableMessage
+                          message={log.attributes.response_body}
+                        />
+                      </code>
+                    </pre>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Box mt={2}>
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        </Box>
 
         <Box
           mt={4}

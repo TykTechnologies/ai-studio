@@ -529,3 +529,45 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time) ([
 
 	return results, nil
 }
+
+// GetChatLogsForChatID retrieves all chat log entries for a specific chat ID
+func GetChatLogsForChatID(db *gorm.DB, chatID uint) ([]LLMChatLogEntry, error) {
+	var chatLogs []LLMChatLogEntry
+
+	err := db.Where("chat_id = ?", chatID).
+		Order("time_stamp ASC").
+		Find(&chatLogs).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return chatLogs, nil
+}
+
+func GetProxyLogsForAppID(db *gorm.DB, startDate, endDate time.Time, appID uint, page, pageSize int) ([]ProxyLog, int64, error) {
+	var proxyLogs []ProxyLog
+	var totalCount int64
+
+	// Count total records
+	err := db.Model(&ProxyLog{}).
+		Where("app_id = ? AND time_stamp BETWEEN ? AND ?", appID, startDate, endDate).
+		Count(&totalCount).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Retrieve paginated records
+	offset := (page - 1) * pageSize
+	err = db.Where("app_id = ? AND time_stamp BETWEEN ? AND ?", appID, startDate, endDate).
+		Order("time_stamp DESC").
+		Offset(offset).
+		Limit(pageSize).
+		Find(&proxyLogs).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return proxyLogs, totalCount, nil
+}

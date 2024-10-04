@@ -429,6 +429,8 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/vendor-usage", a.getVendorUsage)
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 
+	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
+
 	a.SetupWebSocketRoute(authed)
 }
 

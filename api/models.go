@@ -838,3 +838,29 @@ type CMessageResponse struct {
 		ChatID    uint      `json:"chat_id"`
 	} `json:"attributes"`
 }
+
+// ProxyLogResponse represents the response structure for a proxy log entry
+type ProxyLogResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		AppID        uint      `json:"app_id"`
+		UserID       uint      `json:"user_id"`
+		TimeStamp    time.Time `json:"time_stamp"`
+		Vendor       string    `json:"vendor"`
+		RequestBody  string    `json:"request_body"`
+		ResponseBody string    `json:"response_body"`
+		ResponseCode int       `json:"response_code"`
+	} `json:"attributes"`
+}
+
+// PaginatedProxyLogs represents the paginated response for proxy logs
+type PaginatedProxyLogs struct {
+	Data []ProxyLogResponse `json:"data"`
+	Meta struct {
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+		PageSize   int   `json:"page_size"`
+		PageNumber int   `json:"page_number"`
+	} `json:"meta"`
+}

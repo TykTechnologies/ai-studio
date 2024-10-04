@@ -220,6 +220,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reqBody, err := helpers.CopyRequestBody(r)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err)
+		return
+	}
+
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err)
 		return
@@ -268,12 +274,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		responseBody := capture.buffer.Bytes()
 		statusCode := capture.statusCode
 
-		p.analyzeResponse(llm, app, statusCode, responseBody, r)
+		p.analyzeResponse(llm, app, statusCode, responseBody, reqBody, r)
 	}(r)
 }
 
-func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) {
-	AnalyzeResponse(p.service, llm, app, statusCode, body, r)
+func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
+	AnalyzeResponse(p.service, llm, app, statusCode, reqBody, body, r)
 }
 
 func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
@@ -408,6 +414,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	reqBody, err := helpers.CopyRequestBody(r)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err)
+		return
+	}
+
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err)
 		return
@@ -496,12 +508,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), responses)
+		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses)
 	}
 }
 
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, chunks [][]byte) {
-	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, req, chunks)
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte) {
+	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, reqBody, req, chunks)
 }
 
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {

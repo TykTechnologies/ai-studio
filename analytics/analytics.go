@@ -46,6 +46,8 @@ type LLMChatLogEntry struct {
 	Response  string
 	Tokens    int
 	UserID    uint
+	ChatID    string
+	SessionID string
 }
 
 // records Tool Calls
@@ -58,11 +60,32 @@ type ToolCallRecord struct {
 	TimeStamp time.Time
 }
 
+type ProxyLog struct {
+	gorm.Model
+	ID           uint `gorm:"primaryKey"`
+	AppID        uint
+	UserID       uint
+	TimeStamp    time.Time
+	Vendor       string
+	RequestBody  string
+	ResponseBody string
+	ResponseCode int
+}
+
 var (
 	chatRecordChan chan *LLMChatRecord
 	logEntryChan   chan *LLMChatLogEntry
 	toolCallChan   chan *ToolCallRecord
+	proxyLogChan   chan *ProxyLog
 )
+
+func RecordProxyLog(log *ProxyLog) {
+	if !recStarted {
+		return
+	}
+
+	proxyLogChan <- log
+}
 
 func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
 	if !recStarted {
@@ -167,6 +190,7 @@ func RecordContentMessage(
 	chatLog.Response = strings.Join(responseParts, "\n")
 	chatLog.Tokens = promptTokens
 	chatLog.UserID = userID
+	chatLog.ChatID = chatID
 
 	recordChatRecord(rec)
 	recordChatLogEntry(chatLog)
@@ -207,7 +231,9 @@ func initDB(db *gorm.DB) {
 	err := db.AutoMigrate(
 		&LLMChatRecord{},
 		&LLMChatLogEntry{},
-		&ToolCallRecord{})
+		&ToolCallRecord{},
+		&ProxyLog{},
+	)
 
 	if err != nil {
 		slog.Warn("error migrating analytics tables", "error", err)
@@ -238,6 +264,7 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 	chatRecordChan = make(chan *LLMChatRecord, defaultBufferSize)
 	logEntryChan = make(chan *LLMChatLogEntry, defaultBufferSize)
 	toolCallChan = make(chan *ToolCallRecord, defaultBufferSize)
+	proxyLogChan = make(chan *ProxyLog, defaultBufferSize)
 
 	go func() {
 		for {
@@ -257,11 +284,17 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 				if err != nil {
 					slog.Warn("error creating tool call record", "error", err)
 				}
+			case proxyLog := <-proxyLogChan:
+				err := db.Create(proxyLog).Error
+				if err != nil {
+					slog.Warn("error creating proxy log", "error", err)
+				}
 			case <-ctx.Done():
 				slog.Info("shutting down analytics recording")
 				close(chatRecordChan)
 				close(logEntryChan)
 				close(toolCallChan)
+				close(proxyLogChan)
 				recStarted = false
 				return
 			}

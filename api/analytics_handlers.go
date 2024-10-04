@@ -656,3 +656,106 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 
 	c.JSON(http.StatusOK, costs)
 }
+
+// getProxyLogsForApp godoc
+// @Summary Get proxy logs for a specific app
+// @Description Get paginated proxy logs for a specific app
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param app_id query int true "App ID"
+// @Param page query int false "Page number (default: 1)"
+// @Param page_size query int false "Page size (default: 10)"
+// @Success 200 {object} PaginatedProxyLogs
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /analytics/proxy-logs-for-app [get]
+func (a *API) getProxyLogsForApp(c *gin.Context) {
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid app_id"}},
+		})
+		return
+	}
+
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+
+	logs, totalCount, err := analytics.GetProxyLogsForAppID(a.service.DB, startDate, endDate, uint(appID), page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get proxy logs for app"}},
+		})
+		return
+	}
+
+	totalPages := (totalCount + int64(pageSize) - 1) / int64(pageSize)
+
+	response := PaginatedProxyLogs{
+		Data: make([]ProxyLogResponse, len(logs)),
+		Meta: struct {
+			TotalCount int64 `json:"total_count"`
+			TotalPages int   `json:"total_pages"`
+			PageSize   int   `json:"page_size"`
+			PageNumber int   `json:"page_number"`
+		}{
+			TotalCount: totalCount,
+			TotalPages: int(totalPages),
+			PageSize:   pageSize,
+			PageNumber: page,
+		},
+	}
+
+	for i, log := range logs {
+		response.Data[i] = ProxyLogResponse{
+			Type: "proxy_log",
+			ID:   strconv.FormatUint(uint64(log.ID), 10),
+			Attributes: struct {
+				AppID        uint      `json:"app_id"`
+				UserID       uint      `json:"user_id"`
+				TimeStamp    time.Time `json:"time_stamp"`
+				Vendor       string    `json:"vendor"`
+				RequestBody  string    `json:"request_body"`
+				ResponseBody string    `json:"response_body"`
+				ResponseCode int       `json:"response_code"`
+			}{
+				AppID:        log.AppID,
+				UserID:       log.UserID,
+				TimeStamp:    log.TimeStamp,
+				Vendor:       log.Vendor,
+				RequestBody:  log.RequestBody,
+				ResponseBody: log.ResponseBody,
+				ResponseCode: log.ResponseCode,
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
