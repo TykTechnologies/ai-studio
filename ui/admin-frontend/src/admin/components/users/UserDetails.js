@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -13,6 +13,7 @@ import {
   TableRow,
   Grid,
   Button,
+  Link,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -25,39 +26,73 @@ import {
   StyledTableRow,
   StyledButton,
 } from "../../styles/sharedStyles";
+import PaginationControls from "../common/PaginationControls";
+import usePagination from "../../hooks/usePagination";
+import { Divider } from "@mui/material";
 
 const UserDetails = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userGroups, setUserGroups] = useState([]);
+  const [chatHistory, setChatHistory] = useState([]);
   const { id } = useParams();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchUserDetails();
-    fetchUserGroups();
-  }, [id]);
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
-  const fetchUserDetails = async () => {
+  const fetchUserDetails = useCallback(async () => {
     try {
       const response = await apiClient.get(`/users/${id}`);
       setUser(response.data.data);
     } catch (error) {
       console.error("Error fetching user details", error);
     }
-  };
+  }, [id]);
 
-  const fetchUserGroups = async () => {
-    setLoading(true);
+  const fetchUserGroups = useCallback(async () => {
     try {
       const response = await apiClient.get(`/users/${id}/groups`);
       setUserGroups(response.data.data || []);
     } catch (error) {
       console.error("Error fetching user groups", error);
+    }
+  }, [id]);
+
+  const fetchChatHistory = useCallback(async () => {
+    try {
+      const response = await apiClient.get(`/chat-history-records`, {
+        params: {
+          user_id: id,
+          page,
+          page_size: pageSize,
+        },
+      });
+      setChatHistory(response.data.data || []);
+      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
+      updatePaginationData(totalCount, totalPages);
+    } catch (error) {
+      console.error("Error fetching chat history", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, page, pageSize, updatePaginationData]);
+
+  useEffect(() => {
+    fetchUserDetails();
+    fetchUserGroups();
+  }, [fetchUserDetails, fetchUserGroups]);
+
+  useEffect(() => {
+    fetchChatHistory();
+  }, [fetchChatHistory]);
 
   if (!user) return <CircularProgress />;
 
@@ -110,6 +145,12 @@ const UserDetails = () => {
             Edit User
           </StyledButton>
         </Box>
+        <Divider />
+        <Box mt={4} mb={2}>
+          <Typography variant="h5" sx={{ color: "black" }}>
+            Group Membership
+          </Typography>
+        </Box>
         {loading ? (
           <CircularProgress />
         ) : (
@@ -117,11 +158,7 @@ const UserDetails = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>
-                    <Typography variant="h6" color="black">
-                      Group Memberships
-                    </Typography>
-                  </TableCell>
+                  <TableCell>Name</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -139,6 +176,59 @@ const UserDetails = () => {
               </TableBody>
             </Table>
           </TableContainer>
+        )}
+
+        <Box mt={4} mb={2}>
+          <Typography variant="h5" sx={{ color: "black" }}>
+            Chat History
+          </Typography>
+        </Box>
+        {loading ? (
+          <CircularProgress />
+        ) : (
+          <>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Chat ID</TableCell>
+                    <TableCell>Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {chatHistory.length > 0 ? (
+                    chatHistory.map((record) => (
+                      <StyledTableRow key={record.id}>
+                        <TableCell>{record.attributes.name}</TableCell>
+                        <TableCell>{record.attributes.chat_id}</TableCell>
+                        <TableCell>
+                          <RouterLink
+                            to={`/admin/users/${id}/chat-log/${record.attributes.session_id}`}
+                          >
+                            <Link variant="body2">View Chat Log</Link>
+                          </RouterLink>
+                        </TableCell>
+                      </StyledTableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={3}>
+                        No chat history records found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <PaginationControls
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </>
         )}
       </ContentBox>
     </StyledPaper>

@@ -100,3 +100,23 @@ func (s *Service) GetLatestChatHistoryRecord(userID uint) (*models.ChatHistoryRe
 func (s *Service) GetLastCMessagesForSession(sessionID string, limit int) ([]models.CMessage, error) {
 	return models.GetLastCMessagesForSession(s.DB, sessionID, limit)
 }
+
+// GetCMessagesForSessionPaginated retrieves CMessage records for a given session ID with pagination
+func (s *Service) GetCMessagesForSessionPaginated(sessionID string, pageSize, pageNumber int) ([]models.CMessage, int64, int, error) {
+	offset := (pageNumber - 1) * pageSize
+
+	var messages []models.CMessage
+	var totalCount int64
+
+	if err := s.DB.Model(&models.CMessage{}).Where("session = ?", sessionID).Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	if err := s.DB.Where("session = ?", sessionID).Order("created_at asc").Offset(offset).Limit(pageSize).Find(&messages).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int((totalCount + int64(pageSize) - 1) / int64(pageSize))
+
+	return messages, totalCount, totalPages, nil
+}

@@ -51,6 +51,7 @@ import AppForm from "./components/apps/AppForm";
 import ChatList from "./pages/ChatList";
 import ChatDetails from "./components/chats/ChatDetails";
 import ChatForm from "./components/chats/ChatForm";
+import UserMessageLog from "./components/users/UserMessageLog";
 
 import Dashboard from "./pages/Dashboard";
 
@@ -60,6 +61,7 @@ const adminRoutes = (
     <Route path="dashboard" element={<Dashboard />} />
     <Route path="users" element={<Users />} />
     <Route path="users/:id" element={<UserDetails />} />
+    <Route path="users/:id/chat-log/:sessionId" element={<UserMessageLog />} />
     <Route path="users/edit/:id" element={<UserForm />} />
     <Route path="users/new" element={<UserForm />} />
 

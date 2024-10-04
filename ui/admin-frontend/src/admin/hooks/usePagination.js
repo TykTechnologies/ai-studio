@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
-
-const usePagination = (initialPageSize = 10) => {
-  const [page, setPage] = useState(1);
+const usePagination = (initialPage = 1, initialPageSize = 10) => {
+  const [page, setPage] = useState(initialPage);
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);

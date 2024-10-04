@@ -16,6 +16,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
 
 import MainLayout from "./admin/components/layout/MainLayout";
+
 import Login from "./portal/pages/Login";
 import Register from "./portal/pages/Register";
 import ForgotPassword from "./portal/pages/ForgotPassword";

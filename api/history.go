@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
@@ -223,6 +224,10 @@ func (a *API) deleteChatHistoryRecord(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+type CMessageListResponse struct {
+	Data []CMessageResponse `json:"data"`
+}
+
 func serializeChatHistoryRecords(records []models.ChatHistoryRecord) []ChatHistoryRecordResponse {
 	result := make([]ChatHistoryRecordResponse, len(records))
 	for i, record := range records {
@@ -243,4 +248,60 @@ func serializeChatHistoryRecords(records []models.ChatHistoryRecord) []ChatHisto
 		}
 	}
 	return result
+}
+
+func serializeCMessages(messages []models.CMessage) []CMessageResponse {
+	result := make([]CMessageResponse, len(messages))
+	for i, msg := range messages {
+		result[i] = CMessageResponse{
+			Type: "cmessage",
+			ID:   strconv.FormatUint(uint64(msg.ID), 10),
+			Attributes: struct {
+				Session   string    `json:"session"`
+				Content   string    `json:"content"`
+				CreatedAt time.Time `json:"created_at"`
+				ChatID    uint      `json:"chat_id"`
+			}{
+				Session:   msg.Session,
+				Content:   string(msg.Content),
+				CreatedAt: msg.CreatedAt,
+				ChatID:    msg.ChatID,
+			},
+		}
+	}
+	return result
+}
+
+// getCMessagesForSession godoc
+// @Summary Get messages for a session
+// @Description Get paginated messages for a given session ID, ordered from oldest to newest
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param session_id path string true "Session ID"
+// @Param page query int false "Page number (default 1)"
+// @Param page_size query int false "Page size (default 10)"
+// @Success 200 {object} CMessageListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/sessions/{session_id}/messages [get]
+func (a *API) getCMessagesForSession(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	pageSize, pageNumber, _ := getPaginationParams(c)
+
+	messages, totalCount, totalPages, err := a.service.GetCMessagesForSessionPaginated(sessionID, pageSize, pageNumber)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	response := CMessageListResponse{Data: serializeCMessages(messages)}
+
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
+	c.JSON(http.StatusOK, response)
 }

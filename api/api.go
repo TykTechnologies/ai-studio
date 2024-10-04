@@ -407,6 +407,7 @@ func (a *API) setupRoutes() {
 
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
+	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)
 	v1.GET("/chat-history-records/:id", a.getChatHistoryRecord)
 	v1.GET("/chat-history-records", a.listChatHistoryRecords)
 	v1.DELETE("/chat-history-records/:id", a.deleteChatHistoryRecord)
