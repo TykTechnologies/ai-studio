@@ -1,0 +1,124 @@
+name: CI tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+env:
+  TYK_PMP_ANALYTICSSTORAGETYPE: redis
+  TYK_PMP_ANALYTICSSTORAGECONFIG_TYPE: redis
+  TYK_PMP_ANALYTICSSTORAGECONFIG_HOST: localhost
+  TYK_PMP_ANALYTICSSTORAGECONFIG_PORT: 6379
+
+jobs:
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Fetch base branch
+        if: ${{ github.event_name == 'pull_request' }}
+        run: git fetch origin ${{ github.base_ref }}
+      - name: golangci-lint
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --out-format=checkstyle:golanglint.xml --timeout=300s --max-issues-per-linter=0 --max-same-issues=0 --new-from-rev=origin/${{ github.base_ref }}
+      - uses: actions/upload-artifact@v3
+        with:
+          name: golangcilint
+          retention-days: 1
+          path: |
+            golanglint.xml
+  test:
+    name: Go ${{ matrix.go }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [1.23]
+
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Checkout langchaingo repository
+        uses: actions/checkout@v3
+        with:
+          repository: lonelycode/langchaingo
+          path: ..
+
+      - name: Setup Golang
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: "14"
+
+      - name: Install Dependencies and basic hygiene test
+        id: hygiene
+        run: |
+          go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Fetch base branch
+        if: ${{ github.event_name == 'pull_request' }}
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Check for UI changes
+        id: check_changes
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            ui:
+              - 'ui/**'
+
+      - name: Cache node modules
+        if: steps.check_changes.outputs.ui == 'true'
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/ui/**') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Install Dependencies
+        if: steps.check_changes.outputs.ui == 'true'
+        run: |
+          cd ui/admin-frontend
+          npm ci
+          cd ../..
+
+      - name: Build
+        if: steps.check_changes.outputs.ui == 'true'
+        run: |
+          cd ui/admin-frontend
+          npm run build
+          cd ../..
+
+      - name: Run Tests
+        id: ci-tests
+        run: |
+          cp .env.example .env
+          go test ./...
