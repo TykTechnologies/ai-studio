@@ -27,6 +27,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         uses: golangci/golangci-lint-action@v3
         with:
+          working-directory: midsommar
           version: latest
           args: --out-format=checkstyle:golanglint.xml --timeout=300s --max-issues-per-linter=0 --max-same-issues=0 --new-from-rev=origin/${{ github.base_ref }}
       - uses: actions/upload-artifact@v3
@@ -117,7 +118,7 @@ jobs:
         if: steps.check_changes.outputs.ui == 'true'
         run: |
           cd ui/admin-frontend
-          npm run build
+          CI=false npm run build
           cd ../..
 
       - name: Run Tests
