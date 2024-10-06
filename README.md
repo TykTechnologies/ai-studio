@@ -37,7 +37,8 @@ The App has two sections: the back-end and the UI. The back-end is written in Go
 
 All configuration is in the .env file in the root of the project, there is a smaple provided in the root of the project.
 
-To run the go server:
+To run the go server: 
+Note: make sure the frontend is built first, that ui/admin-frontend/build exists.
 
 ```bash
 cd midsommar
@@ -46,10 +47,19 @@ go build
 ./midsommar
 ```
 
+To build the Front end:
+
+```bash
+cd midsommar/ui/admin-frontend/src
+npm install
+npm build
+```
+
 To run the Front end:
 
 ```bash
 cd midsommar/ui/admin-frontend/src
+npm install
 npm start
 ```
 
