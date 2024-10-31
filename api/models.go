@@ -8,10 +8,12 @@ type UserInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Email    string `json:"email"`
-			Name     string `json:"name"`
-			Password string `json:"password,omitempty"`
-			IsAdmin  bool   `json:"is_admin"`
+			Email      string `json:"email"`
+			Name       string `json:"name"`
+			Password   string `json:"password,omitempty"`
+			IsAdmin    bool   `json:"is_admin"`
+			ShowChat   bool   `json:"show_chat"`
+			ShowPortal bool   `json:"show_portal"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -60,9 +62,11 @@ type UserResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email   string `json:"email"`
-		Name    string `json:"name"`
-		IsAdmin bool   `json:"is_admin"`
+		Email      string `json:"email"`
+		Name       string `json:"name"`
+		IsAdmin    bool   `json:"is_admin"`
+		ShowChat   bool   `json:"show_chat"`
+		ShowPortal bool   `json:"show_portal"`
 	} `json:"attributes"`
 }
 
@@ -782,9 +786,13 @@ type UserWithEntitlementsResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email        string `json:"email"`
-		Name         string `json:"name"`
-		IsAdmin      bool   `json:"is_admin"`
+		Email     string `json:"email"`
+		Name      string `json:"name"`
+		IsAdmin   bool   `json:"is_admin"`
+		UIOptions struct {
+			ShowChat   bool `json:"show_chat"`
+			ShowPortal bool `json:"show_portal"`
+		} `json:"ui_options"`
 		Entitlements struct {
 			Catalogues     []CatalogueResponse     `json:"catalogues"`
 			DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`

@@ -26,6 +26,8 @@ const PortalDashboard = () => {
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showChat, setShowChat] = useState(true);
+  const [showPortal, setShowPortal] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -44,6 +46,12 @@ const PortalDashboard = () => {
       setApps(appsResponse.data.data);
       setChatHistory(historyResponse.data.data);
       setChatRooms(chatRoomsResponse.data.attributes.entitlements.chats || []);
+      setShowChat(
+        chatRoomsResponse.data.attributes.ui_options?.show_chat ?? true,
+      );
+      setShowPortal(
+        chatRoomsResponse.data.attributes.ui_options?.show_portal ?? true,
+      );
       setTotalPages(
         parseInt(historyResponse.headers["x-total-pages"], 10) || 1,
       );
@@ -113,7 +121,27 @@ const PortalDashboard = () => {
           </Button>
         </Paper>
       )}
-      {chatRooms.length > 0 && (
+
+      {!showChat && showPortal && (
+        <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            Create and Manage AI Applications
+          </Typography>
+          <Typography variant="body1" paragraph>
+            Build custom AI applications with our powerful tools and services.
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={handleCreateApp}
+          >
+            Create a new App
+          </Button>
+        </Paper>
+      )}
+
+      {showChat && chatRooms.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Jump into a new chat...
@@ -165,7 +193,7 @@ const PortalDashboard = () => {
         </Box>
       )}
 
-      {chatHistory.length > 0 && (
+      {showChat && chatHistory.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Continue where you left off

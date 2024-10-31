@@ -18,12 +18,17 @@ type User struct {
 	EmailVerified     bool
 	VerificationToken string
 	IsAdmin           bool
+	ShowPortal        bool
+	ShowChat          bool
 }
 
 type Users []User
 
 func NewUser() *User {
-	return &User{}
+	return &User{
+		ShowPortal: true,
+		ShowChat:   true,
+	}
 }
 
 func (u *User) Get(db *gorm.DB, id uint) error {
