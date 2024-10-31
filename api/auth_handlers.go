@@ -370,9 +370,13 @@ func (a *API) handleMe(c *gin.Context) {
 		Type: "user",
 		ID:   strconv.Itoa(int(u.ID)),
 		Attributes: struct {
-			Email        string `json:"email"`
-			Name         string `json:"name"`
-			IsAdmin      bool   `json:"is_admin"`
+			Email     string `json:"email"`
+			Name      string `json:"name"`
+			IsAdmin   bool   `json:"is_admin"`
+			UIOptions struct {
+				ShowChat   bool `json:"show_chat"`
+				ShowPortal bool `json:"show_portal"`
+			} `json:"ui_options"`
 			Entitlements struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
 				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
@@ -383,6 +387,13 @@ func (a *API) handleMe(c *gin.Context) {
 			Email:   u.Email,
 			Name:    u.Name,
 			IsAdmin: u.IsAdmin,
+			UIOptions: struct {
+				ShowChat   bool `json:"show_chat"`
+				ShowPortal bool `json:"show_portal"`
+			}{
+				ShowChat:   u.ShowChat,
+				ShowPortal: u.ShowPortal,
+			},
 			Entitlements: struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
 				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
