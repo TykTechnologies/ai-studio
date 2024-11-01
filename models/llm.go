@@ -6,10 +6,11 @@ type Vendor string
 
 type LLM struct {
 	gorm.Model
-	ID          uint   `json:"id" gorm:"primary_key"`
-	Name        string `json:"name"`
-	APIKey      string `json:"api_key`
-	APIEndpoint string `json:"api_endpoint"` // The endpoint to actually access the LLM with Midsommar
+	ID           uint   `json:"id" gorm:"primary_key"`
+	Name         string `json:"name"`
+	APIKey       string `json:"api_key`
+	APIEndpoint  string `json:"api_endpoint"` // The endpoint to actually access the LLM with Midsommar
+	DefaultModel string `json:"default_model"`
 
 	PrivacyScore     int    `json:"privacy_score"`
 	ShortDescription string `json:"short_description"`

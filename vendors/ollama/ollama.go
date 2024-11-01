@@ -100,7 +100,9 @@ func setupOllamaDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 		opts = append(opts, ollama.WithServerURL(connDef.APIEndpoint))
 	}
 
-	opts = append(opts, ollama.WithModel(llmSettings.ModelName))
+	if llmSettings != nil {
+		opts = append(opts, ollama.WithModel(llmSettings.ModelName))
+	}
 
 	llm, err := ollama.New(opts...)
 	if err != nil {

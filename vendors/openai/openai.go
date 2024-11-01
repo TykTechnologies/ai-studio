@@ -179,7 +179,9 @@ func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 		opts = append(opts, openai.WithToken(connDef.APIKey))
 	}
 
-	opts = append(opts, openai.WithModel(llmSettings.ModelName))
+	if llmSettings != nil {
+		opts = append(opts, openai.WithModel(llmSettings.ModelName))
+	}
 
 	llm, err := openai.New(opts...)
 	if err != nil {

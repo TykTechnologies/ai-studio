@@ -170,7 +170,9 @@ func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) 
 		opts = append(opts, anthropic.WithToken(connDef.APIKey))
 	}
 
-	opts = append(opts, anthropic.WithModel(llmSettings.ModelName))
+	if llmSettings != nil {
+		opts = append(opts, anthropic.WithModel(llmSettings.ModelName))
+	}
 
 	llm, err := anthropic.New(opts...)
 	if err != nil {
