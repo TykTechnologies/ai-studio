@@ -103,7 +103,9 @@ func setupHuggingFaceDriver(connDef *models.LLM, llmSettings *models.LLMSettings
 		opts = append(opts, huggingface.WithToken(connDef.APIKey))
 	}
 
-	opts = append(opts, huggingface.WithModel(llmSettings.ModelName))
+	if llmSettings != nil {
+		opts = append(opts, huggingface.WithModel(llmSettings.ModelName))
+	}
 
 	llm, err := huggingface.New(opts...)
 	if err != nil {

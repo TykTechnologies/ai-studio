@@ -100,6 +100,7 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 				Vendor           string           `json:"vendor"`
 				Active           bool             `json:"active"`
 				Filters          []FilterResponse `json:"filters"`
+				DefaultModel     string           `json:"default_model"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -108,6 +109,7 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 				LogoURL:          llm.LogoURL,
 				Vendor:           string(llm.Vendor),
 				Active:           llm.Active,
+				DefaultModel:     llm.DefaultModel,
 			},
 		}
 	}
@@ -685,6 +687,7 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 				Vendor           string           `json:"vendor"`
 				Active           bool             `json:"active"`
 				Filters          []FilterResponse `json:"filters"`
+				DefaultModel     string           `json:"default_model"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -693,6 +696,7 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 				LogoURL:          llm.LogoURL,
 				Vendor:           string(llm.Vendor),
 				Active:           llm.Active,
+				DefaultModel:     llm.DefaultModel,
 			},
 		}
 	}

@@ -64,6 +64,7 @@ func main() {
 		stream, err := client.CreateChatCompletionStream(
 			context.Background(),
 			openai.ChatCompletionRequest{
+				Temperature:   0.1,
 				StreamOptions: &openai.StreamOptions{IncludeUsage: true},
 				Model:         *modelName,
 				Messages: []openai.ChatCompletionMessage{

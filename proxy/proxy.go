@@ -157,6 +157,11 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST")
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
+	// This is the translation endpoint
+	ai := r.PathPrefix("/ai").Subrouter()
+	ai.HandleFunc("/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+	ai.HandleFunc("/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
+
 	return p.outboundRequestMiddleware(p.credValidator.Middleware(r))
 }
 
@@ -190,6 +195,7 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error) {
+	slog.Error("api client error", "message", message, "status", status, "error", err)
 	response := ErrorResponse{
 		Status:  status,
 		Message: message,
@@ -197,6 +203,31 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 
 	if err != nil {
 		response.Error = err.Error()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error sending error response: %v", err)
+	}
+}
+
+func respondWithOAIError(w http.ResponseWriter, status int, message string, err error) {
+	httpStatus := http.StatusText(status)
+	APIError := &APIError{
+		Code:           status,
+		Message:        message,
+		HTTPStatus:     httpStatus,
+		HTTPStatusCode: status,
+	}
+
+	response := OAIErrorResponse{
+		Error: APIError,
+	}
+
+	if err != nil {
+		response.Error.Message = fmt.Sprintf("[ERROR] msg: %s err: %s", message, err.Error())
 	}
 
 	w.Header().Set("Content-Type", "application/json")

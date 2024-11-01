@@ -104,6 +104,7 @@ type LLMInput struct {
 			Vendor           string `json:"vendor"`
 			Active           bool   `json:"active"`
 			Filters          []int  `json:"filters"`
+			DefaultModel     string `json:"default_model"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -124,6 +125,7 @@ type LLMResponse struct {
 		Vendor           string           `json:"vendor"`
 		Active           bool             `json:"active"`
 		Filters          []FilterResponse `json:"filters"`
+		DefaultModel     string           `json:"default_model"`
 	} `json:"attributes"`
 }
 
