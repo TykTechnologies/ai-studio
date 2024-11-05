@@ -9,6 +9,9 @@ spec:
     - port: {{ .port }}
       targetPort: {{ .targetPort }}
       name: {{ .name }}
+      {{- if and (eq $.Values.midsommar.service.type "NodePort") (.nodePort) }}
+      nodePort: {{ .nodePort }}
+      {{- end }}
     {{- end }}
   selector:
     {{- include "midsommar.selectorLabels" . | nindent 4 }}

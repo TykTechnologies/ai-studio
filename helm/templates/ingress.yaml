@@ -4,12 +4,15 @@ kind: Ingress
 metadata:
   name: {{ include "midsommar.fullname" . }}
   annotations:
+    {{- if .Values.midsommar.ingress.certificateEnabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.midsommar.ingress.certManager.issuer }}
+    {{- end }}
     {{- with .Values.midsommar.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   ingressClassName: {{ .Values.midsommar.ingress.className }}
-  {{- if .Values.midsommar.ingress.tls }}
+  {{- if and .Values.midsommar.ingress.tls .Values.midsommar.ingress.certificateEnabled }}
   tls:
     {{- range .Values.midsommar.ingress.tls }}
     - hosts:
