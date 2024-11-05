@@ -874,3 +874,9 @@ type PaginatedProxyLogs struct {
 		PageNumber int   `json:"page_number"`
 	} `json:"meta"`
 }
+
+type FrontendConfig struct {
+	APIBaseURL    string `json:"API_BASE_URL"`
+	WebsocketHost string `json:"WEBSOCKET_HOST"`
+	// Add other configuration values as needed
+}

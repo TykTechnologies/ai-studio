@@ -3,9 +3,12 @@ package api
 import (
 	"crypto/rand"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -205,6 +208,7 @@ func (a *API) setupRoutes() {
 	public.POST("/auth/reset-password", a.handleResetPassword)
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
+	public.GET("/config", a.handleGetConfig)
 
 	// routes for portal users
 	authed := public.Group("/common")
@@ -478,4 +482,36 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 
 func (a *API) GetUserID() uint {
 	return 0
+}
+
+func (a *API) handleGetConfig(c *gin.Context) {
+	// Get the request protocol and host
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+
+	host := c.Request.Host
+	siteURLVar := os.Getenv("SITE_URL")
+	if siteURLVar != "" {
+		asURL, err := url.Parse(siteURLVar)
+		if err == nil {
+			host = asURL.Host
+		}
+	}
+
+	// Construct the base URLs
+	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
+	websocketScheme := "ws"
+	if scheme == "https" {
+		websocketScheme = "wss"
+	}
+	websocketHost := fmt.Sprintf("%s://%s", websocketScheme, host)
+
+	config := FrontendConfig{
+		APIBaseURL:    apiBaseURL,
+		WebsocketHost: websocketHost,
+	}
+
+	c.JSON(http.StatusOK, config)
 }
