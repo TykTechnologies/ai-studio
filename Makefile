@@ -20,6 +20,12 @@ build-admin-frontend:
 		echo "Admin frontend build already exists. Use FORCE_BUILD=true to rebuild."; \
 	fi
 
+# Build admin frontend
+build-admin-frontend-clean:
+	cd ui/admin-frontend && \
+	npm install && \
+	npm run build
+
 # Build Golang
 build-golang:
 	go build
@@ -31,6 +37,7 @@ test: build-admin-frontend
 # Clean target
 clean:
 	rm -rf $(ADMIN_FRONTEND_DIR)/build
+	rm -f midsommar
 
 # Start frontend development mode
 start-frontend:

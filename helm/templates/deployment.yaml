@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "midsommar.fullname" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "midsommar.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "midsommar.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: midsommar
+          image: "{{ .Values.midsommar.image.repository }}:{{ .Values.midsommar.image.tag }}"
+          imagePullPolicy: {{ .Values.midsommar.image.pullPolicy }}
+          env:
+            - name: DATABASE_URL
+              value: postgres://{{ .Values.postgres.auth.username }}:{{ .Values.postgres.auth.password }}@{{ include "midsommar.fullname" . }}-postgres:{{ .Values.postgres.service.port }}/{{ .Values.postgres.auth.database }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.config.databaseType }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/.env
+              subPath: .env
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "midsommar.fullname" . }}-config
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "midsommar.fullname" . }}-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.auth.username }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgres.auth.password }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.auth.database }}

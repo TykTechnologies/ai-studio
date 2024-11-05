@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "midsommar.fullname" . }}
+spec:
+  type: {{ .Values.midsommar.service.type }}
+  ports:
+    {{- range .Values.midsommar.service.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      name: {{ .name }}
+    {{- end }}
+  selector:
+    {{- include "midsommar.selectorLabels" . | nindent 4 }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "midsommar.fullname" . }}-postgres
+spec:
+  type: {{ .Values.postgres.service.type }}
+  ports:
+    - port: {{ .Values.postgres.service.port }}
+      targetPort: 5432
+  selector:
+    app: postgres
