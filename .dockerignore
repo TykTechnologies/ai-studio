@@ -1,0 +1,10 @@
+ui/admin-frontend/node_modules
+tools
+utils
+ci
+docs
+.env
+*.db
+.aider*
+.zed
+.github*
