@@ -1,0 +1,29 @@
+midsommar:
+  ingress:
+    enabled: false # Disable ingress since we're using direct port access
+
+  service:
+    type: NodePort # Change to NodePort to expose ports directly
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+        nodePort: 32580
+      - name: gateway
+        port: 9090
+        targetPort: 9090
+        nodePort: 32590
+
+config:
+  allowRegistrations: "true"
+  adminEmail: "admin@localhost"
+  siteUrl: "http://localhost:32580" # Using the NodePort
+  fromEmail: "noreply@localhost"
+  devMode: "true" # Set to true for local development
+  databaseType: "postgres"
+
+postgres:
+  auth:
+    username: postgres
+    password: "localdev123" # Local development password
+    database: midsommar

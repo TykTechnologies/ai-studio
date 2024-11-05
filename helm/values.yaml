@@ -18,9 +18,11 @@ midsommar:
   # Ingress configuration
   ingress:
     enabled: true
+    certificateEnabled: true # New field to control certificate usage
     className: nginx
+    certManager: # New section for cert-manager specific config
+      issuer: letsencrypt-prod
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
       kubernetes.io/ingress.class: nginx
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       nginx.ingress.kubernetes.io/proxy-body-size: "50m"

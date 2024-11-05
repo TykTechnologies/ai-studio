@@ -1,0 +1,39 @@
+midsommar:
+  ingress:
+    enabled: true
+    certificateEnabled: true
+    className: nginx
+    certManager:
+      issuer: letsencrypt-prod
+    hosts:
+      - host: app.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 8080
+      - host: gateway.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 9090
+    tls:
+      - secretName: app-tls-secret
+        hosts:
+          - app.example.com
+      - secretName: gateway-tls-secret
+        hosts:
+          - gateway.example.com
+
+config:
+  allowRegistrations: "true"
+  adminEmail: "admin@example.com"
+  siteUrl: "https://app.example.com"
+  fromEmail: "noreply@example.com"
+  devMode: "false"
+  databaseType: "postgres"
+
+postgres:
+  auth:
+    username: postgres
+    password: "your-secure-password-here" # Change this!
+    database: midsommar
