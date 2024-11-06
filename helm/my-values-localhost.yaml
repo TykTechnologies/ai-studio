@@ -21,6 +21,7 @@ config:
   fromEmail: "noreply@localhost"
   devMode: "true" # Set to true for local development
   databaseType: "postgres"
+  filterSignupDomains: "tyk.io"
 
 postgres:
   auth:

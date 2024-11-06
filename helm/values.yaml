@@ -93,6 +93,7 @@ config:
   fromEmail: "noreply@tyk.io"
   devMode: "false"
   databaseType: "postgres"
+  filterSignupDomains: ""
 
 # Global configuration
 global:
