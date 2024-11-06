@@ -19,13 +19,14 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import config from "../../config";
+
 import FloatingSection from "./FloatingSection";
 import { useDropzone } from "react-dropzone";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import pubClient from "../../admin/utils/pubClient";
 import TextareaAutosize from "@mui/material/TextareaAutosize";
+import { getConfig } from "../../config"; // Update the import
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -260,7 +261,8 @@ const ChatView = () => {
     const searchParams = new URLSearchParams(location.search);
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
-    const wsUrl = `${config.API_BASE_URL}/common/ws/chat/${chatId}${
+    const currentConfig = getConfig();
+    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${
       sessionId ? `?session_id=${sessionId}` : ""
     }`;
 

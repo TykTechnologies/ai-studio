@@ -21,6 +21,8 @@ import portalRoutes from "./portal/routes";
 import ResetPassword from "./portal/pages/ResetPassword";
 import PortalLayout from "./portal/layouts/PortalLayout";
 import { loadConfig } from "./config";
+import { reinitializeApiClient } from "./admin/utils/apiClient";
+import { reinitializePubClient } from "./admin/utils/pubClient";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -34,6 +36,8 @@ function App() {
       try {
         // Load configuration first
         await loadConfig();
+        reinitializeApiClient();
+        reinitializePubClient();
         setConfigLoaded(true);
 
         // Then check authentication

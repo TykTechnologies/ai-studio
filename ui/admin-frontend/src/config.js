@@ -1,6 +1,6 @@
-let config = {
-  API_BASE_URL: "http://localhost:8080", // Default fallback values
-  WEBSOCKET_HOST: "ws://localhost:8080",
+export let config = {
+  API_BASE_URL: `${window.location.protocol}//${window.location.host}`, // Uses current window host
+  WEBSOCKET_HOST: `ws${window.location.protocol === "https:" ? "s" : ""}://${window.location.host}`,
 };
 
 export const loadConfig = async () => {
@@ -19,4 +19,4 @@ export const loadConfig = async () => {
   return config;
 };
 
-export default config;
+export const getConfig = () => config;

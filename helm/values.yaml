@@ -2,7 +2,7 @@ midsommar:
   image:
     repository: tykio/midsommar
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   # Service configuration
   service:
