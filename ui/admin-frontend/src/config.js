@@ -1,5 +1,9 @@
+const isDev = process.env.NODE_ENV === "development";
+const getHost = () => (isDev ? "localhost:8080" : `${window.location.host}`);
+const getProtocol = () => (isDev ? "http:" : window.location.protocol);
+
 export let config = {
-  API_BASE_URL: `${window.location.protocol}//${window.location.host}`, // Uses current window host
+  API_BASE_URL: `${getProtocol()}//${getHost()}`, // Uses current window host
   WEBSOCKET_HOST: `ws${window.location.protocol === "https:" ? "s" : ""}://${window.location.host}`,
 };
 

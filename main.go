@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"gorm.io/driver/postgres"
 
 	"context"
@@ -29,20 +31,21 @@ import (
 var staticFiles embed.FS
 
 type AppConf struct {
-	SMTPServer         string
-	SMTPPort           int
-	SMTPUser           string
-	SMTPPass           string
-	FromEmail          string
-	AllowRegistrations bool
-	AdminEmail         string
-	SiteURL            string
-	ServerPort         string
-	CertFile           string
-	KeyFile            string
-	DisableCors        bool
-	DatabaseURL        string
-	DatabaseType       string
+	SMTPServer          string
+	SMTPPort            int
+	SMTPUser            string
+	SMTPPass            string
+	FromEmail           string
+	AllowRegistrations  bool
+	AdminEmail          string
+	SiteURL             string
+	ServerPort          string
+	CertFile            string
+	KeyFile             string
+	DisableCors         bool
+	DatabaseURL         string
+	DatabaseType        string
+	FilterSignupDomains []string
 }
 
 func GetConfigFromEnv() *AppConf {
@@ -139,6 +142,12 @@ func GetConfigFromEnv() *AppConf {
 		log.Fatalf("Unsupported DATABASE_TYPE: %s. Supported types are 'sqlite' and 'postgres'", conf.DatabaseType)
 	}
 
+	filterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")
+	if filterDomains != "" {
+		conf.FilterSignupDomains = strings.Split(filterDomains, ",")
+		log.Println("Filtering signup domains to:", conf.FilterSignupDomains)
+	}
+
 	return conf
 }
 
@@ -187,26 +196,27 @@ func main() {
 	service := services.NewService(db)
 
 	config := &auth.Config{
-		DB:                  db,
-		Service:             service,
-		CookieName:          "session",
-		CookieSecure:        true,
-		CookieHTTPOnly:      true,
-		CookieSameSite:      http.SameSiteStrictMode,
-		ResetTokenExpiry:    time.Hour,
-		FrontendURL:         appConf.SiteURL,
-		RegistrationAllowed: appConf.AllowRegistrations,
-		AdminEmail:          appConf.AdminEmail,
-		FromEmail:           appConf.FromEmail,
-		TestMode:            false,
-		SMTPPort:            appConf.SMTPPort,
-		SMTPHost:            appConf.SMTPServer,
-		SMTPUsername:        appConf.SMTPUser,
-		SMTPPassword:        appConf.SMTPPass,
+		DB:                     db,
+		Service:                service,
+		CookieName:             "session",
+		CookieSecure:           true,
+		CookieHTTPOnly:         true,
+		CookieSameSite:         http.SameSiteStrictMode,
+		ResetTokenExpiry:       time.Hour,
+		FrontendURL:            appConf.SiteURL,
+		RegistrationAllowed:    appConf.AllowRegistrations,
+		AdminEmail:             appConf.AdminEmail,
+		FromEmail:              appConf.FromEmail,
+		TestMode:               false,
+		SMTPPort:               appConf.SMTPPort,
+		SMTPHost:               appConf.SMTPServer,
+		SMTPUsername:           appConf.SMTPUser,
+		SMTPPassword:           appConf.SMTPPass,
+		AllowedRegisterDomains: appConf.FilterSignupDomains,
 	}
 
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
-	authService := auth.NewAuthService(config, mailer)
+	authService := auth.NewAuthService(config, mailer, service)
 
 	// analytics
 	ctx, stopRec := context.WithCancel(context.Background())

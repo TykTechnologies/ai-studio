@@ -10,5 +10,4 @@ data:
     FROM_EMAIL={{ .Values.config.fromEmail }}
     DEVMODE={{ .Values.config.devMode }}
     DATABASE_TYPE={{ .Values.config.databaseType }}
-    REACT_APP_API_BASE_URL={{ .Values.config.reactAppApiBaseUrl }}
-    REACT_APP_WEBSOCKET_HOST={{ .Values.config.reactAppWebsocketHost }}
+    FILTER_SIGNUP_DOMAINS={{ .Values.config.filterSignupDomains }}

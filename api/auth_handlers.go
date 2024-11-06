@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -225,7 +226,8 @@ func (a *API) handleVerifyEmail(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
+	emailVerifiedHandler(c.Writer, c.Request)
+	return
 }
 
 // @Summary Resend verification email
@@ -418,4 +420,46 @@ func mapToSlice[T any](m map[uint]T) []T {
 		slice = append(slice, v)
 	}
 	return slice
+}
+
+func emailVerifiedHandler(w http.ResponseWriter, r *http.Request) {
+	// HTML content with auto-redirect
+	html := `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Verification</title>
+    <meta http-equiv="refresh" content="3;url=/">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .message {
+            text-align: center;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="message">
+        <h1>Email Verified</h1>
+        <p>Redirecting to homepage...</p>
+    </div>
+</body>
+</html>`
+
+	// Set content type to HTML
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Write the HTML content
+	fmt.Fprint(w, html)
 }

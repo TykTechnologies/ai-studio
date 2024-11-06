@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 	"text/template"
 	"time"
 
@@ -39,17 +40,19 @@ type Config struct {
 	ResetTokenExpiry time.Duration
 	FrontendURL      string
 
-	CookieHTTPOnly      bool
-	CookieSameSite      http.SameSite
-	RegistrationAllowed bool
-	AdminEmail          string
-	FromEmail           string
-	SMTPHost            string
-	SMTPPort            int
-	SMTPUsername        string
-	SMTPPassword        string
-	TestMode            bool
+	CookieHTTPOnly         bool
+	CookieSameSite         http.SameSite
+	RegistrationAllowed    bool
+	AdminEmail             string
+	FromEmail              string
+	SMTPHost               string
+	SMTPPort               int
+	SMTPUsername           string
+	SMTPPassword           string
+	TestMode               bool
+	AllowedRegisterDomains []string
 }
+
 type AuthService struct {
 	Config     *Config
 	DB         *gorm.DB
@@ -58,10 +61,11 @@ type AuthService struct {
 	Mailer     Mailer
 }
 
-func NewAuthService(config *Config, mailer Mailer) *AuthService {
+func NewAuthService(config *Config, mailer Mailer, service *services.Service) *AuthService {
 	return &AuthService{
-		Config: config,
-		Mailer: mailer,
+		Config:  config,
+		Mailer:  mailer,
+		Service: service,
 	}
 }
 
@@ -161,6 +165,31 @@ func (a *AuthService) Register(email, name, password string) error {
 		return errors.New("registration is currently disabled")
 	}
 
+	if len(a.Config.AllowedRegisterDomains) > 0 {
+		parts := strings.Split(email, "@")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid email address")
+		}
+
+		domain := strings.Replace(parts[1], "@", "", 1)
+		cont := false
+		for _, allowed := range a.Config.AllowedRegisterDomains {
+			if strings.ToLower(domain) == strings.ToLower(allowed) {
+				cont = true
+				break
+			}
+		}
+
+		if !cont {
+			return fmt.Errorf("registration is not permitted")
+		}
+	}
+
+	existing, _ := a.Service.GetUserByEmail(email)
+	if existing != nil {
+		return errors.New("email already in use, please log in or reset password")
+	}
+
 	// Ensure default group exists
 	defaultGroup, err := a.getDefaultGroup()
 	if err != nil {
@@ -201,10 +230,16 @@ func (a *AuthService) Register(email, name, password string) error {
 	}
 
 	user := &models.User{
-		Email:    email,
-		Name:     name,
-		Password: string(hashedPassword),
-		IsAdmin:  count == 0, // Set as admin if this is the first user
+		Email:      email,
+		Name:       name,
+		Password:   string(hashedPassword),
+		ShowPortal: true,
+		ShowChat:   true,
+	}
+
+	if count == 0 {
+		user.IsAdmin = true
+		user.EmailVerified = true
 	}
 
 	if err := user.Create(a.Config.DB); err != nil {
@@ -220,9 +255,9 @@ func (a *AuthService) Register(email, name, password string) error {
 		return fmt.Errorf("failed to add user to default group: %w", err)
 	}
 
-	// if err := a.sendVerificationEmail(user); err != nil {
-	// 	return fmt.Errorf("failed to send verification email: %w", err)
-	// }
+	if err := a.sendVerificationEmail(user); err != nil {
+		return fmt.Errorf("failed to send verification email: %w", err)
+	}
 
 	if err := a.notifyAdmin(user); err != nil {
 		// Log the error, but don't return it to prevent leaking information
@@ -310,7 +345,7 @@ func (a *AuthService) sendVerificationEmail(user *models.User) error {
 		return err
 	}
 
-	verificationLink := fmt.Sprintf("https://yourdomain.com/verify-email?token=%s", verificationToken)
+	verificationLink := fmt.Sprintf("%s/auth/verify-email?token=%s", a.Config.FrontendURL, verificationToken)
 	emailBody := fmt.Sprintf("Click the following link to verify your email: %s", verificationLink)
 
 	return a.SendEmail(user.Email, "Email Verification", emailBody)

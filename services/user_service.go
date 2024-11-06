@@ -80,6 +80,10 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 		return nil, errors.New("invalid password")
 	}
 
+	if !user.EmailVerified {
+		return nil, errors.New("email not verified")
+	}
+
 	return user, nil
 }
 
