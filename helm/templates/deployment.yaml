@@ -10,6 +10,7 @@ spec:
   template:
     metadata:
       labels:
+        date: "{{ now | unixEpoch }}"
         {{- include "midsommar.selectorLabels" . | nindent 8 }}
     spec:
       containers:
