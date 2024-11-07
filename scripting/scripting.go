@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/scriptExtensions"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/d5/tengo/v2"
 	"github.com/d5/tengo/v2/stdlib"
 )
@@ -20,12 +21,12 @@ func NewScriptRunner(source []byte) *ScriptRunner {
 	}
 }
 
-func (sr *ScriptRunner) RunFilter(payload string) error {
+func (sr *ScriptRunner) RunFilter(payload string, serviceRef services.ServiceInterface) error {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
 	script := tengo.NewScript(sr.source)
-	customModules := scriptExtensions.GetModules()
+	customModules := scriptExtensions.GetModules(serviceRef)
 	stdModules := stdlib.GetModuleMap(stdlib.AllModuleNames()...)
 	stdModules.AddBuiltinModule("tyk", customModules)
 	script.SetImports(stdModules)
@@ -62,7 +63,7 @@ func (sr *ScriptRunner) RunFilter(payload string) error {
 	return nil
 }
 
-func RunFilter(sourceCode string, payload string) error {
+func RunFilter(sourceCode string, payload string, svcRef services.ServiceInterface) error {
 	runner := NewScriptRunner([]byte(sourceCode))
-	return runner.RunFilter(payload)
+	return runner.RunFilter(payload, svcRef)
 }

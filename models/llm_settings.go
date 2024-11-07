@@ -1,6 +1,11 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"context"
+
+	"github.com/tmc/langchaingo/llms"
+	"gorm.io/gorm"
+)
 
 type LLMSettings struct {
 	gorm.Model
@@ -76,4 +81,47 @@ func (ls *LLMSettings) GetByModel(db *gorm.DB, model string) error {
 // Search LLMSettings by Model name stub
 func (ls *LLMSettingsSlice) SearchByModelStub(db *gorm.DB, modelStub string) error {
 	return db.Where("model_name LIKE ?", modelStub+"%").Find(ls).Error
+}
+
+func (ls *LLMSettings) GenerateOptionsFromSettings(tools []llms.Tool, mode string, streamingFunc func(ctx context.Context, chunk []byte) error) []llms.CallOption {
+	var callOptions = make([]llms.CallOption, 0)
+
+	if ls.MaxLength > 0 {
+		callOptions = append(callOptions, llms.WithMaxLength(ls.MaxLength))
+	}
+	if ls.MaxTokens > 0 {
+		callOptions = append(callOptions, llms.WithMaxTokens(ls.MaxTokens))
+	}
+	if ls.MinLength > 0 {
+		callOptions = append(callOptions, llms.WithMinLength(ls.MinLength))
+	}
+
+	if ls.RepetitionPenalty > 0 {
+		callOptions = append(callOptions, llms.WithRepetitionPenalty(ls.RepetitionPenalty))
+	}
+	if ls.Seed > 0 {
+		callOptions = append(callOptions, llms.WithSeed(ls.Seed))
+	}
+	if len(ls.StopWords) > 0 {
+		callOptions = append(callOptions, llms.WithStopWords(ls.StopWords))
+	}
+	if ls.Temperature > 0 {
+		callOptions = append(callOptions, llms.WithTemperature(ls.Temperature))
+	}
+	if ls.TopK > 0 {
+		callOptions = append(callOptions, llms.WithTopK(ls.TopK))
+	}
+	if ls.TopP > 0 {
+		callOptions = append(callOptions, llms.WithTopP(ls.TopP))
+	}
+
+	if mode == "stream" {
+		callOptions = append(callOptions, llms.WithStreamingFunc(streamingFunc))
+	}
+
+	if len(tools) > 0 {
+		callOptions = append(callOptions, llms.WithTools(tools))
+	}
+
+	return callOptions
 }

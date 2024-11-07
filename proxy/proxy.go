@@ -183,7 +183,7 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 
 		for _, filter := range p.filters {
 			runner := scripting.NewScriptRunner(filter.Script)
-			err := runner.RunFilter(string(bodyBytes))
+			err := runner.RunFilter(string(bodyBytes), p.service)
 			if err != nil {
 				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Policy error: %s", filter.Name), nil)
 				return
@@ -417,7 +417,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 
 	for _, filter := range llm.Filters {
 		runner := scripting.NewScriptRunner(filter.Script)
-		err := runner.RunFilter(string(bodyBytes))
+		err := runner.RunFilter(string(bodyBytes), p.service)
 		if err != nil {
 			return fmt.Errorf("Policy error: %s", filter.Name)
 		}
