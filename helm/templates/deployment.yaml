@@ -18,19 +18,35 @@ spec:
           image: "{{ .Values.midsommar.image.repository }}:{{ .Values.midsommar.image.tag }}"
           imagePullPolicy: {{ .Values.midsommar.image.pullPolicy }}
           env:
-            - name: DATABASE_URL
-              value: postgres://{{ .Values.postgres.auth.username }}:{{ .Values.postgres.auth.password }}@{{ include "midsommar.fullname" . }}-postgres:{{ .Values.postgres.service.port }}/{{ .Values.postgres.auth.database }}
             - name: DATABASE_TYPE
               value: {{ .Values.config.databaseType }}
+            - name: DATABASE_URL
+              value: {{ default (printf "postgres://%s:%s@%s:%v/%s"
+                (required "database.user is required" .Values.database.user)
+                (required "database.password is required" .Values.database.password)
+                (default (printf "%s-postgres" (include "midsommar.fullname" .)) .Values.database.host)
+                (default 5432 .Values.database.port)
+                (default "midsommar" .Values.database.name))
+                .Values.database.url }}
           volumeMounts:
             - name: config
               mountPath: /app/.env
               subPath: .env
+            {{- if .Values.config.smtpPass }}
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
+            {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ include "midsommar.fullname" . }}-config
-
+        {{- if .Values.config.smtpPass }}
+        - name: secrets
+          secret:
+            secretName: {{ include "midsommar.fullname" . }}-secrets
+        {{- end }}
+{{- if .Values.database.internal }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,8 +68,24 @@ spec:
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
           env:
             - name: POSTGRES_USER
-              value: {{ .Values.postgres.auth.username }}
+              value: {{ .Values.database.user }}
             - name: POSTGRES_PASSWORD
-              value: {{ .Values.postgres.auth.password }}
+              value: {{ .Values.database.password }}
             - name: POSTGRES_DB
-              value: {{ .Values.postgres.auth.database }}
+              value: {{ .Values.database.name }}
+          {{- if .Values.postgres.resources }}
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          {{- end }}
+          {{- if .Values.postgres.persistence.enabled }}
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          {{- end }}
+      {{- if .Values.postgres.persistence.enabled }}
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: {{ include "midsommar.fullname" . }}-postgres-pvc
+      {{- end }}
+{{- end }}

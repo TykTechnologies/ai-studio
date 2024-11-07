@@ -1,0 +1,21 @@
+enabled: false # Disabled by default
+
+image:
+  repository: midsommar/reranker
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Deployment configuration
+replicaCount: 1

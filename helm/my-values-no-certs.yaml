@@ -23,8 +23,18 @@ config:
   devMode: "false"
   databaseType: "postgres"
 
-postgres:
-  auth:
-    username: postgres
-    password: "your-secure-password-here" # Change this!
-    database: midsommar
+# External database configuration
+database:
+  internal: false
+  host: "your-external-postgres-host"
+  port: 5432
+  name: "midsommar"
+  user: "your-db-user"
+  password: "your-secure-password-here"
+
+# Optional services (disabled by default)
+reranker:
+  enabled: false
+
+transformer-server:
+  enabled: false

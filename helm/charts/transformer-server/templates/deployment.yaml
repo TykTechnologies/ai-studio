@@ -1,0 +1,24 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-transformer
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: transformer
+  template:
+    metadata:
+      labels:
+        app: transformer
+    spec:
+      containers:
+        - name: transformer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

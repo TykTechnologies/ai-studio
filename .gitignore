@@ -8,3 +8,6 @@ utils/transformer-host/server
 utils/proxy-tests/openai/openai
 utils/proxy-tests/anthropic/anthropic
 utils/proxy-tests/vertex/vertex
+tmp/
+venv
+extra/reranker/reranker
