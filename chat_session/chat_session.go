@@ -105,7 +105,7 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 	for i, _ := range withFilters {
 		sr := scripting.NewScriptRunner(withFilters[i].Script)
 		asFunc := func(m *models.UserMessage) error {
-			return sr.RunFilter(m.Payload)
+			return sr.RunFilter(m.Payload, cs.service)
 		}
 
 		preProcessors = append(preProcessors, asFunc)
@@ -382,7 +382,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					continue
 				}
 
-				if err := sr.RunFilter(content); err != nil {
+				if err := sr.RunFilter(content, cs.service); err != nil {
 					return fmt.Sprintf("filter denied content in %s", refs[i]), false
 				}
 			}
@@ -790,46 +790,7 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 }
 
 func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings, tools []llms.Tool) []llms.CallOption {
-	var callOptions = make([]llms.CallOption, 0)
-
-	if llmSettings.MaxLength > 0 {
-		callOptions = append(callOptions, llms.WithMaxLength(llmSettings.MaxLength))
-	}
-	if llmSettings.MaxTokens > 0 {
-		callOptions = append(callOptions, llms.WithMaxTokens(llmSettings.MaxTokens))
-	}
-	if llmSettings.MinLength > 0 {
-		callOptions = append(callOptions, llms.WithMinLength(llmSettings.MinLength))
-	}
-
-	if llmSettings.RepetitionPenalty > 0 {
-		callOptions = append(callOptions, llms.WithRepetitionPenalty(llmSettings.RepetitionPenalty))
-	}
-	if llmSettings.Seed > 0 {
-		callOptions = append(callOptions, llms.WithSeed(llmSettings.Seed))
-	}
-	if len(llmSettings.StopWords) > 0 {
-		callOptions = append(callOptions, llms.WithStopWords(llmSettings.StopWords))
-	}
-	if llmSettings.Temperature > 0 {
-		callOptions = append(callOptions, llms.WithTemperature(llmSettings.Temperature))
-	}
-	if llmSettings.TopK > 0 {
-		callOptions = append(callOptions, llms.WithTopK(llmSettings.TopK))
-	}
-	if llmSettings.TopP > 0 {
-		callOptions = append(callOptions, llms.WithTopP(llmSettings.TopP))
-	}
-
-	if cs.mode == ChatStream {
-		callOptions = append(callOptions, llms.WithStreamingFunc(cs.streamingFunc))
-	}
-
-	if len(tools) > 0 {
-		callOptions = append(callOptions, llms.WithTools(tools))
-	}
-
-	return callOptions
+	return llmSettings.GenerateOptionsFromSettings(tools, string(cs.mode), cs.streamingFunc)
 }
 
 func (cs *ChatSession) validatePrivacyScores() error {
