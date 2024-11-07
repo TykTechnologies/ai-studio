@@ -32,8 +32,40 @@ config:
   devMode: "false"
   databaseType: "postgres"
 
-postgres:
-  auth:
-    username: postgres
-    password: "your-secure-password-here" # Change this!
-    database: midsommar
+# External database configuration using full URL
+database:
+  internal: false
+  url: "postgres://user:password@production-db.example.com:5432/midsommar"
+  # Alternative configuration using individual components:
+  # host: "production-db.example.com"
+  # port: 5432
+  # name: "midsommar"
+  # user: "production-user"
+  # password: "production-password"
+
+# Optional services configuration for production
+reranker:
+  enabled: true
+  image:
+    repository: tykio/reranker_cpu
+    tag: latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+transformer-server:
+  enabled: true
+  image:
+    repository: tykio/transformer_server_cpu
+    tag: latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

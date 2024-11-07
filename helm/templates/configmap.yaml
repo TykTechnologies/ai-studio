@@ -4,10 +4,31 @@ metadata:
   name: {{ include "midsommar.fullname" . }}-config
 data:
   .env: |
+    {{- if .Values.config.smtpServer }}
+    SMTP_SERVER={{ .Values.config.smtpServer }}
+    {{- end }}
+    {{- if .Values.config.smtpPort }}
+    SMTP_PORT={{ .Values.config.smtpPort }}
+    {{- end }}
+    {{- if .Values.config.smtpUser }}
+    SMTP_USER={{ .Values.config.smtpUser }}
+    {{- end }}
+    {{- if .Values.config.smtpPass }}
+    SMTP_PASS={{ .Values.config.smtpPass }}
+    {{- end }}
     ALLOW_REGISTRATIONS={{ .Values.config.allowRegistrations }}
     ADMIN_EMAIL={{ .Values.config.adminEmail }}
     SITE_URL={{ .Values.config.siteUrl }}
     FROM_EMAIL={{ .Values.config.fromEmail }}
     DEVMODE={{ .Values.config.devMode }}
     DATABASE_TYPE={{ .Values.config.databaseType }}
+    {{- if .Values.config.filterSignupDomains }}
     FILTER_SIGNUP_DOMAINS={{ .Values.config.filterSignupDomains }}
+    {{- end }}
+    {{- if .Values.config.databaseUrl }}
+    DATABASE_URL={{ .Values.config.databaseUrl }}
+    {{- else if .Values.database.url }}
+    DATABASE_URL={{ .Values.database.url }}
+    {{- else }}
+    DATABASE_URL=postgres://{{ .Values.database.user }}:{{ .Values.database.password }}@{{ default (printf "%s-postgres" (include "midsommar.fullname" .)) .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}
+    {{- end }}

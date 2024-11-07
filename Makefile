@@ -69,6 +69,14 @@ start-dev: stop-dev
 	@screen -S midsommar -X screen -t backend bash -c 'make start-backend'
 	@screen -r midsommar
 
+build-docker-multiarch:
+	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/midsommar:latest --push .
+
+build-docker-extras:
+	cd extra/transformer_server && \
+	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/transformer_server_cpu:latest --push -f dockerfile.cpu .
+	cd extra/reranker && \
+	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/reranker_cpu:latest --push -f dockerfile.cpu .
 # Stop both frontend and backend
 stop-dev:
 	make stop-frontend

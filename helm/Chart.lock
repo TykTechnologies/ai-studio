@@ -1,0 +1,9 @@
+dependencies:
+- name: reranker
+  repository: file://charts/reranker
+  version: 0.1.0
+- name: transformer-server
+  repository: file://charts/transformer-server
+  version: 0.1.0
+digest: sha256:5fdcd600559f287335c5708946280c871915520c247fad01d41dcf6be494a802
+generated: "2024-11-07T12:59:00.145839+13:00"

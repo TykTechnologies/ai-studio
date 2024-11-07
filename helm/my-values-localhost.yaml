@@ -23,8 +23,41 @@ config:
   databaseType: "postgres"
   filterSignupDomains: "tyk.io"
 
+# Internal database configuration for local development
+database:
+  internal: true
+  user: "postgres"
+  password: "localdev123"
+  name: "midsommar"
+
 postgres:
-  auth:
-    username: postgres
-    password: "localdev123" # Local development password
-    database: midsommar
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    size: 1Gi
+  service:
+    type: ClusterIP
+    port: 5432
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Optional services
+reranker:
+  enabled: true
+  image:
+    repository: tykio/reranker_cpu
+    tag: latest
+
+transformer-server:
+  enabled: true
+  image:
+    repository: tykio/transformer_server_cpu
+    tag: latest
