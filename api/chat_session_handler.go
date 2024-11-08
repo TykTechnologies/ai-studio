@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -18,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
+	"github.com/TykTechnologies/midsommar/v2/filereader"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -482,17 +482,8 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Check if the file type is supported
-	if !isSupportedFileType(header.Filename) {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Unsupported file type", Detail: "Only code-related source files, text, or markdown are supported"}}})
-		return
-	}
-
 	// Read the file contents
-	contents, err := readFileContents(file)
+	raw, err := readFileContents(file)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -501,28 +492,19 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		return
 	}
 
+	contents, err := filereader.Read(header.Filename, raw)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error parsing file", Detail: err.Error()}}})
+		return
+	}
+
 	// Add the file reference to the chat session
 	session.AddFileReference(header.Filename, contents)
 
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
-}
-
-func isSupportedFileType(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	supportedExtensions := []string{
-		".txt", ".md", ".markdown", // Text and Markdown
-		".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs", ".rb", ".php", // Common programming languages
-		".html", ".css", ".json", ".xml", ".yaml", ".yml", // Web-related files
-		".sh", ".bash", // Shell scripts
-		".sql", // SQL files
-	}
-
-	for _, supportedExt := range supportedExtensions {
-		if ext == supportedExt {
-			return true
-		}
-	}
-	return false
 }
 
 func readFileContents(file multipart.File) (string, error) {
