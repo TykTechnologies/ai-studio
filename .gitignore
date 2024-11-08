@@ -11,3 +11,4 @@ utils/proxy-tests/vertex/vertex
 tmp/
 venv
 extra/reranker/reranker
+compose.prod.yaml
