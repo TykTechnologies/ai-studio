@@ -487,9 +487,6 @@ func (a *API) GetUserID() uint {
 func (a *API) handleGetConfig(c *gin.Context) {
 	// Get the request protocol and host
 	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
 
 	host := c.Request.Host
 	siteURLVar := os.Getenv("SITE_URL")
@@ -497,6 +494,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		asURL, err := url.Parse(siteURLVar)
 		if err == nil {
 			host = asURL.Host
+			scheme = asURL.Scheme
 		}
 	}
 

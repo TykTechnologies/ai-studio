@@ -18,6 +18,7 @@ COPY . .
 
 # Build the application for multiple architectures
 ARG TARGETARCH
+ENV NODE_ENV notDevelopment
 RUN make clean && \
     make build-admin-frontend-clean && \
     GOOS=linux GOARCH=$TARGETARCH go build -o midsommar .
