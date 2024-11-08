@@ -507,10 +507,10 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
 }
 
-func readFileContents(file multipart.File) (string, error) {
+func readFileContents(file multipart.File) ([]byte, error) {
 	contents, err := io.ReadAll(file)
 	if err != nil {
-		return "", fmt.Errorf("error reading file: %v", err)
+		return []byte{}, fmt.Errorf("error reading file: %v", err)
 	}
-	return string(contents), nil
+	return contents, nil
 }
