@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/dslipak/pdf"
+	"github.com/lu4p/cat"
 )
 
 var TextExtensions = []string{
@@ -32,6 +33,12 @@ func Read(name string, fileData []byte) (string, error) {
 	switch dotExt {
 	case ".pdf":
 		return ExtractPDFText(name, fileData)
+	case ".odt":
+		return ExtractMSFormats(name, fileData)
+	case ".docx":
+		return ExtractMSFormats(name, fileData)
+	case ".rtf":
+		return ExtractMSFormats(name, fileData)
 	}
 
 	return "", fmt.Errorf("unsupported file type: %s", ext)
@@ -40,6 +47,10 @@ func Read(name string, fileData []byte) (string, error) {
 func ExtractPDFText(fileName string, data []byte) (string, error) {
 	// dump to file
 	tmpFile, err := os.CreateTemp("/tmp", "pdf_extract-*.txt")
+	if err != nil {
+		return "", err
+	}
+
 	defer os.Remove(tmpFile.Name())
 
 	os.WriteFile(tmpFile.Name(), data, 0644)
@@ -57,4 +68,23 @@ func ExtractPDFText(fileName string, data []byte) (string, error) {
 	}
 	buf.ReadFrom(b)
 	return buf.String(), nil
+}
+
+func ExtractMSFormats(fileName string, data []byte) (string, error) {
+	// dump to file
+	tmpFile, err := os.CreateTemp("/tmp", "msdoc_extract-*.txt")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmpFile.Name())
+
+	os.WriteFile(tmpFile.Name(), data, 0644)
+	defer tmpFile.Close()
+
+	txt, err := cat.File(tmpFile.Name())
+	if err != nil {
+		return "", err
+	}
+
+	return txt, nil
 }
