@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
@@ -16,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gofrs/uuid"
+	"github.com/pkoukk/tiktoken-go"
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
@@ -277,6 +280,18 @@ func (cs *ChatSession) sendOutput(resp string) {
 	}
 }
 
+func (cs *ChatSession) sendStatus(resp string) {
+	select {
+	case cs.outputMessages <- &ChatResponse{Payload: resp}:
+	}
+
+	if cs.streamingFunc != nil {
+		select {
+		case cs.outputStream <- []byte(fmt.Sprintf("\n\n %s \n\n", resp)):
+		}
+	}
+}
+
 func (cs *ChatSession) sendError(err error) {
 	select {
 	case cs.errors <- err:
@@ -421,7 +436,21 @@ func (cs *ChatSession) getMessages() ([]llms.MessageContent, error) {
 	return history, nil
 }
 
+func handleEcho(prefix string, dat interface{}) {
+	prettyJSON, err := json.MarshalIndent(dat, "", "    ")
+	if err != nil {
+		slog.Error("error echoing response to stdout", "error", err)
+	} else {
+		slog.Info("[CONV ECHO]", prefix, "")
+		fmt.Println("--------------------------------------------------")
+		fmt.Printf("%s\n", string(prettyJSON))
+	}
+}
+
 func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
+	if config.Get().EchoConversation {
+		handleEcho("LLM", w.Response)
+	}
 	resp := w.Response
 	if len(resp.Choices) == 0 {
 		cs.sendError(fmt.Errorf("no choices in response"))
@@ -527,6 +556,15 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		}
 	}
 
+	if config.Get().EchoConversation {
+		type ComboObj struct {
+			Message *models.UserMessage
+			Docs    []schema.Document
+		}
+
+		handleEcho("USER", ComboObj{Message: msg, Docs: docs})
+	}
+
 	pl := cs.prepHumanMessage(msg.Payload, docs).Content
 	err := cs.chatHistory.AddUserMessage(context.Background(), pl)
 	if err != nil {
@@ -537,6 +575,9 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	if err != nil {
 		return nil, fmt.Errorf("error getting chat history: %v", err)
 	}
+
+	// need to make sure we stay in content window
+	messages = cs.PreflightTokenLengthCheck(messages)
 
 	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
@@ -572,6 +613,49 @@ type CallParams struct {
 	Body       map[string]interface{} `json:"body"`
 	Headers    map[string][]string    `json:"headers"`
 	Parameters map[string][]string    `json:"parameters"`
+}
+
+func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []llms.MessageContent {
+	maxInputTokens := cs.chatRef.LLMSettings.MaxLength
+	removed := 0
+	for {
+		tokenLength := cs.estimateTokenLength(msgs)
+		if tokenLength <= maxInputTokens {
+			break
+		}
+
+		// remove the earliest message before the first message
+		msgs = append(msgs[:1], msgs[2:]...)
+		removed++
+	}
+
+	fmt.Println("REMOVED", removed, "messages to stay within token limit")
+
+	return msgs
+}
+
+func (cs *ChatSession) estimateTokenLength(msgs []llms.MessageContent) int {
+	encoding := "cl100k_base"
+	tke, err := tiktoken.GetEncoding(encoding)
+	if err != nil {
+		slog.Error("error getting encoding", err)
+		return -1
+	}
+
+	// encode
+	total := 0
+	for _, m := range msgs {
+		for _, p := range m.Parts {
+			switch p.(type) {
+			case llms.TextContent:
+				text := p.(llms.TextContent).Text
+				token := tke.Encode(text, nil, nil)
+				total += len(token)
+			}
+		}
+	}
+
+	return total
 }
 
 func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opName string, uc *universalclient.Client) (*CallParams, error) {
@@ -684,6 +768,11 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
 
+		// ignore empty tool calls
+		if t.ID == "" {
+			continue
+		}
+
 		toolCall.Parts = append(toolCall.Parts, llms.ToolCall{
 			ID:   t.ID,
 			Type: t.Type,
@@ -740,9 +829,16 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
-			cs.sendOutput(fmt.Sprintf("[TOOL] calling [%s]", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("[TOOL] calling [%s]", t.FunctionCall.Name))
+			if config.Get().EchoConversation {
+				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
+			}
+
 			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
 			if err != nil {
+				if config.Get().EchoConversation {
+					slog.Info("[TOOL-CALL]", "[ERROR]", err)
+				}
 				return false, fmt.Errorf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
 			}
 
@@ -762,6 +858,10 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				ToolCallID: t.ID,
 				Name:       t.FunctionCall.Name,
 				Content:    asStr,
+			}
+
+			if config.Get().EchoConversation {
+				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name, "[RESPONSE]", asStr)
 			}
 
 			toolResult.Parts = append(toolResult.Parts, toolResp)
