@@ -452,14 +452,15 @@ type ToolResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name           string   `json:"name"`
-		Description    string   `json:"description"`
-		ToolType       string   `json:"tool_type"`
-		OASSpec        string   `json:"oas_spec"`
-		PrivacyScore   int      `json:"privacy_score"`
-		Operations     []string `json:"operations"`
-		AuthKey        string   `json:"auth_key"`
-		AuthSchemaName string   `json:"auth_schema_name"`
+		Name           string              `json:"name"`
+		Description    string              `json:"description"`
+		ToolType       string              `json:"tool_type"`
+		OASSpec        string              `json:"oas_spec"`
+		PrivacyScore   int                 `json:"privacy_score"`
+		Operations     []string            `json:"operations"`
+		AuthKey        string              `json:"auth_key"`
+		AuthSchemaName string              `json:"auth_schema_name"`
+		FileStores     []FileStoreResponse `json:"file_stores"` // Added this field
 	} `json:"attributes"`
 }
 
@@ -879,4 +880,31 @@ type FrontendConfig struct {
 	APIBaseURL    string `json:"API_BASE_URL"`
 	WebsocketHost string `json:"WEBSOCKET_HOST"`
 	// Add other configuration values as needed
+}
+
+// FileStoreInput represents the input for filestore-related operations
+// @Description FileStore input model
+type FileStoreInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			FileName    string `json:"file_name"`
+			Description string `json:"description"`
+			Content     string `json:"content"`
+			Length      int    `json:"length"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// FileStoreResponse represents the response for filestore-related operations
+// @Description FileStore response model
+type FileStoreResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		FileName    string `json:"file_name"`
+		Description string `json:"description"`
+		Content     string `json:"-"`
+		Length      int    `json:"length"`
+	} `json:"attributes"`
 }

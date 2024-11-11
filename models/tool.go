@@ -18,6 +18,8 @@ type Tool struct {
 	PrivacyScore        int    `json:"privacy_score"`
 	AuthKey             string `json:"auth_key"`
 	AuthSchemaName      string `json:"auth_schema_name"`
+
+	FileStores []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
 }
 
 type Tools []Tool
@@ -37,7 +39,7 @@ func (t *Tool) Create(db *gorm.DB) error {
 
 // Get a tool by ID
 func (t *Tool) Get(db *gorm.DB, id uint) error {
-	return db.First(t, id).Error
+	return db.Preload("FileStores").First(t, id).Error
 }
 
 // Update an existing tool
@@ -136,4 +138,26 @@ func (t *Tool) GetOperations() []string {
 		return []string{}
 	}
 	return strings.Split(t.AvailableOperations, ",")
+}
+
+// AddFileStore adds a FileStore to the Tool
+func (t *Tool) AddFileStore(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(t).Association("FileStores").Append(fileStore)
+}
+
+// RemoveFileStore removes a FileStore from the Tool
+func (t *Tool) RemoveFileStore(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(t).Association("FileStores").Delete(fileStore)
+}
+
+// GetFileStores gets all FileStores associated with the Tool
+func (t *Tool) GetFileStores(db *gorm.DB) ([]FileStore, error) {
+	var fileStores []FileStore
+	err := db.Model(t).Association("FileStores").Find(&fileStores)
+	return fileStores, err
+}
+
+// SetFileStores replaces all existing FileStore associations with new ones
+func (t *Tool) SetFileStores(db *gorm.DB, fileStores []FileStore) error {
+	return db.Model(t).Association("FileStores").Replace(&fileStores)
 }

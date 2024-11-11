@@ -2,6 +2,7 @@ package chat_session
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -168,6 +169,30 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 		// If validation fails, remove the tool and return the error
 		delete(cs.tools, id)
 		return err
+	}
+
+	fmt.Println("Tool added to chat")
+
+	fmt.Println(len(t.FileStores))
+
+	for i, _ := range t.FileStores {
+		// base64 decode the file contents first
+		content, err := base64.StdEncoding.DecodeString(t.FileStores[i].Content)
+		if err != nil {
+			return fmt.Errorf("error decoding file contents: %v", err)
+		}
+
+		pl := fmt.Sprintf("The following additional documentation file '%s' has been provided for the tool '%s' to helpo you use it:\n%s",
+			t.FileStores[i].FileName,
+			t.Name,
+			content)
+
+		fmt.Println("ADDING FILE TO HISTORY")
+		err = cs.chatHistory.AddUserMessage(context.Background(), pl)
+		if err != nil {
+			return fmt.Errorf("error adding message to history: %v", err)
+		}
+
 	}
 
 	return nil
@@ -418,6 +443,18 @@ func (cs *ChatSession) joinDocuments(docs []schema.Document, separator string) s
 		}
 	}
 	return text
+}
+
+func isToolCaller(name string) bool {
+	lowerName := strings.ToLower(name)
+	toolCallers := []string{"gpt", "claude", "gemini"}
+	for _, tc := range toolCallers {
+		if strings.Contains(lowerName, tc) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
@@ -829,7 +866,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
-			cs.sendStatus(fmt.Sprintf("[TOOL] calling [%s]", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
 			if config.Get().EchoConversation {
 				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
 			}
@@ -860,6 +897,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				Content:    asStr,
 			}
 
+			cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
 			if config.Get().EchoConversation {
 				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name, "[RESPONSE]", asStr)
 			}

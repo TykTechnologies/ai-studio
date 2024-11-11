@@ -159,3 +159,62 @@ func (s *Service) GetToolOperations(toolID uint) ([]string, error) {
 
 	return tool.GetOperations(), nil
 }
+
+// AddFileStoreToTool adds a FileStore to a Tool
+func (s *Service) AddFileStoreToTool(toolID uint, fileStoreID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return tool.AddFileStore(s.DB, fileStore)
+}
+
+// RemoveFileStoreFromTool removes a FileStore from a Tool
+func (s *Service) RemoveFileStoreFromTool(toolID uint, fileStoreID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return tool.RemoveFileStore(s.DB, fileStore)
+}
+
+// GetToolFileStores gets all FileStores associated with a Tool
+func (s *Service) GetToolFileStores(toolID uint) ([]models.FileStore, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.GetFileStores(s.DB)
+}
+
+// SetToolFileStores replaces all existing FileStore associations with new ones
+func (s *Service) SetToolFileStores(toolID uint, fileStoreIDs []uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStores := make([]models.FileStore, len(fileStoreIDs))
+	for i, id := range fileStoreIDs {
+		fileStore := models.FileStore{}
+		if err := fileStore.Get(s.DB, id); err != nil {
+			return err
+		}
+		fileStores[i] = fileStore
+	}
+
+	return tool.SetFileStores(s.DB, fileStores)
+}

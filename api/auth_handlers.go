@@ -404,7 +404,7 @@ func (a *API) handleMe(c *gin.Context) {
 			}{
 				Catalogues:     serializeCatalogues(mapToSlice(catalogues)),
 				DataCatalogues: serializeDataCatalogues(mapToSlice(dataCatalogues)),
-				ToolCatalogues: serializeToolCatalogues(mapToSlice(toolCatalogues)),
+				ToolCatalogues: serializeToolCatalogues(mapToSlice(toolCatalogues), a.config.DB),
 				Chats:          serializeChats(mapToSlice(chats)),
 			},
 		},
