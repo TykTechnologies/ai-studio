@@ -919,20 +919,20 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues, a.config.DB)})
 }
 
 // Helper function to serialize ToolCatalogues
-func serializeToolCatalogues(toolCatalogues models.ToolCatalogues) []ToolCatalogueResponse {
+func serializeToolCatalogues(toolCatalogues models.ToolCatalogues, db *gorm.DB) []ToolCatalogueResponse {
 	result := make([]ToolCatalogueResponse, len(toolCatalogues))
 	for i, tc := range toolCatalogues {
-		result[i] = serializeToolCatalogue(&tc)
+		result[i] = serializeToolCatalogue(&tc, db)
 	}
 	return result
 }
 
 // Helper function to serialize a single ToolCatalogue
-func serializeToolCatalogue(tc *models.ToolCatalogue) ToolCatalogueResponse {
+func serializeToolCatalogue(tc *models.ToolCatalogue, db *gorm.DB) ToolCatalogueResponse {
 	return ToolCatalogueResponse{
 		Type: "tool-catalogues",
 		ID:   strconv.FormatUint(uint64(tc.ID), 10),
@@ -948,7 +948,7 @@ func serializeToolCatalogue(tc *models.ToolCatalogue) ToolCatalogueResponse {
 			ShortDescription: tc.ShortDescription,
 			LongDescription:  tc.LongDescription,
 			Icon:             tc.Icon,
-			Tools:            serializeTools(tc.Tools),
+			Tools:            serializeTools(tc.Tools, db),
 			Tags:             serializeTags(tc.Tags),
 		},
 	}

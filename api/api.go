@@ -389,6 +389,11 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/tools/:id/operations", a.removeOperationFromTool)
 	v1.GET("/tools/:id/operations", a.getToolOperations)
 
+	v1.POST("/tools/:id/filestores/:filestore_id", a.addFileStoreToTool)
+	v1.DELETE("/tools/:id/filestores/:filestore_id", a.removeFileStoreFromTool)
+	v1.GET("/tools/:id/filestores", a.getToolFileStores)
+	v1.PUT("/tools/:id/filestores", a.setToolFileStores)
+
 	// Model Price routes
 	v1.POST("/model-prices", a.createModelPrice)
 	v1.GET("/model-prices/:id", a.getModelPrice)
@@ -434,6 +439,14 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
+
+	// FileStore routes
+	v1.POST("/filestore", a.createFileStore)
+	v1.GET("/filestore/:id", a.getFileStore)
+	v1.PATCH("/filestore/:id", a.updateFileStore)
+	v1.DELETE("/filestore/:id", a.deleteFileStore)
+	v1.GET("/filestore", a.getAllFileStores)
+	v1.GET("/filestore/search", a.searchFileStores)
 
 	a.SetupWebSocketRoute(authed)
 }

@@ -14,11 +14,19 @@ import {
   Paper,
   AccordionSummary,
   AccordionDetails,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import DeleteIcon from "@mui/icons-material/Delete";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import {
   StyledPaper,
   TitleBox,
@@ -58,7 +66,7 @@ const OperationsInput = ({ value, onChange }) => {
     } else {
       setOperations([]);
     }
-  }, [value]); // Run this effect when value changes
+  }, [value]);
 
   const handleInputChange = (event) => {
     setInputValue(event.target.value);
@@ -121,15 +129,15 @@ const findInvalidCharPosition = (inputString) => {
       const char = line[colNum];
       if (!validPattern.test(char)) {
         return {
-          line: lineNum + 1, // Adding 1 because line numbers typically start at 1
-          column: colNum + 1, // Adding 1 because column numbers typically start at 1
+          line: lineNum + 1,
+          column: colNum + 1,
           char: char,
         };
       }
     }
   }
 
-  return null; // No invalid character found
+  return null;
 };
 
 const StyledTextField = styled(TextField)({
@@ -155,9 +163,11 @@ const ToolForm = () => {
     message: "",
     severity: "success",
   });
+  const [oasSpecError, setOasSpecError] = useState(null);
+  const [files, setFiles] = useState([]);
   const navigate = useNavigate();
   const { id } = useParams();
-  const [oasSpecError, setOasSpecError] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (id) {
@@ -171,12 +181,12 @@ const ToolForm = () => {
       const response = await apiClient.get(`/tools/${id}`);
       const fetchedTool = response.data.data.attributes;
 
-      // Decode the base64 OAS spec
       fetchedTool.oas_spec = fetchedTool.oas_spec
         ? atob(fetchedTool.oas_spec)
         : "";
 
       setTool(fetchedTool);
+      setFiles(fetchedTool.file_stores || []);
     } catch (error) {
       console.error("Error fetching tool", error);
       setSnackbar({
@@ -193,7 +203,7 @@ const ToolForm = () => {
       const operations = response.data.data.operations;
       setTool((prevTool) => ({
         ...prevTool,
-        operations: operations, // Set as array
+        operations: operations,
       }));
     } catch (error) {
       console.error("Error fetching tool operations", error);
@@ -251,7 +261,6 @@ const ToolForm = () => {
           ...tool,
           privacy_score: Number(tool.privacy_score),
           tool_type: "REST",
-          // Base64 encode the OAS spec
           oas_spec: tool.oas_spec ? btoa(tool.oas_spec) : "",
         },
       },
@@ -289,7 +298,6 @@ const ToolForm = () => {
       ? tool.operations
       : tool.operations.split(",").map((op) => op.trim());
 
-    // Remove all existing operations
     if (id) {
       const currentOperations = await apiClient.get(
         `/tools/${toolId}/operations`,
@@ -301,14 +309,72 @@ const ToolForm = () => {
       }
     }
 
-    // Add new operations
     for (const operation of operations) {
       if (operation) {
-        // Only add non-empty operations
         await apiClient.post(`/tools/${toolId}/operations`, {
           data: { type: "Operation", attributes: { operation } },
         });
       }
+    }
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("description", `Documentation for tool: ${tool.name}`);
+
+      const fileStoreResponse = await apiClient.post("/filestore", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const fileStoreId = fileStoreResponse.data.data.id;
+
+      await apiClient.post(`/tools/${id}/filestores/${fileStoreId}`);
+
+      const updatedToolResponse = await apiClient.get(`/tools/${id}`);
+      setFiles(updatedToolResponse.data.data.attributes.file_stores || []);
+
+      setSnackbar({
+        open: true,
+        message: "File uploaded successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error uploading file", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload file",
+        severity: "error",
+      });
+    }
+
+    event.target.value = "";
+  };
+
+  const handleDeleteFile = async (fileStoreId) => {
+    try {
+      await apiClient.delete(`/tools/${id}/filestores/${fileStoreId}`);
+
+      setFiles(files.filter((file) => file.id !== fileStoreId));
+
+      setSnackbar({
+        open: true,
+        message: "File removed successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error deleting file", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove file",
+        severity: "error",
+      });
     }
   };
 
@@ -432,10 +498,10 @@ const ToolForm = () => {
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" color="text.secondary" paragraph>
-                if your tool requires authentication, please ensure to provide
+                If your tool requires authentication, please ensure to provide
                 the name of the Auth schema to use from the OAS Specification
                 (only API Key and bearer token types are supported), as well as
-                ther API Key to use.
+                the API Key to use.
               </Typography>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
@@ -458,6 +524,55 @@ const ToolForm = () => {
                   />
                 </Grid>
               </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Extra Context</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Upload additional documentation or context files for this tool.
+                These files will be used to provide additional context during
+                tool operation.
+              </Typography>
+
+              <List>
+                {files.map((file) => (
+                  <ListItem key={file.id}>
+                    <ListItemText
+                      primary={file.attributes.file_name}
+                      secondary={`Size: ${file.attributes.length} bytes`}
+                    />
+                    <ListItemSecondaryAction>
+                      <IconButton
+                        edge="end"
+                        aria-label="delete"
+                        onClick={() => handleDeleteFile(file.id)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                onChange={handleFileUpload}
+              />
+
+              <Button
+                variant="contained"
+                startIcon={<CloudUploadIcon />}
+                onClick={() => fileInputRef.current.click()}
+                sx={{ mt: 2 }}
+              >
+                Upload Additional Tool Documentation
+              </Button>
             </AccordionDetails>
           </StyledAccordion>
 

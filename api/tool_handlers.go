@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // @Summary Create a new tool
@@ -82,7 +83,7 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeTool(tool)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
 
 // @Summary Get a tool by ID
@@ -119,7 +120,7 @@ func (a *API) getTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
 
 // @Summary Update a tool
@@ -177,7 +178,7 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
 
 // @Summary Delete a tool
@@ -242,7 +243,7 @@ func (a *API) getAllTools(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools, a.config.DB)})
 }
 
 // @Summary Get tools by type
@@ -279,7 +280,7 @@ func (a *API) getToolsByType(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools, a.config.DB)})
 }
 
 // @Summary Search tools
@@ -316,7 +317,7 @@ func (a *API) searchTools(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools, a.config.DB)})
 }
 
 // @Summary Add operation to tool
@@ -377,7 +378,7 @@ func (a *API) addOperationToTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
 
 // @Summary Remove operation from tool
@@ -438,7 +439,7 @@ func (a *API) removeOperationFromTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
 
 // @Summary Get tool operations
@@ -479,19 +480,246 @@ func (a *API) getToolOperations(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": OperationsResponse{Operations: operations}})
 }
 
-func serializeTool(tool *models.Tool) ToolResponse {
+// api/tool_handlers.go
+
+// Add these new handlers to the existing file:
+
+// @Summary Add FileStore to Tool
+// @Description Add a FileStore to a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param filestore_id path int true "FileStore ID"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filestores/{filestore_id} [post]
+// @Security BearerAuth
+func (a *API) addFileStoreToTool(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	fileStoreID, err := strconv.ParseUint(c.Param("filestore_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filestore ID"}},
+		})
+		return
+	}
+
+	err = a.service.AddFileStoreToTool(uint(toolID), uint(fileStoreID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// @Summary Remove FileStore from Tool
+// @Description Remove a FileStore from a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param filestore_id path int true "FileStore ID"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filestores/{filestore_id} [delete]
+// @Security BearerAuth
+func (a *API) removeFileStoreFromTool(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	fileStoreID, err := strconv.ParseUint(c.Param("filestore_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filestore ID"}},
+		})
+		return
+	}
+
+	err = a.service.RemoveFileStoreFromTool(uint(toolID), uint(fileStoreID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// @Summary Get Tool FileStores
+// @Description Get all FileStores associated with a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Success 200 {array} FileStoreResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filestores [get]
+// @Security BearerAuth
+func (a *API) getToolFileStores(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	fileStores, err := a.service.GetToolFileStores(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeFileStores(fileStores)})
+}
+
+// @Summary Set Tool FileStores
+// @Description Replace all FileStore associations for a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param filestore_ids body []int true "Array of FileStore IDs"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filestores [put]
+// @Security BearerAuth
+func (a *API) setToolFileStores(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	var fileStoreIDs []uint
+	if err := c.ShouldBindJSON(&fileStoreIDs); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	err = a.service.SetToolFileStores(uint(toolID), fileStoreIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
+	fileStores, _ := tool.GetFileStores(db) // You'll need to pass the db instance here
 	return ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
 		Attributes: struct {
-			Name           string   `json:"name"`
-			Description    string   `json:"description"`
-			ToolType       string   `json:"tool_type"`
-			OASSpec        string   `json:"oas_spec"`
-			PrivacyScore   int      `json:"privacy_score"`
-			Operations     []string `json:"operations"`
-			AuthKey        string   `json:"auth_key"`
-			AuthSchemaName string   `json:"auth_schema_name"`
+			Name           string              `json:"name"`
+			Description    string              `json:"description"`
+			ToolType       string              `json:"tool_type"`
+			OASSpec        string              `json:"oas_spec"`
+			PrivacyScore   int                 `json:"privacy_score"`
+			Operations     []string            `json:"operations"`
+			AuthKey        string              `json:"auth_key"`
+			AuthSchemaName string              `json:"auth_schema_name"`
+			FileStores     []FileStoreResponse `json:"file_stores"`
 		}{
 			Name:           tool.Name,
 			Description:    tool.Description,
@@ -501,14 +729,15 @@ func serializeTool(tool *models.Tool) ToolResponse {
 			Operations:     tool.GetOperations(),
 			AuthKey:        tool.AuthKey,
 			AuthSchemaName: tool.AuthSchemaName,
+			FileStores:     serializeFileStores(fileStores),
 		},
 	}
 }
 
-func serializeTools(tools []models.Tool) []ToolResponse {
+func serializeTools(tools []models.Tool, db *gorm.DB) []ToolResponse {
 	result := make([]ToolResponse, len(tools))
 	for i, tool := range tools {
-		result[i] = serializeTool(&tool)
+		result[i] = serializeTool(&tool, db)
 	}
 	return result
 }
