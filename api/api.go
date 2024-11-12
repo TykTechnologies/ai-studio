@@ -394,6 +394,11 @@ func (a *API) setupRoutes() {
 	v1.GET("/tools/:id/filestores", a.getToolFileStores)
 	v1.PUT("/tools/:id/filestores", a.setToolFileStores)
 
+	v1.POST("/tools/:id/filters/:filter_id", a.addFilterToTool)        // Add a filter to a tool
+	v1.DELETE("/tools/:id/filters/:filter_id", a.removeFilterFromTool) // Remove a filter from a tool
+	v1.GET("/tools/:id/filters", a.getToolFilters)                     // Get all filters for a tool
+	v1.PUT("/tools/:id/filters", a.setToolFilters)                     // Replace all filters for a tool
+
 	// Model Price routes
 	v1.POST("/model-prices", a.createModelPrice)
 	v1.GET("/model-prices/:id", a.getModelPrice)

@@ -20,6 +20,7 @@ type Tool struct {
 	AuthSchemaName      string `json:"auth_schema_name"`
 
 	FileStores []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
+	Filters    []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
 }
 
 type Tools []Tool
@@ -39,7 +40,7 @@ func (t *Tool) Create(db *gorm.DB) error {
 
 // Get a tool by ID
 func (t *Tool) Get(db *gorm.DB, id uint) error {
-	return db.Preload("FileStores").First(t, id).Error
+	return db.Preload("FileStores").Preload("Filters").First(t, id).Error
 }
 
 // Update an existing tool
@@ -54,7 +55,7 @@ func (t *Tool) Delete(db *gorm.DB) error {
 
 // GetByName gets a tool by its name
 func (t *Tool) GetByName(db *gorm.DB, name string) error {
-	return db.Where("name = ?", name).First(t).Error
+	return db.Where("name = ?", name).Preload("FileStores").Preload("Filters").First(t).Error
 }
 
 // GetAll retrieves all tools
@@ -160,4 +161,26 @@ func (t *Tool) GetFileStores(db *gorm.DB) ([]FileStore, error) {
 // SetFileStores replaces all existing FileStore associations with new ones
 func (t *Tool) SetFileStores(db *gorm.DB, fileStores []FileStore) error {
 	return db.Model(t).Association("FileStores").Replace(&fileStores)
+}
+
+// AddFilter adds a Filter to the Tool
+func (t *Tool) AddFilter(db *gorm.DB, filter *Filter) error {
+	return db.Model(t).Association("Filters").Append(filter)
+}
+
+// RemoveFilter removes a Filter from the Tool
+func (t *Tool) RemoveFilter(db *gorm.DB, filter *Filter) error {
+	return db.Model(t).Association("Filters").Delete(filter)
+}
+
+// GetFilters gets all Filters associated with the Tool
+func (t *Tool) GetFilters(db *gorm.DB) ([]Filter, error) {
+	var filters []Filter
+	err := db.Model(t).Association("Filters").Find(&filters)
+	return filters, err
+}
+
+// SetFilters replaces all existing Filter associations with new ones
+func (t *Tool) SetFilters(db *gorm.DB, filters []Filter) error {
+	return db.Model(t).Association("Filters").Replace(&filters)
 }

@@ -218,3 +218,62 @@ func (s *Service) SetToolFileStores(toolID uint, fileStoreIDs []uint) error {
 
 	return tool.SetFileStores(s.DB, fileStores)
 }
+
+// AddFilterToTool adds a Filter to a Tool
+func (s *Service) AddFilterToTool(toolID uint, filterID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	filter := &models.Filter{}
+	if err := filter.Get(s.DB, filterID); err != nil {
+		return err
+	}
+
+	return tool.AddFilter(s.DB, filter)
+}
+
+// RemoveFilterFromTool removes a Filter from a Tool
+func (s *Service) RemoveFilterFromTool(toolID uint, filterID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	filter := &models.Filter{}
+	if err := filter.Get(s.DB, filterID); err != nil {
+		return err
+	}
+
+	return tool.RemoveFilter(s.DB, filter)
+}
+
+// GetToolFilters gets all Filters associated with a Tool
+func (s *Service) GetToolFilters(toolID uint) ([]models.Filter, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.GetFilters(s.DB)
+}
+
+// SetToolFilters replaces all existing Filter associations with new ones
+func (s *Service) SetToolFilters(toolID uint, filterIDs []uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	filters := make([]models.Filter, len(filterIDs))
+	for i, id := range filterIDs {
+		filter := models.Filter{}
+		if err := filter.Get(s.DB, id); err != nil {
+			return err
+		}
+		filters[i] = filter
+	}
+
+	return tool.SetFilters(s.DB, filters)
+}

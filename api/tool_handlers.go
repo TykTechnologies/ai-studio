@@ -705,8 +705,250 @@ func (a *API) setToolFileStores(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
 
+// @Summary Add Filter to Tool
+// @Description Add a Filter to a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param filter_id path int true "Filter ID"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filters/{filter_id} [post]
+// @Security BearerAuth
+func (a *API) addFilterToTool(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	filterID, err := strconv.ParseUint(c.Param("filter_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filter ID"}},
+		})
+		return
+	}
+
+	err = a.service.AddFilterToTool(uint(toolID), uint(filterID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// @Summary Remove Filter from Tool
+// @Description Remove a Filter from a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param filter_id path int true "Filter ID"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filters/{filter_id} [delete]
+// @Security BearerAuth
+func (a *API) removeFilterFromTool(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	filterID, err := strconv.ParseUint(c.Param("filter_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filter ID"}},
+		})
+		return
+	}
+
+	err = a.service.RemoveFilterFromTool(uint(toolID), uint(filterID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// @Summary Get Tool Filters
+// @Description Get all Filters associated with a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Success 200 {array} FilterResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filters [get]
+// @Security BearerAuth
+func (a *API) getToolFilters(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	filters, err := a.service.GetToolFilters(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeFiltersForTool(filters)})
+}
+
+// @Summary Set Tool Filters
+// @Description Replace all Filter associations for a specific Tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param filter_ids body []int true "Array of Filter IDs"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/filters [put]
+// @Security BearerAuth
+func (a *API) setToolFilters(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	var filterIDs []uint
+	if err := c.ShouldBindJSON(&filterIDs); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	err = a.service.SetToolFilters(uint(toolID), filterIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+func serializeFiltersForTool(filters []models.Filter) []FilterResponse {
+	result := make([]FilterResponse, len(filters))
+	for i, filter := range filters {
+		result[i] = FilterResponse{
+			Type: "filters",
+			ID:   strconv.FormatUint(uint64(filter.ID), 10),
+			Attributes: struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Script      []byte `json:"script"`
+			}{
+				Name:        filter.Name,
+				Description: filter.Description,
+				Script:      filter.Script,
+			},
+		}
+	}
+	return result
+}
+
 func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
-	fileStores, _ := tool.GetFileStores(db) // You'll need to pass the db instance here
+	fileStores, _ := tool.GetFileStores(db)
+	filters, _ := tool.GetFilters(db)
 	return ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
@@ -720,6 +962,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
+			Filters        []FilterResponse    `json:"filters"`
 		}{
 			Name:           tool.Name,
 			Description:    tool.Description,
@@ -730,6 +973,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthKey:        tool.AuthKey,
 			AuthSchemaName: tool.AuthSchemaName,
 			FileStores:     serializeFileStores(fileStores),
+			Filters:        serializeFiltersForTool(filters),
 		},
 	}
 }

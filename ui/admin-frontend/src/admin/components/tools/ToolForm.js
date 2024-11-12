@@ -19,6 +19,7 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  MenuItem,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -165,6 +166,9 @@ const ToolForm = () => {
   });
   const [oasSpecError, setOasSpecError] = useState(null);
   const [files, setFiles] = useState([]);
+  const [availableFilters, setAvailableFilters] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState("");
+  const [toolFilters, setToolFilters] = useState([]);
   const navigate = useNavigate();
   const { id } = useParams();
   const fileInputRef = useRef(null);
@@ -173,7 +177,9 @@ const ToolForm = () => {
     if (id) {
       fetchTool();
       fetchToolOperations();
+      fetchToolFilters();
     }
+    fetchAvailableFilters();
   }, [id]);
 
   const fetchTool = async () => {
@@ -215,6 +221,38 @@ const ToolForm = () => {
     }
   };
 
+  const fetchAvailableFilters = async () => {
+    try {
+      const response = await apiClient.get("/filters");
+      // Make sure we're accessing the correct part of the response
+      setAvailableFilters(response.data || []); // Add fallback to empty array
+    } catch (error) {
+      console.error("Error fetching available filters", error);
+      setAvailableFilters([]); // Set to empty array on error
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch available filters",
+        severity: "error",
+      });
+    }
+  };
+
+  const fetchToolFilters = async () => {
+    try {
+      const response = await apiClient.get(`/tools/${id}/filters`);
+      // Make sure we're accessing the correct part of the response
+      setToolFilters(response.data.data || []); // Add fallback to empty array
+    } catch (error) {
+      console.error("Error fetching tool filters", error);
+      setToolFilters([]); // Set to empty array on error
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch tool filters",
+        severity: "error",
+      });
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === "privacy_score") {
@@ -248,6 +286,47 @@ const ToolForm = () => {
       newErrors.privacy_score = "Privacy score must be between 0 and 100";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleAddFilter = async () => {
+    if (!selectedFilter) return;
+
+    try {
+      await apiClient.post(`/tools/${id}/filters/${selectedFilter}`);
+      await fetchToolFilters(); // Refresh the list
+      setSelectedFilter(""); // Reset selection
+      setSnackbar({
+        open: true,
+        message: "Filter added successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error adding filter", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add filter",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleRemoveFilter = async (filterId) => {
+    try {
+      await apiClient.delete(`/tools/${id}/filters/${filterId}`);
+      await fetchToolFilters(); // Refresh the list
+      setSnackbar({
+        open: true,
+        message: "Filter removed successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error removing filter", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove filter",
+        severity: "error",
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -491,6 +570,62 @@ const ToolForm = () => {
               </Typography>
             </Grid>
           </Grid>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Middleware</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Middleware scripts are filters that enable you to modify the
+                output of the tool before it's results are sent back to the LLM,
+                for example a filter to remove sensitive information.
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <List>
+                    {toolFilters.map((filter) => (
+                      <ListItem key={filter.id}>
+                        <ListItemText primary={filter.attributes.name} />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            aria-label="delete"
+                            onClick={() => handleRemoveFilter(filter.id)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+                    <TextField
+                      select
+                      label="Add Filter"
+                      value={selectedFilter}
+                      onChange={(e) => setSelectedFilter(e.target.value)}
+                      sx={{ flexGrow: 1 }}
+                    >
+                      {(availableFilters || []).map((filter) => (
+                        <MenuItem key={filter.id} value={filter.id}>
+                          {filter.attributes.name}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Button
+                      variant="contained"
+                      onClick={handleAddFilter}
+                      disabled={!selectedFilter}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
 
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>

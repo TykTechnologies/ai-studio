@@ -1,6 +1,10 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"fmt"
+
+	"gorm.io/gorm"
+)
 
 type Chat struct {
 	gorm.Model
@@ -51,6 +55,9 @@ func (c *Chat) Get(db *gorm.DB, id uint) error {
 
 // Update an existing chat
 func (c *Chat) Update(db *gorm.DB) error {
+	fmt.Println(c.LLMSettingsID)
+	fmt.Println(c.SupportsTools)
+
 	return db.Transaction(func(tx *gorm.DB) error {
 		// Update the chat's fields
 		if err := tx.Model(c).Updates(Chat{
