@@ -222,7 +222,7 @@ func (a *API) createNewSession(chat *models.Chat, userID uint) (*chat_session.Ch
 		chat_session.ChatStream,
 		a.service.DB,
 		a.service,
-		nil, // Add filters if needed
+		chat.Filters,
 		&userID,
 		nil, // No session ID
 	)

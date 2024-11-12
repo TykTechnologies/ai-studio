@@ -115,6 +115,8 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		preProcessors = append(preProcessors, asFunc)
 	}
 
+	cs.preProcessors = preProcessors
+
 	return cs, nil
 }
 
@@ -239,7 +241,7 @@ func (cs *ChatSession) Start() error {
 			case msg := <-cs.input:
 				err := cs.preProcessMessage(msg)
 				if err != nil {
-					cs.errors <- fmt.Errorf("preprocessing error: %v", err)
+					cs.sendStatus(fmt.Sprintf("Content guideline violation detected. This request cannot be processed."))
 					continue
 				}
 
@@ -404,10 +406,13 @@ func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
 
 func (cs *ChatSession) preProcessMessage(msg *models.UserMessage) error {
 	for _, fn := range cs.preProcessors {
+		fmt.Println(msg)
 		if err := fn(msg); err != nil {
 			return err
 		}
 	}
+
+	fmt.Println("no issue found")
 	return nil
 }
 
