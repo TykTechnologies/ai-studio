@@ -86,8 +86,9 @@ const ChatForm = () => {
         llm_id: chatData.llm_id,
         groups: chatData.groups.map((group) => group.id.toString()),
         filters: chatData.filters.map((filter) => filter.id.toString()),
-        oas_spec: chatData.oas_spec || "", // No decoding needed
-        rag_n: chatData.rag_n || "", // Include rag_n from API response
+        oas_spec: chatData.oas_spec || "",
+        rag_n: chatData.rag_n || "",
+        tool_support: chatData.tool_support || false, // Add this line
       });
     } catch (error) {
       console.error("Error fetching chat", error);

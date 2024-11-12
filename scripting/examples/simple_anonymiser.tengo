@@ -1,0 +1,15 @@
+// Import the 'text' module for regular expression operations
+text := import("text")
+
+// Define regular expression patterns for various PII
+email_pattern := `[\w\.-]+@[\w\.-]+\.\w+`
+
+// Define the function to sanitize PII in the input string
+filter := func(input) {
+    // Replace email addresses
+    input = text.re_replace(email_pattern, input, "[REDACTED EMAIL]")
+
+    return input
+}
+
+result := filter(payload)

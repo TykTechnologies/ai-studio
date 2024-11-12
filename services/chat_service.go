@@ -53,36 +53,46 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 
 // UpdateChat updates an existing chat
 func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool) (*models.Chat, error) {
-	chat, err := s.GetChatByID(id)
-	if err != nil {
+	// Start a transaction
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Get the chat within the transaction
+	chat := &models.Chat{}
+	if err := tx.First(chat, id).Error; err != nil {
+		tx.Rollback()
 		return nil, err
 	}
 
-	// Start a transaction
-	tx := s.DB.Begin()
-
-	chat.Name = name
-	chat.LLMSettingsID = llmSettingsID
-	chat.LLMID = llmID
-	chat.RagResultsPerSource = ragN
-	chat.SupportsTools = toolSupport
-
-	for _, filterID := range filterIDs {
-		filter := &models.Filter{}
-		if err := filter.Get(s.DB, filterID); err != nil {
-			return nil, err
-		}
-		chat.Filters = append(chat.Filters, filter)
+	// Update chat fields
+	updates := map[string]interface{}{
+		"name":                   name,
+		"llm_settings_id":        llmSettingsID,
+		"llm_id":                 llmID,
+		"rag_results_per_source": ragN,
+		"supports_tools":         toolSupport,
 	}
 
 	// Update the chat's basic information
-	if err := tx.Save(chat).Error; err != nil {
+	if err := tx.Model(chat).Updates(updates).Error; err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 
 	// Clear existing associations
 	if err := tx.Model(chat).Association("Groups").Clear(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err := tx.Model(chat).Association("Filters").Clear(); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -94,7 +104,20 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 			tx.Rollback()
 			return nil, err
 		}
-		if err := tx.Model(chat).Association("Groups").Append(groups); err != nil {
+		if err := tx.Model(chat).Association("Groups").Append(&groups); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
+	// Add new filter associations
+	if len(filterIDs) > 0 {
+		var filters []*models.Filter
+		if err := tx.Where("id IN ?", filterIDs).Find(&filters).Error; err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		if err := tx.Model(chat).Association("Filters").Append(&filters); err != nil {
 			tx.Rollback()
 			return nil, err
 		}
@@ -105,12 +128,17 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		return nil, err
 	}
 
-	// Reload the chat to get the updated data
-	if err := s.DB.Preload("Groups").First(chat, id).Error; err != nil {
+	// Reload the chat with all associations
+	updatedChat := &models.Chat{}
+	if err := s.DB.Preload("Groups").
+		Preload("Filters").
+		Preload("LLMSettings").
+		Preload("LLM").
+		First(updatedChat, id).Error; err != nil {
 		return nil, err
 	}
 
-	return chat, nil
+	return updatedChat, nil
 }
 
 // DeleteChat deletes a chat by its ID

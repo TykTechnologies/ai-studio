@@ -866,7 +866,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
-			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("**Using function**: `%s()`", t.FunctionCall.Name))
 			if config.Get().EchoConversation {
 				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
 			}
@@ -891,6 +891,19 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			t1 := time.Now()
 
+			// filter content before sending to LLM
+			for i, _ := range toolDef.Filters {
+				filter := toolDef.Filters[i]
+				sr := scripting.NewScriptRunner(filter.Script)
+				cs.sendStatus(fmt.Sprintf("**Running governance filter**: `%s`", filter.Name))
+				filtered, err := sr.RunMiddleware(asStr, cs.service)
+				if err != nil {
+					return false, fmt.Errorf("error running governance filter: %v", err)
+				}
+
+				asStr = filtered
+			}
+
 			toolResp := llms.ToolCallResponse{
 				ToolCallID: t.ID,
 				Name:       t.FunctionCall.Name,
@@ -899,7 +912,10 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
 			if config.Get().EchoConversation {
-				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name, "[RESPONSE]", asStr)
+				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
+				fmt.Println("===============================================")
+				fmt.Println(asStr)
+				fmt.Println("===============================================")
 			}
 
 			toolResult.Parts = append(toolResult.Parts, toolResp)

@@ -3,6 +3,7 @@ package llmcaller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -60,18 +61,22 @@ func (*LLMCaller) CanCall() bool {
 }
 
 func (a *LLMCaller) makeLLMCall(llmID int, llmSettingsID int, prompt string) (string, error) {
+	slog.Info("running LLMCaller", "llmID", llmID, "llmSettingsID", llmSettingsID)
 	llmDetail, err := a.service.GetLLMByID(uint(llmID))
 	if err != nil {
+		slog.Error("error getting LLM by ID", "llmID", llmID, "error", err)
 		return "", err
 	}
 
 	conf, err := a.service.GetLLMSettingsByID(uint(llmSettingsID))
 	if err != nil {
+		slog.Error("error getting LLM settings by ID", "llmSettingsID", llmSettingsID, "error", err)
 		return "", err
 	}
 
 	llm, err := switches.FetchDriver(llmDetail, conf, nil, nil)
 	if err != nil {
+		slog.Error("error fetching LLM driver", "error", err)
 		return "", err
 	}
 
@@ -80,10 +85,12 @@ func (a *LLMCaller) makeLLMCall(llmID int, llmSettingsID int, prompt string) (st
 	mc := llms.TextParts(llms.ChatMessageTypeHuman, prompt)
 	response, err := llm.GenerateContent(context.Background(), []llms.MessageContent{mc}, options...)
 	if err != nil {
+		slog.Error("error generating content", "error", err)
 		return "", err
 	}
 
 	if len(response.Choices) < 1 {
+		slog.Error("no responses returned")
 		return "", fmt.Errorf("no responses returned")
 	}
 

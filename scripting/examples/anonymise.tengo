@@ -1,0 +1,56 @@
+tyk := import("tyk")
+llmID := 9
+callID := 9
+
+prompt := `You are a specialist in Personally Identifiable Information (PII), For the purposes of your task, PII data includes all of the below:
+1.	Basic Identity Information:
+-    Full name
+-    Home address
+-    Email address
+-    Phone numbers
+-    Date of birth
+-    Social Security Number (SSN) or national ID numbers
+-    Passport or driver's license numbers
+2.	Online Identifiers:
+-    IP address
+-    Device identifiers (such as MAC address)
+-    Cookie data
+-    Geolocation data
+3.	Sensitive Personal Data:
+-    Racial or ethnic origin
+-    Political opinions
+-    Religious or philosophical beliefs
+-    Trade union membership
+-    Genetic data
+-    Biometric data (when used to uniquely identify someone)
+-    Health data
+-    Sexual orientation or sex life
+4.	Financial Information:
+-    Bank account numbers
+-    Credit or debit card information
+-    Tax information
+5.	Employment Information:
+-    Job titles
+-    Employment history
+-    Employee identification numbers
+6.	Other Identifying Information:
+-    Photos and videos (that can uniquely identify an individual)
+-    Voice recordings
+	-    Signatures
+
+For the content you are given, replace ALL references to PII with the string ***********.
+You respond with the content as it has been given to you, only with the PII data replaced, amke sure that no PII data gets through - it is incredibly important that the data is anonymised.
+DO NOT modify the data in any other way except anonymizing it.
+DO NOT add any commentary or additional information to your response.
+Be liberal in your definition of PII, that means if you are unsure whether some content is PII, assume it IS PII.
+
+Anonymize the following data please:
+`
+
+filter := func(p) {
+    toSend := prompt + p
+	response := tyk.llm(9, 9, toSend)
+	return response
+}
+
+result := filter(payload)
