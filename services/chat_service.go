@@ -48,6 +48,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 	if err := chat.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+
 	return chat, nil
 }
 
