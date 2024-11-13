@@ -11,11 +11,19 @@ import {
   CircularProgress,
   Box,
   Pagination,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
+import DeleteIcon from "@mui/icons-material/Delete";
 import pubClient from "../../admin/utils/pubClient";
 
 const PortalDashboard = () => {
@@ -79,6 +87,18 @@ const PortalDashboard = () => {
     setCurrentPage(value);
   };
 
+  const handleDeleteChat = async (chatId) => {
+    try {
+      // Implementation needed - example:
+      // await pubClient.delete(`/common/history/${chatId}`);
+      // await fetchData(); // Refresh the data
+      console.log("Delete chat:", chatId);
+    } catch (err) {
+      console.error("Error deleting chat:", err);
+      // Handle error appropriately
+    }
+  };
+
   if (loading) {
     return (
       <Container sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
@@ -100,10 +120,10 @@ const PortalDashboard = () => {
   return (
     <Container maxWidth="lg">
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Welcome to our AI Portal
+        Welcome to the AI Portal
       </Typography>
 
-      {apps.length === 0 && (
+      {false === 0 && (
         <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
           <Typography variant="h6" gutterBottom>
             Apps provide access to LLMs and Data sources via the AI Gateway
@@ -144,7 +164,7 @@ const PortalDashboard = () => {
       {showChat && chatRooms.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
-            Jump into a new chat...
+            Start a new chat session
           </Typography>
           <Grid container spacing={2}>
             {chatRooms
@@ -198,39 +218,80 @@ const PortalDashboard = () => {
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Continue where you left off
           </Typography>
-          <Grid container spacing={3}>
-            {chatHistory.map((record) => (
-              <Grid item xs={12} sm={6} md={4} key={record.id}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h7" component="div">
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "#f5f5f5",
+                      fontSize: "1rem",
+                      color: "rgba(0, 0, 0, 0.87)",
+                    }}
+                  >
+                    Conversation
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "#f5f5f5",
+                      fontSize: "1rem",
+                      color: "rgba(0, 0, 0, 0.87)",
+                    }}
+                    align="right"
+                  >
+                    Actions
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {chatHistory.map((record, index) => (
+                  <TableRow
+                    key={record.id}
+                    sx={{
+                      "&:nth-of-type(odd)": {
+                        backgroundColor: "#E0F7F6",
+                      },
+                      "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.08)" },
+                    }}
+                  >
+                    <TableCell component="th" scope="row">
                       {record.attributes.name}
-                    </Typography>
-                  </CardContent>
-                  <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        handleContinueChat(
-                          record.attributes.chat_id,
-                          record.attributes.session_id,
-                        )
-                      }
-                      endIcon={<ArrowForwardIcon />}
-                      sx={{
-                        color: "black",
-                        "&:hover": {
-                          backgroundColor: "rgba(0, 0, 0, 0.04)",
-                        },
-                      }}
-                    >
-                      Continue
-                    </Button>
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            handleContinueChat(
+                              record.attributes.chat_id,
+                              record.attributes.session_id,
+                            )
+                          }
+                          endIcon={<ArrowForwardIcon />}
+                          sx={{
+                            color: "black",
+                            "&:hover": {
+                              backgroundColor: "rgba(0, 0, 0, 0.04)",
+                            },
+                          }}
+                        >
+                          Continue
+                        </Button>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
           <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
             <Pagination
               count={totalPages}

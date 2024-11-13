@@ -269,6 +269,8 @@ const ChatView = () => {
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
 
+    let keepAliveInterval; // Define interval variable
+
     const setupWebSocket = () => {
       closeWebSocket();
 
@@ -278,6 +280,13 @@ const ChatView = () => {
         setIsConnected(true);
         setIsLoading(false);
         setError(null);
+
+        // Set up keepalive interval
+        keepAliveInterval = setInterval(() => {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 10000); // Send keepalive every 10 second
 
         // If there's a continue_id, fetch the chat history
         if (continueId) {
@@ -300,6 +309,9 @@ const ChatView = () => {
 
       ws.current.onclose = (event) => {
         setIsConnected(false);
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+        }
         if (!event.wasClean) {
           setError(
             `Connection closed unexpectedly: ${event.reason || "Unknown reason"}`,
@@ -314,6 +326,9 @@ const ChatView = () => {
     }, delay);
 
     return () => {
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+      }
       closeWebSocket();
     };
   }, [chatId, location.search]);

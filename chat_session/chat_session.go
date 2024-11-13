@@ -896,6 +896,13 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			t1 := time.Now()
 
+			if config.Get().EchoConversation {
+				fmt.Println("===============================================")
+				slog.Info("[TOOL CALL]", "[FUNCTION]", t.FunctionCall.Name)
+				fmt.Println(asStr)
+				fmt.Println("===============================================")
+			}
+
 			// filter content before sending to LLM
 			for i, _ := range toolDef.Filters {
 				filter := toolDef.Filters[i]
@@ -916,8 +923,8 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			}
 
 			cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
-			if config.Get().EchoConversation {
-				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
+			if config.Get().EchoConversation && len(toolDef.Filters) > 0 {
+				slog.Info("[TOOL-CALL]", "[FILTERED]", t.FunctionCall.Name)
 				fmt.Println("===============================================")
 				fmt.Println(asStr)
 				fmt.Println("===============================================")
