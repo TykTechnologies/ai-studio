@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -238,6 +239,7 @@ func WithAuth(schemeName string, credentials interface{}) ClientOption {
 		setAuth := false
 		for i, scheme := range c.authConfig.Schemes {
 			if scheme.Name == schemeName {
+				slog.Info("universalclient", "security-schema", schemeName)
 				switch creds := credentials.(type) {
 				case string:
 					switch scheme.Method {
@@ -330,13 +332,17 @@ func (c *Client) CallOperation(operationId string, params map[string][]string, p
 	for _, scheme := range c.authConfig.Schemes {
 		switch scheme.Method {
 		case AuthBearer:
+			slog.Info("universalclient", "set bearer")
 			req.Header.Set("Authorization", "Bearer "+scheme.Token)
 		case AuthBasic:
+			slog.Info("universalclient", "set basic")
 			req.SetBasicAuth(scheme.Username, scheme.Password)
 		case AuthApiKey:
 			if scheme.ApiKeyIn == "header" {
+				slog.Info("universalclient", "set header", scheme.ApiKeyName)
 				req.Header.Set(scheme.ApiKeyName, scheme.Token)
 			} else if scheme.ApiKeyIn == "query" {
+				slog.Info("universalclient", "set query", scheme.ApiKeyName)
 				q := req.URL.Query()
 				q.Add(scheme.ApiKeyName, scheme.Token)
 				req.URL.RawQuery = q.Encode()

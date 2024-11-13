@@ -7,6 +7,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import CssBaseline from "@mui/material/CssBaseline";
 import pubClient from "./admin/utils/pubClient";
@@ -23,6 +24,75 @@ import PortalLayout from "./portal/layouts/PortalLayout";
 import { loadConfig } from "./config";
 import { reinitializeApiClient } from "./admin/utils/apiClient";
 import { reinitializePubClient } from "./admin/utils/pubClient";
+
+// Wrapped component that can use router hooks
+const ThemedApp = ({ isAuthenticated, isAdmin }) => {
+  const location = useLocation();
+  const isAdminPath = location.pathname.startsWith("/admin");
+
+  return (
+    <ThemeProvider theme={isAdminPath ? theme : portalTheme}>
+      <CssBaseline />
+      <Routes>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate
+                to={isAdmin ? "/admin/dashboard" : "/portal/dashboard"}
+                replace
+              />
+            ) : (
+              <Login />
+            )
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? (
+              <Navigate
+                to={isAdmin ? "/admin/dashboard" : "/portal/dashboard"}
+                replace
+              />
+            ) : (
+              <Login />
+            )
+          }
+        />
+        {/* Allow access to register and forgot-password without authentication */}
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route
+          path="/admin/*"
+          element={
+            isAuthenticated && isAdmin ? (
+              <MainLayout />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          {adminRoutes}
+        </Route>
+        <Route
+          path="/portal/*"
+          element={
+            isAuthenticated ? (
+              <PortalLayout />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          {portalRoutes}
+        </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </ThemeProvider>
+  );
+};
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -108,68 +178,9 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={isAdmin ? theme : portalTheme}>
-      <Router>
-        <CssBaseline />
-        <Routes>
-          <Route
-            path="/"
-            element={
-              isAuthenticated ? (
-                <Navigate
-                  to={isAdmin ? "/admin/dashboard" : "/portal/dashboard"}
-                  replace
-                />
-              ) : (
-                <Login />
-              )
-            }
-          />
-          <Route
-            path="/login"
-            element={
-              isAuthenticated ? (
-                <Navigate
-                  to={isAdmin ? "/admin/dashboard" : "/portal/dashboard"}
-                  replace
-                />
-              ) : (
-                <Login />
-              )
-            }
-          />
-          {/* Allow access to register and forgot-password without authentication */}
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route
-            path="/admin/*"
-            element={
-              isAuthenticated && isAdmin ? (
-                <MainLayout />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          >
-            {adminRoutes}
-          </Route>
-          <Route
-            path="/portal/*"
-            element={
-              isAuthenticated ? (
-                <PortalLayout />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          >
-            {portalRoutes}
-          </Route>
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </Router>
-    </ThemeProvider>
+    <Router>
+      <ThemedApp isAuthenticated={isAuthenticated} isAdmin={isAdmin} />
+    </Router>
   );
 }
 

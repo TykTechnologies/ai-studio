@@ -40,9 +40,6 @@ const PortalAppBar = () => {
       position="fixed"
       sx={(theme) => ({
         zIndex: theme.zIndex.drawer + 1,
-        backgroundColor: "white",
-        boxShadow: "none",
-        borderBottom: "none",
       })}
     >
       <Toolbar>
