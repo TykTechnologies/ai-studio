@@ -240,6 +240,16 @@ const ChatDetails = () => {
         </Grid>
 
         <Grid item xs={3}>
+          <FieldLabel>System Prompt:</FieldLabel>
+        </Grid>
+        <Grid item xs={9}>
+          <FieldValue>
+            {chat.attributes.system_prompt ||
+              "No system prompt set, check LLM Settings for fallback prompt"}
+          </FieldValue>
+        </Grid>
+
+        <Grid item xs={3}>
           <FieldLabel>Tool Support:</FieldLabel>
         </Grid>
         <Grid item xs={9}>

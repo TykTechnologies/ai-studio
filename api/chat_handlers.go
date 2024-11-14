@@ -39,6 +39,7 @@ func (a *API) createChat(c *gin.Context) {
 		input.Data.Attributes.FilterIDs,
 		input.Data.Attributes.RagN,
 		input.Data.Attributes.ToolSupport,
+		input.Data.Attributes.SystemPrompt,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -150,6 +151,7 @@ func (a *API) updateChat(c *gin.Context) {
 		input.Data.Attributes.FilterIDs,
 		input.Data.Attributes.RagN,
 		input.Data.Attributes.ToolSupport,
+		input.Data.Attributes.SystemPrompt,
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -278,6 +280,7 @@ func serializeChat(chat *models.Chat) ChatResponse {
 			Filters       []FilterResponse `json:"filters"`
 			RagN          int              `json:"rag_n"`
 			ToolSupport   bool             `json:"tool_support"`
+			SystemPrompt  string           `json:"system_prompt"`
 		}{
 			Name:          chat.Name,
 			LLMSettingsID: chat.LLMSettingsID,
@@ -286,6 +289,7 @@ func serializeChat(chat *models.Chat) ChatResponse {
 			Filters:       serializeFilters(chat.Filters),
 			RagN:          chat.RagResultsPerSource,
 			ToolSupport:   chat.SupportsTools,
+			SystemPrompt:  chat.SystemPrompt,
 		},
 	}
 }

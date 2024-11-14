@@ -36,6 +36,7 @@ const ChatForm = () => {
     filters: [],
     rag_n: "",
     tool_support: false,
+    system_prompt: "",
   });
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
@@ -88,7 +89,8 @@ const ChatForm = () => {
         filters: chatData.filters.map((filter) => filter.id.toString()),
         oas_spec: chatData.oas_spec || "",
         rag_n: chatData.rag_n || "",
-        tool_support: chatData.tool_support || false, // Add this line
+        tool_support: chatData.tool_support || false,
+        system_prompt: chatData.system_prompt || "", // Add this line
       });
     } catch (error) {
       console.error("Error fetching chat", error);
@@ -181,6 +183,7 @@ const ChatForm = () => {
           filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
           rag_n: chat.rag_n ? parseInt(chat.rag_n, 10) : null,
           tool_support: chat.tool_support,
+          system_prompt: chat.system_prompt, // Add this line to be explicit
         },
       },
     };
@@ -371,6 +374,18 @@ const ChatForm = () => {
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="System Prompt"
+                name="system_prompt"
+                value={chat.system_prompt}
+                onChange={handleChange}
+                multiline
+                rows={4}
+                placeholder="Enter the system prompt for this chat"
+              />
             </Grid>
 
             <Grid item xs={12}>
