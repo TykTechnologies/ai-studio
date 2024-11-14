@@ -1,14 +1,20 @@
-url := "http://localhost:9000/redact"
+url := "http://localhost:9001/process"
+labels := ["person", "email", "phone number", "address"]
 
 json := import ("json")
 fmt := import("fmt")
 os := import("os")
+base64 := import("base64")
 tyk := import("tyk")
 
 makeRequest := func(input) {
+    // b64 encode the body
+    input64 := base64.encode(input)
+
     // Create the request body
     body := {
-        "text": input
+        "labels": labels,
+        "text": input64
     }
 
     // Convert body to JSON string
@@ -25,8 +31,11 @@ makeRequest := func(input) {
     }
 
     decoded := json.decode(response.response)
+    redacted64 := decoded.processed_text
 
-    return decoded.redacted_text
+    asStr := base64.decode(redacted64)
+
+    return asStr
 }
 
 // ingress

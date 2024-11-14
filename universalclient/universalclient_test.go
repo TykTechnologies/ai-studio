@@ -672,3 +672,21 @@ func decodeToUTF8(s string) (string, error) {
 
 	return string(utf8Bytes), nil
 }
+
+func Test_GetOperations(t *testing.T) {
+	// Load the OpenAPI 3.0 definition
+	specBytes, err := os.ReadFile("testdata/logzio.json")
+	require.NoError(t, err)
+
+	// Create the client
+	client, err := NewClient(specBytes, "")
+	require.NoError(t, err)
+
+	// List the operations
+	operations, err := client.ListOperations()
+	require.NoError(t, err)
+
+	for _, o := range operations {
+		fmt.Println(o)
+	}
+}

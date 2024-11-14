@@ -409,6 +409,7 @@ type ChatInput struct {
 			FilterIDs     []uint `json:"filter_ids"`
 			RagN          int    `json:"rag_n"`
 			ToolSupport   bool   `json:"tool_support"`
+			SystemPrompt  string `json:"system_prompt"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -426,6 +427,7 @@ type ChatResponse struct {
 		Filters       []FilterResponse `json:"filters"`
 		RagN          int              `json:"rag_n"`
 		ToolSupport   bool             `json:"tool_support"`
+		SystemPrompt  string           `json:"system_prompt"`
 	} `json:"attributes"`
 }
 

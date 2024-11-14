@@ -18,6 +18,7 @@ type Chat struct {
 	Filters             []*Filter    `gorm:"many2many:chat_filters;"`
 	RagResultsPerSource int          `json:"rag_results_per_source"`
 	SupportsTools       bool         `json:"supports_tools"`
+	SystemPrompt        string       `json:"system_prompt"`
 }
 
 type Chats []Chat

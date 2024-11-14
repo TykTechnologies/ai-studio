@@ -367,6 +367,16 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 	return tools
 }
 
+func (cs *ChatSession) getSystemPrompt() string {
+	// allow override of system prompt in chat room config
+	prompt := cs.chatRef.LLMSettings.SystemPrompt
+	if cs.chatRef.SystemPrompt != "" {
+		prompt = cs.chatRef.SystemPrompt
+	}
+
+	return prompt
+}
+
 func (cs *ChatSession) initSession() error {
 	// History for the chat session
 	if cs.db == nil {
@@ -381,7 +391,7 @@ func (cs *ChatSession) initSession() error {
 		return fmt.Errorf("no LLM settings")
 	}
 
-	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, cs.chatRef.ID, cs.userID, cs.chatRef.LLMSettings.SystemPrompt)
+	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, cs.chatRef.ID, cs.userID, cs.getSystemPrompt())
 
 	// create the LLM client
 	llm, err := cs.fetchDriver(nil)
@@ -550,6 +560,8 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			return err
 		}
 
+		// also check with tool calls!
+		cs.PreflightTokenLengthCheck(history)
 		toolCallResp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
 		if err != nil {
 			cs.sendError(fmt.Errorf("[toolcall] error generating content after tool call: %v", err))
@@ -662,6 +674,7 @@ func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []l
 	removed := 0
 	for {
 		tokenLength := cs.estimateTokenLength(msgs)
+		slog.Info("preflight token count", "estiamte", tokenLength)
 		if tokenLength <= maxInputTokens {
 			break
 		}
@@ -691,6 +704,10 @@ func (cs *ChatSession) estimateTokenLength(msgs []llms.MessageContent) int {
 			switch p.(type) {
 			case llms.TextContent:
 				text := p.(llms.TextContent).Text
+				token := tke.Encode(text, nil, nil)
+				total += len(token)
+			case llms.ToolCallResponse:
+				text := p.(llms.ToolCallResponse).Content
 				token := tke.Encode(text, nil, nil)
 				total += len(token)
 			}

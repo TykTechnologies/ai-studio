@@ -7,13 +7,14 @@ import (
 )
 
 // CreateChat creates a new chat
-func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool) (*models.Chat, error) {
+func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string) (*models.Chat, error) {
 	chat := &models.Chat{
 		Name:                name,
 		LLMSettingsID:       llmSettingsID,
 		LLMID:               llmID,
 		RagResultsPerSource: ragN,
 		SupportsTools:       toolSupport,
+		SystemPrompt:        systemPrompt,
 	}
 
 	for _, filterID := range filterIDs {
@@ -53,7 +54,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
-func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool) (*models.Chat, error) {
+func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string) (*models.Chat, error) {
 	// Start a transaction
 	tx := s.DB.Begin()
 	if tx.Error != nil {
@@ -79,6 +80,7 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		"llm_id":                 llmID,
 		"rag_results_per_source": ragN,
 		"supports_tools":         toolSupport,
+		"system_prompt":          systemPrompt,
 	}
 
 	// Update the chat's basic information
