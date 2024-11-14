@@ -314,7 +314,7 @@ func (cs *ChatSession) sendStatus(resp string) {
 
 	if cs.streamingFunc != nil {
 		select {
-		case cs.outputStream <- []byte(fmt.Sprintf("\n\n %s \n\n", resp)):
+		case cs.outputStream <- []byte(fmt.Sprintf(":::system \n\n %s \n\n :::", resp)):
 		}
 	}
 }
@@ -871,7 +871,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
-			cs.sendStatus(fmt.Sprintf("**Using function**: `%s()`", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
 			if config.Get().EchoConversation {
 				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
 			}
@@ -907,7 +907,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			for i, _ := range toolDef.Filters {
 				filter := toolDef.Filters[i]
 				sr := scripting.NewScriptRunner(filter.Script)
-				cs.sendStatus(fmt.Sprintf("**Running governance filter**: `%s`", filter.Name))
+				cs.sendStatus(fmt.Sprintf("Running governance filter: `%s`", filter.Name))
 				filtered, err := sr.RunMiddleware(asStr, cs.service)
 				if err != nil {
 					return false, fmt.Errorf("error running governance filter: %v", err)

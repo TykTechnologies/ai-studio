@@ -27,6 +27,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import pubClient from "../../admin/utils/pubClient";
 import TextareaAutosize from "@mui/material/TextareaAutosize";
 import { getConfig } from "../../config"; // Update the import
+import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -69,23 +70,6 @@ const ChatView = () => {
       ws.current.close();
       ws.current = null;
     }
-  };
-
-  useEffect(() => {
-    let errorTimer;
-    if (error) {
-      errorTimer = setTimeout(() => {
-        setShowError(true);
-      }, 2000); // 2 seconds delay before showing error
-    }
-    return () => clearTimeout(errorTimer);
-  }, [error]);
-
-  const dismissError = () => {
-    setError(null);
-    setShowError(false);
-    // Reload the chat by navigating to the same route
-    navigate(0);
   };
 
   const handleKeyDown = (e) => {
@@ -213,7 +197,14 @@ const ChatView = () => {
         }
       } catch (error) {
         console.error("Error fetching user entitlements:", error);
-        setError("Failed to load user entitlements");
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content: ":::system Error: Failed to load user entitlements:::",
+            isComplete: true,
+          },
+        ]);
       }
 
       try {
@@ -243,7 +234,15 @@ const ChatView = () => {
         setIsLoading(false);
       } catch (error) {
         console.error("Error fetching data:", error);
-        setError("Failed to load databases and tools");
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content: ":::system Error: Failed to load databases and tools:::",
+            isComplete: true,
+          },
+        ]);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -303,7 +302,14 @@ const ChatView = () => {
       };
 
       ws.current.onerror = (error) => {
-        setError(`Failed to connect to chat. Error: ${error.message}`);
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content: `:::system Error: Failed to connect to chat. ${error.message}:::`,
+            isComplete: true,
+          },
+        ]);
         setIsLoading(false);
       };
 
@@ -313,9 +319,14 @@ const ChatView = () => {
           clearInterval(keepAliveInterval);
         }
         if (!event.wasClean) {
-          setError(
-            `Connection closed unexpectedly: ${event.reason || "Unknown reason"}`,
-          );
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              type: "system",
+              content: `:::system Error: Connection closed unexpectedly: ${event.reason || "Unknown reason"}:::`,
+              isComplete: true,
+            },
+          ]);
         }
       };
     };
@@ -360,7 +371,13 @@ const ChatView = () => {
       setMessages(historicalMessages);
     } catch (error) {
       console.error("Error fetching chat history:", error);
-      setError("Failed to load chat history");
+      setMessages([
+        {
+          type: "system",
+          content: ":::system Error: Failed to load chat history:::",
+          isComplete: true,
+        },
+      ]);
     } finally {
       setIsFetchingHistory(false);
     }
@@ -451,7 +468,6 @@ const ChatView = () => {
             isComplete: data.type === "ai_message",
           });
 
-          // If this is a new chat, we haven't updated the chat name yet, and this is a complete AI message
           if (isNewChat && !hasUpdatedChatName && data.type === "ai_message") {
             const newName = content.slice(0, 100).trim();
             updateChatName(newName);
@@ -462,7 +478,15 @@ const ChatView = () => {
         return newMessages;
       });
     } else if (data.type === "error") {
-      setError(data.payload);
+      // Add error as a system message
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {
+          type: "system",
+          content: `:::system Error: ${data.payload}:::`,
+          isComplete: true,
+        },
+      ]);
       setIsLoading(false);
     } else {
       console.warn("Received unknown message type:", data.type);
@@ -501,57 +525,116 @@ const ChatView = () => {
   };
 
   const renderMessageContent = (content) => {
-    const components = {
-      p: ({ node, ...props }) => <Typography {...props} />,
-      a: ({ node, ...props }) => (
-        <a target="_blank" rel="noopener noreferrer" {...props} />
-      ),
-      code: ({ node, inline, className, children, ...props }) => {
-        const match = /language-(\w+)/.exec(className || "");
+    // Add safety check for undefined or null content
+    if (!content) {
+      return null;
+    }
 
-        if (inline) {
-          return (
-            <code className="inline-code" {...props}>
-              {children}
-            </code>
-          );
-        }
+    // Ensure content is a string
+    const contentString = String(content);
 
-        return match ? (
-          <pre
-            style={{
-              margin: "8px 0",
-              padding: "10px",
-              backgroundColor: "#f0f0f0",
-              borderRadius: "4px",
-              overflowX: "auto",
-            }}
-          >
-            <code
-              className={className}
-              style={{
-                fontFamily: "monospace",
-                fontSize: "0.9em",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-              {...props}
-            >
-              {children}
-            </code>
-          </pre>
-        ) : (
-          <code className={className} {...props}>
-            {children}
-          </code>
-        );
-      },
-    };
+    const segments = content.split(
+      /((?::::|\%\%\%)system[\s\S]*?(?::::|\%\%\%))/g,
+    );
 
     return (
-      <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
-        {content}
-      </ReactMarkdown>
+      <>
+        {segments.map((segment, index) => {
+          // Check for both ::: and %%% system messages
+          if (segment.match(/(:::|\%\%\%)system/)) {
+            const systemContent = segment
+              .replace(/(:::|\%\%\%)system\s*([\s\S]*?)(:::|\%\%\%)/, "$2")
+              .trim();
+
+            // Check if this is an error message
+            const isError = systemContent.startsWith("Error:");
+
+            return (
+              <Box
+                key={index}
+                sx={{
+                  backgroundColor: isError ? "#FEE2E2" : "#E0F7F6",
+                  border: `1px solid ${isError ? "#FCA5A5" : "#e9ecef"}`,
+                  borderRadius: "10px",
+                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                  padding: "12px 12px",
+                  margin: "10px 10px",
+                  color: isError ? "#DC2626" : "#000000",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  fontFamily: "monospace",
+                }}
+              >
+                <SmartToyOutlinedIcon
+                  sx={{
+                    fontSize: "1rem",
+                    color: isError ? "#DC2626" : "#666",
+                  }}
+                />
+                {systemContent}
+              </Box>
+            );
+          } else if (segment.trim()) {
+            // Regular markdown content
+            return (
+              <ReactMarkdown
+                key={index}
+                components={{
+                  p: ({ node, ...props }) => <Typography {...props} />,
+                  a: ({ node, ...props }) => (
+                    <a target="_blank" rel="noopener noreferrer" {...props} />
+                  ),
+                  code: ({ node, inline, className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+
+                    if (inline) {
+                      return (
+                        <code className="inline-code" {...props}>
+                          {children}
+                        </code>
+                      );
+                    }
+
+                    return match ? (
+                      <pre
+                        style={{
+                          margin: "8px 0",
+                          padding: "10px",
+                          backgroundColor: "#f0f0f0",
+                          borderRadius: "4px",
+                          overflowX: "auto",
+                        }}
+                      >
+                        <code
+                          className={className}
+                          style={{
+                            fontFamily: "monospace",
+                            fontSize: "0.9em",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      </pre>
+                    ) : (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+                remarkPlugins={[remarkGfm]}
+              >
+                {segment}
+              </ReactMarkdown>
+            );
+          }
+          return null;
+        })}
+      </>
     );
   };
 
@@ -652,25 +735,6 @@ const ChatView = () => {
         height="100vh"
       >
         <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (showError && error) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        height="100vh"
-        flexDirection="column"
-      >
-        <Typography color="error" gutterBottom>
-          {error}
-        </Typography>
-        <Button variant="contained" onClick={dismissError}>
-          Dismiss and Reload
-        </Button>
       </Box>
     );
   }

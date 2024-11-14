@@ -1,0 +1,92 @@
+url := "http://localhost:9000/redact"
+fields_to_anonymize := ["emailAddress", "displayName", "email", "mail", "name"]
+fields_to_analyse := ["summary", "description"]
+
+
+json := import ("json")
+fmt := import("fmt")
+os := import("os")
+tyk := import("tyk")
+
+makeRequest := func(input) {
+    // Create the request body
+    body := {
+        "text": input
+    }
+
+    // Convert body to JSON string
+    json_body := json.encode(body)
+
+    // Make POST request
+    method := "POST"
+    headers := {"Content-Type": "application/json"}
+
+    response := tyk.makeHTTPRequest(method, url, headers, json_body)
+    if response.status != 200 {
+        fmt.println("governance error with contnet filter for:", input)
+        return input
+    }
+
+    decoded := json.decode(response.response)
+
+    return decoded.redacted_text
+}
+
+search_and_null := func(obj) {
+    // Handle different types
+    if is_map(obj) {
+        // For maps/objects, check each key
+        for k, v in obj {
+            if is_map(v) || is_array(v) {
+                // Recursively process nested objects/arrays
+                search_and_null(v)
+            }
+
+            // Check if key is in our list of fields to anonymize
+            for field in fields_to_anonymize {
+                if obj[k] != "" {
+                    if k == field {
+                        obj[k] = "**********"
+                        break
+                    }
+                }
+            }
+
+            // check if it's in keys to process
+            for field in fields_to_analyse {
+                if k == field {
+                    if obj[k] != "" {
+                        obj[k] = makeRequest(obj[k])
+                        break
+                    }
+                }
+            }
+        }
+    } else if is_array(obj) {
+        // For arrays, process each element
+        for i := 0; i < len(obj); i++ {
+            if is_map(obj[i]) || is_array(obj[i]) {
+                search_and_null(obj[i])
+            }
+        }
+    }
+    return obj
+}
+
+// ingress
+filter := func(input) {
+    json_data := json.decode(input)
+    if !is_error(json_data) {
+        clean := search_and_null(json_data)
+        asStr := json.encode(clean)
+
+        return string(asStr)
+    } else {
+        // Handle JSON decode error
+        return "Failed to decode JSON"
+    }
+
+    return "something went wrong..."
+}
+
+result := filter(payload)
