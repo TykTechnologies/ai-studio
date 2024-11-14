@@ -1,0 +1,38 @@
+url := "http://localhost:9000/redact"
+
+json := import ("json")
+fmt := import("fmt")
+os := import("os")
+tyk := import("tyk")
+
+makeRequest := func(input) {
+    // Create the request body
+    body := {
+        "text": input
+    }
+
+    // Convert body to JSON string
+    json_body := json.encode(body)
+
+    // Make POST request
+    method := "POST"
+    headers := {"Content-Type": "application/json"}
+
+    response := tyk.makeHTTPRequest(method, url, headers, json_body)
+    if response.status != 200 {
+        fmt.println("governance error with contnet filter for:", input)
+        return input
+    }
+
+    decoded := json.decode(response.response)
+
+    return decoded.redacted_text
+}
+
+// ingress
+filter := func(input) {
+    data := makeRequest(input)
+    return string(data)
+}
+
+result := filter(payload)
