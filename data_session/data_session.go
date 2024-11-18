@@ -2,7 +2,9 @@ package data_session
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/schema"
+	"github.com/tmc/langchaingo/textsplitter"
 	"github.com/tmc/langchaingo/vectorstores"
 	"github.com/tmc/langchaingo/vectorstores/chroma"
 	"github.com/tmc/langchaingo/vectorstores/pgvector"
@@ -18,6 +21,7 @@ import (
 	"github.com/tmc/langchaingo/vectorstores/qdrant"
 	"github.com/tmc/langchaingo/vectorstores/redisvector"
 	"github.com/tmc/langchaingo/vectorstores/weaviate"
+	"gorm.io/gorm"
 )
 
 type VectorStoreVendor string
@@ -71,10 +75,128 @@ func (ds *DataSession) Search(query string, n int) ([]schema.Document, error) {
 			return nil, err
 		}
 
+		for i := range docs {
+			enc, ok := docs[i].Metadata["encoding"]
+			if ok {
+				if enc == "base64" {
+					// base64 decode content
+					decodedContent, err := base64.StdEncoding.DecodeString(docs[i].PageContent)
+					if err != nil {
+						slog.Error("error decoding base64 content", err)
+						continue
+					}
+					docs[i].PageContent = string(decodedContent)
+				}
+			}
+		}
+
 		results = append(results, docs...)
 	}
 
 	return results, nil
+}
+
+func (ds *DataSession) ProcessRAGForDatasource(withDSID uint, db *gorm.DB) error {
+	splitter := textsplitter.NewRecursiveCharacter(
+		textsplitter.WithSeparators([]string{"\n\n", "\n", " ", ""}),
+		textsplitter.WithChunkSize(2048),
+	)
+
+	dataSource, ok := ds.Sources[withDSID]
+	if !ok {
+		return fmt.Errorf("datasource with id %d not found", withDSID)
+	}
+
+	files := dataSource.Files
+
+	texts := make([]string, 0)
+	metas := make([]map[string]any, 0)
+
+	for i, _ := range files {
+		f := files[i]
+		meta := map[string]any{
+			"filename": f.FileName,
+			"encoding": "base64", // for some reason it base64 encodes the pagecontent
+		}
+
+		texts = append(texts, f.Content)
+		metas = append(metas, meta)
+
+		f.LastProcessedOn = time.Now()
+		err := f.Update(db)
+		if err != nil {
+			return err
+		}
+	}
+
+	fmt.Println("processing RAG for datasource with id", withDSID)
+	asDocs, err := textsplitter.CreateDocuments(
+		splitter,
+		texts,
+		metas)
+
+	if err != nil {
+		return err
+	}
+
+	slog.Info("creating embedding for datasource with id", withDSID)
+	err = ds.StoreEmbedding(withDSID, asDocs)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ds *DataSession) CreateEmbedding(dsID uint, texts []string) ([][]float32, error) {
+	if len(ds.Sources) > 0 {
+		d, ok := ds.Sources[dsID]
+		if !ok {
+			return nil, fmt.Errorf("datasource with id %d not found", dsID)
+		}
+
+		embedder, err := ds.getEmbedder(d)
+		if err != nil {
+			return nil, err
+		}
+
+		embedding, err := embedder.EmbedDocuments(context.Background(), texts)
+		if err != nil {
+			return nil, err
+		}
+
+		return embedding, nil
+	}
+
+	return nil, fmt.Errorf("no datasources found")
+}
+
+func (ds *DataSession) StoreEmbedding(dsID uint, docs []schema.Document) error {
+	if len(ds.Sources) > 0 {
+		d, ok := ds.Sources[dsID]
+		if !ok {
+			return fmt.Errorf("datasource with id %d not found", dsID)
+		}
+
+		embedder, err := ds.getEmbedder(d)
+		if err != nil {
+			return err
+		}
+
+		store, err := ds.getStore(d, embedder)
+		if err != nil {
+			return err
+		}
+
+		_, err = store.AddDocuments(context.Background(), docs, vectorstores.WithNameSpace(d.DBName))
+		if err != nil {
+			return fmt.Errorf("add documents failed: %v", err)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("no datasources found")
 }
 
 func (ds *DataSession) getEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {

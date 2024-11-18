@@ -1,15 +1,20 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type FileStore struct {
 	gorm.Model
-	ID          uint   `gorm:"primary_key" json:"id"`
-	FileName    string `json:"file_name"`
-	Description string `json:"description"`
-	Content     string `json:"content"`
-	Length      int    `json:"length"`
-	Tools       []Tool `gorm:"many2many:tool_filestores;" json:"-"` // Note the json:"-" to
+	ID              uint      `gorm:"primary_key" json:"id"`
+	FileName        string    `json:"file_name"`
+	Description     string    `json:"description"`
+	Content         string    `json:"content"`
+	Length          int       `json:"length"`
+	LastProcessedOn time.Time `json:"last_processed_on"`
+	// Tools       []Tool `gorm:"many2many:tool_filestores;" json:"-"` // Note the json:"-" to
 }
 
 // NewFileStore creates a new FileStore instance

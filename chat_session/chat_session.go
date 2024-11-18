@@ -97,6 +97,11 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		filters:        withFilters,
 	}
 
+	// auto-load the default
+	if chat.DefaultDataSource != nil {
+		cs.datasources[chat.DefaultDataSource.ID] = chat.DefaultDataSource
+	}
+
 	// Perform initial privacy check
 	if len(cs.datasources) > 0 || len(cs.tools) > 0 {
 		if err := cs.validatePrivacyScores(); err != nil {
@@ -372,6 +377,19 @@ func (cs *ChatSession) getSystemPrompt() string {
 	prompt := cs.chatRef.LLMSettings.SystemPrompt
 	if cs.chatRef.SystemPrompt != "" {
 		prompt = cs.chatRef.SystemPrompt
+	}
+
+	if (cs.chatRef.ExtraContext != nil) || (len(cs.chatRef.ExtraContext) > 0) {
+		contextStr := "I have provided additional context for this chat session. Please review the following information and bear it in mind for every interaction:"
+		for i := range cs.chatRef.ExtraContext {
+			contextStr = fmt.Sprintf("%s\n\n## File Name: %s \n\n## File Content:\n\n %s",
+				contextStr,
+				cs.chatRef.ExtraContext[i].FileName,
+				cs.chatRef.ExtraContext[i].Content)
+		}
+
+		fmt.Println("Injecting default context into system prompt")
+		prompt = fmt.Sprintf("%s\n\n%s", contextStr, prompt)
 	}
 
 	return prompt

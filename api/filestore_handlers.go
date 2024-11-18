@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/filereader"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -293,15 +294,17 @@ func serializeFileStore(fileStore *models.FileStore) FileStoreResponse {
 		Type: "filestore",
 		ID:   strconv.FormatUint(uint64(fileStore.ID), 10),
 		Attributes: struct {
-			FileName    string `json:"file_name"`
-			Description string `json:"description"`
-			Content     string `json:"-"`
-			Length      int    `json:"length"`
+			FileName        string    `json:"file_name"`
+			Description     string    `json:"description"`
+			Content         string    `json:"-"`
+			Length          int       `json:"length"`
+			LastProcessedOn time.Time `json:"last_processed_on"`
 		}{
-			FileName:    fileStore.FileName,
-			Description: fileStore.Description,
-			Content:     fileStore.Content,
-			Length:      fileStore.Length,
+			FileName:        fileStore.FileName,
+			Description:     fileStore.Description,
+			Content:         fileStore.Content,
+			Length:          fileStore.Length,
+			LastProcessedOn: fileStore.LastProcessedOn,
 		},
 	}
 }

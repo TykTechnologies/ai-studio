@@ -235,23 +235,24 @@ type DatasourceResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name             string        `json:"name"`
-		ShortDescription string        `json:"short_description"`
-		LongDescription  string        `json:"long_description"`
-		Icon             string        `json:"icon"`
-		Url              string        `json:"url"`
-		PrivacyScore     int           `json:"privacy_score"`
-		UserID           uint          `json:"user_id"`
-		Tags             []TagResponse `json:"tags"`
-		DBConnString     string        `json:"db_conn_string"`
-		DBSourceType     string        `json:"db_source_type"`
-		DBConnAPIKey     string        `json:"db_conn_api_key"`
-		DBName           string        `json:"db_name"`
-		EmbedVendor      string        `json:"embed_vendor"`
-		EmbedUrl         string        `json:"embed_url"`
-		EmbedAPIKey      string        `json:"embed_api_key"`
-		EmbedModel       string        `json:"embed_model"`
-		Active           bool          `json:"active"`
+		Name             string              `json:"name"`
+		ShortDescription string              `json:"short_description"`
+		LongDescription  string              `json:"long_description"`
+		Icon             string              `json:"icon"`
+		Url              string              `json:"url"`
+		PrivacyScore     int                 `json:"privacy_score"`
+		UserID           uint                `json:"user_id"`
+		Tags             []TagResponse       `json:"tags"`
+		DBConnString     string              `json:"db_conn_string"`
+		DBSourceType     string              `json:"db_source_type"`
+		DBConnAPIKey     string              `json:"db_conn_api_key"`
+		DBName           string              `json:"db_name"`
+		EmbedVendor      string              `json:"embed_vendor"`
+		EmbedUrl         string              `json:"embed_url"`
+		EmbedAPIKey      string              `json:"embed_api_key"`
+		EmbedModel       string              `json:"embed_model"`
+		Active           bool                `json:"active"`
+		Files            []FileStoreResponse `json:"files"` // Added Files field
 	} `json:"attributes"`
 }
 
@@ -402,14 +403,15 @@ type ChatInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name          string `json:"name"`
-			LLMSettingsID uint   `json:"llm_settings_id"`
-			LLMID         uint   `json:"llm_id"`
-			GroupIDs      []uint `json:"group_ids"`
-			FilterIDs     []uint `json:"filter_ids"`
-			RagN          int    `json:"rag_n"`
-			ToolSupport   bool   `json:"tool_support"`
-			SystemPrompt  string `json:"system_prompt"`
+			Name                string `json:"name"`
+			LLMSettingsID       uint   `json:"llm_settings_id"`
+			LLMID               uint   `json:"llm_id"`
+			GroupIDs            []uint `json:"group_ids"`
+			FilterIDs           []uint `json:"filter_ids"`
+			RagN                int    `json:"rag_n"`
+			ToolSupport         bool   `json:"tool_support"`
+			SystemPrompt        string `json:"system_prompt"`
+			DefaultDataSourceID int    `json:"default_data_source_id"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -420,14 +422,17 @@ type ChatResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name          string           `json:"name"`
-		LLMSettingsID uint             `json:"llm_settings_id"`
-		LLMID         uint             `json:"llm_id"`
-		Groups        []GroupResponse  `json:"groups"`
-		Filters       []FilterResponse `json:"filters"`
-		RagN          int              `json:"rag_n"`
-		ToolSupport   bool             `json:"tool_support"`
-		SystemPrompt  string           `json:"system_prompt"`
+		Name                string              `json:"name"`
+		LLMSettingsID       uint                `json:"llm_settings_id"`
+		LLMID               uint                `json:"llm_id"`
+		Groups              []GroupResponse     `json:"groups"`
+		Filters             []FilterResponse    `json:"filters"`
+		RagN                int                 `json:"rag_n"`
+		ToolSupport         bool                `json:"tool_support"`
+		SystemPrompt        string              `json:"system_prompt"`
+		DefaultDataSourceID int                 `json:"default_data_source_id"`
+		DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
+		ExtraContext        []FileStoreResponse `json:"extra_context"` // Add this field
 	} `json:"attributes"`
 }
 
@@ -905,9 +910,10 @@ type FileStoreResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		FileName    string `json:"file_name"`
-		Description string `json:"description"`
-		Content     string `json:"-"`
-		Length      int    `json:"length"`
+		FileName        string    `json:"file_name"`
+		Description     string    `json:"description"`
+		Content         string    `json:"-"`
+		Length          int       `json:"length"`
+		LastProcessedOn time.Time `json:"last_processed_on"`
 	} `json:"attributes"`
 }
