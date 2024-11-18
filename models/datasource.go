@@ -26,6 +26,8 @@ type Datasource struct {
 	EmbedAPIKey string `json:"embed_api_key"`
 	EmbedModel  string `json:"embed_model"`
 
+	Files []FileStore `gorm:"many2many:datasource_filestores;" json:"files"`
+
 	Active bool
 }
 
@@ -42,7 +44,7 @@ func (d *Datasource) Create(db *gorm.DB) error {
 
 // Get a datasource by ID
 func (d *Datasource) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Tags").First(d, id).Error
+	return db.Preload("Tags").Preload("Files").First(d, id).Error
 }
 
 // Update an existing datasource
@@ -117,6 +119,16 @@ func (d *Datasource) RemoveTags(db *gorm.DB, tagNames []string) error {
 		}
 	}
 	return nil
+}
+
+// AddFileStore adds a FileStore to the DS
+func (d *Datasource) AddFileStore(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(d).Association("Files").Append(fileStore)
+}
+
+// RemoveFileStore removes a FileStore from the DS
+func (d *Datasource) RemoveFileStore(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(d).Association("Files").Delete(fileStore)
 }
 
 // Filter datasources by minimum privacy score

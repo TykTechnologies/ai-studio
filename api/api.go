@@ -307,6 +307,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/datasources", a.listDatasources)
 	v1.GET("/datasources/search", a.searchDatasources)
 	v1.GET("/datasources/by-tag", a.getDatasourcesByTag)
+	v1.POST("/datasources/:id/filestores/:filestore_id", a.addFileStoreToDatasource)
+	v1.DELETE("/datasources/:id/filestores/:filestore_id", a.removeFileStoreFromDatasource)
+	v1.POST("/datasources/:id/process-embeddings", a.ProcessFileEmbeddingHandler)
 
 	// Data Catalogue routes
 	v1.POST("/data-catalogues", a.createDataCatalogue)
@@ -376,6 +379,10 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/chats/:id", a.deleteChat)
 	v1.GET("/chats", a.listChats)
 	v1.GET("/chats/by-group", a.getChatsByGroupID)
+	v1.POST("/chats/:id/extra-context/:filestore_id", a.addExtraContextToChat)
+	v1.DELETE("/chats/:id/extra-context/:filestore_id", a.removeExtraContextFromChat)
+	v1.GET("/chats/:id/extra-context", a.getChatExtraContext)
+	v1.PUT("/chats/:id/extra-context", a.setChatExtraContext)
 
 	// Tool routes
 	v1.POST("/tools", a.createTool)

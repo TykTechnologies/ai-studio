@@ -7,7 +7,7 @@ import (
 )
 
 // CreateChat creates a new chat
-func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string) (*models.Chat, error) {
+func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint) (*models.Chat, error) {
 	chat := &models.Chat{
 		Name:                name,
 		LLMSettingsID:       llmSettingsID,
@@ -15,6 +15,7 @@ func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []
 		RagResultsPerSource: ragN,
 		SupportsTools:       toolSupport,
 		SystemPrompt:        systemPrompt,
+		DefaultDataSourceID: defaultDSID,
 	}
 
 	for _, filterID := range filterIDs {
@@ -54,7 +55,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
-func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string) (*models.Chat, error) {
+func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint) (*models.Chat, error) {
 	// Start a transaction
 	tx := s.DB.Begin()
 	if tx.Error != nil {
@@ -81,6 +82,7 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		"rag_results_per_source": ragN,
 		"supports_tools":         toolSupport,
 		"system_prompt":          systemPrompt,
+		"default_data_source_id": defaultDSID,
 	}
 
 	// Update the chat's basic information
@@ -137,6 +139,7 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		Preload("Filters").
 		Preload("LLMSettings").
 		Preload("LLM").
+		Preload("DefaultDataSource").
 		First(updatedChat, id).Error; err != nil {
 		return nil, err
 	}
@@ -188,4 +191,63 @@ func (s *Service) GetChatsByLLMSettingsID(llmSettingsID uint) (models.Chats, err
 		return nil, err
 	}
 	return chats, nil
+}
+
+// AddExtraContextToChat adds a ExtraContext to a Chat
+func (s *Service) AddExtraContextToChat(toolID uint, fileStoreID uint) error {
+	chat, err := s.GetChatByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return chat.AddExtraContext(s.DB, fileStore)
+}
+
+// RemoveExtraContextFromChat removes a ExtraContext from a Chat
+func (s *Service) RemoveExtraContextFromChat(toolID uint, fileStoreID uint) error {
+	chat, err := s.GetChatByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return chat.RemoveExtraContext(s.DB, fileStore)
+}
+
+// GetChatExtraContexts gets all ExtraContexts associated with a Chat
+func (s *Service) GetChatExtraContexts(toolID uint) ([]models.FileStore, error) {
+	chat, err := s.GetChatByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return chat.GetExtraContext(s.DB)
+}
+
+// SetChatExtraContexts replaces all existing ExtraContext associations with new ones
+func (s *Service) SetChatExtraContexts(toolID uint, fileStoreIDs []uint) error {
+	chat, err := s.GetChatByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStores := make([]models.FileStore, len(fileStoreIDs))
+	for i, id := range fileStoreIDs {
+		fileStore := models.FileStore{}
+		if err := fileStore.Get(s.DB, id); err != nil {
+			return err
+		}
+		fileStores[i] = fileStore
+	}
+
+	return chat.SetExtraContext(s.DB, fileStores)
 }

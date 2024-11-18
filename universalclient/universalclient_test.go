@@ -675,7 +675,7 @@ func decodeToUTF8(s string) (string, error) {
 
 func Test_GetOperations(t *testing.T) {
 	// Load the OpenAPI 3.0 definition
-	specBytes, err := os.ReadFile("testdata/logzio.json")
+	specBytes, err := os.ReadFile("testdata/zendesk.yaml")
 	require.NoError(t, err)
 
 	// Create the client

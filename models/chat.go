@@ -19,6 +19,9 @@ type Chat struct {
 	RagResultsPerSource int          `json:"rag_results_per_source"`
 	SupportsTools       bool         `json:"supports_tools"`
 	SystemPrompt        string       `json:"system_prompt"`
+	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID" json:"default_data_source"`
+	DefaultDataSourceID uint         `json:"default_data_source_id"`
+	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
 }
 
 type Chats []Chat
@@ -51,7 +54,12 @@ func (c *Chat) Create(db *gorm.DB) error {
 
 // Get a chat by ID
 func (c *Chat) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Groups").Preload("LLMSettings").Preload("LLM").Preload("Filters").First(c, id).Error
+	return db.Preload("Groups").
+		Preload("LLMSettings").
+		Preload("LLM").
+		Preload("Filters").
+		Preload("ExtraContext").
+		Preload("DefaultDataSource").First(c, id).Error
 }
 
 // Update an existing chat
@@ -131,4 +139,26 @@ func (cs *Chats) GetByLLMSettingsID(db *gorm.DB, llmSettingsID uint) error {
 	return db.Preload("Groups").Preload("LLMSettings").Preload("LLM").
 		Where("llm_settings_id = ?", llmSettingsID).
 		Find(cs).Error
+}
+
+// AddFileStore adds a FileStore to the Tool
+func (cs *Chat) AddExtraContext(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(cs).Association("ExtraContext").Append(fileStore)
+}
+
+// RemoveFileStore removes a FileStore from the Tool
+func (cs *Chat) RemoveExtraContext(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(cs).Association("ExtraContext").Delete(fileStore)
+}
+
+// GetFileStores gets all FileStores associated with the Tool
+func (cs *Chat) GetExtraContext(db *gorm.DB) ([]FileStore, error) {
+	var fileStores []FileStore
+	err := db.Model(cs).Association("ExtraContext").Find(&fileStores)
+	return fileStores, err
+}
+
+// SetFileStores replaces all existing FileStore associations with new ones
+func (cs *Chat) SetExtraContext(db *gorm.DB, fileStores []FileStore) error {
+	return db.Model(cs).Association("ExtraContext").Replace(&fileStores)
 }

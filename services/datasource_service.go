@@ -168,3 +168,37 @@ func (s *Service) GetDatasourcesByUserID(userID uint) (models.Datasources, error
 	}
 	return datasources, nil
 }
+
+// AddFileStoreToTool adds a FileStore to a Tool
+func (s *Service) AddFileToDatasource(dsID uint, fileStoreID uint) error {
+	ds, err := s.GetDatasourceByID(dsID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return ds.AddFileStore(s.DB, fileStore)
+}
+
+// RemoveFileStoreFromTool removes a FileStore from a Tool
+func (s *Service) RemoveFileFromDatasource(dsID uint, fileStoreID uint) error {
+	ds, err := s.GetDatasourceByID(dsID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return ds.RemoveFileStore(s.DB, fileStore)
+}
+
+// TODO:
+// - StartProcessingFiles method (Starts RAG with DataSourceSession)
+// - Make sure chats with default DS load them on init

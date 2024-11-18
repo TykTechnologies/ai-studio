@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -14,7 +14,18 @@ import {
   Alert,
   Chip,
   CircularProgress,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
+import DeleteIcon from "@mui/icons-material/Delete";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { FormControlLabel, Switch } from "@mui/material";
 
@@ -25,6 +36,7 @@ import {
   TitleBox,
   ContentBox,
   StyledButton,
+  StyledAccordion,
 } from "../../styles/sharedStyles";
 
 const ChatForm = () => {
@@ -37,7 +49,10 @@ const ChatForm = () => {
     rag_n: "",
     tool_support: false,
     system_prompt: "",
+    default_data_source_id: 0,
   });
+  const [files, setFiles] = useState([]);
+  const fileInputRef = useRef(null);
   const [llms, setLLMs] = useState([]);
   const [llmSettings, setLLMSettings] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
@@ -50,6 +65,7 @@ const ChatForm = () => {
   });
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
+  const [datasources, setDatasources] = useState([]);
 
   const navigate = useNavigate();
   const { id } = useParams();
@@ -64,7 +80,10 @@ const ChatForm = () => {
           fetchLLMs(),
           fetchLLMSettings(),
           fetchGroups(),
-          id ? fetchChat() : Promise.resolve(),
+          fetchDatasources(),
+          id
+            ? Promise.all([fetchChat(), fetchExtraContext()])
+            : Promise.resolve(),
         ]);
       } catch (error) {
         console.error("Error fetching data", error);
@@ -77,6 +96,87 @@ const ChatForm = () => {
     fetchData();
   }, [id]);
 
+  const fetchExtraContext = async () => {
+    if (!id) return;
+    try {
+      const response = await apiClient.get(`/chats/${id}/extra-context`);
+      setFiles(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching extra context files", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch extra context files",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("description", `Extra context for chat: ${chat.name}`);
+
+      const fileStoreResponse = await apiClient.post("/filestore", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const fileStoreId = fileStoreResponse.data.data.id;
+      await apiClient.post(`/chats/${id}/extra-context/${fileStoreId}`);
+      await fetchExtraContext();
+
+      setSnackbar({
+        open: true,
+        message: "File uploaded successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error uploading file", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload file",
+        severity: "error",
+      });
+    }
+
+    event.target.value = "";
+  };
+
+  const handleDeleteFile = async (fileStoreId) => {
+    try {
+      await apiClient.delete(`/chats/${id}/extra-context/${fileStoreId}`);
+      await fetchExtraContext();
+
+      setSnackbar({
+        open: true,
+        message: "File removed successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error deleting file", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove file",
+        severity: "error",
+      });
+    }
+  };
+
+  const fetchDatasources = async () => {
+    try {
+      const response = await apiClient.get("/datasources");
+      setDatasources(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching datasources", error);
+      throw error;
+    }
+  };
+
   const fetchChat = async () => {
     try {
       const response = await apiClient.get(`/chats/${id}`);
@@ -87,10 +187,11 @@ const ChatForm = () => {
         llm_id: chatData.llm_id,
         groups: chatData.groups.map((group) => group.id.toString()),
         filters: chatData.filters.map((filter) => filter.id.toString()),
-        oas_spec: chatData.oas_spec || "",
         rag_n: chatData.rag_n || "",
         tool_support: chatData.tool_support || false,
-        system_prompt: chatData.system_prompt || "", // Add this line
+        system_prompt: chatData.system_prompt || "",
+        default_data_source_id:
+          chatData.default_data_source_id?.toString() || "", // Add this line
       });
     } catch (error) {
       console.error("Error fetching chat", error);
@@ -183,7 +284,10 @@ const ChatForm = () => {
           filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
           rag_n: chat.rag_n ? parseInt(chat.rag_n, 10) : null,
           tool_support: chat.tool_support,
-          system_prompt: chat.system_prompt, // Add this line to be explicit
+          system_prompt: chat.system_prompt,
+          default_data_source_id: chat.default_data_source_id
+            ? parseInt(chat.default_data_source_id, 10)
+            : null, // Add this line
         },
       },
     };
@@ -413,7 +517,89 @@ const ChatForm = () => {
                 inputProps={{ min: 0 }}
               />
             </Grid>
+
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mb: 2, marginBottom: 4 }}>
+                Setting a default data source will automatically include this
+                vector database in all conversations in this chat room, allowing
+                the model to reference its contents when generating responses.
+              </Alert>
+              <FormControl fullWidth>
+                <InputLabel>Default Data Source</InputLabel>
+                <Select
+                  name="default_data_source_id"
+                  value={chat.default_data_source_id}
+                  onChange={handleChange}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {datasources.map((datasource) => (
+                    <MenuItem key={datasource.id} value={datasource.id}>
+                      {datasource.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
           </Grid>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Extra Context</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Upload additional files to provide extra context for this chat
+                room. These files will be used to enhance the model's
+                understanding and responses.
+              </Typography>
+
+              <List>
+                {files.map((file) => (
+                  <ListItem key={file.id}>
+                    <ListItemText
+                      primary={file.attributes.file_name}
+                      secondary={`Size: ${file.attributes.length} bytes`}
+                    />
+                    <ListItemSecondaryAction>
+                      <IconButton
+                        edge="end"
+                        aria-label="delete"
+                        onClick={() => handleDeleteFile(file.id)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                onChange={handleFileUpload}
+              />
+
+              {id && ( // Only show upload button if editing an existing chat
+                <Button
+                  variant="contained"
+                  startIcon={<CloudUploadIcon />}
+                  onClick={() => fileInputRef.current.click()}
+                  sx={{ mt: 2 }}
+                >
+                  Upload Context File
+                </Button>
+              )}
+
+              {!id && (
+                <Typography variant="caption" color="text.secondary">
+                  You can add extra context files after creating the chat room.
+                </Typography>
+              )}
+            </AccordionDetails>
+          </StyledAccordion>
 
           <Box mt={4}>
             <StyledButton variant="contained" type="submit">
