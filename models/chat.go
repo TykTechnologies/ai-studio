@@ -22,6 +22,7 @@ type Chat struct {
 	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID" json:"default_data_source"`
 	DefaultDataSourceID *uint        `json:"default_data_source_id"`
 	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
+	DefaultTools        []*Tool      `gorm:"many2many:chat_tools;" json:"default_tools"`
 }
 
 type Chats []Chat
@@ -48,6 +49,13 @@ func (c *Chat) Create(db *gorm.DB) error {
 			}
 		}
 
+		// Handle Filters association
+		if len(c.DefaultTools) > 0 {
+			if err := tx.Model(c).Association("DefaultTools").Replace(c.DefaultTools); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 }
@@ -58,6 +66,7 @@ func (c *Chat) Get(db *gorm.DB, id uint) error {
 		Preload("LLMSettings").
 		Preload("LLM").
 		Preload("Filters").
+		Preload("DefaultTools").
 		Preload("ExtraContext").
 		Preload("DefaultDataSource").First(c, id).Error
 }
@@ -84,6 +93,10 @@ func (c *Chat) Update(db *gorm.DB) error {
 
 		// Handle Filters association
 		if err := tx.Model(c).Association("Filters").Replace(c.Filters); err != nil {
+			return err
+		}
+
+		if err := tx.Model(c).Association("DefaultTools").Replace(c.DefaultTools); err != nil {
 			return err
 		}
 

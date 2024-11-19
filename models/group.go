@@ -19,7 +19,10 @@ func NewGroup() *Group {
 }
 
 func (g *Group) Get(db *gorm.DB, id uint) error {
-	return db.First(g, id).Error
+	return db.Preload("Catalogues").
+		Preload("DataCatalogues").
+		Preload("ToolCatalogues").
+		First(g, id).Error
 }
 
 func (gs *Groups) List(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
@@ -121,7 +124,12 @@ func (g *Group) RemoveDataCatalogue(db *gorm.DB, dataCatalogue *DataCatalogue) e
 }
 
 func (g *Group) GetDataCatalogues(db *gorm.DB) error {
-	return db.Model(g).Association("DataCatalogues").Find(&g.DataCatalogues)
+	return db.Preload("Datasources", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id, name") // Only select ID and Name fields from Datasources
+	}).
+		Model(g).
+		Association("DataCatalogues").
+		Find(&g.DataCatalogues)
 }
 
 func (g *Group) AddToolCatalogue(db *gorm.DB, toolCatalogue *ToolCatalogue) error {
@@ -151,7 +159,10 @@ func (g *Group) GetToolCatalogues(db *gorm.DB, pageSize int, pageNumber int, all
 	}
 
 	// Base query
-	query := db.Table("tool_catalogues").
+	query := db.Preload("Tools", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id, name") // Only select ID and Name fields from Tools
+	}).
+		Table("tool_catalogues").
 		Select("tool_catalogues.*").
 		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
 		Where("group_toolcatalogues.group_id = ?", g.ID)

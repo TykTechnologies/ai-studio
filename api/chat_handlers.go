@@ -42,6 +42,7 @@ func (a *API) createChat(c *gin.Context) {
 		input.Data.Attributes.ToolSupport,
 		input.Data.Attributes.SystemPrompt,
 		uint(input.Data.Attributes.DefaultDataSourceID),
+		input.Data.Attributes.DefaultToolIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -155,6 +156,7 @@ func (a *API) updateChat(c *gin.Context) {
 		input.Data.Attributes.ToolSupport,
 		input.Data.Attributes.SystemPrompt,
 		uint(input.Data.Attributes.DefaultDataSourceID),
+		input.Data.Attributes.DefaultToolIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -513,6 +515,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			DefaultDataSourceID int                 `json:"default_data_source_id"`
 			DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
 			ExtraContext        []FileStoreResponse `json:"extra_context"`
+			DefaultTools        []ToolResponse      `json:"default_tools"`
 		}{
 			Name:                chat.Name,
 			LLMSettingsID:       chat.LLMSettingsID,
@@ -525,6 +528,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			DefaultDataSourceID: defaultDSID,
 			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),
 			ExtraContext:        serializeFileStores(extraContext),
+			DefaultTools:        serializeToolsPointers(chat.DefaultTools, db),
 		},
 	}
 }

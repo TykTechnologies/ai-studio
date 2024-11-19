@@ -288,8 +288,7 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Get user's groups
-	groups, err := a.service.GetGroupsByUserID(u.ID)
+	entitlements, err := a.service.GetUserEntitlements(u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -300,77 +299,10 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Get unique entitlements across all groups
-	catalogues := make(map[uint]models.Catalogue)
-	dataCatalogues := make(map[uint]models.DataCatalogue)
-	toolCatalogues := make(map[uint]models.ToolCatalogue)
-	chats := make(map[uint]models.Chat)
-
-	for _, group := range groups {
-		// Get catalogues for this group
-		groupCatalogues, err := a.service.GetGroupCatalogues(group.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, catalogue := range groupCatalogues {
-			catalogues[catalogue.ID] = catalogue
-		}
-
-		// Get data catalogues for this group
-		groupDataCatalogues, err := a.service.GetGroupDataCatalogues(group.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, dataCatalogue := range groupDataCatalogues {
-			dataCatalogues[dataCatalogue.ID] = dataCatalogue
-		}
-
-		// Get tool catalogues for this group
-		groupToolCatalogues, _, _, err := a.service.GetGroupToolCatalogues(group.ID, 1, 1, true)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, toolCatalogue := range groupToolCatalogues {
-			toolCatalogues[toolCatalogue.ID] = toolCatalogue
-		}
-
-		// Get chats for this group
-		groupChats, err := a.service.GetChatsByGroupID(group.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, chat := range groupChats {
-			chats[chat.ID] = chat
-		}
-	}
-
+	// Convert service-level entitlements to API response
 	response := UserWithEntitlementsResponse{
 		Type: "user",
-		ID:   strconv.Itoa(int(u.ID)),
+		ID:   strconv.Itoa(int(entitlements.User.ID)),
 		Attributes: struct {
 			Email     string `json:"email"`
 			Name      string `json:"name"`
@@ -386,15 +318,15 @@ func (a *API) handleMe(c *gin.Context) {
 				Chats          []ChatResponse          `json:"chats"`
 			} `json:"entitlements"`
 		}{
-			Email:   u.Email,
-			Name:    u.Name,
-			IsAdmin: u.IsAdmin,
+			Email:   entitlements.User.Email,
+			Name:    entitlements.User.Name,
+			IsAdmin: entitlements.User.IsAdmin,
 			UIOptions: struct {
 				ShowChat   bool `json:"show_chat"`
 				ShowPortal bool `json:"show_portal"`
 			}{
-				ShowChat:   u.ShowChat,
-				ShowPortal: u.ShowPortal,
+				ShowChat:   entitlements.User.ShowChat,
+				ShowPortal: entitlements.User.ShowPortal,
 			},
 			Entitlements: struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
@@ -402,10 +334,10 @@ func (a *API) handleMe(c *gin.Context) {
 				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
 				Chats          []ChatResponse          `json:"chats"`
 			}{
-				Catalogues:     serializeCatalogues(mapToSlice(catalogues)),
-				DataCatalogues: serializeDataCatalogues(mapToSlice(dataCatalogues)),
-				ToolCatalogues: serializeToolCatalogues(mapToSlice(toolCatalogues), a.config.DB),
-				Chats:          serializeChats(mapToSlice(chats), a.config.DB),
+				Catalogues:     serializeCatalogues(entitlements.Catalogues),
+				DataCatalogues: serializeDataCatalogues(entitlements.DataCatalogues),
+				ToolCatalogues: serializeToolCatalogues(entitlements.ToolCatalogues, a.config.DB),
+				Chats:          serializeChats(entitlements.Chats, a.config.DB),
 			},
 		},
 	}

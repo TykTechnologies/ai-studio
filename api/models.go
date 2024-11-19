@@ -412,6 +412,7 @@ type ChatInput struct {
 			ToolSupport         bool   `json:"tool_support"`
 			SystemPrompt        string `json:"system_prompt"`
 			DefaultDataSourceID int    `json:"default_data_source_id"`
+			DefaultToolIDs      []uint `json:"default_tool_ids"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -433,6 +434,7 @@ type ChatResponse struct {
 		DefaultDataSourceID int                 `json:"default_data_source_id"`
 		DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
 		ExtraContext        []FileStoreResponse `json:"extra_context"` // Add this field
+		DefaultTools        []ToolResponse      `json:"default_tools"`
 	} `json:"attributes"`
 }
 
