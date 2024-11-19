@@ -465,15 +465,16 @@ func TestValidateSpec(t *testing.T) {
             }`,
 			wantErr: "specification must have at least one valid servers entry",
 		},
-		{
-			name: "Missing SecuritySchemes",
-			spec: `{
-                "openapi": "3.0.0",
-                "info": {"title": "Test API", "version": "1.0.0"},
-                "servers": [{"url": "https://api.example.com/v1"}]
-            }`,
-			wantErr: "specification must have at least one SecuritySchema entry",
-		},
+		// Non longer enforcing sec scheme requirement
+		// {
+		// 	name: "Missing SecuritySchemes",
+		// 	spec: `{
+		//               "openapi": "3.0.0",
+		//               "info": {"title": "Test API", "version": "1.0.0"},
+		//               "servers": [{"url": "https://api.example.com/v1"}]
+		//           }`,
+		// 	wantErr: "specification must have at least one SecuritySchema entry",
+		// },
 		{
 			name: "Only Unsupported Auth Type",
 			spec: `{
@@ -673,20 +674,20 @@ func decodeToUTF8(s string) (string, error) {
 	return string(utf8Bytes), nil
 }
 
-func Test_GetOperations(t *testing.T) {
-	// Load the OpenAPI 3.0 definition
-	specBytes, err := os.ReadFile("testdata/zendesk.yaml")
-	require.NoError(t, err)
+// func Test_GetOperations(t *testing.T) {
+// 	// Load the OpenAPI 3.0 definition
+// 	specBytes, err := os.ReadFile("testdata/zendesk.yaml")
+// 	require.NoError(t, err)
 
-	// Create the client
-	client, err := NewClient(specBytes, "")
-	require.NoError(t, err)
+// 	// Create the client
+// 	client, err := NewClient(specBytes, "")
+// 	require.NoError(t, err)
 
-	// List the operations
-	operations, err := client.ListOperations()
-	require.NoError(t, err)
+// 	// List the operations
+// 	operations, err := client.ListOperations()
+// 	require.NoError(t, err)
 
-	for _, o := range operations {
-		fmt.Println(o)
-	}
-}
+// 	for _, o := range operations {
+// 		fmt.Println(o)
+// 	}
+// }

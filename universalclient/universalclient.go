@@ -157,25 +157,31 @@ func validateSpec(doc libopenapi.Document) error {
 	}
 
 	// Check for SecuritySchemes
-	if model.Model.Components == nil || model.Model.Components.SecuritySchemes == nil || model.Model.Components.SecuritySchemes.Len() == 0 {
-		return fmt.Errorf("specification must have at least one SecuritySchema entry")
-	}
+	// if model.Model.Components == nil || model.Model.Components.SecuritySchemes == nil || model.Model.Components.SecuritySchemes.Len() == 0 {
+	// 	return fmt.Errorf("specification must have at least one SecuritySchema entry")
+	// }
 
 	// Validate SecuritySchemes
-	hasValidAuthScheme := false
-	for pair := model.Model.Components.SecuritySchemes.First(); pair != nil; pair = pair.Next() {
-		scheme := pair.Value()
-		switch scheme.Type {
-		case "apiKey":
-			hasValidAuthScheme = true
-		case "http":
-			if scheme.Scheme == "bearer" || scheme.Scheme == "basic" {
+
+	if (model.Model.Components != nil) &&
+		(model.Model.Components.SecuritySchemes != nil) &&
+		(model.Model.Components.SecuritySchemes.Len() > 0) {
+
+		hasValidAuthScheme := false
+		for pair := model.Model.Components.SecuritySchemes.First(); pair != nil; pair = pair.Next() {
+			scheme := pair.Value()
+			switch scheme.Type {
+			case "apiKey":
 				hasValidAuthScheme = true
+			case "http":
+				if scheme.Scheme == "bearer" || scheme.Scheme == "basic" {
+					hasValidAuthScheme = true
+				}
 			}
 		}
-	}
-	if !hasValidAuthScheme {
-		return fmt.Errorf("specification must have at least one supported authentication type (apiKey, bearer, or basic)")
+		if !hasValidAuthScheme {
+			return fmt.Errorf("specification must have at least one supported authentication type (apiKey, bearer, or basic)")
+		}
 	}
 
 	// Check all paths for operationID
