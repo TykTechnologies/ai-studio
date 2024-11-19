@@ -7,7 +7,8 @@ import (
 )
 
 // CreateChat creates a new chat
-func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint) (*models.Chat, error) {
+func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint,
+	filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint, defaultTools []uint) (*models.Chat, error) {
 	chat := &models.Chat{
 		Name:                name,
 		LLMSettingsID:       llmSettingsID,
@@ -24,6 +25,14 @@ func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []
 			return nil, err
 		}
 		chat.Filters = append(chat.Filters, filter)
+	}
+
+	for _, toolID := range defaultTools {
+		tool := &models.Tool{}
+		if err := tool.Get(s.DB, toolID); err != nil {
+			return nil, err
+		}
+		chat.DefaultTools = append(chat.DefaultTools, tool)
 	}
 
 	// Fetch the groups
@@ -55,7 +64,8 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
-func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint, filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint) (*models.Chat, error) {
+func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint,
+	filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint, defaultToolIDs []uint) (*models.Chat, error) {
 	// Start a transaction
 	tx := s.DB.Begin()
 	if tx.Error != nil {
@@ -102,6 +112,11 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		return nil, err
 	}
 
+	if err := tx.Model(chat).Association("DefaultTools").Clear(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
 	// Add new group associations
 	if len(groupIDs) > 0 {
 		var groups []models.Group
@@ -128,6 +143,18 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		}
 	}
 
+	if len(defaultToolIDs) > 0 {
+		var tools []*models.Tool
+		if err := tx.Where("id IN ?", defaultToolIDs).Find(&tools).Error; err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		if err := tx.Model(chat).Association("DefaultTools").Append(&tools); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
 	// Commit the transaction
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
@@ -137,6 +164,7 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 	updatedChat := &models.Chat{}
 	if err := s.DB.Preload("Groups").
 		Preload("Filters").
+		Preload("DefaultTools").
 		Preload("LLMSettings").
 		Preload("LLM").
 		Preload("DefaultDataSource").

@@ -2,10 +2,15 @@ package helpers
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"unicode"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 func KeyValueOrZero(dat map[string]any, key string) int {
@@ -76,4 +81,23 @@ func EstimateTokenCount(text string) int {
     estimatedTokens += nonAlphanumericCount
 
     return estimatedTokens
+}
+
+func DecodeToUTF8(s string) (string, error) {
+	// Step 1: Decode base64
+	decodedBytes, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return "", fmt.Errorf("base64 decoding failed: %v", err)
+	}
+
+	// Step 2 & 3: Convert to UTF-8
+	// This example assumes the original encoding was Windows-1252 (a common encoding)
+	// Replace this with the correct encoding if known
+	reader := transform.NewReader(strings.NewReader(string(decodedBytes)), charmap.Windows1252.NewDecoder())
+	utf8Bytes, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("conversion to UTF-8 failed: %v", err)
+	}
+
+	return string(utf8Bytes), nil
 }

@@ -50,6 +50,7 @@ const ChatForm = () => {
     tool_support: false,
     system_prompt: "",
     default_data_source_id: 0,
+    default_tool_ids: [],
   });
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
@@ -66,6 +67,7 @@ const ChatForm = () => {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [datasources, setDatasources] = useState([]);
+  const [allTools, setAllTools] = useState([]);
 
   const navigate = useNavigate();
   const { id } = useParams();
@@ -81,6 +83,7 @@ const ChatForm = () => {
           fetchLLMSettings(),
           fetchGroups(),
           fetchDatasources(),
+          fetchTools(), // Add this line
           id
             ? Promise.all([fetchChat(), fetchExtraContext()])
             : Promise.resolve(),
@@ -95,6 +98,16 @@ const ChatForm = () => {
 
     fetchData();
   }, [id]);
+
+  const fetchTools = async () => {
+    try {
+      const response = await apiClient.get("/tools");
+      setAllTools(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching tools", error);
+      throw error;
+    }
+  };
 
   const fetchExtraContext = async () => {
     if (!id) return;
@@ -191,12 +204,19 @@ const ChatForm = () => {
         tool_support: chatData.tool_support || false,
         system_prompt: chatData.system_prompt || "",
         default_data_source_id:
-          chatData.default_data_source_id?.toString() || "", // Add this line
+          chatData.default_data_source_id?.toString() || "",
+        default_tool_ids: Array.isArray(chatData.default_tools)
+          ? chatData.default_tools.map((tool) => tool.id.toString())
+          : [],
       });
     } catch (error) {
       console.error("Error fetching chat", error);
       throw error;
     }
+  };
+
+  const handleToolChange = (event) => {
+    setChat({ ...chat, default_tool_ids: event.target.value });
   };
 
   const fetchLLMs = async () => {
@@ -288,6 +308,7 @@ const ChatForm = () => {
           default_data_source_id: chat.default_data_source_id
             ? parseInt(chat.default_data_source_id, 10)
             : null, // Add this line
+          default_tool_ids: chat.default_tool_ids.map((id) => parseInt(id, 10)),
         },
       },
     };
@@ -537,6 +558,41 @@ const ChatForm = () => {
                   {datasources.map((datasource) => (
                     <MenuItem key={datasource.id} value={datasource.id}>
                       {datasource.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Select default tools that will be available in this chat room.
+                These tools will be automatically accessible to the AI when
+                responding to user queries.
+              </Alert>
+              <FormControl fullWidth>
+                <InputLabel>Default Tools</InputLabel>
+                <Select
+                  multiple
+                  value={chat.default_tool_ids}
+                  onChange={handleToolChange}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {selected.map((value) => {
+                        const tool = allTools.find((t) => t.id === value);
+                        return (
+                          <Chip
+                            key={value}
+                            label={tool ? tool.attributes.name : "Unknown"}
+                          />
+                        );
+                      })}
+                    </Box>
+                  )}
+                >
+                  {allTools.map((tool) => (
+                    <MenuItem key={tool.id} value={tool.id}>
+                      {tool.attributes.name}
                     </MenuItem>
                   ))}
                 </Select>

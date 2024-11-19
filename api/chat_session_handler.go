@@ -7,10 +7,8 @@ import (
 	"io"
 	"mime/multipart"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -18,11 +16,10 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/filereader"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"golang.org/x/text/encoding/charmap"
-	"golang.org/x/text/transform"
 )
 
 var upgrader = websocket.Upgrader{
@@ -390,7 +387,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 	}
 
 	tool, err := a.service.GetToolByID(uint(toolId))
-	tool.OASSpec, err = decodeToUTF8(tool.OASSpec)
+	tool.OASSpec, err = helpers.DecodeToUTF8(tool.OASSpec)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -436,25 +433,6 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Tool removed successfully"})
-}
-
-func decodeToUTF8(s string) (string, error) {
-	// Step 1: Decode base64
-	decodedBytes, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return "", fmt.Errorf("base64 decoding failed: %v", err)
-	}
-
-	// Step 2 & 3: Convert to UTF-8
-	// This example assumes the original encoding was Windows-1252 (a common encoding)
-	// Replace this with the correct encoding if known
-	reader := transform.NewReader(strings.NewReader(string(decodedBytes)), charmap.Windows1252.NewDecoder())
-	utf8Bytes, err := io.ReadAll(reader)
-	if err != nil {
-		return "", fmt.Errorf("conversion to UTF-8 failed: %v", err)
-	}
-
-	return string(utf8Bytes), nil
 }
 
 func (a *API) UploadFileToSession(c *gin.Context) {

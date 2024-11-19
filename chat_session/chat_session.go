@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -99,7 +100,27 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 
 	// auto-load the default
 	if chat.DefaultDataSource != nil {
-		cs.datasources[chat.DefaultDataSource.ID] = chat.DefaultDataSource
+		err := cs.AddDatasource(chat.DefaultDataSource.ID)
+		if err != nil {
+			return nil, fmt.Errorf("error adding default datasource to chat session: %v", err)
+		}
+	}
+
+	if chat.DefaultTools != nil {
+		for i, _ := range chat.DefaultTools {
+			toolDef, err := cs.service.GetToolByID(chat.DefaultTools[i].ID)
+			if err != nil {
+				return nil, fmt.Errorf("error getting default tool definition: %v", err)
+			}
+
+			toolDef.OASSpec, err = helpers.DecodeToUTF8(toolDef.OASSpec)
+			err = cs.AddTool(
+				toolDef.Name,
+				*toolDef)
+			if err != nil {
+				return nil, fmt.Errorf("error adding default tool to chat session: %v", err)
+			}
+		}
 	}
 
 	// Perform initial privacy check
@@ -152,6 +173,15 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 		return fmt.Errorf("error getting datasource: %v", err)
 	}
 
+	entitlements, err := cs.service.GetUserEntitlements(cs.userID)
+	if err != nil {
+		return fmt.Errorf("error getting user entitlements: %v", err)
+	}
+
+	if !entitlements.HasDataSourceAccess(ds.ID) {
+		return fmt.Errorf("user does not have access to datasource %s", ds.Name)
+	}
+
 	cs.datasources[id] = &ds
 
 	// Validate privacy scores
@@ -171,6 +201,15 @@ func (cs *ChatSession) RemoveDatasource(id uint) {
 func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 	cs.tools[id] = t
 
+	entitlements, err := cs.service.GetUserEntitlements(cs.userID)
+	if err != nil {
+		return fmt.Errorf("error getting user entitlements: %v", err)
+	}
+
+	if !entitlements.HasToolAccess(t.ID) {
+		return fmt.Errorf("user does not have access to tool %s", t.Name)
+	}
+
 	// Validate privacy scores
 	if err := cs.validatePrivacyScores(); err != nil {
 		// If validation fails, remove the tool and return the error
@@ -178,9 +217,7 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 		return err
 	}
 
-	fmt.Println("Tool added to chat")
-
-	fmt.Println(len(t.FileStores))
+	slog.Info("tool added to chat", "tool", t.Name)
 
 	for i, _ := range t.FileStores {
 		// base64 decode the file contents first
@@ -194,7 +231,6 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 			t.Name,
 			content)
 
-		fmt.Println("ADDING FILE TO HISTORY")
 		err = cs.chatHistory.AddUserMessage(context.Background(), pl)
 		if err != nil {
 			return fmt.Errorf("error adding message to history: %v", err)

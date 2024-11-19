@@ -985,3 +985,11 @@ func serializeTools(tools []models.Tool, db *gorm.DB) []ToolResponse {
 	}
 	return result
 }
+
+func serializeToolsPointers(tools []*models.Tool, db *gorm.DB) []ToolResponse {
+	result := make([]ToolResponse, len(tools))
+	for i, tool := range tools {
+		result[i] = serializeTool(tool, db)
+	}
+	return result
+}
