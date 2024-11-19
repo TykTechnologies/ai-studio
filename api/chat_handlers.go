@@ -493,7 +493,11 @@ func (a *API) setChatExtraContext(c *gin.Context) {
 }
 
 func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
-	extraContext, _ := chat.GetExtraContext(db) // Pass the DB instance if needed
+	extraContext, _ := chat.GetExtraContext(db)
+	var defaultDSID int
+	if chat.DefaultDataSource != nil {
+		defaultDSID = int(*chat.DefaultDataSourceID)
+	}
 	return ChatResponse{
 		Type: "chats",
 		ID:   strconv.FormatUint(uint64(chat.ID), 10),
@@ -518,7 +522,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			RagN:                chat.RagResultsPerSource,
 			ToolSupport:         chat.SupportsTools,
 			SystemPrompt:        chat.SystemPrompt,
-			DefaultDataSourceID: int(chat.DefaultDataSourceID),
+			DefaultDataSourceID: defaultDSID,
 			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),
 			ExtraContext:        serializeFileStores(extraContext),
 		},

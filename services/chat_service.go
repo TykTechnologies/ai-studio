@@ -15,7 +15,7 @@ func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []
 		RagResultsPerSource: ragN,
 		SupportsTools:       toolSupport,
 		SystemPrompt:        systemPrompt,
-		DefaultDataSourceID: defaultDSID,
+		DefaultDataSourceID: &defaultDSID,
 	}
 
 	for _, filterID := range filterIDs {

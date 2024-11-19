@@ -20,7 +20,7 @@ type Chat struct {
 	SupportsTools       bool         `json:"supports_tools"`
 	SystemPrompt        string       `json:"system_prompt"`
 	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID" json:"default_data_source"`
-	DefaultDataSourceID uint         `json:"default_data_source_id"`
+	DefaultDataSourceID *uint        `json:"default_data_source_id"`
 	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
 }
 
