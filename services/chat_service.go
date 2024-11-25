@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // CreateChat creates a new chat
@@ -58,6 +59,21 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 	chat := &models.Chat{}
 	if err := chat.Get(s.DB, id); err != nil {
 		return nil, err
+	}
+
+	fmt.Println("getting chat by ID")
+	fmt.Println(chat.LLM.APIKey)
+
+	chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey)
+	fmt.Println("AFTER")
+	fmt.Println(chat.LLM.APIKey)
+	for i := range chat.DefaultTools {
+		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey)
+	}
+
+	if chat.DefaultDataSource != nil {
+		chat.DefaultDataSource.DBConnAPIKey = secrets.GetValue(chat.DefaultDataSource.DBConnAPIKey)
+		chat.DefaultDataSource.EmbedAPIKey = secrets.GetValue(chat.DefaultDataSource.EmbedAPIKey)
 	}
 
 	return chat, nil
