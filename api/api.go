@@ -460,6 +460,12 @@ func (a *API) setupRoutes() {
 	v1.GET("/filestore", a.getAllFileStores)
 	v1.GET("/filestore/search", a.searchFileStores)
 
+	v1.POST("/secrets", a.createSecret)
+	v1.GET("/secrets/:id", a.getSecret)
+	v1.PATCH("/secrets/:id", a.updateSecret)
+	v1.DELETE("/secrets/:id", a.deleteSecret)
+	v1.GET("/secrets", a.listSecrets)
+
 	a.SetupWebSocketRoute(authed)
 }
 

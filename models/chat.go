@@ -62,13 +62,19 @@ func (c *Chat) Create(db *gorm.DB) error {
 
 // Get a chat by ID
 func (c *Chat) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Groups").
+	err := db.Preload("Groups").
 		Preload("LLMSettings").
 		Preload("LLM").
 		Preload("Filters").
 		Preload("DefaultTools").
 		Preload("ExtraContext").
 		Preload("DefaultDataSource").First(c, id).Error
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Update an existing chat

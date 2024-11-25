@@ -53,6 +53,10 @@ import ChatDetails from "./components/chats/ChatDetails";
 import ChatForm from "./components/chats/ChatForm";
 import UserMessageLog from "./components/users/UserMessageLog";
 
+import Secrets from "./pages/Secrets";
+import SecretDetails from "./components/secrets/SecretDetails";
+import SecretForm from "./components/secrets/SecretForm";
+
 import Dashboard from "./pages/Dashboard";
 
 const adminRoutes = (
@@ -122,6 +126,11 @@ const adminRoutes = (
     <Route path="chats/:id" element={<ChatDetails />} />
     <Route path="chats/edit/:id" element={<ChatForm />} />
     <Route path="chats/new" element={<ChatForm />} />
+
+    <Route path="secrets" element={<Secrets />} />
+    <Route path="secrets/:id" element={<SecretDetails />} />
+    <Route path="secrets/edit/:id" element={<SecretForm />} />
+    <Route path="secrets/new" element={<SecretForm />} />
   </>
 );
 

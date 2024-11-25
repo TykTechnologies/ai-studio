@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
@@ -33,6 +34,8 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	if err := llm.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+
+	llm.APIKey = secrets.GetValue(llm.APIKey)
 	return llm, nil
 }
 
@@ -78,6 +81,9 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 	if err := llm.GetByName(s.DB, name); err != nil {
 		return nil, err
 	}
+
+	llm.APIKey = secrets.GetValue(llm.APIKey)
+
 	return llm, nil
 }
 
@@ -95,6 +101,11 @@ func (s *Service) GetActiveLLMs() (models.LLMs, error) {
 	if err := llms.GetActiveLLMs(s.DB); err != nil {
 		return nil, err
 	}
+
+	for i := range llms {
+		llms[i].APIKey = secrets.GetValue(llms[i].APIKey)
+	}
+
 	return llms, nil
 }
 

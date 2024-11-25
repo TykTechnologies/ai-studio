@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
@@ -83,6 +84,9 @@ func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
 	if err := datasource.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+
+	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey)
+	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey)
 	return datasource, nil
 }
 
@@ -117,6 +121,12 @@ func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
 	if err := datasources.Search(s.DB, query); err != nil {
 		return nil, err
 	}
+
+	for i := range datasources {
+		datasources[i].DBConnAPIKey = secrets.GetValue(datasources[i].DBConnAPIKey)
+		datasources[i].EmbedAPIKey = secrets.GetValue(datasources[i].EmbedAPIKey)
+	}
+
 	return datasources, nil
 }
 

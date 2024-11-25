@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // CreateTool creates a new tool with validity checks
@@ -51,6 +52,8 @@ func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
 	if err := tool.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+
+	tool.AuthKey = secrets.GetValue(tool.AuthKey)
 	return tool, nil
 }
 
@@ -70,6 +73,8 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 	if err := tool.GetByName(s.DB, name); err != nil {
 		return nil, err
 	}
+
+	tool.AuthKey = secrets.GetValue(tool.AuthKey)
 	return tool, nil
 }
 

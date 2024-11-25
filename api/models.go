@@ -919,3 +919,38 @@ type FileStoreResponse struct {
 		LastProcessedOn time.Time `json:"last_processed_on"`
 	} `json:"attributes"`
 }
+
+// SecretInput represents the input for secret-related operations
+// @Description Secret input model
+type SecretInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Value   string `json:"value"`
+			VarName string `json:"var_name"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// SecretResponse represents the response for secret-related operations
+// @Description Secret response model
+type SecretResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Value   string `json:"value"`
+		VarName string `json:"var_name"`
+	} `json:"attributes"`
+}
+
+// SecretListResponse represents the paginated response for listing secrets
+// @Description Secret list response model
+type SecretListResponse struct {
+	Data []SecretResponse `json:"data"`
+	Meta struct {
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+		PageSize   int   `json:"page_size"`
+		PageNumber int   `json:"page_number"`
+	} `json:"meta"`
+}

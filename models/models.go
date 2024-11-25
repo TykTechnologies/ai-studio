@@ -1,6 +1,9 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"gorm.io/gorm"
+)
 
 func InitModels(db *gorm.DB) error {
 	err := db.AutoMigrate(
@@ -21,7 +24,7 @@ func InitModels(db *gorm.DB) error {
 		&Filter{},     // Done
 		&ChatHistoryRecord{},
 		&ToolCatalogue{}, // Done
-		// &Proxy{},
+		&secrets.Secret{},
 	)
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {
