@@ -27,6 +27,8 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string `json:"logo_url"`
 				Vendor           string `json:"vendor"`
 				Active           bool   `json:"active"`
+				Filters          []int  `json:"filters"`
+				DefaultModel     string `json:"default_model"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -40,6 +42,8 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string `json:"logo_url"`
 				Vendor           string `json:"vendor"`
 				Active           bool   `json:"active"`
+				Filters          []int  `json:"filters"`
+				DefaultModel     string `json:"default_model"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -82,6 +86,8 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string `json:"logo_url"`
 				Vendor           string `json:"vendor"`
 				Active           bool   `json:"active"`
+				Filters          []int  `json:"filters"`
+				DefaultModel     string `json:"default_model"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -95,6 +101,8 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string `json:"logo_url"`
 				Vendor           string `json:"vendor"`
 				Active           bool   `json:"active"`
+				Filters          []int  `json:"filters"`
+				DefaultModel     string `json:"default_model"`
 			}{
 				Name:             "Updated Test LLM",
 				APIKey:           "updated-api-key",

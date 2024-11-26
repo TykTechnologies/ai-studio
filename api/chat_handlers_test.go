@@ -20,7 +20,10 @@ func TestChatEndpoints(t *testing.T) {
 	llmSettings, err := api.service.CreateLLMSettings(&models.LLMSettings{ModelName: "TestModel"})
 	assert.NoError(t, err)
 
-	llm, err := api.service.CreateLLM("TestLLM", "api-key", "http://api.test", 75, "Short desc", "Long desc", "http://logo.test", models.OPENAI, true)
+	llm, err := api.service.CreateLLM(
+		"TestLLM", "api-key", "http://api.test", 75,
+		"Short desc", "Long desc", "http://logo.test",
+		models.OPENAI, true, nil, "")
 	assert.NoError(t, err)
 
 	// Test Create Chat
@@ -28,24 +31,30 @@ func TestChatEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "chats",
 			Attributes: struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "Test Chat",
 				LLMSettingsID: llmSettings.ID,
@@ -74,24 +83,30 @@ func TestChatEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "chats",
 			Attributes: struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "Updated Chat",
 				LLMSettingsID: llmSettings.ID,
@@ -145,24 +160,30 @@ func TestChatEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "chats",
 			Attributes: struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "Updated Chat",
 				LLMSettingsID: 1,
@@ -183,24 +204,30 @@ func TestChatEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			} `json:"attributes"`
 		}{
 			Type: "chats",
 			Attributes: struct {
-				Name          string `json:"name"`
-				LLMSettingsID uint   `json:"llm_settings_id"`
-				LLMID         uint   `json:"llm_id"`
-				GroupIDs      []uint `json:"group_ids"`
-				FilterIDs     []uint `json:"filter_ids"`
-				RagN          int    `json:"rag_n"`
-				ToolSupport   bool   `json:"tool_support"`
+				Name                string `json:"name"`
+				LLMSettingsID       uint   `json:"llm_settings_id"`
+				LLMID               uint   `json:"llm_id"`
+				GroupIDs            []uint `json:"group_ids"`
+				FilterIDs           []uint `json:"filter_ids"`
+				RagN                int    `json:"rag_n"`
+				ToolSupport         bool   `json:"tool_support"`
+				SystemPrompt        string `json:"system_prompt"`
+				DefaultDataSourceID int    `json:"default_data_source_id"`
+				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "",
 				LLMSettingsID: 0,

@@ -18,11 +18,11 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create a test user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true)
 	assert.NoError(t, err)
 
 	// Create a test chat
-	chat, err := api.service.CreateChat("Test Chat", 1, 1, []uint{group.ID}, nil, 1, false)
+	chat, err := api.service.CreateChat("Test Chat", 1, 1, []uint{group.ID}, nil, 1, false, "Test System Prompt", 1, nil)
 	assert.NoError(t, err)
 
 	// Test Create ChatHistoryRecord
