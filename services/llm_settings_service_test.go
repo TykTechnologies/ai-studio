@@ -155,6 +155,8 @@ func TestLLMServicePagination(t *testing.T) {
 			"https://logo.test",
 			models.OPENAI,
 			true,
+			nil,
+			"",
 		)
 		assert.NoError(t, err)
 	}

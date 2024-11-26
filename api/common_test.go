@@ -40,7 +40,7 @@ func setupTestAPIForCommonTests(t *testing.T) (*API, *gorm.DB, *services.Service
 		TestMode:            true,
 	}
 
-	authService := auth.NewAuthService(&config, newMockMailer())
+	authService := auth.NewAuthService(&config, newMockMailer(), service)
 	api := NewAPI(service, true, authService, &config, nil, emptyFile)
 
 	return api, db, service
@@ -217,7 +217,7 @@ func TestCommon_TestGetUserChatHistoryRecords(t *testing.T) {
 // Helper functions for creating test data
 
 func createTestUser(t *testing.T, service *services.Service) *models.User {
-	user, err := service.CreateUser("test@example.com", "Test User", "password", false)
+	user, err := service.CreateUser("test@example.com", "Test User", "password", false, true, true)
 	assert.NoError(t, err)
 	return user
 }
@@ -241,7 +241,8 @@ func createTestToolCatalogue(t *testing.T, service *services.Service) *models.To
 }
 
 func createTestLLM(t *testing.T, service *services.Service, name string) *models.LLM {
-	llm, err := service.CreateLLM(name, "api_key", "https://api.example.com", 80, "Short desc", "Long desc", "https://logo.example.com", models.OPENAI, true)
+	llm, err := service.CreateLLM(name, "api_key", "https://api.example.com",
+		80, "Short desc", "Long desc", "https://logo.example.com", models.OPENAI, true, nil, "")
 	assert.NoError(t, err)
 	return llm
 }

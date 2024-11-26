@@ -17,18 +17,22 @@ func TestUserEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Email    string `json:"email"`
-				Name     string `json:"name"`
-				Password string `json:"password,omitempty"`
-				IsAdmin  bool   `json:"is_admin"`
+				Email      string `json:"email"`
+				Name       string `json:"name"`
+				Password   string `json:"password,omitempty"`
+				IsAdmin    bool   `json:"is_admin"`
+				ShowChat   bool   `json:"show_chat"`
+				ShowPortal bool   `json:"show_portal"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
 			Attributes: struct {
-				Email    string `json:"email"`
-				Name     string `json:"name"`
-				Password string `json:"password,omitempty"`
-				IsAdmin  bool   `json:"is_admin"`
+				Email      string `json:"email"`
+				Name       string `json:"name"`
+				Password   string `json:"password,omitempty"`
+				IsAdmin    bool   `json:"is_admin"`
+				ShowChat   bool   `json:"show_chat"`
+				ShowPortal bool   `json:"show_portal"`
 			}{
 				Email:    "test@example.com",
 				Name:     "Test User",
@@ -56,18 +60,22 @@ func TestUserEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Email    string `json:"email"`
-				Name     string `json:"name"`
-				Password string `json:"password,omitempty"`
-				IsAdmin  bool   `json:"is_admin"`
+				Email      string `json:"email"`
+				Name       string `json:"name"`
+				Password   string `json:"password,omitempty"`
+				IsAdmin    bool   `json:"is_admin"`
+				ShowChat   bool   `json:"show_chat"`
+				ShowPortal bool   `json:"show_portal"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
 			Attributes: struct {
-				Email    string `json:"email"`
-				Name     string `json:"name"`
-				Password string `json:"password,omitempty"`
-				IsAdmin  bool   `json:"is_admin"`
+				Email      string `json:"email"`
+				Name       string `json:"name"`
+				Password   string `json:"password,omitempty"`
+				IsAdmin    bool   `json:"is_admin"`
+				ShowChat   bool   `json:"show_chat"`
+				ShowPortal bool   `json:"show_portal"`
 			}{
 				Email: "updated@example.com",
 				Name:  "Updated User",

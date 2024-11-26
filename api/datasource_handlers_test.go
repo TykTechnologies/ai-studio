@@ -13,7 +13,7 @@ func TestDatasourceEndpoints(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a user for testing
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true, true, true)
 	assert.NoError(t, err)
 
 	// Test Create Datasource
