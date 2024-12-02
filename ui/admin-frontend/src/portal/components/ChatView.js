@@ -49,6 +49,7 @@ const ChatView = () => {
   const [chatName, setChatName] = useState("");
   const navigate = useNavigate();
   const [showError, setShowError] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState({});
 
   const [showTools, setShowTools] = useState(true);
 
@@ -77,6 +78,53 @@ const ChatView = () => {
       e.preventDefault();
       handleSendMessage(e);
     }
+  };
+
+  const toggleGroup = (index) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
+
+  const groupSystemMessages = (segments) => {
+    let groupedSegments = [];
+    let currentSystemGroup = [];
+
+    segments.forEach((segment) => {
+      if (segment.match(/(:::|\%\%\%)system/)) {
+        // Add to current system group
+        currentSystemGroup.push(
+          segment
+            .replace(/(:::|\%\%\%)system\s*([\s\S]*?)(:::|\%\%\%)/, "$2")
+            .trim(),
+        );
+      } else if (segment.trim()) {
+        // If we have accumulated system messages, add them as a group
+        if (currentSystemGroup.length > 0) {
+          groupedSegments.push({
+            type: "system-group",
+            messages: currentSystemGroup,
+          });
+          currentSystemGroup = [];
+        }
+        // Add non-system content
+        groupedSegments.push({
+          type: "content",
+          content: segment,
+        });
+      }
+    });
+
+    // Handle any remaining system messages
+    if (currentSystemGroup.length > 0) {
+      groupedSegments.push({
+        type: "system-group",
+        messages: currentSystemGroup,
+      });
+    }
+
+    return groupedSegments;
   };
 
   const updateChatName = useCallback(
@@ -525,58 +573,133 @@ const ChatView = () => {
   };
 
   const renderMessageContent = (content) => {
-    // Add safety check for undefined or null content
     if (!content) {
       return null;
     }
 
-    // Ensure content is a string
-    const contentString = String(content);
-
     const segments = content.split(
       /((?::::|\%\%\%)system[\s\S]*?(?::::|\%\%\%))/g,
     );
+    const groupedSegments = groupSystemMessages(segments);
 
     return (
       <>
-        {segments.map((segment, index) => {
-          // Check for both ::: and %%% system messages
-          if (segment.match(/(:::|\%\%\%)system/)) {
-            const systemContent = segment
-              .replace(/(:::|\%\%\%)system\s*([\s\S]*?)(:::|\%\%\%)/, "$2")
-              .trim();
-
-            // Check if this is an error message
-            const isError = systemContent.startsWith("Error:");
+        {groupedSegments.map((segment, index) => {
+          if (segment.type === "system-group") {
+            const isExpanded = expandedGroups[index];
+            const messageCount = segment.messages.length;
+            const hasMultipleMessages = messageCount > 1;
 
             return (
               <Box
                 key={index}
                 sx={{
-                  backgroundColor: isError ? "#FEE2E2" : "#E0F7F6",
-                  border: `1px solid ${isError ? "#FCA5A5" : "#e9ecef"}`,
+                  backgroundColor: "#E0F7F6",
+                  border: "1px solid #e9ecef",
                   borderRadius: "10px",
                   boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
                   padding: "12px 12px",
                   margin: "10px 10px",
-                  color: isError ? "#DC2626" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
+                  color: "#000000",
                   fontFamily: "monospace",
+                  cursor: hasMultipleMessages ? "pointer" : "default",
                 }}
+                onClick={
+                  hasMultipleMessages ? () => toggleGroup(index) : undefined
+                }
               >
-                <SmartToyOutlinedIcon
+                {/* First message is always visible */}
+                <Box
                   sx={{
-                    fontSize: "1rem",
-                    color: isError ? "#DC2626" : "#666",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    backgroundColor: segment.messages[0].startsWith("Error:")
+                      ? "#FEE2E2"
+                      : "transparent",
+                    color: segment.messages[0].startsWith("Error:")
+                      ? "#DC2626"
+                      : "inherit",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
                   }}
-                />
-                {systemContent}
+                >
+                  <SmartToyOutlinedIcon
+                    sx={{
+                      fontSize: "1rem",
+                      color: segment.messages[0].startsWith("Error:")
+                        ? "#DC2626"
+                        : "#666",
+                    }}
+                  />
+                  {segment.messages[0]}
+                </Box>
+
+                {/* Show message count and expand/collapse indicator if there are multiple messages */}
+                {hasMultipleMessages && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      mt: 1,
+                      borderTop: "1px solid rgba(0,0,0,0.1)",
+                      pt: 1,
+                      color: "#666",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    <Typography variant="caption">
+                      {isExpanded
+                        ? "Click to collapse"
+                        : `${messageCount - 1} more messages...`}
+                    </Typography>
+                    <KeyboardArrowDownIcon
+                      sx={{
+                        transform: isExpanded ? "rotate(180deg)" : "none",
+                        transition: "transform 0.2s",
+                      }}
+                    />
+                  </Box>
+                )}
+
+                {/* Additional messages shown when expanded */}
+                {isExpanded && (
+                  <Box sx={{ mt: 1 }}>
+                    {segment.messages.slice(1).map((message, msgIndex) => {
+                      const isError = message.startsWith("Error:");
+                      return (
+                        <Box
+                          key={msgIndex}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                            backgroundColor: isError
+                              ? "#FEE2E2"
+                              : "transparent",
+                            color: isError ? "#DC2626" : "inherit",
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            mt: 1,
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <SmartToyOutlinedIcon
+                            sx={{
+                              fontSize: "1rem",
+                              color: isError ? "#DC2626" : "#666",
+                            }}
+                          />
+                          {message}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                )}
               </Box>
             );
-          } else if (segment.trim()) {
-            // Regular markdown content
+          } else {
             return (
               <ReactMarkdown
                 key={index}
@@ -628,11 +751,10 @@ const ChatView = () => {
                 }}
                 remarkPlugins={[remarkGfm]}
               >
-                {segment}
+                {segment.content}
               </ReactMarkdown>
             );
           }
-          return null;
         })}
       </>
     );
