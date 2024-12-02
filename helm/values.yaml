@@ -1,0 +1,202 @@
+midsommar:
+  image:
+    repository: tykio/midsommar
+    tag: latest
+    pullPolicy: Always
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+      - name: gateway
+        port: 9090
+        targetPort: 9090
+
+  # Ingress configuration
+  ingress:
+    enabled: true
+    certificateEnabled: true # New field to control certificate usage
+    className: nginx
+    certManager: # New section for cert-manager specific config
+      issuer: letsencrypt-prod
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    hosts:
+      - host: midsommar.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 8080
+      - host: gateway.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 9090
+    tls:
+      - secretName: midsommar-tls
+        hosts:
+          - midsommar.example.com
+      - secretName: gateway-tls
+        hosts:
+          - gateway.example.com
+
+  # Resources configuration
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+database:
+  # Set to false to disable built-in PostgreSQL deployment
+  internal: true
+
+  # Connection details (used for both internal and external databases)
+  url: "" # If set, this takes precedence over individual connection parameters
+  host: ""
+  port: 5432
+  name: "midsommar"
+  user: "postgres"
+  password: "postgres"
+
+# PostgreSQL configuration
+postgres:
+  enabled: true # This will be tied to database.internal
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 5432
+
+  auth:
+    username: postgres
+    password: postgres
+    database: postgres
+
+  # PostgreSQL persistence
+  persistence:
+    enabled: true
+    storageClass: "" # Empty string means use default storageClass
+    size: 10Gi
+
+  # PostgreSQL resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Application configuration
+config:
+  # SMTP Configuration
+  smtpServer: ""
+  smtpPort: "587"
+  smtpUser: "apikey"
+  smtpPass: ""
+
+  # Application Configuration
+  allowRegistrations: "true"
+  adminEmail: "you@tyk.io"
+  siteUrl: "http://localhost:3000"
+  fromEmail: "noreply@tyk.io"
+  devMode: "false"
+  databaseType: "postgres"
+  filterSignupDomains: ""
+  databaseUrl: "" # This will be auto-generated if using internal database
+
+# Global configuration
+global:
+  # Environment name (development, staging, production)
+  environment: "development"
+
+  # Node selector for all pods
+  nodeSelector: {}
+
+  # Tolerations for all pods
+  tolerations: []
+
+  # Affinity rules for all pods
+  affinity: {}
+
+# Deployment specific configurations
+replicaCount: 1
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 2000
+
+# Container security context
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Prometheus metrics
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
+# Configure liveness and readiness probes
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+
+# Configure pod priority
+priorityClassName: ""
+
+# Extra environment variables
+extraEnv:
+  []
+  # - name: EXTRA_VAR
+  #   value: "extra-value"
+
+# Extra volumes and volume mounts
+extraVolumes: []
+extraVolumeMounts: []
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""

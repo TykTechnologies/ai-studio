@@ -31,7 +31,7 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.CreateUser(input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.Password, input.Data.Attributes.IsAdmin)
+	user, err := a.service.CreateUser(input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.Password, input.Data.Attributes.IsAdmin, input.Data.Attributes.ShowChat, input.Data.Attributes.ShowPortal)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -117,7 +117,7 @@ func (a *API) updateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.UpdateUser(uint(id), input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.IsAdmin)
+	user, err := a.service.UpdateUser(uint(id), input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.IsAdmin, input.Data.Attributes.ShowChat, input.Data.Attributes.ShowPortal)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -227,13 +227,17 @@ func serializeUser(user *models.User) UserResponse {
 		Type: "users",
 		ID:   strconv.FormatUint(uint64(user.ID), 10),
 		Attributes: struct {
-			Email   string `json:"email"`
-			Name    string `json:"name"`
-			IsAdmin bool   `json:"is_admin"`
+			Email      string `json:"email"`
+			Name       string `json:"name"`
+			IsAdmin    bool   `json:"is_admin"`
+			ShowChat   bool   `json:"show_chat"`
+			ShowPortal bool   `json:"show_portal"`
 		}{
-			Email:   user.Email,
-			Name:    user.Name,
-			IsAdmin: user.IsAdmin,
+			Email:      user.Email,
+			Name:       user.Name,
+			IsAdmin:    user.IsAdmin,
+			ShowChat:   user.ShowChat,
+			ShowPortal: user.ShowPortal,
 		},
 	}
 }

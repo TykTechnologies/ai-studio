@@ -100,6 +100,7 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 				Vendor           string           `json:"vendor"`
 				Active           bool             `json:"active"`
 				Filters          []FilterResponse `json:"filters"`
+				DefaultModel     string           `json:"default_model"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -108,6 +109,7 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 				LogoURL:          llm.LogoURL,
 				Vendor:           string(llm.Vendor),
 				Active:           llm.Active,
+				DefaultModel:     llm.DefaultModel,
 			},
 		}
 	}
@@ -189,23 +191,24 @@ func (a *API) getDataCatalogueDatasources(c *gin.Context) {
 			Type: "datasource",
 			ID:   strconv.FormatUint(uint64(ds.ID), 10),
 			Attributes: struct {
-				Name             string        `json:"name"`
-				ShortDescription string        `json:"short_description"`
-				LongDescription  string        `json:"long_description"`
-				Icon             string        `json:"icon"`
-				Url              string        `json:"url"`
-				PrivacyScore     int           `json:"privacy_score"`
-				UserID           uint          `json:"user_id"`
-				Tags             []TagResponse `json:"tags"`
-				DBConnString     string        `json:"db_conn_string"`
-				DBSourceType     string        `json:"db_source_type"`
-				DBConnAPIKey     string        `json:"db_conn_api_key"`
-				DBName           string        `json:"db_name"`
-				EmbedVendor      string        `json:"embed_vendor"`
-				EmbedUrl         string        `json:"embed_url"`
-				EmbedAPIKey      string        `json:"embed_api_key"`
-				EmbedModel       string        `json:"embed_model"`
-				Active           bool          `json:"active"`
+				Name             string              `json:"name"`
+				ShortDescription string              `json:"short_description"`
+				LongDescription  string              `json:"long_description"`
+				Icon             string              `json:"icon"`
+				Url              string              `json:"url"`
+				PrivacyScore     int                 `json:"privacy_score"`
+				UserID           uint                `json:"user_id"`
+				Tags             []TagResponse       `json:"tags"`
+				DBConnString     string              `json:"db_conn_string"`
+				DBSourceType     string              `json:"db_source_type"`
+				DBConnAPIKey     string              `json:"db_conn_api_key"`
+				DBName           string              `json:"db_name"`
+				EmbedVendor      string              `json:"embed_vendor"`
+				EmbedUrl         string              `json:"embed_url"`
+				EmbedAPIKey      string              `json:"embed_api_key"`
+				EmbedModel       string              `json:"embed_model"`
+				Active           bool                `json:"active"`
+				Files            []FileStoreResponse `json:"files"` // Added Files field
 			}{
 				Name:             ds.Name,
 				ShortDescription: ds.ShortDescription,
@@ -300,14 +303,17 @@ func (a *API) getCommonToolCatalogueTools(c *gin.Context) {
 			Type: "tool",
 			ID:   strconv.FormatUint(uint64(tool.ID), 10),
 			Attributes: struct {
-				Name           string   `json:"name"`
-				Description    string   `json:"description"`
-				ToolType       string   `json:"tool_type"`
-				OASSpec        string   `json:"oas_spec"`
-				PrivacyScore   int      `json:"privacy_score"`
-				Operations     []string `json:"operations"`
-				AuthKey        string   `json:"auth_key"`
-				AuthSchemaName string   `json:"auth_schema_name"`
+				Name           string              `json:"name"`
+				Description    string              `json:"description"`
+				ToolType       string              `json:"tool_type"`
+				OASSpec        string              `json:"oas_spec"`
+				PrivacyScore   int                 `json:"privacy_score"`
+				Operations     []string            `json:"operations"`
+				AuthKey        string              `json:"auth_key"`
+				AuthSchemaName string              `json:"auth_schema_name"`
+				FileStores     []FileStoreResponse `json:"file_stores"`
+				Filters        []FilterResponse    `json:"filters"`
+				Dependencies   []ToolResponse      `json:"dependencies"`
 			}{
 				Name:         tool.Name,
 				Description:  tool.Description,
@@ -602,23 +608,24 @@ func (a *API) getUserAccessibleDataSources(c *gin.Context) {
 			Type: "datasource",
 			ID:   strconv.FormatUint(uint64(ds.ID), 10),
 			Attributes: struct {
-				Name             string        `json:"name"`
-				ShortDescription string        `json:"short_description"`
-				LongDescription  string        `json:"long_description"`
-				Icon             string        `json:"icon"`
-				Url              string        `json:"url"`
-				PrivacyScore     int           `json:"privacy_score"`
-				UserID           uint          `json:"user_id"`
-				Tags             []TagResponse `json:"tags"`
-				DBConnString     string        `json:"db_conn_string"`
-				DBSourceType     string        `json:"db_source_type"`
-				DBConnAPIKey     string        `json:"db_conn_api_key"`
-				DBName           string        `json:"db_name"`
-				EmbedVendor      string        `json:"embed_vendor"`
-				EmbedUrl         string        `json:"embed_url"`
-				EmbedAPIKey      string        `json:"embed_api_key"`
-				EmbedModel       string        `json:"embed_model"`
-				Active           bool          `json:"active"`
+				Name             string              `json:"name"`
+				ShortDescription string              `json:"short_description"`
+				LongDescription  string              `json:"long_description"`
+				Icon             string              `json:"icon"`
+				Url              string              `json:"url"`
+				PrivacyScore     int                 `json:"privacy_score"`
+				UserID           uint                `json:"user_id"`
+				Tags             []TagResponse       `json:"tags"`
+				DBConnString     string              `json:"db_conn_string"`
+				DBSourceType     string              `json:"db_source_type"`
+				DBConnAPIKey     string              `json:"db_conn_api_key"`
+				DBName           string              `json:"db_name"`
+				EmbedVendor      string              `json:"embed_vendor"`
+				EmbedUrl         string              `json:"embed_url"`
+				EmbedAPIKey      string              `json:"embed_api_key"`
+				EmbedModel       string              `json:"embed_model"`
+				Active           bool                `json:"active"`
+				Files            []FileStoreResponse `json:"files"` // Added Files field
 			}{
 				Name:             ds.Name,
 				ShortDescription: ds.ShortDescription,
@@ -685,6 +692,7 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 				Vendor           string           `json:"vendor"`
 				Active           bool             `json:"active"`
 				Filters          []FilterResponse `json:"filters"`
+				DefaultModel     string           `json:"default_model"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -693,6 +701,7 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 				LogoURL:          llm.LogoURL,
 				Vendor:           string(llm.Vendor),
 				Active:           llm.Active,
+				DefaultModel:     llm.DefaultModel,
 			},
 		}
 	}
@@ -1057,14 +1066,17 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 			Type: "tool",
 			ID:   strconv.FormatUint(uint64(tool.ID), 10),
 			Attributes: struct {
-				Name           string   `json:"name"`
-				Description    string   `json:"description"`
-				ToolType       string   `json:"tool_type"`
-				OASSpec        string   `json:"oas_spec"`
-				PrivacyScore   int      `json:"privacy_score"`
-				Operations     []string `json:"operations"`
-				AuthKey        string   `json:"auth_key"`
-				AuthSchemaName string   `json:"auth_schema_name"`
+				Name           string              `json:"name"`
+				Description    string              `json:"description"`
+				ToolType       string              `json:"tool_type"`
+				OASSpec        string              `json:"oas_spec"`
+				PrivacyScore   int                 `json:"privacy_score"`
+				Operations     []string            `json:"operations"`
+				AuthKey        string              `json:"auth_key"`
+				AuthSchemaName string              `json:"auth_schema_name"`
+				FileStores     []FileStoreResponse `json:"file_stores"`
+				Filters        []FilterResponse    `json:"filters"`
+				Dependencies   []ToolResponse      `json:"dependencies"`
 			}{
 				Name:         tool.Name,
 				Description:  tool.Description,

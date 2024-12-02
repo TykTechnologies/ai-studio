@@ -3,9 +3,12 @@ package api
 import (
 	"crypto/rand"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -205,6 +208,7 @@ func (a *API) setupRoutes() {
 	public.POST("/auth/reset-password", a.handleResetPassword)
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
+	public.GET("/config", a.handleGetConfig)
 
 	// routes for portal users
 	authed := public.Group("/common")
@@ -303,6 +307,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/datasources", a.listDatasources)
 	v1.GET("/datasources/search", a.searchDatasources)
 	v1.GET("/datasources/by-tag", a.getDatasourcesByTag)
+	v1.POST("/datasources/:id/filestores/:filestore_id", a.addFileStoreToDatasource)
+	v1.DELETE("/datasources/:id/filestores/:filestore_id", a.removeFileStoreFromDatasource)
+	v1.POST("/datasources/:id/process-embeddings", a.ProcessFileEmbeddingHandler)
 
 	// Data Catalogue routes
 	v1.POST("/data-catalogues", a.createDataCatalogue)
@@ -372,6 +379,10 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/chats/:id", a.deleteChat)
 	v1.GET("/chats", a.listChats)
 	v1.GET("/chats/by-group", a.getChatsByGroupID)
+	v1.POST("/chats/:id/extra-context/:filestore_id", a.addExtraContextToChat)
+	v1.DELETE("/chats/:id/extra-context/:filestore_id", a.removeExtraContextFromChat)
+	v1.GET("/chats/:id/extra-context", a.getChatExtraContext)
+	v1.PUT("/chats/:id/extra-context", a.setChatExtraContext)
 
 	// Tool routes
 	v1.POST("/tools", a.createTool)
@@ -384,6 +395,21 @@ func (a *API) setupRoutes() {
 	v1.POST("/tools/:id/operations", a.addOperationToTool)
 	v1.DELETE("/tools/:id/operations", a.removeOperationFromTool)
 	v1.GET("/tools/:id/operations", a.getToolOperations)
+
+	v1.POST("/tools/:id/dependencies/:dependency_id", a.addDependencyToTool)
+	v1.DELETE("/tools/:id/dependencies/:dependency_id", a.removeDependencyFromTool)
+	v1.GET("/tools/:id/dependencies", a.getToolDependencies)
+	v1.PUT("/tools/:id/dependencies", a.setToolDependencies)
+
+	v1.POST("/tools/:id/filestores/:filestore_id", a.addFileStoreToTool)
+	v1.DELETE("/tools/:id/filestores/:filestore_id", a.removeFileStoreFromTool)
+	v1.GET("/tools/:id/filestores", a.getToolFileStores)
+	v1.PUT("/tools/:id/filestores", a.setToolFileStores)
+
+	v1.POST("/tools/:id/filters/:filter_id", a.addFilterToTool)        // Add a filter to a tool
+	v1.DELETE("/tools/:id/filters/:filter_id", a.removeFilterFromTool) // Remove a filter from a tool
+	v1.GET("/tools/:id/filters", a.getToolFilters)                     // Get all filters for a tool
+	v1.PUT("/tools/:id/filters", a.setToolFilters)                     // Replace all filters for a tool
 
 	// Model Price routes
 	v1.POST("/model-prices", a.createModelPrice)
@@ -430,6 +456,20 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
+
+	// FileStore routes
+	v1.POST("/filestore", a.createFileStore)
+	v1.GET("/filestore/:id", a.getFileStore)
+	v1.PATCH("/filestore/:id", a.updateFileStore)
+	v1.DELETE("/filestore/:id", a.deleteFileStore)
+	v1.GET("/filestore", a.getAllFileStores)
+	v1.GET("/filestore/search", a.searchFileStores)
+
+	v1.POST("/secrets", a.createSecret)
+	v1.GET("/secrets/:id", a.getSecret)
+	v1.PATCH("/secrets/:id", a.updateSecret)
+	v1.DELETE("/secrets/:id", a.deleteSecret)
+	v1.GET("/secrets", a.listSecrets)
 
 	a.SetupWebSocketRoute(authed)
 }
@@ -478,4 +518,34 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 
 func (a *API) GetUserID() uint {
 	return 0
+}
+
+func (a *API) handleGetConfig(c *gin.Context) {
+	// Get the request protocol and host
+	scheme := "http"
+
+	host := c.Request.Host
+	siteURLVar := os.Getenv("SITE_URL")
+	if siteURLVar != "" {
+		asURL, err := url.Parse(siteURLVar)
+		if err == nil {
+			host = asURL.Host
+			scheme = asURL.Scheme
+		}
+	}
+
+	// Construct the base URLs
+	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
+	websocketScheme := "ws"
+	if scheme == "https" {
+		websocketScheme = "wss"
+	}
+	websocketHost := fmt.Sprintf("%s://%s", websocketScheme, host)
+
+	config := FrontendConfig{
+		APIBaseURL:    apiBaseURL,
+		WebsocketHost: websocketHost,
+	}
+
+	c.JSON(http.StatusOK, config)
 }

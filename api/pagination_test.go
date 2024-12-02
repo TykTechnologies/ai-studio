@@ -38,7 +38,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 		TestMode:            true,
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), config, nil, emptyFile)
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
 
 	// Create multiple LLMs
 	for i := 1; i <= 15; i++ {
@@ -52,6 +52,8 @@ func TestPagination_LLMPagination(t *testing.T) {
 			"https://logo.test",
 			models.OPENAI,
 			true,
+			nil,
+			"",
 		)
 		assert.NoError(t, err)
 	}
@@ -134,7 +136,7 @@ func TestPagination_UserPagination(t *testing.T) {
 		TestMode:            true,
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), config, nil, emptyFile)
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
 
 	// Create multiple users
 	for i := 1; i <= 15; i++ {
@@ -143,6 +145,8 @@ func TestPagination_UserPagination(t *testing.T) {
 			fmt.Sprintf("User %d", i),
 			"password123",
 			false,
+			true,
+			true,
 		)
 		assert.NoError(t, err)
 	}

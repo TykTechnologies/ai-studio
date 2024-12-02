@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-
 import { Switch, FormControlLabel } from "@mui/material";
-
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -39,9 +37,9 @@ const UserForm = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [isAdmin, setIsAdmin] = useState(false);
-
+  const [showPortal, setShowPortal] = useState(true);
+  const [showChat, setShowChat] = useState(true);
   const [groups, setGroups] = useState([]);
   const [userGroups, setUserGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("");
@@ -85,6 +83,8 @@ const UserForm = () => {
       setName(userData.attributes.name);
       setEmail(userData.attributes.email);
       setIsAdmin(userData.attributes.is_admin);
+      setShowPortal(userData.attributes.show_portal ?? true);
+      setShowChat(userData.attributes.show_chat ?? true);
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -136,6 +136,8 @@ const UserForm = () => {
           name,
           email,
           is_admin: isAdmin,
+          show_portal: showPortal,
+          show_chat: showChat,
           ...(password && { password }),
         },
       },
@@ -345,6 +347,30 @@ const UserForm = () => {
                   />
                 }
                 label="Admin User"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showPortal}
+                    onChange={(e) => setShowPortal(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Show Portal"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showChat}
+                    onChange={(e) => setShowChat(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Show Chat"
               />
             </Grid>
             <Grid item xs={12}>

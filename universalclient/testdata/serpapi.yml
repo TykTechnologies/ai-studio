@@ -1,0 +1,152 @@
+openapi: 3.0.0
+info:
+  title: SerpAPI Search API
+  version: "1.0.0"
+  description: API for retrieving search engine results from various providers like Google, Bing, and more.
+servers:
+  - url: https://serpapi.com
+paths:
+  /search:
+    get:
+      summary: Perform a search query
+      description: Returns search results from the specified search engine.
+      operationId: searchQuery
+      parameters:
+        - in: query
+          name: engine
+          schema:
+            type: string
+            enum:
+              - google
+              - bing
+              - yahoo
+              - baidu
+              - yandex
+              - duckduckgo
+          required: true
+          description: The search engine to use.
+        - in: query
+          name: q
+          schema:
+            type: string
+          required: true
+          description: The search query.
+        - in: query
+          name: location
+          schema:
+            type: string
+          required: false
+          description: Location to localize the search results (e.g., "Austin, TX").
+        - in: query
+          name: hl
+          schema:
+            type: string
+          required: false
+          description: Language code for the search results (e.g., "en").
+        - in: query
+          name: gl
+          schema:
+            type: string
+          required: false
+          description: Country code to localize search results (e.g., "us").
+        - in: query
+          name: num
+          schema:
+            type: integer
+          required: false
+          description: Number of results to return.
+        - in: query
+          name: start
+          schema:
+            type: integer
+          required: false
+          description: Offset for pagination.
+        - in: query
+          name: safe
+          schema:
+            type: string
+            enum:
+              - active
+              - off
+          required: false
+          description: Safe search filter.
+      responses:
+        "200":
+          description: Successful response with search results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "400":
+          description: Bad request due to invalid parameters.
+        "401":
+          description: Unauthorized access due to invalid API key.
+        "500":
+          description: Internal server error.
+      security:
+        - ApiKeyAuth: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: query
+      name: api_key
+  schemas:
+    SearchResults:
+      type: object
+      properties:
+        search_metadata:
+          type: object
+          description: Metadata about the search request.
+          properties:
+            id:
+              type: string
+              description: Unique identifier for the search request.
+            status:
+              type: string
+              description: Status of the search request.
+            created_at:
+              type: string
+              format: date-time
+              description: Timestamp when the search was created.
+        search_parameters:
+          type: object
+          description: Parameters used in the search request.
+        organic_results:
+          type: array
+          description: List of organic search results.
+          items:
+            type: object
+            properties:
+              position:
+                type: integer
+                description: Position of the result in the list.
+              title:
+                type: string
+                description: Title of the result.
+              link:
+                type: string
+                format: uri
+                description: URL of the result.
+              snippet:
+                type: string
+                description: Snippet of the result.
+        ads_results:
+          type: array
+          description: List of ad results (if any).
+          items:
+            type: object
+            properties:
+              position:
+                type: integer
+                description: Position of the ad in the list.
+              title:
+                type: string
+                description: Title of the ad.
+              link:
+                type: string
+                format: uri
+                description: URL of the ad.
+              snippet:
+                type: string
+                description: Snippet of the ad.

@@ -70,7 +70,7 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		AdminEmail:          "admin@example.com",
 		SMTPHost:            "dummy.host.com",
 	}
-	suite.authService = auth.NewAuthService(&config, mockMailer)
+	suite.authService = auth.NewAuthService(&config, mockMailer, suite.service)
 }
 
 func (suite *AuthServiceTestSuite) TearDownTest() {

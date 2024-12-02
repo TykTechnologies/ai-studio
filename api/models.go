@@ -8,10 +8,12 @@ type UserInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Email    string `json:"email"`
-			Name     string `json:"name"`
-			Password string `json:"password,omitempty"`
-			IsAdmin  bool   `json:"is_admin"`
+			Email      string `json:"email"`
+			Name       string `json:"name"`
+			Password   string `json:"password,omitempty"`
+			IsAdmin    bool   `json:"is_admin"`
+			ShowChat   bool   `json:"show_chat"`
+			ShowPortal bool   `json:"show_portal"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -60,9 +62,11 @@ type UserResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email   string `json:"email"`
-		Name    string `json:"name"`
-		IsAdmin bool   `json:"is_admin"`
+		Email      string `json:"email"`
+		Name       string `json:"name"`
+		IsAdmin    bool   `json:"is_admin"`
+		ShowChat   bool   `json:"show_chat"`
+		ShowPortal bool   `json:"show_portal"`
 	} `json:"attributes"`
 }
 
@@ -100,6 +104,7 @@ type LLMInput struct {
 			Vendor           string `json:"vendor"`
 			Active           bool   `json:"active"`
 			Filters          []int  `json:"filters"`
+			DefaultModel     string `json:"default_model"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -120,6 +125,7 @@ type LLMResponse struct {
 		Vendor           string           `json:"vendor"`
 		Active           bool             `json:"active"`
 		Filters          []FilterResponse `json:"filters"`
+		DefaultModel     string           `json:"default_model"`
 	} `json:"attributes"`
 }
 
@@ -229,23 +235,24 @@ type DatasourceResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name             string        `json:"name"`
-		ShortDescription string        `json:"short_description"`
-		LongDescription  string        `json:"long_description"`
-		Icon             string        `json:"icon"`
-		Url              string        `json:"url"`
-		PrivacyScore     int           `json:"privacy_score"`
-		UserID           uint          `json:"user_id"`
-		Tags             []TagResponse `json:"tags"`
-		DBConnString     string        `json:"db_conn_string"`
-		DBSourceType     string        `json:"db_source_type"`
-		DBConnAPIKey     string        `json:"db_conn_api_key"`
-		DBName           string        `json:"db_name"`
-		EmbedVendor      string        `json:"embed_vendor"`
-		EmbedUrl         string        `json:"embed_url"`
-		EmbedAPIKey      string        `json:"embed_api_key"`
-		EmbedModel       string        `json:"embed_model"`
-		Active           bool          `json:"active"`
+		Name             string              `json:"name"`
+		ShortDescription string              `json:"short_description"`
+		LongDescription  string              `json:"long_description"`
+		Icon             string              `json:"icon"`
+		Url              string              `json:"url"`
+		PrivacyScore     int                 `json:"privacy_score"`
+		UserID           uint                `json:"user_id"`
+		Tags             []TagResponse       `json:"tags"`
+		DBConnString     string              `json:"db_conn_string"`
+		DBSourceType     string              `json:"db_source_type"`
+		DBConnAPIKey     string              `json:"db_conn_api_key"`
+		DBName           string              `json:"db_name"`
+		EmbedVendor      string              `json:"embed_vendor"`
+		EmbedUrl         string              `json:"embed_url"`
+		EmbedAPIKey      string              `json:"embed_api_key"`
+		EmbedModel       string              `json:"embed_model"`
+		Active           bool                `json:"active"`
+		Files            []FileStoreResponse `json:"files"` // Added Files field
 	} `json:"attributes"`
 }
 
@@ -396,13 +403,16 @@ type ChatInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name          string `json:"name"`
-			LLMSettingsID uint   `json:"llm_settings_id"`
-			LLMID         uint   `json:"llm_id"`
-			GroupIDs      []uint `json:"group_ids"`
-			FilterIDs     []uint `json:"filter_ids"`
-			RagN          int    `json:"rag_n"`
-			ToolSupport   bool   `json:"tool_support"`
+			Name                string `json:"name"`
+			LLMSettingsID       uint   `json:"llm_settings_id"`
+			LLMID               uint   `json:"llm_id"`
+			GroupIDs            []uint `json:"group_ids"`
+			FilterIDs           []uint `json:"filter_ids"`
+			RagN                int    `json:"rag_n"`
+			ToolSupport         bool   `json:"tool_support"`
+			SystemPrompt        string `json:"system_prompt"`
+			DefaultDataSourceID int    `json:"default_data_source_id"`
+			DefaultToolIDs      []uint `json:"default_tool_ids"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -413,13 +423,18 @@ type ChatResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name          string           `json:"name"`
-		LLMSettingsID uint             `json:"llm_settings_id"`
-		LLMID         uint             `json:"llm_id"`
-		Groups        []GroupResponse  `json:"groups"`
-		Filters       []FilterResponse `json:"filters"`
-		RagN          int              `json:"rag_n"`
-		ToolSupport   bool             `json:"tool_support"`
+		Name                string              `json:"name"`
+		LLMSettingsID       uint                `json:"llm_settings_id"`
+		LLMID               uint                `json:"llm_id"`
+		Groups              []GroupResponse     `json:"groups"`
+		Filters             []FilterResponse    `json:"filters"`
+		RagN                int                 `json:"rag_n"`
+		ToolSupport         bool                `json:"tool_support"`
+		SystemPrompt        string              `json:"system_prompt"`
+		DefaultDataSourceID int                 `json:"default_data_source_id"`
+		DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
+		ExtraContext        []FileStoreResponse `json:"extra_context"` // Add this field
+		DefaultTools        []ToolResponse      `json:"default_tools"`
 	} `json:"attributes"`
 }
 
@@ -446,14 +461,17 @@ type ToolResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name           string   `json:"name"`
-		Description    string   `json:"description"`
-		ToolType       string   `json:"tool_type"`
-		OASSpec        string   `json:"oas_spec"`
-		PrivacyScore   int      `json:"privacy_score"`
-		Operations     []string `json:"operations"`
-		AuthKey        string   `json:"auth_key"`
-		AuthSchemaName string   `json:"auth_schema_name"`
+		Name           string              `json:"name"`
+		Description    string              `json:"description"`
+		ToolType       string              `json:"tool_type"`
+		OASSpec        string              `json:"oas_spec"`
+		PrivacyScore   int                 `json:"privacy_score"`
+		Operations     []string            `json:"operations"`
+		AuthKey        string              `json:"auth_key"`
+		AuthSchemaName string              `json:"auth_schema_name"`
+		FileStores     []FileStoreResponse `json:"file_stores"`
+		Filters        []FilterResponse    `json:"filters"`
+		Dependencies   []ToolResponse      `json:"dependencies"` // Add this line
 	} `json:"attributes"`
 }
 
@@ -782,9 +800,13 @@ type UserWithEntitlementsResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email        string `json:"email"`
-		Name         string `json:"name"`
-		IsAdmin      bool   `json:"is_admin"`
+		Email     string `json:"email"`
+		Name      string `json:"name"`
+		IsAdmin   bool   `json:"is_admin"`
+		UIOptions struct {
+			ShowChat   bool `json:"show_chat"`
+			ShowPortal bool `json:"show_portal"`
+		} `json:"ui_options"`
 		Entitlements struct {
 			Catalogues     []CatalogueResponse     `json:"catalogues"`
 			DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
@@ -863,4 +885,86 @@ type PaginatedProxyLogs struct {
 		PageSize   int   `json:"page_size"`
 		PageNumber int   `json:"page_number"`
 	} `json:"meta"`
+}
+
+type FrontendConfig struct {
+	APIBaseURL    string `json:"API_BASE_URL"`
+	WebsocketHost string `json:"WEBSOCKET_HOST"`
+	// Add other configuration values as needed
+}
+
+// FileStoreInput represents the input for filestore-related operations
+// @Description FileStore input model
+type FileStoreInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			FileName    string `json:"file_name"`
+			Description string `json:"description"`
+			Content     string `json:"content"`
+			Length      int    `json:"length"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// FileStoreResponse represents the response for filestore-related operations
+// @Description FileStore response model
+type FileStoreResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		FileName        string    `json:"file_name"`
+		Description     string    `json:"description"`
+		Content         string    `json:"-"`
+		Length          int       `json:"length"`
+		LastProcessedOn time.Time `json:"last_processed_on"`
+	} `json:"attributes"`
+}
+
+// SecretInput represents the input for secret-related operations
+// @Description Secret input model
+type SecretInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Value   string `json:"value"`
+			VarName string `json:"var_name"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// SecretResponse represents the response for secret-related operations
+// @Description Secret response model
+type SecretResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Value   string `json:"value"`
+		VarName string `json:"var_name"`
+	} `json:"attributes"`
+}
+
+// SecretListResponse represents the paginated response for listing secrets
+// @Description Secret list response model
+type SecretListResponse struct {
+	Data []SecretResponse `json:"data"`
+	Meta struct {
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+		PageSize   int   `json:"page_size"`
+		PageNumber int   `json:"page_number"`
+	} `json:"meta"`
+}
+
+// DependencyInput represents the input for adding or removing a dependency
+type DependencyInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}
+
+// DependencyListResponse represents the response for listing dependencies
+type DependencyListResponse struct {
+	Data []ToolResponse `json:"data"`
 }

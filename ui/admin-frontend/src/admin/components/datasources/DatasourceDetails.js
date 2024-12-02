@@ -85,6 +85,34 @@ const DatasourceDetails = () => {
     }
   };
 
+  const handleCloneDataSource = async () => {
+    try {
+      // Create new datasource data with modified name
+      const cloneData = {
+        data: {
+          type: "datasources",
+          attributes: {
+            ...datasource.attributes,
+            name: `Copy of ${datasource.attributes.name}`,
+            active: false,
+            // Reset files array if it exists
+            files: [],
+          },
+        },
+      };
+
+      // Create new datasource
+      const response = await apiClient.post("/datasources", cloneData);
+      const newDatasourceId = response.data.data.id;
+
+      // Redirect to edit page of new datasource
+      navigate(`/admin/datasources/edit/${newDatasourceId}`);
+    } catch (error) {
+      console.error("Error cloning datasource:", error);
+      // You might want to add some error handling here, like showing a snackbar
+    }
+  };
+
   const copyToClipboard = (text, field) => {
     navigator.clipboard.writeText(text).then(
       () => {
@@ -398,13 +426,23 @@ const DatasourceDetails = () => {
           alignItems="center"
         >
           <Typography color="success.main">{copySuccess}</Typography>
-          <StyledButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/datasources/edit/${id}`)}
-          >
-            Edit Datasource
-          </StyledButton>
+          <Box display="flex" gap={2}>
+            <StyledButton
+              variant="contained"
+              color="secondary"
+              onClick={handleCloneDataSource}
+              startIcon={<ContentCopyIcon />}
+            >
+              Clone This Data Source
+            </StyledButton>
+            <StyledButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/datasources/edit/${id}`)}
+            >
+              Edit Datasource
+            </StyledButton>
+          </Box>
         </Box>
       </ContentBox>
     </StyledPaper>

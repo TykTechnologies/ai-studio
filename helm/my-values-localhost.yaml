@@ -1,0 +1,63 @@
+midsommar:
+  ingress:
+    enabled: false # Disable ingress since we're using direct port access
+
+  service:
+    type: NodePort # Change to NodePort to expose ports directly
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+        nodePort: 32580
+      - name: gateway
+        port: 9090
+        targetPort: 9090
+        nodePort: 32590
+
+config:
+  allowRegistrations: "true"
+  adminEmail: "admin@localhost"
+  siteUrl: "http://localhost:32580" # Using the NodePort
+  fromEmail: "noreply@localhost"
+  devMode: "true" # Set to true for local development
+  databaseType: "postgres"
+  filterSignupDomains: "tyk.io"
+
+# Internal database configuration for local development
+database:
+  internal: true
+  user: "postgres"
+  password: "localdev123"
+  name: "midsommar"
+
+postgres:
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    size: 1Gi
+  service:
+    type: ClusterIP
+    port: 5432
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Optional services
+reranker:
+  enabled: true
+  image:
+    repository: tykio/reranker_cpu
+    tag: latest
+
+transformer-server:
+  enabled: true
+  image:
+    repository: tykio/transformer_server_cpu
+    tag: latest

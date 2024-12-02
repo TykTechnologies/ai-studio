@@ -28,6 +28,7 @@ import SettingsInputComponentIcon from "@mui/icons-material/SettingsInputCompone
 import AppsIcon from "@mui/icons-material/Apps";
 import WebIcon from "@mui/icons-material/Web";
 import ChatIcon from "@mui/icons-material/Chat";
+import VpnKeyIcon from "@mui/icons-material/VpnKey"; // Add this import at the top
 
 import { StyledNavLink } from "../../styles/sharedStyles";
 
@@ -78,6 +79,7 @@ const menuItems = [
     icon: <SettingsInputComponentIcon />,
     subItems: [
       { text: "Filters", icon: <FilterListIcon />, path: "/admin/filters" },
+      { text: "Secrets", icon: <VpnKeyIcon />, path: "/admin/secrets" },
     ],
   },
   {

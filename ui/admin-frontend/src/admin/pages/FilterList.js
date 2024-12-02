@@ -113,7 +113,7 @@ const FilterList = () => {
   };
 
   const handleFilterClick = (filter) => {
-    navigate(`/filters/${filter.id}`);
+    navigate(`/admin/filters/${filter.id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -219,7 +219,7 @@ const FilterList = () => {
         onClose={handleMenuClose}
       >
         <MenuItem
-          onClick={() => navigate(`/filters/edit/${selectedFilter?.id}`)}
+          onClick={() => navigate(`/admin/filters/edit/${selectedFilter?.id}`)}
         >
           Edit Filter
         </MenuItem>

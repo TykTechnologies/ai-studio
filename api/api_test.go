@@ -43,7 +43,7 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 		TestMode:            true,
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer()), config, nil, emptyFile)
+	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
 
 	return api, db
 }

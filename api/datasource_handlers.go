@@ -1,9 +1,13 @@
 package api
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
@@ -307,28 +311,223 @@ func (a *API) getDatasourcesByTag(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
 }
 
+// @Summary Add FileStore to Datasource
+// @Description Add a FileStore to a specific Datasource
+// @Tags datasources
+// @Accept json
+// @Produce json
+// @Param id path int true "Datasource ID"
+// @Param filestore_id path int true "FileStore ID"
+// @Success 200 {object} DatasourceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /datasources/{id}/filestores/{filestore_id} [post]
+// @Security BearerAuth
+func (a *API) addFileStoreToDatasource(c *gin.Context) {
+	datasourceID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid datasource ID"}},
+		})
+		return
+	}
+
+	fileStoreID, err := strconv.ParseUint(c.Param("filestore_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filestore ID"}},
+		})
+		return
+	}
+
+	err = a.service.AddFileToDatasource(uint(datasourceID), uint(fileStoreID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	datasource, err := a.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Datasource not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+}
+
+// @Summary Remove FileStore from Datasource
+// @Description Remove a FileStore from a specific Datasource
+// @Tags datasources
+// @Accept json
+// @Produce json
+// @Param id path int true "Datasource ID"
+// @Param filestore_id path int true "FileStore ID"
+// @Success 200 {object} DatasourceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /datasources/{id}/filestores/{filestore_id} [delete]
+// @Security BearerAuth
+func (a *API) removeFileStoreFromDatasource(c *gin.Context) {
+	datasourceID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid datasource ID"}},
+		})
+		return
+	}
+
+	fileStoreID, err := strconv.ParseUint(c.Param("filestore_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filestore ID"}},
+		})
+		return
+	}
+
+	err = a.service.RemoveFileFromDatasource(uint(datasourceID), uint(fileStoreID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	datasource, err := a.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Datasource not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+}
+
+// @Summary Process file embeddings for a datasource
+// @Description Process and create embeddings for all files in a datasource
+// @Tags datasources
+// @Accept json
+// @Produce json
+// @Param id path int true "Datasource ID"
+// @Success 202 {object} MessageResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /datasources/{id}/process-embeddings [post]
+// @Security BearerAuth
+func (a *API) ProcessFileEmbeddingHandler(c *gin.Context) {
+	// Parse datasource ID from path
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid datasource ID"}},
+		})
+		return
+	}
+
+	// Get datasource to verify it exists
+	datasource, err := a.service.GetDatasourceByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Datasource not found"}},
+		})
+		return
+	}
+
+	// Initialize sources map for DataSession
+	sources := make(map[uint]*models.Datasource)
+	sources[datasource.ID] = datasource
+
+	// Create new DataSession
+	ds := data_session.NewDataSession(sources)
+
+	// Process embeddings in a goroutine
+	go func() {
+		err := ds.ProcessRAGForDatasource(uint(id), a.service.DB)
+		if err != nil {
+			log.Printf("Error processing embeddings for datasource %d: %v", id, err)
+			return
+		}
+		log.Printf("Successfully processed embeddings for datasource %d", id)
+
+		// Update LastProcessedOn for all files in the datasource
+		for _, file := range datasource.Files {
+			file.LastProcessedOn = time.Now()
+			err = file.Update(a.service.DB)
+			if err != nil {
+				log.Printf("Error updating LastProcessedOn for file %d: %v", file.ID, err)
+			}
+		}
+	}()
+
+	// Return accepted status immediately
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": fmt.Sprintf("Processing embeddings for datasource %d started", id),
+	})
+}
+
 func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
+	if datasource == nil {
+		datasource = &models.Datasource{}
+	}
 	return DatasourceResponse{
 		Type: "datasources",
 		ID:   strconv.FormatUint(uint64(datasource.ID), 10),
 		Attributes: struct {
-			Name             string        `json:"name"`
-			ShortDescription string        `json:"short_description"`
-			LongDescription  string        `json:"long_description"`
-			Icon             string        `json:"icon"`
-			Url              string        `json:"url"`
-			PrivacyScore     int           `json:"privacy_score"`
-			UserID           uint          `json:"user_id"`
-			Tags             []TagResponse `json:"tags"`
-			DBConnString     string        `json:"db_conn_string"`
-			DBSourceType     string        `json:"db_source_type"`
-			DBConnAPIKey     string        `json:"db_conn_api_key"`
-			DBName           string        `json:"db_name"`
-			EmbedVendor      string        `json:"embed_vendor"`
-			EmbedUrl         string        `json:"embed_url"`
-			EmbedAPIKey      string        `json:"embed_api_key"`
-			EmbedModel       string        `json:"embed_model"`
-			Active           bool          `json:"active"`
+			Name             string              `json:"name"`
+			ShortDescription string              `json:"short_description"`
+			LongDescription  string              `json:"long_description"`
+			Icon             string              `json:"icon"`
+			Url              string              `json:"url"`
+			PrivacyScore     int                 `json:"privacy_score"`
+			UserID           uint                `json:"user_id"`
+			Tags             []TagResponse       `json:"tags"`
+			DBConnString     string              `json:"db_conn_string"`
+			DBSourceType     string              `json:"db_source_type"`
+			DBConnAPIKey     string              `json:"db_conn_api_key"`
+			DBName           string              `json:"db_name"`
+			EmbedVendor      string              `json:"embed_vendor"`
+			EmbedUrl         string              `json:"embed_url"`
+			EmbedAPIKey      string              `json:"embed_api_key"`
+			EmbedModel       string              `json:"embed_model"`
+			Active           bool                `json:"active"`
+			Files            []FileStoreResponse `json:"files"` // Added Files field
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -347,6 +546,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			EmbedAPIKey:      datasource.EmbedAPIKey,
 			EmbedModel:       datasource.EmbedModel,
 			Active:           datasource.Active,
+			Files:            serializeFileStores(datasource.Files), // Added Files field
 		},
 	}
 }

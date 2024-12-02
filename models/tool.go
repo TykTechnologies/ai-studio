@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"strings"
 
 	"gorm.io/gorm"
@@ -18,6 +19,10 @@ type Tool struct {
 	PrivacyScore        int    `json:"privacy_score"`
 	AuthKey             string `json:"auth_key"`
 	AuthSchemaName      string `json:"auth_schema_name"`
+
+	FileStores   []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
+	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
+	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
 }
 
 type Tools []Tool
@@ -37,7 +42,7 @@ func (t *Tool) Create(db *gorm.DB) error {
 
 // Get a tool by ID
 func (t *Tool) Get(db *gorm.DB, id uint) error {
-	return db.First(t, id).Error
+	return db.Preload("FileStores").Preload("Filters").Preload("Dependencies").First(t, id).Error
 }
 
 // Update an existing tool
@@ -52,7 +57,7 @@ func (t *Tool) Delete(db *gorm.DB) error {
 
 // GetByName gets a tool by its name
 func (t *Tool) GetByName(db *gorm.DB, name string) error {
-	return db.Where("name = ?", name).First(t).Error
+	return db.Where("name = ?", name).Preload("FileStores").Preload("Filters").Preload("Dependencies").First(t).Error
 }
 
 // GetAll retrieves all tools
@@ -136,4 +141,138 @@ func (t *Tool) GetOperations() []string {
 		return []string{}
 	}
 	return strings.Split(t.AvailableOperations, ",")
+}
+
+// AddFileStore adds a FileStore to the Tool
+func (t *Tool) AddFileStore(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(t).Association("FileStores").Append(fileStore)
+}
+
+// RemoveFileStore removes a FileStore from the Tool
+func (t *Tool) RemoveFileStore(db *gorm.DB, fileStore *FileStore) error {
+	return db.Model(t).Association("FileStores").Delete(fileStore)
+}
+
+// GetFileStores gets all FileStores associated with the Tool
+func (t *Tool) GetFileStores(db *gorm.DB) ([]FileStore, error) {
+	var fileStores []FileStore
+	err := db.Model(t).Association("FileStores").Find(&fileStores)
+	return fileStores, err
+}
+
+// SetFileStores replaces all existing FileStore associations with new ones
+func (t *Tool) SetFileStores(db *gorm.DB, fileStores []FileStore) error {
+	return db.Model(t).Association("FileStores").Replace(&fileStores)
+}
+
+// AddFilter adds a Filter to the Tool
+func (t *Tool) AddFilter(db *gorm.DB, filter *Filter) error {
+	return db.Model(t).Association("Filters").Append(filter)
+}
+
+// RemoveFilter removes a Filter from the Tool
+func (t *Tool) RemoveFilter(db *gorm.DB, filter *Filter) error {
+	return db.Model(t).Association("Filters").Delete(filter)
+}
+
+// GetFilters gets all Filters associated with the Tool
+func (t *Tool) GetFilters(db *gorm.DB) ([]Filter, error) {
+	var filters []Filter
+	err := db.Model(t).Association("Filters").Find(&filters)
+	return filters, err
+}
+
+// SetFilters replaces all existing Filter associations with new ones
+func (t *Tool) SetFilters(db *gorm.DB, filters []Filter) error {
+	return db.Model(t).Association("Filters").Replace(&filters)
+}
+
+func (t *Tool) AddDependency(db *gorm.DB, dependency *Tool) error {
+	// Prevent self-dependency
+	if t.ID == dependency.ID {
+		return fmt.Errorf("tool cannot depend on itself")
+	}
+
+	// Check for circular dependencies
+	isCircular, err := t.WouldCreateCircularDependency(db, dependency)
+	if err != nil {
+		return err
+	}
+	if isCircular {
+		return fmt.Errorf("adding this dependency would create a circular reference")
+	}
+
+	return db.Model(t).Association("Dependencies").Append(dependency)
+}
+
+// RemoveDependency removes a Tool dependency
+func (t *Tool) RemoveDependency(db *gorm.DB, dependency *Tool) error {
+	return db.Model(t).Association("Dependencies").Delete(dependency)
+}
+
+// GetDependencies gets all Tool dependencies
+func (t *Tool) GetDependencies(db *gorm.DB) ([]*Tool, error) {
+	var dependencies []*Tool
+	err := db.Model(t).Association("Dependencies").Find(&dependencies)
+	return dependencies, err
+}
+
+// SetDependencies replaces all existing Tool dependencies with new ones
+func (t *Tool) SetDependencies(db *gorm.DB, dependencies []*Tool) error {
+	return db.Model(t).Association("Dependencies").Replace(dependencies)
+}
+
+// ClearDependencies removes all Tool dependencies
+func (t *Tool) ClearDependencies(db *gorm.DB) error {
+	return db.Model(t).Association("Dependencies").Clear()
+}
+
+// HasDependency checks if a specific Tool is a dependency
+func (t *Tool) HasDependency(db *gorm.DB, dependencyID uint) (bool, error) {
+	var count int64
+	err := db.Model(t).Where("id = ?", t.ID).
+		Joins("JOIN tool_dependencies ON tool_dependencies.tool_id = tools.id").
+		Where("tool_dependencies.dependency_id = ?", dependencyID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// Would create a circular dependency checks if adding this dependency would create a circular reference
+func (t *Tool) WouldCreateCircularDependency(db *gorm.DB, newDependency *Tool) (bool, error) {
+	// First check if the new dependency depends on the current tool directly
+	var count int64
+	err := db.Model(newDependency).
+		Joins("JOIN tool_dependencies ON tool_dependencies.tool_id = tools.id").
+		Where("tool_dependencies.dependency_id = ?", t.ID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+
+	// Then check recursively through all dependencies of the new dependency
+	dependencies, err := newDependency.GetDependencies(db)
+	if err != nil {
+		return false, err
+	}
+
+	for _, dep := range dependencies {
+		// Check if this dependency is the current tool (would create a cycle)
+		if dep.ID == t.ID {
+			return true, nil
+		}
+
+		// Recursively check this dependency's dependencies
+		isCircular, err := t.WouldCreateCircularDependency(db, dep)
+		if err != nil {
+			return false, err
+		}
+		if isCircular {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

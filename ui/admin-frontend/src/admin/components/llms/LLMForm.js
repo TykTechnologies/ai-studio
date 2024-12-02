@@ -59,6 +59,7 @@ const LLMForm = () => {
     logo_url: "",
     active: false,
     filters: [],
+    default_model: "",
   });
   const [vendors, setVendors] = useState([]);
   const [filters, setFilters] = useState(null);
@@ -284,6 +285,16 @@ const LLMForm = () => {
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Default Model"
+                name="default_model"
+                value={llm.default_model}
+                onChange={handleChange}
+                helperText="Specify the default model to use for this LLM (e.g., gpt-4, claude-2)"
+              />
             </Grid>
             <Grid item xs={12}>
               <TextField

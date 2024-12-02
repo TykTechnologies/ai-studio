@@ -1,7 +1,11 @@
 package services
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // CreateTool creates a new tool with validity checks
@@ -51,6 +55,8 @@ func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
 	if err := tool.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+
+	tool.AuthKey = secrets.GetValue(tool.AuthKey)
 	return tool, nil
 }
 
@@ -70,6 +76,8 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 	if err := tool.GetByName(s.DB, name); err != nil {
 		return nil, err
 	}
+
+	tool.AuthKey = secrets.GetValue(tool.AuthKey)
 	return tool, nil
 }
 
@@ -158,4 +166,214 @@ func (s *Service) GetToolOperations(toolID uint) ([]string, error) {
 	}
 
 	return tool.GetOperations(), nil
+}
+
+// AddFileStoreToTool adds a FileStore to a Tool
+func (s *Service) AddFileStoreToTool(toolID uint, fileStoreID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return tool.AddFileStore(s.DB, fileStore)
+}
+
+// RemoveFileStoreFromTool removes a FileStore from a Tool
+func (s *Service) RemoveFileStoreFromTool(toolID uint, fileStoreID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStore := &models.FileStore{}
+	if err := fileStore.Get(s.DB, fileStoreID); err != nil {
+		return err
+	}
+
+	return tool.RemoveFileStore(s.DB, fileStore)
+}
+
+// GetToolFileStores gets all FileStores associated with a Tool
+func (s *Service) GetToolFileStores(toolID uint) ([]models.FileStore, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.GetFileStores(s.DB)
+}
+
+// SetToolFileStores replaces all existing FileStore associations with new ones
+func (s *Service) SetToolFileStores(toolID uint, fileStoreIDs []uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	fileStores := make([]models.FileStore, len(fileStoreIDs))
+	for i, id := range fileStoreIDs {
+		fileStore := models.FileStore{}
+		if err := fileStore.Get(s.DB, id); err != nil {
+			return err
+		}
+		fileStores[i] = fileStore
+	}
+
+	return tool.SetFileStores(s.DB, fileStores)
+}
+
+// AddFilterToTool adds a Filter to a Tool
+func (s *Service) AddFilterToTool(toolID uint, filterID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	filter := &models.Filter{}
+	if err := filter.Get(s.DB, filterID); err != nil {
+		return err
+	}
+
+	return tool.AddFilter(s.DB, filter)
+}
+
+// RemoveFilterFromTool removes a Filter from a Tool
+func (s *Service) RemoveFilterFromTool(toolID uint, filterID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	filter := &models.Filter{}
+	if err := filter.Get(s.DB, filterID); err != nil {
+		return err
+	}
+
+	return tool.RemoveFilter(s.DB, filter)
+}
+
+// GetToolFilters gets all Filters associated with a Tool
+func (s *Service) GetToolFilters(toolID uint) ([]models.Filter, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.GetFilters(s.DB)
+}
+
+// SetToolFilters replaces all existing Filter associations with new ones
+func (s *Service) SetToolFilters(toolID uint, filterIDs []uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	filters := make([]models.Filter, len(filterIDs))
+	for i, id := range filterIDs {
+		filter := models.Filter{}
+		if err := filter.Get(s.DB, id); err != nil {
+			return err
+		}
+		filters[i] = filter
+	}
+
+	return tool.SetFilters(s.DB, filters)
+}
+
+// AddDependencyToTool adds a dependency to a Tool
+func (s *Service) AddDependencyToTool(toolID uint, dependencyID uint) error {
+	// Prevent self-dependency
+	if toolID == dependencyID {
+		return fmt.Errorf("tool cannot depend on itself")
+	}
+
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	dependency := models.NewTool()
+	if err := dependency.Get(s.DB, dependencyID); err != nil {
+		return err
+	}
+
+	err = tool.AddDependency(s.DB, dependency)
+	if err != nil {
+		if strings.Contains(err.Error(), "circular reference") {
+			return fmt.Errorf("cannot add dependency: would create a circular reference")
+		}
+		return err
+	}
+
+	return nil
+}
+
+// RemoveDependencyFromTool removes a dependency from a Tool
+func (s *Service) RemoveDependencyFromTool(toolID uint, dependencyID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	dependency := models.NewTool()
+	if err := dependency.Get(s.DB, dependencyID); err != nil {
+		return err
+	}
+
+	return tool.RemoveDependency(s.DB, dependency)
+}
+
+// GetToolDependencies gets all dependencies associated with a Tool
+func (s *Service) GetToolDependencies(toolID uint) ([]*models.Tool, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.GetDependencies(s.DB)
+}
+
+// SetToolDependencies replaces all existing Tool dependencies with new ones
+func (s *Service) SetToolDependencies(toolID uint, dependencyIDs []uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	dependencies := make([]*models.Tool, len(dependencyIDs))
+	for i, id := range dependencyIDs {
+		dependency := models.NewTool()
+		if err := dependency.Get(s.DB, id); err != nil {
+			return err
+		}
+		dependencies[i] = dependency
+	}
+
+	return tool.SetDependencies(s.DB, dependencies)
+}
+
+// ClearToolDependencies removes all dependencies from a Tool
+func (s *Service) ClearToolDependencies(toolID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	return tool.ClearDependencies(s.DB)
+}
+
+// HasToolDependency checks if a specific Tool is a dependency
+func (s *Service) HasToolDependency(toolID uint, dependencyID uint) (bool, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return false, err
+	}
+
+	return tool.HasDependency(s.DB, dependencyID)
 }

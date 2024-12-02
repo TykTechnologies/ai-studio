@@ -12,6 +12,8 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import FolderIcon from "@mui/icons-material/Folder";
+import { List, ListItem, ListItemText, ListItemIcon } from "@mui/material";
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -63,6 +65,8 @@ const ChatDetails = () => {
   );
   const { id } = useParams();
   const navigate = useNavigate();
+  const [defaultDataSource, setDefaultDataSource] = useState(null);
+  const [extraContext, setExtraContext] = useState([]);
 
   useEffect(() => {
     fetchChatDetails();
@@ -79,6 +83,20 @@ const ChatDetails = () => {
       const chatResponse = await apiClient.get(`/chats/${id}`);
       setChat(chatResponse.data.data);
       setFilters(chatResponse.data.data.attributes.filters || []);
+
+      // Fetch default data source if it exists
+      if (chatResponse.data.data.attributes.default_data_source_id) {
+        const dataSourceResponse = await apiClient.get(
+          `/datasources/${chatResponse.data.data.attributes.default_data_source_id}`,
+        );
+        setDefaultDataSource(dataSourceResponse.data.data);
+      }
+
+      // Fetch extra context files
+      const extraContextResponse = await apiClient.get(
+        `/chats/${id}/extra-context`,
+      );
+      setExtraContext(extraContextResponse.data.data || []);
 
       const llmResponse = await apiClient.get(
         `/llms/${chatResponse.data.data.attributes.llm_id}`,
@@ -203,6 +221,7 @@ const ChatDetails = () => {
           <Grid item xs={9}>
             <FieldValue>{chat.attributes.name}</FieldValue>
           </Grid>
+
           <Grid item xs={3}>
             <FieldLabel>Filters:</FieldLabel>
           </Grid>
@@ -213,6 +232,7 @@ const ChatDetails = () => {
               ))}
             </Box>
           </Grid>
+
           <Grid item xs={3}>
             <FieldLabel>LLM Settings:</FieldLabel>
           </Grid>
@@ -221,12 +241,14 @@ const ChatDetails = () => {
               {llmSettings ? llmSettings.attributes.model_name : "Loading..."}
             </FieldValue>
           </Grid>
+
           <Grid item xs={3}>
             <FieldLabel>LLM:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <FieldValue>{llm ? llm.attributes.name : "Loading..."}</FieldValue>
           </Grid>
+
           <Grid item xs={3}>
             <FieldLabel>Groups:</FieldLabel>
           </Grid>
@@ -237,16 +259,91 @@ const ChatDetails = () => {
               ))}
             </Box>
           </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>System Prompt:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {chat.attributes.system_prompt ||
+                "No system prompt set, check LLM Settings for fallback prompt"}
+            </FieldValue>
+          </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>Tool Support:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {chat.attributes.tool_support ? "Enabled" : "Disabled"}
+            </FieldValue>
+          </Grid>
         </Grid>
 
-        <Grid item xs={3}>
-          <FieldLabel>Tool Support:</FieldLabel>
-        </Grid>
-        <Grid item xs={9}>
-          <FieldValue>
-            {chat.attributes.tool_support ? "Enabled" : "Disabled"}
-          </FieldValue>
-        </Grid>
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="h6" gutterBottom>
+          Default Data Source
+        </Typography>
+        {defaultDataSource ? (
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{defaultDataSource.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                {defaultDataSource.attributes.short_description}
+              </FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Privacy Score:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                {defaultDataSource.attributes.privacy_score}
+              </FieldValue>
+            </Grid>
+          </Grid>
+        ) : (
+          <Typography color="text.secondary">
+            No default data source set
+          </Typography>
+        )}
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="h6" gutterBottom>
+          Extra Context Files
+        </Typography>
+        {extraContext.length > 0 ? (
+          <List>
+            {extraContext.map((file) => (
+              <ListItem key={file.id}>
+                <ListItemIcon>
+                  <FolderIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary={file.attributes.file_name}
+                  secondary={`Size: ${file.attributes.length} bytes${
+                    file.attributes.description
+                      ? ` • ${file.attributes.description}`
+                      : ""
+                  }`}
+                />
+              </ListItem>
+            ))}
+          </List>
+        ) : (
+          <Typography color="text.secondary">
+            No extra context files added
+          </Typography>
+        )}
 
         <Box mt={4}>
           <StyledButton

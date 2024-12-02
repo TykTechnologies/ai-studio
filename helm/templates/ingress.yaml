@@ -1,0 +1,40 @@
+{{- if .Values.midsommar.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "midsommar.fullname" . }}
+  annotations:
+    {{- if .Values.midsommar.ingress.certificateEnabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.midsommar.ingress.certManager.issuer }}
+    {{- end }}
+    {{- with .Values.midsommar.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.midsommar.ingress.className }}
+  {{- if and .Values.midsommar.ingress.tls .Values.midsommar.ingress.certificateEnabled }}
+  tls:
+    {{- range .Values.midsommar.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.midsommar.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "midsommar.fullname" $ }}
+                port:
+                  number: {{ .port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

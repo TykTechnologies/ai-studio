@@ -17,6 +17,7 @@ import {
   IconButton,
   Card,
   CardContent,
+  Tooltip,
 } from "@mui/material";
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -24,6 +25,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 
 import pubClient from "../../admin/utils/pubClient";
 
@@ -249,6 +251,13 @@ const AppDetailView = () => {
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   <FieldLabel sx={{ minWidth: "100px" }}>REST API:</FieldLabel>
+                  <Box>
+                    <Tooltip title="This endpoint proxies directly upstream to the vendor using your settings, use the vendor's API or SDK for access">
+                      <HelpOutlineIcon
+                        sx={{ color: "text.secondary", mr: 1 }}
+                      />
+                    </Tooltip>
+                  </Box>
                   <Box
                     sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
                   >
@@ -281,6 +290,13 @@ const AppDetailView = () => {
                   <FieldLabel sx={{ minWidth: "100px" }}>
                     STREAM API:
                   </FieldLabel>
+                  <Box>
+                    <Tooltip title="This endpoint proxies directly upstream to the vendor's streaming API using your settings, use the vendor's API or SDK for access, not all vendors support streaming proxy">
+                      <HelpOutlineIcon
+                        sx={{ color: "text.secondary", mr: 1 }}
+                      />
+                    </Tooltip>
+                  </Box>
                   <Box
                     sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
                   >
@@ -301,6 +317,45 @@ const AppDetailView = () => {
                       onClick={() =>
                         copyToClipboard(
                           `//${currentHost}:9090/api/llm/stream/${generateSlug(llm.attributes.name)}/`,
+                        )
+                      }
+                      size="small"
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Box>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <FieldLabel sx={{ minWidth: "100px" }}>
+                    UNIFIED API:
+                  </FieldLabel>
+                  <Box>
+                    <Tooltip title="This endpoint exposes an OpenAI-compatible API but translates your requests to the upstream vendor (using the default model defined by the admin)">
+                      <HelpOutlineIcon
+                        sx={{ color: "text.secondary", mr: 1 }}
+                      />
+                    </Tooltip>
+                  </Box>
+                  <Box
+                    sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                  >
+                    <Typography
+                      variant="body2"
+                      component="code"
+                      sx={{
+                        fontFamily: "monospace",
+                        bgcolor: "background.paper",
+                        p: 1,
+                        borderRadius: 1,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {`//${currentHost}:9090/ai/${generateSlug(llm.attributes.name)}/v1`}
+                    </Typography>
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(
+                          `//${currentHost}:9090/ai/${generateSlug(llm.attributes.name)}/v1/`,
                         )
                       }
                       size="small"

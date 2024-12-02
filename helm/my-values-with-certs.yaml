@@ -1,0 +1,71 @@
+midsommar:
+  ingress:
+    enabled: true
+    certificateEnabled: true
+    className: nginx
+    certManager:
+      issuer: letsencrypt-prod
+    hosts:
+      - host: app.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 8080
+      - host: gateway.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 9090
+    tls:
+      - secretName: app-tls-secret
+        hosts:
+          - app.example.com
+      - secretName: gateway-tls-secret
+        hosts:
+          - gateway.example.com
+
+config:
+  allowRegistrations: "true"
+  adminEmail: "admin@example.com"
+  siteUrl: "https://app.example.com"
+  fromEmail: "noreply@example.com"
+  devMode: "false"
+  databaseType: "postgres"
+
+# External database configuration using full URL
+database:
+  internal: false
+  url: "postgres://user:password@production-db.example.com:5432/midsommar"
+  # Alternative configuration using individual components:
+  # host: "production-db.example.com"
+  # port: 5432
+  # name: "midsommar"
+  # user: "production-user"
+  # password: "production-password"
+
+# Optional services configuration for production
+reranker:
+  enabled: true
+  image:
+    repository: tykio/reranker_cpu
+    tag: latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+transformer-server:
+  enabled: true
+  image:
+    repository: tykio/transformer_server_cpu
+    tag: latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

@@ -6,23 +6,20 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
+	"github.com/TykTechnologies/midsommar/v2/filereader"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"golang.org/x/text/encoding/charmap"
-	"golang.org/x/text/transform"
 )
 
 var upgrader = websocket.Upgrader{
@@ -222,7 +219,7 @@ func (a *API) createNewSession(chat *models.Chat, userID uint) (*chat_session.Ch
 		chat_session.ChatStream,
 		a.service.DB,
 		a.service,
-		nil, // Add filters if needed
+		chat.Filters,
 		&userID,
 		nil, // No session ID
 	)
@@ -390,7 +387,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 	}
 
 	tool, err := a.service.GetToolByID(uint(toolId))
-	tool.OASSpec, err = decodeToUTF8(tool.OASSpec)
+	tool.OASSpec, err = helpers.DecodeToUTF8(tool.OASSpec)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -438,25 +435,6 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Tool removed successfully"})
 }
 
-func decodeToUTF8(s string) (string, error) {
-	// Step 1: Decode base64
-	decodedBytes, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return "", fmt.Errorf("base64 decoding failed: %v", err)
-	}
-
-	// Step 2 & 3: Convert to UTF-8
-	// This example assumes the original encoding was Windows-1252 (a common encoding)
-	// Replace this with the correct encoding if known
-	reader := transform.NewReader(strings.NewReader(string(decodedBytes)), charmap.Windows1252.NewDecoder())
-	utf8Bytes, err := io.ReadAll(reader)
-	if err != nil {
-		return "", fmt.Errorf("conversion to UTF-8 failed: %v", err)
-	}
-
-	return string(utf8Bytes), nil
-}
-
 func (a *API) UploadFileToSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 
@@ -482,22 +460,22 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Check if the file type is supported
-	if !isSupportedFileType(header.Filename) {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Unsupported file type", Detail: "Only code-related source files, text, or markdown are supported"}}})
-		return
-	}
-
 	// Read the file contents
-	contents, err := readFileContents(file)
+	raw, err := readFileContents(file)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{Title: "Error reading file", Detail: err.Error()}}})
+		return
+	}
+
+	contents, err := filereader.Read(header.Filename, raw)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error parsing file", Detail: err.Error()}}})
 		return
 	}
 
@@ -507,28 +485,10 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
 }
 
-func isSupportedFileType(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	supportedExtensions := []string{
-		".txt", ".md", ".markdown", // Text and Markdown
-		".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs", ".rb", ".php", // Common programming languages
-		".html", ".css", ".json", ".xml", ".yaml", ".yml", // Web-related files
-		".sh", ".bash", // Shell scripts
-		".sql", // SQL files
-	}
-
-	for _, supportedExt := range supportedExtensions {
-		if ext == supportedExt {
-			return true
-		}
-	}
-	return false
-}
-
-func readFileContents(file multipart.File) (string, error) {
+func readFileContents(file multipart.File) ([]byte, error) {
 	contents, err := io.ReadAll(file)
 	if err != nil {
-		return "", fmt.Errorf("error reading file: %v", err)
+		return []byte{}, fmt.Errorf("error reading file: %v", err)
 	}
-	return string(contents), nil
+	return contents, nil
 }

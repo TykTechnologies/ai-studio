@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "midsommar.fullname" . }}
+spec:
+  type: {{ .Values.midsommar.service.type }}
+  ports:
+    {{- range .Values.midsommar.service.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      name: {{ .name }}
+      {{- if and (eq $.Values.midsommar.service.type "NodePort") (.nodePort) }}
+      nodePort: {{ .nodePort }}
+      {{- end }}
+    {{- end }}
+  selector:
+    {{- include "midsommar.selectorLabels" . | nindent 4 }}
+
+{{- if .Values.database.internal }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "midsommar.fullname" . }}-postgres
+  labels:
+    {{- include "midsommar.labels" . | nindent 4 }}
+    app: postgres
+spec:
+  type: {{ .Values.postgres.service.type }}
+  ports:
+    - port: {{ default 5432 .Values.postgres.service.port }}
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: postgres
+{{- end }}
