@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // @Summary Create a new chat
@@ -39,6 +40,9 @@ func (a *API) createChat(c *gin.Context) {
 		input.Data.Attributes.FilterIDs,
 		input.Data.Attributes.RagN,
 		input.Data.Attributes.ToolSupport,
+		input.Data.Attributes.SystemPrompt,
+		uint(input.Data.Attributes.DefaultDataSourceID),
+		input.Data.Attributes.DefaultToolIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -50,7 +54,7 @@ func (a *API) createChat(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeChat(chat)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
 
 // @Summary Get a chat by ID
@@ -99,7 +103,7 @@ func (a *API) getChat(c *gin.Context) {
 		return
 	}
 
-	response := serializeChat(chat)
+	response := serializeChat(chat, a.config.DB)
 	response.Attributes.Filters = serializeFilters(filters)
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -150,6 +154,9 @@ func (a *API) updateChat(c *gin.Context) {
 		input.Data.Attributes.FilterIDs,
 		input.Data.Attributes.RagN,
 		input.Data.Attributes.ToolSupport,
+		input.Data.Attributes.SystemPrompt,
+		uint(input.Data.Attributes.DefaultDataSourceID),
+		input.Data.Attributes.DefaultToolIDs,
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -161,7 +168,7 @@ func (a *API) updateChat(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
 
 // @Summary Delete a chat
@@ -226,7 +233,7 @@ func (a *API) listChats(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats, a.config.DB)})
 }
 
 // @Summary Get chats by group ID
@@ -263,37 +270,273 @@ func (a *API) getChatsByGroupID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats, a.config.DB)})
 }
 
-func serializeChat(chat *models.Chat) ChatResponse {
+// @Summary Add ExtraContext to Chat
+// @Description Add an ExtraContext to a specific Chat
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Param id path int true "Chat ID"
+// @Param filestore_id path int true "FileStore ID"
+// @Success 200 {object} ChatResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /chats/{id}/extra-context/{filestore_id} [post]
+// @Security BearerAuth
+func (a *API) addExtraContextToChat(c *gin.Context) {
+	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid chat ID"}},
+		})
+		return
+	}
+
+	fileStoreID, err := strconv.ParseUint(c.Param("filestore_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filestore ID"}},
+		})
+		return
+	}
+
+	err = a.service.AddExtraContextToChat(uint(chatID), uint(fileStoreID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	chat, err := a.service.GetChatByID(uint(chatID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
+}
+
+// @Summary Remove ExtraContext from Chat
+// @Description Remove an ExtraContext from a specific Chat
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Param id path int true "Chat ID"
+// @Param filestore_id path int true "FileStore ID"
+// @Success 200 {object} ChatResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /chats/{id}/extra-context/{filestore_id} [delete]
+// @Security BearerAuth
+func (a *API) removeExtraContextFromChat(c *gin.Context) {
+	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid chat ID"}},
+		})
+		return
+	}
+
+	fileStoreID, err := strconv.ParseUint(c.Param("filestore_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid filestore ID"}},
+		})
+		return
+	}
+
+	err = a.service.RemoveExtraContextFromChat(uint(chatID), uint(fileStoreID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	chat, err := a.service.GetChatByID(uint(chatID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
+}
+
+// @Summary Get Chat ExtraContext
+// @Description Get all ExtraContext associated with a specific Chat
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Param id path int true "Chat ID"
+// @Success 200 {array} FileStoreResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /chats/{id}/extra-context [get]
+// @Security BearerAuth
+func (a *API) getChatExtraContext(c *gin.Context) {
+	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid chat ID"}},
+		})
+		return
+	}
+
+	fileStores, err := a.service.GetChatExtraContexts(uint(chatID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeFileStores(fileStores)})
+}
+
+// @Summary Set Chat ExtraContext
+// @Description Replace all ExtraContext associations for a specific Chat
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Param id path int true "Chat ID"
+// @Param filestore_ids body []int true "Array of FileStore IDs"
+// @Success 200 {object} ChatResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /chats/{id}/extra-context [put]
+// @Security BearerAuth
+func (a *API) setChatExtraContext(c *gin.Context) {
+	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid chat ID"}},
+		})
+		return
+	}
+
+	var fileStoreIDs []uint
+	if err := c.ShouldBindJSON(&fileStoreIDs); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	err = a.service.SetChatExtraContexts(uint(chatID), fileStoreIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	chat, err := a.service.GetChatByID(uint(chatID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
+}
+
+func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
+	extraContext, _ := chat.GetExtraContext(db)
+	var defaultDSID int
+	if chat.DefaultDataSource != nil {
+		defaultDSID = int(*chat.DefaultDataSourceID)
+	}
 	return ChatResponse{
 		Type: "chats",
 		ID:   strconv.FormatUint(uint64(chat.ID), 10),
 		Attributes: struct {
-			Name          string           `json:"name"`
-			LLMSettingsID uint             `json:"llm_settings_id"`
-			LLMID         uint             `json:"llm_id"`
-			Groups        []GroupResponse  `json:"groups"`
-			Filters       []FilterResponse `json:"filters"`
-			RagN          int              `json:"rag_n"`
-			ToolSupport   bool             `json:"tool_support"`
+			Name                string              `json:"name"`
+			LLMSettingsID       uint                `json:"llm_settings_id"`
+			LLMID               uint                `json:"llm_id"`
+			Groups              []GroupResponse     `json:"groups"`
+			Filters             []FilterResponse    `json:"filters"`
+			RagN                int                 `json:"rag_n"`
+			ToolSupport         bool                `json:"tool_support"`
+			SystemPrompt        string              `json:"system_prompt"`
+			DefaultDataSourceID int                 `json:"default_data_source_id"`
+			DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
+			ExtraContext        []FileStoreResponse `json:"extra_context"`
+			DefaultTools        []ToolResponse      `json:"default_tools"`
 		}{
-			Name:          chat.Name,
-			LLMSettingsID: chat.LLMSettingsID,
-			LLMID:         chat.LLMID,
-			Groups:        serializeGroups(chat.Groups),
-			Filters:       serializeFilters(chat.Filters),
-			RagN:          chat.RagResultsPerSource,
-			ToolSupport:   chat.SupportsTools,
+			Name:                chat.Name,
+			LLMSettingsID:       chat.LLMSettingsID,
+			LLMID:               chat.LLMID,
+			Groups:              serializeGroups(chat.Groups),
+			Filters:             serializeFilters(chat.Filters),
+			RagN:                chat.RagResultsPerSource,
+			ToolSupport:         chat.SupportsTools,
+			SystemPrompt:        chat.SystemPrompt,
+			DefaultDataSourceID: defaultDSID,
+			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),
+			ExtraContext:        serializeFileStores(extraContext),
+			DefaultTools:        serializeToolsPointers(chat.DefaultTools, db),
 		},
 	}
 }
 
-func serializeChats(chats models.Chats) []ChatResponse {
+func serializeChats(chats models.Chats, db *gorm.DB) []ChatResponse {
 	result := make([]ChatResponse, len(chats))
 	for i, chat := range chats {
-		result[i] = serializeChat(&chat)
+		result[i] = serializeChat(&chat, db)
 	}
 	return result
 }

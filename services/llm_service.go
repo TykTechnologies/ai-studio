@@ -2,9 +2,12 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
-func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool, filters []*models.Filter) (*models.LLM, error) {
+func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
+	shortDescription, longDescription, logoURL string,
+	vendor models.Vendor, active bool, filters []*models.Filter, defaultModel string) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -16,6 +19,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int, 
 		Vendor:           vendor,
 		Active:           active,
 		Filters:          filters,
+		DefaultModel:     defaultModel,
 	}
 
 	if err := llm.Create(s.DB); err != nil {
@@ -30,10 +34,14 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	if err := llm.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+
+	llm.APIKey = secrets.GetValue(llm.APIKey)
 	return llm, nil
 }
 
-func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string, privacyScore int, shortDescription, longDescription, logoURL string, vendor models.Vendor, active bool, filters []*models.Filter) (*models.LLM, error) {
+func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
+	privacyScore int, shortDescription, longDescription, logoURL string,
+	vendor models.Vendor, active bool, filters []*models.Filter, defaultModel string) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -49,6 +57,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string, privacySc
 	llm.Vendor = vendor
 	llm.Active = active
 	llm.Filters = filters
+	llm.DefaultModel = defaultModel
 
 	if err := llm.Update(s.DB); err != nil {
 		return nil, err
@@ -72,6 +81,9 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 	if err := llm.GetByName(s.DB, name); err != nil {
 		return nil, err
 	}
+
+	llm.APIKey = secrets.GetValue(llm.APIKey)
+
 	return llm, nil
 }
 
@@ -89,6 +101,11 @@ func (s *Service) GetActiveLLMs() (models.LLMs, error) {
 	if err := llms.GetActiveLLMs(s.DB); err != nil {
 		return nil, err
 	}
+
+	for i := range llms {
+		llms[i].APIKey = secrets.GetValue(llms[i].APIKey)
+	}
+
 	return llms, nil
 }
 

@@ -37,19 +37,21 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		var llmSlug, dsSlug string
+		var llmSlug, dsSlug, routeID string
 		switch pathParts[1] {
 		case "llm":
 			llmSlug = pathParts[3]
 		case "datasource":
 			dsSlug = pathParts[2]
+		case "ai":
+			routeID = pathParts[2]
 		default:
 			respondWithError(w, http.StatusBadRequest, "invalid request path, options are llm or datasource", nil)
 			return
 		}
 
-		if llmSlug == "" && dsSlug == "" {
-			respondWithError(w, http.StatusBadRequest, "no LLM or datasource specified", nil)
+		if llmSlug == "" && dsSlug == "" && routeID == "" {
+			respondWithError(w, http.StatusBadRequest, "no LLM, datasource, or interface specified", nil)
 			return
 		}
 
@@ -75,13 +77,25 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			}
 			token, err = extractor(r)
 			if err != nil {
-				respondWithError(w, http.StatusUnauthorized, "invalid credential", err)
+				respondWithError(w, http.StatusUnauthorized, "invalid credential for llm pass through", err)
+				return
+			}
+		} else if routeID != "" {
+			hVal := r.Header.Get("Authorization")
+			parts := strings.Split(hVal, "Bearer ")
+			if len(parts) != 2 {
+				respondWithError(w, http.StatusUnauthorized, "missing or malformed authorization header", nil)
+			}
+
+			token = parts[1]
+			if token == "" {
+				respondWithError(w, http.StatusUnauthorized, "missing or malformed authorization header", nil)
 				return
 			}
 		}
 
 		var ok bool
-		ok, r = cv.CheckCredential(token, dsSlug, llmSlug, r)
+		ok, r = cv.CheckCredential(token, dsSlug, llmSlug, routeID, r)
 
 		if !ok {
 			respondWithError(w, http.StatusUnauthorized, "invalid credential", nil)
@@ -92,7 +106,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string, r *http.Request) (bool, *http.Request) {
+func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(token)
 	if err != nil || !cred.Active {
 		return false, r
@@ -128,6 +142,21 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug string, r 
 
 		for _, l := range app.LLMs {
 			if l.ID == llm.ID {
+				return true, r
+			}
+		}
+
+		return false, r
+	}
+
+	if routeID != "" {
+		px, ok := cv.p.GetLLM(routeID)
+		if !ok {
+			return false, r
+		}
+
+		for _, llm := range app.LLMs {
+			if llm.ID == px.ID {
 				return true, r
 			}
 		}

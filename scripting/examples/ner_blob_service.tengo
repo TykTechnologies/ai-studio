@@ -1,0 +1,47 @@
+url := "http://localhost:9001/process"
+labels := ["person", "email", "phone number", "address"]
+
+json := import ("json")
+fmt := import("fmt")
+os := import("os")
+base64 := import("base64")
+tyk := import("tyk")
+
+makeRequest := func(input) {
+    // b64 encode the body
+    input64 := base64.encode(input)
+
+    // Create the request body
+    body := {
+        "labels": labels,
+        "text": input64
+    }
+
+    // Convert body to JSON string
+    json_body := json.encode(body)
+
+    // Make POST request
+    method := "POST"
+    headers := {"Content-Type": "application/json"}
+
+    response := tyk.makeHTTPRequest(method, url, headers, json_body)
+    if response.status != 200 {
+        fmt.println("governance error with contnet filter for:", input)
+        return input
+    }
+
+    decoded := json.decode(response.response)
+    redacted64 := decoded.processed_text
+
+    asStr := base64.decode(redacted64)
+
+    return asStr
+}
+
+// ingress
+filter := func(input) {
+    data := makeRequest(input)
+    return string(data)
+}
+
+result := filter(payload)

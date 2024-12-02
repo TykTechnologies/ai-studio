@@ -111,7 +111,7 @@ const DataCatalogList = () => {
   };
 
   const handleEdit = (id) => {
-    navigate(`/catalogs/data/edit/${id}`);
+    navigate(`/admin/catalogs/data/edit/${id}`);
   };
 
   const handleAddDataCatalog = () => {
@@ -119,7 +119,7 @@ const DataCatalogList = () => {
   };
 
   const handleCatalogClick = (id) => {
-    navigate(`/catalogs/data/${id}`);
+    navigate(`/admin/catalogs/data/${id}`);
   };
 
   const handleCloseSnackbar = (event, reason) => {

@@ -2,20 +2,25 @@ package chat_session
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gofrs/uuid"
+	"github.com/pkoukk/tiktoken-go"
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
@@ -93,6 +98,31 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		filters:        withFilters,
 	}
 
+	// auto-load the default
+	if chat.DefaultDataSource != nil {
+		err := cs.AddDatasource(chat.DefaultDataSource.ID)
+		if err != nil {
+			return nil, fmt.Errorf("error adding default datasource to chat session: %v", err)
+		}
+	}
+
+	if chat.DefaultTools != nil {
+		for i, _ := range chat.DefaultTools {
+			toolDef, err := cs.service.GetToolByID(chat.DefaultTools[i].ID)
+			if err != nil {
+				return nil, fmt.Errorf("error getting default tool definition: %v", err)
+			}
+
+			toolDef.OASSpec, err = helpers.DecodeToUTF8(toolDef.OASSpec)
+			err = cs.AddTool(
+				toolDef.Name,
+				*toolDef)
+			if err != nil {
+				return nil, fmt.Errorf("error adding default tool to chat session: %v", err)
+			}
+		}
+	}
+
 	// Perform initial privacy check
 	if len(cs.datasources) > 0 || len(cs.tools) > 0 {
 		if err := cs.validatePrivacyScores(); err != nil {
@@ -105,11 +135,13 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 	for i, _ := range withFilters {
 		sr := scripting.NewScriptRunner(withFilters[i].Script)
 		asFunc := func(m *models.UserMessage) error {
-			return sr.RunFilter(m.Payload)
+			return sr.RunFilter(m.Payload, cs.service)
 		}
 
 		preProcessors = append(preProcessors, asFunc)
 	}
+
+	cs.preProcessors = preProcessors
 
 	return cs, nil
 }
@@ -141,6 +173,15 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 		return fmt.Errorf("error getting datasource: %v", err)
 	}
 
+	entitlements, err := cs.service.GetUserEntitlements(cs.userID)
+	if err != nil {
+		return fmt.Errorf("error getting user entitlements: %v", err)
+	}
+
+	if !entitlements.HasDataSourceAccess(ds.ID) {
+		return fmt.Errorf("user does not have access to datasource %s", ds.Name)
+	}
+
 	cs.datasources[id] = &ds
 
 	// Validate privacy scores
@@ -158,7 +199,14 @@ func (cs *ChatSession) RemoveDatasource(id uint) {
 }
 
 func (cs *ChatSession) AddTool(id string, t models.Tool) error {
-	cs.tools[id] = t
+	entitlements, err := cs.service.GetUserEntitlements(cs.userID)
+	if err != nil {
+		return fmt.Errorf("error getting user entitlements: %v", err)
+	}
+
+	if !entitlements.HasToolAccess(t.ID) {
+		return fmt.Errorf("user does not have access to tool %s", t.Name)
+	}
 
 	// Validate privacy scores
 	if err := cs.validatePrivacyScores(); err != nil {
@@ -166,6 +214,47 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 		delete(cs.tools, id)
 		return err
 	}
+
+	slog.Info("tool added to chat", "tool", t.Name)
+
+	for i, _ := range t.FileStores {
+		// base64 decode the file contents first
+		content, err := base64.StdEncoding.DecodeString(t.FileStores[i].Content)
+		if err != nil {
+			return fmt.Errorf("error decoding file contents: %v", err)
+		}
+
+		pl := fmt.Sprintf("The following additional documentation file '%s' has been provided for the tool '%s' to helpo you use it:\n%s",
+			t.FileStores[i].FileName,
+			t.Name,
+			content)
+
+		err = cs.chatHistory.AddUserMessage(context.Background(), pl)
+		if err != nil {
+			return fmt.Errorf("error adding message to history: %v", err)
+		}
+
+	}
+
+	if len(t.Dependencies) > 0 {
+		slog.Info("tool has dependencies", "count", len(t.Dependencies))
+		for i, _ := range t.Dependencies {
+			dep, err := cs.service.GetToolByID(t.Dependencies[i].ID)
+			if err != nil {
+				return fmt.Errorf("error getting tool dependency: %v", err)
+			}
+
+			dep.OASSpec, err = helpers.DecodeToUTF8(dep.OASSpec)
+			err = cs.AddTool(
+				dep.Name,
+				*dep)
+			if err != nil {
+				return fmt.Errorf("error adding tool dependency: %v", err)
+			}
+		}
+	}
+
+	cs.tools[id] = t
 
 	return nil
 }
@@ -211,7 +300,7 @@ func (cs *ChatSession) Start() error {
 			case msg := <-cs.input:
 				err := cs.preProcessMessage(msg)
 				if err != nil {
-					cs.errors <- fmt.Errorf("preprocessing error: %v", err)
+					cs.sendStatus(fmt.Sprintf("Content guideline violation detected. This request cannot be processed."))
 					continue
 				}
 
@@ -277,6 +366,18 @@ func (cs *ChatSession) sendOutput(resp string) {
 	}
 }
 
+func (cs *ChatSession) sendStatus(resp string) {
+	select {
+	case cs.outputMessages <- &ChatResponse{Payload: resp}:
+	}
+
+	if cs.streamingFunc != nil {
+		select {
+		case cs.outputStream <- []byte(fmt.Sprintf(":::system \n\n %s \n\n :::", resp)):
+		}
+	}
+}
+
 func (cs *ChatSession) sendError(err error) {
 	select {
 	case cs.errors <- err:
@@ -325,6 +426,29 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 	return tools
 }
 
+func (cs *ChatSession) getSystemPrompt() string {
+	// allow override of system prompt in chat room config
+	prompt := cs.chatRef.LLMSettings.SystemPrompt
+	if cs.chatRef.SystemPrompt != "" {
+		prompt = cs.chatRef.SystemPrompt
+	}
+
+	if (cs.chatRef.ExtraContext != nil) || (len(cs.chatRef.ExtraContext) > 0) {
+		contextStr := "I have provided additional context for this chat session. Please review the following information and bear it in mind for every interaction:"
+		for i := range cs.chatRef.ExtraContext {
+			contextStr = fmt.Sprintf("%s\n\n## File Name: %s \n\n## File Content:\n\n %s",
+				contextStr,
+				cs.chatRef.ExtraContext[i].FileName,
+				cs.chatRef.ExtraContext[i].Content)
+		}
+
+		fmt.Println("Injecting default context into system prompt")
+		prompt = fmt.Sprintf("%s\n\n%s", contextStr, prompt)
+	}
+
+	return prompt
+}
+
 func (cs *ChatSession) initSession() error {
 	// History for the chat session
 	if cs.db == nil {
@@ -339,7 +463,7 @@ func (cs *ChatSession) initSession() error {
 		return fmt.Errorf("no LLM settings")
 	}
 
-	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, cs.chatRef.ID, cs.userID, cs.chatRef.LLMSettings.SystemPrompt)
+	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, cs.chatRef.ID, cs.userID, cs.getSystemPrompt())
 
 	// create the LLM client
 	llm, err := cs.fetchDriver(nil)
@@ -364,10 +488,13 @@ func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
 
 func (cs *ChatSession) preProcessMessage(msg *models.UserMessage) error {
 	for _, fn := range cs.preProcessors {
+		fmt.Println(msg)
 		if err := fn(msg); err != nil {
 			return err
 		}
 	}
+
+	fmt.Println("no issue found")
 	return nil
 }
 
@@ -382,7 +509,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					continue
 				}
 
-				if err := sr.RunFilter(content); err != nil {
+				if err := sr.RunFilter(content, cs.service); err != nil {
 					return fmt.Sprintf("filter denied content in %s", refs[i]), false
 				}
 			}
@@ -405,6 +532,18 @@ func (cs *ChatSession) joinDocuments(docs []schema.Document, separator string) s
 	return text
 }
 
+func isToolCaller(name string) bool {
+	lowerName := strings.ToLower(name)
+	toolCallers := []string{"gpt", "claude", "gemini"}
+	for _, tc := range toolCallers {
+		if strings.Contains(lowerName, tc) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
 	pl := fmt.Sprintf("Context for this message: \n%s\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
 	return llms.HumanChatMessage{
@@ -421,7 +560,21 @@ func (cs *ChatSession) getMessages() ([]llms.MessageContent, error) {
 	return history, nil
 }
 
+func handleEcho(prefix string, dat interface{}) {
+	prettyJSON, err := json.MarshalIndent(dat, "", "    ")
+	if err != nil {
+		slog.Error("error echoing response to stdout", "error", err)
+	} else {
+		slog.Info("[CONV ECHO]", prefix, "")
+		fmt.Println("--------------------------------------------------")
+		fmt.Printf("%s\n", string(prettyJSON))
+	}
+}
+
 func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
+	if config.Get().EchoConversation {
+		handleEcho("LLM", w.Response)
+	}
 	resp := w.Response
 	if len(resp.Choices) == 0 {
 		cs.sendError(fmt.Errorf("no choices in response"))
@@ -479,6 +632,8 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			return err
 		}
 
+		// also check with tool calls!
+		cs.PreflightTokenLengthCheck(history)
 		toolCallResp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
 		if err != nil {
 			cs.sendError(fmt.Errorf("[toolcall] error generating content after tool call: %v", err))
@@ -527,6 +682,15 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		}
 	}
 
+	if config.Get().EchoConversation {
+		type ComboObj struct {
+			Message *models.UserMessage
+			Docs    []schema.Document
+		}
+
+		handleEcho("USER", ComboObj{Message: msg, Docs: docs})
+	}
+
 	pl := cs.prepHumanMessage(msg.Payload, docs).Content
 	err := cs.chatHistory.AddUserMessage(context.Background(), pl)
 	if err != nil {
@@ -537,6 +701,9 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	if err != nil {
 		return nil, fmt.Errorf("error getting chat history: %v", err)
 	}
+
+	// need to make sure we stay in content window
+	messages = cs.PreflightTokenLengthCheck(messages)
 
 	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
@@ -572,6 +739,54 @@ type CallParams struct {
 	Body       map[string]interface{} `json:"body"`
 	Headers    map[string][]string    `json:"headers"`
 	Parameters map[string][]string    `json:"parameters"`
+}
+
+func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []llms.MessageContent {
+	maxInputTokens := cs.chatRef.LLMSettings.MaxLength
+	removed := 0
+	for {
+		tokenLength := cs.estimateTokenLength(msgs)
+		slog.Info("preflight token count", "estiamte", tokenLength)
+		if tokenLength <= maxInputTokens {
+			break
+		}
+
+		// remove the earliest message before the first message
+		msgs = append(msgs[:1], msgs[2:]...)
+		removed++
+	}
+
+	fmt.Println("REMOVED", removed, "messages to stay within token limit")
+
+	return msgs
+}
+
+func (cs *ChatSession) estimateTokenLength(msgs []llms.MessageContent) int {
+	encoding := "cl100k_base"
+	tke, err := tiktoken.GetEncoding(encoding)
+	if err != nil {
+		slog.Error("error getting encoding", err)
+		return -1
+	}
+
+	// encode
+	total := 0
+	for _, m := range msgs {
+		for _, p := range m.Parts {
+			switch p.(type) {
+			case llms.TextContent:
+				text := p.(llms.TextContent).Text
+				token := tke.Encode(text, nil, nil)
+				total += len(token)
+			case llms.ToolCallResponse:
+				text := p.(llms.ToolCallResponse).Content
+				token := tke.Encode(text, nil, nil)
+				total += len(token)
+			}
+		}
+	}
+
+	return total
 }
 
 func (cs *ChatSession) convertLLMArgsToUniversalClientInputs(params []byte, opName string, uc *universalclient.Client) (*CallParams, error) {
@@ -684,6 +899,11 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
 
+		// ignore empty tool calls
+		if t.ID == "" {
+			continue
+		}
+
 		toolCall.Parts = append(toolCall.Parts, llms.ToolCall{
 			ID:   t.ID,
 			Type: t.Type,
@@ -740,9 +960,18 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
 			}
 
-			cs.sendOutput(fmt.Sprintf("[TOOL] calling [%s]", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
+			if config.Get().EchoConversation {
+				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
+				slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
+			}
+
 			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
 			if err != nil {
+				if config.Get().EchoConversation {
+					slog.Info("[TOOL-CALL]", "[ERROR]", err)
+				}
 				return false, fmt.Errorf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
 			}
 
@@ -758,10 +987,38 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			t1 := time.Now()
 
+			if config.Get().EchoConversation {
+				fmt.Println("===============================================")
+				slog.Info("[TOOL CALL]", "[FUNCTION]", t.FunctionCall.Name)
+				fmt.Println(asStr)
+				fmt.Println("===============================================")
+			}
+
+			// filter content before sending to LLM
+			for i, _ := range toolDef.Filters {
+				filter := toolDef.Filters[i]
+				sr := scripting.NewScriptRunner(filter.Script)
+				cs.sendStatus(fmt.Sprintf("Running governance filter: `%s`", filter.Name))
+				filtered, err := sr.RunMiddleware(asStr, cs.service)
+				if err != nil {
+					return false, fmt.Errorf("error running governance filter: %v", err)
+				}
+
+				asStr = filtered
+			}
+
 			toolResp := llms.ToolCallResponse{
 				ToolCallID: t.ID,
 				Name:       t.FunctionCall.Name,
 				Content:    asStr,
+			}
+
+			cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
+			if config.Get().EchoConversation && len(toolDef.Filters) > 0 {
+				slog.Info("[TOOL-CALL]", "[FILTERED]", t.FunctionCall.Name)
+				fmt.Println("===============================================")
+				fmt.Println(asStr)
+				fmt.Println("===============================================")
 			}
 
 			toolResult.Parts = append(toolResult.Parts, toolResp)
@@ -790,46 +1047,7 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 }
 
 func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings, tools []llms.Tool) []llms.CallOption {
-	var callOptions = make([]llms.CallOption, 0)
-
-	if llmSettings.MaxLength > 0 {
-		callOptions = append(callOptions, llms.WithMaxLength(llmSettings.MaxLength))
-	}
-	if llmSettings.MaxTokens > 0 {
-		callOptions = append(callOptions, llms.WithMaxTokens(llmSettings.MaxTokens))
-	}
-	if llmSettings.MinLength > 0 {
-		callOptions = append(callOptions, llms.WithMinLength(llmSettings.MinLength))
-	}
-
-	if llmSettings.RepetitionPenalty > 0 {
-		callOptions = append(callOptions, llms.WithRepetitionPenalty(llmSettings.RepetitionPenalty))
-	}
-	if llmSettings.Seed > 0 {
-		callOptions = append(callOptions, llms.WithSeed(llmSettings.Seed))
-	}
-	if len(llmSettings.StopWords) > 0 {
-		callOptions = append(callOptions, llms.WithStopWords(llmSettings.StopWords))
-	}
-	if llmSettings.Temperature > 0 {
-		callOptions = append(callOptions, llms.WithTemperature(llmSettings.Temperature))
-	}
-	if llmSettings.TopK > 0 {
-		callOptions = append(callOptions, llms.WithTopK(llmSettings.TopK))
-	}
-	if llmSettings.TopP > 0 {
-		callOptions = append(callOptions, llms.WithTopP(llmSettings.TopP))
-	}
-
-	if cs.mode == ChatStream {
-		callOptions = append(callOptions, llms.WithStreamingFunc(cs.streamingFunc))
-	}
-
-	if len(tools) > 0 {
-		callOptions = append(callOptions, llms.WithTools(tools))
-	}
-
-	return callOptions
+	return llmSettings.GenerateOptionsFromSettings(tools, string(cs.mode), cs.streamingFunc)
 }
 
 func (cs *ChatSession) validatePrivacyScores() error {

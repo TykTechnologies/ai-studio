@@ -8,6 +8,8 @@ type ServiceInterface interface {
 	GetActiveLLMs() (models.LLMs, error)
 	GetLLMByID(id uint) (*models.LLM, error)
 
+	GetLLMSettingsByID(id uint) (*models.LLMSettings, error)
+
 	// Datasource related methods
 	GetActiveDatasources() (models.Datasources, error)
 	GetDatasourceByID(id uint) (*models.Datasource, error)

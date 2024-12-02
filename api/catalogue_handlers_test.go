@@ -92,6 +92,8 @@ func TestCatalogueEndpoints(t *testing.T) {
 				LogoURL          string `json:"logo_url"`
 				Vendor           string `json:"vendor"`
 				Active           bool   `json:"active"`
+				Filters          []int  `json:"filters"`
+				DefaultModel     string `json:"default_model"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -105,6 +107,8 @@ func TestCatalogueEndpoints(t *testing.T) {
 				LogoURL          string `json:"logo_url"`
 				Vendor           string `json:"vendor"`
 				Active           bool   `json:"active"`
+				Filters          []int  `json:"filters"`
+				DefaultModel     string `json:"default_model"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -219,7 +223,7 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true)
 	assert.NoError(t, err)
 
 	// Create a group

@@ -6,10 +6,11 @@ type Vendor string
 
 type LLM struct {
 	gorm.Model
-	ID          uint   `json:"id" gorm:"primary_key"`
-	Name        string `json:"name"`
-	APIKey      string `json:"api_key`
-	APIEndpoint string `json:"api_endpoint"` // The endpoint to actually access the LLM with Midsommar
+	ID           uint   `json:"id" gorm:"primary_key"`
+	Name         string `json:"name"`
+	APIKey       string `json:"api_key`
+	APIEndpoint  string `json:"api_endpoint"` // The endpoint to actually access the LLM with Midsommar
+	DefaultModel string `json:"default_model"`
 
 	PrivacyScore     int    `json:"privacy_score"`
 	ShortDescription string `json:"short_description"`
@@ -44,7 +45,34 @@ func (l *LLM) Get(db *gorm.DB, id uint) error {
 }
 
 func (l *LLM) Create(db *gorm.DB) error {
-	return db.Create(l).Association("Filters").Replace(l.Filters)
+	// Start a transaction
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	// Create the LLM
+	if err := tx.Create(l).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// If there are Filters, save the many-to-many relationship
+	if len(l.Filters) > 0 {
+		if err := tx.Model(l).Association("Filters").Replace(l.Filters); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Commit the transaction
+	return tx.Commit().Error
 }
 
 func (l *LLM) Update(db *gorm.DB) error {

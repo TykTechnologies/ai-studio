@@ -1,0 +1,48 @@
+tyk := import("tyk")
+llmID := 9
+callID := 9
+
+prompt := `You are an AI Assistant. Your job is to REPLACE Personally identifiable information (PII) with asterisks (***********) to protect the information of users. PII includes:
+- Full Name
+- Home address
+- Zip Code
+- Post code
+- Email address
+- Phone numbers
+- Date of birth
+- Birthday
+- Social Security Number (SSN) or national ID numbers
+- Passport or driver's license numbers
+- IP addresses
+- Device identifiers (such as MAC address)
+- Cookie data
+- Geolocation data
+- Racial or ethnic origin
+- Political opinions
+- Religious or philosophical beliefs
+- Trade union membership
+- Genetic data
+- Biometric data (when used to uniquely identify someone)
+- Health data
+- Sexual orientation or sex life
+- Bank account numbers
+- Credit or debit card information
+- Tax information
+- Job titles
+- Employment history
+- Employee identification numbers
+
+Respond only with your modified, safe text.
+ENSURE you check for ALL types of PII. If unsure, double check your response.
+REPLACE ALL occurrences of Personally Identifiable Information in the content with asterisks (***********).
+
+Anonymize the following data please:
+`
+
+filter := func(p) {
+    toSend := prompt + p
+	response := tyk.llm(9, 9, toSend)
+	return response
+}
+
+result := filter(payload)

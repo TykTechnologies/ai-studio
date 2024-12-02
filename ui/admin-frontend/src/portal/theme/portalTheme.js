@@ -1,5 +1,9 @@
 import { createTheme } from "@mui/material/styles";
 const portalTheme = createTheme({
+  typography: {
+    // This will reduce the base font size (default is typically 14px)
+    fontSize: 13, // or any other value you prefer
+  },
   palette: {
     primary: {
       main: "#000000",
@@ -24,8 +28,8 @@ const portalTheme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: "#ffffff",
-          boxShadow: "none",
+          backgroundColor: "#E0F7F6", // Light turquoise color
+          boxShadow: "0px 5px 8px rgba(0, 0, 0, 0.2)", // Add this drop shadow
           color: "#000000",
         },
       },

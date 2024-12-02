@@ -94,6 +94,22 @@ const theme = createTheme({
         },
       ],
     },
+    MuiInputLabel: {
+      styleOverrides: {
+        shrink: {
+          transform: "translate(14px, -9px) scale(0.75)", // Adjust these values as needed
+        },
+      },
+    },
+    MuiFormLabel: {
+      styleOverrides: {
+        root: {
+          "&.Mui-focused, &.MuiFormLabel-filled": {
+            transform: "translate(2px, -16px) scale(0.75)", // Match the InputLabel
+          },
+        },
+      },
+    },
   },
 });
 

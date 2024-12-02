@@ -1,13 +1,19 @@
 import axios from "axios";
-import config from "../../config";
+import { getConfig } from "../../config";
 
-const apiClient = axios.create({
-  baseURL: `${config.API_BASE_URL}/api/v1`,
-  withCredentials: true, // This is important for handling cookies
-});
+const createApiClient = () => {
+  const config = getConfig();
+  return axios.create({
+    baseURL: `${config.API_BASE_URL}/api/v1`,
+    withCredentials: true,
+  });
+};
+
+let apiClient = createApiClient();
 
 // Function to fetch CSRF token
 const fetchCSRFToken = async () => {
+  const config = getConfig();
   try {
     const response = await axios.get(`${config.API_BASE_URL}/csrf-token`, {
       withCredentials: true,
@@ -39,11 +45,15 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Redirect to login page if unauthorized
       window.location.href = "/login";
     }
     return Promise.reject(error);
   },
 );
+
+// Export a function to reinitialize the client with updated config
+export const reinitializeApiClient = () => {
+  apiClient = createApiClient();
+};
 
 export default apiClient;

@@ -78,7 +78,7 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		TestMode:            false,
 		SMTPHost:            "testhost",
 	}
-	suite.authService = auth.NewAuthService(config, suite.mockMailer)
+	suite.authService = auth.NewAuthService(config, suite.mockMailer, suite.service)
 	suite.api = &API{
 		service: suite.service,
 		auth:    suite.authService,

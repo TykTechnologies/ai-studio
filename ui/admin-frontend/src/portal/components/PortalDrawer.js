@@ -22,11 +22,14 @@ import AppsIcon from "@mui/icons-material/Apps";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 
 import pubClient from "../../admin/utils/pubClient";
-const drawerWidth = 280; // Increased drawer width
+
+const drawerWidth = 280;
 const CACHE_KEY = "userEntitlements";
 const CACHE_EXPIRY = 10000; // 10s
+
 const PortalDrawer = () => {
   const [userEntitlements, setUserEntitlements] = useState(null);
+  const [uiOptions, setUiOptions] = useState(null);
   const [openDev, setOpenDev] = useState(true);
   const [openLLMs, setOpenLLMs] = useState(false);
   const [openDatabases, setOpenDatabases] = useState(false);
@@ -40,6 +43,7 @@ const PortalDrawer = () => {
         const { data, timestamp } = JSON.parse(cachedData);
         if (Date.now() - timestamp < CACHE_EXPIRY) {
           setUserEntitlements(data);
+          setUiOptions(data.ui_options);
           return;
         }
       }
@@ -47,11 +51,13 @@ const PortalDrawer = () => {
       try {
         const response = await pubClient.get("/common/me");
         const newData = response.data.attributes.entitlements;
+        const newUiOptions = response.data.attributes.ui_options;
         setUserEntitlements(newData);
+        setUiOptions(newUiOptions);
         localStorage.setItem(
           CACHE_KEY,
           JSON.stringify({
-            data: newData,
+            data: { ...newData, ui_options: newUiOptions },
             timestamp: Date.now(),
           }),
         );
@@ -114,131 +120,148 @@ const PortalDrawer = () => {
             primaryTypographyProps={{ noWrap: true }}
           />
         </ListItem>
-        <ListItem button component={Link} to="/portal/app/new" sx={{ mb: 1 }}>
-          <ListItemIcon>
-            <AddCircleOutlineIcon />
-          </ListItemIcon>
-          <ListItemText
-            primary="Create App"
-            primaryTypographyProps={{ noWrap: true }}
-          />
-        </ListItem>
 
-        <ListItem button onClick={handleChatRoomsClick} sx={{ mb: 1 }}>
-          <ListItemIcon>
-            <ChatIcon />
-          </ListItemIcon>
-          <ListItemText
-            primary="Chat Rooms"
-            primaryTypographyProps={{ noWrap: true }}
-          />
-          {openChatRooms ? <ExpandLess /> : <ExpandMore />}
-        </ListItem>
-        <Collapse in={openChatRooms} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            {userEntitlements?.chats.map((chat) => (
-              <ListItem
-                key={chat.id}
-                button
-                component={Link}
-                to={`/portal/chat/${chat.id}`}
-                sx={{ pl: 4, mb: 1 }}
-              >
-                <ListItemIcon>
-                  <ChatBubbleOutlineIcon />
-                </ListItemIcon>
-                <ListItemText
-                  primary={chat.attributes.name}
-                  primaryTypographyProps={{ noWrap: true }}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Collapse>
-        <ListItem button onClick={handleDevClick} sx={{ mb: 1 }}>
-          <ListItemIcon>
-            <CodeIcon />
-          </ListItemIcon>
-          <ListItemText
-            primary="Resources"
-            primaryTypographyProps={{ noWrap: true }}
-          />
-          {openDev ? <ExpandLess /> : <ExpandMore />}
-        </ListItem>
-        <Collapse in={openDev} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItem button onClick={handleLLMsClick} sx={{ pl: 4, mb: 1 }}>
+        {uiOptions?.show_portal && (
+          <ListItem button component={Link} to="/portal/app/new" sx={{ mb: 1 }}>
+            <ListItemIcon>
+              <AddCircleOutlineIcon />
+            </ListItemIcon>
+            <ListItemText
+              primary="Create App"
+              primaryTypographyProps={{ noWrap: true }}
+            />
+          </ListItem>
+        )}
+
+        {uiOptions?.show_chat && (
+          <>
+            <ListItem button onClick={handleChatRoomsClick} sx={{ mb: 1 }}>
               <ListItemIcon>
-                <PsychologyIcon />
+                <ChatIcon />
               </ListItemIcon>
               <ListItemText
-                primary="LLMs"
+                primary="Chat Rooms"
                 primaryTypographyProps={{ noWrap: true }}
               />
-              {openLLMs ? <ExpandLess /> : <ExpandMore />}
+              {openChatRooms ? <ExpandLess /> : <ExpandMore />}
             </ListItem>
-            <Collapse in={openLLMs} timeout="auto" unmountOnExit>
+            <Collapse in={openChatRooms} timeout="auto" unmountOnExit>
               <List component="div" disablePadding>
-                {userEntitlements?.catalogues.map((catalogue) => (
+                {userEntitlements?.chats.map((chat) => (
                   <ListItem
-                    key={catalogue.id}
+                    key={chat.id}
                     button
                     component={Link}
-                    to={`/portal/llms/${catalogue.id}`}
-                    sx={{ pl: 6, mb: 1 }}
+                    to={`/portal/chat/${chat.id}`}
+                    sx={{ pl: 4, mb: 1 }}
                   >
+                    <ListItemIcon>
+                      <ChatBubbleOutlineIcon />
+                    </ListItemIcon>
                     <ListItemText
-                      primary={catalogue.attributes.name}
+                      primary={chat.attributes.name}
                       primaryTypographyProps={{ noWrap: true }}
                     />
                   </ListItem>
                 ))}
               </List>
             </Collapse>
+          </>
+        )}
 
-            <ListItem
-              button
-              onClick={handleDatabasesClick}
-              sx={{ pl: 4, mb: 1 }}
-            >
+        {uiOptions?.show_portal && (
+          <>
+            <ListItem button onClick={handleDevClick} sx={{ mb: 1 }}>
               <ListItemIcon>
-                <StorageIcon />
+                <CodeIcon />
               </ListItemIcon>
               <ListItemText
-                primary="Databases"
+                primary="Resources"
                 primaryTypographyProps={{ noWrap: true }}
               />
-              {openDatabases ? <ExpandLess /> : <ExpandMore />}
+              {openDev ? <ExpandLess /> : <ExpandMore />}
             </ListItem>
-            <Collapse in={openDatabases} timeout="auto" unmountOnExit>
+            <Collapse in={openDev} timeout="auto" unmountOnExit>
               <List component="div" disablePadding>
-                {userEntitlements?.data_catalogues.map((dataCatalogue) => (
-                  <ListItem
-                    key={dataCatalogue.id}
-                    button
-                    component={Link}
-                    to={`/portal/databases/${dataCatalogue.id}`}
-                    sx={{ pl: 6, mb: 1 }}
-                  >
-                    <ListItemText
-                      primary={dataCatalogue.attributes.name}
-                      primaryTypographyProps={{ noWrap: true }}
-                    />
-                  </ListItem>
-                ))}
+                <ListItem
+                  button
+                  onClick={handleLLMsClick}
+                  sx={{ pl: 4, mb: 1 }}
+                >
+                  <ListItemIcon>
+                    <PsychologyIcon />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="LLMs"
+                    primaryTypographyProps={{ noWrap: true }}
+                  />
+                  {openLLMs ? <ExpandLess /> : <ExpandMore />}
+                </ListItem>
+                <Collapse in={openLLMs} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {userEntitlements?.catalogues.map((catalogue) => (
+                      <ListItem
+                        key={catalogue.id}
+                        button
+                        component={Link}
+                        to={`/portal/llms/${catalogue.id}`}
+                        sx={{ pl: 6, mb: 1 }}
+                      >
+                        <ListItemText
+                          primary={catalogue.attributes.name}
+                          primaryTypographyProps={{ noWrap: true }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Collapse>
+
+                <ListItem
+                  button
+                  onClick={handleDatabasesClick}
+                  sx={{ pl: 4, mb: 1 }}
+                >
+                  <ListItemIcon>
+                    <StorageIcon />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Databases"
+                    primaryTypographyProps={{ noWrap: true }}
+                  />
+                  {openDatabases ? <ExpandLess /> : <ExpandMore />}
+                </ListItem>
+                <Collapse in={openDatabases} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {userEntitlements?.data_catalogues.map((dataCatalogue) => (
+                      <ListItem
+                        key={dataCatalogue.id}
+                        button
+                        component={Link}
+                        to={`/portal/databases/${dataCatalogue.id}`}
+                        sx={{ pl: 6, mb: 1 }}
+                      >
+                        <ListItemText
+                          primary={dataCatalogue.attributes.name}
+                          primaryTypographyProps={{ noWrap: true }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Collapse>
               </List>
             </Collapse>
-          </List>
-        </Collapse>
-        <ListItem button component={Link} to="/portal/apps" sx={{ mb: 1 }}>
-          <ListItemIcon>
-            <AppsIcon />
-          </ListItemIcon>
-          <ListItemText
-            primary="My Apps"
-            primaryTypographyProps={{ noWrap: true }}
-          />
-        </ListItem>
+
+            <ListItem button component={Link} to="/portal/apps" sx={{ mb: 1 }}>
+              <ListItemIcon>
+                <AppsIcon />
+              </ListItemIcon>
+              <ListItemText
+                primary="My Apps"
+                primaryTypographyProps={{ noWrap: true }}
+              />
+            </ListItem>
+          </>
+        )}
       </List>
     </Drawer>
   );

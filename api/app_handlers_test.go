@@ -13,7 +13,7 @@ func TestAppEndpoints(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a test user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true, true, true)
 	assert.NoError(t, err)
 
 	// Test Create App
@@ -270,7 +270,7 @@ func TestAppPagination(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a test user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", true, true, true)
 	assert.NoError(t, err)
 
 	// Create multiple apps

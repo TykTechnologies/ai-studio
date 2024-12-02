@@ -59,11 +59,11 @@ const modelPresets = {
   default: {
     model_name: "",
     temperature: 0.7,
-    max_tokens: 100,
+    max_tokens: 1024,
     top_p: 1,
     top_k: 50,
     min_length: 0,
-    max_length: 1000,
+    max_length: 4096,
     repetition_penalty: 1,
   },
   "OpenAI GPT-3.5 Turbo": {
@@ -79,7 +79,7 @@ const modelPresets = {
   "OpenAI GPT-4": {
     model_name: "gpt-4",
     temperature: 0.7,
-    max_tokens: 128000,
+    max_tokens: 8192,
     top_p: 1,
     top_k: 0,
     min_length: 0,
@@ -109,7 +109,7 @@ const modelPresets = {
   "Anthropic Claude 3 Haiku": {
     model_name: "claude-3-haiku-20240307",
     temperature: 0.7,
-    max_tokens: 2000000,
+    max_tokens: 4096,
     top_p: 0.9,
     top_k: 0,
     min_length: 0,
@@ -119,7 +119,7 @@ const modelPresets = {
   "Anthropic Claude 3 Opus": {
     model_name: "claude-3-opus-20240229",
     temperature: 0.7,
-    max_tokens: 200000,
+    max_tokens: 4096,
     top_p: 0.9,
     top_k: 0,
     min_length: 0,
@@ -129,7 +129,7 @@ const modelPresets = {
   "Anthropic Claude 3 Sonnet": {
     model_name: "claude-3-sonnet-20240229",
     temperature: 0.7,
-    max_tokens: 200000,
+    max_tokens: 4096,
     top_p: 0.9,
     top_k: 0,
     min_length: 0,

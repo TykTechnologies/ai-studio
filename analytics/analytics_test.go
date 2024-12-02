@@ -282,3 +282,7 @@ func (m *mockService) GetCredentialBySecret(secret string) (*models.Credential, 
 func (m *mockService) GetAppByCredentialID(credID uint) (*models.App, error) {
 	return nil, nil
 }
+
+func (m *mockService) GetLLMSettingsByID(id uint) (*models.LLMSettings, error) {
+	return nil, nil
+}

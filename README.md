@@ -35,22 +35,24 @@ For Administratorts, IT, and Platform Teams:
 ## Getting Started
 The App has two sections: the back-end and the UI. The back-end is written in Go and the UI is written in React.
 
-All configuration is in the .env file in the root of the project, there is a smaple provided in the root of the project.
+All configuration is in the .env file in the root of the project, there is a sample provided in the root of the project.
 
-To run the go server:
+To run the go server and front-end:
 
 ```bash
-cd midsommar
-cp .env.example .env
-go build
-./midsommar
+make start-dev
 ```
 
-To run the Front end:
+This command will:
+1. Create a .env file from .env.example if it doesn't exist
+2. Start the frontend in development mode
+3. Build and start the backend
+4. Open a screen session with two windows for the frontend and backend
+
+To stop both the frontend and backend:
 
 ```bash
-cd midsommar/ui/admin-frontend/src
-npm start
+make stop-dev
 ```
 
 The UI is on `http://localhost:3000`, the proxy is on `http://localhost:9090`, and the API is on `http://localhost:8080/`.
@@ -68,11 +70,23 @@ The front-end is split into two sections: admin and portal, each have their own 
 
 ## Building a Final Binary
 
-```
-cd midsommar/ui/admin-frontend/src
-npm run build
-cd ../../..
-go build
+To build the final binary, use the following command:
+
+```bash
+make build
 ```
 
-That will process all the static files and embed them into the binary. The binary will now be a full server that serves the UI and the API from the same port.ß
+This will:
+1. Build the admin frontend if it doesn't exist or if FORCE_BUILD=true
+2. Build the Golang binary
+
+The resulting binary will be a full server that serves the UI and the API from the same port.
+
+## Additional Makefile Commands
+
+- `make test`: Runs Go tests after building the admin frontend
+- `make clean`: Removes the admin frontend build directory
+- `make start-frontend`: Starts the frontend in development mode
+- `make stop-frontend`: Stops the frontend development server
+- `make start-backend`: Builds and starts the backend
+- `make stop-backend`: Stops the backend server

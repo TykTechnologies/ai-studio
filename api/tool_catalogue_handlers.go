@@ -287,14 +287,17 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
 		Attributes: struct {
-			Name           string   `json:"name"`
-			Description    string   `json:"description"`
-			ToolType       string   `json:"tool_type"`
-			OASSpec        string   `json:"oas_spec"`
-			PrivacyScore   int      `json:"privacy_score"`
-			Operations     []string `json:"operations"`
-			AuthKey        string   `json:"auth_key"`
-			AuthSchemaName string   `json:"auth_schema_name"`
+			Name           string              `json:"name"`
+			Description    string              `json:"description"`
+			ToolType       string              `json:"tool_type"`
+			OASSpec        string              `json:"oas_spec"`
+			PrivacyScore   int                 `json:"privacy_score"`
+			Operations     []string            `json:"operations"`
+			AuthKey        string              `json:"auth_key"`
+			AuthSchemaName string              `json:"auth_schema_name"`
+			FileStores     []FileStoreResponse `json:"file_stores"`
+			Filters        []FilterResponse    `json:"filters"`
+			Dependencies   []ToolResponse      `json:"dependencies"`
 		}{
 			Name:           tool.Name,
 			Description:    tool.Description,

@@ -159,8 +159,9 @@ func setupGoogleDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 		opts = append(opts, googleai.WithAPIKey(connDef.APIKey))
 	}
 
-	opts = append(opts, googleai.WithDefaultModel(llmSettings.ModelName))
-
+	if llmSettings != nil {
+		opts = append(opts, googleai.WithDefaultModel(llmSettings.ModelName))
+	}
 	llm, err := googleai.New(context.Background(), opts...)
 
 	if err != nil {

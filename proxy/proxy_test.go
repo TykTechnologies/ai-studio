@@ -35,6 +35,11 @@ func (m *MockService) GetActiveLLMs() (models.LLMs, error) {
 	return args.Get(0).([]models.LLM), args.Error(1)
 }
 
+func (m *MockService) GetLLMSettingsByID(id uint) (*models.LLMSettings, error) {
+	args := m.Called(id)
+	return args.Get(0).(*models.LLMSettings), args.Error(1)
+}
+
 func (m *MockService) GetLLMByID(id uint) (*models.LLM, error) {
 	args := m.Called(id)
 	return args.Get(0).(*models.LLM), args.Error(1)
@@ -303,28 +308,28 @@ func TestCredentialValidation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test valid LLM credential
-	v, r := proxy.credValidator.CheckCredential("valid-token", "", "dummyllm", r)
+	v, r := proxy.credValidator.CheckCredential("valid-token", "", "dummyllm", "dummy-llm", r)
 	assert.True(t, v)
 
 	// Test valid Datasource credential
-	v, r = proxy.credValidator.CheckCredential("valid-token", "dummyds", "", r)
+	v, r = proxy.credValidator.CheckCredential("valid-token", "dummyds", "", "dummy-llm", r)
 	assert.True(t, v)
 
 	// Test invalid credential for LLM
 	mockService.On("GetCredentialBySecret", "invalid-token").Return(&models.Credential{}, fmt.Errorf("invalid credential"))
-	v, r = proxy.credValidator.CheckCredential("invalid-token", "", "dummyllm", r)
+	v, r = proxy.credValidator.CheckCredential("invalid-token", "", "dummyllm", "dummy-llm", r)
 	assert.False(t, v)
 
 	// Test invalid credential for Datasource
-	v, r = proxy.credValidator.CheckCredential("invalid-token", "dummyds", "", r)
+	v, r = proxy.credValidator.CheckCredential("invalid-token", "dummyds", "", "dummy-llm", r)
 	assert.False(t, v)
 
 	// Test non-existent LLM
-	v, r = proxy.credValidator.CheckCredential("valid-token", "", "nonexistentllm", r)
+	v, r = proxy.credValidator.CheckCredential("valid-token", "", "nonexistentllm", "dummy-llm", r)
 	assert.False(t, v)
 
 	// Test non-existent Datasource
-	v, r = proxy.credValidator.CheckCredential("valid-token", "nonexistentds", "", r)
+	v, r = proxy.credValidator.CheckCredential("valid-token", "nonexistentds", "", "dummy-llm", r)
 	assert.False(t, v)
 }
 
@@ -465,7 +470,7 @@ func TestAnalyzeResponse(t *testing.T) {
 	body := []byte(`{"model": "test-model", "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}`)
 	r, _ := http.NewRequest("POST", "http://test.com", nil)
 
-	proxy.analyzeResponse(llm, app, statusCode, body, r)
+	proxy.analyzeResponse(llm, app, statusCode, body, []byte{}, r)
 
 	// Wait a bit for the goroutine to process the record
 	time.Sleep(100 * time.Millisecond)
@@ -618,7 +623,7 @@ func TestFilterScriptExecution(t *testing.T) {
 			proxy.AddFilter(filter)
 
 			runner := scripting.NewScriptRunner(filter.Script)
-			err := runner.RunFilter(tc.payload)
+			err := runner.RunFilter(tc.payload, mockService)
 
 			if tc.expected {
 				assert.NoError(t, err)

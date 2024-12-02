@@ -1,0 +1,16 @@
+apiVersion: v2
+name: midsommar
+description: A Helm chart for Midsommar application
+type: application
+version: 0.1.0
+appVersion: "latest"
+
+dependencies:
+  - name: reranker
+    version: 0.1.0
+    condition: reranker.enabled
+    repository: file://charts/reranker
+  - name: transformer-server
+    version: 0.1.0
+    condition: transformer-server.enabled
+    repository: file://charts/transformer-server

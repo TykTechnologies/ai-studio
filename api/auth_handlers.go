@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -225,7 +226,8 @@ func (a *API) handleVerifyEmail(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
+	emailVerifiedHandler(c.Writer, c.Request)
+	return
 }
 
 // @Summary Resend verification email
@@ -286,8 +288,7 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Get user's groups
-	groups, err := a.service.GetGroupsByUserID(u.ID)
+	entitlements, err := a.service.GetUserEntitlements(u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -298,81 +299,18 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Get unique entitlements across all groups
-	catalogues := make(map[uint]models.Catalogue)
-	dataCatalogues := make(map[uint]models.DataCatalogue)
-	toolCatalogues := make(map[uint]models.ToolCatalogue)
-	chats := make(map[uint]models.Chat)
-
-	for _, group := range groups {
-		// Get catalogues for this group
-		groupCatalogues, err := a.service.GetGroupCatalogues(group.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, catalogue := range groupCatalogues {
-			catalogues[catalogue.ID] = catalogue
-		}
-
-		// Get data catalogues for this group
-		groupDataCatalogues, err := a.service.GetGroupDataCatalogues(group.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, dataCatalogue := range groupDataCatalogues {
-			dataCatalogues[dataCatalogue.ID] = dataCatalogue
-		}
-
-		// Get tool catalogues for this group
-		groupToolCatalogues, _, _, err := a.service.GetGroupToolCatalogues(group.ID, 1, 1, true)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, toolCatalogue := range groupToolCatalogues {
-			toolCatalogues[toolCatalogue.ID] = toolCatalogue
-		}
-
-		// Get chats for this group
-		groupChats, err := a.service.GetChatsByGroupID(group.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-		for _, chat := range groupChats {
-			chats[chat.ID] = chat
-		}
-	}
-
+	// Convert service-level entitlements to API response
 	response := UserWithEntitlementsResponse{
 		Type: "user",
-		ID:   strconv.Itoa(int(u.ID)),
+		ID:   strconv.Itoa(int(entitlements.User.ID)),
 		Attributes: struct {
-			Email        string `json:"email"`
-			Name         string `json:"name"`
-			IsAdmin      bool   `json:"is_admin"`
+			Email     string `json:"email"`
+			Name      string `json:"name"`
+			IsAdmin   bool   `json:"is_admin"`
+			UIOptions struct {
+				ShowChat   bool `json:"show_chat"`
+				ShowPortal bool `json:"show_portal"`
+			} `json:"ui_options"`
 			Entitlements struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
 				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
@@ -380,19 +318,26 @@ func (a *API) handleMe(c *gin.Context) {
 				Chats          []ChatResponse          `json:"chats"`
 			} `json:"entitlements"`
 		}{
-			Email:   u.Email,
-			Name:    u.Name,
-			IsAdmin: u.IsAdmin,
+			Email:   entitlements.User.Email,
+			Name:    entitlements.User.Name,
+			IsAdmin: entitlements.User.IsAdmin,
+			UIOptions: struct {
+				ShowChat   bool `json:"show_chat"`
+				ShowPortal bool `json:"show_portal"`
+			}{
+				ShowChat:   entitlements.User.ShowChat,
+				ShowPortal: entitlements.User.ShowPortal,
+			},
 			Entitlements: struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
 				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
 				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
 				Chats          []ChatResponse          `json:"chats"`
 			}{
-				Catalogues:     serializeCatalogues(mapToSlice(catalogues)),
-				DataCatalogues: serializeDataCatalogues(mapToSlice(dataCatalogues)),
-				ToolCatalogues: serializeToolCatalogues(mapToSlice(toolCatalogues)),
-				Chats:          serializeChats(mapToSlice(chats)),
+				Catalogues:     serializeCatalogues(entitlements.Catalogues),
+				DataCatalogues: serializeDataCatalogues(entitlements.DataCatalogues),
+				ToolCatalogues: serializeToolCatalogues(entitlements.ToolCatalogues, a.config.DB),
+				Chats:          serializeChats(entitlements.Chats, a.config.DB),
 			},
 		},
 	}
@@ -407,4 +352,46 @@ func mapToSlice[T any](m map[uint]T) []T {
 		slice = append(slice, v)
 	}
 	return slice
+}
+
+func emailVerifiedHandler(w http.ResponseWriter, r *http.Request) {
+	// HTML content with auto-redirect
+	html := `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Verification</title>
+    <meta http-equiv="refresh" content="3;url=/">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .message {
+            text-align: center;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="message">
+        <h1>Email Verified</h1>
+        <p>Redirecting to homepage...</p>
+    </div>
+</body>
+</html>`
+
+	// Set content type to HTML
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Write the HTML content
+	fmt.Fprint(w, html)
 }

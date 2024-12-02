@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -22,6 +22,10 @@ import {
   AccordionDetails,
   Chip,
   Paper,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -30,6 +34,10 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoIcon from "@mui/icons-material/Info";
+import DeleteIcon from "@mui/icons-material/Delete";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
+
 import {
   StyledPaper,
   TitleBox,
@@ -68,7 +76,7 @@ const DatasourceForm = () => {
     active: false,
     tags: [],
     db_name: "",
-    user_id: "", // Add this line
+    user_id: "",
   });
 
   const [users, setUsers] = useState([]);
@@ -83,10 +91,12 @@ const DatasourceForm = () => {
   const [showDbConnApiKey, setShowDbConnApiKey] = useState(false);
   const [showEmbedApiKey, setShowEmbedApiKey] = useState(false);
   const [newTag, setNewTag] = useState("");
+  const [files, setFiles] = useState([]);
   const navigate = useNavigate();
   const { id } = useParams();
   const [vectorStoreHelpText, setVectorStoreHelpText] = useState("");
   const [embedderHelpText, setEmbedderHelpText] = useState("");
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const loadVendors = async () => {
@@ -97,7 +107,6 @@ const DatasourceForm = () => {
     loadVendors();
     fetchUsers();
 
-    // Fetch datasource data if in edit mode
     if (id) {
       const fetchDatasource = async () => {
         try {
@@ -108,8 +117,9 @@ const DatasourceForm = () => {
             tags: datasourceData.tags
               ? datasourceData.tags.map((tag) => tag.attributes.name)
               : [],
-            user_id: datasourceData.user_id.toString(), // Convert user_id to string
+            user_id: datasourceData.user_id.toString(),
           });
+          setFiles(datasourceData.files || []);
           setVectorStoreHelpText(
             getVectorStoreHelpText(datasourceData.db_source_type),
           );
@@ -127,12 +137,95 @@ const DatasourceForm = () => {
     }
   }, [id]);
 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append(
+        "description",
+        `Documentation for datasource: ${datasource.name}`,
+      );
+
+      const fileStoreResponse = await apiClient.post("/filestore", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const fileStoreId = fileStoreResponse.data.data.id;
+
+      await apiClient.post(`/datasources/${id}/filestores/${fileStoreId}`);
+
+      const updatedDatasourceResponse = await apiClient.get(
+        `/datasources/${id}`,
+      );
+      setFiles(updatedDatasourceResponse.data.data.attributes.files || []);
+
+      setSnackbar({
+        open: true,
+        message: "File uploaded successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error uploading file", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload file",
+        severity: "error",
+      });
+    }
+
+    event.target.value = "";
+  };
+
+  const handleDeleteFile = async (fileStoreId) => {
+    try {
+      await apiClient.delete(`/datasources/${id}/filestores/${fileStoreId}`);
+
+      setFiles(files.filter((file) => file.id !== fileStoreId));
+
+      setSnackbar({
+        open: true,
+        message: "File removed successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error deleting file", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove file",
+        severity: "error",
+      });
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       const response = await apiClient.get("/users");
       setUsers(response.data.data || []);
     } catch (error) {
       console.error("Error fetching users", error);
+    }
+  };
+
+  const handleStartProcessing = async () => {
+    try {
+      await apiClient.post(`/datasources/${id}/process-embeddings`);
+      setSnackbar({
+        open: true,
+        message: "File processing started. This may take a few minutes.",
+        severity: "info",
+      });
+    } catch (error) {
+      console.error("Error starting file processing:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to start file processing. Please try again.",
+        severity: "error",
+      });
     }
   };
 
@@ -191,7 +284,7 @@ const DatasourceForm = () => {
     const datasourceData = {
       data: {
         type: "datasources",
-        ...(id && { id }), // Include id for PATCH requests
+        ...(id && { id }),
         attributes: {
           ...datasource,
           privacy_score: Number(datasource.privacy_score),
@@ -234,9 +327,6 @@ const DatasourceForm = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
-
-  console.log("vectorStores:", vectorStores);
-  console.log("datasource:", datasource);
 
   return (
     <StyledPaper>
@@ -606,6 +696,80 @@ const DatasourceForm = () => {
               </Grid>
             </AccordionDetails>
           </StyledAccordion>
+
+          {id && (
+            <StyledAccordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>File Quick Upload</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Upload documentation to be processed for this datasource.
+                  These files will be processed, chunked, and embedded into your
+                  chosen data store.
+                </Typography>
+
+                <List>
+                  {files.map((file) => (
+                    <ListItem key={file.id}>
+                      <ListItemText
+                        primary={file.attributes.file_name}
+                        secondary={
+                          <>
+                            {`Size: ${file.attributes.length} bytes`}
+                            <br />
+                            {file.attributes.last_processed_on &&
+                            file.attributes.last_processed_on !==
+                              "0001-01-01T00:00:00Z"
+                              ? `Last processed: ${new Date(
+                                  file.attributes.last_processed_on,
+                                ).toLocaleString()}`
+                              : "Not processed"}
+                          </>
+                        }
+                      />
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDeleteFile(file.id)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: "none" }}
+                  onChange={handleFileUpload}
+                />
+
+                <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<CloudUploadIcon />}
+                    onClick={() => fileInputRef.current.click()}
+                  >
+                    Upload Additional Datasource Documentation
+                  </Button>
+
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    onClick={handleStartProcessing}
+                    disabled={files.length === 0}
+                    startIcon={<AutorenewIcon />}
+                  >
+                    Start Processing
+                  </Button>
+                </Box>
+              </AccordionDetails>
+            </StyledAccordion>
+          )}
 
           <Box mt={4}>
             <StyledButton variant="contained" type="submit">

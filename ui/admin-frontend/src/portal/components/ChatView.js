@@ -19,13 +19,15 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import config from "../../config";
+
 import FloatingSection from "./FloatingSection";
 import { useDropzone } from "react-dropzone";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import pubClient from "../../admin/utils/pubClient";
 import TextareaAutosize from "@mui/material/TextareaAutosize";
+import { getConfig } from "../../config"; // Update the import
+import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -47,6 +49,7 @@ const ChatView = () => {
   const [chatName, setChatName] = useState("");
   const navigate = useNavigate();
   const [showError, setShowError] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState({});
 
   const [showTools, setShowTools] = useState(true);
 
@@ -70,28 +73,58 @@ const ChatView = () => {
     }
   };
 
-  useEffect(() => {
-    let errorTimer;
-    if (error) {
-      errorTimer = setTimeout(() => {
-        setShowError(true);
-      }, 2000); // 2 seconds delay before showing error
-    }
-    return () => clearTimeout(errorTimer);
-  }, [error]);
-
-  const dismissError = () => {
-    setError(null);
-    setShowError(false);
-    // Reload the chat by navigating to the same route
-    navigate(0);
-  };
-
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSendMessage(e);
     }
+  };
+
+  const toggleGroup = (index) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
+
+  const groupSystemMessages = (segments) => {
+    let groupedSegments = [];
+    let currentSystemGroup = [];
+
+    segments.forEach((segment) => {
+      if (segment.match(/(:::|\%\%\%)system/)) {
+        // Add to current system group
+        currentSystemGroup.push(
+          segment
+            .replace(/(:::|\%\%\%)system\s*([\s\S]*?)(:::|\%\%\%)/, "$2")
+            .trim(),
+        );
+      } else if (segment.trim()) {
+        // If we have accumulated system messages, add them as a group
+        if (currentSystemGroup.length > 0) {
+          groupedSegments.push({
+            type: "system-group",
+            messages: currentSystemGroup,
+          });
+          currentSystemGroup = [];
+        }
+        // Add non-system content
+        groupedSegments.push({
+          type: "content",
+          content: segment,
+        });
+      }
+    });
+
+    // Handle any remaining system messages
+    if (currentSystemGroup.length > 0) {
+      groupedSegments.push({
+        type: "system-group",
+        messages: currentSystemGroup,
+      });
+    }
+
+    return groupedSegments;
   };
 
   const updateChatName = useCallback(
@@ -212,7 +245,14 @@ const ChatView = () => {
         }
       } catch (error) {
         console.error("Error fetching user entitlements:", error);
-        setError("Failed to load user entitlements");
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content: ":::system Error: Failed to load user entitlements:::",
+            isComplete: true,
+          },
+        ]);
       }
 
       try {
@@ -242,7 +282,15 @@ const ChatView = () => {
         setIsLoading(false);
       } catch (error) {
         console.error("Error fetching data:", error);
-        setError("Failed to load databases and tools");
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content: ":::system Error: Failed to load databases and tools:::",
+            isComplete: true,
+          },
+        ]);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -260,12 +308,15 @@ const ChatView = () => {
     const searchParams = new URLSearchParams(location.search);
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
-    const wsUrl = `${config.API_BASE_URL}/common/ws/chat/${chatId}${
+    const currentConfig = getConfig();
+    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${
       sessionId ? `?session_id=${sessionId}` : ""
     }`;
 
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
+
+    let keepAliveInterval; // Define interval variable
 
     const setupWebSocket = () => {
       closeWebSocket();
@@ -276,6 +327,13 @@ const ChatView = () => {
         setIsConnected(true);
         setIsLoading(false);
         setError(null);
+
+        // Set up keepalive interval
+        keepAliveInterval = setInterval(() => {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 10000); // Send keepalive every 10 second
 
         // If there's a continue_id, fetch the chat history
         if (continueId) {
@@ -292,16 +350,31 @@ const ChatView = () => {
       };
 
       ws.current.onerror = (error) => {
-        setError(`Failed to connect to chat. Error: ${error.message}`);
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content: `:::system Error: Failed to connect to chat. ${error.message}:::`,
+            isComplete: true,
+          },
+        ]);
         setIsLoading(false);
       };
 
       ws.current.onclose = (event) => {
         setIsConnected(false);
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+        }
         if (!event.wasClean) {
-          setError(
-            `Connection closed unexpectedly: ${event.reason || "Unknown reason"}`,
-          );
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              type: "system",
+              content: `:::system Error: Connection closed unexpectedly: ${event.reason || "Unknown reason"}:::`,
+              isComplete: true,
+            },
+          ]);
         }
       };
     };
@@ -312,6 +385,9 @@ const ChatView = () => {
     }, delay);
 
     return () => {
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+      }
       closeWebSocket();
     };
   }, [chatId, location.search]);
@@ -343,7 +419,13 @@ const ChatView = () => {
       setMessages(historicalMessages);
     } catch (error) {
       console.error("Error fetching chat history:", error);
-      setError("Failed to load chat history");
+      setMessages([
+        {
+          type: "system",
+          content: ":::system Error: Failed to load chat history:::",
+          isComplete: true,
+        },
+      ]);
     } finally {
       setIsFetchingHistory(false);
     }
@@ -434,7 +516,6 @@ const ChatView = () => {
             isComplete: data.type === "ai_message",
           });
 
-          // If this is a new chat, we haven't updated the chat name yet, and this is a complete AI message
           if (isNewChat && !hasUpdatedChatName && data.type === "ai_message") {
             const newName = content.slice(0, 100).trim();
             updateChatName(newName);
@@ -445,7 +526,15 @@ const ChatView = () => {
         return newMessages;
       });
     } else if (data.type === "error") {
-      setError(data.payload);
+      // Add error as a system message
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {
+          type: "system",
+          content: `:::system Error: ${data.payload}:::`,
+          isComplete: true,
+        },
+      ]);
       setIsLoading(false);
     } else {
       console.warn("Received unknown message type:", data.type);
@@ -484,57 +573,190 @@ const ChatView = () => {
   };
 
   const renderMessageContent = (content) => {
-    const components = {
-      p: ({ node, ...props }) => <Typography {...props} />,
-      a: ({ node, ...props }) => (
-        <a target="_blank" rel="noopener noreferrer" {...props} />
-      ),
-      code: ({ node, inline, className, children, ...props }) => {
-        const match = /language-(\w+)/.exec(className || "");
+    if (!content) {
+      return null;
+    }
 
-        if (inline) {
-          return (
-            <code className="inline-code" {...props}>
-              {children}
-            </code>
-          );
-        }
-
-        return match ? (
-          <pre
-            style={{
-              margin: "8px 0",
-              padding: "10px",
-              backgroundColor: "#f0f0f0",
-              borderRadius: "4px",
-              overflowX: "auto",
-            }}
-          >
-            <code
-              className={className}
-              style={{
-                fontFamily: "monospace",
-                fontSize: "0.9em",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-              {...props}
-            >
-              {children}
-            </code>
-          </pre>
-        ) : (
-          <code className={className} {...props}>
-            {children}
-          </code>
-        );
-      },
-    };
+    const segments = content.split(
+      /((?::::|\%\%\%)system[\s\S]*?(?::::|\%\%\%))/g,
+    );
+    const groupedSegments = groupSystemMessages(segments);
 
     return (
-      <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
-        {content}
-      </ReactMarkdown>
+      <>
+        {groupedSegments.map((segment, index) => {
+          if (segment.type === "system-group") {
+            const isExpanded = expandedGroups[index];
+            const messageCount = segment.messages.length;
+            const hasMultipleMessages = messageCount > 1;
+
+            return (
+              <Box
+                key={index}
+                sx={{
+                  backgroundColor: "#E0F7F6",
+                  border: "1px solid #e9ecef",
+                  borderRadius: "10px",
+                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                  padding: "12px 12px",
+                  margin: "10px 10px",
+                  color: "#000000",
+                  fontFamily: "monospace",
+                  cursor: hasMultipleMessages ? "pointer" : "default",
+                }}
+                onClick={
+                  hasMultipleMessages ? () => toggleGroup(index) : undefined
+                }
+              >
+                {/* First message is always visible */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    backgroundColor: segment.messages[0].startsWith("Error:")
+                      ? "#FEE2E2"
+                      : "transparent",
+                    color: segment.messages[0].startsWith("Error:")
+                      ? "#DC2626"
+                      : "inherit",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <SmartToyOutlinedIcon
+                    sx={{
+                      fontSize: "1rem",
+                      color: segment.messages[0].startsWith("Error:")
+                        ? "#DC2626"
+                        : "#666",
+                    }}
+                  />
+                  {segment.messages[0]}
+                </Box>
+
+                {/* Show message count and expand/collapse indicator if there are multiple messages */}
+                {hasMultipleMessages && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      mt: 1,
+                      borderTop: "1px solid rgba(0,0,0,0.1)",
+                      pt: 1,
+                      color: "#666",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    <Typography variant="caption">
+                      {isExpanded
+                        ? "Click to collapse"
+                        : `${messageCount - 1} more messages...`}
+                    </Typography>
+                    <KeyboardArrowDownIcon
+                      sx={{
+                        transform: isExpanded ? "rotate(180deg)" : "none",
+                        transition: "transform 0.2s",
+                      }}
+                    />
+                  </Box>
+                )}
+
+                {/* Additional messages shown when expanded */}
+                {isExpanded && (
+                  <Box sx={{ mt: 1 }}>
+                    {segment.messages.slice(1).map((message, msgIndex) => {
+                      const isError = message.startsWith("Error:");
+                      return (
+                        <Box
+                          key={msgIndex}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                            backgroundColor: isError
+                              ? "#FEE2E2"
+                              : "transparent",
+                            color: isError ? "#DC2626" : "inherit",
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            mt: 1,
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <SmartToyOutlinedIcon
+                            sx={{
+                              fontSize: "1rem",
+                              color: isError ? "#DC2626" : "#666",
+                            }}
+                          />
+                          {message}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                )}
+              </Box>
+            );
+          } else {
+            return (
+              <ReactMarkdown
+                key={index}
+                components={{
+                  p: ({ node, ...props }) => <Typography {...props} />,
+                  a: ({ node, ...props }) => (
+                    <a target="_blank" rel="noopener noreferrer" {...props} />
+                  ),
+                  code: ({ node, inline, className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+
+                    if (inline) {
+                      return (
+                        <code className="inline-code" {...props}>
+                          {children}
+                        </code>
+                      );
+                    }
+
+                    return match ? (
+                      <pre
+                        style={{
+                          margin: "8px 0",
+                          padding: "10px",
+                          backgroundColor: "#f0f0f0",
+                          borderRadius: "4px",
+                          overflowX: "auto",
+                        }}
+                      >
+                        <code
+                          className={className}
+                          style={{
+                            fontFamily: "monospace",
+                            fontSize: "0.9em",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      </pre>
+                    ) : (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+                remarkPlugins={[remarkGfm]}
+              >
+                {segment.content}
+              </ReactMarkdown>
+            );
+          }
+        })}
+      </>
     );
   };
 
@@ -635,25 +857,6 @@ const ChatView = () => {
         height="100vh"
       >
         <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (showError && error) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        height="100vh"
-        flexDirection="column"
-      >
-        <Typography color="error" gutterBottom>
-          {error}
-        </Typography>
-        <Button variant="contained" onClick={dismissError}>
-          Dismiss and Reload
-        </Button>
       </Box>
     );
   }
