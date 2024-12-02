@@ -471,6 +471,7 @@ type ToolResponse struct {
 		AuthSchemaName string              `json:"auth_schema_name"`
 		FileStores     []FileStoreResponse `json:"file_stores"`
 		Filters        []FilterResponse    `json:"filters"`
+		Dependencies   []ToolResponse      `json:"dependencies"` // Add this line
 	} `json:"attributes"`
 }
 
@@ -953,4 +954,17 @@ type SecretListResponse struct {
 		PageSize   int   `json:"page_size"`
 		PageNumber int   `json:"page_number"`
 	} `json:"meta"`
+}
+
+// DependencyInput represents the input for adding or removing a dependency
+type DependencyInput struct {
+	Data struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	} `json:"data"`
+}
+
+// DependencyListResponse represents the response for listing dependencies
+type DependencyListResponse struct {
+	Data []ToolResponse `json:"data"`
 }

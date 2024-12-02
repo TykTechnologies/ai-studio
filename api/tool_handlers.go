@@ -949,7 +949,9 @@ func serializeFiltersForTool(filters []models.Filter) []FilterResponse {
 func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 	fileStores, _ := tool.GetFileStores(db)
 	filters, _ := tool.GetFilters(db)
-	return ToolResponse{
+	dependencies, _ := tool.GetDependencies(db)
+
+	response := ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
 		Attributes: struct {
@@ -963,6 +965,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthSchemaName string              `json:"auth_schema_name"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
+			Dependencies   []ToolResponse      `json:"dependencies"`
 		}{
 			Name:           tool.Name,
 			Description:    tool.Description,
@@ -974,8 +977,11 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthSchemaName: tool.AuthSchemaName,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
+			Dependencies:   serializeToolsPointers(dependencies, db),
 		},
 	}
+
+	return response
 }
 
 func serializeTools(tools []models.Tool, db *gorm.DB) []ToolResponse {
@@ -992,4 +998,225 @@ func serializeToolsPointers(tools []*models.Tool, db *gorm.DB) []ToolResponse {
 		result[i] = serializeTool(tool, db)
 	}
 	return result
+}
+
+// @Summary Add dependency to tool
+// @Description Add a dependency to a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param dependency_id path int true "Dependency ID"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/dependencies/{dependency_id} [post]
+// @Security BearerAuth
+func (a *API) addDependencyToTool(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	dependencyID, err := strconv.ParseUint(c.Param("dependency_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid dependency ID"}},
+		})
+		return
+	}
+
+	err = a.service.AddDependencyToTool(uint(toolID), uint(dependencyID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// @Summary Remove dependency from tool
+// @Description Remove a dependency from a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param dependency_id path int true "Dependency ID"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/dependencies/{dependency_id} [delete]
+// @Security BearerAuth
+func (a *API) removeDependencyFromTool(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	dependencyID, err := strconv.ParseUint(c.Param("dependency_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid dependency ID"}},
+		})
+		return
+	}
+
+	err = a.service.RemoveDependencyFromTool(uint(toolID), uint(dependencyID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// @Summary Get tool dependencies
+// @Description Get all dependencies associated with a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Success 200 {object} DependencyListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/dependencies [get]
+// @Security BearerAuth
+func (a *API) getToolDependencies(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	dependencies, err := a.service.GetToolDependencies(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeToolsPointers(dependencies, a.config.DB)})
+}
+
+// @Summary Set tool dependencies
+// @Description Replace all dependencies for a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param dependency_ids body []int true "Array of dependency IDs"
+// @Success 200 {object} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/dependencies [put]
+// @Security BearerAuth
+func (a *API) setToolDependencies(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	var dependencyIDs []uint
+	if err := c.ShouldBindJSON(&dependencyIDs); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	err = a.service.SetToolDependencies(uint(toolID), dependencyIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }

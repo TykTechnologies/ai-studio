@@ -172,15 +172,106 @@ const ToolForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const fileInputRef = useRef(null);
+  const [availableTools, setAvailableTools] = useState([]);
+  const [selectedTool, setSelectedTool] = useState("");
+  const [toolDependencies, setToolDependencies] = useState([]);
 
   useEffect(() => {
     if (id) {
       fetchTool();
       fetchToolOperations();
       fetchToolFilters();
+      fetchToolDependencies();
     }
+    fetchAvailableTools();
     fetchAvailableFilters();
   }, [id]);
+
+  const fetchAvailableTools = async () => {
+    try {
+      const response = await apiClient.get("/tools");
+      // Filter out the current tool from available dependencies
+      const tools = response.data.data.filter((tool) => tool.id !== id);
+      setAvailableTools(tools);
+    } catch (error) {
+      console.error("Error fetching available tools", error);
+      setAvailableTools([]);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch available tools",
+        severity: "error",
+      });
+    }
+  };
+
+  const fetchToolDependencies = async () => {
+    try {
+      const response = await apiClient.get(`/tools/${id}/dependencies`);
+      setToolDependencies(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching tool dependencies", error);
+      setToolDependencies([]);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch tool dependencies",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAddDependency = async () => {
+    if (!selectedTool) return;
+
+    try {
+      await apiClient.post(`/tools/${id}/dependencies/${selectedTool}`);
+      await fetchToolDependencies();
+      setSelectedTool("");
+      setSnackbar({
+        open: true,
+        message: "Dependency added successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      let errorMessage = "Failed to add dependency";
+
+      // Handle specific error messages
+      if (error.response?.data?.errors?.[0]?.detail) {
+        const detail = error.response.data.errors[0].detail;
+        if (detail.includes("circular reference")) {
+          errorMessage =
+            "Cannot add this dependency: it would create a circular reference";
+        } else if (detail.includes("cannot depend on itself")) {
+          errorMessage = "A tool cannot depend on itself";
+        }
+      }
+
+      console.error("Error adding dependency", error);
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: "error",
+      });
+    }
+  };
+
+  const handleRemoveDependency = async (dependencyId) => {
+    try {
+      await apiClient.delete(`/tools/${id}/dependencies/${dependencyId}`);
+      await fetchToolDependencies();
+      setSnackbar({
+        open: true,
+        message: "Dependency removed successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error removing dependency", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove dependency",
+        severity: "error",
+      });
+    }
+  };
 
   const fetchTool = async () => {
     try {
@@ -570,6 +661,67 @@ const ToolForm = () => {
               </Typography>
             </Grid>
           </Grid>
+
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Dependencies</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Add other tools that this tool depends on. Dependencies are
+                tools that need to be available for this tool to function
+                properly.
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <List>
+                    {toolDependencies.map((dependency) => (
+                      <ListItem key={dependency.id}>
+                        <ListItemText
+                          primary={dependency.attributes.name}
+                          secondary={dependency.attributes.description}
+                        />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            aria-label="delete"
+                            onClick={() =>
+                              handleRemoveDependency(dependency.id)
+                            }
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+                    <TextField
+                      select
+                      label="Add Dependency"
+                      value={selectedTool}
+                      onChange={(e) => setSelectedTool(e.target.value)}
+                      sx={{ flexGrow: 1 }}
+                    >
+                      {availableTools.map((tool) => (
+                        <MenuItem key={tool.id} value={tool.id}>
+                          {tool.attributes.name}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Button
+                      variant="contained"
+                      onClick={handleAddDependency}
+                      disabled={!selectedTool}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
 
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>

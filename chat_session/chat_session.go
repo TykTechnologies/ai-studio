@@ -199,8 +199,6 @@ func (cs *ChatSession) RemoveDatasource(id uint) {
 }
 
 func (cs *ChatSession) AddTool(id string, t models.Tool) error {
-	cs.tools[id] = t
-
 	entitlements, err := cs.service.GetUserEntitlements(cs.userID)
 	if err != nil {
 		return fmt.Errorf("error getting user entitlements: %v", err)
@@ -237,6 +235,26 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 		}
 
 	}
+
+	if len(t.Dependencies) > 0 {
+		slog.Info("tool has dependencies", "count", len(t.Dependencies))
+		for i, _ := range t.Dependencies {
+			dep, err := cs.service.GetToolByID(t.Dependencies[i].ID)
+			if err != nil {
+				return fmt.Errorf("error getting tool dependency: %v", err)
+			}
+
+			dep.OASSpec, err = helpers.DecodeToUTF8(dep.OASSpec)
+			err = cs.AddTool(
+				dep.Name,
+				*dep)
+			if err != nil {
+				return fmt.Errorf("error adding tool dependency: %v", err)
+			}
+		}
+	}
+
+	cs.tools[id] = t
 
 	return nil
 }
