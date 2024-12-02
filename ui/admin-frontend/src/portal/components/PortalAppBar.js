@@ -40,7 +40,7 @@ const PortalAppBar = () => {
       position="fixed"
       sx={(theme) => ({
         zIndex: theme.zIndex.drawer + 1,
-        backgroundColor: "white",
+        backgroundColor: "#03031c",
         boxShadow: "none",
         borderBottom: "none",
       })}
@@ -48,20 +48,13 @@ const PortalAppBar = () => {
       <Toolbar>
         <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
           <img
-            src="/sun-logo.png"
+            src="/logos/tyk-portal-logo.png"
             alt="Midsommar Logo"
             style={{
               height: "25px",
               marginRight: "5px",
             }}
           />
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{ color: "black", mt: "5px" }}
-          >
-            Midsommar
-          </Typography>
         </Box>
         <IconButton onClick={handleLogout} sx={{ color: "black" }}>
           <LogoutIcon />
