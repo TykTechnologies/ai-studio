@@ -943,8 +943,10 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			}
 
 			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
+			cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
 			if config.Get().EchoConversation {
 				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
+				slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
 			}
 
 			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
