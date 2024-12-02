@@ -1,6 +1,9 @@
 package services
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
@@ -281,4 +284,96 @@ func (s *Service) SetToolFilters(toolID uint, filterIDs []uint) error {
 	}
 
 	return tool.SetFilters(s.DB, filters)
+}
+
+// AddDependencyToTool adds a dependency to a Tool
+func (s *Service) AddDependencyToTool(toolID uint, dependencyID uint) error {
+	// Prevent self-dependency
+	if toolID == dependencyID {
+		return fmt.Errorf("tool cannot depend on itself")
+	}
+
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	dependency := models.NewTool()
+	if err := dependency.Get(s.DB, dependencyID); err != nil {
+		return err
+	}
+
+	err = tool.AddDependency(s.DB, dependency)
+	if err != nil {
+		if strings.Contains(err.Error(), "circular reference") {
+			return fmt.Errorf("cannot add dependency: would create a circular reference")
+		}
+		return err
+	}
+
+	return nil
+}
+
+// RemoveDependencyFromTool removes a dependency from a Tool
+func (s *Service) RemoveDependencyFromTool(toolID uint, dependencyID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	dependency := models.NewTool()
+	if err := dependency.Get(s.DB, dependencyID); err != nil {
+		return err
+	}
+
+	return tool.RemoveDependency(s.DB, dependency)
+}
+
+// GetToolDependencies gets all dependencies associated with a Tool
+func (s *Service) GetToolDependencies(toolID uint) ([]*models.Tool, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.GetDependencies(s.DB)
+}
+
+// SetToolDependencies replaces all existing Tool dependencies with new ones
+func (s *Service) SetToolDependencies(toolID uint, dependencyIDs []uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	dependencies := make([]*models.Tool, len(dependencyIDs))
+	for i, id := range dependencyIDs {
+		dependency := models.NewTool()
+		if err := dependency.Get(s.DB, id); err != nil {
+			return err
+		}
+		dependencies[i] = dependency
+	}
+
+	return tool.SetDependencies(s.DB, dependencies)
+}
+
+// ClearToolDependencies removes all dependencies from a Tool
+func (s *Service) ClearToolDependencies(toolID uint) error {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return err
+	}
+
+	return tool.ClearDependencies(s.DB)
+}
+
+// HasToolDependency checks if a specific Tool is a dependency
+func (s *Service) HasToolDependency(toolID uint, dependencyID uint) (bool, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return false, err
+	}
+
+	return tool.HasDependency(s.DB, dependencyID)
 }

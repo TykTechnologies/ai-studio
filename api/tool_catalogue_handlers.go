@@ -297,6 +297,7 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 			AuthSchemaName string              `json:"auth_schema_name"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
+			Dependencies   []ToolResponse      `json:"dependencies"`
 		}{
 			Name:           tool.Name,
 			Description:    tool.Description,

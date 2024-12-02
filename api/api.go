@@ -396,6 +396,11 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/tools/:id/operations", a.removeOperationFromTool)
 	v1.GET("/tools/:id/operations", a.getToolOperations)
 
+	v1.POST("/tools/:id/dependencies/:dependency_id", a.addDependencyToTool)
+	v1.DELETE("/tools/:id/dependencies/:dependency_id", a.removeDependencyFromTool)
+	v1.GET("/tools/:id/dependencies", a.getToolDependencies)
+	v1.PUT("/tools/:id/dependencies", a.setToolDependencies)
+
 	v1.POST("/tools/:id/filestores/:filestore_id", a.addFileStoreToTool)
 	v1.DELETE("/tools/:id/filestores/:filestore_id", a.removeFileStoreFromTool)
 	v1.GET("/tools/:id/filestores", a.getToolFileStores)

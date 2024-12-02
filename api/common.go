@@ -313,6 +313,7 @@ func (a *API) getCommonToolCatalogueTools(c *gin.Context) {
 				AuthSchemaName string              `json:"auth_schema_name"`
 				FileStores     []FileStoreResponse `json:"file_stores"`
 				Filters        []FilterResponse    `json:"filters"`
+				Dependencies   []ToolResponse      `json:"dependencies"`
 			}{
 				Name:         tool.Name,
 				Description:  tool.Description,
@@ -1075,6 +1076,7 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 				AuthSchemaName string              `json:"auth_schema_name"`
 				FileStores     []FileStoreResponse `json:"file_stores"`
 				Filters        []FilterResponse    `json:"filters"`
+				Dependencies   []ToolResponse      `json:"dependencies"`
 			}{
 				Name:         tool.Name,
 				Description:  tool.Description,
