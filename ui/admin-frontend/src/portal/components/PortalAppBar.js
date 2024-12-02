@@ -57,7 +57,7 @@ const PortalAppBar = () => {
           />
         </Box>
         <IconButton onClick={handleLogout} sx={{ color: "black" }}>
-          <LogoutIcon />
+          <LogoutIcon style={{ color: 'white'}} />
         </IconButton>
       </Toolbar>
     </AppBar>
