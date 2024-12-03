@@ -55,6 +55,8 @@ const ModelPriceList = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [openUpdatePriceModal, setOpenUpdatePriceModal] = useState(false);
   const [updatedPrice, setUpdatedPrice] = useState(0);
+  const [updatedOutputPrice, setUpdatedOutputPrice] = useState(0);
+  const [updatedInputPrice, setUpdatedInputPrice] = useState(0);
 
   const {
     page,
@@ -147,7 +149,8 @@ const ModelPriceList = () => {
   };
 
   const handleOpenUpdatePriceModal = () => {
-    setUpdatedPrice(selectedPrice.attributes.cpt);
+    setUpdatedOutputPrice(selectedPrice.attributes.cpt);
+    setUpdatedInputPrice(selectedPrice.attributes.cpit);
     setOpenUpdatePriceModal(true);
     handleMenuClose();
   };
@@ -163,7 +166,8 @@ const ModelPriceList = () => {
           type: "ModelPrice",
           attributes: {
             ...selectedPrice.attributes,
-            cpt: parseFloat(updatedPrice),
+            cpt: parseFloat(updatedOutputPrice),
+            cpit: parseFloat(updatedInputPrice),
           },
         },
       });
@@ -231,8 +235,11 @@ const ModelPriceList = () => {
                     <StyledTableCell onClick={() => handleSort("vendor")}>
                       Vendor
                     </StyledTableCell>
+                    <StyledTableCell onClick={() => handleSort("cpit")}>
+                      Cost per Input Token
+                    </StyledTableCell>
                     <StyledTableCell onClick={() => handleSort("cpt")}>
-                      Cost per Token
+                      Cost per Output Token
                     </StyledTableCell>
                     <StyledTableCell onClick={() => handleSort("currency")}>
                       Currency
@@ -258,6 +265,7 @@ const ModelPriceList = () => {
                           {getVendorName(price.attributes.vendor)}
                         </Box>
                       </TableCell>
+                      <TableCell>{price.attributes.cpit}</TableCell>
                       <TableCell>{price.attributes.cpt}</TableCell>
                       <TableCell>{price.attributes.currency}</TableCell>
                       <TableCell align="right">
@@ -309,11 +317,20 @@ const ModelPriceList = () => {
         <StyledDialogContent>
           <TextField
             fullWidth
-            label="Cost per Token"
+            label="Cost per Input Token"
             type="number"
             inputProps={{ step: 0.000001, min: 0 }}
-            value={updatedPrice}
-            onChange={(e) => setUpdatedPrice(e.target.value)}
+            value={updatedInputPrice}
+            onChange={(e) => setUpdatedInputPrice(e.target.value)}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Cost per Output Token"
+            type="number"
+            inputProps={{ step: 0.000001, min: 0 }}
+            value={updatedOutputPrice}
+            onChange={(e) => setUpdatedOutputPrice(e.target.value)}
             margin="normal"
           />
         </StyledDialogContent>

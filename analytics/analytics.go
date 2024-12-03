@@ -153,13 +153,16 @@ func RecordContentMessage(
 
 	price, err := svc.GetModelPriceByModelNameAndVendor(name, string(vendor))
 	cpt := 0.0
+	cpit := 0.0
 	if err == nil {
 		cpt = price.CPT
+		cpit = price.CPIT
 	}
 
 	if price == nil {
 		price = &models.ModelPrice{
 			CPT:       0.0,
+			CPIT:      0.0,
 			ModelName: name,
 			Vendor:    string(vendor),
 			Currency:  "USD",
@@ -178,7 +181,7 @@ func RecordContentMessage(
 	rec.ToolCalls = toolCalls
 	rec.ChatID = chatID
 	rec.AppID = appID
-	rec.Cost = cpt * float64(totalTokens)
+	rec.Cost = cpt*float64(responseTokens) + cpit*float64(promptTokens)
 	rec.Currency = price.Currency
 
 	// LLM Response

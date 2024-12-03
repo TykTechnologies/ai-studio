@@ -53,6 +53,7 @@ const ModelPriceForm = () => {
   const [price, setPrice] = useState({
     model_name: "",
     vendor: "",
+    cpit: 0,
     cpt: 0,
     currency: "USD",
   });
@@ -89,7 +90,8 @@ const ModelPriceForm = () => {
     const { name, value } = e.target;
     setPrice((prevPrice) => ({
       ...prevPrice,
-      [name]: name === "cpt" ? parseFloat(value) || 0 : value,
+      [name]:
+        name === "cpt" || name === "cpit" ? parseFloat(value) || 0 : value,
     }));
   };
 
@@ -98,7 +100,6 @@ const ModelPriceForm = () => {
     if (!price.model_name.trim())
       newErrors.model_name = "Model name is required";
     if (!price.vendor.trim()) newErrors.vendor = "Vendor is required";
-    if (price.cpt <= 0) newErrors.cpt = "Cost per token must be greater than 0";
     if (!price.currency.trim()) newErrors.currency = "Currency is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -223,7 +224,22 @@ const ModelPriceForm = () => {
             <Grid item xs={12}>
               <TooltipTextField
                 fullWidth
-                label="Cost per Token"
+                label="Cost per Input Token"
+                name="cpit"
+                type="number"
+                inputProps={{ step: 0.000001 }}
+                value={price.cpit}
+                onChange={handleChange}
+                error={!!errors.cpit}
+                helperText={errors.cpit}
+                required
+                tooltip="The cost per input token for this model (e.g., 0.000002)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TooltipTextField
+                fullWidth
+                label="Cost per Output Token"
                 name="cpt"
                 type="number"
                 inputProps={{ step: 0.000001, min: 0 }}
@@ -232,7 +248,7 @@ const ModelPriceForm = () => {
                 error={!!errors.cpt}
                 helperText={errors.cpt}
                 required
-                tooltip="The cost per token for this model (e.g., 0.000002)"
+                tooltip="The cost per output token for this model (e.g., 0.000002)"
               />
             </Grid>
             <Grid item xs={12}>

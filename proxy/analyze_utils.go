@@ -56,23 +56,27 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 
 func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse) {
 	cpt := 0.0
+	cpit := 0.0
 	price, err := service.GetModelPriceByModelNameAndVendor(response.GetModel(), string(llm.Vendor))
 	if err == nil {
 		cpt = price.CPT
+		cpit = price.CPIT
 	}
 
-	tt := response.GetPromptTokens() + response.GetResponseTokens()
+	pt := response.GetPromptTokens()
+	rt := response.GetResponseTokens()
+
 	rec := &analytics.LLMChatRecord{
 		Vendor:         string(llm.Vendor),
 		PromptTokens:   response.GetPromptTokens(),
 		ResponseTokens: response.GetResponseTokens(),
-		TotalTokens:    tt,
+		TotalTokens:    pt + rt,
 		TimeStamp:      time.Now(),
 		Choices:        response.GetChoiceCount(),
 		ToolCalls:      response.GetToolCount(),
 		AppID:          app.ID,
 		UserID:         app.UserID,
-		Cost:           cpt * float64(tt),
+		Cost:           (cpt * float64(rt)) + (cpit * float64(pt)),
 	}
 
 	analytics.RecordChatRecord(rec)
