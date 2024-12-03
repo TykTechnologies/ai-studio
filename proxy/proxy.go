@@ -315,9 +315,11 @@ func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int
 
 func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
 	cpt := 0.0
+	cpit := 0.0
 	price, err := p.service.GetModelPriceByModelNameAndVendor(response.GetModel(), string(llm.Vendor))
 	if err == nil {
 		cpt = price.CPT
+		cpit = price.CPIT
 	}
 
 	tt := response.GetPromptTokens() + response.GetResponseTokens()
@@ -331,7 +333,7 @@ func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, resp
 		ToolCalls:      response.GetToolCount(),
 		AppID:          app.ID,
 		UserID:         app.UserID,
-		Cost:           cpt * float64(tt),
+		Cost:           cpt*float64(response.GetResponseTokens()) + cpit*float64(response.GetPromptTokens()),
 	}
 
 	analytics.RecordChatRecord(rec)

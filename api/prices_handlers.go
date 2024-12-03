@@ -66,6 +66,7 @@ func (a *API) createModelPrice(c *gin.Context) {
 		input.Data.Attributes.ModelName,
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
+		input.Data.Attributes.CPIT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
@@ -158,6 +159,7 @@ func (a *API) updateModelPrice(c *gin.Context) {
 		input.Data.Attributes.ModelName,
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
+		input.Data.Attributes.CPIT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
@@ -281,11 +283,13 @@ func serializeModelPrice(mp *models.ModelPrice) ModelPriceResponse {
 			ModelName string  `json:"model_name"`
 			Vendor    string  `json:"vendor"`
 			CPT       float64 `json:"cpt"`
+			CPIT      float64 `json:"cpit"`
 			Currency  string  `json:"currency"`
 		}{
 			ModelName: mp.ModelName,
 			Vendor:    mp.Vendor,
 			CPT:       mp.CPT,
+			CPIT:      mp.CPIT,
 			Currency:  mp.Currency,
 		},
 	}
