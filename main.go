@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -34,6 +35,14 @@ func printWelcome() {
 func main() {
 	printWelcome()
 	appConf := config.Get()
+
+	err := licensing.IsLicensed()
+	if err != nil {
+		log.Fatalf("License is not valid: %v", err)
+	}
+
+	// start ongoing check
+	go licensing.LicenseService()
 
 	var dialector gorm.Dialector
 	switch appConf.DatabaseType {
