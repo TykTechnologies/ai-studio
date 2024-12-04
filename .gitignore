@@ -12,3 +12,4 @@ tmp/
 venv
 extra/reranker/reranker
 compose.prod.yaml
+licensing/keys
