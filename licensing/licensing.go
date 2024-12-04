@@ -3,6 +3,7 @@ package licensing
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -30,6 +31,21 @@ var features = map[string]interface{}{}
 
 func FeatureSet() map[string]interface{} {
 	return features
+}
+
+func Entitlement(name string) (*Feature, bool) {
+	f, ok := features[name]
+	if !ok {
+		return nil, false
+	}
+
+	feat, err := NewFeature(f)
+	if err != nil {
+		slog.Error("failed to check entitlement", "name", name, "error", err)
+		return nil, false
+	}
+
+	return feat, true
 }
 
 func LicenseService() {

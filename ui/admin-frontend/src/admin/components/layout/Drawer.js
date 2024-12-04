@@ -28,88 +28,16 @@ import SettingsInputComponentIcon from "@mui/icons-material/SettingsInputCompone
 import AppsIcon from "@mui/icons-material/Apps";
 import WebIcon from "@mui/icons-material/Web";
 import ChatIcon from "@mui/icons-material/Chat";
-import VpnKeyIcon from "@mui/icons-material/VpnKey"; // Add this import at the top
+import VpnKeyIcon from "@mui/icons-material/VpnKey";
 
 import { StyledNavLink } from "../../styles/sharedStyles";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
 
 const drawerWidth = 240;
 const minimizedDrawerWidth = 60;
 
-const menuItems = [
-  { text: "Dashboard", icon: <DashboardIcon />, path: "/admin/dash" },
-  {
-    text: "Team",
-    icon: <PeopleIcon />,
-    subItems: [
-      { text: "Users", icon: <PersonIcon />, path: "/admin/users" },
-      { text: "Groups", icon: <GroupIcon />, path: "/admin/groups" },
-    ],
-  },
-  {
-    text: "AI",
-    icon: <SmartToyIcon />,
-    subItems: [
-      { text: "LLMs", icon: <SmartToyIcon />, path: "/admin/llms" },
-      {
-        text: "Call Settings",
-        icon: <SettingsIcon />,
-        path: "/admin/llm-settings",
-      },
-      {
-        text: "Model Prices",
-        icon: <AttachMoneyIcon />,
-        path: "/admin/model-prices",
-      },
-    ],
-  },
-  {
-    text: "Data",
-    icon: <DataObjectIcon />,
-    subItems: [
-      {
-        text: "Vector Sources",
-        icon: <StorageIcon />,
-        path: "/admin/datasources",
-      },
-      { text: "Tools", icon: <BuildIcon />, path: "/admin/tools" },
-    ],
-  },
-  {
-    text: "Gateway",
-    icon: <SettingsInputComponentIcon />,
-    subItems: [
-      { text: "Filters", icon: <FilterListIcon />, path: "/admin/filters" },
-      { text: "Secrets", icon: <VpnKeyIcon />, path: "/admin/secrets" },
-    ],
-  },
-  {
-    text: "Portal",
-    icon: <WebIcon />,
-    subItems: [
-      { text: "Apps", icon: <AppsIcon />, path: "/admin/apps" },
-      { text: "Chat Rooms", icon: <ChatIcon />, path: "/admin/chats" }, // Add this line
-      {
-        text: "Catalogs",
-        icon: <FolderOpenIcon />,
-        subItems: [
-          {
-            text: "LLMs",
-            icon: <SmartToyIcon />,
-            path: "/admin/catalogs/llms",
-          },
-          {
-            text: "Data",
-            icon: <DataObjectIcon />,
-            path: "/admin/catalogs/data",
-          },
-          { text: "Tools", icon: <BuildIcon />, path: "/admin/catalogs/tools" },
-        ],
-      },
-    ],
-  },
-];
-
 const MyDrawer = () => {
+  const { features, loading } = useSystemFeatures();
   const [open, setOpen] = useState(true);
   const [expandedItems, setExpandedItems] = useState({});
 
@@ -123,6 +51,107 @@ const MyDrawer = () => {
       [text]: !prevState[text],
     }));
   };
+
+  const getMenuItems = (features) => [
+    { text: "Dashboard", icon: <DashboardIcon />, path: "/admin/dash" },
+    {
+      text: "Team",
+      icon: <PeopleIcon />,
+      subItems: [
+        { text: "Users", icon: <PersonIcon />, path: "/admin/users" },
+        { text: "Groups", icon: <GroupIcon />, path: "/admin/groups" },
+      ],
+    },
+    {
+      text: "AI",
+      icon: <SmartToyIcon />,
+      subItems: [
+        { text: "LLMs", icon: <SmartToyIcon />, path: "/admin/llms" },
+        {
+          text: "Call Settings",
+          icon: <SettingsIcon />,
+          path: "/admin/llm-settings",
+        },
+        {
+          text: "Model Prices",
+          icon: <AttachMoneyIcon />,
+          path: "/admin/model-prices",
+        },
+      ],
+    },
+    {
+      text: "Data",
+      icon: <DataObjectIcon />,
+      subItems: [
+        {
+          text: "Vector Sources",
+          icon: <StorageIcon />,
+          path: "/admin/datasources",
+        },
+        // Only show Tools if feature_chat is enabled
+        ...(features.feature_chat
+          ? [{ text: "Tools", icon: <BuildIcon />, path: "/admin/tools" }]
+          : []),
+      ],
+    },
+    // Only show Gateway if feature_gateway is enabled
+    ...(features.feature_gateway
+      ? [
+          {
+            text: "Gateway",
+            icon: <SettingsInputComponentIcon />,
+            subItems: [
+              {
+                text: "Filters",
+                icon: <FilterListIcon />,
+                path: "/admin/filters",
+              },
+              { text: "Secrets", icon: <VpnKeyIcon />, path: "/admin/secrets" },
+            ],
+          },
+        ]
+      : []),
+    {
+      text: "Portal",
+      icon: <WebIcon />,
+      subItems: [
+        // Only show Apps if either feature_portal or feature_gateway is enabled
+        ...(features.feature_portal || features.feature_gateway
+          ? [{ text: "Apps", icon: <AppsIcon />, path: "/admin/apps" }]
+          : []),
+        // Only show Chat Rooms if feature_chat is enabled
+        ...(features.feature_chat
+          ? [{ text: "Chat Rooms", icon: <ChatIcon />, path: "/admin/chats" }]
+          : []),
+        {
+          text: "Catalogs",
+          icon: <FolderOpenIcon />,
+          subItems: [
+            {
+              text: "LLMs",
+              icon: <SmartToyIcon />,
+              path: "/admin/catalogs/llms",
+            },
+            {
+              text: "Data",
+              icon: <DataObjectIcon />,
+              path: "/admin/catalogs/data",
+            },
+            // Only show Tools catalog if feature_chat is enabled
+            ...(features.feature_chat
+              ? [
+                  {
+                    text: "Tools",
+                    icon: <BuildIcon />,
+                    path: "/admin/catalogs/tools",
+                  },
+                ]
+              : []),
+          ],
+        },
+      ],
+    },
+  ];
 
   const renderMenuItem = (item, depth = 0) => {
     const commonStyles = {
@@ -182,6 +211,12 @@ const MyDrawer = () => {
       );
     }
   };
+
+  if (loading) {
+    return <div>Loading...</div>; // Or your preferred loading indicator
+  }
+
+  const menuItems = getMenuItems(features);
 
   return (
     <Drawer

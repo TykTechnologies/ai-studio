@@ -25,8 +25,10 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
 import DeleteIcon from "@mui/icons-material/Delete";
 import pubClient from "../../admin/utils/pubClient";
+import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
 
 const PortalDashboard = () => {
+  const { features, loading: featuresLoading } = useSystemFeatures();
   const [apps, setApps] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
   const [chatRooms, setChatRooms] = useState([]);
@@ -99,7 +101,7 @@ const PortalDashboard = () => {
     }
   };
 
-  if (loading) {
+  if (loading || featuresLoading) {
     return (
       <Container sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
         <CircularProgress />
@@ -117,13 +119,16 @@ const PortalDashboard = () => {
     );
   }
 
+  const showPortalFeatures =
+    features.feature_portal || features.feature_gateway;
+
   return (
     <Container maxWidth="lg">
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
         Welcome to the AI Portal
       </Typography>
 
-      {false === 0 && (
+      {showPortalFeatures && apps.length === 0 && (
         <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
           <Typography variant="h6" gutterBottom>
             Apps provide access to LLMs and Data sources via the AI Gateway
@@ -142,7 +147,7 @@ const PortalDashboard = () => {
         </Paper>
       )}
 
-      {!showChat && showPortal && (
+      {showPortalFeatures && !showChat && showPortal && (
         <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
           <Typography variant="h6" gutterBottom>
             Create and Manage AI Applications
@@ -161,7 +166,7 @@ const PortalDashboard = () => {
         </Paper>
       )}
 
-      {showChat && chatRooms.length > 0 && (
+      {features.feature_chat && showChat && chatRooms.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Start a new chat session
@@ -213,7 +218,7 @@ const PortalDashboard = () => {
         </Box>
       )}
 
-      {showChat && chatHistory.length > 0 && (
+      {features.feature_chat && showChat && chatHistory.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
             Continue where you left off
