@@ -166,3 +166,9 @@ func (u *User) GetAccessibleTools(db *gorm.DB) ([]Tool, error) {
 		Find(&tools).Error
 	return tools, err
 }
+
+func (u *Users) CountActive(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&User{}).Where("deleted_at IS NULL").Count(&count).Error
+	return count, err
+}
