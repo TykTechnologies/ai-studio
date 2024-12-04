@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-contrib/cors"
@@ -215,17 +216,22 @@ func (a *API) setupRoutes() {
 	authed.Use(a.auth.AuthMiddleware())
 	authed.POST("/logout", a.handleLogout)
 	authed.GET("/me", a.handleMe)
+	authed.GET("/system", a.handleFeatureSet)
+
+	// PORTAL FEATURES
 	authed.GET("/catalogues/:id/llms", a.getCatalogueLLMs)
-	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
-	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
-	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/apps", a.getUserApps)
 	authed.POST("/apps", a.createUserApp)
-	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
-	authed.GET("/accessible-tools", a.getUserAccessibleTools)
 	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
 	authed.GET("/apps/:id", a.getUserAppDetails)
 	authed.DELETE("/apps/:id", a.deleteUserApp)
+
+	// CHAT FEATURES
+	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
+	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
+	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
+	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
+	authed.GET("/accessible-tools", a.getUserAccessibleTools)
 	authed.GET("/history", a.listChatHistoryRecordsForMe)
 	authed.POST("/chat-sessions/:session_id/datasources", a.addDatasourceToChatSession)
 	authed.DELETE("/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
@@ -432,6 +438,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/filters", a.listFilters)
 
 	// Chat History Record routes
+
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)
 	v1.GET("/chat-history-records/:id", a.getChatHistoryRecord)
@@ -471,7 +478,11 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
-	a.SetupWebSocketRoute(authed)
+	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
+	if chaOK && chatEnabled.Bool() {
+		a.SetupWebSocketRoute(authed)
+	}
+
 }
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {

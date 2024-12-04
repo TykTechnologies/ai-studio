@@ -5,9 +5,24 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
+
+// @Summary Get system feature set
+// @Description Returns the current system feature set from licensing
+// @Tags system
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /common/system [get]
+func (a *API) handleFeatureSet(c *gin.Context) {
+	featureSet := licensing.FeatureSet()
+	c.JSON(http.StatusOK, gin.H{
+		"features": featureSet,
+	})
+}
 
 // @Summary Login user
 // @Description Authenticate a user and return a session token

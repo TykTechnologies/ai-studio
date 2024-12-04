@@ -113,17 +113,26 @@ func main() {
 		Port: 9090,
 	}
 	p := proxy.NewProxy(service, pConfig)
-	go p.Start()
 
-	// Create a new API instance
-	api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles) // true to disable CORS for development
+	gatewayEnabled, gatewayOk := licensing.Entitlement(licensing.FEATUREGateway)
+	if gatewayOk && gatewayEnabled.Bool() {
+		go p.Start()
+	}
 
-	//listEmbeddedFiles(staticFiles)
-	// Run the API
-	listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
-	log.Println("server listening on", listenOn)
-	if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
-		log.Fatalf("Failed to run server: %v", err)
+	if appConf.ProxyOnly == false {
+		// Create a new API instance
+		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles) // true to disable CORS for development
+
+		//listEmbeddedFiles(staticFiles)
+		// Run the API
+		listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
+		log.Println("server listening on", listenOn)
+		if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
+			log.Fatalf("Failed to run server: %v", err)
+		}
+	} else {
+		// wait for Ctrl+C
+		select {}
 	}
 }
 

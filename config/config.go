@@ -26,6 +26,7 @@ type AppConf struct {
 	DatabaseType        string
 	FilterSignupDomains []string
 	EchoConversation    bool
+	ProxyOnly           bool
 }
 
 var globalConfig *AppConf
@@ -133,6 +134,11 @@ func getConfigFromEnv() *AppConf {
 	echoConvStr := os.Getenv("ECHO_CONVERSATION")
 	if echoConvStr != "" {
 		conf.EchoConversation = true
+	}
+
+	proxyOnlyStr := os.Getenv("PROXY_ONLY")
+	if proxyOnlyStr == "true" || proxyOnlyStr == "1" {
+		conf.ProxyOnly = true
 	}
 
 	return conf

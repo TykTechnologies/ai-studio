@@ -22,12 +22,14 @@ import AppsIcon from "@mui/icons-material/Apps";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 
 import pubClient from "../../admin/utils/pubClient";
+import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
 
 const drawerWidth = 280;
 const CACHE_KEY = "userEntitlements";
 const CACHE_EXPIRY = 10000; // 10s
 
 const PortalDrawer = () => {
+  const { features, loading } = useSystemFeatures();
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [uiOptions, setUiOptions] = useState(null);
   const [openDev, setOpenDev] = useState(true);
@@ -85,6 +87,13 @@ const PortalDrawer = () => {
     setOpenChatRooms(!openChatRooms);
   };
 
+  if (loading) {
+    return null;
+  }
+
+  const showPortalFeatures =
+    features.feature_portal || features.feature_gateway;
+
   return (
     <Drawer
       variant="permanent"
@@ -121,7 +130,7 @@ const PortalDrawer = () => {
           />
         </ListItem>
 
-        {uiOptions?.show_portal && (
+        {showPortalFeatures && uiOptions?.show_portal && (
           <ListItem button component={Link} to="/portal/app/new" sx={{ mb: 1 }}>
             <ListItemIcon>
               <AddCircleOutlineIcon />
@@ -133,7 +142,7 @@ const PortalDrawer = () => {
           </ListItem>
         )}
 
-        {uiOptions?.show_chat && (
+        {features.feature_chat && uiOptions?.show_chat && (
           <>
             <ListItem button onClick={handleChatRoomsClick} sx={{ mb: 1 }}>
               <ListItemIcon>
@@ -169,7 +178,7 @@ const PortalDrawer = () => {
           </>
         )}
 
-        {uiOptions?.show_portal && (
+        {showPortalFeatures && uiOptions?.show_portal && (
           <>
             <ListItem button onClick={handleDevClick} sx={{ mb: 1 }}>
               <ListItemIcon>
