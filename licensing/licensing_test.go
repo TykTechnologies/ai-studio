@@ -14,7 +14,7 @@ func OneYear() time.Duration {
 }
 
 func TestLicenseCreate(t *testing.T) {
-	privateKey, err := os.ReadFile("./keys/signing.key")
+	privateKey, err := os.ReadFile("./keys/license_key.key")
 	if err != nil {
 		t.Fatal(err)
 	}
