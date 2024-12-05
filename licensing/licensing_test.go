@@ -19,46 +19,14 @@ func TestLicenseCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	allLic, _ := Create(OneYear(), map[string]interface{}{
-		"feature_portal":  true,
-		"feature_chat":    true,
-		"feature_gateway": true,
-		"num_seats":       5,
-	}, []byte(privateKey))
-
-	portal_gateway, _ := Create(OneYear(), map[string]interface{}{
-		"feature_portal":  true,
-		"feature_chat":    false,
-		"feature_gateway": true,
-		"num_seats":       5,
-	}, []byte(privateKey))
-
-	chat_only, _ := Create(OneYear(), map[string]interface{}{
-		"feature_portal":  false,
-		"feature_chat":    true,
-		"feature_gateway": false,
-		"num_seats":       5,
-	}, []byte(privateKey))
-
-	gw_only, _ := Create(OneYear(), map[string]interface{}{
-		"feature_portal":  false,
-		"feature_chat":    false,
-		"feature_gateway": true,
-		"num_seats":       5,
-	}, []byte(privateKey))
-
-	trial, _ := Create(OneYear(), map[string]interface{}{
-		"feature_portal":  false,
-		"feature_chat":    false,
-		"feature_gateway": true,
-		"num_seats":       1,
-	}, []byte(privateKey))
-
+	allLic, _ := Create(OneYear(),
+		"feature_portal,feature_chat,feature_gateway",
+		[]byte(privateKey))
+	portal_gateway, _ := Create(OneYear(), "feature_portal,feature_gateway", []byte(privateKey))
+	chat_only, _ := Create(OneYear(), "feature_chat", []byte(privateKey))
 	os.WriteFile("keys/all.lic", []byte(allLic), 0644)
 	os.WriteFile("keys/portal_gateway.lic", []byte(portal_gateway), 0644)
 	os.WriteFile("keys/chat_only.lic", []byte(chat_only), 0644)
-	os.WriteFile("keys/gw_only.lic", []byte(gw_only), 0644)
-	os.WriteFile("keys/trial.lic", []byte(trial), 0644)
 }
 
 func TestLIcenseValidateFeatures(t *testing.T) {
