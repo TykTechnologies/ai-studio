@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="
+  Apps View
+  #
+
+The Apps View is used to manage user-created applications that interact with Large Language Models (LLMs) and data sources via the Tyk AI Gateway. These apps provide a mechanism for users to define and encapsulate the functionality and resources they need for API interactions. Below is a detailed overview of the Apps View and its functionality.
+
+
+  Apps List Overview
+  #
+
+
+
+Name:
+
+The name of the application created by the user (e.g., My New App, Jira Task Refiner).
+
+
+
+Description:">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#343a40">
+<meta name="color-scheme" content="light dark"><meta property="og:url" content="http://localhost:1313/docs/apps/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Apps">
+  <meta property="og:description" content="Apps View # The Apps View is used to manage user-created applications that interact with Large Language Models (LLMs) and data sources via the Tyk AI Gateway. These apps provide a mechanism for users to define and encapsulate the functionality and resources they need for API interactions. Below is a detailed overview of the Apps View and its functionality.
+Apps List Overview # Name:
+The name of the application created by the user (e.g., My New App, Jira Task Refiner). Description:">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="docs">
+<title>Apps | Docs</title>
+<link rel="icon" href="/favicon.png" >
+<link rel="manifest" href="/manifest.json">
+<link rel="canonical" href="http://localhost:1313/docs/apps/">
+<link rel="stylesheet" href="/book.min.07eb0517c93be900a0192ad4818442f94e0af010cebd7abf1e90ed37ccbff1d5.css" integrity="sha256-B&#43;sFF8k76QCgGSrUgYRC&#43;U4K8BDOvXq/HpDtN8y/8dU=" crossorigin="anonymous">
+  <script defer src="/fuse.min.js"></script>
+  <script defer src="/en.search.min.030874663a358a9d296f715607d72a8fa30a7e9a1fb664f6d3efb84a1a7b6aae.js" integrity="sha256-Awh0Zjo1ip0pb3FWB9cqj6MKfpoftmT20&#43;&#43;4Shp7aq4=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/logo.png" alt="Logo" class="book-icon" /><span>Docs</span>
+  </a>
+</h2>
+
+
+<div class="book-search hidden">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+<script>document.querySelector(".book-search").classList.remove("hidden")</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/quickstart/" class="">Quickstart</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/users/" class="">Users</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/configuration/" class="">Configuration</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/dashboard/" class="">Dashboard</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/groups/" class="">Groups</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/llms/" class="">Llms</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/call-settings/" class="">Call Settings</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/model-prices/" class="">Model Prices</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/vector-sources/" class="">Vector Sources</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/tools/" class="">Tools</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/filters/" class="">Filters</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/secrets/" class="">Secrets</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/apps/" class="active">Apps</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/catalogs/" class="">Catalogs Datasource</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/chat-rooms/" class="">Chat Rooms</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <h3>Apps</h3>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#apps-view">Apps View</a></li>
+        <li><a href="#app-details-and-proxy-logs">App Details and Proxy Logs</a></li>
+        <li><a href="#app-token-usage-and-cost"><strong>App Token Usage and Cost</strong></a></li>
+        <li><a href="#app-information"><strong>App Information</strong></a></li>
+        <li><a href="#credential-information"><strong>Credential Information</strong></a></li>
+        <li><a href="#proxy-logs"><strong>Proxy Logs</strong></a></li>
+        <li><a href="#action-buttons"><strong>Action Buttons</strong></a></li>
+        <li><a href="#app-editing-and-credential-approval">App Editing and Credential Approval</a></li>
+        <li><a href="#app-details"><strong>App Details</strong></a></li>
+        <li><a href="#credential-information-1"><strong>Credential Information</strong></a></li>
+        <li><a href="#action-buttons-1"><strong>Action Buttons</strong></a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown book-article"><h3 id="apps-view">
+  Apps View
+  <a class="anchor" href="#apps-view">#</a>
+</h3>
+<p>The <strong>Apps View</strong> is used to manage user-created applications that interact with Large Language Models (LLMs) and data sources via the Tyk AI Gateway. These apps provide a mechanism for users to define and encapsulate the functionality and resources they need for API interactions. Below is a detailed overview of the Apps View and its functionality.</p>
+<hr>
+<h4 id="apps-list-overview">
+  <strong>Apps List Overview</strong>
+  <a class="anchor" href="#apps-list-overview">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Name</strong>:</p>
+<ul>
+<li>The name of the application created by the user (e.g., <code>My New App</code>, <code>Jira Task Refiner</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Description</strong>:</p>
+<ul>
+<li>A brief explanation of the app&rsquo;s purpose or functionality (e.g., &ldquo;Experiment to refine tasks for Jira&rdquo;).</li>
+</ul>
+</li>
+<li>
+<p><strong>User</strong>:</p>
+<ul>
+<li>The name of the user who created or owns the application.</li>
+</ul>
+</li>
+<li>
+<p><strong>Actions</strong>:</p>
+<ul>
+<li>A menu (three-dot icon) for performing app-related actions, such as:
+<ul>
+<li>Viewing app details.</li>
+<li>Editing the app configuration.</li>
+<li>Deleting the app.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="features">
+  <strong>Features</strong>
+  <a class="anchor" href="#features">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Add App Button</strong>:</p>
+<ul>
+<li>A green button labeled <strong>+ ADD APP</strong>, located in the top-right corner. Clicking this button opens a form for creating a new app.</li>
+</ul>
+</li>
+<li>
+<p><strong>Pagination Control</strong>:</p>
+<ul>
+<li>Located at the bottom-left, this dropdown allows administrators to adjust the number of apps displayed per page.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="purpose-of-apps">
+  <strong>Purpose of Apps</strong>
+  <a class="anchor" href="#purpose-of-apps">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Encapsulation of Resources</strong>:</p>
+<ul>
+<li>Apps bundle together the LLMs, tools, and data sources a user needs to access through the AI Gateway.</li>
+</ul>
+</li>
+<li>
+<p><strong>RESTful Access via Credentials</strong>:</p>
+<ul>
+<li>Each app is linked to a set of credentials that users can use to authenticate API requests.</li>
+<li>Credentials must be activated by an administrator after an app is submitted.</li>
+</ul>
+</li>
+<li>
+<p><strong>Integration with Upstream LLMs</strong>:</p>
+<ul>
+<li>Apps allow users to access LLMs through the following methods:
+<ul>
+<li><strong>Vendor-Native SDKs</strong>: Direct interaction with the upstream provider&rsquo;s SDK.</li>
+<li><strong>OpenAI-Compatible API</strong>: Requests translated into a standardized API format.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Centralized Administration</strong>:</p>
+<ul>
+<li>Administrators can manage all user-created apps, ensuring proper governance and access control.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="example-workflow">
+  <strong>Example Workflow</strong>
+  <a class="anchor" href="#example-workflow">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>App Creation</strong>:</p>
+<ul>
+<li>A user creates an app and specifies the LLMs, tools, and data sources required for their use case.</li>
+</ul>
+</li>
+<li>
+<p><strong>Credential Activation</strong>:</p>
+<ul>
+<li>Once the app is submitted, an admin reviews and activates the app&rsquo;s credentials, enabling the app to interact with the AI Gateway.</li>
+</ul>
+</li>
+<li>
+<p><strong>API Integration</strong>:</p>
+<ul>
+<li>The user integrates their app with their systems using the provided credentials and API endpoints.</li>
+</ul>
+</li>
+<li>
+<p><strong>Real-Time Usage</strong>:</p>
+<ul>
+<li>The app facilitates RESTful communication with the specified resources via the AI Gateway.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="benefits">
+  <strong>Benefits</strong>
+  <a class="anchor" href="#benefits">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Streamlined Access</strong>:</p>
+<ul>
+<li>Users can consolidate all the resources they need into a single app, simplifying integration workflows.</li>
+</ul>
+</li>
+<li>
+<p><strong>Governance and Security</strong>:</p>
+<ul>
+<li>Admin-controlled credential activation ensures that only approved apps can access the AI Gateway.</li>
+</ul>
+</li>
+<li>
+<p><strong>Flexibility</strong>:</p>
+<ul>
+<li>Support for both vendor-native SDKs and OpenAI-compatible APIs allows users to integrate apps into diverse environments.</li>
+</ul>
+</li>
+<li>
+<p><strong>Centralized Management</strong>:</p>
+<ul>
+<li>Admins can oversee all user-created apps, ensuring compliance with organizational policies.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<p>The <strong>Apps View</strong> is a key feature of the Tyk AI Portal, enabling users to define, configure, and securely interact with LLMs and data sources through the AI Gateway while ensuring robust governance and control.</p>
+<h3 id="app-details-and-proxy-logs">
+  App Details and Proxy Logs
+  <a class="anchor" href="#app-details-and-proxy-logs">#</a>
+</h3>
+<p>The <strong>App Details View</strong> provides a comprehensive overview of a specific app, including its performance metrics, usage data, and traffic logs. This view is designed to help administrators monitor the app&rsquo;s activity and ensure compliance with governance policies.</p>
+<hr>
+<h4 id="sections-and-features">
+  <strong>Sections and Features</strong>
+  <a class="anchor" href="#sections-and-features">#</a>
+</h4>
+<h3 id="app-token-usage-and-cost">
+  <strong>App Token Usage and Cost</strong>
+  <a class="anchor" href="#app-token-usage-and-cost">#</a>
+</h3>
+<ul>
+<li>
+<p><strong>Graph</strong>:</p>
+<ul>
+<li>Displays token usage and cost over a specified date range.</li>
+<li>Tracks the app&rsquo;s performance by visualizing the volume of tokens consumed and associated costs.</li>
+</ul>
+</li>
+<li>
+<p><strong>Date Range Selector</strong>:</p>
+<ul>
+<li>Allows filtering of token usage and cost data for specific start and end dates.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3 id="app-information">
+  <strong>App Information</strong>
+  <a class="anchor" href="#app-information">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Name</strong>:</p>
+<ul>
+<li>The name of the app (e.g., <code>Jira Task Refiner</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Description</strong>:</p>
+<ul>
+<li>A summary of the app&rsquo;s purpose (e.g., &ldquo;Experiment to refine tasks for Jira&rdquo;).</li>
+</ul>
+</li>
+<li>
+<p><strong>User</strong>:</p>
+<ul>
+<li>The creator or owner of the app (e.g., <code>Jeffy Mathew</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>LLMs</strong>:</p>
+<ul>
+<li>The LLMs used by the app (if specified).</li>
+</ul>
+</li>
+<li>
+<p><strong>Datasources</strong>:</p>
+<ul>
+<li>Lists the data sources configured for use with this app (e.g., <code>Tyk Documentation</code>).</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="credential-information">
+  <strong>Credential Information</strong>
+  <a class="anchor" href="#credential-information">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Key ID</strong>:</p>
+<ul>
+<li>The unique identifier for the app&rsquo;s credentials.</li>
+</ul>
+</li>
+<li>
+<p><strong>Secret</strong>:</p>
+<ul>
+<li>The app&rsquo;s secret key, masked for security purposes.</li>
+</ul>
+</li>
+<li>
+<p><strong>Active Status</strong>:</p>
+<ul>
+<li>Indicates whether the app&rsquo;s credentials are active.</li>
+<li>Admins must activate credentials after the app is submitted.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="proxy-logs">
+  <strong>Proxy Logs</strong>
+  <a class="anchor" href="#proxy-logs">#</a>
+</h3>
+<ul>
+<li>
+<p><strong>Purpose</strong>:</p>
+<ul>
+<li>Provides a detailed log of inbound and outbound requests processed by the app for governance and troubleshooting purposes.</li>
+</ul>
+</li>
+<li>
+<p><strong>Columns</strong>:</p>
+<ul>
+<li><strong>Timestamp</strong>: The date and time of the request.</li>
+<li><strong>Vendor</strong>: The upstream LLM vendor handling the request.</li>
+<li><strong>Response Code</strong>: The HTTP status code of the response.</li>
+<li><strong>Request</strong>: Details of the inbound request.</li>
+<li><strong>Response</strong>: The response returned by the upstream LLM or tool.</li>
+</ul>
+</li>
+<li>
+<p><strong>Pagination</strong>:</p>
+<ul>
+<li>Allows administrators to navigate through logs in batches.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3 id="action-buttons">
+  <strong>Action Buttons</strong>
+  <a class="anchor" href="#action-buttons">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Edit App</strong>:</p>
+<ul>
+<li>Opens the app configuration form for editing details such as name, description, LLMs, and data sources.</li>
+</ul>
+</li>
+<li>
+<p><strong>Back to Apps</strong>:</p>
+<ul>
+<li>Navigates back to the <strong>Apps List View</strong>.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="purpose-of-the-app-details-view">
+  <strong>Purpose of the App Details View</strong>
+  <a class="anchor" href="#purpose-of-the-app-details-view">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Monitoring Performance</strong>:</p>
+<ul>
+<li>The token usage and cost graph provides insight into how efficiently the app is utilizing resources.</li>
+</ul>
+</li>
+<li>
+<p><strong>Governance and Compliance</strong>:</p>
+<ul>
+<li>Proxy logs and credential management ensure transparency and compliance with organizational policies.</li>
+</ul>
+</li>
+<li>
+<p><strong>Troubleshooting</strong>:</p>
+<ul>
+<li>Administrators can use detailed request and response logs to identify and resolve issues.</li>
+</ul>
+</li>
+<li>
+<p><strong>Security</strong>:</p>
+<ul>
+<li>Credential status and masking ensure that sensitive information is handled securely.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<p>This <strong>App Details View</strong> is an essential feature for administrators to monitor, manage, and ensure the secure operation of user-created apps within the Tyk AI Portal.</p>
+<h3 id="app-editing-and-credential-approval">
+  App Editing and Credential Approval
+  <a class="anchor" href="#app-editing-and-credential-approval">#</a>
+</h3>
+<p>The <strong>App Edit View</strong> allows administrators to modify app details and manage credentials for user-created applications. Most importantly, this view provides controls to <strong>approve or reject</strong> an app by activating or deactivating its credentials.</p>
+<hr>
+<h4 id="sections-and-features-1">
+  <strong>Sections and Features</strong>
+  <a class="anchor" href="#sections-and-features-1">#</a>
+</h4>
+<h3 id="app-details">
+  <strong>App Details</strong>
+  <a class="anchor" href="#app-details">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Name</strong> <em>(Required)</em>:</p>
+<ul>
+<li>Editable field for the app&rsquo;s name (e.g., <code>Jira Task Refiner</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Description</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>A short summary of the app&rsquo;s functionality or purpose (e.g., &ldquo;Experiment to refine tasks for Jira&rdquo;).</li>
+</ul>
+</li>
+<li>
+<p><strong>User</strong> <em>(Read-Only)</em>:</p>
+<ul>
+<li>Displays the user who created the app (e.g., <code>Jeffy Mathew</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>LLMs</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>Select or modify the Large Language Models associated with this app.</li>
+<li>Example: OpenAI&rsquo;s GPT-4, Anthropic&rsquo;s Claude.</li>
+</ul>
+</li>
+<li>
+<p><strong>Datasources</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>Add or remove data sources the app can access.</li>
+<li>Example: <code>Tyk Documentation</code>.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="credential-information-1">
+  <strong>Credential Information</strong>
+  <a class="anchor" href="#credential-information-1">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Key ID</strong> <em>(Read-Only)</em>:</p>
+<ul>
+<li>The unique identifier for the app&rsquo;s credentials.</li>
+</ul>
+</li>
+<li>
+<p><strong>Secret</strong> <em>(Masked)</em>:</p>
+<ul>
+<li>A secure key that is masked by default but used for API integration.</li>
+</ul>
+</li>
+<li>
+<p><strong>Active Toggle</strong>:</p>
+<ul>
+<li><strong>Purpose</strong>: Approve or reject the app by activating or deactivating its credentials.</li>
+<li><strong>States</strong>:
+<ul>
+<li><strong>Inactive</strong>: The app is not approved, and credentials cannot be used.</li>
+<li><strong>Active</strong>: The app is approved, enabling API access via the AI Gateway.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="action-buttons-1">
+  <strong>Action Buttons</strong>
+  <a class="anchor" href="#action-buttons-1">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Update App</strong>:</p>
+<ul>
+<li>Saves changes made to the app&rsquo;s details and credentials.</li>
+</ul>
+</li>
+<li>
+<p><strong>Back to Apps</strong>:</p>
+<ul>
+<li>Navigates back to the <strong>Apps List View</strong> without saving changes.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="use-cases">
+  <strong>Use Cases</strong>
+  <a class="anchor" href="#use-cases">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Approval Workflow</strong>:</p>
+<ul>
+<li>After a user submits an app, administrators can review its configuration and activate the credentials if it complies with governance policies.</li>
+</ul>
+</li>
+<li>
+<p><strong>Editing App Details</strong>:</p>
+<ul>
+<li>Admins can modify the app&rsquo;s name, description, associated LLMs, and data sources to refine its configuration.</li>
+</ul>
+</li>
+<li>
+<p><strong>Credential Management</strong>:</p>
+<ul>
+<li>Credentials can be deactivated if the app no longer complies with organizational requirements.</li>
+</ul>
+</li>
+<li>
+<p><strong>Governance and Security</strong>:</p>
+<ul>
+<li>Ensures apps have controlled access to LLMs and data sources, adhering to organizational policies.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="purpose-and-benefits">
+  <strong>Purpose and Benefits</strong>
+  <a class="anchor" href="#purpose-and-benefits">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Enhanced Control</strong>:</p>
+<ul>
+<li>Enables administrators to manage the lifecycle of user-created apps, ensuring proper governance.</li>
+</ul>
+</li>
+<li>
+<p><strong>Simplified Approval Process</strong>:</p>
+<ul>
+<li>The credential activation toggle streamlines the process of approving or rejecting apps.</li>
+</ul>
+</li>
+<li>
+<p><strong>Secure Integration</strong>:</p>
+<ul>
+<li>Ensures only approved apps can interact with the AI Gateway, protecting sensitive data and resources.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<p>The <strong>App Edit View</strong> is a critical feature for managing user-created apps in the Tyk AI Portal, providing administrators with full control over app configuration, approval, and access management.</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+  <div>
+    <a class="flex align-center" href="https://github.com/alex-shpak/hugo-book/edit/master/exampleSite/content/docs/apps.md" target="_blank" rel="noopener">
+      <img src="/svg/edit.svg" class="book-icon" alt="" />
+      <span>Edit this page</span>
+    </a>
+  </div>
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#apps-view">Apps View</a></li>
+        <li><a href="#app-details-and-proxy-logs">App Details and Proxy Logs</a></li>
+        <li><a href="#app-token-usage-and-cost"><strong>App Token Usage and Cost</strong></a></li>
+        <li><a href="#app-information"><strong>App Information</strong></a></li>
+        <li><a href="#credential-information"><strong>Credential Information</strong></a></li>
+        <li><a href="#proxy-logs"><strong>Proxy Logs</strong></a></li>
+        <li><a href="#action-buttons"><strong>Action Buttons</strong></a></li>
+        <li><a href="#app-editing-and-credential-approval">App Editing and Credential Approval</a></li>
+        <li><a href="#app-details"><strong>App Details</strong></a></li>
+        <li><a href="#credential-information-1"><strong>Credential Information</strong></a></li>
+        <li><a href="#action-buttons-1"><strong>Action Buttons</strong></a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

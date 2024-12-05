@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="
+  Vector Data Sources View for Tyk AI Portal
+  #
+
+The Vector Data Sources View enables administrators to manage and configure vector-based data sources. These data sources can be queried via the API or included in Chat Rooms as selectable or default resources to shape the behavior of interactions. Below is a breakdown of the features and options in this section:
+
+
+  Table Overview
+  #
+
+
+
+Name:
+
+The name of the vector data source (e.g., Tyk Documentation, Tyk Stack Overflow).
+
+
+
+Short Description:">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#343a40">
+<meta name="color-scheme" content="light dark"><meta property="og:url" content="http://localhost:1313/docs/vector-sources/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Vector Sources">
+  <meta property="og:description" content="Vector Data Sources View for Tyk AI Portal # The Vector Data Sources View enables administrators to manage and configure vector-based data sources. These data sources can be queried via the API or included in Chat Rooms as selectable or default resources to shape the behavior of interactions. Below is a breakdown of the features and options in this section:
+Table Overview # Name:
+The name of the vector data source (e.g., Tyk Documentation, Tyk Stack Overflow). Short Description:">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="docs">
+<title>Vector Sources | Docs</title>
+<link rel="icon" href="/favicon.png" >
+<link rel="manifest" href="/manifest.json">
+<link rel="canonical" href="http://localhost:1313/docs/vector-sources/">
+<link rel="stylesheet" href="/book.min.07eb0517c93be900a0192ad4818442f94e0af010cebd7abf1e90ed37ccbff1d5.css" integrity="sha256-B&#43;sFF8k76QCgGSrUgYRC&#43;U4K8BDOvXq/HpDtN8y/8dU=" crossorigin="anonymous">
+  <script defer src="/fuse.min.js"></script>
+  <script defer src="/en.search.min.030874663a358a9d296f715607d72a8fa30a7e9a1fb664f6d3efb84a1a7b6aae.js" integrity="sha256-Awh0Zjo1ip0pb3FWB9cqj6MKfpoftmT20&#43;&#43;4Shp7aq4=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/logo.png" alt="Logo" class="book-icon" /><span>Docs</span>
+  </a>
+</h2>
+
+
+<div class="book-search hidden">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+<script>document.querySelector(".book-search").classList.remove("hidden")</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/quickstart/" class="">Quickstart</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/users/" class="">Users</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/configuration/" class="">Configuration</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/dashboard/" class="">Dashboard</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/groups/" class="">Groups</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/llms/" class="">Llms</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/call-settings/" class="">Call Settings</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/model-prices/" class="">Model Prices</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/vector-sources/" class="active">Vector Sources</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/tools/" class="">Tools</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/filters/" class="">Filters</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/secrets/" class="">Secrets</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/apps/" class="">Apps</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/catalogs/" class="">Catalogs Datasource</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/chat-rooms/" class="">Chat Rooms</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <h3>Vector Sources</h3>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#vector-data-sources-view-for-tyk-ai-portal">Vector Data Sources View for Tyk AI Portal</a></li>
+        <li><a href="#editcreate-data-source">Edit/Create Data Source</a></li>
+        <li><a href="#basic-information"><strong>Basic Information</strong></a></li>
+        <li><a href="#vector-database-access-details"><strong>Vector Database Access Details</strong></a></li>
+        <li><a href="#embedding-service-details"><strong>Embedding Service Details</strong></a></li>
+        <li><a href="#additional-information"><strong>Additional Information</strong></a></li>
+        <li><a href="#file-quick-upload"><strong>File Quick Upload</strong></a></li>
+        <li><a href="#action-buttons"><strong>Action Buttons</strong></a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown book-article"><h3 id="vector-data-sources-view-for-tyk-ai-portal">
+  Vector Data Sources View for Tyk AI Portal
+  <a class="anchor" href="#vector-data-sources-view-for-tyk-ai-portal">#</a>
+</h3>
+<p>The <strong>Vector Data Sources View</strong> enables administrators to manage and configure vector-based data sources. These data sources can be queried via the API or included in Chat Rooms as selectable or default resources to shape the behavior of interactions. Below is a breakdown of the features and options in this section:</p>
+<hr>
+<h4 id="table-overview">
+  <strong>Table Overview</strong>
+  <a class="anchor" href="#table-overview">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Name</strong>:</p>
+<ul>
+<li>The name of the vector data source (e.g., <code>Tyk Documentation</code>, <code>Tyk Stack Overflow</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Short Description</strong>:</p>
+<ul>
+<li>A brief summary describing the data source and its purpose (e.g., &ldquo;Scraped documentation from the tyk.io website&rdquo;).</li>
+</ul>
+</li>
+<li>
+<p><strong>DB Source Type</strong>:</p>
+<ul>
+<li>Specifies the database system used for the vector data source (e.g., <code>Pinecone</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Embed Vendor</strong>:</p>
+<ul>
+<li>Indicates the embedding vendor responsible for processing data into vectorized formats (e.g., <code>OpenAI</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Privacy Score</strong>:</p>
+<ul>
+<li>A numerical value representing the privacy level of the data source:
+<ul>
+<li><strong>Higher scores</strong> indicate better privacy handling.</li>
+<li><strong>Lower scores</strong> suggest less stringent privacy measures.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Tags</strong>:</p>
+<ul>
+<li>Keywords or labels associated with the data source, making it easier to categorize or identify (e.g., <code>tyk</code>, <code>docs</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Active</strong>:</p>
+<ul>
+<li>A status indicator showing whether the data source is currently active:
+<ul>
+<li><strong>Green dot</strong>: Active and available for use.</li>
+<li><strong>Red dot</strong>: Inactive and not available for querying or inclusion in Chat Rooms.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Actions</strong>:</p>
+<ul>
+<li>A menu (three-dot icon) that provides options to:
+<ul>
+<li>Edit the data source.</li>
+<li>Delete the data source.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="features">
+  <strong>Features</strong>
+  <a class="anchor" href="#features">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Add Data Source Button</strong>:</p>
+<ul>
+<li>A green button labeled <strong>+ ADD DATASOURCE</strong>, located in the top-right corner. Clicking this opens a form to create and configure a new vector data source.</li>
+</ul>
+</li>
+<li>
+<p><strong>Pagination Dropdown</strong>:</p>
+<ul>
+<li>Found at the bottom-left corner, this control allows administrators to adjust how many data sources are displayed per page.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="use-cases">
+  <strong>Use Cases</strong>
+  <a class="anchor" href="#use-cases">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>API Queries</strong>:</p>
+<ul>
+<li>Vector data sources configured here can be queried via the API, enabling programmatic access to indexed data for tasks like content search or retrieval.</li>
+</ul>
+</li>
+<li>
+<p><strong>Chat Rooms</strong>:</p>
+<ul>
+<li>Data sources can be:
+<ul>
+<li><strong>User-selectable</strong>: Allowing end-users to choose the data source for specific queries.</li>
+<li><strong>Default</strong>: Pre-included in the Chat Room to guide its behavior or provide predefined context.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="quick-insights">
+  <strong>Quick Insights</strong>
+  <a class="anchor" href="#quick-insights">#</a>
+</h4>
+<p>The <strong>Vector Data Sources View</strong> simplifies the integration and management of vector databases and embedding systems, ensuring that administrators can tailor data availability and privacy levels. This section is crucial for enabling seamless API and Chat Room interactions with structured, searchable datasets.</p>
+<h3 id="editcreate-data-source">
+  Edit/Create Data Source
+  <a class="anchor" href="#editcreate-data-source">#</a>
+</h3>
+<p>The <strong>Edit/Create Data Source Form</strong> is used to configure or update vector data sources for querying and embedding purposes. It provides options for setting access details, embedding configurations, and initializing the data source with files via a quick upload feature.</p>
+<hr>
+<h4 id="form-sections-and-fields">
+  <strong>Form Sections and Fields</strong>
+  <a class="anchor" href="#form-sections-and-fields">#</a>
+</h4>
+<h3 id="basic-information">
+  <strong>Basic Information</strong>
+  <a class="anchor" href="#basic-information">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Name</strong> <em>(Required)</em>:</p>
+<ul>
+<li>The name of the data source (e.g., <code>Tyk Documentation</code>).</li>
+<li>This is how the data source will appear in the portal and API calls.</li>
+</ul>
+</li>
+<li>
+<p><strong>Short Description</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>A concise description of the data source and its purpose.
+Example: &ldquo;Scraped documentation from the tyk.io website and other sources.&rdquo;</li>
+</ul>
+</li>
+<li>
+<p><strong>User</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>Assigns the owner of the data source to a specific user.</li>
+</ul>
+</li>
+<li>
+<p><strong>Vector Database Type</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>Specifies the type of vector database used (e.g., <code>Pinecone</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Embedding Service Vendor</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>The vendor used for embedding (e.g., <code>OpenAI</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Privacy Score</strong> <em>(Integer)</em>:</p>
+<ul>
+<li>A numerical value to indicate the privacy level of the data source.
+<ul>
+<li><strong>Higher scores</strong>: Better privacy protections.</li>
+<li><strong>Lower scores</strong>: Less stringent privacy controls.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Active</strong> <em>(Toggle)</em>:</p>
+<ul>
+<li>Determines whether the data source is enabled and available for use.
+<ul>
+<li><strong>Enabled</strong>: Active and usable in Chat Rooms or API queries.</li>
+<li><strong>Disabled</strong>: Not available for interaction.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="vector-database-access-details">
+  <strong>Vector Database Access Details</strong>
+  <a class="anchor" href="#vector-database-access-details">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Database / Namespace Name</strong> <em>(Required)</em>:</p>
+<ul>
+<li>Specifies the unique identifier or namespace for the data source within the vector database.</li>
+</ul>
+</li>
+<li>
+<p><strong>Connection String</strong> <em>(Required)</em>:</p>
+<ul>
+<li>URL or endpoint for accessing the vector database.
+Example: <code>https://example-vector-db.pinecone.io</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>API Key</strong> <em>(Required)</em>:</p>
+<ul>
+<li>Authentication key for accessing the vector database.
+<ul>
+<li><strong>View/Hide Toggle</strong>: Allows the key to be shown or hidden for security.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="embedding-service-details">
+  <strong>Embedding Service Details</strong>
+  <a class="anchor" href="#embedding-service-details">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Model</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>Specifies the embedding model used for processing data (e.g., <code>sentence-transformers/all-mpnet-base-v2</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Service URL</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>The endpoint of the embedding service (e.g., <code>http://embedding-service.com/api/v1</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>API Key</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>Authentication key for accessing the embedding service.
+<ul>
+<li><strong>View/Hide Toggle</strong>: Ensures security when displaying sensitive information.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="additional-information">
+  <strong>Additional Information</strong>
+  <a class="anchor" href="#additional-information">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Long Description</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>A detailed explanation of the data source and its contents.</li>
+</ul>
+</li>
+<li>
+<p><strong>Icon URL</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>A link to an image that visually represents the data source.</li>
+</ul>
+</li>
+<li>
+<p><strong>Tags</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>Labels for categorizing or describing the data source (e.g., <code>tyk</code>, <code>docs</code>).
+<ul>
+<li><strong>Add Tag Button</strong>: Adds tags for better organization and searchability.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="file-quick-upload">
+  <strong>File Quick Upload</strong>
+  <a class="anchor" href="#file-quick-upload">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Upload Additional Datasource Documentation</strong>:</p>
+<ul>
+<li>Allows administrators to upload files to seed the data source.
+<ul>
+<li>The files are processed, chunked, and embedded into the vector database.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Start Processing</strong> <em>(Button)</em>:</p>
+<ul>
+<li>Initiates the processing of uploaded files for indexing into the vector database.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="action-buttons">
+  <strong>Action Buttons</strong>
+  <a class="anchor" href="#action-buttons">#</a>
+</h3>
+<ol>
+<li>
+<p><strong>Update Datasource / Create Datasource</strong>:</p>
+<ul>
+<li>Saves the data source configuration or creates a new one based on the current inputs.</li>
+</ul>
+</li>
+<li>
+<p><strong>Back to Datasources</strong>:</p>
+<ul>
+<li>Navigates back to the <strong>Vector Data Sources View</strong> without saving changes.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="purpose">
+  <strong>Purpose</strong>
+  <a class="anchor" href="#purpose">#</a>
+</h4>
+<p>This form provides a centralized interface for managing vector data sources, including access details, embedding configurations, and initialization from files. It supports seamless integration of structured datasets into the Tyk AI ecosystem for use in Chat Rooms or API queries.</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+  <div>
+    <a class="flex align-center" href="https://github.com/alex-shpak/hugo-book/edit/master/exampleSite/content/docs/vector-sources.md" target="_blank" rel="noopener">
+      <img src="/svg/edit.svg" class="book-icon" alt="" />
+      <span>Edit this page</span>
+    </a>
+  </div>
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#vector-data-sources-view-for-tyk-ai-portal">Vector Data Sources View for Tyk AI Portal</a></li>
+        <li><a href="#editcreate-data-source">Edit/Create Data Source</a></li>
+        <li><a href="#basic-information"><strong>Basic Information</strong></a></li>
+        <li><a href="#vector-database-access-details"><strong>Vector Database Access Details</strong></a></li>
+        <li><a href="#embedding-service-details"><strong>Embedding Service Details</strong></a></li>
+        <li><a href="#additional-information"><strong>Additional Information</strong></a></li>
+        <li><a href="#file-quick-upload"><strong>File Quick Upload</strong></a></li>
+        <li><a href="#action-buttons"><strong>Action Buttons</strong></a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

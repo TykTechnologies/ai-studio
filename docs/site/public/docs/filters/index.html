@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="
+  Filters and Middleware
+  #
+
+The Filters List View allows administrators to manage filters and middleware applied to prompts or data sent to Large Language Models (LLMs) via the AI Gateway or Chat Rooms. Filters and middleware ensure data governance, compliance, and security by processing or controlling the flow of information. Below is an enhanced description with the distinction between Filters and Middleware:
+
+
+  Filters vs. Middleware
+  #
+
+
+
+Filters:
+
+Purpose: Filters act as governance blocks that either approve or deny a prompt before it reaches the upstream LLM.
+Behavior:
+
+Filters do not modify the prompt.
+They analyze the contents of the input prompt to decide if it complies with organizational policies or contains restricted content.
+Example: A PII detector that blocks prompts containing sensitive information.
+
+
+
+
+
+Middleware:">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#343a40">
+<meta name="color-scheme" content="light dark"><meta property="og:url" content="http://localhost:1313/docs/filters/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Filters">
+  <meta property="og:description" content="Filters and Middleware # The Filters List View allows administrators to manage filters and middleware applied to prompts or data sent to Large Language Models (LLMs) via the AI Gateway or Chat Rooms. Filters and middleware ensure data governance, compliance, and security by processing or controlling the flow of information. Below is an enhanced description with the distinction between Filters and Middleware:
+Filters vs. Middleware # Filters:
+Purpose: Filters act as governance blocks that either approve or deny a prompt before it reaches the upstream LLM. Behavior: Filters do not modify the prompt. They analyze the contents of the input prompt to decide if it complies with organizational policies or contains restricted content. Example: A PII detector that blocks prompts containing sensitive information. Middleware:">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="docs">
+<title>Filters | Docs</title>
+<link rel="icon" href="/favicon.png" >
+<link rel="manifest" href="/manifest.json">
+<link rel="canonical" href="http://localhost:1313/docs/filters/">
+<link rel="stylesheet" href="/book.min.07eb0517c93be900a0192ad4818442f94e0af010cebd7abf1e90ed37ccbff1d5.css" integrity="sha256-B&#43;sFF8k76QCgGSrUgYRC&#43;U4K8BDOvXq/HpDtN8y/8dU=" crossorigin="anonymous">
+  <script defer src="/fuse.min.js"></script>
+  <script defer src="/en.search.min.030874663a358a9d296f715607d72a8fa30a7e9a1fb664f6d3efb84a1a7b6aae.js" integrity="sha256-Awh0Zjo1ip0pb3FWB9cqj6MKfpoftmT20&#43;&#43;4Shp7aq4=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/logo.png" alt="Logo" class="book-icon" /><span>Docs</span>
+  </a>
+</h2>
+
+
+<div class="book-search hidden">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+<script>document.querySelector(".book-search").classList.remove("hidden")</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/quickstart/" class="">Quickstart</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/users/" class="">Users</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/configuration/" class="">Configuration</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/dashboard/" class="">Dashboard</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/groups/" class="">Groups</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/llms/" class="">Llms</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/call-settings/" class="">Call Settings</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/model-prices/" class="">Model Prices</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/vector-sources/" class="">Vector Sources</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/tools/" class="">Tools</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/filters/" class="active">Filters</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/secrets/" class="">Secrets</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/apps/" class="">Apps</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/catalogs/" class="">Catalogs Datasource</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/chat-rooms/" class="">Chat Rooms</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <h3>Filters</h3>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#filters-and-middleware">Filters and Middleware</a></li>
+        <li><a href="#filter-edit-view-and-example-filter">Filter Edit View (and example Filter)</a></li>
+        <li><a href="#example-middleware-for-tools">Example Middleware for Tools</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown book-article"><h3 id="filters-and-middleware">
+  Filters and Middleware
+  <a class="anchor" href="#filters-and-middleware">#</a>
+</h3>
+<p>The <strong>Filters List View</strong> allows administrators to manage filters and middleware applied to prompts or data sent to Large Language Models (LLMs) via the AI Gateway or Chat Rooms. Filters and middleware ensure data governance, compliance, and security by processing or controlling the flow of information. Below is an enhanced description with the distinction between <strong>Filters</strong> and <strong>Middleware</strong>:</p>
+<hr>
+<h4 id="filters-vs-middleware">
+  <strong>Filters vs. Middleware</strong>
+  <a class="anchor" href="#filters-vs-middleware">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Filters</strong>:</p>
+<ul>
+<li><strong>Purpose</strong>: Filters act as governance blocks that either approve or deny a prompt before it reaches the upstream LLM.</li>
+<li><strong>Behavior</strong>:
+<ul>
+<li>Filters <strong>do not modify the prompt</strong>.</li>
+<li>They analyze the contents of the input prompt to decide if it complies with organizational policies or contains restricted content.</li>
+<li>Example: A PII detector that blocks prompts containing sensitive information.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Middleware</strong>:</p>
+<ul>
+<li><strong>Purpose</strong>: Middleware processes prompts or outputs generated by tools, modifying them before they are passed on to the LLM.</li>
+<li><strong>Behavior</strong>:
+<ul>
+<li>Middleware <strong>modifies the prompt or output</strong> to enhance security, anonymize data, or perform other transformations.</li>
+<li>Middleware only works with tools (e.g., API-based services) and is not used directly with raw input prompts.</li>
+<li>Example: An anonymizer that removes Personally Identifiable Information (PII) from tool outputs.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="table-overview">
+  <strong>Table Overview</strong>
+  <a class="anchor" href="#table-overview">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Name</strong>:</p>
+<ul>
+<li>The name of the filter or middleware (e.g., <code>Anonymize PII (LLM)</code>, <code>Fixed PII Filter</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Description</strong>:</p>
+<ul>
+<li>A brief summary of the filter or middleware&rsquo;s functionality (e.g., &ldquo;Uses Regex to remove obvious PII&rdquo;).</li>
+</ul>
+</li>
+<li>
+<p><strong>Actions</strong>:</p>
+<ul>
+<li>A menu (three-dot icon) that allows administrators to:
+<ul>
+<li>Edit the filter or middleware.</li>
+<li>Delete the filter or middleware.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="features">
+  <strong>Features</strong>
+  <a class="anchor" href="#features">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Add Filter Button</strong>:</p>
+<ul>
+<li>A green button labeled <strong>+ ADD FILTER</strong>, located in the top-right corner. Clicking this button opens a form to create a new filter or middleware.</li>
+</ul>
+</li>
+<li>
+<p><strong>Pagination Dropdown</strong>:</p>
+<ul>
+<li>Located at the bottom-left corner, this control allows administrators to adjust the number of entries displayed per page.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="examples-of-filters-and-middleware">
+  <strong>Examples of Filters and Middleware</strong>
+  <a class="anchor" href="#examples-of-filters-and-middleware">#</a>
+</h4>
+<ul>
+<li>
+<p><strong>Filters</strong>:</p>
+<ul>
+<li><strong>PII Detector</strong>: A regex-based filter that blocks prompts containing sensitive PII.</li>
+<li><strong>JIRA Field Analysis</strong>: Ensures no PII is included in data retrieved from JIRA fields before passing to the LLM.</li>
+</ul>
+</li>
+<li>
+<p><strong>Middleware</strong>:</p>
+<ul>
+<li><strong>Anonymize PII (LLM)</strong>: Uses an LLM to anonymize sensitive data before sending it downstream.</li>
+<li><strong>NER Service Filter</strong>: A Named Entity Recognition (NER) microservice that modifies outputs to remove identified entities.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h4 id="use-cases">
+  <strong>Use Cases</strong>
+  <a class="anchor" href="#use-cases">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Prompt Validation with Filters</strong>:</p>
+<ul>
+<li>Ensures that only compliant and secure prompts are sent to LLMs.</li>
+<li>Example: Blocking a prompt with sensitive data that should not be processed by an unapproved vendor.</li>
+</ul>
+</li>
+<li>
+<p><strong>Data Preprocessing with Middleware</strong>:</p>
+<ul>
+<li>Prepares data from tools or external sources for safe interaction with LLMs by modifying or anonymizing content.</li>
+<li>Example: Removing sensitive ticket details from a JIRA query before sending to an LLM.</li>
+</ul>
+</li>
+<li>
+<p><strong>Organizational Security</strong>:</p>
+<ul>
+<li>Both filters and middleware ensure sensitive information is protected and handled in line with organizational governance policies.</li>
+</ul>
+</li>
+<li>
+<p><strong>Enhanced Tool Interactions</strong>:</p>
+<ul>
+<li>Middleware supports tools by transforming their outputs, enabling richer and safer LLM interactions.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="key-benefits">
+  <strong>Key Benefits</strong>
+  <a class="anchor" href="#key-benefits">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Improved Data Governance</strong>:</p>
+<ul>
+<li>Filters and middleware work together to enforce strict controls over data flow, protecting sensitive information.</li>
+</ul>
+</li>
+<li>
+<p><strong>Flexibility</strong>:</p>
+<ul>
+<li>Middleware allows for data transformation, enhancing interoperability between tools and LLMs.</li>
+<li>Filters ensure compliance without altering user-provided prompts.</li>
+</ul>
+</li>
+<li>
+<p><strong>Compliance and Security</strong>:</p>
+<ul>
+<li>Prevent unauthorized or sensitive data from reaching unapproved vendors, ensuring regulatory compliance.</li>
+</ul>
+</li>
+</ol>
+<p>This detailed structure for <strong>Filters and Middleware</strong> provides organizations with robust governance tools to secure and optimize data workflows in the Tyk AI Portal.</p>
+<h3 id="filter-edit-view-and-example-filter">
+  Filter Edit View (and example Filter)
+  <a class="anchor" href="#filter-edit-view-and-example-filter">#</a>
+</h3>
+<p>The <strong>Filter Edit View</strong> enables administrators to create or modify filters using the <strong>Tengo scripting language</strong>. Filters serve as governance tools that analyze input data (e.g., prompts or files) and decide whether the content is permitted to pass to the upstream LLM. In this example, the filter uses regular expressions (regex) to detect Personally Identifiable Information (PII) and blocks the prompt if any matches are found.</p>
+<hr>
+<h4 id="form-sections-and-fields">
+  <strong>Form Sections and Fields</strong>
+  <a class="anchor" href="#form-sections-and-fields">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Name</strong> <em>(Required)</em>:</p>
+<ul>
+<li>Specifies the name of the filter (e.g., <code>PII Detector</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Description</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>A brief summary of the filter&rsquo;s purpose and functionality (e.g., &ldquo;Simple Regex-based PII detector to prevent the wrong data being sent to LLMs&rdquo;).</li>
+</ul>
+</li>
+<li>
+<p><strong>Script</strong> <em>(Required)</em>:</p>
+<ul>
+<li>A <strong>Tengo script</strong> that defines the logic of the filter. The script evaluates input data and determines whether the filter approves or blocks it.</li>
+<li>The example script detects PII using a collection of regex patterns and blocks the data if a match is found.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="example-script">
+  <strong>Example Script</strong>
+  <a class="anchor" href="#example-script">#</a>
+</h4>
+<p>This script demonstrates a regex-based PII detection filter:</p>
+<pre tabindex="0"><code class="language-tengo" data-lang="tengo">text := import(&#34;text&#34;)
+
+// regexes for various PII
+patterns := {
+    &#34;email&#34;: `[\w\.-]+@[\w\.-]+\.\w+`,
+    &#34;phone&#34;: `\+?\d{1,3}?[-.\s]?\(?\d{1,4}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}`,
+    &#34;ssn&#34;: `\b\d{3}-\d{2}-\d{4}\b`,
+    &#34;credit_card&#34;: `\b(?:\d[ -]*?){13,16}\b`,
+    &#34;ipv4&#34;: `\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`,
+    &#34;ipv6&#34;: `\b([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}\b`,
+    &#34;dob&#34;: `\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b`,
+    &#34;address&#34;: `\d+\s[A-Za-z]+\s[A-Za-z]+`,
+    &#34;passport&#34;: `\b[A-PR-WYa-pr-wy][1-9]\d\s?\d{4}[1-9]\b`,
+    &#34;drivers_license&#34;: `\b[A-Z]{1,2}\d{1,7}\b`,
+    &#34;bank_account&#34;: `\b\d{8,17}\b`
+}
+
+/*
+payload := `
+John Doe, born on 12/25/1980,
+resides at 1234 Elm Street, Springfield, IL 62704.
+You can contact him via email at john.doe@example.com or
+by phone at +1-555-123-4567. His Social Security Number is 123-45-6789,
+and his U.S. passport number is 987654321. John&#39;s driver&#39;s license
+number is D1234567, and his bank account number is 123456789012.
+He often uses the IP address 192.168.1.1 to access his online banking.
+`
+*/
+
+filter := func(payload) {
+    for key, pattern in patterns {
+        found := text.re_match(pattern, payload)
+        if found {
+            return false
+        }
+    }
+
+    return true
+}
+
+result := filter(payload)
+</code></pre><hr>
+<h4 id="key-features-of-the-script">
+  <strong>Key Features of the Script</strong>
+  <a class="anchor" href="#key-features-of-the-script">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Patterns Dictionary</strong>:</p>
+<ul>
+<li>Defines regex patterns for detecting specific PII types (e.g., email, phone, SSN, IP addresses, etc.).</li>
+</ul>
+</li>
+<li>
+<p><strong>Filter Function</strong>:</p>
+<ul>
+<li>Iterates through the patterns and checks if the input payload matches any of them.</li>
+<li>If a match is found, the filter blocks the input (<code>return false</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Usage Context</strong>:</p>
+<ul>
+<li>This filter can be applied to prompts, files, or any other input to ensure that sensitive information is not unintentionally shared with an LLM.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="action-buttons">
+  <strong>Action Buttons</strong>
+  <a class="anchor" href="#action-buttons">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Update Filter / Create Filter</strong>:</p>
+<ul>
+<li>Saves the filter configuration, making it active for future data processing.</li>
+</ul>
+</li>
+<li>
+<p><strong>Back to Filters</strong>:</p>
+<ul>
+<li>Returns to the Filters List View without saving changes.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="purpose-and-benefits">
+  <strong>Purpose and Benefits</strong>
+  <a class="anchor" href="#purpose-and-benefits">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Data Governance</strong>:</p>
+<ul>
+<li>Enforces strict control over what data can be sent to LLMs, ensuring compliance with privacy regulations.</li>
+</ul>
+</li>
+<li>
+<p><strong>Flexibility</strong>:</p>
+<ul>
+<li>Filters can be tailored to specific organizational needs using custom scripts.</li>
+</ul>
+</li>
+<li>
+<p><strong>Security</strong>:</p>
+<ul>
+<li>Prevents sensitive or unauthorized data from leaking to unapproved vendors or external systems.</li>
+</ul>
+</li>
+</ol>
+<p>This <strong>Filter Edit View</strong> provides a robust and customizable interface for creating scripts to enforce data governance and security in the Tyk AI Portal.</p>
+<h3 id="example-middleware-for-tools">
+  Example Middleware for Tools
+  <a class="anchor" href="#example-middleware-for-tools">#</a>
+</h3>
+<p>Middleware filters in the Tyk AI Portal modify data coming from tools before passing it to the LLM. These filters are applied to sanitize, anonymize, or enhance the data to ensure it complies with organizational standards and privacy regulations. Below is an example of a middleware filter that sanitizes Personally Identifiable Information (PII), specifically email addresses, from the tool&rsquo;s output.</p>
+<hr>
+<h4 id="middleware-script-email-redaction-example">
+  <strong>Middleware Script: Email Redaction Example</strong>
+  <a class="anchor" href="#middleware-script-email-redaction-example">#</a>
+</h4>
+<pre tabindex="0"><code class="language-tengo" data-lang="tengo">// Import the &#39;text&#39; module for regular expression operations
+text := import(&#34;text&#34;)
+
+// Define regular expression patterns for various PII
+email_pattern := `[\w\.-]+@[\w\.-]+\.\w+`
+
+// Define the function to sanitize PII in the input string
+filter := func(input) {
+    // Replace email addresses
+    input = text.re_replace(email_pattern, input, &#34;[REDACTED EMAIL]&#34;)
+
+    return input
+}
+
+// Process the input payload
+result := filter(payload)
+</code></pre><hr>
+<h4 id="explanation-of-the-script">
+  <strong>Explanation of the Script</strong>
+  <a class="anchor" href="#explanation-of-the-script">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Module Import</strong>:</p>
+<ul>
+<li>The <code>text</code> module is imported to enable regular expression operations (<code>text.re_replace</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Regex Pattern</strong>:</p>
+<ul>
+<li>A regex pattern is defined to detect email addresses:
+<ul>
+<li>Example pattern: <code>[\w\.-]+@[\w\.-]+\.\w+</code></li>
+<li>This pattern matches standard email formats.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Filter Function</strong>:</p>
+<ul>
+<li>The <code>filter</code> function accepts an input string (e.g., tool output) and:
+<ul>
+<li>Uses <code>text.re_replace</code> to identify email addresses.</li>
+<li>Replaces detected email addresses with <code>[REDACTED EMAIL]</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Return Processed Output</strong>:</p>
+<ul>
+<li>The sanitized output is returned, ensuring that sensitive information like email addresses is redacted before reaching the LLM.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="use-case-for-middleware">
+  <strong>Use Case for Middleware</strong>
+  <a class="anchor" href="#use-case-for-middleware">#</a>
+</h4>
+<p><strong>Tool Example</strong>:
+Imagine a tool, such as <code>Support Ticket Viewer</code>, which retrieves user tickets from a system. These tickets often contain email addresses. Middleware ensures that no sensitive email information is included in the output sent to the LLM.</p>
+<ul>
+<li>
+<p><strong>Input Payload Example</strong>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>User email: john.doe@example.com has reported an issue with their account.
+</span></span></code></pre></div></li>
+<li>
+<p><strong>Sanitized Output</strong>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>User email: [REDACTED EMAIL] has reported an issue with their account.
+</span></span></code></pre></div></li>
+</ul>
+<hr>
+<h4 id="benefits-of-middleware">
+  <strong>Benefits of Middleware</strong>
+  <a class="anchor" href="#benefits-of-middleware">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Data Privacy</strong>:</p>
+<ul>
+<li>Protects sensitive user information by ensuring it is sanitized before being sent to external systems.</li>
+</ul>
+</li>
+<li>
+<p><strong>Compliance</strong>:</p>
+<ul>
+<li>Ensures organizational adherence to privacy laws like GDPR or HIPAA.</li>
+</ul>
+</li>
+<li>
+<p><strong>Enhanced Security</strong>:</p>
+<ul>
+<li>Prevents accidental sharing of PII with external vendors or LLMs.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<p>This middleware example demonstrates how flexible and powerful Tyk&rsquo;s scripting capabilities are, enabling administrators to enforce strict data governance policies while supporting advanced LLM and tool integration workflows.</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+  <div>
+    <a class="flex align-center" href="https://github.com/alex-shpak/hugo-book/edit/master/exampleSite/content/docs/filters.md" target="_blank" rel="noopener">
+      <img src="/svg/edit.svg" class="book-icon" alt="" />
+      <span>Edit this page</span>
+    </a>
+  </div>
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#filters-and-middleware">Filters and Middleware</a></li>
+        <li><a href="#filter-edit-view-and-example-filter">Filter Edit View (and example Filter)</a></li>
+        <li><a href="#example-middleware-for-tools">Example Middleware for Tools</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

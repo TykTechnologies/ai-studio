@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="
+  Users List View for Tyk AI Portal
+  #
+
+The Users List View provides administrators with an overview of all registered users on the platform. This interface allows for managing users&rsquo; access and permissions. Below is a detailed explanation of its components:
+
+
+  Table Overview
+  #
+
+The table contains user-specific data displayed in rows and organized into the following columns:
+
+
+ID:
+A unique identifier assigned to each user for easy referencing.">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#343a40">
+<meta name="color-scheme" content="light dark"><meta property="og:url" content="http://localhost:1313/docs/users/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Users">
+  <meta property="og:description" content="Users List View for Tyk AI Portal # The Users List View provides administrators with an overview of all registered users on the platform. This interface allows for managing users’ access and permissions. Below is a detailed explanation of its components:
+Table Overview # The table contains user-specific data displayed in rows and organized into the following columns:
+ID: A unique identifier assigned to each user for easy referencing.">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="docs">
+<title>Users | Docs</title>
+<link rel="icon" href="/favicon.png" >
+<link rel="manifest" href="/manifest.json">
+<link rel="canonical" href="http://localhost:1313/docs/users/">
+<link rel="stylesheet" href="/book.min.07eb0517c93be900a0192ad4818442f94e0af010cebd7abf1e90ed37ccbff1d5.css" integrity="sha256-B&#43;sFF8k76QCgGSrUgYRC&#43;U4K8BDOvXq/HpDtN8y/8dU=" crossorigin="anonymous">
+  <script defer src="/fuse.min.js"></script>
+  <script defer src="/en.search.min.030874663a358a9d296f715607d72a8fa30a7e9a1fb664f6d3efb84a1a7b6aae.js" integrity="sha256-Awh0Zjo1ip0pb3FWB9cqj6MKfpoftmT20&#43;&#43;4Shp7aq4=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/logo.png" alt="Logo" class="book-icon" /><span>Docs</span>
+  </a>
+</h2>
+
+
+<div class="book-search hidden">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+<script>document.querySelector(".book-search").classList.remove("hidden")</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/quickstart/" class="">Quickstart</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/users/" class="active">Users</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/configuration/" class="">Configuration</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/dashboard/" class="">Dashboard</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/groups/" class="">Groups</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/llms/" class="">Llms</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/call-settings/" class="">Call Settings</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/model-prices/" class="">Model Prices</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/vector-sources/" class="">Vector Sources</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/tools/" class="">Tools</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/filters/" class="">Filters</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/secrets/" class="">Secrets</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/apps/" class="">Apps</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/catalogs/" class="">Catalogs Datasource</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/chat-rooms/" class="">Chat Rooms</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <h3>Users</h3>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#users-list-view-for-tyk-ai-portal">Users List View for Tyk AI Portal</a></li>
+        <li><a href="#add-or-edit-users">Add or Edit Users</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown book-article"><h3 id="users-list-view-for-tyk-ai-portal">
+  Users List View for Tyk AI Portal
+  <a class="anchor" href="#users-list-view-for-tyk-ai-portal">#</a>
+</h3>
+<p>The Users List View provides administrators with an overview of all registered users on the platform. This interface allows for managing users&rsquo; access and permissions. Below is a detailed explanation of its components:</p>
+<hr>
+<h4 id="table-overview">
+  <strong>Table Overview</strong>
+  <a class="anchor" href="#table-overview">#</a>
+</h4>
+<p>The table contains user-specific data displayed in rows and organized into the following columns:</p>
+<ul>
+<li>
+<p><strong>ID</strong>:
+A unique identifier assigned to each user for easy referencing.</p>
+</li>
+<li>
+<p><strong>Name</strong>:
+The full name of the user as registered in the system.</p>
+</li>
+<li>
+<p><strong>Email</strong>:
+The user&rsquo;s email address, which serves as their primary contact and login credential.</p>
+</li>
+<li>
+<p><strong>Is Admin</strong>:
+Indicates whether the user has administrative privileges.</p>
+<ul>
+<li><strong>Yes</strong>: The user has admin access and can perform higher-level management tasks.</li>
+<li><strong>No</strong>: The user does not have admin privileges and is limited to standard user capabilities.</li>
+</ul>
+</li>
+<li>
+<p><strong>Actions</strong>:
+A menu (represented by three dots) that allows administrators to perform additional actions for each user, such as editing user details, managing permissions, or removing a user from the system.</p>
+</li>
+</ul>
+<hr>
+<h4 id="features">
+  <strong>Features</strong>
+  <a class="anchor" href="#features">#</a>
+</h4>
+<ul>
+<li>
+<p><strong>Add User Button</strong>:
+Located in the top-right corner of the view, this green button allows administrators to add a new user to the system. Upon clicking, a form or modal is expected to open for entering the new user&rsquo;s details.</p>
+</li>
+<li>
+<p><strong>Pagination Dropdown</strong>:
+Found at the bottom-left corner of the table, this dropdown allows administrators to select how many users are displayed per page (e.g., 10, 20, or more users).</p>
+</li>
+</ul>
+<hr>
+<h3 id="add-or-edit-users">
+  Add or Edit Users
+  <a class="anchor" href="#add-or-edit-users">#</a>
+</h3>
+<p>The User Form allows administrators to create new user accounts on the platform. Below is a detailed explanation of the fields and options available in this form:</p>
+<hr>
+<h4 id="form-fields">
+  <strong>Form Fields</strong>
+  <a class="anchor" href="#form-fields">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Name</strong> <em>(Required)</em>:
+A text field where the administrator enters the full name of the new user.</p>
+</li>
+<li>
+<p><strong>Email</strong> <em>(Required)</em>:
+A text field for the user&rsquo;s email address, which serves as their primary login identifier.</p>
+</li>
+<li>
+<p><strong>Password</strong> <em>(Required)</em>:
+A password field where the administrator sets an initial password for the user.</p>
+</li>
+</ol>
+<hr>
+<h4 id="user-role-and-permissions">
+  <strong>User Role and Permissions</strong>
+  <a class="anchor" href="#user-role-and-permissions">#</a>
+</h4>
+<p>The form provides toggles to configure the user&rsquo;s role and access permissions:</p>
+<ol>
+<li>
+<p><strong>Admin User</strong>:
+A toggle switch to grant the user administrative privileges.</p>
+<ul>
+<li><strong>Enabled</strong>: The user becomes an admin with elevated permissions.</li>
+<li><strong>Disabled</strong>: The user remains a standard user.</li>
+</ul>
+</li>
+<li>
+<p><strong>Show Portal</strong>:
+A toggle switch to grant or restrict access to the portal interface.</p>
+<ul>
+<li><strong>Enabled</strong>: The user can access portal features.</li>
+<li><strong>Disabled</strong>: Portal access is restricted.</li>
+</ul>
+</li>
+<li>
+<p><strong>Show Chat</strong>:
+A toggle switch to enable or disable the user&rsquo;s access to chat functionality.</p>
+<ul>
+<li><strong>Enabled</strong>: The user can utilize chat features.</li>
+<li><strong>Disabled</strong>: Chat features are hidden from the user.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="action-button">
+  <strong>Action Button</strong>
+  <a class="anchor" href="#action-button">#</a>
+</h4>
+<ul>
+<li><strong>Add User</strong>:
+A button located at the bottom of the form that finalizes the creation of the user account. This button becomes active only after all required fields are completed.</li>
+</ul>
+<hr>
+<h4 id="navigation">
+  <strong>Navigation</strong>
+  <a class="anchor" href="#navigation">#</a>
+</h4>
+<ul>
+<li><strong>Back to Users</strong>:
+A link in the top-right corner that navigates the administrator back to the Users List View without saving changes.</li>
+</ul>
+<hr>
+<p>This form provides a streamlined way for administrators to add and configure new user accounts, ensuring flexibility in assigning roles and managing access permissions.</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+  <div>
+    <a class="flex align-center" href="https://github.com/alex-shpak/hugo-book/edit/master/exampleSite/content/docs/users.md" target="_blank" rel="noopener">
+      <img src="/svg/edit.svg" class="book-icon" alt="" />
+      <span>Edit this page</span>
+    </a>
+  </div>
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#users-list-view-for-tyk-ai-portal">Users List View for Tyk AI Portal</a></li>
+        <li><a href="#add-or-edit-users">Add or Edit Users</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

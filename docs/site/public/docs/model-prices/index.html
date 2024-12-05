@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="
+  Model Prices View for Tyk AI Portal
+  #
+
+The Model Prices View allows administrators to manage and track the cost associated with Large Language Model (LLM) usage. This section is essential for monitoring expenses and setting pricing for LLM use within the AI Gateway and Chat Room features. Below is a detailed breakdown of the table and its features:
+
+
+  Table Overview
+  #
+
+The table displays the following columns:">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#343a40">
+<meta name="color-scheme" content="light dark"><meta property="og:url" content="http://localhost:1313/docs/model-prices/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Model Prices">
+  <meta property="og:description" content="Model Prices View for Tyk AI Portal # The Model Prices View allows administrators to manage and track the cost associated with Large Language Model (LLM) usage. This section is essential for monitoring expenses and setting pricing for LLM use within the AI Gateway and Chat Room features. Below is a detailed breakdown of the table and its features:
+Table Overview # The table displays the following columns:">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="docs">
+<title>Model Prices | Docs</title>
+<link rel="icon" href="/favicon.png" >
+<link rel="manifest" href="/manifest.json">
+<link rel="canonical" href="http://localhost:1313/docs/model-prices/">
+<link rel="stylesheet" href="/book.min.07eb0517c93be900a0192ad4818442f94e0af010cebd7abf1e90ed37ccbff1d5.css" integrity="sha256-B&#43;sFF8k76QCgGSrUgYRC&#43;U4K8BDOvXq/HpDtN8y/8dU=" crossorigin="anonymous">
+  <script defer src="/fuse.min.js"></script>
+  <script defer src="/en.search.min.030874663a358a9d296f715607d72a8fa30a7e9a1fb664f6d3efb84a1a7b6aae.js" integrity="sha256-Awh0Zjo1ip0pb3FWB9cqj6MKfpoftmT20&#43;&#43;4Shp7aq4=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/logo.png" alt="Logo" class="book-icon" /><span>Docs</span>
+  </a>
+</h2>
+
+
+<div class="book-search hidden">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+<script>document.querySelector(".book-search").classList.remove("hidden")</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/quickstart/" class="">Quickstart</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/users/" class="">Users</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/configuration/" class="">Configuration</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/dashboard/" class="">Dashboard</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/groups/" class="">Groups</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/llms/" class="">Llms</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/call-settings/" class="">Call Settings</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/model-prices/" class="active">Model Prices</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/vector-sources/" class="">Vector Sources</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/tools/" class="">Tools</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/filters/" class="">Filters</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/secrets/" class="">Secrets</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/apps/" class="">Apps</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/catalogs/" class="">Catalogs Datasource</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/chat-rooms/" class="">Chat Rooms</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <h3>Model Prices</h3>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#model-prices-view-for-tyk-ai-portal">Model Prices View for Tyk AI Portal</a></li>
+        <li><a href="#editcreate-model-prices">Edit/Create Model Prices</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown book-article"><h3 id="model-prices-view-for-tyk-ai-portal">
+  Model Prices View for Tyk AI Portal
+  <a class="anchor" href="#model-prices-view-for-tyk-ai-portal">#</a>
+</h3>
+<p>The <strong>Model Prices View</strong> allows administrators to manage and track the cost associated with Large Language Model (LLM) usage. This section is essential for monitoring expenses and setting pricing for LLM use within the AI Gateway and Chat Room features. Below is a detailed breakdown of the table and its features:</p>
+<hr>
+<h4 id="table-overview">
+  <strong>Table Overview</strong>
+  <a class="anchor" href="#table-overview">#</a>
+</h4>
+<p>The table displays the following columns:</p>
+<ol>
+<li>
+<p><strong>Model Name</strong>:</p>
+<ul>
+<li>The name of the LLM model for which pricing is defined (e.g., <code>claude-3.5-sonnet-20240620</code>, <code>gpt-4o</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Vendor</strong>:</p>
+<ul>
+<li>The organization providing the LLM (e.g., Anthropic, OpenAI).</li>
+</ul>
+</li>
+<li>
+<p><strong>Cost per Input Token</strong>:</p>
+<ul>
+<li>The price charged for each input token processed by the LLM.</li>
+<li>Example: A value of <code>0.000001</code> represents the cost in the specified currency per token.</li>
+</ul>
+</li>
+<li>
+<p><strong>Cost per Output Token</strong>:</p>
+<ul>
+<li>The price charged for each output token generated by the LLM.</li>
+<li>Example: A value of <code>0.000015</code> reflects the token generation cost in the specified currency.</li>
+</ul>
+</li>
+<li>
+<p><strong>Currency</strong>:</p>
+<ul>
+<li>The currency in which the model&rsquo;s pricing is defined (e.g., USD).</li>
+</ul>
+</li>
+<li>
+<p><strong>Actions</strong>:</p>
+<ul>
+<li>A menu (three-dot icon) with quick actions for each model, allowing administrators to:
+<ul>
+<li>Edit the pricing.</li>
+<li>Delete the pricing configuration.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="features">
+  <strong>Features</strong>
+  <a class="anchor" href="#features">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Add Model Price Button</strong>:</p>
+<ul>
+<li>A green button labeled <strong>+ ADD MODEL PRICE</strong>, located in the top-right corner. Clicking this button opens a form to configure the pricing for a new LLM model.</li>
+</ul>
+</li>
+<li>
+<p><strong>Pagination Dropdown</strong>:</p>
+<ul>
+<li>Located at the bottom-left corner, this control allows users to adjust how many pricing entries are displayed per page.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="use-cases">
+  <strong>Use Cases</strong>
+  <a class="anchor" href="#use-cases">#</a>
+</h4>
+<ul>
+<li>
+<p><strong>AI Gateway Tracking</strong>:</p>
+<ul>
+<li>Ensures that token-based costs for API calls through the AI Gateway are accurately logged and monitored.</li>
+</ul>
+</li>
+<li>
+<p><strong>Chat Room Cost Analysis</strong>:</p>
+<ul>
+<li>Tracks and evaluates expenses associated with user interactions in the Chat Room feature.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h4 id="quick-insights">
+  <strong>Quick Insights</strong>
+  <a class="anchor" href="#quick-insights">#</a>
+</h4>
+<p>This section simplifies the process of tracking and updating LLM pricing, ensuring transparency and control over usage costs. The ability to edit or add prices directly from this interface provides flexibility for managing vendor costs dynamically as new models or pricing structures are introduced.</p>
+<h3 id="editcreate-model-prices">
+  Edit/Create Model Prices
+  <a class="anchor" href="#editcreate-model-prices">#</a>
+</h3>
+<p>The <strong>Edit/Create Model Price Form</strong> allows administrators to define or update the cost structure for a specific Large Language Model (LLM). The pricing information configured here is used for cost tracking and billing purposes and must align with the model names used in API calls or the model settings screen.</p>
+<hr>
+<h4 id="form-fields-and-descriptions">
+  <strong>Form Fields and Descriptions</strong>
+  <a class="anchor" href="#form-fields-and-descriptions">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Model Name</strong> <em>(Required)</em>:</p>
+<ul>
+<li>The exact name of the model this price configuration applies to (e.g., <code>claude-3.5-sonnet-20240620</code>).</li>
+<li><strong>Important</strong>: This name must match the name used in client API calls or the LLM settings in the portal for correct mapping.</li>
+</ul>
+</li>
+<li>
+<p><strong>Vendor</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>The name of the LLM provider (e.g., Anthropic, OpenAI).</li>
+<li>Selectable from pre-configured vendors in the portal.</li>
+</ul>
+</li>
+<li>
+<p><strong>Cost per Input Token</strong> <em>(Decimal, Required)</em>:</p>
+<ul>
+<li>The price charged per input token sent to the LLM.</li>
+<li>Example: A value of <code>0.000001</code> indicates the cost per input token in the specified currency.</li>
+</ul>
+</li>
+<li>
+<p><strong>Cost per Output Token</strong> <em>(Decimal, Required)</em>:</p>
+<ul>
+<li>The price charged per output token generated by the LLM.</li>
+<li>Example: A value of <code>0.000015</code> specifies the output token cost in the specified currency.</li>
+</ul>
+</li>
+<li>
+<p><strong>Currency</strong> <em>(Text, Required)</em>:</p>
+<ul>
+<li>The currency in which the pricing is defined (e.g., USD).</li>
+<li>Example: Use &ldquo;USD&rdquo; for United States Dollar pricing.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="action-buttons">
+  <strong>Action Buttons</strong>
+  <a class="anchor" href="#action-buttons">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Update Model Price / Create Model Price</strong>:</p>
+<ul>
+<li>A green button at the bottom of the form that saves the price configuration. It updates an existing price or creates a new one depending on the context.</li>
+</ul>
+</li>
+<li>
+<p><strong>Back to Model Prices</strong>:</p>
+<ul>
+<li>A link in the top-right corner to return to the <strong>Model Prices View</strong> without saving changes.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="usage-and-purpose">
+  <strong>Usage and Purpose</strong>
+  <a class="anchor" href="#usage-and-purpose">#</a>
+</h4>
+<ul>
+<li>
+<p><strong>Price Tracking</strong>:</p>
+<ul>
+<li>Ensures token-level costs are recorded for API calls and Chat Room interactions.</li>
+<li>Provides transparency for usage billing.</li>
+</ul>
+</li>
+<li>
+<p><strong>Integration Consistency</strong>:</p>
+<ul>
+<li>Ensures that the configured pricing aligns with the exact model names used in client interactions or other system settings to avoid mismatches.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<p>This form is essential for cost management and aligns LLM usage with its associated financial metrics, providing a streamlined approach to managing expenses in the portal.</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+  <div>
+    <a class="flex align-center" href="https://github.com/alex-shpak/hugo-book/edit/master/exampleSite/content/docs/model-prices.md" target="_blank" rel="noopener">
+      <img src="/svg/edit.svg" class="book-icon" alt="" />
+      <span>Edit this page</span>
+    </a>
+  </div>
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#model-prices-view-for-tyk-ai-portal">Model Prices View for Tyk AI Portal</a></li>
+        <li><a href="#editcreate-model-prices">Edit/Create Model Prices</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
