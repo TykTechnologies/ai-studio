@@ -5,6 +5,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -64,9 +65,15 @@ func IsLicensed() error {
 		return err
 	}
 
-	claimsMap, ok := claims.(map[string]interface{})
+	claimsStr, ok := claims.(string)
 	if !ok {
-		return fmt.Errorf("Invalid license format")
+		return fmt.Errorf("invalid license format")
+	}
+
+	asArr := strings.Split(claimsStr, ",")
+	claimsMap := make(map[string]interface{})
+	for i, _ := range asArr {
+		claimsMap[asArr[i]] = true
 	}
 
 	features = claimsMap
@@ -96,7 +103,7 @@ func Validate(token string, pub []byte) (interface{}, error) {
 		return nil, fmt.Errorf("validate: invalid")
 	}
 
-	return claims["dat"], nil
+	return claims["scope"], nil
 }
 
 func Create(ttl time.Duration, content interface{}, pKey []byte) (string, error) {
@@ -108,7 +115,7 @@ func Create(ttl time.Duration, content interface{}, pKey []byte) (string, error)
 	now := time.Now().UTC()
 
 	claims := make(jwt.MapClaims)
-	claims["dat"] = content             // Our custom data.
+	claims["scope"] = content           // Our custom data.
 	claims["exp"] = now.Add(ttl).Unix() // The expiration time after which the token must be disregarded.
 	claims["iat"] = now.Unix()          // The time at which the token was issued.
 	claims["nbf"] = now.Unix()          // The time before which the token must be disregarded.

@@ -13,7 +13,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -241,21 +240,6 @@ func (a *AuthService) Register(email, name, password string) error {
 	if count == 0 {
 		user.IsAdmin = true
 		user.EmailVerified = true
-	}
-
-	users := models.Users{}
-	active, err := users.CountActive(a.Config.DB)
-	if err != nil {
-		return err
-	}
-	maxUsers := 1
-	setLimit, ok := licensing.Entitlement(licensing.NUMSeats)
-	if ok {
-		maxUsers = setLimit.Int()
-	}
-
-	if int(active) >= maxUsers {
-		return errors.New("maximum number of users reached")
 	}
 
 	if err := user.Create(a.Config.DB); err != nil {

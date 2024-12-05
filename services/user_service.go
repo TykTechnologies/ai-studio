@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
@@ -15,22 +14,6 @@ func (s *Service) CreateUser(email, name, password string, isAdmin bool, showCha
 		IsAdmin:    isAdmin,
 		ShowChat:   showChat,
 		ShowPortal: showPortal,
-	}
-
-	users := models.Users{}
-	active, err := users.CountActive(s.DB)
-	if err != nil {
-		return nil, err
-	}
-
-	maxUsers := 1
-	setLimit, ok := licensing.Entitlement(licensing.NUMSeats)
-	if ok {
-		maxUsers = setLimit.Int()
-	}
-
-	if int(active) >= maxUsers {
-		return nil, errors.New("maximum number of users reached")
 	}
 
 	if err := user.SetPassword(password); err != nil {
