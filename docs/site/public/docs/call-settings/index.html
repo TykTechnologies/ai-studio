@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="
+  LLM Call Settings
+  #
+
+The LLM Call Settings section allows administrators to configure default runtime parameters for Large Language Models (LLMs) used in chat interactions and middleware system function calls. These settings provide control over how the LLM processes inputs and generates outputs. It is important to note that these settings are not utilized in the AI Gateway proxy since applications are expected to define their own model configurations.">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#343a40">
+<meta name="color-scheme" content="light dark"><meta property="og:url" content="http://localhost:1313/docs/call-settings/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Call Settings">
+  <meta property="og:description" content="LLM Call Settings # The LLM Call Settings section allows administrators to configure default runtime parameters for Large Language Models (LLMs) used in chat interactions and middleware system function calls. These settings provide control over how the LLM processes inputs and generates outputs. It is important to note that these settings are not utilized in the AI Gateway proxy since applications are expected to define their own model configurations.">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="docs">
+<title>Call Settings | Docs</title>
+<link rel="icon" href="/favicon.png" >
+<link rel="manifest" href="/manifest.json">
+<link rel="canonical" href="http://localhost:1313/docs/call-settings/">
+<link rel="stylesheet" href="/book.min.07eb0517c93be900a0192ad4818442f94e0af010cebd7abf1e90ed37ccbff1d5.css" integrity="sha256-B&#43;sFF8k76QCgGSrUgYRC&#43;U4K8BDOvXq/HpDtN8y/8dU=" crossorigin="anonymous">
+  <script defer src="/fuse.min.js"></script>
+  <script defer src="/en.search.min.030874663a358a9d296f715607d72a8fa30a7e9a1fb664f6d3efb84a1a7b6aae.js" integrity="sha256-Awh0Zjo1ip0pb3FWB9cqj6MKfpoftmT20&#43;&#43;4Shp7aq4=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/logo.png" alt="Logo" class="book-icon" /><span>Docs</span>
+  </a>
+</h2>
+
+
+<div class="book-search hidden">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+<script>document.querySelector(".book-search").classList.remove("hidden")</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/quickstart/" class="">Quickstart</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/users/" class="">Users</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/configuration/" class="">Configuration</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/dashboard/" class="">Dashboard</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/groups/" class="">Groups</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/llms/" class="">Llms</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/call-settings/" class="active">Call Settings</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/model-prices/" class="">Model Prices</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/vector-sources/" class="">Vector Sources</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/tools/" class="">Tools</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/filters/" class="">Filters</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/secrets/" class="">Secrets</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/apps/" class="">Apps</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/catalogs/" class="">Catalogs Datasource</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/chat-rooms/" class="">Chat Rooms</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <h3>Call Settings</h3>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#llm-call-settings">LLM Call Settings</a></li>
+        <li><a href="#editcreate-call-settings">Edit/Create Call Settings</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown book-article"><h3 id="llm-call-settings">
+  LLM Call Settings
+  <a class="anchor" href="#llm-call-settings">#</a>
+</h3>
+<p>The <strong>LLM Call Settings</strong> section allows administrators to configure default runtime parameters for Large Language Models (LLMs) used in chat interactions and middleware system function calls. These settings provide control over how the LLM processes inputs and generates outputs. It is important to note that these settings are not utilized in the AI Gateway proxy since applications are expected to define their own model configurations.</p>
+<hr>
+<h4 id="table-overview">
+  <strong>Table Overview</strong>
+  <a class="anchor" href="#table-overview">#</a>
+</h4>
+<p>The table lists all configured call settings for available LLMs with the following columns:</p>
+<ol>
+<li>
+<p><strong>Model Name</strong>:
+The specific name or version of the LLM for which the call settings apply (e.g., <code>claude-3.5-sonnet-20240620</code>, <code>gpt-4o</code>).</p>
+</li>
+<li>
+<p><strong>Temperature</strong>:
+A numerical value (e.g., <code>0.7</code>, <code>0.1</code>) that controls the randomness of the LLM&rsquo;s responses:</p>
+<ul>
+<li>Higher values (e.g., <code>0.7</code>) produce more creative and varied outputs.</li>
+<li>Lower values (e.g., <code>0.1</code>) generate more deterministic and focused responses.</li>
+</ul>
+</li>
+<li>
+<p><strong>Max Tokens</strong>:
+The maximum number of tokens the LLM can generate in a single response. This sets a hard limit on the length of the output to ensure efficiency and prevent excessive usage.</p>
+</li>
+<li>
+<p><strong>Actions</strong>:
+A menu (three-dot icon) with quick actions to edit or delete the call settings for a specific model.</p>
+</li>
+</ol>
+<hr>
+<h4 id="features">
+  <strong>Features</strong>
+  <a class="anchor" href="#features">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Add LLM Call Setting Button</strong>:
+A green button labeled <strong>+ ADD LLM CALL SETTING</strong>, located at the top-right of the view. Clicking this button opens a form to define call settings for a new model.</p>
+</li>
+<li>
+<p><strong>Pagination Dropdown</strong>:
+Found at the bottom-left corner, this dropdown allows users to control how many call settings are displayed per page (e.g., 10, 20, etc.).</p>
+</li>
+</ol>
+<hr>
+<h4 id="use-cases">
+  <strong>Use Cases</strong>
+  <a class="anchor" href="#use-cases">#</a>
+</h4>
+<ul>
+<li>
+<p><strong>Chats</strong>:
+These settings control how the LLM responds in conversational interfaces within the Chat Room feature, allowing administrators to fine-tune the user experience.</p>
+</li>
+<li>
+<p><strong>Middleware Function Calls</strong>:
+The settings guide LLM behavior in automated backend processes where the LLM is used for tasks such as data generation or content analysis.</p>
+</li>
+</ul>
+<hr>
+<h4 id="quick-insights">
+  <strong>Quick Insights</strong>
+  <a class="anchor" href="#quick-insights">#</a>
+</h4>
+<p>The <strong>LLM Call Settings</strong> section provides administrators with granular control over LLM behavior during runtime. While the settings are not used in the proxy, they are crucial for managing system-level and chat-specific interactions, ensuring consistent performance and efficiency. This section enables streamlined configuration for application-level integration of LLMs.</p>
+<h3 id="editcreate-call-settings">
+  Edit/Create Call Settings
+  <a class="anchor" href="#editcreate-call-settings">#</a>
+</h3>
+<p>The <strong>Edit/Create LLM Call Settings View</strong> enables administrators to configure or update call-time options for a specific Large Language Model (LLM). These settings determine how the LLM processes inputs and generates outputs in chat interactions or middleware system function calls. Below is an explanation of each field and its purpose:</p>
+<hr>
+<h4 id="form-fields-and-descriptions">
+  <strong>Form Fields and Descriptions</strong>
+  <a class="anchor" href="#form-fields-and-descriptions">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Model Preset</strong> <em>(Dropdown)</em>:</p>
+<ul>
+<li>Allows administrators to select a pre-configured preset for the LLM, or choose &ldquo;Custom&rdquo; to manually configure all settings.</li>
+</ul>
+</li>
+<li>
+<p><strong>Model Name</strong> <em>(Required)</em>:</p>
+<ul>
+<li>Specifies the name of the LLM model these settings apply to (e.g., <code>claude-3.5-sonnet-20240620</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Temperature</strong> <em>(Decimal, 0.0 to 1.0)</em>:</p>
+<ul>
+<li>Controls the randomness of the model&rsquo;s responses:
+<ul>
+<li><strong>Higher values</strong> (e.g., <code>0.7</code>): More creative and varied outputs.</li>
+<li><strong>Lower values</strong> (e.g., <code>0.1</code>): More deterministic and repetitive outputs.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Max Tokens</strong> <em>(Integer)</em>:</p>
+<ul>
+<li>Defines the maximum number of tokens the LLM can generate in its response.</li>
+<li>Helps to limit response length for efficiency and control.</li>
+</ul>
+</li>
+<li>
+<p><strong>Top P</strong> <em>(Decimal, 0.0 to 1.0)</em>:</p>
+<ul>
+<li>Controls nucleus sampling, a method to limit token selection to the most probable subset:
+<ul>
+<li><strong>Higher values</strong> (e.g., <code>0.9</code>): Includes more variability in token choices.</li>
+<li><strong>Lower values</strong> (e.g., <code>0.1</code>): Focuses on the most likely tokens.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Top K</strong> <em>(Integer)</em>:</p>
+<ul>
+<li>Limits token selection to the top <code>K</code> most probable tokens at each step:
+<ul>
+<li><strong>Higher values</strong> allow for more varied responses.</li>
+<li><strong>Lower values</strong> restrict outputs to fewer options.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Min Length</strong> <em>(Integer)</em>:</p>
+<ul>
+<li>Sets the minimum number of tokens that must be included in the model&rsquo;s response.</li>
+</ul>
+</li>
+<li>
+<p><strong>Max Length</strong> <em>(Integer)</em>:</p>
+<ul>
+<li>Specifies the upper limit for the length of the response (e.g., 200,000 tokens).</li>
+</ul>
+</li>
+<li>
+<p><strong>Repetition Penalty</strong> <em>(Decimal)</em>:</p>
+<ul>
+<li>Penalizes repeated tokens to prevent the model from generating repetitive responses.
+<ul>
+<li><strong>Higher values</strong> (e.g., <code>1.5</code>): Stronger penalty for repetition.</li>
+<li><strong>Lower values</strong> (e.g., <code>1.0</code>): Little or no penalty.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>System Prompt</strong> <em>(Optional)</em>:</p>
+<ul>
+<li>A predefined instruction for the LLM that sets the tone or context for its responses.
+Example:
+<em>&ldquo;You are a helpful AI assistant specializing in API management and related topics. Respond in markdown and cite sources where appropriate.&rdquo;</em></li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="action-buttons">
+  <strong>Action Buttons</strong>
+  <a class="anchor" href="#action-buttons">#</a>
+</h4>
+<ol>
+<li>
+<p><strong>Update LLM Call Settings / Create LLM Call Settings</strong>:</p>
+<ul>
+<li>Saves the configuration or creates a new call settings entry. This button becomes active only when all required fields are valid.</li>
+</ul>
+</li>
+<li>
+<p><strong>Back to LLM Call Settings</strong>:</p>
+<ul>
+<li>A link in the top-right corner to return to the main LLM Call Settings view without saving changes.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h4 id="purpose">
+  <strong>Purpose</strong>
+  <a class="anchor" href="#purpose">#</a>
+</h4>
+<p>This interface provides granular control over runtime parameters, allowing administrators to customize the LLM&rsquo;s behavior for different use cases. These settings are critical for ensuring that the model generates responses tailored to specific operational or user requirements.</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+  <div>
+    <a class="flex align-center" href="https://github.com/alex-shpak/hugo-book/edit/master/exampleSite/content/docs/call-settings.md" target="_blank" rel="noopener">
+      <img src="/svg/edit.svg" class="book-icon" alt="" />
+      <span>Edit this page</span>
+    </a>
+  </div>
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#llm-call-settings">LLM Call Settings</a></li>
+        <li><a href="#editcreate-call-settings">Edit/Create Call Settings</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
