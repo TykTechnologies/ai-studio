@@ -9,7 +9,7 @@ weight: 70
 # bookSearchExclude: false
 ---
 
-### Catalogs Overview
+# Catalogs Overview
 
 The **Catalogs View** provides administrators with a centralized interface to group and manage related resources such as Large Language Models (LLMs), Data Sources, and Tools. By organizing these resources into catalogs, administrators can efficiently manage access control and simplify the assignment of resources to user groups.
 

@@ -9,7 +9,7 @@ weight: 60
 # bookSearchExclude: false
 ---
 
-### Apps View
+# Apps
 
 The **Apps View** is used to manage user-created applications that interact with Large Language Models (LLMs) and data sources via the Tyk AI Gateway. These apps provide a mechanism for users to define and encapsulate the functionality and resources they need for API interactions. Below is a detailed overview of the Apps View and its functionality.
 

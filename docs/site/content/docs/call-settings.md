@@ -9,7 +9,7 @@ weight: 15
 # bookSearchExclude: false
 ---
 
-### LLM Call Settings
+# LLM Call Settings
 
 The **LLM Call Settings** section allows administrators to configure default runtime parameters for Large Language Models (LLMs) used in chat interactions and middleware system function calls. These settings provide control over how the LLM processes inputs and generates outputs. It is important to note that these settings are not utilized in the AI Gateway proxy since applications are expected to define their own model configurations.
 

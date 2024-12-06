@@ -28,6 +28,9 @@ build-admin-frontend-clean:
 
 # Build Golang
 build-golang:
+	cd docs/site && \
+	hugo && \
+	cd ../../ && \
 	go build
 
 # Test target

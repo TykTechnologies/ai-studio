@@ -9,7 +9,7 @@ weight: 5
 # bookSearchExclude: false
 ---
 
-### Groups View for Tyk AI Portal
+# Groups View for Tyk AI Portal
 
 The Groups View allows administrators to manage role-based access control by organizing users into groups. Groups define permissions and access levels across the portal, enabling streamlined user management.
 

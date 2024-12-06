@@ -9,7 +9,7 @@ weight: 2
 # bookSearchExclude: false
 ---
 
-### Configuration
+# Configuration
 
 The Tyk AI Portal is configured using environment variables that can be set in a `.env` file. Below are the available configuration options:
 

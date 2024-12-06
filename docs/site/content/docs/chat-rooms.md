@@ -9,7 +9,7 @@ weight: 70
 # bookSearchExclude: false
 ---
 
-### Chat Rooms
+# Chat Rooms
 
 The **Chat Rooms View** enables administrators to manage interactive environments where non-technical users can engage with Large Language Models (LLMs). These chat rooms provide access to LLMs, data sources, and tools in a secure, group-based context. They are highly customizable to meet specific organizational needs.
 

@@ -9,7 +9,7 @@ weight: 25
 # bookSearchExclude: false
 ---
 
-### Vector Data Sources View for Tyk AI Portal
+# Vector Data Sources View for Tyk AI Portal
 
 The **Vector Data Sources View** enables administrators to manage and configure vector-based data sources. These data sources can be queried via the API or included in Chat Rooms as selectable or default resources to shape the behavior of interactions. Below is a breakdown of the features and options in this section:
 

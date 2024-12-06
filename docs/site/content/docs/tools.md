@@ -9,7 +9,7 @@ weight: 30
 # bookSearchExclude: false
 ---
 
-### Tools List
+# Tools List
 
 The **Tools List View** provides administrators with an overview of available tools that can be assigned to user groups and used in Chat Rooms. Tools enhance interaction by allowing users to add functionality to their context, enabling the Large Language Model (LLM) to perform specific tasks. Below is a breakdown of the features and information in this section:
 

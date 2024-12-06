@@ -9,7 +9,7 @@ weight: 50
 # bookSearchExclude: false
 ---
 
-### Secrets View
+# Secrets View
 
 The **Secrets View** allows administrators to securely store sensitive information, such as API keys or passwords, which can be referenced throughout the Tyk AI Portal. These secrets are encrypted at rest using the environment variable key `TYK_AI_SECRET_KEY`. Below is a breakdown of the functionality and use cases for this view.
 

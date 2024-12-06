@@ -9,7 +9,7 @@ weight: 1
 # bookSearchExclude: false
 ---
 
-### Users List View for Tyk AI Portal
+# Users List View for Tyk AI Portal
 
 The Users List View provides administrators with an overview of all registered users on the platform. This interface allows for managing users' access and permissions. Below is a detailed explanation of its components:
 

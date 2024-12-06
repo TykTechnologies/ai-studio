@@ -9,7 +9,7 @@ weight: 10
 # bookSearchExclude: false
 ---
 
-### The LLMs Vendor List
+# The LLMs Vendor List
 
 The **LLMs View** provides administrators with an overview of the Large Language Model (LLM) vendors integrated into the portal. This section allows for managing the LLMs available for use in Chat Room features and the AI Gateway. Below is a breakdown of the features and data displayed:
 
