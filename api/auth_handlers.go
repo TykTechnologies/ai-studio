@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,8 @@ import (
 // @Router /common/system [get]
 func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet := licensing.FeatureSet()
+	featureSet["docs_url"] = config.Get().DocsURL
+
 	c.JSON(http.StatusOK, gin.H{
 		"features": featureSet,
 	})
