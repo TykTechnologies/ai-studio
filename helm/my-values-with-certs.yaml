@@ -31,6 +31,8 @@ config:
   fromEmail: "noreply@example.com"
   devMode: "false"
   databaseType: "postgres"
+  tykAiSecretKey: "production-secret-key" # Add these new values
+  tykAiLicense: "production-license"
 
 # External database configuration using full URL
 database:

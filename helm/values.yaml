@@ -114,7 +114,11 @@ config:
   devMode: "false"
   databaseType: "postgres"
   filterSignupDomains: ""
-  databaseUrl: "" # This will be auto-generated if using internal database
+  databaseUrl: ""
+
+  # Tyk AI Configuration
+  tykAiSecretKey: ""
+  tykAiLicense: ""
 
 # Global configuration
 global:
