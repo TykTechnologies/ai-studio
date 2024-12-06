@@ -9,7 +9,7 @@ weight: 20
 # bookSearchExclude: false
 ---
 
-### Model Prices View for Tyk AI Portal
+# Model Prices View for Tyk AI Portal
 
 The **Model Prices View** allows administrators to manage and track the cost associated with Large Language Model (LLM) usage. This section is essential for monitoring expenses and setting pricing for LLM use within the AI Gateway and Chat Room features. Below is a detailed breakdown of the table and its features:
 

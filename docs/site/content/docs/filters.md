@@ -9,7 +9,7 @@ weight: 40
 # bookSearchExclude: false
 ---
 
-### Filters and Middleware
+# Filters and Middleware
 
 The **Filters List View** allows administrators to manage filters and middleware applied to prompts or data sent to Large Language Models (LLMs) via the AI Gateway or Chat Rooms. Filters and middleware ensure data governance, compliance, and security by processing or controlling the flow of information. Below is an enhanced description with the distinction between **Filters** and **Middleware**:
 

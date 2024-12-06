@@ -9,7 +9,7 @@ weight: 3
 # bookSearchExclude: false
 ---
 
-### Dashboard Overview for Tyk AI Portal
+# Dashboard Overview for Tyk AI Portal
 
 This dashboard provides an overview of user engagement, cost analysis, and tool/model usage for the Tyk AI Portal. Below is a breakdown of the various elements and their significance:
 

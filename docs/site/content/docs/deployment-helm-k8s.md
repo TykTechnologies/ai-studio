@@ -1,6 +1,6 @@
 ---
-title: "Deployment Helm K8s"
-weight: 4
+title: "Deploy on Helm with K8s"
+weight: 2
 # bookFlatSection: false
 # bookToc: true
 # bookHidden: false

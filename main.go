@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"strconv"
+
 	"gorm.io/driver/postgres"
 
 	"context"
@@ -15,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -117,6 +121,24 @@ func main() {
 	gatewayEnabled, gatewayOk := licensing.Entitlement(licensing.FEATUREGateway)
 	if gatewayOk && gatewayEnabled.Bool() {
 		go p.Start()
+	}
+
+	noDocsArg := false
+	docsPortArg := 8989
+	for i, arg := range os.Args {
+		if arg == "--no-docs" {
+			noDocsArg = true
+		}
+		if arg == "--docs-port" && i+1 < len(os.Args) {
+			if port, err := strconv.Atoi(os.Args[i+1]); err == nil {
+				docsPortArg = port
+			}
+		}
+	}
+
+	if !noDocsArg {
+		docsServer := docs.NewServer(docsPortArg)
+		go docsServer.Start()
 	}
 
 	if appConf.ProxyOnly == false {

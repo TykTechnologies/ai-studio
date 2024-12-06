@@ -4,6 +4,7 @@ import Toolbar from "@mui/material/Toolbar";
 import Box from "@mui/material/Box";
 import LogoutIcon from "@mui/icons-material/Logout";
 import LaunchIcon from "@mui/icons-material/Launch"; // Changed to Launch icon
+import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import { useNavigate } from "react-router-dom";
 import { styled } from "@mui/material/styles";
 import { StyledIconButton } from "../../styles/sharedStyles";
@@ -51,6 +52,14 @@ const MyAppBar = () => {
           />
         </Box>
 
+        <StyledLink
+          href={`${window.location.protocol}//${window.location.hostname}:8989/docs/quickstart`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <LibraryBooksIcon sx={{ mr: 1 }} />
+          Docs
+        </StyledLink>
         <StyledLink
           href="/portal/dashboard"
           target="_blank"
