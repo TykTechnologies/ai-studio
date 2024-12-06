@@ -32,3 +32,9 @@ data:
     {{- else }}
     DATABASE_URL=postgres://{{ .Values.database.user }}:{{ .Values.database.password }}@{{ default (printf "%s-postgres" (include "midsommar.fullname" .)) .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}
     {{- end }}
+    {{- if .Values.config.tykAiSecretKey }}
+    TYK_AI_SECRET_KEY={{ .Values.config.tykAiSecretKey }}
+    {{- end }}
+    {{- if .Values.config.tykAiLicense }}
+    TYK_AI_LICENSE={{ .Values.config.tykAiLicense }}
+    {{- end }}

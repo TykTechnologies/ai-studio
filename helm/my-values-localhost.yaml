@@ -17,11 +17,13 @@ midsommar:
 config:
   allowRegistrations: "true"
   adminEmail: "admin@localhost"
-  siteUrl: "http://localhost:32580" # Using the NodePort
+  siteUrl: "http://localhost:32580"
   fromEmail: "noreply@localhost"
-  devMode: "true" # Set to true for local development
+  devMode: "true"
   databaseType: "postgres"
   filterSignupDomains: "tyk.io"
+  tykAiSecretKey: "your-secret-key" # Add these new values
+  tykAiLicense: "your-license"
 
 # Internal database configuration for local development
 database:
