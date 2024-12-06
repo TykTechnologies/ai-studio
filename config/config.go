@@ -27,6 +27,7 @@ type AppConf struct {
 	FilterSignupDomains []string
 	EchoConversation    bool
 	ProxyOnly           bool
+	DocsURL             string
 }
 
 var globalConfig *AppConf
@@ -139,6 +140,11 @@ func getConfigFromEnv() *AppConf {
 	proxyOnlyStr := os.Getenv("PROXY_ONLY")
 	if proxyOnlyStr == "true" || proxyOnlyStr == "1" {
 		conf.ProxyOnly = true
+	}
+
+	conf.DocsURL = os.Getenv("DOCS_URL")
+	if conf.DocsURL == "" {
+		conf.DocsURL = "http://localhost:8989"
 	}
 
 	return conf

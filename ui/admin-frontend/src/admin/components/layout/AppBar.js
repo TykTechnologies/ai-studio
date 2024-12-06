@@ -1,14 +1,15 @@
-import React from "react";
+import React, { useState, useEffect } from "react"; // Add useState and useEffect
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Box from "@mui/material/Box";
 import LogoutIcon from "@mui/icons-material/Logout";
-import LaunchIcon from "@mui/icons-material/Launch"; // Changed to Launch icon
+import LaunchIcon from "@mui/icons-material/Launch";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import { useNavigate } from "react-router-dom";
 import { styled } from "@mui/material/styles";
 import { StyledIconButton } from "../../styles/sharedStyles";
 import apiClient from "../../utils/apiClient";
+import pubClient from "../../utils/pubClient";
 
 const StyledLink = styled("a")(({ theme }) => ({
   color: "white",
@@ -21,6 +22,21 @@ const StyledLink = styled("a")(({ theme }) => ({
 
 const MyAppBar = () => {
   const navigate = useNavigate();
+  const [docsUrl, setDocsUrl] = useState(""); // Add state for docs URL
+
+  // Fetch system settings when component mounts
+  useEffect(() => {
+    const fetchSystemSettings = async () => {
+      try {
+        const response = await pubClient.get("/common/system");
+        setDocsUrl(response.data.features.docs_url + "/docs/quickstart");
+      } catch (error) {
+        console.error("Failed to fetch system settings:", error);
+      }
+    };
+
+    fetchSystemSettings();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -52,14 +68,13 @@ const MyAppBar = () => {
           />
         </Box>
 
-        <StyledLink
-          href={`${window.location.protocol}//${window.location.hostname}:8989/docs/quickstart`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <LibraryBooksIcon sx={{ mr: 1 }} />
-          Docs
-        </StyledLink>
+        {docsUrl && ( // Conditionally render docs link
+          <StyledLink href={docsUrl} target="_blank" rel="noopener noreferrer">
+            <LibraryBooksIcon sx={{ mr: 1 }} />
+            Docs
+          </StyledLink>
+        )}
+
         <StyledLink
           href="/portal/dashboard"
           target="_blank"
