@@ -98,38 +98,6 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		filters:        withFilters,
 	}
 
-	// auto-load the default
-	if chat.DefaultDataSource != nil {
-		err := cs.AddDatasource(chat.DefaultDataSource.ID)
-		if err != nil {
-			return nil, fmt.Errorf("error adding default datasource to chat session: %v", err)
-		}
-	}
-
-	if chat.DefaultTools != nil {
-		for i, _ := range chat.DefaultTools {
-			toolDef, err := cs.service.GetToolByID(chat.DefaultTools[i].ID)
-			if err != nil {
-				return nil, fmt.Errorf("error getting default tool definition: %v", err)
-			}
-
-			toolDef.OASSpec, err = helpers.DecodeToUTF8(toolDef.OASSpec)
-			err = cs.AddTool(
-				toolDef.Name,
-				*toolDef)
-			if err != nil {
-				return nil, fmt.Errorf("error adding default tool to chat session: %v", err)
-			}
-		}
-	}
-
-	// Perform initial privacy check
-	if len(cs.datasources) > 0 || len(cs.tools) > 0 {
-		if err := cs.validatePrivacyScores(); err != nil {
-			return nil, fmt.Errorf("initial privacy score validation failed: %v", err)
-		}
-	}
-
 	// filter setup
 	preProcessors := []func(*models.UserMessage) error{}
 	for i, _ := range withFilters {
@@ -191,11 +159,19 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 		return err
 	}
 
+	cs.sendStatus(fmt.Sprintf("Datasource '%s' added to room", ds.Name))
+
 	return nil
 }
 
 func (cs *ChatSession) RemoveDatasource(id uint) {
+	ds, ok := cs.datasources[id]
+	if !ok {
+		return
+	}
+
 	delete(cs.datasources, id)
+	cs.sendStatus(fmt.Sprintf("Datasource '%s' removed from room", ds.Name))
 }
 
 func (cs *ChatSession) AddTool(id string, t models.Tool) error {
@@ -216,6 +192,7 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 	}
 
 	slog.Info("tool added to chat", "tool", t.Name)
+	cs.sendStatus(fmt.Sprintf("Tool '%s' added to room", t.Name))
 
 	for i, _ := range t.FileStores {
 		// base64 decode the file contents first
@@ -269,7 +246,13 @@ func (cs *ChatSession) GetFileReference(filename string) (string, bool) {
 }
 
 func (cs *ChatSession) RemoveTool(id string) {
+	t, ok := cs.tools[id]
+	if !ok {
+		return
+	}
+
 	delete(cs.tools, id)
+	cs.sendStatus(fmt.Sprintf("Tool '%s' removed from room", t.Name))
 }
 
 func (cs *ChatSession) CurrentTools() map[string]models.Tool {
@@ -290,6 +273,11 @@ func (cs *ChatSession) Stop() {
 func (cs *ChatSession) Start() error {
 	if err := cs.initSession(); err != nil {
 		return fmt.Errorf("error initializing chat session: %v", err)
+	}
+
+	err := cs.handleDefaults()
+	if err != nil {
+		return fmt.Errorf("error handling defaults: %v", err)
 	}
 
 	go func() {
@@ -476,6 +464,42 @@ func (cs *ChatSession) initSession() error {
 	// Validate privacy scores
 	if err := cs.validatePrivacyScores(); err != nil {
 		return fmt.Errorf("privacy score validation failed: %v", err)
+	}
+
+	return nil
+}
+
+func (cs *ChatSession) handleDefaults() error {
+	// auto-load the default
+	if cs.chatRef.DefaultDataSource != nil {
+		err := cs.AddDatasource(cs.chatRef.DefaultDataSource.ID)
+		if err != nil {
+			return fmt.Errorf("error adding default datasource to chat session: %v", err)
+		}
+	}
+
+	if cs.chatRef.DefaultTools != nil {
+		for i, _ := range cs.chatRef.DefaultTools {
+			toolDef, err := cs.service.GetToolByID(cs.chatRef.DefaultTools[i].ID)
+			if err != nil {
+				return fmt.Errorf("error getting default tool definition: %v", err)
+			}
+
+			toolDef.OASSpec, err = helpers.DecodeToUTF8(toolDef.OASSpec)
+			err = cs.AddTool(
+				toolDef.Name,
+				*toolDef)
+			if err != nil {
+				return fmt.Errorf("error adding default tool to chat session: %v", err)
+			}
+		}
+	}
+
+	// Perform initial privacy check
+	if len(cs.datasources) > 0 || len(cs.tools) > 0 {
+		if err := cs.validatePrivacyScores(); err != nil {
+			return fmt.Errorf("privacy score validation failed: %v", err)
+		}
 	}
 
 	return nil
