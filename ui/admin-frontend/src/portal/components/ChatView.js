@@ -28,6 +28,7 @@ import pubClient from "../../admin/utils/pubClient";
 import TextareaAutosize from "@mui/material/TextareaAutosize";
 import { getConfig } from "../../config"; // Update the import
 import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
+import SendIcon from "@mui/icons-material/Send";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -74,7 +75,11 @@ const ChatView = () => {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter") {
+      // If Shift or Cmd/Ctrl is pressed, allow new line
+      if (e.shiftKey || e.metaKey || e.ctrlKey) {
+        return;
+      }
       e.preventDefault();
       handleSendMessage(e);
     }
@@ -965,7 +970,7 @@ const ChatView = () => {
             <TextField
               fullWidth
               variant="outlined"
-              placeholder="Type your message here... (Cmd+Enter or Ctrl+Enter to send)"
+              placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -988,6 +993,16 @@ const ChatView = () => {
                     {renderUploadIndicator()}
                     <IconButton onClick={open} size="small">
                       <AttachFileIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={handleSendMessage}
+                      disabled={
+                        !isConnected ||
+                        (!inputMessage.trim() && uploadedFiles.length === 0)
+                      }
+                      size="small"
+                    >
+                      <SendIcon />
                     </IconButton>
                   </Box>
                 ),
