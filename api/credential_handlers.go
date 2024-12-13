@@ -1,6 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"fmt"
+	"html/template"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -143,6 +147,7 @@ func (a *API) updateCredential(c *gin.Context) {
 		return
 	}
 
+	prev := credential.Active
 	credential.Active = input.Data.Attributes.Active
 
 	err = a.service.UpdateCredential(credential)
@@ -156,7 +161,70 @@ func (a *API) updateCredential(c *gin.Context) {
 		return
 	}
 
+	if prev == false && credential.Active == true {
+		// notify the end user that the credential has been activated
+		app, err := a.service.GetAppByCredentialID(credential.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+
+		err = a.sendCredentialsApprovedEmail(app, credential)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": serializeCredential(credential)})
+}
+
+func (a *API) sendCredentialsApprovedEmail(app *models.App, creds *models.Credential) error {
+	subject := "App Credentials Approved"
+	appDetailsURL := fmt.Sprintf("%s/portal/apps/%d", a.config.FrontendURL, app.ID)
+
+	user, err := a.service.GetUserByID(app.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to get user by ID: %w", err)
+	}
+
+	var body string
+	tmpl, err := template.ParseFiles("./templates/user-app-approved-notification.tmpl")
+	if err != nil {
+		// If template is not found, use a simple string
+		body = fmt.Sprintf("Your app has been approved:\n\nName: %s\n\nView app details: %s\n",
+			app.Name, app.Description, app.UserID, appDetailsURL)
+		slog.Warn("failed to parse email template", "error", err)
+	} else {
+		var buf bytes.Buffer
+		err = tmpl.Execute(&buf, map[string]interface{}{
+			"UserName": user.Name,
+			"AppName":  app.Name,
+			"KeyID":    creds.KeyID,
+			"AppURL":   appDetailsURL,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute email template: %w", err)
+		}
+		body = buf.String()
+	}
+
+	err = a.auth.SendEmail(user.Email, subject, body)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+
+	return nil
 }
 
 // @Summary Delete a credential
