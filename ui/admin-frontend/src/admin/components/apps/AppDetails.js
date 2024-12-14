@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
+  Alert,
   Typography,
   CircularProgress,
   Box,
@@ -16,6 +17,7 @@ import {
   TableHead,
   TableRow,
   Paper,
+  Snackbar,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -125,6 +127,11 @@ const AppDetails = () => {
   );
   const { id } = useParams();
   const navigate = useNavigate();
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   const {
     page,
@@ -140,6 +147,50 @@ const AppDetails = () => {
     fetchTokenUsageAndCost();
     fetchProxyLogs();
   }, [id, startDate, endDate, page, pageSize]);
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  const handleApproveApp = async () => {
+    try {
+      const credentialInput = {
+        data: {
+          type: "credentials",
+          attributes: {
+            active: true,
+          },
+        },
+      };
+
+      await apiClient.patch(`/credentials/${credential.id}`, credentialInput);
+
+      setCredential((prevState) => ({
+        ...prevState,
+        attributes: {
+          ...prevState.attributes,
+          active: true,
+        },
+      }));
+
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: "App approved successfully",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error approving app", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to approve app. Please try again.",
+        severity: "error",
+      });
+    }
+  };
 
   const fetchAppDetails = async () => {
     try {
@@ -411,6 +462,19 @@ const AppDetails = () => {
                   {credential.attributes.active ? "Yes" : "No"}
                 </FieldValue>
               </Grid>
+              {!credential.attributes.active && (
+                <Grid item xs={12}>
+                  <Box mt={2}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleApproveApp}
+                    >
+                      Approve this App
+                    </Button>
+                  </Box>
+                </Grid>
+              )}
             </Grid>
           </>
         )}
@@ -499,6 +563,20 @@ const AppDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 };
