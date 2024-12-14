@@ -556,8 +556,8 @@ const ToolForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit Tool" : "Add Tool"}</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -884,7 +884,7 @@ const ToolForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

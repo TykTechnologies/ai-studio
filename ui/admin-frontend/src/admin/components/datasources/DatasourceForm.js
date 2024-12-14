@@ -329,8 +329,8 @@ const DatasourceForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Datasource" : "Add Datasource"}
         </Typography>
@@ -338,7 +338,7 @@ const DatasourceForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/datasources"
-          color="white"
+          color="inherit"
         >
           Back to Datasources
         </Button>
@@ -792,7 +792,7 @@ const DatasourceForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

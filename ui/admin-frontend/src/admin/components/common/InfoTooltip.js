@@ -27,7 +27,7 @@ const InfoTooltip = ({ title }) => (
         sx={{
           cursor: "help",
           fontSize: "1.5em",
-          color: "white",
+          color: "black",
           mr: 1,
           paddingBottom: "2px",
         }}

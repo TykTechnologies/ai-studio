@@ -6,7 +6,7 @@ const theme = createTheme({
     fontOpticalSizing: "auto",
     fontStyle: "normal",
     body1: {
-      fontSize: "0.99rem",
+      fontSize: "0.89rem",
     },
     body2: {
       fontSize: "0.89rem",
@@ -25,10 +25,18 @@ const theme = createTheme({
       default: "#FFFFFF",
       paper: "#FFFFFF",
     },
+    gray: {
+      ligh: "#F5F5F5",
+      main: "#CCCCCC",
+      dark: "#333333",
+    },
     custom: {
+      white: "#FFFFFF",
       leaf: "#21ecba",
+      purpleExtraDark: "#5525AA",
       purpleDark: "#8437fa",
       purpleLight: "#972afc",
+      purpleExtraLight: "#F0E4FF",
       teal: "#21ecba",
       lightTeal: "rgb(33 236 186 / 7%)",
       hoverTeal: "rgb(33 236 186 / 47%)",
@@ -63,7 +71,6 @@ const theme = createTheme({
       styleOverrides: {
         h5: {
           fontWeight: "bold",
-          color: "#FFFFFF", // or use a theme color like theme.palette.common.white
         },
       },
     },

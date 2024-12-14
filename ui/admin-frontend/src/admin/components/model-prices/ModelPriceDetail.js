@@ -52,13 +52,13 @@ const ModelPriceDetail = () => {
   if (!price) return <Typography>Model Price not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Model Price Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/model-prices")}
-          color="white"
+          color="inherit"
         >
           Back to Model Prices
         </Button>
@@ -115,7 +115,7 @@ const ModelPriceDetail = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

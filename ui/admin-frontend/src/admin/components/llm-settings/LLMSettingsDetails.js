@@ -165,13 +165,13 @@ const LLMSettingsDetails = () => {
   if (!setting) return <Typography>LLM Call Settings not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">LLM Call Settings Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llm-settings")}
-          color="white"
+          color="inherit"
         >
           Back to LLM Call Settings
         </Button>
@@ -311,7 +311,7 @@ const LLMSettingsDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

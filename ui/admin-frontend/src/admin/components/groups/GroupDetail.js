@@ -396,12 +396,12 @@ const GroupDetail = () => {
   if (!group) return <Typography>Group not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Group Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          color="white"
+          color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
@@ -671,7 +671,7 @@ const GroupDetail = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

@@ -21,10 +21,10 @@ import AddIcon from "@mui/icons-material/Add";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import {
-  StyledPaper,
   TitleBox,
-  ContentBox,
+  StyledPaper,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -171,8 +171,8 @@ const LLMList = () => {
 
   return (
     <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Large Language Models (LLMs) registered here can be used in chat rooms, and are available to developers in the Portal if set to Active. They must be part of a catalog in order to be usable by a group." />
             <Typography variant="h5">LLMs</Typography>
@@ -186,7 +186,7 @@ const LLMList = () => {
             Add LLM
           </StyledButton>
         </TitleBox>
-        <ContentBox>
+        <Box sx={{ p: 3 }}>
           {llms.length === 0 ? (
             <EmptyStateWidget
               title="Want to start working with your favourite LLM?"
@@ -196,26 +196,26 @@ const LLMList = () => {
               onButtonClick={handleAddLLM}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
-                    </StyledTableCell>
-                    <StyledTableCell>Short Description</StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("vendor")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Short Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("vendor")}>
                       Vendor
-                    </StyledTableCell>
-                    <StyledTableCell
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
                       onClick={() => handleSort("privacy_score")}
                     >
                       Privacy Score
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("active")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("active")}>
                       Proxied
-                    </StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -225,9 +225,9 @@ const LLMList = () => {
                       onClick={() => handleLLMClick(llm)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{llm.attributes.name}</TableCell>
-                      <TableCell>{llm.attributes.short_description}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{llm.attributes.name}</StyledTableCell>
+                      <StyledTableCell>{llm.attributes.short_description}</StyledTableCell>
+                      <StyledTableCell>
                         <Box sx={{ display: "flex", alignItems: "center" }}>
                           <img
                             src={getVendorLogo(llm.attributes.vendor)}
@@ -247,22 +247,22 @@ const LLMList = () => {
                           />
                           {getVendorName(llm.attributes.vendor)}
                         </Box>
-                      </TableCell>
-                      <TableCell>{llm.attributes.privacy_score}</TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>{llm.attributes.privacy_score}</StyledTableCell>
+                      <StyledTableCell>
                         <FiberManualRecordIcon
                           sx={{
                             color: llm.attributes.active ? "green" : "red",
                           }}
                         />
-                      </TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, llm)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -274,10 +274,10 @@ const LLMList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
-        </ContentBox>
-      </StyledPaper>
+        </Box>
+      </>
 
       <Menu
         anchorEl={anchorEl}

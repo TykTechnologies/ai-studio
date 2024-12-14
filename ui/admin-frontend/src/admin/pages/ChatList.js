@@ -24,6 +24,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -177,9 +178,9 @@ const ChatList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to their group. They can be associated with one or more groups." />
             <Typography variant="h5">Chat Rooms</Typography>
@@ -203,23 +204,23 @@ const ChatList = () => {
               onButtonClick={handleAddChat}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("llm_id")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("llm_id")}>
                       LLM
-                    </StyledTableCell>
-                    <StyledTableCell
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
                       onClick={() => handleSort("llm_settings_id")}
                     >
                       LLM Settings
-                    </StyledTableCell>
-                    <StyledTableCell>Groups</StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Groups</StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -229,26 +230,26 @@ const ChatList = () => {
                       onClick={() => handleChatClick(chat)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{chat.attributes.name}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{chat.attributes.name}</StyledTableCell>
+                      <StyledTableCell>
                         {llms[chat.attributes.llm_id] || "Unknown LLM"}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         {llmSettings[chat.attributes.llm_settings_id] ||
                           "Unknown Settings"}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         {chat.attributes.groups
                           .map((group) => group.attributes.name)
                           .join(", ")}
-                      </TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, chat)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -260,10 +261,10 @@ const ChatList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -294,7 +295,7 @@ const ChatList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

@@ -123,8 +123,8 @@ const UserMessageLog = () => {
   }
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5" fontWeight="bold">
           Chat Log
         </Typography>
@@ -187,7 +187,7 @@ const UserMessageLog = () => {
           />
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

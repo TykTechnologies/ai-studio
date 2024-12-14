@@ -200,14 +200,14 @@ const LLMForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit LLM" : "Add LLM"}</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llms"
-          color="white"
+          color="inherit"
         >
           Back to LLMs
         </Button>
@@ -482,7 +482,7 @@ const LLMForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

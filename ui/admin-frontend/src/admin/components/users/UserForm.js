@@ -285,13 +285,13 @@ const UserForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit User" : "Add User"}</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
-          color="white"
+          color="inherit"
           to="/admin/users"
         >
           Back to Users
@@ -468,7 +468,7 @@ const UserForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

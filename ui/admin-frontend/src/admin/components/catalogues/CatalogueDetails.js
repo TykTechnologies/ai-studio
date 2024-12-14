@@ -69,8 +69,8 @@ const CatalogueDetails = () => {
   if (!catalogue) return <Typography>Catalog not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Catalog Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -135,7 +135,7 @@ const CatalogueDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

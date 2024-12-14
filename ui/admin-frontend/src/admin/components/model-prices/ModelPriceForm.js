@@ -173,8 +173,8 @@ const ModelPriceForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Model Price" : "Add Model Price"}
         </Typography>
@@ -182,7 +182,7 @@ const ModelPriceForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/model-prices"
-          color="white"
+          color="inherit"
         >
           Back to Model Prices
         </Button>
@@ -288,7 +288,7 @@ const ModelPriceForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

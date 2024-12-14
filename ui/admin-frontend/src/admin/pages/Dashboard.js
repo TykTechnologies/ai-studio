@@ -19,6 +19,11 @@ import {
   TableHead,
   TableRow,
 } from "@mui/material";
+import {
+  StyledButton,
+  StyledPaper,
+  TitleBox,
+} from "../styles/sharedStyles";
 import { Line, Bar } from "react-chartjs-2";
 import { styled } from "@mui/material/styles";
 
@@ -337,6 +342,11 @@ const Dashboard = () => {
   );
 
   const ChartPaper = styled(Paper)(({ theme }) => ({
+    backgroundColor: theme.palette.background.paper,
+    borderRadius: theme.shape.borderRadius * 3,
+    border: `1px solid rgba(0, 0, 0, 0.12)`,
+    boxShadow: "none",
+    overflow: "hidden",
     padding: theme.spacing(3),
     paddingBottom: theme.spacing(6), // Increased bottom padding
     height: 450, // Increased height to accommodate the extra padding
@@ -377,12 +387,8 @@ const Dashboard = () => {
               onClose={hideGetStartedWidget}
             />
           )}
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-            mb={3}
-          >
+
+          <TitleBox top="64px">
             <Typography variant="h4">Dashboard</Typography>
             <Stack direction="row" spacing={2} alignItems="center">
               <TextField
@@ -401,17 +407,16 @@ const Dashboard = () => {
                 InputLabelProps={{ shrink: true }}
                 size="small"
               />
-              <Button
+              <StyledButton
                 variant="contained"
                 onClick={handleDateChange}
-                size="small"
               >
                 Update
-              </Button>
+              </StyledButton>
             </Stack>
-          </Box>
+          </TitleBox>
 
-          <Box mb={4}>
+          <Box sx={{ p: 3 }}>
             <SectionTitle
               title="Conversations"
               helpText="Overview of user engagement and chat activity"
@@ -455,7 +460,7 @@ const Dashboard = () => {
 
           <Divider sx={{ my: 4 }} />
 
-          <Box mb={4}>
+          <Box sx={{ p: 3 }}>
             <SectionTitle
               title="Cost Analysis"
               helpText="Breakdown of costs for different currencies and usage of LLM models"
@@ -477,7 +482,7 @@ const Dashboard = () => {
                 </ChartPaper>
               </Grid>
               <Grid item xs={12}>
-                <Paper elevation={3} style={{ padding: "20px" }}>
+                <StyledPaper elevation={3} style={{ padding: "20px" }}>
                   <Typography variant="h6" gutterBottom>
                     Total Cost per Vendor and Model
                   </Typography>
@@ -549,14 +554,14 @@ const Dashboard = () => {
                   ) : (
                     <NoDataMessage message="No vendor and model cost data available for the selected period." />
                   )}
-                </Paper>
+                </StyledPaper>
               </Grid>
             </Grid>
           </Box>
 
           <Divider sx={{ my: 4 }} />
 
-          <Box mb={4}>
+          <Box sx={{ p: 3 }}>
             <SectionTitle
               title="Model and Tool Usage"
               helpText="Analysis of most used LLM models and tools"
