@@ -549,6 +549,11 @@ func (a *API) sendAdminAppNotification(app *models.App) error {
 	subject := "New App Created"
 	appDetailsURL := fmt.Sprintf("%s/admin/apps/%d", a.config.FrontendURL, app.ID)
 
+	user, err := a.service.GetUserByID(app.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to get user by ID: %w", err)
+	}
+
 	var body string
 	tmpl, err := template.ParseFiles("./templates/admin-app-notification.tmpl")
 	if err != nil {
@@ -560,7 +565,7 @@ func (a *API) sendAdminAppNotification(app *models.App) error {
 		err = tmpl.Execute(&buf, map[string]interface{}{
 			"AppName":        app.Name,
 			"AppDescription": app.Description,
-			"UserID":         app.UserID,
+			"UserName":       user.Name,
 			"AppDetailsURL":  appDetailsURL,
 		})
 		if err != nil {

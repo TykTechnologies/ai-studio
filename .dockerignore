@@ -2,7 +2,16 @@ ui/admin-frontend/node_modules
 tools
 utils
 ci
-docs
+docs/site/archetypes 
+docs/site/assets
+docs/site/content/docs
+docs/site/data
+docs/site/i18n
+docs/site/layouts
+docs/site/themes/hugo-book
+docs/site/.hugo_build.lock
+docs/site/hugo.toml
+docs/swagger
 .env
 *.db
 .aider*
