@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -24,6 +23,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -144,9 +144,9 @@ const ToolList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request." />
             <Typography variant="h5">Tools</Typography>
@@ -170,20 +170,20 @@ const ToolList = () => {
               onButtonClick={handleAddTool}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
-                    </StyledTableCell>
-                    <StyledTableCell>Description</StyledTableCell>
-                    <StyledTableCell
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell
                       onClick={() => handleSort("privacy_score")}
                     >
                       Privacy Score
-                    </StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -193,16 +193,16 @@ const ToolList = () => {
                       onClick={() => handleToolClick(tool)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{tool.attributes.name}</TableCell>
-                      <TableCell>{tool.attributes.description}</TableCell>
-                      <TableCell>{tool.attributes.privacy_score}</TableCell>
-                      <TableCell align="right">
+                      <StyledTableCell>{tool.attributes.name}</StyledTableCell>
+                      <StyledTableCell>{tool.attributes.description}</StyledTableCell>
+                      <StyledTableCell>{tool.attributes.privacy_score}</StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, tool)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -214,10 +214,10 @@ const ToolList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -248,7 +248,7 @@ const ToolList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

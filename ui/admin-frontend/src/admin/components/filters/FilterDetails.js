@@ -52,13 +52,13 @@ const FilterDetails = () => {
   if (!filter) return <Typography>Filter not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Filter Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/filters")}
-          color="white"
+          color="inherit"
         >
           Back to Filters
         </Button>
@@ -106,7 +106,7 @@ const FilterDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

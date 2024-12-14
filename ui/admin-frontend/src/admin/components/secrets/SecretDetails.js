@@ -76,14 +76,14 @@ const SecretDetails = () => {
   if (loading || !secret) return <CircularProgress />;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Secret Details</Typography>
         <Box>
           <Button
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate("/admin/secrets")}
-            color="white"
+            color="inherit"
             sx={{ mr: 2 }}
           >
             Back to Secrets
@@ -158,7 +158,7 @@ const SecretDetails = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

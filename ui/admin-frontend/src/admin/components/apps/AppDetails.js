@@ -315,13 +315,13 @@ const AppDetails = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">App Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/apps")}
-          color="white"
+          color="inherit"
         >
           Back to Apps
         </Button>
@@ -499,7 +499,7 @@ const AppDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

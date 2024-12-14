@@ -24,6 +24,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -162,9 +163,9 @@ const AppList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources." />
             <Typography variant="h5">Apps</Typography>
@@ -187,18 +188,18 @@ const AppList = () => {
               onButtonClick={handleAddApp}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
-                    </StyledTableCell>
-                    <StyledTableCell>Description</StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("user_id")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("user_id")}>
                       User
-                    </StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -208,18 +209,18 @@ const AppList = () => {
                       onClick={() => handleAppClick(app)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{app.attributes.name}</TableCell>
-                      <TableCell>{app.attributes.description}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{app.attributes.name}</StyledTableCell>
+                      <StyledTableCell>{app.attributes.description}</StyledTableCell>
+                      <StyledTableCell>
                         {users[app.attributes.user_id] || "Unknown"}
-                      </TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, app)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -231,10 +232,10 @@ const AppList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -265,7 +266,7 @@ const AppList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

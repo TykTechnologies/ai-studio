@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -24,6 +23,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -144,9 +144,9 @@ const FilterList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Filters are used to process and modify data before it is passed to the LLM." />
             <Typography variant="h5">Filters</Typography>
@@ -170,15 +170,15 @@ const FilterList = () => {
               onButtonClick={handleAddFilter}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
-                    </StyledTableCell>
-                    <StyledTableCell>Description</StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -188,15 +188,15 @@ const FilterList = () => {
                       onClick={() => handleFilterClick(filter)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{filter.attributes.name}</TableCell>
-                      <TableCell>{filter.attributes.description}</TableCell>
-                      <TableCell align="right">
+                      <StyledTableCell>{filter.attributes.name}</StyledTableCell>
+                      <StyledTableCell>{filter.attributes.description}</StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, filter)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -208,10 +208,10 @@ const FilterList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -242,7 +242,7 @@ const FilterList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

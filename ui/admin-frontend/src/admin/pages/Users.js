@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -27,8 +26,8 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   StyledPaper,
   TitleBox,
-  ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
   StyledDialogContent,
@@ -237,28 +236,28 @@ const Users = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
-          <Typography variant="h5">Users</Typography>
-          <StyledButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            component={Link}
-            to="/admin/users/new"
-          >
-            Add user
-          </StyledButton>
-        </TitleBox>
-        <ContentBox>
+    <>
+      <TitleBox top="64px">
+        <Typography variant="h5">Users</Typography>
+        <StyledButton
+          variant="contained"
+          startIcon={<AddIcon />}
+          component={Link}
+          to="/admin/users/new"
+        >
+          Add user
+        </StyledButton>
+      </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <StyledPaper>
           <Table>
             <TableHead>
               <TableRow>
-                <StyledTableCell>ID</StyledTableCell>
-                <StyledTableCell>Name</StyledTableCell>
-                <StyledTableCell>Email</StyledTableCell>
-                <StyledTableCell>Is Admin</StyledTableCell>
-                <StyledTableCell align="right">Actions</StyledTableCell>
+                <StyledTableHeaderCell>ID</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Email</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Is Admin</StyledTableHeaderCell>
+                <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -269,24 +268,24 @@ const Users = () => {
                     onClick={() => handleUserClick(user)}
                     sx={{ cursor: "pointer" }}
                   >
-                    <TableCell>{user.id}</TableCell>
-                    <TableCell>{user.attributes.name}</TableCell>
-                    <TableCell>{user.attributes.email}</TableCell>
-                    <TableCell>
+                    <StyledTableCell>{user.id}</StyledTableCell>
+                    <StyledTableCell>{user.attributes.name}</StyledTableCell>
+                    <StyledTableCell>{user.attributes.email}</StyledTableCell>
+                    <StyledTableCell>
                       {user.attributes.is_admin ? "Yes" : "No"}
-                    </TableCell>
-                    <TableCell align="right">
+                    </StyledTableCell>
+                    <StyledTableCell align="right">
                       <IconButton
                         onClick={(event) => handleMenuOpen(event, user)}
                       >
                         <MoreVertIcon />
                       </IconButton>
-                    </TableCell>
+                    </StyledTableCell>
                   </StyledTableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4}>No users found</TableCell>
+                  <StyledTableCell colSpan={4}>No users found</StyledTableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -298,93 +297,93 @@ const Users = () => {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />
-        </ContentBox>
-      </StyledPaper>
+        </StyledPaper>
 
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
-        <MenuItem
-          onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
         >
-          Edit User
-        </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedUser?.id)}>
-          Delete User
-        </MenuItem>
-      </Menu>
-
-      <StyledDialog
-        open={openAddToGroupModal}
-        onClose={handleCloseAddToGroupModal}
-      >
-        <StyledDialogTitle>
-          {isAddingGroup ? "Add New Group" : "Add User to Group"}
-        </StyledDialogTitle>
-        <StyledDialogContent>
-          {isAddingGroup ? (
-            <TextField
-              fullWidth
-              label="New Group Name"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              sx={{ mt: 2 }}
-            />
-          ) : (
-            <>
-              <Typography
-                gutterBottom
-                sx={(theme) => ({ padding: theme.spacing(2) })}
-              >
-                Select a group from the dropdown menu below to add the user to
-                that group. This action will grant the user permissions
-                associated with the selected group.
-              </Typography>
-              <FormControl fullWidth sx={{ mt: 2 }}>
-                <InputLabel>Group</InputLabel>
-                <Select
-                  value={selectedGroup}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
-                >
-                  {groups.map((group) => (
-                    <MenuItem key={group.id} value={group.id}>
-                      {group.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </>
-          )}
-        </StyledDialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseAddToGroupModal}>Cancel</Button>
-          <Button
-            onClick={isAddingGroup ? handleAddNewGroup : handleAddUserToGroup}
-            color="primary"
+          <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
+          <MenuItem
+            onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
           >
-            {isAddingGroup ? "Add Group" : "Add to Group"}
-          </Button>
-        </DialogActions>
-      </StyledDialog>
+            Edit User
+          </MenuItem>
+          <MenuItem onClick={() => handleDelete(selectedUser?.id)}>
+            Delete User
+          </MenuItem>
+        </Menu>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
+        <StyledDialog
+          open={openAddToGroupModal}
+          onClose={handleCloseAddToGroupModal}
         >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+          <StyledDialogTitle>
+            {isAddingGroup ? "Add New Group" : "Add User to Group"}
+          </StyledDialogTitle>
+          <StyledDialogContent>
+            {isAddingGroup ? (
+              <TextField
+                fullWidth
+                label="New Group Name"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                sx={{ mt: 2 }}
+              />
+            ) : (
+              <>
+                <Typography
+                  gutterBottom
+                  sx={(theme) => ({ padding: theme.spacing(2) })}
+                >
+                  Select a group from the dropdown menu below to add the user to
+                  that group. This action will grant the user permissions
+                  associated with the selected group.
+                </Typography>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                  <InputLabel>Group</InputLabel>
+                  <Select
+                    value={selectedGroup}
+                    onChange={(e) => setSelectedGroup(e.target.value)}
+                  >
+                    {groups.map((group) => (
+                      <MenuItem key={group.id} value={group.id}>
+                        {group.attributes.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </>
+            )}
+          </StyledDialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseAddToGroupModal}>Cancel</Button>
+            <Button
+              onClick={isAddingGroup ? handleAddNewGroup : handleAddUserToGroup}
+              color="primary"
+            >
+              {isAddingGroup ? "Add Group" : "Add to Group"}
+            </Button>
+          </DialogActions>
+        </StyledDialog>
+
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            onClose={handleCloseSnackbar}
+            severity={snackbar.severity}
+            sx={{ width: "100%" }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Box>
+    </>
   );
 };
 

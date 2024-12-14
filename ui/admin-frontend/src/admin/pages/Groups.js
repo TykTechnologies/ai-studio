@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -19,14 +18,15 @@ import {
   Select,
   Snackbar,
   Button,
+  Box,
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   StyledPaper,
   TitleBox,
-  ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
   StyledDialogContent,
@@ -45,10 +45,8 @@ const Groups = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [openAddCatalogueModal, setOpenAddCatalogueModal] = useState(false);
-  const [openAddDataCatalogueModal, setOpenAddDataCatalogueModal] =
-    useState(false);
-  const [openAddToolCatalogueModal, setOpenAddToolCatalogueModal] =
-    useState(false);
+  const [openAddDataCatalogueModal, setOpenAddDataCatalogueModal] = useState(false);
+  const [openAddToolCatalogueModal, setOpenAddToolCatalogueModal] = useState(false);
   const [openAddUserModal, setOpenAddUserModal] = useState(false);
   const [catalogues, setCatalogues] = useState([]);
   const [dataCatalogues, setDataCatalogues] = useState([]);
@@ -351,8 +349,8 @@ const Groups = () => {
   }
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Groups</Typography>
         <StyledButton
           variant="contained"
@@ -363,41 +361,45 @@ const Groups = () => {
           Add Group
         </StyledButton>
       </TitleBox>
-      <ContentBox>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <StyledTableCell>ID</StyledTableCell>
-              <StyledTableCell>Name</StyledTableCell>
-              <StyledTableCell align="right">Actions</StyledTableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {groups.map((group) => (
-              <StyledTableRow
-                key={group.id}
-                onClick={() => handleGroupClick(group)}
-                sx={{ cursor: "pointer" }}
-              >
-                <TableCell>{group.id}</TableCell>
-                <TableCell>{group.attributes.name}</TableCell>
-                <TableCell align="right">
-                  <IconButton onClick={(event) => handleMenuOpen(event, group)}>
-                    <MoreVertIcon />
-                  </IconButton>
-                </TableCell>
-              </StyledTableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <PaginationControls
-          page={page}
-          pageSize={pageSize}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-        />
-      </ContentBox>
+      <Box sx={{ p: 3 }}>
+        <StyledPaper>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <StyledTableHeaderCell>ID</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {groups.length > 0 ? (
+                groups.map((group) => (
+                  <StyledTableRow key={group.id}>
+                    <StyledTableCell>{group.id}</StyledTableCell>
+                    <StyledTableCell>{group.attributes.name}</StyledTableCell>
+                    <StyledTableCell align="right">
+                      <IconButton onClick={(event) => handleMenuOpen(event, group)}>
+                        <MoreVertIcon />
+                      </IconButton>
+                    </StyledTableCell>
+                  </StyledTableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <StyledTableCell colSpan={3}>No groups found</StyledTableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        </StyledPaper>
+      </Box>
 
       <Menu
         anchorEl={anchorEl}
@@ -598,7 +600,7 @@ const Groups = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 
