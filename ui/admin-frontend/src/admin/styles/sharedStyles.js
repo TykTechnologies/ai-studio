@@ -43,11 +43,10 @@ export const ContentBox = styled(Box)(({ theme }) => ({
 
 export const StyledTableHeaderCell = styled(TableCell)(({ theme }) => ({
   fontWeight: "bold",
-  textAlign: "center",
 }));
 
 export const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  textAlign: "center",
+  textAlign: "left",
 }));
 
 export const StyledTableRow = styled(TableRow)(({ theme }) => ({
