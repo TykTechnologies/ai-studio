@@ -67,13 +67,13 @@ const ToolDetails = () => {
   if (!tool) return <Typography>Tool not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Tool Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/tools")}
-          color="white"
+          color="inherit"
         >
           Back to Tools
         </Button>
@@ -185,7 +185,7 @@ const ToolDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

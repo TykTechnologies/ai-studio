@@ -182,13 +182,13 @@ const ChatDetails = () => {
   if (!chat) return <Typography>Chat not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Chat Room Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/chats")}
-          color="white"
+          color="inherit"
         >
           Back to Chat Rooms
         </Button>
@@ -355,7 +355,7 @@ const ChatDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

@@ -24,6 +24,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -132,8 +133,8 @@ const ToolCatalogueList = () => {
     return <Typography color="error">{error}</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Tool Catalogs</Typography>
         <StyledButton
           variant="contained"
@@ -153,15 +154,15 @@ const ToolCatalogueList = () => {
             onButtonClick={handleAddToolCatalogue}
           />
         ) : (
-          <>
+          <StyledPaper>
             <Table>
               <TableHead>
                 <TableRow>
-                  <StyledTableCell>Name</StyledTableCell>
-                  <StyledTableCell>Description</StyledTableCell>
-                  <StyledTableCell>Tools</StyledTableCell>
-                  <StyledTableCell>Tags</StyledTableCell>
-                  <StyledTableCell align="right">Actions</StyledTableCell>
+                  <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Tools</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -170,11 +171,11 @@ const ToolCatalogueList = () => {
                     key={catalogue.id}
                     onClick={() => handleCatalogueClick(catalogue.id)}
                   >
-                    <TableCell>{catalogue.attributes.name}</TableCell>
-                    <TableCell>
+                    <StyledTableCell>{catalogue.attributes.name}</StyledTableCell>
+                    <StyledTableCell>
                       {catalogue.attributes.short_description}
-                    </TableCell>
-                    <TableCell>
+                    </StyledTableCell>
+                    <StyledTableCell>
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                         {catalogue.attributes.tools.map((tool) => (
                           <Chip
@@ -185,8 +186,8 @@ const ToolCatalogueList = () => {
                           />
                         ))}
                       </Box>
-                    </TableCell>
-                    <TableCell>
+                    </StyledTableCell>
+                    <StyledTableCell>
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                         {catalogue.attributes.tags.map((tag) => (
                           <Chip
@@ -197,8 +198,8 @@ const ToolCatalogueList = () => {
                           />
                         ))}
                       </Box>
-                    </TableCell>
-                    <TableCell align="right">
+                    </StyledTableCell>
+                    <StyledTableCell align="right">
                       <IconButton
                         onClick={(event) => {
                           event.stopPropagation();
@@ -207,7 +208,7 @@ const ToolCatalogueList = () => {
                       >
                         <MoreVertIcon />
                       </IconButton>
-                    </TableCell>
+                    </StyledTableCell>
                   </StyledTableRow>
                 ))}
               </TableBody>
@@ -219,7 +220,7 @@ const ToolCatalogueList = () => {
               onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
             />
-          </>
+          </StyledPaper>
         )}
       </ContentBox>
       <Menu
@@ -247,7 +248,7 @@ const ToolCatalogueList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

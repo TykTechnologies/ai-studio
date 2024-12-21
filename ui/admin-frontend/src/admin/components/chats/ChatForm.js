@@ -371,8 +371,8 @@ const ChatForm = () => {
   }
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Chat Room" : "Add Chat Room"}
         </Typography>
@@ -380,7 +380,7 @@ const ChatForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/chats"
-          color="white"
+          color="inherit"
         >
           Back to Chat Rooms
         </Button>
@@ -678,7 +678,7 @@ const ChatForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

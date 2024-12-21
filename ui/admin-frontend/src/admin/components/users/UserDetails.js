@@ -97,13 +97,13 @@ const UserDetails = () => {
   if (!user) return <CircularProgress />;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">User Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/users")}
-          color="white"
+          color="inherit"
         >
           Back to Users
         </Button>
@@ -231,7 +231,7 @@ const UserDetails = () => {
           </>
         )}
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

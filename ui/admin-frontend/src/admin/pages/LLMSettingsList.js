@@ -23,6 +23,7 @@ import {
   StyledPaper,
   TitleBox,
   ContentBox,
+  StyledTableHeaderCell,
   StyledTableCell,
   StyledTableRow,
   StyledButton,
@@ -145,8 +146,8 @@ const LLMSettingsList = () => {
 
   return (
     <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="LLM Call Settings define the configuration parameters for Large Language Models when a prompt is sent to the LLM." />
             <Typography variant="h5">LLM Call Settings</Typography>
@@ -170,20 +171,20 @@ const LLMSettingsList = () => {
               onButtonClick={handleAddSetting}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("model_name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("model_name")}>
                       Model Name
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("temperature")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("temperature")}>
                       Temperature
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("max_tokens")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("max_tokens")}>
                       Max Tokens
-                    </StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -193,16 +194,16 @@ const LLMSettingsList = () => {
                       onClick={() => handleSettingClick(setting)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{setting.attributes.model_name}</TableCell>
-                      <TableCell>{setting.attributes.temperature}</TableCell>
-                      <TableCell>{setting.attributes.max_tokens}</TableCell>
-                      <TableCell align="right">
+                      <StyledTableCell>{setting.attributes.model_name}</StyledTableCell>
+                      <StyledTableCell>{setting.attributes.temperature}</StyledTableCell>
+                      <StyledTableCell>{setting.attributes.max_tokens}</StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, setting)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -214,10 +215,10 @@ const LLMSettingsList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}

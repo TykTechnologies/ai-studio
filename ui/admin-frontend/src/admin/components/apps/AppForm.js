@@ -226,14 +226,14 @@ const AppForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit App" : "Add App"}</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/apps"
-          color="white"
+          color="inherit"
         >
           Back to Apps
         </Button>
@@ -420,7 +420,7 @@ const AppForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

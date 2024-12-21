@@ -67,14 +67,14 @@ const GroupForm = () => {
   if (loading) return <CircularProgress />;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Group" : "Create Group"}
         </Typography>
         <Button
           startIcon={<ArrowBackIcon />}
-          color="white"
+          color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
@@ -106,7 +106,7 @@ const GroupForm = () => {
           </StyledButton>
         </form>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

@@ -53,7 +53,7 @@ const MyAppBar = () => {
       position="fixed"
       sx={{
         zIndex: (theme) => theme.zIndex.drawer + 1,
-        backgroundColor: "#03031c",
+        background: "linear-gradient(91deg, #03031C 12.29%, #8438FA 92.06%, #B421FA 105%)",
       }}
     >
       <Toolbar>
@@ -62,7 +62,7 @@ const MyAppBar = () => {
             src="/logos/tyk-portal-logo.png"
             alt="Midsommar Logo"
             style={{
-              height: "40px",
+              height: "25px",
               marginRight: "5px",
             }}
           />

@@ -227,7 +227,7 @@ const MyDrawer = () => {
         [`& .MuiDrawer-paper`]: {
           width: open ? drawerWidth : minimizedDrawerWidth,
           boxSizing: "border-box",
-          overflowX: "hidden",
+          overflow: "visible",
           transition: "width 0.2s",
         },
       }}
@@ -235,7 +235,15 @@ const MyDrawer = () => {
       <Toolbar />
       <IconButton
         onClick={handleDrawerToggle}
-        sx={{ alignSelf: "flex-end", mr: 1 }}
+        sx={{
+          backgroundColor: "#ECECEF",
+          alignSelf: "flex-end",
+          mr: 1,
+          position: "absolute",
+          left: "calc(100% - 20px)",
+          top: "78px",
+          zIndex: 9,
+        }}
       >
         {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
       </IconButton>

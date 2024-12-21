@@ -218,8 +218,8 @@ const DataCatalogForm = () => {
   }
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Data Catalog" : "Create New Data Catalog"}
         </Typography>
@@ -379,7 +379,7 @@ const DataCatalogForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

@@ -14,8 +14,8 @@ const EmptyStateWidget = ({
     elevation={3}
     sx={{
       p: 4,
+      boxShadow: 0,
       textAlign: "center",
-      mt: 4,
       backgroundColor: (theme) =>
         alpha(theme.palette.custom.emptyStateBackground, 0.1),
       border: (theme) => `1px solid ${alpha(theme.palette.info.main, 0.2)}`,

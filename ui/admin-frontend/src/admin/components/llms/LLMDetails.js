@@ -174,13 +174,13 @@ const LLMDetails = () => {
   if (!llm) return <Typography>LLM not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">LLM Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}
-          color="white"
+          color="inherit"
         >
           Back to LLMs
         </Button>
@@ -381,7 +381,7 @@ const LLMDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 
