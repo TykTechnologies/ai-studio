@@ -19,25 +19,34 @@ import { NavLink } from "react-router-dom";
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
   borderRadius: theme.shape.borderRadius * 3,
+  border: `1px solid rgba(0, 0, 0, 0.12)`,
+  boxShadow: "none",
   overflow: "hidden",
 }));
 
-export const TitleBox = styled(Box)(({ theme }) => ({
+export const TitleBox = styled(Box)(({ theme, top = '0px' }) => ({
+  position: 'sticky',
+  top: top,
+  zIndex: 1000,
+  borderBottom: `1px solid rgba(0, 0, 0, 0.12)`,
   backgroundColor: theme.palette.background.paper,
-  padding: theme.spacing(2),
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  backgroundColor: theme.palette.custom.purpleLight,
-  borderRadius: theme.shape.borderRadius,
+  color: theme.palette.text.primary,
+  padding: theme.spacing(3),
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
 }));
 
 export const ContentBox = styled(Box)(({ theme }) => ({
   padding: theme.spacing(3),
 }));
 
-export const StyledTableCell = styled(TableCell)(({ theme }) => ({
+export const StyledTableHeaderCell = styled(TableCell)(({ theme }) => ({
   fontWeight: "bold",
+}));
+
+export const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  textAlign: "left",
 }));
 
 export const StyledTableRow = styled(TableRow)(({ theme }) => ({
@@ -63,8 +72,15 @@ export const FieldValue = styled(Typography)(({ theme }) => ({
 
 export const StyledButton = styled(Button)(({ theme }) => ({
   borderRadius: 20,
-  color: theme.palette.custom.primary,
-  backgroundColor: theme.palette.custom.leaf,
+  border: `1px solid ${theme.palette.custom.purpleExtraDark}`,
+  color: theme.palette.custom.white,
+  backgroundColor: theme.palette.custom.purpleDark,
+  boxShadow: "none",
+  textTransform: "Capitalize",
+  "&:hover": {
+    backgroundColor: theme.palette.custom.purpleExtraDark,
+    boxShadow: "none",
+  },
 }));
 
 export const StyledDialog = styled(Dialog)(({ theme }) => ({

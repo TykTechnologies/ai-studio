@@ -118,8 +118,8 @@ const FilterForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Filter" : "Add Filter"}
         </Typography>
@@ -127,7 +127,7 @@ const FilterForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/filters"
-          color="white"
+          color="inherit"
         >
           Back to Filters
         </Button>
@@ -194,7 +194,7 @@ const FilterForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

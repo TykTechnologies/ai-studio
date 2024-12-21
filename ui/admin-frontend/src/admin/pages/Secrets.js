@@ -1,7 +1,11 @@
-// src/admin/pages/Secrets.js
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import AddIcon from "@mui/icons-material/Add";
+import PaginationControls from "../components/common/PaginationControls";
+import usePagination from "../hooks/usePagination";
+import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import {
   Table,
   TableBody,
@@ -17,19 +21,15 @@ import {
   Box,
   Snackbar,
 } from "@mui/material";
-import { Link } from "react-router-dom";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   StyledPaper,
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
-import AddIcon from "@mui/icons-material/Add";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
 
 const Secrets = () => {
   const navigate = useNavigate();
@@ -113,6 +113,17 @@ const Secrets = () => {
     navigate(`/admin/secrets/${secret.id}`);
   };
 
+  const handleAddSecret = () => {
+    navigate("/admin/secrets/new");
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   if (loading && secrets.length === 0) {
     return <CircularProgress />;
   }
@@ -122,63 +133,66 @@ const Secrets = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
-          <Typography variant="h5">Secrets</Typography>
-          <StyledButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            component={Link}
-            to="/admin/secrets/new"
-          >
-            Add Secret
-          </StyledButton>
-        </TitleBox>
-        <ContentBox>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <StyledTableCell>ID</StyledTableCell>
-                <StyledTableCell>Variable Name</StyledTableCell>
-                <StyledTableCell align="right">Actions</StyledTableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {secrets.length > 0 ? (
-                secrets.map((secret) => (
+    <>
+      <TitleBox top="64px">
+        <Typography variant="h5">Secrets</Typography>
+        <StyledButton
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddSecret}
+        >
+          Add Secret
+        </StyledButton>
+      </TitleBox>
+      <ContentBox>
+        {secrets.length === 0 ? (
+          <EmptyStateWidget
+            title="No secrets found"
+            description="Click the button below to add a new secret."
+            buttonText="Add Secret"
+            buttonIcon={<AddIcon />}
+            onButtonClick={handleAddSecret}
+          />
+        ) : (
+          <StyledPaper>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <StyledTableHeaderCell>ID</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Variable Name</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {secrets.map((secret) => (
                   <StyledTableRow
                     key={secret.id}
                     onClick={() => handleSecretClick(secret)}
                     sx={{ cursor: "pointer" }}
                   >
-                    <TableCell>{secret.id}</TableCell>
-                    <TableCell>{secret.attributes.var_name}</TableCell>
-                    <TableCell align="right">
+                    <StyledTableCell>{secret.id}</StyledTableCell>
+                    <StyledTableCell>{secret.attributes.var_name}</StyledTableCell>
+                    <StyledTableCell align="right">
                       <IconButton
                         onClick={(event) => handleMenuOpen(event, secret)}
                       >
                         <MoreVertIcon />
                       </IconButton>
-                    </TableCell>
+                    </StyledTableCell>
                   </StyledTableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={3}>No secrets found</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <PaginationControls
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-          />
-        </ContentBox>
-      </StyledPaper>
+                ))}
+              </TableBody>
+            </Table>
+            <PaginationControls
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </StyledPaper>
+        )}
+      </ContentBox>
 
       <Menu
         anchorEl={anchorEl}
@@ -198,18 +212,18 @@ const Secrets = () => {
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
         <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          onClose={handleCloseSnackbar}
           severity={snackbar.severity}
           sx={{ width: "100%" }}
         >
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

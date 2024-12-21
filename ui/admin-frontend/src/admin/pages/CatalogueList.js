@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -33,6 +32,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -237,9 +237,9 @@ const CatalogueList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Catalogs are collections of LLMs that can be assigned to groups." />
             <Typography variant="h5">Catalogs</Typography>
@@ -262,13 +262,13 @@ const CatalogueList = () => {
               onButtonClick={handleAddCatalogue}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell>Name</StyledTableCell>
-                    <StyledTableCell>LLMs</StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>LLMs</StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -278,8 +278,8 @@ const CatalogueList = () => {
                       onClick={() => handleCatalogueClick(catalogue.id)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{catalogue.attributes.name}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{catalogue.attributes.name}</StyledTableCell>
+                      <StyledTableCell>
                         <Box
                           sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
                         >
@@ -292,14 +292,14 @@ const CatalogueList = () => {
                             />
                           ))}
                         </Box>
-                      </TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, catalogue)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -311,10 +311,10 @@ const CatalogueList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -390,7 +390,7 @@ const CatalogueList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

@@ -183,8 +183,8 @@ const CatalogueForm = () => {
   }
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Catalog" : "Create New Catalog"}
         </Typography>
@@ -278,7 +278,7 @@ const CatalogueForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

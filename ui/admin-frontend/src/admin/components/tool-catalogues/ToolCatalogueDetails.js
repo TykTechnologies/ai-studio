@@ -60,8 +60,8 @@ const ToolCatalogueDetails = () => {
   if (!catalogue) return <Typography>Tool catalogue not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Tool Catalog Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -152,7 +152,7 @@ const ToolCatalogueDetails = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

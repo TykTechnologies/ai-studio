@@ -129,13 +129,13 @@ const DatasourceDetails = () => {
   if (!datasource) return <Typography>Datasource not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Datasource Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/datasources")}
-          color="white"
+          color="inherit"
         >
           Back to Datasources
         </Button>
@@ -445,7 +445,7 @@ const DatasourceDetails = () => {
           </Box>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

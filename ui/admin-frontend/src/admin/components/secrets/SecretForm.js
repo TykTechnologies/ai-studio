@@ -139,8 +139,8 @@ const SecretForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Secret" : "Add Secret"}
         </Typography>
@@ -148,7 +148,7 @@ const SecretForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/secrets"
-          color="white"
+          color="inherit"
         >
           Back to Secrets
         </Button>
@@ -230,7 +230,7 @@ const SecretForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

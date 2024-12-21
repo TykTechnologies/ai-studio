@@ -395,8 +395,8 @@ const LLMSettingsForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
         </Typography>
@@ -404,7 +404,7 @@ const LLMSettingsForm = () => {
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llm-settings"
-          color="white"
+          color="inherit"
         >
           Back to LLM Call Settings
         </Button>
@@ -622,7 +622,7 @@ const LLMSettingsForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

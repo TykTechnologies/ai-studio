@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -22,12 +21,13 @@ import AddIcon from "@mui/icons-material/Add";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
+  StyledPaper,
 } from "../styles/sharedStyles";
 import {
   getVectorStoreName,
@@ -192,9 +192,9 @@ const DatasourceList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Vector data sources are used to store and retrieve data to enhance conversations with your models. These can be created using embedding providers that vectorise the content you wish to search, and make for an excellent way to enhance your chat room effectiveness for your users, or to better inform responses in your AI Applications" />
             <Typography variant="h5">Vector Data Sources</Typography>
@@ -218,32 +218,32 @@ const DatasourceList = () => {
               onButtonClick={handleAddDatasource}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
-                    </StyledTableCell>
-                    <StyledTableCell>Short Description</StyledTableCell>
-                    <StyledTableCell
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Short Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell
                       onClick={() => handleSort("db_source_type")}
                     >
                       DB Source Type
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("embed_vendor")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("embed_vendor")}>
                       Embed Vendor
-                    </StyledTableCell>
-                    <StyledTableCell
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
                       onClick={() => handleSort("privacy_score")}
                     >
                       Privacy Score
-                    </StyledTableCell>
-                    <StyledTableCell>Tags</StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("active")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("active")}>
                       Active
-                    </StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -253,11 +253,11 @@ const DatasourceList = () => {
                       onClick={() => handleDatasourceClick(datasource)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{datasource.attributes.name}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{datasource.attributes.name}</StyledTableCell>
+                      <StyledTableCell>
                         {datasource.attributes.short_description}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Box sx={{ display: "flex", alignItems: "center" }}>
                           <img
                             src={getVectorStoreLogo(
@@ -277,8 +277,8 @@ const DatasourceList = () => {
                             datasource.attributes.db_source_type,
                           )}
                         </Box>
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Box sx={{ display: "flex", alignItems: "center" }}>
                           <img
                             src={getEmbedderLogo(
@@ -296,11 +296,11 @@ const DatasourceList = () => {
                           />
                           {getEmbedderName(datasource.attributes.embed_vendor)}
                         </Box>
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         {datasource.attributes.privacy_score}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         {datasource.attributes.tags.map((tag) => (
                           <Chip
                             key={tag.id}
@@ -309,8 +309,8 @@ const DatasourceList = () => {
                             sx={{ mr: 0.5, mb: 0.5 }}
                           />
                         ))}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <FiberManualRecordIcon
                           sx={{
                             color: datasource.attributes.active
@@ -318,14 +318,14 @@ const DatasourceList = () => {
                               : "red",
                           }}
                         />
-                      </TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, datasource)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -337,10 +337,10 @@ const DatasourceList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -377,7 +377,7 @@ const DatasourceList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

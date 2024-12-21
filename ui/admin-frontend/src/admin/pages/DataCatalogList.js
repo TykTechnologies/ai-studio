@@ -25,6 +25,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
 } from "../styles/sharedStyles";
@@ -138,9 +139,9 @@ const DataCatalogList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Data Catalogs are collections of data sources that can be assigned to groups." />
             <Typography variant="h5">Data Catalogs</Typography>
@@ -163,15 +164,15 @@ const DataCatalogList = () => {
               onButtonClick={handleAddDataCatalog}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell>Name</StyledTableCell>
-                    <StyledTableCell>Description</StyledTableCell>
-                    <StyledTableCell>Data Sources</StyledTableCell>
-                    <StyledTableCell>Tags</StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Data Sources</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -181,11 +182,11 @@ const DataCatalogList = () => {
                       onClick={() => handleCatalogClick(catalog.id)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{catalog.attributes.name}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{catalog.attributes.name}</StyledTableCell>
+                      <StyledTableCell>
                         {catalog.attributes.short_description}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Box
                           sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
                         >
@@ -198,8 +199,8 @@ const DataCatalogList = () => {
                             />
                           ))}
                         </Box>
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Box
                           sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
                         >
@@ -212,14 +213,14 @@ const DataCatalogList = () => {
                             />
                           ))}
                         </Box>
-                      </TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, catalog)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -231,10 +232,10 @@ const DataCatalogList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -263,7 +264,7 @@ const DataCatalogList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

@@ -15,9 +15,6 @@ import {
   MenuItem,
   Snackbar,
   Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
   TextField,
 } from "@mui/material";
@@ -29,6 +26,7 @@ import {
   TitleBox,
   ContentBox,
   StyledTableCell,
+  StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
   StyledDialog,
@@ -199,9 +197,9 @@ const ModelPriceList = () => {
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      <StyledPaper>
-        <TitleBox>
+    <>
+      <>
+        <TitleBox top="64px">
           <Box display="flex" alignItems="center">
             <InfoTooltip title="Model Prices define the cost per token for different language models." />
             <Typography variant="h5">Model Prices</Typography>
@@ -225,26 +223,26 @@ const ModelPriceList = () => {
               onButtonClick={handleAddPrice}
             />
           ) : (
-            <>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableCell onClick={() => handleSort("model_name")}>
+                    <StyledTableHeaderCell onClick={() => handleSort("model_name")}>
                       Model Name
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("vendor")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("vendor")}>
                       Vendor
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("cpit")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("cpit")}>
                       Cost per Input Token
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("cpt")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("cpt")}>
                       Cost per Output Token
-                    </StyledTableCell>
-                    <StyledTableCell onClick={() => handleSort("currency")}>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("currency")}>
                       Currency
-                    </StyledTableCell>
-                    <StyledTableCell align="right">Actions</StyledTableCell>
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -254,8 +252,8 @@ const ModelPriceList = () => {
                       onClick={() => handlePriceClick(price)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{price.attributes.model_name}</TableCell>
-                      <TableCell>
+                      <StyledTableCell>{price.attributes.model_name}</StyledTableCell>
+                      <StyledTableCell>
                         <Box display="flex" alignItems="center">
                           <img
                             src={getVendorLogo(price.attributes.vendor)}
@@ -264,17 +262,17 @@ const ModelPriceList = () => {
                           />
                           {getVendorName(price.attributes.vendor)}
                         </Box>
-                      </TableCell>
-                      <TableCell>{price.attributes.cpit}</TableCell>
-                      <TableCell>{price.attributes.cpt}</TableCell>
-                      <TableCell>{price.attributes.currency}</TableCell>
-                      <TableCell align="right">
+                      </StyledTableCell>
+                      <StyledTableCell>{price.attributes.cpit}</StyledTableCell>
+                      <StyledTableCell>{price.attributes.cpt}</StyledTableCell>
+                      <StyledTableCell>{price.attributes.currency}</StyledTableCell>
+                      <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, price)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </StyledTableCell>
                     </StyledTableRow>
                   ))}
                 </TableBody>
@@ -286,10 +284,10 @@ const ModelPriceList = () => {
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
               />
-            </>
+            </StyledPaper>
           )}
         </ContentBox>
-      </StyledPaper>
+      </>
 
       <Menu
         anchorEl={anchorEl}
@@ -358,7 +356,7 @@ const ModelPriceList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

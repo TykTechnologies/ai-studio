@@ -58,8 +58,8 @@ const DataCatalogDetail = () => {
   if (!catalog) return <Typography>Data catalog not found</Typography>;
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">Data Catalog Details</Typography>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -150,7 +150,7 @@ const DataCatalogDetail = () => {
           </StyledButton>
         </Box>
       </ContentBox>
-    </StyledPaper>
+    </>
   );
 };
 

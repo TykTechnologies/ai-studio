@@ -230,8 +230,8 @@ const ToolCatalogueForm = () => {
   };
 
   return (
-    <StyledPaper>
-      <TitleBox>
+    <>
+      <TitleBox top="64px">
         <Typography variant="h5">
           {id ? "Edit Tool Catalog" : "Create Tool Catalog"}
         </Typography>
@@ -378,7 +378,7 @@ const ToolCatalogueForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </>
   );
 };
 

@@ -15,6 +15,7 @@ const PaginationControls = ({
         justifyContent: "space-between",
         alignItems: "center",
         mt: 2,
+        padding: "0 20px 20px 20px"
       }}
     >
       <Select value={pageSize} onChange={onPageSizeChange}>

@@ -40,7 +40,7 @@ const PortalAppBar = () => {
       position="fixed"
       sx={(theme) => ({
         zIndex: theme.zIndex.drawer + 1,
-        backgroundColor: "#03031c",
+        background: "linear-gradient(91deg, #03031C 12.29%, #8438FA 92.06%, #B421FA 105%)",
         boxShadow: "none",
         borderBottom: "none",
       })}
