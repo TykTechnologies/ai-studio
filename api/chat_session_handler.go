@@ -436,6 +436,7 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 }
 
 func (a *API) UploadFileToSession(c *gin.Context) {
+	fmt.Println("File upload called")
 	sessionID := c.Param("session_id")
 
 	// Get the chat session
@@ -459,6 +460,7 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+	fmt.Println("File uploaded:", header.Filename)
 
 	// Read the file contents
 	raw, err := readFileContents(file)
@@ -469,6 +471,7 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		}{{Title: "Error reading file", Detail: err.Error()}}})
 		return
 	}
+	fmt.Println("File contents read")
 
 	contents, err := filereader.Read(header.Filename, raw)
 	if err != nil {
@@ -478,9 +481,11 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		}{{Title: "Error parsing file", Detail: err.Error()}}})
 		return
 	}
+	fmt.Println("filereader completed")
 
 	// Add the file reference to the chat session
 	session.AddFileReference(header.Filename, contents)
+	fmt.Println("File reference added to chat session")
 
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
 }
