@@ -19,14 +19,17 @@ COPY . .
 # Build the application for multiple architectures
 ARG TARGETARCH
 ENV NODE_ENV notDevelopment
+
 RUN make clean && \
     make build-admin-frontend-clean && \
     GOOS=linux GOARCH=$TARGETARCH go build -o midsommar .
 
 # Final stage
-FROM gcr.io/distroless/static-debian12
+FROM alpine:latest
 
 WORKDIR /app
+
+RUN apk add --no-cache poppler-utils
 
 # Copy the binary from builder
 COPY --from=builder /app/templates .
