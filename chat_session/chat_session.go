@@ -376,7 +376,13 @@ func (cs *ChatSession) sendError(err error) {
 
 func (cs *ChatSession) prepareTools() []llms.Tool {
 	tools := make([]llms.Tool, 0)
+	ids := make(map[string]struct{})
 	for _, t := range cs.tools {
+		// make sure only unique tool names go into the final array
+		if _, ok := ids[t.Name]; ok {
+			continue
+		}
+
 		switch t.ToolType {
 		case models.ToolTypeREST:
 			opts := []universalclient.ClientOption{}
