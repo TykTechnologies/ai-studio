@@ -409,6 +409,7 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 				}
 
 				tools = append(tools, asToolDef...)
+				ids[t.Name] = struct{}{}
 			}
 
 		default:
