@@ -10,6 +10,7 @@ import (
 // CreateChat creates a new chat
 func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint,
 	filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint, defaultTools []uint) (*models.Chat, error) {
+
 	chat := &models.Chat{
 		Name:                name,
 		LLMSettingsID:       llmSettingsID,
@@ -17,7 +18,11 @@ func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []
 		RagResultsPerSource: ragN,
 		SupportsTools:       toolSupport,
 		SystemPrompt:        systemPrompt,
-		DefaultDataSourceID: &defaultDSID,
+		DefaultDataSourceID: nil,
+	}
+
+	if defaultDSID != 0 {
+		chat.DefaultDataSourceID = &defaultDSID
 	}
 
 	for _, filterID := range filterIDs {

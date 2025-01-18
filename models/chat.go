@@ -19,7 +19,7 @@ type Chat struct {
 	RagResultsPerSource int          `json:"rag_results_per_source"`
 	SupportsTools       bool         `json:"supports_tools"`
 	SystemPrompt        string       `json:"system_prompt"`
-	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID" json:"default_data_source"`
+	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID;constraint:OnDelete:SET NULL" json:"default_data_source"`
 	DefaultDataSourceID *uint        `json:"default_data_source_id"`
 	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
 	DefaultTools        []*Tool      `gorm:"many2many:chat_tools;" json:"default_tools"`
@@ -30,6 +30,20 @@ type Chats []Chat
 // Create a new chat
 func (c *Chat) Create(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
+		if c.DefaultDataSourceID != nil {
+			var count int64
+			if err := tx.Model(&Datasource{}).Where("id = ?", *c.DefaultDataSourceID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count == 0 {
+				return fmt.Errorf("Datasource with ID %d does not exist", *c.DefaultDataSourceID)
+			}
+		} else {
+			// Ensure it's explicitly nil if not provided
+			c.DefaultDataSourceID = nil
+			c.DefaultDataSource = nil
+		}
+
 		// Create the chat
 		if err := tx.Create(c).Error; err != nil {
 			return err
