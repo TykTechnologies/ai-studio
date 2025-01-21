@@ -113,7 +113,11 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 		"rag_results_per_source": ragN,
 		"supports_tools":         toolSupport,
 		"system_prompt":          systemPrompt,
-		"default_data_source_id": defaultDSID,
+		"default_data_source_id": nil,
+	}
+
+	if defaultDSID != 0 {
+		updates["default_data_source_id"] = &defaultDSID
 	}
 
 	// Update the chat's basic information

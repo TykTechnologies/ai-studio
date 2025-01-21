@@ -272,12 +272,12 @@ const AppDetailView = () => {
                         flexGrow: 1,
                       }}
                     >
-                      {`//${currentHost}:9090/api/llm/rest/${generateSlug(llm.attributes.name)}/`}
+                      {`//${currentHost}:9090/llm/rest/${generateSlug(llm.attributes.name)}/`}
                     </Typography>
                     <IconButton
                       onClick={() =>
                         copyToClipboard(
-                          `//${currentHost}:9090/api/llm/rest/${generateSlug(llm.attributes.name)}/`,
+                          `//${currentHost}:9090/llm/rest/${generateSlug(llm.attributes.name)}/`,
                         )
                       }
                       size="small"
@@ -311,12 +311,12 @@ const AppDetailView = () => {
                         flexGrow: 1,
                       }}
                     >
-                      {`//${currentHost}:9090/api/llm/stream/${generateSlug(llm.attributes.name)}/`}
+                      {`//${currentHost}:9090/llm/stream/${generateSlug(llm.attributes.name)}/`}
                     </Typography>
                     <IconButton
                       onClick={() =>
                         copyToClipboard(
-                          `//${currentHost}:9090/api/llm/stream/${generateSlug(llm.attributes.name)}/`,
+                          `//${currentHost}:9090/llm/stream/${generateSlug(llm.attributes.name)}/`,
                         )
                       }
                       size="small"
