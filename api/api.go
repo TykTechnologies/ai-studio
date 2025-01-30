@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -209,7 +210,7 @@ func (a *API) setupRoutes() {
 	public.POST("/auth/reset-password", a.handleResetPassword)
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
-	public.GET("/config", a.handleGetConfig)
+	public.GET("/auth/config", a.handleGetConfig)
 
 	// routes for portal users
 	authed := public.Group("/common")
@@ -556,6 +557,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	config := FrontendConfig{
 		APIBaseURL:    apiBaseURL,
 		WebsocketHost: websocketHost,
+		ProxyURL:      config.Get().ProxyURL,
 	}
 
 	c.JSON(http.StatusOK, config)
