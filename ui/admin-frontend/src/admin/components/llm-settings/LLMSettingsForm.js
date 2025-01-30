@@ -36,6 +36,7 @@ import {
   getVendorLogo,
   getVendorCodes,
 } from "../../utils/vendorLogos";
+import Decimal from "decimal.js";
 
 const TooltipTextField = ({ tooltip, ...props }) => (
   <Tooltip title={tooltip} placement="top-start" arrow>
@@ -193,9 +194,11 @@ const LLMSettingsForm = () => {
   const [modelPrice, setModelPrice] = useState({
     model_name: "",
     vendor: "",
-    cpt: 0.0,
+    cpit_million: 0.0, // Cost per million input tokens
+    cpt_million: 0.0, // Cost per million output tokens
     currency: "USD",
   });
+
   const [vendors, setVendors] = useState([]);
 
   useEffect(() => {
@@ -337,22 +340,38 @@ const LLMSettingsForm = () => {
     const { name, value } = e.target;
     setModelPrice({
       ...modelPrice,
-      [name]: name === "cpt" ? parseFloat(value) || 0 : value,
+      [name]: name.includes("million") ? parseFloat(value) || 0 : value,
     });
   };
 
   const handleSaveModelPrice = async () => {
     try {
-      await apiClient.post("/model-prices", {
+      // Use Decimal.js to handle the calculations
+      const cpitMillions = new Decimal(modelPrice.cpit_million);
+      const cptMillions = new Decimal(modelPrice.cpt_million);
+
+      // Calculate per-token prices
+      const cpit = cpitMillions.dividedBy(1000000);
+      const cpt = cptMillions.dividedBy(1000000);
+
+      // Convert to JSON-safe decimal strings that won't use scientific notation
+      const payload = {
         data: {
           type: "ModelPrice",
           attributes: {
-            ...modelPrice,
-            cpt: parseFloat(modelPrice.cpt),
+            model_name: modelPrice.model_name,
+            vendor: modelPrice.vendor,
+            cpit: Number(cpit.toFixed(10)),
+            cpt: Number(cpt.toFixed(10)),
             currency: modelPrice.currency,
           },
         },
-      });
+      };
+
+      // Verify the actual payload being sent
+      console.log("Final payload:", JSON.stringify(payload, null, 2));
+
+      await apiClient.post("/model-prices", payload);
       setOpenPriceModal(false);
       saveSettings();
     } catch (error) {
@@ -581,11 +600,22 @@ const LLMSettingsForm = () => {
           </FormControl>
           <TextField
             fullWidth
-            label="Cost per Token"
-            name="cpt"
+            label="Cost per Million Input Tokens"
+            name="cpit_million"
             type="number"
-            inputProps={{ step: 0.000001, min: 0 }}
-            value={modelPrice.cpt}
+            inputProps={{ step: 0.01, min: 0 }}
+            value={modelPrice.cpit_million}
+            onChange={handleModelPriceChange}
+            required
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Cost per Million Output Tokens"
+            name="cpt_million"
+            type="number"
+            inputProps={{ step: 0.01, min: 0 }}
+            value={modelPrice.cpt_million}
             onChange={handleModelPriceChange}
             required
             margin="normal"

@@ -147,8 +147,8 @@ const ModelPriceList = () => {
   };
 
   const handleOpenUpdatePriceModal = () => {
-    setUpdatedOutputPrice(selectedPrice.attributes.cpt);
-    setUpdatedInputPrice(selectedPrice.attributes.cpit);
+    setUpdatedOutputPrice(selectedPrice.attributes.cpt * 1000000);
+    setUpdatedInputPrice(selectedPrice.attributes.cpit * 1000000);
     setOpenUpdatePriceModal(true);
     handleMenuClose();
   };
@@ -164,8 +164,8 @@ const ModelPriceList = () => {
           type: "ModelPrice",
           attributes: {
             ...selectedPrice.attributes,
-            cpt: parseFloat(updatedOutputPrice),
-            cpit: parseFloat(updatedInputPrice),
+            cpt: parseFloat(updatedOutputPrice) / 1000000,
+            cpit: parseFloat(updatedInputPrice) / 1000000,
           },
         },
       });
@@ -227,22 +227,28 @@ const ModelPriceList = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("model_name")}>
+                    <StyledTableHeaderCell
+                      onClick={() => handleSort("model_name")}
+                    >
                       Model Name
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("vendor")}>
                       Vendor
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("cpit")}>
-                      Cost per Input Token
+                      Cost per Million Input Tokens
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("cpt")}>
-                      Cost per Output Token
+                      Cost per Million Output Tokens
                     </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("currency")}>
+                    <StyledTableHeaderCell
+                      onClick={() => handleSort("currency")}
+                    >
                       Currency
                     </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">
+                      Actions
+                    </StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -252,7 +258,9 @@ const ModelPriceList = () => {
                       onClick={() => handlePriceClick(price)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <StyledTableCell>{price.attributes.model_name}</StyledTableCell>
+                      <StyledTableCell>
+                        {price.attributes.model_name}
+                      </StyledTableCell>
                       <StyledTableCell>
                         <Box display="flex" alignItems="center">
                           <img
@@ -263,9 +271,15 @@ const ModelPriceList = () => {
                           {getVendorName(price.attributes.vendor)}
                         </Box>
                       </StyledTableCell>
-                      <StyledTableCell>{price.attributes.cpit}</StyledTableCell>
-                      <StyledTableCell>{price.attributes.cpt}</StyledTableCell>
-                      <StyledTableCell>{price.attributes.currency}</StyledTableCell>
+                      <StyledTableCell>
+                        {`${(price.attributes.cpit * 1000000).toFixed(2)} ${price.attributes.currency}`}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {`${(price.attributes.cpt * 1000000).toFixed(2)} ${price.attributes.currency}`}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {price.attributes.currency}
+                      </StyledTableCell>
                       <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, price)}
@@ -315,18 +329,18 @@ const ModelPriceList = () => {
         <StyledDialogContent>
           <TextField
             fullWidth
-            label="Cost per Input Token"
+            label="Cost per Million Input Tokens"
             type="number"
-            inputProps={{ step: 0.000001, min: 0 }}
+            inputProps={{ step: 0.01, min: 0 }}
             value={updatedInputPrice}
             onChange={(e) => setUpdatedInputPrice(e.target.value)}
             margin="normal"
           />
           <TextField
             fullWidth
-            label="Cost per Output Token"
+            label="Cost per Million Output Tokens"
             type="number"
-            inputProps={{ step: 0.000001, min: 0 }}
+            inputProps={{ step: 0.01, min: 0 }}
             value={updatedOutputPrice}
             onChange={(e) => setUpdatedOutputPrice(e.target.value)}
             margin="normal"
