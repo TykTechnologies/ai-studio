@@ -18,6 +18,7 @@ type AppConf struct {
 	AllowRegistrations  bool
 	AdminEmail          string
 	SiteURL             string
+	ProxyURL            string
 	ServerPort          string
 	CertFile            string
 	KeyFile             string
@@ -145,6 +146,11 @@ func getConfigFromEnv() *AppConf {
 	conf.DocsURL = os.Getenv("DOCS_URL")
 	if conf.DocsURL == "" {
 		conf.DocsURL = "http://localhost:8989"
+	}
+
+	conf.ProxyURL = os.Getenv("PROXY_URL")
+	if conf.ProxyURL == "" {
+		log.Println("Warning: PROXY_URL environment variable is not set")
 	}
 
 	return conf

@@ -892,6 +892,7 @@ type PaginatedProxyLogs struct {
 type FrontendConfig struct {
 	APIBaseURL    string `json:"API_BASE_URL"`
 	WebsocketHost string `json:"WEBSOCKET_HOST"`
+	ProxyURL      string `json:"PROXY_URL"`
 	// Add other configuration values as needed
 }
 
