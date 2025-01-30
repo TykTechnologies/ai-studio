@@ -26,6 +26,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import { getConfig } from "../../config"; // Add this import
 
 import pubClient from "../../admin/utils/pubClient";
 
@@ -52,6 +53,7 @@ const AppDetailView = () => {
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [baseUrl, setBaseUrl] = useState("");
 
   const { id } = useParams();
   const navigate = useNavigate();
@@ -65,6 +67,10 @@ const AppDetailView = () => {
           pubClient.get(`/common/apps/${id}`),
           pubClient.get("/common/accessible-llms"),
         ]);
+
+        const config = getConfig();
+        setBaseUrl(config.PROXY_URL || `//${currentHost}:9090`);
+
         setApp(appResponse.data);
         setAccessibleLLMs(llmsResponse.data);
         setLoading(false);
@@ -80,6 +86,11 @@ const AppDetailView = () => {
 
   const toggleSecretVisibility = () => {
     setShowSecret(!showSecret);
+  };
+
+  const generateEndpointUrl = (path, name) => {
+    const slug = generateSlug(name);
+    return `${baseUrl}${path}${slug}/`;
   };
 
   const copyToClipboard = (text) => {
@@ -248,6 +259,23 @@ const AppDetailView = () => {
               <Typography variant="body2" color="text.secondary" mb={2}>
                 {llm.attributes.short_description}
               </Typography>
+
+              {/* SDK-Specific Endpoints Section */}
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: "bold",
+                  mt: 2,
+                  mb: 1,
+                }}
+              >
+                SDK-Specific Endpoints
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Use the following URLs in your app, using the appropriate vendor
+                SDK or API Specs to interact with the LLMs.
+              </Typography>
+
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   <FieldLabel sx={{ minWidth: "100px" }}>REST API:</FieldLabel>
@@ -272,12 +300,15 @@ const AppDetailView = () => {
                         flexGrow: 1,
                       }}
                     >
-                      {`//${currentHost}:9090/llm/rest/${generateSlug(llm.attributes.name)}/`}
+                      {generateEndpointUrl("/llm/rest/", llm.attributes.name)}
                     </Typography>
                     <IconButton
                       onClick={() =>
                         copyToClipboard(
-                          `//${currentHost}:9090/llm/rest/${generateSlug(llm.attributes.name)}/`,
+                          generateEndpointUrl(
+                            "/llm/rest/",
+                            llm.attributes.name,
+                          ),
                         )
                       }
                       size="small"
@@ -286,6 +317,7 @@ const AppDetailView = () => {
                     </IconButton>
                   </Box>
                 </Box>
+
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   <FieldLabel sx={{ minWidth: "100px" }}>
                     STREAM API:
@@ -311,12 +343,15 @@ const AppDetailView = () => {
                         flexGrow: 1,
                       }}
                     >
-                      {`//${currentHost}:9090/llm/stream/${generateSlug(llm.attributes.name)}/`}
+                      {generateEndpointUrl("/llm/stream/", llm.attributes.name)}
                     </Typography>
                     <IconButton
                       onClick={() =>
                         copyToClipboard(
-                          `//${currentHost}:9090/llm/stream/${generateSlug(llm.attributes.name)}/`,
+                          generateEndpointUrl(
+                            "/llm/stream/",
+                            llm.attributes.name,
+                          ),
                         )
                       }
                       size="small"
@@ -325,44 +360,58 @@ const AppDetailView = () => {
                     </IconButton>
                   </Box>
                 </Box>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <FieldLabel sx={{ minWidth: "100px" }}>
-                    UNIFIED API:
-                  </FieldLabel>
-                  <Box>
-                    <Tooltip title="This endpoint exposes an OpenAI-compatible API but translates your requests to the upstream vendor (using the default model defined by the admin)">
-                      <HelpOutlineIcon
-                        sx={{ color: "text.secondary", mr: 1 }}
-                      />
-                    </Tooltip>
-                  </Box>
-                  <Box
-                    sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+              </Box>
+
+              {/* Unified Endpoint Section */}
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: "bold",
+                  mt: 3,
+                  mb: 1,
+                }}
+              >
+                Unified Endpoint
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                The Unified Endpoint is an OpenAI-compatible endpoint that
+                translates your API calls into vendor-compatible ones to the
+                vendor. This endpoint currently does not support Streams.
+              </Typography>
+
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <FieldLabel sx={{ minWidth: "100px" }}>UNIFIED API:</FieldLabel>
+                <Box>
+                  <Tooltip title="This endpoint exposes an OpenAI-compatible API but translates your requests to the upstream vendor (using the default model defined by the admin)">
+                    <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                  </Tooltip>
+                </Box>
+                <Box
+                  sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                >
+                  <Typography
+                    variant="body2"
+                    component="code"
+                    sx={{
+                      fontFamily: "monospace",
+                      bgcolor: "background.paper",
+                      p: 1,
+                      borderRadius: 1,
+                      flexGrow: 1,
+                    }}
                   >
-                    <Typography
-                      variant="body2"
-                      component="code"
-                      sx={{
-                        fontFamily: "monospace",
-                        bgcolor: "background.paper",
-                        p: 1,
-                        borderRadius: 1,
-                        flexGrow: 1,
-                      }}
-                    >
-                      {`//${currentHost}:9090/ai/${generateSlug(llm.attributes.name)}/v1`}
-                    </Typography>
-                    <IconButton
-                      onClick={() =>
-                        copyToClipboard(
-                          `//${currentHost}:9090/ai/${generateSlug(llm.attributes.name)}/v1/`,
-                        )
-                      }
-                      size="small"
-                    >
-                      <ContentCopyIcon />
-                    </IconButton>
-                  </Box>
+                    {`${generateEndpointUrl("/ai/", llm.attributes.name)}v1`}
+                  </Typography>
+                  <IconButton
+                    onClick={() =>
+                      copyToClipboard(
+                        `${generateEndpointUrl("/ai/", llm.attributes.name)}v1`,
+                      )
+                    }
+                    size="small"
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
                 </Box>
               </Box>
             </CardContent>
