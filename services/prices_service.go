@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
 )
 
 // CreateModelPrice creates a new model price
@@ -92,6 +93,20 @@ func (s *Service) GetModelPriceByModelName(modelName string) (*models.ModelPrice
 func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
 	modelPrice := &models.ModelPrice{}
 	if err := modelPrice.GetByModelNameAndVendor(s.DB, modelName, vendor); err != nil {
+		if err.Error() == gorm.ErrRecordNotFound.Error() {
+			// not found, create it
+			modelPrice.ModelName = modelName
+			modelPrice.Vendor = vendor
+			modelPrice.CPT = 0.0
+			modelPrice.CPIT = 0.0
+			modelPrice.Currency = "USD"
+			if err := modelPrice.Create(s.DB); err != nil {
+				return nil, err
+			}
+
+			return modelPrice, nil
+		}
+
 		return nil, err
 	}
 	return modelPrice, nil

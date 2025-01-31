@@ -121,4 +121,29 @@ func TestModelPriceService(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(remainingPrices))
 	})
+	t.Run("GetModelPriceByModelNameAndVendor", func(t *testing.T) {
+		// Test existing model price
+		service.CreateModelPrice("SpecificModel", "SpecificVendor", 0.0006, 0.00005, "USD")
+		modelPrice, err := service.GetModelPriceByModelNameAndVendor("SpecificModel", "SpecificVendor")
+		assert.NoError(t, err)
+		assert.Equal(t, "SpecificModel", modelPrice.ModelName)
+		assert.Equal(t, "SpecificVendor", modelPrice.Vendor)
+
+		// Test auto-creation of non-existing model price
+		nonExistingModelPrice, err := service.GetModelPriceByModelNameAndVendor("NewModel", "NewVendor")
+		assert.NoError(t, err)
+		assert.NotNil(t, nonExistingModelPrice)
+		assert.Equal(t, "NewModel", nonExistingModelPrice.ModelName)
+		assert.Equal(t, "NewVendor", nonExistingModelPrice.Vendor)
+		assert.Equal(t, 0.0, nonExistingModelPrice.CPT)
+		assert.Equal(t, 0.0, nonExistingModelPrice.CPIT)
+		assert.Equal(t, "USD", nonExistingModelPrice.Currency)
+
+		// Verify the auto-created model price was actually persisted
+		verifyModelPrice, err := service.GetModelPriceByModelNameAndVendor("NewModel", "NewVendor")
+		assert.NoError(t, err)
+		assert.Equal(t, nonExistingModelPrice.ID, verifyModelPrice.ID)
+		assert.Equal(t, "NewModel", verifyModelPrice.ModelName)
+		assert.Equal(t, "NewVendor", verifyModelPrice.Vendor)
+	})
 }
