@@ -215,6 +215,22 @@ func (a *API) setupRoutes() {
 	// routes for portal users
 	authed := public.Group("/common")
 	authed.Use(a.auth.AuthMiddleware())
+
+	scim := authed.Group("/scim/v2")
+	scim.GET("/Users", a.listSCIMUsers)
+	scim.POST("/Users", a.createSCIMUser)
+	scim.GET("/Users/:id", a.getSCIMUser)
+	scim.PUT("/Users/:id", a.updateSCIMUser)
+	scim.PATCH("/Users/:id", a.patchSCIMUser)
+	scim.DELETE("/Users/:id", a.deleteSCIMUser)
+
+	scim.GET("/Groups", a.listSCIMGroups)
+	scim.POST("/Groups", a.createSCIMGroup)
+	scim.GET("/Groups/:id", a.getSCIMGroup)
+	scim.PUT("/Groups/:id", a.updateSCIMGroup)
+	scim.PATCH("/Groups/:id", a.patchSCIMGroup)
+	scim.DELETE("/Groups/:id", a.deleteSCIMGroup)
+
 	authed.POST("/logout", a.handleLogout)
 	authed.GET("/me", a.handleMe)
 	authed.GET("/system", a.handleFeatureSet)

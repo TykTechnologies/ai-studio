@@ -1,0 +1,19 @@
+{
+  "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+  "id": "12345",
+  "userName": "jdoe",
+  "name": {
+    "givenName": "John",
+    "familyName": "Doe"
+  },
+  "emails": [
+    {
+      "value": "jdoe@example.com",
+      "type": "work"
+    }
+  ],
+  "meta": {
+    "resourceType": "User",
+    "location": "https://chat.tyk.technology/scim/v2/Users/12345"
+  }
+}
