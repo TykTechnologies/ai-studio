@@ -14,6 +14,7 @@ type AppConf struct {
 	SMTPPort            int
 	SMTPUser            string
 	SMTPPass            string
+	AdminAPIKey         string
 	FromEmail           string
 	AllowRegistrations  bool
 	AdminEmail          string
@@ -151,6 +152,11 @@ func getConfigFromEnv() *AppConf {
 	conf.ProxyURL = os.Getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
 		log.Println("Warning: PROXY_URL environment variable is not set")
+	}
+
+	conf.AdminAPIKey = os.Getenv("ADMIN_API_KEY")
+	if conf.AdminAPIKey == "" {
+		log.Println("Warning: ADMIN_API_KEY environment variable is not set")
 	}
 
 	return conf

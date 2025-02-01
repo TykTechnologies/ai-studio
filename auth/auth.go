@@ -33,6 +33,7 @@ type MailDialer interface {
 type Config struct {
 	DB           *gorm.DB
 	Service      *services.Service
+	AdminAPIKey  string
 	CookieName   string
 	CookieSecure bool
 
@@ -390,6 +391,12 @@ func (a *AuthService) SendEmail(to, subject, body string) error {
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if a.Config.TestMode {
+			c.Next()
+			return
+		}
+
+		apiKey := c.GetHeader("X-Admin-API-Key")
+		if apiKey != "" && apiKey == a.Config.AdminAPIKey {
 			c.Next()
 			return
 		}

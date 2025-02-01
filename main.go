@@ -87,6 +87,7 @@ func main() {
 		DB:                     db,
 		Service:                service,
 		CookieName:             "session",
+		AdminAPIKey:            appConf.AdminAPIKey,
 		CookieSecure:           true,
 		CookieHTTPOnly:         true,
 		CookieSameSite:         http.SameSiteStrictMode,
