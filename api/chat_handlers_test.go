@@ -23,7 +23,7 @@ func TestChatEndpoints(t *testing.T) {
 	llm, err := api.service.CreateLLM(
 		"TestLLM", "api-key", "http://api.test", 75,
 		"Short desc", "Long desc", "http://logo.test",
-		models.OPENAI, true, nil, "")
+		models.OPENAI, true, nil, "", []string{})
 	assert.NoError(t, err)
 
 	// Test Create Chat

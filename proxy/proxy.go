@@ -153,16 +153,22 @@ func (p *Proxy) loadResources() error {
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 
+	modelValidation := p.modelValidationMiddleware
+
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST")
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST")
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	// This is the translation endpoint
+	// Translation endpoints
 	ai := r.PathPrefix("/ai").Subrouter()
 	ai.HandleFunc("/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
 	ai.HandleFunc("/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 
-	return p.outboundRequestMiddleware(p.credValidator.Middleware(r))
+	return p.outboundRequestMiddleware(
+		p.credValidator.Middleware(
+			modelValidation(r),
+		),
+	)
 }
 
 func (p *Proxy) AddFilter(filter *models.Filter) {

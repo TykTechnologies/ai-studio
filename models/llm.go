@@ -21,6 +21,9 @@ type LLM struct {
 	Active  bool   `json:"active"`
 
 	Filters []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
+
+	// If empty, all models are allowed
+	AllowedModels []string `json:"allowed_models" gorm:"type:json;serializer:json"`
 }
 
 const (
