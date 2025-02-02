@@ -40,6 +40,8 @@ import {
   getVendorCodes,
 } from "../../utils/vendorLogos";
 import { useTheme } from "@mui/material/styles";
+import Stack from "@mui/material/Stack";
+import AddIcon from "@mui/icons-material/Add";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -60,6 +62,7 @@ const LLMForm = () => {
     active: false,
     filters: [],
     default_model: "",
+    allowed_models: [],
   });
   const [vendors, setVendors] = useState([]);
   const [filters, setFilters] = useState(null);
@@ -76,6 +79,7 @@ const LLMForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const theme = useTheme();
+  const [newModel, setNewModel] = useState("");
 
   useEffect(() => {
     setVendors(getVendorCodes());
@@ -84,6 +88,25 @@ const LLMForm = () => {
       fetchLLM();
     }
   }, [id]);
+
+  const handleAddModel = () => {
+    if (newModel.trim()) {
+      setLLM((prev) => ({
+        ...prev,
+        allowed_models: [...(prev.allowed_models || []), newModel.trim()],
+      }));
+      setNewModel("");
+    }
+  };
+
+  const handleDeleteModel = (modelToDelete) => {
+    setLLM((prev) => ({
+      ...prev,
+      allowed_models: prev.allowed_models.filter(
+        (model) => model !== modelToDelete,
+      ),
+    }));
+  };
 
   const fetchFilters = async () => {
     setFiltersLoading(true);
@@ -321,6 +344,53 @@ const LLMForm = () => {
                   ),
                 }}
               />
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom>
+                Allowed Models
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Add regex patterns to whitelist specific models (e.g., "gpt-4.*"
+                for all GPT-4 models)
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+                <TextField
+                  fullWidth
+                  label="Model Pattern"
+                  value={newModel}
+                  onChange={(e) => setNewModel(e.target.value)}
+                  placeholder="Enter model pattern (e.g., gpt-4.*)"
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddModel();
+                    }
+                  }}
+                />
+                <IconButton
+                  onClick={handleAddModel}
+                  color="primary"
+                  sx={{ ml: 1 }}
+                >
+                  <AddIcon />
+                </IconButton>
+              </Box>
+              <Stack
+                direction="row"
+                spacing={1}
+                flexWrap="wrap"
+                sx={{ gap: 1 }}
+              >
+                {llm.allowed_models?.map((model, index) => (
+                  <Chip
+                    key={index}
+                    label={model}
+                    onDelete={() => handleDeleteModel(model)}
+                    color="primary"
+                    variant="outlined"
+                  />
+                ))}
+              </Stack>
             </Grid>
           </Grid>
 

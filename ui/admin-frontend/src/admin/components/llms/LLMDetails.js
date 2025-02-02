@@ -40,6 +40,8 @@ import {
   StyledButton,
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
+import Chip from "@mui/material/Chip";
+import { useTheme } from "@mui/material/styles";
 
 ChartJS.register(
   CategoryScale,
@@ -76,6 +78,7 @@ const LLMDetails = () => {
 
   const apiEndpointPlaceholder = "API Endpoint not set";
   const apiKeyPlaceholder = "API Key not set";
+  const theme = useTheme();
 
   useEffect(() => {
     fetchLLMDetails();
@@ -307,6 +310,58 @@ const LLMDetails = () => {
                 </Tooltip>
               )}
             </Box>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>Model Configuration</SectionTitle>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          The following model patterns are allowed for this LLM. These patterns
+          are used to validate model requests through the API Gateway.
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={3}>
+            <FieldLabel>Default Model:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {llm.attributes.default_model || "No default model set"}
+            </FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Allowed Models:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            {llm.attributes.allowed_models &&
+            llm.attributes.allowed_models.length > 0 ? (
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                {llm.attributes.allowed_models.map((model, index) => (
+                  <Chip
+                    key={index}
+                    label={model}
+                    color="primary"
+                    variant="outlined"
+                    sx={{
+                      backgroundColor: theme.palette.background.paper,
+                      "& .MuiChip-label": {
+                        color: theme.palette.text.primary,
+                      },
+                    }}
+                  />
+                ))}
+              </Box>
+            ) : (
+              <FieldValue>No model patterns specified</FieldValue>
+            )}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: "block", mt: 1 }}
+            >
+              These patterns use regex matching to determine which models are
+              allowed. For example, "gpt-4.*" allows all GPT-4 models.
+            </Typography>
           </Grid>
         </Grid>
 

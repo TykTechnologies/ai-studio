@@ -49,6 +49,7 @@ func (a *API) createLLM(c *gin.Context) {
 		input.Data.Attributes.Active,
 		filters,
 		input.Data.Attributes.DefaultModel,
+		input.Data.Attributes.AllowedModels,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -171,6 +172,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.Active,
 		filters,
 		input.Data.Attributes.DefaultModel,
+		input.Data.Attributes.AllowedModels,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -446,6 +448,7 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			Active           bool             `json:"active"`
 			Filters          []FilterResponse `json:"filters"`
 			DefaultModel     string           `json:"default_model"`
+			AllowedModels    []string         `json:"allowed_models"`
 		}{
 			Name:             llm.Name,
 			APIKey:           llm.APIKey,
@@ -458,6 +461,7 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			Active:           llm.Active,
 			Filters:          serializeFilters(llm.Filters),
 			DefaultModel:     llm.DefaultModel,
+			AllowedModels:    llm.AllowedModels,
 		},
 	}
 }
