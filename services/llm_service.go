@@ -1,33 +1,12 @@
 package services
 
 import (
+	"fmt"
+	"regexp"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
-
-func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
-	shortDescription, longDescription, logoURL string,
-	vendor models.Vendor, active bool, filters []*models.Filter, defaultModel string) (*models.LLM, error) {
-	llm := &models.LLM{
-		Name:             name,
-		APIKey:           apiKey,
-		APIEndpoint:      apiEndpoint,
-		PrivacyScore:     privacyScore,
-		ShortDescription: shortDescription,
-		LongDescription:  longDescription,
-		LogoURL:          logoURL,
-		Vendor:           vendor,
-		Active:           active,
-		Filters:          filters,
-		DefaultModel:     defaultModel,
-	}
-
-	if err := llm.Create(s.DB); err != nil {
-		return nil, err
-	}
-
-	return llm, nil
-}
 
 func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	llm := models.NewLLM()
@@ -39,31 +18,143 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	return llm, nil
 }
 
+func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
+    shortDescription, longDescription, logoURL string,
+    vendor models.Vendor, active bool, filters []*models.Filter,
+    defaultModel string, allowedModels []string) (*models.LLM, error) {
+    llm := &models.LLM{
+        Name:             name,
+        APIKey:           apiKey,
+        APIEndpoint:      apiEndpoint,
+        PrivacyScore:     privacyScore,
+        ShortDescription: shortDescription,
+        LongDescription:  longDescription,
+        LogoURL:          logoURL,
+        Vendor:           vendor,
+        Active:           active,
+        Filters:          filters,
+        DefaultModel:     defaultModel,
+        AllowedModels:    allowedModels,
+    }
+
+    if err := llm.Create(s.DB); err != nil {
+        return nil, err
+    }
+
+    return llm, nil
+}
+
 func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
-	privacyScore int, shortDescription, longDescription, logoURL string,
-	vendor models.Vendor, active bool, filters []*models.Filter, defaultModel string) (*models.LLM, error) {
-	llm, err := s.GetLLMByID(id)
-	if err != nil {
-		return nil, err
-	}
+    privacyScore int, shortDescription, longDescription, logoURL string,
+    vendor models.Vendor, active bool, filters []*models.Filter,
+    defaultModel string, allowedModels []string) (*models.LLM, error) {
+    llm, err := s.GetLLMByID(id)
+    if err != nil {
+        return nil, err
+    }
 
-	llm.Name = name
-	llm.APIKey = apiKey
-	llm.APIEndpoint = apiEndpoint
-	llm.PrivacyScore = privacyScore
-	llm.ShortDescription = shortDescription
-	llm.LongDescription = longDescription
-	llm.LogoURL = logoURL
-	llm.Vendor = vendor
-	llm.Active = active
-	llm.Filters = filters
-	llm.DefaultModel = defaultModel
+    llm.Name = name
+    llm.APIKey = apiKey
+    llm.APIEndpoint = apiEndpoint
+    llm.PrivacyScore = privacyScore
+    llm.ShortDescription = shortDescription
+    llm.LongDescription = longDescription
+    llm.LogoURL = logoURL
+    llm.Vendor = vendor
+    llm.Active = active
+    llm.Filters = filters
+    llm.DefaultModel = defaultModel
+    llm.AllowedModels = allowedModels
 
-	if err := llm.Update(s.DB); err != nil {
-		return nil, err
-	}
+    if err := llm.Update(s.DB); err != nil {
+        return nil, err
+    }
 
-	return llm, nil
+    return llm, nil
+}
+
+// Add some helper functions for managing allowed models
+func (s *Service) AddAllowedModel(id uint, modelPattern string) error {
+    llm, err := s.GetLLMByID(id)
+    if err != nil {
+        return err
+    }
+
+    // Check if pattern is valid regex
+    if _, err := regexp.Compile(modelPattern); err != nil {
+        return fmt.Errorf("invalid model pattern: %w", err)
+    }
+
+    // Check for duplicates
+    for _, existing := range llm.AllowedModels {
+        if existing == modelPattern {
+            return nil // Pattern already exists
+        }
+    }
+
+    llm.AllowedModels = append(llm.AllowedModels, modelPattern)
+    return llm.Update(s.DB)
+}
+
+func (s *Service) RemoveAllowedModel(id uint, modelPattern string) error {
+    llm, err := s.GetLLMByID(id)
+    if err != nil {
+        return err
+    }
+
+    // Filter out the pattern
+    newPatterns := make([]string, 0)
+    for _, pattern := range llm.AllowedModels {
+        if pattern != modelPattern {
+            newPatterns = append(newPatterns, pattern)
+        }
+    }
+
+    llm.AllowedModels = newPatterns
+    return llm.Update(s.DB)
+}
+
+func (s *Service) ClearAllowedModels(id uint) error {
+    llm, err := s.GetLLMByID(id)
+    if err != nil {
+        return err
+    }
+
+    llm.AllowedModels = []string{}
+    return llm.Update(s.DB)
+}
+
+func (s *Service) GetAllowedModels(id uint) ([]string, error) {
+    llm, err := s.GetLLMByID(id)
+    if err != nil {
+        return nil, err
+    }
+
+    return llm.AllowedModels, nil
+}
+
+// Add a validation helper
+func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
+    llm, err := s.GetLLMByID(id)
+    if err != nil {
+        return false, err
+    }
+
+    if len(llm.AllowedModels) == 0 {
+        return true, nil // Empty list means all models are allowed
+    }
+
+    for _, pattern := range llm.AllowedModels {
+        matched, err := regexp.MatchString(pattern, modelName)
+        if err != nil {
+            return false, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
+        }
+        if matched {
+            return true, nil
+        }
+    }
+
+    return false, nil
 }
 
 // The following functions remain unchanged

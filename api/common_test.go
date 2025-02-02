@@ -242,7 +242,7 @@ func createTestToolCatalogue(t *testing.T, service *services.Service) *models.To
 
 func createTestLLM(t *testing.T, service *services.Service, name string) *models.LLM {
 	llm, err := service.CreateLLM(name, "api_key", "https://api.example.com",
-		80, "Short desc", "Long desc", "https://logo.example.com", models.OPENAI, true, nil, "")
+		80, "Short desc", "Long desc", "https://logo.example.com", models.OPENAI, true, nil, "", []string{})
 	assert.NoError(t, err)
 	return llm
 }

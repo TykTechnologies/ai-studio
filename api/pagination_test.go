@@ -54,6 +54,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 			true,
 			nil,
 			"",
+			[]string{},
 		)
 		assert.NoError(t, err)
 	}
