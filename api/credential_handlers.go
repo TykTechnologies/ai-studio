@@ -203,7 +203,7 @@ func (a *API) sendCredentialsApprovedEmail(app *models.App, creds *models.Creden
 	if err != nil {
 		// If template is not found, use a simple string
 		body = fmt.Sprintf("Your app has been approved:\n\nName: %s\n\nView app details: %s\n",
-			app.Name, app.Description, app.UserID, appDetailsURL)
+			app.Name, appDetailsURL)
 		slog.Warn("failed to parse email template", "error", err)
 	} else {
 		var buf bytes.Buffer

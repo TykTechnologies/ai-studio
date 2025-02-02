@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -17,16 +18,23 @@ func (p *Proxy) CreateCompletionHandler(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	routeID := vars["routeId"]
 
+	// get the route ID from the DB to find out what back-end LLM to use
+	conf, ok := p.llms[routeID]
+	if !ok {
+		http.Error(w, "Route not found", http.StatusNotFound)
+		return
+	}
+
 	var req CreateCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// get the route ID from the DB to find out what back-end LLM to use
-	conf, ok := p.llms[routeID]
-	if !ok {
-		http.Error(w, "Route not found", http.StatusNotFound)
+	// Validate model
+	validator := NewModelValidator(conf.AllowedModels)
+	if !validator.IsModelAllowed(req.Model) {
+		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil)
 		return
 	}
 
@@ -71,9 +79,23 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	vars := mux.Vars(r)
 	routeID := vars["routeId"]
 
+	// get the route ID from the DB to find out what back-end LLM to use
+	conf, ok := p.llms[routeID]
+	if !ok {
+		respondWithOAIError(w, http.StatusNotFound, "vendor not found", nil)
+		return
+	}
+
 	var req ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithOAIError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	// Validate model
+	validator := NewModelValidator(conf.AllowedModels)
+	if !validator.IsModelAllowed(req.Model) {
+		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil)
 		return
 	}
 
@@ -86,13 +108,6 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	// Handle streaming if requested
 	if req.Stream != nil && *req.Stream {
 		respondWithOAIError(w, http.StatusBadRequest, "streaming not supported", nil)
-		return
-	}
-
-	// get the route ID from the DB to find out what back-end LLM to use
-	conf, ok := p.llms[routeID]
-	if !ok {
-		respondWithOAIError(w, http.StatusNotFound, "vendor not found", nil)
 		return
 	}
 

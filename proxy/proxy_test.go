@@ -752,3 +752,223 @@ func TestHandleStreamingLLMRequest(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }
+
+func TestModelValidation(t *testing.T) {
+	// mockService := new(MockService)
+	// config := &Config{Port: 8080}
+	// proxy := NewProxy(mockService, config)
+
+	tests := []struct {
+		name          string
+		allowedModels []string
+		modelName     string
+		expectAllowed bool
+	}{
+		{
+			name:          "Empty allowlist permits all models",
+			allowedModels: []string{},
+			modelName:     "gpt-4",
+			expectAllowed: true,
+		},
+		{
+			name:          "Nil allowlist permits all models",
+			allowedModels: nil,
+			modelName:     "gpt-4",
+			expectAllowed: true,
+		},
+		{
+			name:          "Exact match is allowed",
+			allowedModels: []string{"gpt-4", "gpt-3.5-turbo"},
+			modelName:     "gpt-4",
+			expectAllowed: true,
+		},
+		{
+			name:          "Non-matching model is blocked",
+			allowedModels: []string{"gpt-4", "gpt-3.5-turbo"},
+			modelName:     "claude-2",
+			expectAllowed: false,
+		},
+		{
+			name:          "Regex pattern allows matching models",
+			allowedModels: []string{"gpt-4.*"},
+			modelName:     "gpt-4-turbo",
+			expectAllowed: true,
+		},
+		{
+			name:          "Multiple patterns work",
+			allowedModels: []string{"gpt-4.*", "claude-.*"},
+			modelName:     "claude-2",
+			expectAllowed: true,
+		},
+		{
+			name:          "Case sensitive matching",
+			allowedModels: []string{"GPT-4"},
+			modelName:     "gpt-4",
+			expectAllowed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := NewModelValidator(tt.allowedModels)
+			allowed := validator.IsModelAllowed(tt.modelName)
+			assert.Equal(t, tt.expectAllowed, allowed)
+		})
+	}
+}
+
+func TestModelValidationMiddleware(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{
+		{
+			ID:            1,
+			Name:          "testllm",
+			AllowedModels: []string{"gpt-4.*", "gpt-3.5-turbo"},
+		},
+	}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+	err := proxy.loadResources()
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		requestBody    string
+		expectedStatus int
+	}{
+		{
+			name:           "Valid model allowed",
+			requestBody:    `{"model": "gpt-4-turbo", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid model blocked",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "Malformed request",
+			requestBody:    `{"invalid json"`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Missing model field",
+			requestBody:    `{"messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a router to properly handle URL parameters
+			router := mux.NewRouter()
+			router.HandleFunc("/llm/rest/{llmSlug}/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+				// Create a test handler that would be called after validation
+				next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				})
+
+				// Apply the middleware directly to this handler
+				proxy.modelValidationMiddleware(next).ServeHTTP(w, r)
+			}).Methods("POST")
+
+			// Create the test server with the router
+			server := httptest.NewServer(router)
+			defer server.Close()
+
+			// Make the request
+			req, err := http.NewRequest("POST",
+				fmt.Sprintf("%s/llm/rest/testllm/v1/chat/completions", server.URL),
+				strings.NewReader(tt.requestBody))
+			assert.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Send the request
+			resp, err := http.DefaultClient.Do(req)
+			assert.NoError(t, err)
+			defer resp.Body.Close()
+
+			// Read the response body for error messages
+			body, err := ioutil.ReadAll(resp.Body)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode,
+				"Test case: %s - Response body: %s", tt.name, string(body))
+		})
+	}
+}
+
+func TestIntegratedModelValidation(t *testing.T) {
+	mockService := new(MockService)
+	// Setup mock service with an LLM that has model restrictions
+	mockService.On("GetActiveLLMs").Return([]models.LLM{
+		{
+			ID:            1,
+			Name:          "RestrictedLLM",
+			AllowedModels: []string{"gpt-4.*"},
+			Vendor:        models.MOCK_VENDOR,
+			APIEndpoint:   "http://mock-llm.com",
+		},
+	}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+	mockService.On("GetCredentialBySecret", "valid-token").Return(&models.Credential{ID: 1, Active: true}, nil)
+	mockService.On("GetAppByCredentialID", uint(1)).Return(&models.App{ID: 1, LLMs: []models.LLM{{ID: 1}}}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+	proxy.loadResources()
+
+	// Create test server
+	router := mux.NewRouter()
+	router.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", proxy.handleLLMRequest).Methods("POST")
+	router.HandleFunc("/ai/{routeId}/v1/chat/completions", proxy.CreateChatCompletionHandler).Methods("POST")
+
+	testServer := httptest.NewServer(proxy.modelValidationMiddleware(router))
+	defer testServer.Close()
+
+	tests := []struct {
+		name           string
+		endpoint       string
+		requestBody    string
+		expectedStatus int
+	}{
+		{
+			name:           "Direct proxy - allowed model",
+			endpoint:       "/llm/rest/restrictedllm/v1/chat/completions",
+			requestBody:    `{"model": "gpt-4-turbo", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Direct proxy - blocked model",
+			endpoint:       "/llm/rest/restrictedllm/v1/chat/completions",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "Translation endpoint - allowed model",
+			endpoint:       "/ai/restrictedllm/v1/chat/completions",
+			requestBody:    `{"model": "gpt-4-turbo", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Translation endpoint - blocked model",
+			endpoint:       "/ai/restrictedllm/v1/chat/completions",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("POST", testServer.URL+tt.endpoint, strings.NewReader(tt.requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "valid-token")
+
+			resp, err := http.DefaultClient.Do(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
+		})
+	}
+}
