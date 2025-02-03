@@ -54,14 +54,15 @@ type SearchResults struct {
 }
 
 type Proxy struct {
-	service       services.ServiceInterface
-	server        *http.Server
-	llms          map[string]*models.LLM
-	datasources   map[string]*models.Datasource
-	mu            sync.RWMutex
-	config        *Config
-	credValidator *CredentialValidator
-	filters       []*models.Filter
+	service        services.ServiceInterface
+	server         *http.Server
+	llms           map[string]*models.LLM
+	datasources    map[string]*models.Datasource
+	mu             sync.RWMutex
+	config         *Config
+	credValidator  *CredentialValidator
+	modelValidator *ModelValidator
+	filters        []*models.Filter
 }
 
 type Config struct {
@@ -86,6 +87,17 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val.RegisterValidator(strings.ToLower(string(models.OLLAMA)), OpenAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.MOCK_VENDOR)), MockValidator)
 	val.RegisterValidator("dummy", DummyValidator)
+
+	modelVal := NewModelValidator(nil) // nil because allowed models will be set per-LLM
+	modelVal.RegisterExtractor(strings.ToLower(string(models.OPENAI)), OpenAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.ANTHROPIC)), AnthropicModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.GOOGLEAI)), GoogleAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.VERTEX)), VertexModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.HUGGINGFACE)), HuggingFaceModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.OLLAMA)), OpenAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
+
+	p.modelValidator = modelVal
 
 	p.credValidator = val
 
@@ -253,7 +265,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	p.mu.RUnlock()
 
 	if !ok {
-		respondWithError(w, http.StatusNotFound, "[rest] LLM not found", nil)
+		errMsg := fmt.Sprintf("[rest] LLM not found: %s", llmSlug)
+		respondWithError(w, http.StatusNotFound, errMsg, nil)
 		return
 	}
 
