@@ -1,6 +1,7 @@
 version: "3.8"
 services:
   dev:
+    platform: linux/${TARGETARCH:-amd64}
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -8,6 +9,7 @@ services:
       - .:/app
       - /app/ui/admin-frontend/node_modules
       - ./midsommar.db:/app/midsommar.db # Bind mount SQLite database file
+      - ./.env:/app/.env # Mount .env file
     ports:
       - "3000:3000" # Frontend
       - "8080:8080" # Backend
