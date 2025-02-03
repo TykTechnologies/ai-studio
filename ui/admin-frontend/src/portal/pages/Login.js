@@ -67,7 +67,7 @@ const Login = () => {
             {error}
           </Alert>
         )}
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete="off">
           <TextField
             fullWidth
             label="Email"
@@ -76,6 +76,7 @@ const Login = () => {
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
           />
           <TextField
             fullWidth
@@ -85,6 +86,7 @@ const Login = () => {
             onChange={(e) => setPassword(e.target.value)}
             margin="normal"
             required
+            autoComplete="new-password"
           />
           <Button
             type="submit"
