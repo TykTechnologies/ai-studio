@@ -1,0 +1,39 @@
+FROM node:18 AS base
+
+# Install Go
+RUN apt-get update && apt-get install -y \
+    golang-go \
+    git \
+    screen \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up work directory
+WORKDIR /app
+
+# Install Air for Go hot reloading
+RUN go install github.com/cosmtrek/air@latest
+
+# Copy package files first to leverage Docker cache
+COPY ui/admin-frontend/package*.json ./ui/admin-frontend/
+
+# Install frontend dependencies
+RUN cd ui/admin-frontend && npm install
+
+# Copy the rest of the application
+COPY . .
+
+# Create empty build directory for Go static build
+RUN mkdir -p ui/admin-frontend/build && \
+    touch ui/admin-frontend/build/empty
+
+RUN touch /app/midsommar.db && \
+    chmod 666 /app/midsommar.db
+
+# Expose ports for frontend and backend
+EXPOSE 3000 8080
+
+# Use a shell script to run both services
+COPY docker-entrypoint-dev.sh /
+RUN chmod +x /docker-entrypoint-dev.sh
+
+ENTRYPOINT ["/docker-entrypoint-dev.sh"]
