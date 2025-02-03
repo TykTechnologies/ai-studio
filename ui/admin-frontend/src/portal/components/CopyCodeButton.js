@@ -11,7 +11,6 @@ export default function CodeCopyBtn({ children }) {
 
   const handleClick = () => {
     navigator.clipboard.writeText(children.props.children);
-    console.log(children);
 
     setCopyOk(true);
     setTimeout(() => {
