@@ -13,6 +13,8 @@ import {
   Alert,
   Button,
 } from "@mui/material";
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { a11yDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 import IconButton from "@mui/material/IconButton";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -29,6 +31,7 @@ import TextareaAutosize from "@mui/material/TextareaAutosize";
 import { getConfig } from "../../config"; // Update the import
 import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 import SendIcon from "@mui/icons-material/Send";
+import CodeCopyBtn from "./CopyCodeButton";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -314,9 +317,8 @@ const ChatView = () => {
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
     const currentConfig = getConfig();
-    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${
-      sessionId ? `?session_id=${sessionId}` : ""
-    }`;
+    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""
+      }`;
 
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
@@ -587,6 +589,11 @@ const ChatView = () => {
     );
     const groupedSegments = groupSystemMessages(segments);
 
+    const Pre = ({ children }) => <pre className="code-pre">
+      <CodeCopyBtn>{children}</CodeCopyBtn>
+      {children}
+    </pre>
+
     return (
       <>
         {groupedSegments.map((segment, index) => {
@@ -713,6 +720,7 @@ const ChatView = () => {
                   a: ({ node, ...props }) => (
                     <a target="_blank" rel="noopener noreferrer" {...props} />
                   ),
+                  pre: Pre,
                   code: ({ node, inline, className, children, ...props }) => {
                     const match = /language-(\w+)/.exec(className || "");
 
@@ -725,28 +733,14 @@ const ChatView = () => {
                     }
 
                     return match ? (
-                      <pre
-                        style={{
-                          margin: "8px 0",
-                          padding: "10px",
-                          backgroundColor: "#f0f0f0",
-                          borderRadius: "4px",
-                          overflowX: "auto",
-                        }}
+                      <SyntaxHighlighter
+                        style={a11yDark}
+                        language={match[1]}
+                        PreTag="div"
+                        {...props}
                       >
-                        <code
-                          className={className}
-                          style={{
-                            fontFamily: "monospace",
-                            fontSize: "0.9em",
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                          }}
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      </pre>
+                        {String(children).replace(/\n$/, '')}
+                      </SyntaxHighlighter>
                     ) : (
                       <code className={className} {...props}>
                         {children}

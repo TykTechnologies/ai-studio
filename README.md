@@ -27,6 +27,30 @@ For Administratorts, IT, and Platform Teams:
 
 ## Developer Guide
 
+There are two ways to run in developer mode: using the docker container, or running everything locally.
+
+### Running in Docker
+
+To run the app in Docker, you need to have Docker installed on your machine.
+
+first, make a copy of the env file:
+
+```bash
+cp .env.example .env
+```
+
+Then, fill in the required environment variables in the .env file, most importantly you'll need the `TYK_AI_LICENSE_KEY`, which you can get from the AI Team.
+
+To start the app in Docker, run the following command:
+
+```bash
+docker compose up --build
+```
+
+This will take a while on first run, but when fully up, should watch the server, and let you update any code and have it re-compiled each time you make a change to the front end or back end.
+
+### Running natively
+
 ### Prerequisites
 1. Clone this repository
 2. Clone the llangchain-go fork at https://github.com/lonelycode/langchaingo (yes, I know, but they have not merged my fixes yet).

@@ -86,16 +86,20 @@ const ModelPriceDetail = () => {
             </Box>
           </Grid>
           <Grid item xs={4}>
-            <FieldLabel>Cost per Input Token:</FieldLabel>
+            <FieldLabel>Cost per Million Input Tokens:</FieldLabel>
           </Grid>
           <Grid item xs={8}>
-            <FieldValue>{price.attributes.cpit}</FieldValue>
+            <FieldValue>
+              {`${(price.attributes.cpit * 1000000).toFixed(2)} ${price.attributes.currency}`}
+            </FieldValue>
           </Grid>
           <Grid item xs={4}>
-            <FieldLabel>Cost per Output Token:</FieldLabel>
+            <FieldLabel>Cost per Million Output Tokens:</FieldLabel>
           </Grid>
           <Grid item xs={8}>
-            <FieldValue>{price.attributes.cpt}</FieldValue>
+            <FieldValue>
+              {`${(price.attributes.cpt * 1000000).toFixed(2)} ${price.attributes.currency}`}
+            </FieldValue>
           </Grid>
           <Grid item xs={4}>
             <FieldLabel>Currency:</FieldLabel>

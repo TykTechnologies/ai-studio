@@ -54,14 +54,15 @@ type SearchResults struct {
 }
 
 type Proxy struct {
-	service       services.ServiceInterface
-	server        *http.Server
-	llms          map[string]*models.LLM
-	datasources   map[string]*models.Datasource
-	mu            sync.RWMutex
-	config        *Config
-	credValidator *CredentialValidator
-	filters       []*models.Filter
+	service        services.ServiceInterface
+	server         *http.Server
+	llms           map[string]*models.LLM
+	datasources    map[string]*models.Datasource
+	mu             sync.RWMutex
+	config         *Config
+	credValidator  *CredentialValidator
+	modelValidator *ModelValidator
+	filters        []*models.Filter
 }
 
 type Config struct {
@@ -86,6 +87,17 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val.RegisterValidator(strings.ToLower(string(models.OLLAMA)), OpenAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.MOCK_VENDOR)), MockValidator)
 	val.RegisterValidator("dummy", DummyValidator)
+
+	modelVal := NewModelValidator(nil) // nil because allowed models will be set per-LLM
+	modelVal.RegisterExtractor(strings.ToLower(string(models.OPENAI)), OpenAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.ANTHROPIC)), AnthropicModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.GOOGLEAI)), GoogleAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.VERTEX)), VertexModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.HUGGINGFACE)), HuggingFaceModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.OLLAMA)), OpenAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
+
+	p.modelValidator = modelVal
 
 	p.credValidator = val
 
@@ -153,16 +165,22 @@ func (p *Proxy) loadResources() error {
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 
+	modelValidation := p.modelValidationMiddleware
+
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST")
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST")
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	// This is the translation endpoint
+	// Translation endpoints
 	ai := r.PathPrefix("/ai").Subrouter()
 	ai.HandleFunc("/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
 	ai.HandleFunc("/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 
-	return p.outboundRequestMiddleware(p.credValidator.Middleware(r))
+	return p.outboundRequestMiddleware(
+		p.credValidator.Middleware(
+			modelValidation(r),
+		),
+	)
 }
 
 func (p *Proxy) AddFilter(filter *models.Filter) {
@@ -247,7 +265,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	p.mu.RUnlock()
 
 	if !ok {
-		respondWithError(w, http.StatusNotFound, "[rest] LLM not found", nil)
+		errMsg := fmt.Sprintf("[rest] LLM not found: %s", llmSlug)
+		respondWithError(w, http.StatusNotFound, errMsg, nil)
 		return
 	}
 
@@ -310,7 +329,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
-	AnalyzeResponse(p.service, llm, app, statusCode, reqBody, body, r)
+	AnalyzeResponse(p.service, llm, app, statusCode, body, reqBody, r)
 }
 
 func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {

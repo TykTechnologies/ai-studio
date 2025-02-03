@@ -18,32 +18,34 @@ func TestLLMEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name             string `json:"name"`
-				APIKey           string `json:"api_key"`
-				APIEndpoint      string `json:"api_endpoint"`
-				PrivacyScore     int    `json:"privacy_score"`
-				ShortDescription string `json:"short_description"`
-				LongDescription  string `json:"long_description"`
-				LogoURL          string `json:"logo_url"`
-				Vendor           string `json:"vendor"`
-				Active           bool   `json:"active"`
-				Filters          []int  `json:"filters"`
-				DefaultModel     string `json:"default_model"`
+				Name             string   `json:"name"`
+				APIKey           string   `json:"api_key"`
+				APIEndpoint      string   `json:"api_endpoint"`
+				PrivacyScore     int      `json:"privacy_score"`
+				ShortDescription string   `json:"short_description"`
+				LongDescription  string   `json:"long_description"`
+				LogoURL          string   `json:"logo_url"`
+				Vendor           string   `json:"vendor"`
+				Active           bool     `json:"active"`
+				Filters          []int    `json:"filters"`
+				DefaultModel     string   `json:"default_model"`
+				AllowedModels    []string `json:"allowed_models"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
 			Attributes: struct {
-				Name             string `json:"name"`
-				APIKey           string `json:"api_key"`
-				APIEndpoint      string `json:"api_endpoint"`
-				PrivacyScore     int    `json:"privacy_score"`
-				ShortDescription string `json:"short_description"`
-				LongDescription  string `json:"long_description"`
-				LogoURL          string `json:"logo_url"`
-				Vendor           string `json:"vendor"`
-				Active           bool   `json:"active"`
-				Filters          []int  `json:"filters"`
-				DefaultModel     string `json:"default_model"`
+				Name             string   `json:"name"`
+				APIKey           string   `json:"api_key"`
+				APIEndpoint      string   `json:"api_endpoint"`
+				PrivacyScore     int      `json:"privacy_score"`
+				ShortDescription string   `json:"short_description"`
+				LongDescription  string   `json:"long_description"`
+				LogoURL          string   `json:"logo_url"`
+				Vendor           string   `json:"vendor"`
+				Active           bool     `json:"active"`
+				Filters          []int    `json:"filters"`
+				DefaultModel     string   `json:"default_model"`
+				AllowedModels    []string `json:"allowed_models"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -54,6 +56,8 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL:          "https://testllm.com/logo.png",
 				Vendor:           "Test Vendor",
 				Active:           true,
+				DefaultModel:     "gpt-4",
+				AllowedModels:    []string{"gpt-4.*", "gpt-3.5-turbo"},
 			},
 		},
 	}
@@ -65,6 +69,7 @@ func TestLLMEndpoints(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test LLM", response["data"].Attributes.Name)
+	assert.Equal(t, []string{"gpt-4.*", "gpt-3.5-turbo"}, response["data"].Attributes.AllowedModels)
 
 	llmID := response["data"].ID
 
@@ -72,37 +77,44 @@ func TestLLMEndpoints(t *testing.T) {
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/llms/%s", llmID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	var getLLMResponse map[string]LLMResponse
+	err = json.Unmarshal(w.Body.Bytes(), &getLLMResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"gpt-4.*", "gpt-3.5-turbo"}, getLLMResponse["data"].Attributes.AllowedModels)
+
 	// Test Update LLM
 	updateLLMInput := LLMInput{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name             string `json:"name"`
-				APIKey           string `json:"api_key"`
-				APIEndpoint      string `json:"api_endpoint"`
-				PrivacyScore     int    `json:"privacy_score"`
-				ShortDescription string `json:"short_description"`
-				LongDescription  string `json:"long_description"`
-				LogoURL          string `json:"logo_url"`
-				Vendor           string `json:"vendor"`
-				Active           bool   `json:"active"`
-				Filters          []int  `json:"filters"`
-				DefaultModel     string `json:"default_model"`
+				Name             string   `json:"name"`
+				APIKey           string   `json:"api_key"`
+				APIEndpoint      string   `json:"api_endpoint"`
+				PrivacyScore     int      `json:"privacy_score"`
+				ShortDescription string   `json:"short_description"`
+				LongDescription  string   `json:"long_description"`
+				LogoURL          string   `json:"logo_url"`
+				Vendor           string   `json:"vendor"`
+				Active           bool     `json:"active"`
+				Filters          []int    `json:"filters"`
+				DefaultModel     string   `json:"default_model"`
+				AllowedModels    []string `json:"allowed_models"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
 			Attributes: struct {
-				Name             string `json:"name"`
-				APIKey           string `json:"api_key"`
-				APIEndpoint      string `json:"api_endpoint"`
-				PrivacyScore     int    `json:"privacy_score"`
-				ShortDescription string `json:"short_description"`
-				LongDescription  string `json:"long_description"`
-				LogoURL          string `json:"logo_url"`
-				Vendor           string `json:"vendor"`
-				Active           bool   `json:"active"`
-				Filters          []int  `json:"filters"`
-				DefaultModel     string `json:"default_model"`
+				Name             string   `json:"name"`
+				APIKey           string   `json:"api_key"`
+				APIEndpoint      string   `json:"api_endpoint"`
+				PrivacyScore     int      `json:"privacy_score"`
+				ShortDescription string   `json:"short_description"`
+				LongDescription  string   `json:"long_description"`
+				LogoURL          string   `json:"logo_url"`
+				Vendor           string   `json:"vendor"`
+				Active           bool     `json:"active"`
+				Filters          []int    `json:"filters"`
+				DefaultModel     string   `json:"default_model"`
+				AllowedModels    []string `json:"allowed_models"`
 			}{
 				Name:             "Updated Test LLM",
 				APIKey:           "updated-api-key",
@@ -113,6 +125,8 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL:          "https://updatedtestllm.com/logo.png",
 				Vendor:           "Updated Test Vendor",
 				Active:           true,
+				DefaultModel:     "gpt-4",
+				AllowedModels:    []string{"gpt-4.*", "gpt-3.5-turbo", "claude-.*"},
 			},
 		},
 	}
@@ -120,9 +134,20 @@ func TestLLMEndpoints(t *testing.T) {
 	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/llms/%s", llmID), updateLLMInput)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	var updateResponse map[string]LLMResponse
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"gpt-4.*", "gpt-3.5-turbo", "claude-.*"}, updateResponse["data"].Attributes.AllowedModels)
+
 	// Test List LLMs
 	w = performRequest(api.router, "GET", "/api/v1/llms", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var listResponse map[string][]LLMResponse
+	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
+	assert.NoError(t, err)
+	assert.Greater(t, len(listResponse["data"]), 0)
+	assert.Equal(t, []string{"gpt-4.*", "gpt-3.5-turbo", "claude-.*"}, listResponse["data"][0].Attributes.AllowedModels)
 
 	// Test Search LLMs
 	w = performRequest(api.router, "GET", "/api/v1/llms/search?name=Updated", nil)
@@ -138,10 +163,34 @@ func TestLLMPrivacyScoreEndpoints(t *testing.T) {
 
 	// Create some test LLMs with different privacy scores
 	llms := []models.LLM{
-		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com", PrivacyScore: 30},
-		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com", PrivacyScore: 50},
-		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com", PrivacyScore: 70},
-		{Name: "LLM4", APIKey: "key4", APIEndpoint: "https://api4.com", PrivacyScore: 90},
+		{
+			Name:          "LLM1",
+			APIKey:        "key1",
+			APIEndpoint:   "https://api1.com",
+			PrivacyScore:  30,
+			AllowedModels: []string{"gpt-4"},
+		},
+		{
+			Name:          "LLM2",
+			APIKey:        "key2",
+			APIEndpoint:   "https://api2.com",
+			PrivacyScore:  50,
+			AllowedModels: []string{"gpt-4.*", "gpt-3.5-turbo"},
+		},
+		{
+			Name:          "LLM3",
+			APIKey:        "key3",
+			APIEndpoint:   "https://api3.com",
+			PrivacyScore:  70,
+			AllowedModels: []string{"claude-.*"},
+		},
+		{
+			Name:          "LLM4",
+			APIKey:        "key4",
+			APIEndpoint:   "https://api4.com",
+			PrivacyScore:  90,
+			AllowedModels: nil, // Test empty allowlist
+		},
 	}
 
 	for _, llm := range llms {

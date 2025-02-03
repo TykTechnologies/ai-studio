@@ -69,7 +69,7 @@ func (u *User) SetPassword(password string) error {
 
 func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
 	var totalCount int64
-	query := db.Model(&User{})
+	query := db.Model(&User{}).Order("name ASC") // Added Order clause here
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err

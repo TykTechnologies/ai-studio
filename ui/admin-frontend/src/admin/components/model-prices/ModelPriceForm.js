@@ -57,6 +57,12 @@ const ModelPriceForm = () => {
     cpt: 0,
     currency: "USD",
   });
+
+  const [displayPrice, setDisplayPrice] = useState({
+    cpit_million: 0,
+    cpt_million: 0,
+  });
+
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -76,6 +82,11 @@ const ModelPriceForm = () => {
     try {
       const response = await apiClient.get(`/model-prices/${id}`);
       setPrice(response.data.data.attributes);
+      // Convert per-token to per-million for display
+      setDisplayPrice({
+        cpit_million: response.data.data.attributes.cpit * 1000000,
+        cpt_million: response.data.data.attributes.cpt * 1000000,
+      });
     } catch (error) {
       console.error("Error fetching Model Price", error);
       setSnackbar({
@@ -88,11 +99,23 @@ const ModelPriceForm = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setPrice((prevPrice) => ({
-      ...prevPrice,
-      [name]:
-        name === "cpt" || name === "cpit" ? parseFloat(value) || 0 : value,
-    }));
+    if (name === "cpit_million" || name === "cpt_million") {
+      setDisplayPrice((prev) => ({
+        ...prev,
+        [name]: parseFloat(value) || 0,
+      }));
+      // Update the actual price state with per-token values
+      const perTokenName = name === "cpit_million" ? "cpit" : "cpt";
+      setPrice((prev) => ({
+        ...prev,
+        [perTokenName]: (parseFloat(value) || 0) / 1000000,
+      }));
+    } else {
+      setPrice((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const validateForm = () => {
@@ -224,31 +247,27 @@ const ModelPriceForm = () => {
             <Grid item xs={12}>
               <TooltipTextField
                 fullWidth
-                label="Cost per Input Token"
-                name="cpit"
+                label="Cost per Million Input Tokens"
+                name="cpit_million"
                 type="number"
-                inputProps={{ step: 0.000001 }}
-                value={price.cpit}
+                inputProps={{ step: 0.01, min: 0 }}
+                value={displayPrice.cpit_million}
                 onChange={handleChange}
-                error={!!errors.cpit}
-                helperText={errors.cpit}
                 required
-                tooltip="The cost per input token for this model (e.g., 0.000002)"
+                tooltip="The cost per million input tokens (e.g., 0.40 for $0.40 per million tokens)"
               />
             </Grid>
             <Grid item xs={12}>
               <TooltipTextField
                 fullWidth
-                label="Cost per Output Token"
-                name="cpt"
+                label="Cost per Million Output Tokens"
+                name="cpt_million"
                 type="number"
-                inputProps={{ step: 0.000001, min: 0 }}
-                value={price.cpt}
+                inputProps={{ step: 0.01, min: 0 }}
+                value={displayPrice.cpt_million}
                 onChange={handleChange}
-                error={!!errors.cpt}
-                helperText={errors.cpt}
                 required
-                tooltip="The cost per output token for this model (e.g., 0.000002)"
+                tooltip="The cost per million output tokens (e.g., 0.40 for $0.40 per million tokens)"
               />
             </Grid>
             <Grid item xs={12}>

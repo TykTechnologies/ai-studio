@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -459,26 +460,82 @@ func TestAnalyzeResponse(t *testing.T) {
 	analytics.StartRecording(ctx, db)
 
 	mockService := new(MockService)
-	mockService.On("GetModelPriceByModelNameAndVendor", mock.Anything, mock.Anything).Return(&models.ModelPrice{CPT: 0.001}, nil)
+	mockService.On("GetModelPriceByModelNameAndVendor", mock.Anything, mock.Anything).Return(&models.ModelPrice{
+		CPT:      0.001,
+		CPIT:     0.001,
+		Currency: "USD",
+	}, nil)
 
 	config := &Config{Port: 8080}
 	proxy := NewProxy(mockService, config)
 
-	llm := &models.LLM{ID: 1, Name: "TestLLM", Vendor: models.MOCK_VENDOR}
+	llm := &models.LLM{
+		ID:     1,
+		Name:   "TestLLM",
+		Vendor: models.MOCK_VENDOR,
+	}
+
 	app := &models.App{ID: 1, UserID: 1}
 	statusCode := 200
-	body := []byte(`{"model": "test-model", "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}`)
-	r, _ := http.NewRequest("POST", "http://test.com", nil)
 
-	proxy.analyzeResponse(llm, app, statusCode, body, []byte{}, r)
+	// Create test response and verify it's valid JSON
+	responseBody := []byte(`{
+        "id": "mock-123",
+        "object": "chat.completion",
+        "model": "test-model",
+        "choices": [
+            {
+                "message": {
+                    "content": "Test response"
+                }
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30
+        }
+    }`)
 
-	// Wait a bit for the goroutine to process the record
-	time.Sleep(100 * time.Millisecond)
+	// Verify the JSON is valid
+	var testParse map[string]interface{}
+	err := json.Unmarshal(responseBody, &testParse)
+	require.NoError(t, err, "Response body should be valid JSON")
 
-	// Retrieve the recorded analytics
+	t.Logf("Response body: %s", responseBody)
+
+	r := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	r.Header.Set("Content-Type", "application/json")
+
+	// Add request context
+	reqCtx := context.WithValue(r.Context(), "app", app)
+	r = r.WithContext(reqCtx)
+
+	// Call analyzeResponse with the valid JSON
+	// fmt.Println("Calling analyzeResponse, response body is: ", string(responseBody))
+	proxy.analyzeResponse(llm, app, statusCode, responseBody, []byte{}, r)
+
+	// Add retry logic with timeout
 	var recordedAnalytics analytics.LLMChatRecord
-	result := db.First(&recordedAnalytics)
-	assert.NoError(t, result.Error)
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	found := false
+	var lastErr error
+	for !found {
+		select {
+		case <-timeout:
+			t.Fatalf("Timeout waiting for analytics record to be created. Last error: %v", lastErr)
+		case <-ticker.C:
+			result := db.First(&recordedAnalytics)
+			if result.Error == nil {
+				found = true
+			} else {
+				lastErr = result.Error
+			}
+		}
+	}
 
 	assert.Equal(t, "mock", recordedAnalytics.Vendor)
 	assert.Equal(t, 10, recordedAnalytics.PromptTokens)
@@ -486,7 +543,8 @@ func TestAnalyzeResponse(t *testing.T) {
 	assert.Equal(t, 30, recordedAnalytics.TotalTokens)
 	assert.Equal(t, uint(1), recordedAnalytics.AppID)
 	assert.Equal(t, uint(1), recordedAnalytics.UserID)
-	assert.InDelta(t, 0.03, recordedAnalytics.Cost, 0.001)
+	expectedCost := (0.001 * float64(20)) + (0.001 * float64(10))
+	assert.InDelta(t, expectedCost, recordedAnalytics.Cost, 0.0001)
 }
 
 func TestSetVendorAuthHeader(t *testing.T) {
@@ -751,4 +809,406 @@ func TestHandleStreamingLLMRequest(t *testing.T) {
 
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
+}
+
+func TestModelValidation(t *testing.T) {
+	// mockService := new(MockService)
+	// config := &Config{Port: 8080}
+	// proxy := NewProxy(mockService, config)
+
+	tests := []struct {
+		name          string
+		allowedModels []string
+		modelName     string
+		expectAllowed bool
+	}{
+		{
+			name:          "Empty allowlist permits all models",
+			allowedModels: []string{},
+			modelName:     "gpt-4",
+			expectAllowed: true,
+		},
+		{
+			name:          "Nil allowlist permits all models",
+			allowedModels: nil,
+			modelName:     "gpt-4",
+			expectAllowed: true,
+		},
+		{
+			name:          "Exact match is allowed",
+			allowedModels: []string{"gpt-4", "gpt-3.5-turbo"},
+			modelName:     "gpt-4",
+			expectAllowed: true,
+		},
+		{
+			name:          "Non-matching model is blocked",
+			allowedModels: []string{"gpt-4", "gpt-3.5-turbo"},
+			modelName:     "claude-2",
+			expectAllowed: false,
+		},
+		{
+			name:          "Regex pattern allows matching models",
+			allowedModels: []string{"gpt-4.*"},
+			modelName:     "gpt-4-turbo",
+			expectAllowed: true,
+		},
+		{
+			name:          "Multiple patterns work",
+			allowedModels: []string{"gpt-4.*", "claude-.*"},
+			modelName:     "claude-2",
+			expectAllowed: true,
+		},
+		{
+			name:          "Case sensitive matching",
+			allowedModels: []string{"GPT-4"},
+			modelName:     "gpt-4",
+			expectAllowed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := NewModelValidator(tt.allowedModels)
+			allowed := validator.IsModelAllowed(tt.modelName)
+			assert.Equal(t, tt.expectAllowed, allowed)
+		})
+	}
+}
+
+func TestModelValidationMiddleware(t *testing.T) {
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{
+		{
+			ID:            1,
+			Name:          "testllm",
+			AllowedModels: []string{"gpt-4.*", "gpt-3.5-turbo"},
+			Vendor:        models.OPENAI, // Added vendor
+		},
+	}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+	err := proxy.loadResources()
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		requestBody    string
+		expectedStatus int
+	}{
+		{
+			name:           "Valid model allowed",
+			requestBody:    `{"model": "gpt-4-turbo", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid model blocked",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "Malformed request",
+			requestBody:    `{"invalid json"`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Missing model field",
+			requestBody:    `{"messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := mux.NewRouter()
+			router.HandleFunc("/llm/rest/{llmSlug}/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+				next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				})
+
+				proxy.modelValidationMiddleware(next).ServeHTTP(w, r)
+			}).Methods("POST")
+
+			server := httptest.NewServer(router)
+			defer server.Close()
+
+			req, err := http.NewRequest("POST",
+				fmt.Sprintf("%s/llm/rest/testllm/v1/chat/completions", server.URL),
+				strings.NewReader(tt.requestBody))
+			assert.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := http.DefaultClient.Do(req)
+			assert.NoError(t, err)
+			defer resp.Body.Close()
+
+			body, err := ioutil.ReadAll(resp.Body)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode,
+				"Test case: %s - Response body: %s", tt.name, string(body))
+		})
+	}
+}
+
+func TestIntegratedModelValidation(t *testing.T) {
+	// Setup a simple LLM configuration
+	testLLM := models.LLM{
+		ID:            1,
+		Name:          "restrictedllm",
+		AllowedModels: []string{"gpt-4.*"},
+		Vendor:        models.OPENAI,
+		APIEndpoint:   "http://mock-llm.com",
+	}
+
+	// Setup mock service
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{testLLM}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+	mockService.On("GetCredentialBySecret", "Bearer valid-token").Return(&models.Credential{ID: 1, Active: true}, nil)
+	mockService.On("GetAppByCredentialID", uint(1)).Return(&models.App{ID: 1, LLMs: []models.LLM{testLLM}}, nil)
+
+	// Create and initialize proxy
+	proxy := NewProxy(mockService, &Config{Port: 8080})
+	err := proxy.loadResources()
+	require.NoError(t, err)
+
+	// Create test handler
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success": true}`))
+	})
+
+	// Create router with single test endpoint
+	router := mux.NewRouter()
+	router.HandleFunc("/llm/rest/{llmSlug}/test", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		t.Logf("Request vars: %v", vars) // Debug logging
+
+		llmSlug := vars["llmSlug"]
+		llm, exists := proxy.GetLLM(llmSlug)
+		if !exists {
+			http.Error(w, "LLM not found", http.StatusNotFound)
+			return
+		}
+
+		// Run model validation
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Reset body for next middleware
+
+		validator := NewModelValidator(llm.AllowedModels)
+		validator.extractors = proxy.modelValidator.extractors
+
+		extractor, ok := validator.extractors[strings.ToLower(string(llm.Vendor))]
+		if !ok {
+			http.Error(w, "no model extractor for vendor", http.StatusBadRequest)
+			return
+		}
+
+		model, err := extractor(r, body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if !validator.IsModelAllowed(model) {
+			http.Error(w, fmt.Sprintf("model '%s' is not allowed", model), http.StatusForbidden)
+			return
+		}
+
+		testHandler.ServeHTTP(w, r)
+	}).Methods("POST")
+
+	// Create test server
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	// Test cases
+	tests := []struct {
+		name           string
+		requestBody    string
+		expectedStatus int
+	}{
+		{
+			name:           "Allowed model",
+			requestBody:    `{"model": "gpt-4-turbo", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Blocked model",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "Invalid request",
+			requestBody:    `{"invalid": json`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Missing model",
+			requestBody:    `{"messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	// Run tests
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := fmt.Sprintf("%s/llm/rest/restrictedllm/test", server.URL)
+			req, err := http.NewRequest("POST", url, strings.NewReader(tt.requestBody))
+			require.NoError(t, err)
+
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode,
+				"Test case: %s - Response body: %s", tt.name, string(body))
+		})
+	}
+}
+
+func TestModelExtractors(t *testing.T) {
+	tests := []struct {
+		name        string
+		extractor   ModelNameExtractor
+		request     *http.Request
+		body        []byte
+		expected    string
+		shouldError bool
+	}{
+		{
+			name:      "OpenAI standard request",
+			extractor: OpenAIModelExtractor,
+			request:   httptest.NewRequest("POST", "/v1/chat/completions", nil),
+			body:      []byte(`{"model": "gpt-4"}`),
+			expected:  "gpt-4",
+		},
+		{
+			name:      "Anthropic standard request",
+			extractor: AnthropicModelExtractor,
+			request:   httptest.NewRequest("POST", "/v1/complete", nil),
+			body:      []byte(`{"model": "claude-2"}`),
+			expected:  "claude-2",
+		},
+		{
+			name:      "Google AI standard request",
+			extractor: GoogleAIModelExtractor,
+			request:   httptest.NewRequest("POST", "/v1/models/chat-bison-001/generateText", nil),
+			body:      []byte(`{"model": "chat-bison-001"}`),
+			expected:  "chat-bison-001",
+		},
+		{
+			name:      "Google AI nested config request",
+			extractor: GoogleAIModelExtractor,
+			request:   httptest.NewRequest("POST", "/v1/generate", nil),
+			body:      []byte(`{"configuration": {"model": "chat-bison-001"}}`),
+			expected:  "chat-bison-001",
+		},
+		{
+			name:      "Vertex AI path request",
+			extractor: VertexModelExtractor,
+			request:   httptest.NewRequest("POST", "/projects/123/locations/us-central1/publishers/google/models/chat-bison", nil),
+			body:      []byte(`{}`),
+			expected:  "chat-bison",
+		},
+		{
+			name:      "HuggingFace path request",
+			extractor: HuggingFaceModelExtractor,
+			request:   httptest.NewRequest("POST", "/models/gpt2/generate", nil),
+			body:      []byte(`{}`),
+			expected:  "gpt2",
+		},
+		{
+			name:      "HuggingFace body request",
+			extractor: HuggingFaceModelExtractor,
+			request:   httptest.NewRequest("POST", "/generate", nil),
+			body:      []byte(`{"model_id": "gpt2"}`),
+			expected:  "gpt2",
+		},
+		// Error cases
+		{
+			name:        "Invalid JSON",
+			extractor:   OpenAIModelExtractor,
+			request:     httptest.NewRequest("POST", "/v1/chat/completions", nil),
+			body:        []byte(`{invalid json}`),
+			shouldError: true,
+		},
+		{
+			name:        "Missing model field",
+			extractor:   OpenAIModelExtractor,
+			request:     httptest.NewRequest("POST", "/v1/chat/completions", nil),
+			body:        []byte(`{}`),
+			shouldError: true,
+		},
+		{
+			name:        "Invalid model type",
+			extractor:   OpenAIModelExtractor,
+			request:     httptest.NewRequest("POST", "/v1/chat/completions", nil),
+			body:        []byte(`{"model": 123}`),
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model, err := tt.extractor(tt.request, tt.body)
+
+			if tt.shouldError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, model)
+		})
+	}
+}
+
+func TestModelValidatorRegistration(t *testing.T) {
+	validator := NewModelValidator([]string{"allowed-model"})
+
+	// Test registration
+	validator.RegisterExtractor("test", OpenAIModelExtractor)
+	assert.NotNil(t, validator.extractors["test"])
+
+	// Test overwriting
+	validator.RegisterExtractor("test", AnthropicModelExtractor)
+	assert.NotNil(t, validator.extractors["test"])
+
+	// Test case insensitivity
+	validator.RegisterExtractor("TEST", OpenAIModelExtractor)
+	assert.NotNil(t, validator.extractors["test"])
+}
+
+func TestModelValidatorExtraction(t *testing.T) {
+	mockService := new(MockService)
+	config := &Config{Port: 8080}
+	proxy := NewProxy(mockService, config)
+
+	// Verify all vendors have registered extractors
+	vendors := []string{
+		string(models.OPENAI),
+		string(models.ANTHROPIC),
+		string(models.GOOGLEAI),
+		string(models.VERTEX),
+		string(models.HUGGINGFACE),
+		string(models.OLLAMA),
+		string(models.MOCK_VENDOR),
+	}
+
+	for _, vendor := range vendors {
+		_, exists := proxy.modelValidator.extractors[strings.ToLower(vendor)]
+		assert.True(t, exists, "Missing extractor for vendor: %s", vendor)
+	}
 }

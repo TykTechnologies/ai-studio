@@ -1,0 +1,33 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/main ."
+bin = "./tmp/main"
+include_ext = ["go", "tpl", "tmpl", "html"]
+exclude_dir = [
+    "tools",
+    "utils",
+    "extra",
+    "assets",
+    "tmp",
+    "vendor",
+    "ui/admin-frontend/node_modules",
+]
+delay = 1000
+kill_delay = "0s"
+log = "build-errors.log"
+send_interrupt = false
+stop_on_error = true
+
+[log]
+time = false
+
+[color]
+main = "yellow"
+watcher = "cyan"
+build = "green"
+runner = "magenta"
+
+[misc]
+clean_on_exit = true
