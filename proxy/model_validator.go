@@ -88,6 +88,10 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 		vars := mux.Vars(r)
 		llmSlug := vars["llmSlug"]
 
+		fmt.Printf("Request URL: %s\n", r.URL.Path)
+		fmt.Printf("All vars: %+v\n", vars)
+		fmt.Printf("llmSlug: %s\n", llmSlug)
+
 		llm, ok := p.GetLLM(llmSlug)
 		if !ok {
 			fmt.Println(r.URL.String())

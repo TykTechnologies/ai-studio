@@ -165,21 +165,20 @@ func (p *Proxy) loadResources() error {
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 
-	modelValidation := p.modelValidationMiddleware
+	// Apply the middleware directly to the routes instead of the whole router
+	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).
+		Methods("POST").
+		Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
 
-	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST")
-	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST")
+	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).
+		Methods("POST").
+		Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
+
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	// Translation endpoints
-	ai := r.PathPrefix("/ai").Subrouter()
-	ai.HandleFunc("/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
-	ai.HandleFunc("/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
-
+	// Apply the other middleware to the whole router
 	return p.outboundRequestMiddleware(
-		p.credValidator.Middleware(
-			modelValidation(r),
-		),
+		p.credValidator.Middleware(r),
 	)
 }
 
