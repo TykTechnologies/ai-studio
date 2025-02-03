@@ -31,6 +31,7 @@ import TextareaAutosize from "@mui/material/TextareaAutosize";
 import { getConfig } from "../../config"; // Update the import
 import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 import SendIcon from "@mui/icons-material/Send";
+import CodeCopyBtn from "./CopyCodeButton";
 
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -588,6 +589,11 @@ const ChatView = () => {
     );
     const groupedSegments = groupSystemMessages(segments);
 
+    const Pre = ({ children }) => <pre className="code-pre">
+      <CodeCopyBtn>{children}</CodeCopyBtn>
+      {children}
+    </pre>
+
     return (
       <>
         {groupedSegments.map((segment, index) => {
@@ -714,6 +720,7 @@ const ChatView = () => {
                   a: ({ node, ...props }) => (
                     <a target="_blank" rel="noopener noreferrer" {...props} />
                   ),
+                  pre: Pre,
                   code: ({ node, inline, className, children, ...props }) => {
                     const match = /language-(\w+)/.exec(className || "");
 
