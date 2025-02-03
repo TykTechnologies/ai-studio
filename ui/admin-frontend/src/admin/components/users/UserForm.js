@@ -53,6 +53,7 @@ const UserForm = () => {
   const { id } = useParams();
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [emailVerified, setEmailVerified] = useState(false);
 
   useEffect(() => {
     fetchGroups();
@@ -85,6 +86,7 @@ const UserForm = () => {
       setIsAdmin(userData.attributes.is_admin);
       setShowPortal(userData.attributes.show_portal ?? true);
       setShowChat(userData.attributes.show_chat ?? true);
+      setEmailVerified(userData.attributes.email_verified ?? false); // Add this line
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -138,6 +140,7 @@ const UserForm = () => {
           is_admin: isAdmin,
           show_portal: showPortal,
           show_chat: showChat,
+          email_verified: emailVerified,
           ...(password && { password }),
         },
       },
@@ -371,6 +374,18 @@ const UserForm = () => {
                   />
                 }
                 label="Show Chat"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={emailVerified}
+                    onChange={(e) => setEmailVerified(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Email Verified"
               />
             </Grid>
             <Grid item xs={12}>
