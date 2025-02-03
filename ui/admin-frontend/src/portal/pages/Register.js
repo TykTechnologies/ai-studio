@@ -138,6 +138,7 @@ const Register = () => {
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
           />
           <TextField
             fullWidth
@@ -149,6 +150,7 @@ const Register = () => {
             onBlur={() => setPasswordFocused(false)}
             margin="normal"
             required
+            autoComplete="new-password"
           />
           {passwordFocused && renderPasswordCriteria()}
           <Button
