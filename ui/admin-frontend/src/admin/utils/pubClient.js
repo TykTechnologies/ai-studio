@@ -1,9 +1,8 @@
 import axios from "axios";
 import { getConfig } from "../../config";
 
-const config = getConfig();
-
 const createPubClient = () => {
+  const config = getConfig();
   return axios.create({
     baseURL: config.API_BASE_URL,
     withCredentials: true,
@@ -14,6 +13,7 @@ let pubClient = createPubClient();
 
 // Function to fetch CSRF token
 const fetchCSRFToken = async () => {
+  const config = getConfig();
   try {
     const response = await axios.get(`${config.API_BASE_URL}/csrf-token`, {
       withCredentials: true,
