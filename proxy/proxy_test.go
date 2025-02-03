@@ -1212,3 +1212,94 @@ func TestModelValidatorExtraction(t *testing.T) {
 		assert.True(t, exists, "Missing extractor for vendor: %s", vendor)
 	}
 }
+
+func TestModelValidationMiddlewareRouteParams(t *testing.T) {
+	// Setup mock service with a test LLM
+	mockService := new(MockService)
+	mockService.On("GetActiveLLMs").Return([]models.LLM{
+		{
+			ID:            1,
+			Name:          "Anthropic", // This will become "anthropic" in the slug
+			AllowedModels: []string{"claude-.*"},
+			Vendor:        models.ANTHROPIC,
+		},
+	}, nil)
+	mockService.On("GetActiveDatasources").Return([]models.Datasource{}, nil)
+
+	// Create and initialize proxy
+	proxy := NewProxy(mockService, &Config{Port: 8080})
+	err := proxy.loadResources()
+	require.NoError(t, err)
+
+	// Create router
+	router := mux.NewRouter()
+	router.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", func(w http.ResponseWriter, r *http.Request) {
+		// Add debug logging
+		fmt.Printf("Request URL: %s\n", r.URL.Path)
+
+		// Apply model validation middleware
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"success":true}`))
+		})
+
+		proxy.modelValidationMiddleware(handler).ServeHTTP(w, r)
+	}).Methods("POST")
+
+	// Create test server
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	// Test cases
+	tests := []struct {
+		name           string
+		url            string
+		requestBody    string
+		expectedStatus int
+	}{
+		{
+			name:           "Valid model and route",
+			url:            "/llm/rest/anthropic/v1/messages",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid model but valid route",
+			url:            "/llm/rest/anthropic/v1/messages",
+			requestBody:    `{"model": "gpt-4", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "Invalid route parameter",
+			url:            "/llm/rest/nonexistent/v1/messages",
+			requestBody:    `{"model": "claude-2", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := server.URL + tt.url
+			req, err := http.NewRequest("POST", url, strings.NewReader(tt.requestBody))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode,
+				"Test case: %s - Response body: %s", tt.name, string(body))
+
+			// Add vars logging for debugging
+			if resp.StatusCode != tt.expectedStatus {
+				t.Logf("URL: %s", url)
+				t.Logf("Response Status: %d", resp.StatusCode)
+				t.Logf("Response Body: %s", string(body))
+			}
+		})
+	}
+}
