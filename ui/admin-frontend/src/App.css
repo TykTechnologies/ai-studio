@@ -38,3 +38,31 @@
         transform: rotate(360deg);
     }
 }
+
+.code-pre {
+    margin-bottom: 3em !important;
+    -webkit-box-shadow: -10px 0px 13px -7px #000000, 10px 0px 13px -7px #000000, 35px -23px 2px -16px rgba(0, 0, 0, 0);
+    box-shadow: -10px 0px 13px -7px #000000, 10px 0px 13px -7px #000000, 35px -23px 2px -16px rgba(0, 0, 0, 0);
+    position: relative;
+}
+
+.code-copy-btn {
+    position: absolute;
+    right: 10px;
+    top: 10px; /* Adjusted from -2px to 10px for better positioning */
+    transition: all 0.3s ease-in-out;
+}
+
+.code-copy-btn .MuiIconButton-root {
+    color: #ddd; /* Default color for the icon */
+    padding: 5px; /* Reduced padding for a smaller button */
+}
+
+.code-copy-btn .MuiIconButton-root:hover {
+    background-color: rgba(255, 255, 255, 0.1); /* Slight background on hover */
+    transform: scale(1.1);
+}
+
+.code-copy-btn .MuiSvgIcon-root {
+    font-size: 1.2rem; /* Adjust icon size as needed */
+}
