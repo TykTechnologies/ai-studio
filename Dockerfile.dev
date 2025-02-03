@@ -1,17 +1,44 @@
-FROM node:18 AS base
+FROM --platform=$BUILDPLATFORM node:18 AS base
 
-# Install Go
+# Install basic tools and build essentials
 RUN apt-get update && apt-get install -y \
-    golang-go \
     git \
     screen \
+    wget \
+    gcc \
+    g++ \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Detect architecture and install appropriate Go version
+RUN arch=$(uname -m); \
+    case "$arch" in \
+        'x86_64') \
+            GOARCH='amd64' \
+            ;; \
+        'aarch64') \
+            GOARCH='arm64' \
+            ;; \
+        *) \
+            echo "Unsupported architecture: $arch" \
+            exit 1 \
+            ;; \
+    esac; \
+    wget https://go.dev/dl/go1.22.0.linux-${GOARCH}.tar.gz && \
+    tar -C /usr/local -xzf go1.22.0.linux-${GOARCH}.tar.gz && \
+    rm go1.22.0.linux-${GOARCH}.tar.gz
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH="/root/go"
+ENV PATH="${GOPATH}/bin:${PATH}"
 
 # Set up work directory
 WORKDIR /app
 
+RUN git clone https://github.com/lonelycode/langchaingo.git /langchaingo
+
 # Install Air for Go hot reloading
-RUN go install github.com/cosmtrek/air@latest
+RUN go install github.com/air-verse/air@latest
 
 # Copy package files first to leverage Docker cache
 COPY ui/admin-frontend/package*.json ./ui/admin-frontend/
