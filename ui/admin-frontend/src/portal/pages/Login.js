@@ -67,7 +67,7 @@ const Login = () => {
             {error}
           </Alert>
         )}
-        <form onSubmit={handleSubmit} autoComplete="off">
+        <form onSubmit={handleSubmit}>
           <TextField
             fullWidth
             label="Email"
