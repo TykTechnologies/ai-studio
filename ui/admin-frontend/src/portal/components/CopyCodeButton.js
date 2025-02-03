@@ -10,7 +10,7 @@ export default function CodeCopyBtn({ children }) {
   const iconColor = copyOk ? '#0af20a' : '#ddd';
 
   const handleClick = () => {
-    navigator.clipboard.writeText(children[0].props.children[0]);
+    navigator.clipboard.writeText(children.props.children);
     console.log(children);
 
     setCopyOk(true);
