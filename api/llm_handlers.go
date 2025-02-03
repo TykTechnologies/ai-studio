@@ -184,17 +184,36 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 
-	if thisLLM.Active && !input.Data.Attributes.Active {
-		if a.proxy != nil {
+	// Reload proxy if:
+	// 1. Active state changed (either way)
+	// 2. LLM is active and any other attributes changed
+	if a.proxy != nil {
+		activeStateChanged := thisLLM.Active != input.Data.Attributes.Active
+		hasChanges := (thisLLM.Name != input.Data.Attributes.Name ||
+			thisLLM.APIKey != input.Data.Attributes.APIKey ||
+			thisLLM.APIEndpoint != input.Data.Attributes.APIEndpoint ||
+			thisLLM.DefaultModel != input.Data.Attributes.DefaultModel ||
+			!sliceEqual(thisLLM.AllowedModels, input.Data.Attributes.AllowedModels) ||
+			len(thisLLM.Filters) != len(filters))
+
+		if activeStateChanged || (input.Data.Attributes.Active && hasChanges) {
 			a.proxy.Reload()
 		}
 	}
 
-	if !thisLLM.Active && input.Data.Attributes.Active {
-		a.proxy.Reload()
-	}
-
 	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+}
+
+func sliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // @Summary Delete an LLM
