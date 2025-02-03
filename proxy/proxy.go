@@ -329,7 +329,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
-	AnalyzeResponse(p.service, llm, app, statusCode, reqBody, body, r)
+	AnalyzeResponse(p.service, llm, app, statusCode, body, reqBody, r)
 }
 
 func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
