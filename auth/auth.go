@@ -72,6 +72,10 @@ func NewAuthService(config *Config, mailer Mailer, service *services.Service) *A
 func (a *AuthService) Login(c *gin.Context, email, password string) error {
 	user, err := a.Config.Service.AuthenticateUser(email, password)
 	if err != nil {
+		if errors.Is(services.EmailNotVerifiedError) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
+			return fmt.Errorf("unauthorized: %w", err)
+		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return fmt.Errorf("unauthorized: %w", err)
 	}

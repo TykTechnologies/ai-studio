@@ -73,6 +73,11 @@ func (s *Service) DeleteUser(id uint) error {
 	return user.Delete(s.DB)
 }
 
+var (
+	LoginFailedError      = errors.New("login failed")
+	EmailNotVerifiedError = errors.New("email not verified")
+)
+
 func (s *Service) AuthenticateUser(email, password string) (*models.User, error) {
 	user := models.NewUser()
 	if err := user.GetByEmail(s.DB, email); err != nil {
@@ -80,11 +85,11 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	}
 
 	if !user.DoesPasswordMatch(password) {
-		return nil, errors.New("invalid password")
+		return nil, LoginFailedError
 	}
 
 	if !user.EmailVerified {
-		return nil, errors.New("email not verified")
+		return nil, EmailNotVerifiedError
 	}
 
 	return user, nil
