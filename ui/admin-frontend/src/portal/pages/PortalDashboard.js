@@ -128,25 +128,6 @@ const PortalDashboard = () => {
         Welcome to the AI Portal
       </Typography>
 
-      {showPortalFeatures && apps.length === 0 && (
-        <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Apps provide access to LLMs and Data sources via the AI Gateway
-          </Typography>
-          <Typography variant="body1" paragraph>
-            Create your first app to get started.
-          </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleCreateApp}
-          >
-            Create your first App
-          </Button>
-        </Paper>
-      )}
-
       {showPortalFeatures && !showChat && showPortal && (
         <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
           <Typography variant="h6" gutterBottom>
@@ -154,6 +135,8 @@ const PortalDashboard = () => {
           </Typography>
           <Typography variant="body1" paragraph>
             Build custom AI applications with our powerful tools and services.
+            Apps provide access to LLMs and Data sources via the AI Gateway for
+            your code.
           </Typography>
           <Button
             variant="contained"

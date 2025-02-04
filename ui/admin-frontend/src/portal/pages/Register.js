@@ -7,17 +7,24 @@ import {
   Typography,
   Alert,
   FormHelperText,
+  FormControlLabel,
+  Checkbox,
+  FormGroup,
 } from "@mui/material";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import apiClient from "../../admin/utils/pubClient";
+import { getConfig } from "../../config";
 
 const Register = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [withPortal, setWithPortal] = useState(false);
+  const [withChat, setWithChat] = useState(false);
   const [error, setError] = useState(null);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [signupMode, setSignupMode] = useState("both"); // Default value
   const [passwordCriteria, setPasswordCriteria] = useState({
     length: false,
     number: false,
@@ -25,6 +32,32 @@ const Register = () => {
     uppercase: false,
   });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Get the signup mode from config
+    const config = getConfig();
+    const mode = config.DEFAULT_SIGNUP_MODE || "both";
+    setSignupMode(mode);
+
+    // Set default values based on mode
+    switch (mode) {
+      case "portal":
+        setWithPortal(true);
+        setWithChat(false);
+        break;
+      case "chat":
+        setWithPortal(false);
+        setWithChat(true);
+        break;
+      case "both":
+        setWithPortal(true);
+        setWithChat(true);
+        break;
+      default:
+        // Use "both" as fallback
+        break;
+    }
+  }, []);
 
   useEffect(() => {
     const checkPasswordCriteria = () => {
@@ -45,11 +78,24 @@ const Register = () => {
       setError("Please ensure all password criteria are met.");
       return;
     }
+
+    // Validate that at least one option is selected when mode is "both"
+    if (signupMode === "both" && !withPortal && !withChat) {
+      setError("Please select at least one option (Portal or Chat)");
+      return;
+    }
+
     try {
       const response = await apiClient.post("/auth/register", {
         data: {
           type: "register",
-          attributes: { name, email, password },
+          attributes: {
+            name,
+            email,
+            password,
+            with_portal: signupMode === "portal" ? true : withPortal,
+            with_chat: signupMode === "chat" ? true : withChat,
+          },
         },
       });
       if (response.data.message === "User registered successfully") {
@@ -151,6 +197,31 @@ const Register = () => {
             required
           />
           {passwordFocused && renderPasswordCriteria()}
+
+          {/* Only show checkboxes if mode is "both" */}
+          {signupMode === "both" && (
+            <FormGroup sx={{ mt: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={withPortal}
+                    onChange={(e) => setWithPortal(e.target.checked)}
+                  />
+                }
+                label="Sign up for AI Developer Portal"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={withChat}
+                    onChange={(e) => setWithChat(e.target.checked)}
+                  />
+                }
+                label="Sign up for AI Chat"
+              />
+            </FormGroup>
+          )}
+
           <Button
             type="submit"
             variant="contained"

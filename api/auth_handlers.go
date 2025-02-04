@@ -90,7 +90,8 @@ func (a *API) handleRegister(c *gin.Context) {
 		return
 	}
 
-	err := a.auth.Register(input.Data.Attributes.Email, input.Data.Attributes.Name, input.Data.Attributes.Password)
+	err := a.auth.Register(input.Data.Attributes.Email, input.Data.Attributes.Name,
+		input.Data.Attributes.Password, input.Data.Attributes.WithPortal, input.Data.Attributes.WithChat)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {

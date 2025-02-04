@@ -164,7 +164,7 @@ func (a *AuthService) ValidatePasswordComplexity(password string) error {
 	return nil
 }
 
-func (a *AuthService) Register(email, name, password string) error {
+func (a *AuthService) Register(email, name, password string, showPortal, showChat bool) error {
 	if !a.Config.RegistrationAllowed {
 		return errors.New("registration is currently disabled")
 	}
@@ -191,7 +191,7 @@ func (a *AuthService) Register(email, name, password string) error {
 
 	existing, _ := a.Service.GetUserByEmail(email)
 	if existing != nil {
-		return errors.New("email already in use, please log in or reset password")
+		return errors.New("email already in use, please log in, verify emil, or reset password")
 	}
 
 	// Ensure default group exists
@@ -237,8 +237,8 @@ func (a *AuthService) Register(email, name, password string) error {
 		Email:      email,
 		Name:       name,
 		Password:   string(hashedPassword),
-		ShowPortal: true,
-		ShowChat:   true,
+		ShowPortal: showPortal,
+		ShowChat:   showChat,
 	}
 
 	if count == 0 {
