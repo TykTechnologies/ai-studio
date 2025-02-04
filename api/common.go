@@ -1264,3 +1264,117 @@ func (a *API) updateChatHistoryRecordName(c *gin.Context) {
 		Message: "Chat history record name updated successfully",
 	})
 }
+
+// getChatDefaults godoc
+// @Summary Get default tools and datasource for a specific chat
+// @Description Get the default tools and datasource configured for a specific chat with redacted sensitive information
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param id path int true "Chat ID"
+// @Success 200 {object} ChatDefaultsResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/chats/{id}/defaults [get]
+func (a *API) getChatDefaults(c *gin.Context) {
+	_, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+
+	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid chat ID"}}})
+		return
+	}
+
+	// Get the chat
+	chat, err := a.service.GetChatByID(uint(chatID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat not found"}}})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		}
+		return
+	}
+
+	// Create simplified tool responses
+	simplifiedTools := make([]SimplifiedToolResponse, 0)
+	if chat.DefaultTools != nil {
+		for _, tool := range chat.DefaultTools {
+			simplifiedTools = append(simplifiedTools, SimplifiedToolResponse{
+				ID:   tool.ID,
+				Name: tool.Name,
+			})
+		}
+	}
+
+	// Create simplified datasource response
+	var simplifiedDataSource *SimplifiedDataSourceResponse
+	if chat.DefaultDataSource != nil {
+		simplifiedDataSource = &SimplifiedDataSourceResponse{
+			ID:   chat.DefaultDataSource.ID,
+			Name: chat.DefaultDataSource.Name,
+		}
+	}
+
+	response := ChatDefaultsResponse{
+		Type: "chat_defaults",
+		ID:   strconv.FormatUint(chatID, 10),
+		Attributes: struct {
+			Name                string                        `json:"name"`
+			DefaultDataSource   *SimplifiedDataSourceResponse `json:"default_data_source"`
+			DefaultTools        []SimplifiedToolResponse      `json:"default_tools"`
+			SupportsTools       bool                          `json:"supports_tools"`
+			RagResultsPerSource int                           `json:"rag_results_per_source"`
+		}{
+			Name:                chat.Name,
+			DefaultDataSource:   simplifiedDataSource,
+			DefaultTools:        simplifiedTools,
+			SupportsTools:       chat.SupportsTools,
+			RagResultsPerSource: chat.RagResultsPerSource,
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+type ChatDefaultsResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name                string                        `json:"name"`
+		DefaultDataSource   *SimplifiedDataSourceResponse `json:"default_data_source"`
+		DefaultTools        []SimplifiedToolResponse      `json:"default_tools"`
+		SupportsTools       bool                          `json:"supports_tools"`
+		RagResultsPerSource int                           `json:"rag_results_per_source"`
+	} `json:"attributes"`
+}
+
+// SimplifiedToolResponse represents a redacted version of tool information
+type SimplifiedToolResponse struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+// SimplifiedDataSourceResponse represents a redacted version of datasource information
+type SimplifiedDataSourceResponse struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
