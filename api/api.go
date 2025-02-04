@@ -239,6 +239,7 @@ func (a *API) setupRoutes() {
 	authed.POST("/chat-sessions/:session_id/tools", a.addToolToChatSession)
 	authed.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
 	authed.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
+	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
 

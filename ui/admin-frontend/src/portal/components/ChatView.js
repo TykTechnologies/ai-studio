@@ -13,8 +13,8 @@ import {
   Alert,
   Button,
 } from "@mui/material";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { a11yDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { a11yDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 
 import IconButton from "@mui/material/IconButton";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -317,8 +317,9 @@ const ChatView = () => {
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
     const currentConfig = getConfig();
-    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""
-      }`;
+    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${
+      sessionId ? `?session_id=${sessionId}` : ""
+    }`;
 
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
@@ -398,6 +399,75 @@ const ChatView = () => {
       closeWebSocket();
     };
   }, [chatId, location.search]);
+
+  useEffect(() => {
+    const fetchChatDefaults = async () => {
+      try {
+        const response = await pubClient.get(
+          `/common/chat-sessions/${chatId}/defaults`,
+        );
+        const defaults = response.data;
+
+        // Create arrays to store the default tools and datasource
+        const defaultItems = [];
+
+        // Add default datasource if it exists
+        if (defaults.attributes.default_data_source) {
+          const datasource = {
+            id: defaults.attributes.default_data_source.id.toString(),
+            name: defaults.attributes.default_data_source.name,
+            type: "database",
+            uniqueId: `database-${defaults.attributes.default_data_source.id}`,
+          };
+          defaultItems.push(datasource);
+
+          // Remove from available databases
+          setDatabases((prev) => prev.filter((db) => db.id !== datasource.id));
+        }
+
+        // Add default tools if they exist
+        if (
+          defaults.attributes.default_tools &&
+          defaults.attributes.default_tools.length > 0
+        ) {
+          const defaultTools = defaults.attributes.default_tools.map(
+            (tool) => ({
+              id: tool.id.toString(),
+              name: tool.name,
+              type: "tool",
+              uniqueId: `tool-${tool.id}`,
+            }),
+          );
+          defaultItems.push(...defaultTools);
+
+          // Remove from available tools
+          setTools((prev) =>
+            prev.filter(
+              (tool) =>
+                !defaultTools.some((defaultTool) => defaultTool.id === tool.id),
+            ),
+          );
+        }
+
+        // Update currently using with default items
+        setCurrentlyUsing(defaultItems);
+
+        // Update tools visibility based on chat configuration
+        setShowTools(defaults.attributes.supports_tools);
+      } catch (error) {
+        console.error("Error fetching chat defaults:", error);
+        setSnackbar({
+          open: true,
+          message: "Failed to load chat defaults",
+          severity: "error",
+        });
+      }
+    };
+
+    if (chatId) {
+      fetchChatDefaults();
+    }
+  }, [chatId]); // Only run when chatId changes
 
   const fetchChatHistory = useCallback(async (sessionId) => {
     setIsFetchingHistory(true);
@@ -589,10 +659,12 @@ const ChatView = () => {
     );
     const groupedSegments = groupSystemMessages(segments);
 
-    const Pre = ({ children }) => <pre className="code-pre">
-      <CodeCopyBtn>{children}</CodeCopyBtn>
-      {children}
-    </pre>
+    const Pre = ({ children }) => (
+      <pre className="code-pre">
+        <CodeCopyBtn>{children}</CodeCopyBtn>
+        {children}
+      </pre>
+    );
 
     return (
       <>
@@ -739,7 +811,7 @@ const ChatView = () => {
                         PreTag="div"
                         {...props}
                       >
-                        {String(children).replace(/\n$/, '')}
+                        {String(children).replace(/\n$/, "")}
                       </SyntaxHighlighter>
                     ) : (
                       <code className={className} {...props}>
