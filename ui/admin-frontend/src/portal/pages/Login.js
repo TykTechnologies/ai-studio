@@ -20,27 +20,22 @@ const Login = () => {
       });
 
       if (response.data.message === "Login successful") {
-        window.location.reload(); // Force a reload to trigger the /me check in App.js
+        window.location.reload();
       }
     } catch (err) {
       console.error("Login error:", err);
       if (err.response) {
-        switch (err.response.status) {
-          case 401:
-            setError("Invalid email or password");
-            break;
-          case 400:
-            if (
-              err.response.data.errors &&
-              err.response.data.errors.length > 0
-            ) {
-              setError(err.response.data.errors[0].detail);
-            } else {
-              setError("Bad request. Please check your input.");
-            }
-            break;
-          default:
-            setError("An unexpected error occurred. Please try again.");
+        // Display the error message from the service if available
+        if (err.response.data && err.response.data.error) {
+          setError(err.response.data.error);
+        } else if (
+          err.response.data.errors &&
+          err.response.data.errors.length > 0
+        ) {
+          setError(err.response.data.errors[0].detail);
+        } else {
+          // Fallback error message
+          setError("An unexpected error occurred. Please try again.");
         }
       } else {
         setError("An unexpected error occurred. Please try again.");
