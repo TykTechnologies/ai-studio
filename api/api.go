@@ -554,10 +554,16 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	}
 	websocketHost := fmt.Sprintf("%s://%s", websocketScheme, host)
 
+	suMode := "both"
+	if config.Get().DefaultSignupMode != "" {
+		suMode = config.Get().DefaultSignupMode
+	}
+
 	config := FrontendConfig{
-		APIBaseURL:    apiBaseURL,
-		WebsocketHost: websocketHost,
-		ProxyURL:      config.Get().ProxyURL,
+		APIBaseURL:        apiBaseURL,
+		WebsocketHost:     websocketHost,
+		ProxyURL:          config.Get().ProxyURL,
+		DefaultSignUpMode: suMode,
 	}
 
 	c.JSON(http.StatusOK, config)

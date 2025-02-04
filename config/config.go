@@ -29,6 +29,7 @@ type AppConf struct {
 	EchoConversation    bool
 	ProxyOnly           bool
 	DocsURL             string
+	DefaultSignupMode   string
 }
 
 var globalConfig *AppConf
@@ -151,6 +152,11 @@ func getConfigFromEnv() *AppConf {
 	conf.ProxyURL = os.Getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
 		log.Println("Warning: PROXY_URL environment variable is not set")
+	}
+
+	conf.DefaultSignupMode = os.Getenv("DEFAULT_SIGNUP_MODE")
+	if conf.DefaultSignupMode == "" {
+		conf.DefaultSignupMode = "both"
 	}
 
 	return conf

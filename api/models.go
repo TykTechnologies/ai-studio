@@ -663,9 +663,11 @@ type RegisterInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Email    string `json:"email"`
-			Name     string `json:"name"`
-			Password string `json:"password"`
+			Email      string `json:"email"`
+			Name       string `json:"name"`
+			Password   string `json:"password"`
+			WithPortal bool   `json:"with_portal"`
+			WithChat   bool   `json:"with_chat"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -894,9 +896,10 @@ type PaginatedProxyLogs struct {
 }
 
 type FrontendConfig struct {
-	APIBaseURL    string `json:"API_BASE_URL"`
-	WebsocketHost string `json:"WEBSOCKET_HOST"`
-	ProxyURL      string `json:"PROXY_URL"`
+	APIBaseURL        string `json:"API_BASE_URL"`
+	WebsocketHost     string `json:"WEBSOCKET_HOST"`
+	ProxyURL          string `json:"PROXY_URL"`
+	DefaultSignUpMode string `json:"DEFAULT_SIGNUP_MODE"`
 	// Add other configuration values as needed
 }
 
