@@ -39,13 +39,11 @@ jobs:
             golanglint.xml
 
   test:
-    name: Go ${{ matrix.go }} tests
+    name: Unit tests
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
-      matrix:
-        go: [1.23]
 
     steps:
       - name: Checkout main repository
@@ -62,9 +60,16 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Golang
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
 
       - name: Use Node.js
         uses: actions/setup-node@v2
