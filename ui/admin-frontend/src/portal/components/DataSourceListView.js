@@ -87,7 +87,15 @@ const DataSourceListView = () => {
   }
 
   return (
-    <Container maxWidth="lg">
+    <Container
+      maxWidth={false}
+      sx={{
+        px: 3,
+        py: 3,
+        boxSizing: "border-box",
+        width: "100%",
+      }}
+    >
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
         Available Data Sources
       </Typography>

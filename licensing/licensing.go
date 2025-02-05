@@ -78,6 +78,16 @@ func IsLicensed() error {
 
 	features = claimsMap
 
+	// DEBUGGING LICENSE CLAIMS
+	// slog.Warn("License claims", "claims", claimsMap)
+	// slog.Warn("REMOVE THIS CODE BEFORE PRODUCTION")
+
+	// features = map[string]interface{}{
+	// 	"feature_chat": true,
+	// }
+
+	// END DEBUGGING LICENSE CLAIMS
+
 	return nil
 }
 

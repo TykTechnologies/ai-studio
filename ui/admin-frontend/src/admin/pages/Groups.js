@@ -36,6 +36,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import useSystemFeatures from "../hooks/useSystemFeatures";
 
 const Groups = () => {
   const navigate = useNavigate();
@@ -45,8 +46,10 @@ const Groups = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [openAddCatalogueModal, setOpenAddCatalogueModal] = useState(false);
-  const [openAddDataCatalogueModal, setOpenAddDataCatalogueModal] = useState(false);
-  const [openAddToolCatalogueModal, setOpenAddToolCatalogueModal] = useState(false);
+  const [openAddDataCatalogueModal, setOpenAddDataCatalogueModal] =
+    useState(false);
+  const [openAddToolCatalogueModal, setOpenAddToolCatalogueModal] =
+    useState(false);
   const [openAddUserModal, setOpenAddUserModal] = useState(false);
   const [catalogues, setCatalogues] = useState([]);
   const [dataCatalogues, setDataCatalogues] = useState([]);
@@ -62,6 +65,7 @@ const Groups = () => {
     message: "",
     severity: "success",
   });
+  const { features, loading: featuresLoading } = useSystemFeatures();
 
   const {
     page,
@@ -368,7 +372,9 @@ const Groups = () => {
               <TableRow>
                 <StyledTableHeaderCell>ID</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
+                <StyledTableHeaderCell align="right">
+                  Actions
+                </StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -378,7 +384,9 @@ const Groups = () => {
                     <StyledTableCell>{group.id}</StyledTableCell>
                     <StyledTableCell>{group.attributes.name}</StyledTableCell>
                     <StyledTableCell align="right">
-                      <IconButton onClick={(event) => handleMenuOpen(event, group)}>
+                      <IconButton
+                        onClick={(event) => handleMenuOpen(event, group)}
+                      >
                         <MoreVertIcon />
                       </IconButton>
                     </StyledTableCell>
@@ -406,7 +414,11 @@ const Groups = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={handleAddCatalogue}>Add Catalogue to Group</MenuItem>
+        {features.feature_portal && (
+          <MenuItem onClick={handleAddCatalogue}>
+            Add Catalogue to Group
+          </MenuItem>
+        )}
         <MenuItem onClick={handleAddDataCatalogue}>
           Add Data Catalogue to Group
         </MenuItem>

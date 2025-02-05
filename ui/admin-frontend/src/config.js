@@ -1,4 +1,5 @@
 import pubClient from "./admin/utils/pubClient";
+import { getBaseUrl } from "./admin/utils/urlUtils";
 
 const isDev = process.env.NODE_ENV === "development";
 const getHost = () => (isDev ? "localhost:8080" : `${window.location.host}`);
@@ -9,6 +10,8 @@ export let config = {
   WEBSOCKET_HOST: `ws${window.location.protocol === "https:" ? "s" : ""}://${window.location.host}`,
   PROXY_URL: isDev ? "http://localhost:9090" : "", // Default PROXY_URL that will be overridden by server config
 };
+
+export const getConfig = () => config;
 
 export const loadConfig = async () => {
   try {
@@ -26,5 +29,3 @@ export const loadConfig = async () => {
   }
   return config;
 };
-
-export const getConfig = () => config;

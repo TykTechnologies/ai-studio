@@ -5,15 +5,19 @@ import MyAppBar from "./AppBar";
 import MyDrawer from "./Drawer";
 import { Outlet } from "react-router-dom";
 
-const MainLayout = () => {
+const MainLayout = ({ hideAppBar }) => {
   return (
     <Box sx={{ display: "flex" }}>
-      <MyAppBar />
+      {!hideAppBar && <MyAppBar />}
       <MyDrawer />
 
-      <Box component="main" style={{
-        padding: "64px 0 24px 0",
-      }} sx={{ flexGrow: 1, p: 3 }}>
+      <Box
+        component="main"
+        style={{
+          padding: hideAppBar ? "0 0 24px 0" : "64px 0 24px 0",
+        }}
+        sx={{ flexGrow: 1, p: 3 }}
+      >
         <Outlet />
       </Box>
     </Box>
