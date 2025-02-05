@@ -37,6 +37,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import useSystemFeatures from "../hooks/useSystemFeatures";
 
 const Users = () => {
   const navigate = useNavigate();
@@ -55,6 +56,16 @@ const Users = () => {
   });
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const { features } = useSystemFeatures();
+
+  // Helper function to check if we're in gateway-only mode
+  const isGatewayOnlyMode = () => {
+    return (
+      features.feature_gateway &&
+      !features.feature_portal &&
+      !features.feature_chat
+    );
+  };
 
   const {
     page,
@@ -257,7 +268,9 @@ const Users = () => {
                 <StyledTableHeaderCell>Name</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Email</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Is Admin</StyledTableHeaderCell>
-                <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
+                <StyledTableHeaderCell align="right">
+                  Actions
+                </StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -304,7 +317,10 @@ const Users = () => {
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
+          {/* Only show Add to Group if not in gateway-only mode */}
+          {!isGatewayOnlyMode() && (
+            <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
+          )}
           <MenuItem
             onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
           >

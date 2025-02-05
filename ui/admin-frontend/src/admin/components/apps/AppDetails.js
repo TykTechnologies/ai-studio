@@ -45,6 +45,8 @@ import {
 import DateRangePicker from "../common/DateRangePicker";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import IconButton from "@mui/material/IconButton";
 
 ChartJS.register(
   CategoryScale,
@@ -153,6 +155,23 @@ const AppDetails = () => {
       return;
     }
     setSnackbar({ ...snackbar, open: false });
+  };
+
+  const handleCopyToClipboard = async (text, fieldName) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setSnackbar({
+        open: true,
+        message: `${fieldName} copied to clipboard`,
+        severity: "success",
+      });
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: `Failed to copy ${fieldName}`,
+        severity: "error",
+      });
+    }
   };
 
   const handleApproveApp = async () => {
@@ -446,13 +465,41 @@ const AppDetails = () => {
                 <FieldLabel>Key ID:</FieldLabel>
               </Grid>
               <Grid item xs={9}>
-                <FieldValue>{credential.attributes.key_id}</FieldValue>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <FieldValue>{credential.attributes.key_id}</FieldValue>
+                  <IconButton
+                    size="small"
+                    onClick={() =>
+                      handleCopyToClipboard(
+                        credential.attributes.key_id,
+                        "Key ID",
+                      )
+                    }
+                    sx={{ ml: 1 }}
+                  >
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Box>
               </Grid>
               <Grid item xs={3}>
                 <FieldLabel>Secret:</FieldLabel>
               </Grid>
               <Grid item xs={9}>
-                <FieldValue>********</FieldValue>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <FieldValue>********</FieldValue>
+                  <IconButton
+                    size="small"
+                    onClick={() =>
+                      handleCopyToClipboard(
+                        credential.attributes.secret,
+                        "Secret",
+                      )
+                    }
+                    sx={{ ml: 1 }}
+                  >
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Box>
               </Grid>
               <Grid item xs={3}>
                 <FieldLabel>Active:</FieldLabel>

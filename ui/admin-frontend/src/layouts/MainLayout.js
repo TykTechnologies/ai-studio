@@ -11,19 +11,46 @@ import pubClient from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
 import portalTheme from "../portal/theme/portalTheme";
 import { DRAWER_WIDTH } from "../constants/layout";
+import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 
 const MainLayout = () => {
-  const [currentTab, setCurrentTab] = useState("chat");
+  const { features } = useSystemFeatures();
+  const [currentTab, setCurrentTab] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
+  console.log("Features:", features);
+  console.log("Entitlements:", entitlements);
+
   useEffect(() => {
     const fetchEntitlements = async () => {
       try {
         const response = await pubClient.get("/common/me");
-        setEntitlements(response.data.attributes);
+        const attributes = response.data.attributes;
+        setEntitlements(attributes);
+
+        // If we're an admin user and either at root or portal dashboard,
+        // force redirect to admin dashboard
+        if (
+          attributes.is_admin &&
+          (location.pathname === "/" ||
+            location.pathname === "/portal/dashboard")
+        ) {
+          setCurrentTab("admin");
+          navigate("/admin/dash", { replace: true }); // Added replace: true
+        } else {
+          // Set initial tab based on current location
+          if (location.pathname.startsWith("/admin")) {
+            setCurrentTab("admin");
+          } else if (location.pathname.startsWith("/chat")) {
+            setCurrentTab("chat");
+          } else if (location.pathname.startsWith("/portal")) {
+            setCurrentTab("portal");
+          }
+        }
+
         setLoading(false);
       } catch (error) {
         console.error("Error fetching entitlements:", error);
@@ -32,21 +59,30 @@ const MainLayout = () => {
     };
 
     fetchEntitlements();
-  }, []);
+  }, []); // Only run on mount
 
+  // Second useEffect to handle path changes
   useEffect(() => {
-    const path = location.pathname;
-    if (path.startsWith("/admin")) {
-      setCurrentTab("admin");
-    } else if (path.startsWith("/chat")) {
-      setCurrentTab("chat");
-    } else if (path.startsWith("/portal")) {
-      setCurrentTab("portal");
+    // Don't update if we're still loading
+    if (!loading && location.pathname !== "/") {
+      const newTab = location.pathname.startsWith("/admin")
+        ? "admin"
+        : location.pathname.startsWith("/chat")
+          ? "chat"
+          : location.pathname.startsWith("/portal")
+            ? "portal"
+            : null;
+
+      if (newTab) {
+        setCurrentTab(newTab);
+      }
     }
-  }, [location]);
+  }, [location.pathname, loading]);
 
   const handleTabChange = (tab) => {
+    console.log("Tab change requested:", tab);
     setCurrentTab(tab);
+
     switch (tab) {
       case "chat":
         navigate("/chat/dashboard");
@@ -55,7 +91,7 @@ const MainLayout = () => {
         navigate("/portal/dashboard");
         break;
       case "admin":
-        navigate("/admin/dashboard");
+        navigate("/admin/dash");
         break;
     }
   };
@@ -72,8 +108,11 @@ const MainLayout = () => {
   if (loading) return null;
 
   const showAdmin = entitlements?.is_admin;
-  const showChat = entitlements?.ui_options?.show_chat;
-  const showPortal = entitlements?.ui_options?.show_portal;
+  const showChat = entitlements?.ui_options?.show_chat && features.feature_chat;
+  const showPortal =
+    entitlements?.ui_options?.show_portal && features.feature_portal;
+
+  console.log("Show flags:", { showAdmin, showChat, showPortal });
 
   const topNav = (
     <TopNavigation
@@ -92,7 +131,11 @@ const MainLayout = () => {
       <ThemeProvider theme={adminTheme}>
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           {topNav}
-          <AdminLayout hideAppBar />
+          <Box sx={{ mt: "64px" }}>
+            {" "}
+            {/* Add margin-top to account for TopNavigation */}
+            <AdminLayout hideAppBar />
+          </Box>
         </Box>
       </ThemeProvider>
     );

@@ -50,7 +50,13 @@ function App() {
         try {
           const response = await pubClient.get("/common/me");
           setIsAuthenticated(true);
-          setEntitlements(response.data.attributes);
+          const attributes = response.data.attributes;
+          setEntitlements({
+            is_admin: attributes.is_admin,
+            ui_options: attributes.ui_options,
+            entitlements: attributes.entitlements,
+          });
+          console.log("Is admin:", attributes.is_admin);
         } catch (authError) {
           if (authError.response && authError.response.status === 401) {
             setIsAuthenticated(false);
@@ -110,7 +116,12 @@ function App() {
             path="/login"
             element={
               isAuthenticated ? (
-                <Navigate to="/portal/dashboard" replace />
+                <Navigate
+                  to={
+                    entitlements?.is_admin ? "/admin/dash" : "/portal/dashboard"
+                  }
+                  replace
+                />
               ) : (
                 <Login />
               )
@@ -173,9 +184,11 @@ function App() {
                 <Navigate
                   to={
                     isAuthenticated
-                      ? entitlements?.ui_options?.show_portal
-                        ? "/portal/dashboard"
-                        : "/chat/dashboard"
+                      ? entitlements?.is_admin === true
+                        ? "/admin/dash"
+                        : entitlements?.ui_options?.show_portal
+                          ? "/portal/dashboard"
+                          : "/chat/dashboard"
                       : "/login"
                   }
                   replace
@@ -191,9 +204,7 @@ function App() {
               <Navigate
                 to={
                   isAuthenticated
-                    ? entitlements?.ui_options?.show_portal
-                      ? "/portal/dashboard"
-                      : "/chat/dashboard"
+                    ? "/admin/dash" // Just redirect to admin dash for unknown routes
                     : "/login"
                 }
                 replace

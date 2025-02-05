@@ -59,7 +59,12 @@ const MyDrawer = () => {
       icon: <PeopleIcon />,
       subItems: [
         { text: "Users", icon: <PersonIcon />, path: "/admin/users" },
-        { text: "Groups", icon: <GroupIcon />, path: "/admin/groups" },
+        // Only show Groups if we're not in the gateway-only mode
+        ...(!features.feature_gateway ||
+        features.feature_portal ||
+        features.feature_chat
+          ? [{ text: "Groups", icon: <GroupIcon />, path: "/admin/groups" }]
+          : []),
       ],
     },
     {
@@ -67,11 +72,16 @@ const MyDrawer = () => {
       icon: <SmartToyIcon />,
       subItems: [
         { text: "LLMs", icon: <SmartToyIcon />, path: "/admin/llms" },
-        {
-          text: "Call Settings",
-          icon: <SettingsIcon />,
-          path: "/admin/llm-settings",
-        },
+        // Only show Call Settings if feature_chat is enabled
+        ...(features.feature_chat
+          ? [
+              {
+                text: "Call Settings",
+                icon: <SettingsIcon />,
+                path: "/admin/llm-settings",
+              },
+            ]
+          : []),
         {
           text: "Model Prices",
           icon: <AttachMoneyIcon />,
@@ -111,46 +121,74 @@ const MyDrawer = () => {
           },
         ]
       : []),
-    {
-      text: "Portal",
-      icon: <WebIcon />,
-      subItems: [
-        // Only show Apps if either feature_portal or feature_gateway is enabled
-        ...(features.feature_portal || features.feature_gateway
-          ? [{ text: "Apps", icon: <AppsIcon />, path: "/admin/apps" }]
-          : []),
-        // Only show Chat Rooms if feature_chat is enabled
-        ...(features.feature_chat
-          ? [{ text: "Chat Rooms", icon: <ChatIcon />, path: "/admin/chats" }]
-          : []),
-        {
-          text: "Catalogs",
-          icon: <FolderOpenIcon />,
-          subItems: [
-            {
-              text: "LLMs",
-              icon: <SmartToyIcon />,
-              path: "/admin/catalogs/llms",
-            },
-            {
-              text: "Data",
-              icon: <DataObjectIcon />,
-              path: "/admin/catalogs/data",
-            },
-            // Only show Tools catalog if feature_chat is enabled
-            ...(features.feature_chat
-              ? [
-                  {
-                    text: "Tools",
-                    icon: <BuildIcon />,
-                    path: "/admin/catalogs/tools",
-                  },
-                ]
-              : []),
-          ],
-        },
-      ],
-    },
+    ...(features.feature_gateway &&
+    !features.feature_portal &&
+    !features.feature_chat
+      ? [
+          {
+            text: "Apps and Credentials", // New name when only gateway is enabled
+            icon: <WebIcon />,
+            subItems: [
+              { text: "Apps", icon: <AppsIcon />, path: "/admin/apps" },
+            ],
+          },
+        ]
+      : [
+          {
+            text: "Portal",
+            icon: <WebIcon />,
+            subItems: [
+              // Only show Apps if either feature_portal or feature_gateway is enabled
+              ...(features.feature_portal || features.feature_gateway
+                ? [{ text: "Apps", icon: <AppsIcon />, path: "/admin/apps" }]
+                : []),
+              // Only show Chat Rooms if feature_chat is enabled
+              ...(features.feature_chat
+                ? [
+                    {
+                      text: "Chat Rooms",
+                      icon: <ChatIcon />,
+                      path: "/admin/chats",
+                    },
+                  ]
+                : []),
+              // Only show Catalogs section if feature_portal or feature_chat is enabled
+              ...(features.feature_portal || features.feature_chat
+                ? [
+                    {
+                      text: "Catalogs",
+                      icon: <FolderOpenIcon />,
+                      subItems: [
+                        ...(features.feature_portal
+                          ? [
+                              {
+                                text: "LLMs",
+                                icon: <SmartToyIcon />,
+                                path: "/admin/catalogs/llms",
+                              },
+                            ]
+                          : []),
+                        {
+                          text: "Data",
+                          icon: <DataObjectIcon />,
+                          path: "/admin/catalogs/data",
+                        },
+                        ...(features.feature_chat
+                          ? [
+                              {
+                                text: "Tools",
+                                icon: <BuildIcon />,
+                                path: "/admin/catalogs/tools",
+                              },
+                            ]
+                          : []),
+                      ],
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]),
   ];
 
   const renderMenuItem = (item, depth = 0) => {
