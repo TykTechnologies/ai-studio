@@ -139,5 +139,6 @@ jobs:
         id: ci-tests
         run: |
           cp .env.example .env
+          cd docs/site && hugo && cd ../..
           go test ./...
 
