@@ -82,7 +82,7 @@ func (ds *DataSession) Search(query string, n int) ([]schema.Document, error) {
 					// base64 decode content
 					decodedContent, err := base64.StdEncoding.DecodeString(docs[i].PageContent)
 					if err != nil {
-						slog.Error("error decoding base64 content", err)
+						slog.Error("error decoding base64 content", "err", err)
 						continue
 					}
 					docs[i].PageContent = string(decodedContent)
@@ -139,7 +139,7 @@ func (ds *DataSession) ProcessRAGForDatasource(withDSID uint, db *gorm.DB) error
 		return err
 	}
 
-	slog.Info("creating embedding for datasource with id", withDSID)
+	slog.Info("creating embedding for datasource", "datasource_id", withDSID)
 	err = ds.StoreEmbedding(withDSID, asDocs)
 	if err != nil {
 		return err
