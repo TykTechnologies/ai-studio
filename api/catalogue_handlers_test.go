@@ -225,7 +225,7 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true, true)
 	assert.NoError(t, err)
 
 	// Create a group
