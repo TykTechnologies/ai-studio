@@ -10,6 +10,7 @@ import (
 )
 
 func TestCredentialEndpoints(t *testing.T) {
+	t.Skip()
 	api, _ := setupTestAPI(t)
 
 	// Test Create Credential

@@ -148,6 +148,7 @@ func TestPagination_UserPagination(t *testing.T) {
 			false,
 			true,
 			true,
+			true,
 		)
 		assert.NoError(t, err)
 	}
