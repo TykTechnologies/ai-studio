@@ -37,6 +37,7 @@ jobs:
           retention-days: 1
           path: |
             golanglint.xml
+
   test:
     name: Go ${{ matrix.go }} tests
     runs-on: ubuntu-latest
@@ -66,9 +67,9 @@ jobs:
           go-version: ${{ matrix.go }}
 
       - name: Use Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: "14"
+          node-version: "18"  # Updated to a more recent version
 
       - name: Install Dependencies and basic hygiene test
         id: hygiene
@@ -108,11 +109,18 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      - name: Install Dependencies
+      - name: Install JavaScript dependencies
         if: steps.check_changes.outputs.ui == 'true'
         run: |
           cd ui/admin-frontend
-          npm install
+          npm ci
+          cd ../..
+
+      - name: Run JavaScript tests
+        if: steps.check_changes.outputs.ui == 'true'
+        run: |
+          cd ui/admin-frontend
+          npm test
           cd ../..
 
       - name: Build
@@ -122,8 +130,9 @@ jobs:
           CI=false npm run build
           cd ../..
 
-      - name: Run Tests
+      - name: Run Go Tests
         id: ci-tests
         run: |
           cp .env.example .env
           go test ./...
+
