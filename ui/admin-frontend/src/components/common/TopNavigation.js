@@ -72,7 +72,10 @@ const TopNavigation = ({
           />
           <Tabs
             value={currentTab}
-            onChange={(e, value) => onTabChange(value)}
+            onChange={(e, value) => {
+              console.log("Tab clicked:", value); // Add this log
+              onTabChange(value);
+            }}
             textColor="inherit"
             TabIndicatorProps={{
               style: {
