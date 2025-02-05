@@ -359,7 +359,7 @@ func (cs *ChatSession) sendStatus(resp string) {
 	case cs.outputMessages <- &ChatResponse{Payload: resp}:
 	}
 
-	if cs.streamingFunc != nil {
+	if cs.outputStream != nil {
 		select {
 		case cs.outputStream <- []byte(fmt.Sprintf(":::system \n\n %s \n\n :::", resp)):
 		}
@@ -796,7 +796,7 @@ func (cs *ChatSession) estimateTokenLength(msgs []llms.MessageContent) int {
 	encoding := "cl100k_base"
 	tke, err := tiktoken.GetEncoding(encoding)
 	if err != nil {
-		slog.Error("error getting encoding", err)
+		slog.Error("error getting encoding", "error", err)
 		return -1
 	}
 

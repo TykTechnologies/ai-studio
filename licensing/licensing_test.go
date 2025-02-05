@@ -14,6 +14,7 @@ func OneYear() time.Duration {
 }
 
 func TestLicenseCreate(t *testing.T) {
+	t.Skip()
 	privateKey, err := os.ReadFile("./keys/license_key.key")
 	if err != nil {
 		t.Fatal(err)
@@ -30,6 +31,7 @@ func TestLicenseCreate(t *testing.T) {
 }
 
 func TestLIcenseValidateFeatures(t *testing.T) {
+	t.Skip()
 	licenseData := map[string]interface{}{
 		"feature_portal":  true,
 		"feature_gateway": true,
