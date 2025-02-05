@@ -486,21 +486,44 @@ const ChatView = () => {
       const historicalMessages = response.data
         .map((msg) => {
           const parsedContent = JSON.parse(msg.attributes.content);
+
+          // Skip system messages
           if (parsedContent.role === "system") {
-            return null; // Ignore system messages
+            return null;
           }
+
+          // Skip tool response messages
+          if (parsedContent.role === "tool") {
+            return null;
+          }
+
+          // Handle tool calls
+          if (
+            parsedContent.parts &&
+            parsedContent.parts[0]?.type === "tool_call"
+          ) {
+            const toolCall = parsedContent.parts[0].tool_call;
+            return {
+              type: "ai",
+              content: `:::system AI Tool Call: ${toolCall.function.name}:::`,
+              isComplete: true,
+            };
+          }
+
+          // Handle regular messages
           let content = parsedContent.text;
           if (parsedContent.role === "human") {
             const messageMatch = content.match(/Message:\s*([\s\S]*)/);
             content = messageMatch ? messageMatch[1].trim() : content;
           }
+
           return {
             type: parsedContent.role === "human" ? "user" : "ai",
             content: content,
             isComplete: true,
           };
         })
-        .filter((msg) => msg !== null); // Remove null entries (system messages)
+        .filter((msg) => msg !== null); // Remove null entries (system and tool response messages)
       setMessages(historicalMessages);
     } catch (error) {
       console.error("Error fetching chat history:", error);
