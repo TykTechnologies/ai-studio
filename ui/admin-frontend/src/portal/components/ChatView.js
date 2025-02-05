@@ -88,10 +88,10 @@ const ChatView = () => {
     }
   };
 
-  const toggleGroup = (index) => {
+  const toggleGroup = (groupId) => {
     setExpandedGroups((prev) => ({
       ...prev,
-      [index]: !prev[index],
+      [groupId]: !prev[groupId],
     }));
   };
 
@@ -99,16 +99,23 @@ const ChatView = () => {
     let groupedSegments = [];
     let currentSystemGroup = [];
 
-    segments.forEach((segment) => {
+    segments.forEach((segment, index) => {
       if (segment.match(/(:::|\%\%\%)system/)) {
-        // Add to current system group
         currentSystemGroup.push(
           segment
             .replace(/(:::|\%\%\%)system\s*([\s\S]*?)(:::|\%\%\%)/, "$2")
             .trim(),
         );
+      } else if (segment.match(/\[CONTEXT\][\s\S]*?\[\/CONTEXT\]/)) {
+        // console.log("Found context section:", segment); // Debug log
+        const contextContent = segment
+          .replace(/\[CONTEXT\]([\s\S]*?)\[\/CONTEXT\]/, "$1")
+          .trim();
+        groupedSegments.push({
+          type: "context-group",
+          messages: [contextContent],
+        });
       } else if (segment.trim()) {
-        // If we have accumulated system messages, add them as a group
         if (currentSystemGroup.length > 0) {
           groupedSegments.push({
             type: "system-group",
@@ -116,15 +123,15 @@ const ChatView = () => {
           });
           currentSystemGroup = [];
         }
-        // Add non-system content
-        groupedSegments.push({
-          type: "content",
-          content: segment,
-        });
+        if (segment.trim()) {
+          groupedSegments.push({
+            type: "content",
+            content: segment,
+          });
+        }
       }
     });
 
-    // Handle any remaining system messages
     if (currentSystemGroup.length > 0) {
       groupedSegments.push({
         type: "system-group",
@@ -132,6 +139,7 @@ const ChatView = () => {
       });
     }
 
+    // console.log("Grouped segments:", groupedSegments); // Debug log
     return groupedSegments;
   };
 
@@ -649,13 +657,13 @@ const ChatView = () => {
     }
   };
 
-  const renderMessageContent = (content) => {
+  const renderMessageContent = (content, messageIndex) => {
     if (!content) {
       return null;
     }
 
     const segments = content.split(
-      /((?::::|\%\%\%)system[\s\S]*?(?::::|\%\%\%))/g,
+      /((?::::|\%\%\%)system[\s\S]*?(?::::|\%\%\%)|\[CONTEXT\][\s\S]*?\[\/CONTEXT\])/g,
     );
     const groupedSegments = groupSystemMessages(segments);
 
@@ -666,17 +674,21 @@ const ChatView = () => {
       </pre>
     );
 
+    // Create a unique messageId to ensure context sections from different messages don't clash
+    const messageId = messageIndex;
+
     return (
       <>
         {groupedSegments.map((segment, index) => {
           if (segment.type === "system-group") {
-            const isExpanded = expandedGroups[index];
+            const groupId = `system-${index}`;
+            const isExpanded = expandedGroups[groupId];
             const messageCount = segment.messages.length;
             const hasMultipleMessages = messageCount > 1;
 
             return (
               <Box
-                key={index}
+                key={groupId}
                 sx={{
                   backgroundColor: "#E0F7F6",
                   border: "1px solid #e9ecef",
@@ -689,7 +701,7 @@ const ChatView = () => {
                   cursor: hasMultipleMessages ? "pointer" : "default",
                 }}
                 onClick={
-                  hasMultipleMessages ? () => toggleGroup(index) : undefined
+                  hasMultipleMessages ? () => toggleGroup(groupId) : undefined
                 }
               >
                 {/* First message is always visible */}
@@ -779,6 +791,89 @@ const ChatView = () => {
                         </Box>
                       );
                     })}
+                  </Box>
+                )}
+              </Box>
+            );
+          } else if (segment.type === "context-group") {
+            const groupId = `context-${messageId}-${index}`;
+            // console.log(
+            //   "Context Group ID:",
+            //   groupId,
+            //   "Content:",
+            //   segment.messages[0].substring(0, 50),
+            // );
+            // console.log("Context Group ID:", groupId);
+            const isExpanded = expandedGroups[groupId];
+            return (
+              <Box
+                key={groupId}
+                sx={{
+                  backgroundColor: "#F5F5F5", // Different color for context
+                  border: "1px solid #e9ecef",
+                  borderRadius: "10px",
+                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                  padding: "12px 12px",
+                  margin: "10px 10px",
+                  color: "#666",
+                  fontFamily: "monospace",
+                  cursor: "pointer",
+                }}
+                onClick={() => toggleGroup(groupId)}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "bold",
+                      color: "#666",
+                    }}
+                  >
+                    CONTEXT
+                  </Typography>
+                </Box>
+
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    mt: 1,
+                    borderTop: "1px solid rgba(0,0,0,0.1)",
+                    pt: 1,
+                    color: "#666",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  <Typography variant="caption">
+                    {isExpanded ? "Click to collapse" : "Click to show context"}
+                  </Typography>
+                  <KeyboardArrowDownIcon
+                    sx={{
+                      transform: isExpanded ? "rotate(180deg)" : "none",
+                      transition: "transform 0.2s",
+                    }}
+                  />
+                </Box>
+
+                {isExpanded && (
+                  <Box sx={{ mt: 1 }}>
+                    <ReactMarkdown
+                      components={
+                        {
+                          // Your existing markdown components...
+                        }
+                      }
+                      remarkPlugins={[remarkGfm]}
+                    >
+                      {segment.messages[0]}
+                    </ReactMarkdown>
                   </Box>
                 )}
               </Box>
@@ -1005,7 +1100,8 @@ const ChatView = () => {
                   >
                     {message.type === "user" ? "You:" : "Assistant:"}
                   </Typography>
-                  {renderMessageContent(message.content)}
+                  {renderMessageContent(message.content, index)}{" "}
+                  {/* Pass the index */}
                 </Box>
               ))}
             </Box>
