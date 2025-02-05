@@ -201,7 +201,7 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 			return fmt.Errorf("error decoding file contents: %v", err)
 		}
 
-		pl := fmt.Sprintf("The following additional documentation file '%s' has been provided for the tool '%s' to helpo you use it:\n%s",
+		pl := fmt.Sprintf("[CONTEXT]\nThe following additional documentation file '%s' has been provided for the tool '%s' to help you use it:\n%s\n[/CONTEXT]",
 			t.FileStores[i].FileName,
 			t.Name,
 			content)
@@ -576,7 +576,7 @@ func isToolCaller(name string) bool {
 }
 
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
-	pl := fmt.Sprintf("Context for this message: \n%s\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	pl := fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT/]\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
 	return llms.HumanChatMessage{
 		Content: pl,
 	}
