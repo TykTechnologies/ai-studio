@@ -15,3 +15,6 @@ compose.prod.yaml
 licensing/keys
 docs/site/public/*
 docs/site/resources
+.vscode
+.DS_Store
+__debug_bin*

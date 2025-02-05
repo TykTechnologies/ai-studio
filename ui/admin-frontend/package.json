@@ -3,15 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@emotion/react": "^11.13.3",
-    "@emotion/styled": "^11.13.0",
-    "@mui/icons-material": "^6.1.0",
-    "@mui/material": "^6.1.0",
-    "@mui/x-date-pickers": "^7.18.0",
-    "@mui/x-date-pickers-pro": "^7.18.0",
-    "@testing-library/jest-dom": "^5.17.0",
-    "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^6.4.3",
+    "@mui/material": "^6.4.3",
+    "@mui/x-date-pickers": "^7.25.0",
+    "@mui/x-date-pickers-pro": "^7.25.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@testing-library/user-event": "^14.6.1",
     "axios": "^1.7.7",
     "chart.js": "^4.4.4",
     "chartjs-adapter-date-fns": "^3.0.0",
@@ -21,7 +21,7 @@
     "react-beautiful-dnd": "^13.1.1",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",
-    "react-dropzone": "^14.2.9",
+    "react-dropzone": "^14.3.5",
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.26.2",
     "react-scripts": "5.0.1",
@@ -36,8 +36,13 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
+    "test": "react-scripts test --watchAll=false",
     "eject": "react-scripts eject"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(chart.js|chartjs-adapter-date-fns|axios|react-markdown|remark-gfm|vfile|unist-util-stringify-position|unified|bail|is-plain-obj|trough|remark|mdast-util-from-markdown|mdast-util-to-string|micromark|parse-entities|character-entities|property-information|space-separated-tokens|comma-separated-tokens|hast-util-whitespace)/)"
+    ]
   },
   "eslintConfig": {
     "extends": [
