@@ -12,20 +12,30 @@ const Login = () => {
     e.preventDefault();
     setError(null);
     try {
-      const response = await pubClient.post("/auth/login", {
+      const loginResponse = await pubClient.post("/auth/login", {
         data: {
           type: "login",
           attributes: { email, password },
         },
       });
 
-      if (response.data.message === "Login successful") {
-        window.location.reload();
+      if (loginResponse.data.message === "Login successful") {
+        // Get user entitlements to determine where to redirect
+        const userResponse = await pubClient.get("/common/me");
+        const { ui_options } = userResponse.data.attributes;
+
+        // Determine which dashboard to show based on permissions
+        if (ui_options?.show_portal) {
+          window.location.href = "/portal/dashboard";
+        } else if (ui_options?.show_chat) {
+          window.location.href = "/chat/dashboard";
+        } else {
+          setError("Your account doesn't have access to any features.");
+        }
       }
     } catch (err) {
       console.error("Login error:", err);
       if (err.response) {
-        // Display the error message from the service if available
         if (err.response.data && err.response.data.error) {
           setError(err.response.data.error);
         } else if (
@@ -34,7 +44,6 @@ const Login = () => {
         ) {
           setError(err.response.data.errors[0].detail);
         } else {
-          // Fallback error message
           setError("An unexpected error occurred. Please try again.");
         }
       } else {
