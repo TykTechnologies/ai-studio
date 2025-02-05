@@ -62,8 +62,8 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: midsommar/go.mod
+          cache-dependency-path: midsommar/go.sum
 
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v2
