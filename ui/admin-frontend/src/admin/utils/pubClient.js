@@ -1,21 +1,32 @@
 import axios from "axios";
-import { getConfig } from "../../config";
+import { getBaseUrl } from "./urlUtils";
 
-const createPubClient = () => {
-  const config = getConfig();
-  return axios.create({
-    baseURL: config.API_BASE_URL,
-    withCredentials: true,
-  });
-};
+const pubClient = axios.create({
+  baseURL: getBaseUrl(),
+  withCredentials: true,
+});
 
-let pubClient = createPubClient();
+pubClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Clear any stored auth data
+      localStorage.clear();
+
+      // Only redirect if we're not already on the login page
+      if (!window.location.pathname.includes("/login")) {
+        window.location.href = "/login";
+      }
+      return Promise.reject(error);
+    }
+    return Promise.reject(error);
+  },
+);
 
 // Function to fetch CSRF token
 const fetchCSRFToken = async () => {
-  const config = getConfig();
   try {
-    const response = await axios.get(`${config.API_BASE_URL}/csrf-token`, {
+    const response = await axios.get(`${getBaseUrl()}/csrf-token`, {
       withCredentials: true,
     });
     return response.headers["x-csrf-token"];
@@ -41,9 +52,23 @@ pubClient.interceptors.request.use(
   },
 );
 
+export const logout = async () => {
+  try {
+    await pubClient.post("/common/logout");
+    localStorage.clear();
+    window.location.href = "/login";
+  } catch (error) {
+    console.error("Logout failed:", error);
+    // Only redirect if we're not already on the login page
+    if (!window.location.pathname.includes("/login")) {
+      window.location.href = "/login";
+    }
+  }
+};
+
 // Export a function to reinitialize the client with updated config
 export const reinitializePubClient = () => {
-  pubClient = createPubClient();
+  pubClient.defaults.baseURL = getBaseUrl();
 };
 
 export default pubClient;
