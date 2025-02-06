@@ -1,122 +1,110 @@
-import React, { useState } from "react";
-import Drawer from "@mui/material/Drawer";
-import Toolbar from "@mui/material/Toolbar";
-import List from "@mui/material/List";
-import Divider from "@mui/material/Divider";
-import ListItem from "@mui/material/ListItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import IconButton from "@mui/material/IconButton";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import ExpandLess from "@mui/icons-material/ExpandLess";
-import ExpandMore from "@mui/icons-material/ExpandMore";
-import Collapse from "@mui/material/Collapse";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import PersonIcon from "@mui/icons-material/Person";
-import GroupIcon from "@mui/icons-material/Group";
-import PeopleIcon from "@mui/icons-material/People";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
-import SettingsIcon from "@mui/icons-material/Settings";
-import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
-import StorageIcon from "@mui/icons-material/Storage";
-import BuildIcon from "@mui/icons-material/Build";
-import DataObjectIcon from "@mui/icons-material/DataObject";
-import FolderOpenIcon from "@mui/icons-material/FolderOpen";
-import FilterListIcon from "@mui/icons-material/FilterList";
-import SettingsInputComponentIcon from "@mui/icons-material/SettingsInputComponent";
-import AppsIcon from "@mui/icons-material/Apps";
-import WebIcon from "@mui/icons-material/Web";
-import ChatIcon from "@mui/icons-material/Chat";
-import VpnKeyIcon from "@mui/icons-material/VpnKey";
-
-import { StyledNavLink } from "../../styles/sharedStyles";
+import React from "react";
+import {
+  Dashboard,
+  Person,
+  Group,
+  People,
+  SmartToy,
+  Settings,
+  AttachMoney,
+  Storage,
+  Build,
+  DataObject,
+  FolderOpen,
+  FilterList,
+  SettingsInputComponent,
+  Apps,
+  Web,
+  Chat,
+  VpnKey,
+} from "@mui/icons-material";
+import BaseDrawer from "./BaseDrawer";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
 
-const drawerWidth = 240;
-const minimizedDrawerWidth = 60;
-
-const MyDrawer = () => {
+const Drawer = () => {
   const { features, loading } = useSystemFeatures();
-  const [open, setOpen] = useState(true);
-  const [expandedItems, setExpandedItems] = useState({});
 
-  const handleDrawerToggle = () => {
-    setOpen(!open);
-  };
+  if (loading) {
+    return null;
+  }
 
-  const handleExpandClick = (text) => {
-    setExpandedItems((prevState) => ({
-      ...prevState,
-      [text]: !prevState[text],
-    }));
-  };
-
-  const getMenuItems = (features) => [
-    { text: "Dashboard", icon: <DashboardIcon />, path: "/admin/dash" },
+  const getMenuItems = () => [
+    { 
+      id: "dashboard",
+      text: "Dashboard", 
+      icon: <Dashboard />, 
+      path: "/admin/dash" 
+    },
     {
+      id: "team",
       text: "Team",
-      icon: <PeopleIcon />,
+      icon: <People />,
       subItems: [
-        { text: "Users", icon: <PersonIcon />, path: "/admin/users" },
-        // Only show Groups if we're not in the gateway-only mode
+        { 
+          id: "users",
+          text: "Users", 
+          icon: <Person />, 
+          path: "/admin/users" 
+        },
         ...(!features.feature_gateway ||
         features.feature_portal ||
         features.feature_chat
-          ? [{ text: "Groups", icon: <GroupIcon />, path: "/admin/groups" }]
+          ? [{ 
+              id: "groups",
+              text: "Groups", 
+              icon: <Group />, 
+              path: "/admin/groups" 
+            }]
           : []),
       ],
     },
     {
       text: "AI",
-      icon: <SmartToyIcon />,
+      icon: <SmartToy />,
       subItems: [
-        { text: "LLMs", icon: <SmartToyIcon />, path: "/admin/llms" },
-        // Only show Call Settings if feature_chat is enabled
+        { text: "LLMs", icon: <SmartToy />, path: "/admin/llms" },
         ...(features.feature_chat
           ? [
               {
                 text: "Call Settings",
-                icon: <SettingsIcon />,
+                icon: <Settings />,
                 path: "/admin/llm-settings",
               },
             ]
           : []),
         {
           text: "Model Prices",
-          icon: <AttachMoneyIcon />,
+          icon: <AttachMoney />,
           path: "/admin/model-prices",
         },
       ],
     },
     {
       text: "Data",
-      icon: <DataObjectIcon />,
+      icon: <DataObject />,
       subItems: [
         {
           text: "Vector Sources",
-          icon: <StorageIcon />,
+          icon: <Storage />,
           path: "/admin/datasources",
         },
-        // Only show Tools if feature_chat is enabled
         ...(features.feature_chat
-          ? [{ text: "Tools", icon: <BuildIcon />, path: "/admin/tools" }]
+          ? [{ text: "Tools", icon: <Build />, path: "/admin/tools" }]
           : []),
       ],
     },
-    // Only show Gateway if feature_gateway is enabled
     ...(features.feature_gateway
       ? [
           {
             text: "Gateway",
-            icon: <SettingsInputComponentIcon />,
+            icon: <SettingsInputComponent />,
             subItems: [
               {
                 text: "Filters",
-                icon: <FilterListIcon />,
+                icon: <FilterList />,
                 path: "/admin/filters",
               },
-              { text: "Secrets", icon: <VpnKeyIcon />, path: "/admin/secrets" },
+              { text: "Secrets", icon: <VpnKey />, path: "/admin/secrets" },
             ],
           },
         ]
@@ -126,58 +114,55 @@ const MyDrawer = () => {
     !features.feature_chat
       ? [
           {
-            text: "Apps and Credentials", // New name when only gateway is enabled
-            icon: <WebIcon />,
+            text: "Apps and Credentials",
+            icon: <Web />,
             subItems: [
-              { text: "Apps", icon: <AppsIcon />, path: "/admin/apps" },
+              { text: "Apps", icon: <Apps />, path: "/admin/apps" },
             ],
           },
         ]
       : [
           {
             text: "Portal",
-            icon: <WebIcon />,
+            icon: <Web />,
             subItems: [
-              // Only show Apps if either feature_portal or feature_gateway is enabled
               ...(features.feature_portal || features.feature_gateway
-                ? [{ text: "Apps", icon: <AppsIcon />, path: "/admin/apps" }]
+                ? [{ text: "Apps", icon: <Apps />, path: "/admin/apps" }]
                 : []),
-              // Only show Chat Rooms if feature_chat is enabled
               ...(features.feature_chat
                 ? [
                     {
                       text: "Chat Rooms",
-                      icon: <ChatIcon />,
+                      icon: <Chat />,
                       path: "/admin/chats",
                     },
                   ]
                 : []),
-              // Only show Catalogs section if feature_portal or feature_chat is enabled
               ...(features.feature_portal || features.feature_chat
                 ? [
                     {
                       text: "Catalogs",
-                      icon: <FolderOpenIcon />,
+                      icon: <FolderOpen />,
                       subItems: [
                         ...(features.feature_portal
                           ? [
                               {
                                 text: "LLMs",
-                                icon: <SmartToyIcon />,
+                                icon: <SmartToy />,
                                 path: "/admin/catalogs/llms",
                               },
                             ]
                           : []),
                         {
                           text: "Data",
-                          icon: <DataObjectIcon />,
+                          icon: <DataObject />,
                           path: "/admin/catalogs/data",
                         },
                         ...(features.feature_chat
                           ? [
                               {
                                 text: "Tools",
-                                icon: <BuildIcon />,
+                                icon: <Build />,
                                 path: "/admin/catalogs/tools",
                               },
                             ]
@@ -191,104 +176,15 @@ const MyDrawer = () => {
         ]),
   ];
 
-  const renderMenuItem = (item, depth = 0) => {
-    const commonStyles = {
-      pl: open ? depth * 4 + 2 : 2,
-    };
-
-    if (item.subItems) {
-      return (
-        <React.Fragment key={item.text}>
-          <ListItem
-            button
-            onClick={() => handleExpandClick(item.text)}
-            sx={commonStyles}
-          >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            {open && (
-              <ListItemText
-                primary={item.text}
-                primaryTypographyProps={{
-                  variant: depth > 0 ? "body2" : "body1",
-                  color: depth > 0 ? "text.secondary" : "text.primary",
-                }}
-              />
-            )}
-            {open &&
-              (expandedItems[item.text] ? <ExpandLess /> : <ExpandMore />)}
-          </ListItem>
-          <Collapse in={expandedItems[item.text]} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {item.subItems.map((subItem) =>
-                renderMenuItem(subItem, depth + 1),
-              )}
-            </List>
-          </Collapse>
-        </React.Fragment>
-      );
-    } else {
-      return (
-        <ListItem
-          key={item.text}
-          component={StyledNavLink}
-          to={item.path}
-          end={item.path === "/admin/"}
-          sx={commonStyles}
-        >
-          <ListItemIcon>{item.icon}</ListItemIcon>
-          {open && (
-            <ListItemText
-              primary={item.text}
-              primaryTypographyProps={{
-                variant: depth > 0 ? "body2" : "body1",
-                color: depth > 0 ? "text.secondary" : "text.primary",
-              }}
-            />
-          )}
-        </ListItem>
-      );
-    }
-  };
-
-  if (loading) {
-    return <div>Loading...</div>; // Or your preferred loading indicator
-  }
-
-  const menuItems = getMenuItems(features);
-
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: open ? drawerWidth : minimizedDrawerWidth,
-        flexShrink: 0,
-        [`& .MuiDrawer-paper`]: {
-          width: open ? drawerWidth : minimizedDrawerWidth,
-          boxSizing: "border-box",
-          overflow: "visible",
-          transition: "width 0.2s",
-        },
-      }}
-    >
-      <Toolbar />
-      <IconButton
-        onClick={handleDrawerToggle}
-        sx={{
-          backgroundColor: "#ECECEF",
-          alignSelf: "flex-end",
-          mr: 1,
-          position: "absolute",
-          left: "calc(100% - 20px)",
-          top: "78px",
-          zIndex: 9,
-        }}
-      >
-        {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-      </IconButton>
-      <List>{menuItems.map((item) => renderMenuItem(item))}</List>
-      <Divider />
-    </Drawer>
+    <BaseDrawer
+      menuItems={getMenuItems()}
+      drawerWidth={240}
+      minimizedWidth={60}
+      isCollapsible={true}
+      showToolbar={true}
+    />
   );
 };
 
-export default MyDrawer;
+export default Drawer;
