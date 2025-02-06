@@ -25,7 +25,7 @@ const TopNavigation = ({
 
   if (showChat) {
     tabs.push({
-      label: "Chat Studio",
+      label: "Chat",
       value: "chat",
       dataTestId: "chat-tab",
     });
@@ -33,7 +33,7 @@ const TopNavigation = ({
 
   if (showPortal) {
     tabs.push({
-      label: "AI Developer Portal",
+      label: "Developer Portal",
       value: "portal",
       dataTestId: "portal-tab",
     });
