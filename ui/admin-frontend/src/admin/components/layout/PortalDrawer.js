@@ -90,7 +90,7 @@ const PortalDrawer = () => {
               id: `llm-${catalogue.id}`,
               text: catalogue.attributes.name,
               path: `/portal/llms/${catalogue.id}`
-            }))
+            })) || []
           },
           {
             id: "databases",
@@ -100,7 +100,7 @@ const PortalDrawer = () => {
               id: `db-${catalogue.id}`,
               text: catalogue.attributes.name,
               path: `/portal/databases/${catalogue.id}`
-            }))
+            })) || []
           }
         ]
       },
@@ -116,13 +116,18 @@ const PortalDrawer = () => {
   return (
     <BaseDrawer
       menuItems={getMenuItems()}
-      drawerWidth={DRAWER_WIDTH}
+      drawerWidth={240}
       minimizedWidth={60}
       showToolbar={false}
       customStyles={{
         marginTop: "64px"
       }}
       defaultOpen={true}
+      defaultExpandedItems={{
+        "resources": true,
+        "llms": false,
+        "databases": false
+      }}
     />
   );
 };

@@ -8,6 +8,7 @@ import {
   Collapse,
   Toolbar,
   IconButton,
+  Divider,
   useTheme,
 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -27,35 +28,68 @@ const BaseDrawer = ({
 }) => {
   const [open, setOpen] = useState(defaultOpen);
   const [expandedItems, setExpandedItems] = useState(defaultExpandedItems);
-  const theme = useTheme();
 
   const handleDrawerToggle = () => {
     setOpen(!open);
   };
 
-  const handleExpandClick = (itemId) => {
-    setExpandedItems((prevState) => ({
-      ...prevState,
-      [itemId]: !prevState[itemId],
-    }));
+  const handleExpandClick = (itemId, parentId = null) => {
+    setExpandedItems((prevState) => {
+      // If this is a nested item, we need to ensure parent stays open
+      if (parentId) {
+        return {
+          ...prevState,
+          [parentId]: true, // Keep parent expanded
+          [itemId]: !prevState[itemId], // Toggle current item
+        };
+      }
+      return {
+        ...prevState,
+        [itemId]: !prevState[itemId],
+      };
+    });
   };
 
-  const renderMenuItem = (item, depth = 0) => {
+  const renderMenuItem = (item, depth = 0, parentId = null) => {
     const hasSubItems = item.subItems && item.subItems.length > 0;
-    const isExpanded = expandedItems[item.id || item.text];
+    const isExpanded = expandedItems[item.id];
     const commonStyles = {
       pl: open ? depth * 4 + 2 : 2,
-      mb: 1,
-      ...(item.sx || {}),
     };
 
-    return (
-      <React.Fragment key={item.id || item.text}>
+    if (hasSubItems) {
+      return (
+        <React.Fragment key={item.id}>
+          <ListItem
+            button
+            onClick={() => handleExpandClick(item.id, parentId)}
+            sx={commonStyles}
+          >
+            {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
+            {open && (
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  variant: depth > 0 ? "body2" : "body1",
+                  color: depth > 0 ? "text.secondary" : "text.primary",
+                }}
+              />
+            )}
+            {open && (isExpanded ? <ExpandLess /> : <ExpandMore />)}
+          </ListItem>
+          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              {item.subItems.map((subItem) => renderMenuItem(subItem, depth + 1, item.id))}
+            </List>
+          </Collapse>
+        </React.Fragment>
+      );
+    } else {
+      return (
         <ListItem
           button
-          component={hasSubItems ? 'div' : StyledNavLink}
-          to={hasSubItems ? undefined : item.path}
-          onClick={hasSubItems ? () => handleExpandClick(item.id || item.text) : undefined}
+          component={StyledNavLink}
+          to={item.path}
           sx={commonStyles}
           end={item.path === "/admin/"}
         >
@@ -66,24 +100,12 @@ const BaseDrawer = ({
               primaryTypographyProps={{
                 variant: depth > 0 ? "body2" : "body1",
                 color: depth > 0 ? "text.secondary" : "text.primary",
-                noWrap: true,
               }}
             />
           )}
-          {hasSubItems && open && (
-            isExpanded ? <ExpandLess /> : <ExpandMore />
-          )}
         </ListItem>
-
-        {hasSubItems && (
-          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {item.subItems.map((subItem) => renderMenuItem(subItem, depth + 1))}
-            </List>
-          </Collapse>
-        )}
-      </React.Fragment>
-    );
+      );
+    }
   };
 
   const currentWidth = open ? drawerWidth : minimizedWidth;
@@ -97,10 +119,6 @@ const BaseDrawer = ({
         [`& .MuiDrawer-paper`]: {
           width: currentWidth,
           boxSizing: "border-box",
-          backgroundColor: theme.palette.background.default,
-          boxShadow: "none",
-          border: "none",
-          padding: "16px",
           overflow: "visible",
           transition: "width 0.2s",
           ...customStyles,
@@ -111,44 +129,21 @@ const BaseDrawer = ({
       <IconButton
         onClick={handleDrawerToggle}
         sx={{
-          backgroundColor: theme.palette.grey[100],
+          backgroundColor: "#ECECEF",
           alignSelf: "flex-end",
           mr: 1,
           position: "absolute",
           left: "calc(100% - 20px)",
           top: "78px",
           zIndex: 9,
-          "&:hover": {
-            backgroundColor: theme.palette.grey[200],
-          },
         }}
       >
         {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
       </IconButton>
-      <List
-        sx={{
-          mt: 2,
-          backgroundColor: theme.palette.background.paper,
-          borderRadius: "16px",
-          boxShadow: theme.shadows[1],
-          padding: "16px",
-          "& .MuiListItem-root": {
-            borderRadius: "8px",
-            "&:hover": {
-              backgroundColor: theme.palette.action.hover,
-            },
-            "&.active": {
-              backgroundColor: theme.palette.primary.main,
-              color: theme.palette.primary.contrastText,
-              "& .MuiListItemIcon-root": {
-                color: theme.palette.primary.contrastText,
-              },
-            },
-          },
-        }}
-      >
+      <List>
         {menuItems.map((item) => renderMenuItem(item))}
       </List>
+      <Divider />
     </Drawer>
   );
 };
