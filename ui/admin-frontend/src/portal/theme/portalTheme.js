@@ -37,10 +37,20 @@ const portalTheme = createTheme({
     MuiDrawer: {
       styleOverrides: {
         paper: {
-          backgroundColor: "#ffffff",
+          backgroundColor: "#000000",
           boxShadow: "none",
           width: "260px",
           padding: "16px",
+          color: "#ffffff",
+          "& .MuiListItemIcon-root": {
+            color: "#ffffff",
+          },
+          "& .MuiListItemText-root": {
+            color: "#ffffff",
+          },
+          "& .MuiIconButton-root": {
+            color: "#ffffff",
+          },
         },
       },
     },
@@ -50,7 +60,10 @@ const portalTheme = createTheme({
           marginTop: "8px",
           borderRadius: "8px",
           "&:hover": {
-            backgroundColor: "rgba(0, 0, 0, 0.04)",
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
+          },
+          "&.active": {
+            backgroundColor: "rgba(255, 255, 255, 0.15)",
           },
         },
       },

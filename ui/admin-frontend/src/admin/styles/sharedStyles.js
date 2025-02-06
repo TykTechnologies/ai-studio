@@ -104,10 +104,10 @@ export const StyledNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: "none",
   color: theme.palette.text.primary,
   "&.active": {
-    backgroundColor: theme.palette.custom.teal,
-    color: theme.palette.common.black,
+    backgroundColor: theme.palette.primary.main,
+    color: theme.palette.primary.contrastText,
     "& .MuiListItemIcon-root": {
-      color: theme.palette.common.black,
+      color: theme.palette.primary.contrastText,
     },
   },
   "&:hover": {
