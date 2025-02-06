@@ -83,7 +83,7 @@ const ChatDrawer = () => {
   return (
     <BaseDrawer
       menuItems={getMenuItems()}
-      drawerWidth={DRAWER_WIDTH}
+      drawerWidth={240}
       minimizedWidth={60}
       showToolbar={false}
       customStyles={{

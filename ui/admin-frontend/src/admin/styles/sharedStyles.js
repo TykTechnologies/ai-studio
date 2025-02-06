@@ -8,7 +8,7 @@ import {
   TableCell,
   TableRow,
   Dialog,
-  Grid,
+  ListItem,
   DialogTitle,
   Accordion,
   DialogContent,
@@ -100,20 +100,20 @@ export const StyledDialogContent = styled(DialogContent)(({ theme }) => ({
   padding: theme.spacing(3),
 }));
 
-export const StyledNavLink = styled(NavLink)(({ theme }) => ({
+export const StyledNavLink = styled(NavLink)({
   textDecoration: "none",
-  color: theme.palette.text.primary,
+  color: "#000000",
   "&.active": {
-    backgroundColor: theme.palette.primary.main,
-    color: theme.palette.primary.contrastText,
+    backgroundColor: "#ECECEF",
+    color: "#000000",
     "& .MuiListItemIcon-root": {
-      color: theme.palette.primary.contrastText,
+      color: "#000000",
     },
   },
   "&:hover": {
-    backgroundColor: theme.palette.primary.light,
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
   },
-}));
+});
 
 export const StyledIconButton = styled(IconButton)(({ theme }) => ({
   color: theme.palette.text.light,
@@ -155,3 +155,15 @@ export const StyledAccordion = styled(Accordion)(({ theme }) => ({
     transition: theme.transitions.create(["margin", "border-radius"]),
   },
 }));
+
+export const StyledListItem = styled(ListItem)({
+  "&.active": {
+    backgroundColor: "#ECECEF !important",
+    "& .MuiListItemIcon-root": {
+      color: "inherit",
+    },
+  },
+  "&:hover": {
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
+  },
+});
