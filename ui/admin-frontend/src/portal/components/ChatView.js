@@ -596,6 +596,9 @@ const ChatView = () => {
     if (data.type === "session_id") {
       setSessionId(data.payload);
       localStorage.setItem("chatSessionId", data.payload);
+      // Update URL without page reload using history.replaceState
+      const newUrl = `/chat/${chatId}?continue_id=${data.payload}`;
+      window.history.replaceState({}, '', newUrl);
     } else if (data.type === "stream_chunk" || data.type === "ai_message") {
       setIsLoading(false);
       setMessages((prevMessages) => {
