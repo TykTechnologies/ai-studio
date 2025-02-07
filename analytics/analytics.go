@@ -67,8 +67,8 @@ type ProxyLog struct {
 	UserID       uint
 	TimeStamp    time.Time
 	Vendor       string
-	RequestBody  string `gorm:"type:text;size:65535"` // Using TEXT type with max size of 64KB
-	ResponseBody string `gorm:"type:text;size:65535"` // Using TEXT type with max size of 64KB
+	RequestBody  string
+	ResponseBody string
 	ResponseCode int
 }
 
