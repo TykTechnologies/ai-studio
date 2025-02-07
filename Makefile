@@ -28,9 +28,6 @@ build-admin-frontend-clean:
 
 # Build Golang
 build-golang:
-	cd docs/site && \
-	hugo && \
-	cd ../../ && \
 	go build
 
 # Test target
@@ -44,7 +41,7 @@ clean:
 
 # Start frontend development mode
 start-frontend:
-	cd $(ADMIN_FRONTEND_DIR) && npm start
+	cd $(ADMIN_FRONTEND_DIR) && SITE_URL=http://localhost:8080 npm start
 
 # Stop frontend development mode
 stop-frontend:
