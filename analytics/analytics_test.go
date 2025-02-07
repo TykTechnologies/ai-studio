@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
@@ -19,10 +21,32 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&LLMChatRecord{}, &LLMChatLogEntry{}, &ToolCallRecord{})
+	err = db.AutoMigrate(&LLMChatRecord{}, &LLMChatLogEntry{}, &ToolCallRecord{}, &models.ModelPrice{})
 	require.NoError(t, err)
 
 	return db
+}
+
+// waitForRecord retries fetching a record until it exists or timeout is reached
+func waitForRecord[T any](db *gorm.DB, condition string, args ...interface{}) (*T, error) {
+	var record T
+	timeout := time.After(2 * time.Second)
+	tick := time.Tick(100 * time.Millisecond)
+
+	for {
+		select {
+		case <-timeout:
+			return nil, fmt.Errorf("timeout waiting for record")
+		case <-tick:
+			result := db.Where(condition, args...).First(&record)
+			if result.Error == nil {
+				return &record, nil
+			}
+			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				return nil, result.Error
+			}
+		}
+	}
 }
 
 func TestRecordContentMessage(t *testing.T) {
@@ -54,19 +78,14 @@ func TestRecordContentMessage(t *testing.T) {
 
 	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, now, svc)
 
-	// Wait for goroutine to process
-	time.Sleep(100 * time.Millisecond)
-
-	var chatRecord LLMChatRecord
-	result := db.First(&chatRecord)
-	assert.NoError(t, result.Error)
+	chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ?", "TestName")
+	require.NoError(t, err)
 	assert.Equal(t, "TestName", chatRecord.Name)
 	assert.Equal(t, "openai", chatRecord.Vendor)
 	assert.Equal(t, 30, chatRecord.TotalTokens)
 
-	var chatLog LLMChatLogEntry
-	result = db.First(&chatLog)
-	assert.NoError(t, result.Error)
+	chatLog, err := waitForRecord[LLMChatLogEntry](db, "name = ?", "TestName")
+	require.NoError(t, err)
 	assert.Equal(t, "TestName", chatLog.Name)
 	assert.Equal(t, "Test prompt", chatLog.Prompt)
 	assert.Equal(t, "Test content", chatLog.Response)
@@ -82,12 +101,8 @@ func TestRecordToolCall(t *testing.T) {
 	now := time.Now()
 	RecordToolCall("TestTool", now, 50, 1)
 
-	// Wait for goroutine to process
-	time.Sleep(100 * time.Millisecond)
-
-	var toolCall ToolCallRecord
-	result := db.First(&toolCall)
-	assert.NoError(t, result.Error)
+	toolCall, err := waitForRecord[ToolCallRecord](db, "name = ?", "TestTool")
+	require.NoError(t, err)
 	assert.Equal(t, "TestTool", toolCall.Name)
 	assert.Equal(t, 50, toolCall.ExecTime)
 	assert.Equal(t, uint(1), toolCall.ToolID)
@@ -193,12 +208,8 @@ func TestCostCalculation(t *testing.T) {
 
 	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
 
-	// Wait for goroutine to process
-	time.Sleep(100 * time.Millisecond)
-
-	var chatRecord LLMChatRecord
-	result := db.First(&chatRecord)
-	assert.NoError(t, result.Error)
+	chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ?", "TestModel")
+	require.NoError(t, err)
 
 	// Check if the cost is calculated correctly
 	expectedCost := 0.002 * float64(30) // CPT * TotalTokens
@@ -239,12 +250,8 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 
 	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
 
-	// Wait for goroutine to process
-	time.Sleep(100 * time.Millisecond)
-
-	var chatRecord LLMChatRecord
-	result := db.First(&chatRecord)
-	assert.NoError(t, result.Error)
+	chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ?", "TestModel")
+	require.NoError(t, err)
 
 	// Check if the cost is zero when price is not available
 	assert.Equal(t, float64(0), chatRecord.Cost)
