@@ -45,6 +45,8 @@ const Users = () => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("asc");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [openAddToGroupModal, setOpenAddToGroupModal] = useState(false);
@@ -83,6 +85,7 @@ const Users = () => {
         params: {
           page,
           page_size: pageSize,
+          sort: `${sortOrder === "desc" ? "-" : ""}${sortField}`,
         },
       });
       setUsers(response.data.data || []);
@@ -96,7 +99,7 @@ const Users = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData]);
+  }, [page, pageSize, updatePaginationData, sortField, sortOrder]);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -264,10 +267,51 @@ const Users = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <StyledTableHeaderCell>ID</StyledTableHeaderCell>
-                <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                <StyledTableHeaderCell>Email</StyledTableHeaderCell>
-                <StyledTableHeaderCell>Is Admin</StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("id");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  ID {sortField === "id" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "name" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("name");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Name {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "email" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("email");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Email {sortField === "email" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "email_verified" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("email_verified");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Email Verified {sortField === "email_verified" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "is_admin" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("is_admin");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Is Admin {sortField === "is_admin" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
                 <StyledTableHeaderCell align="right">
                   Actions
                 </StyledTableHeaderCell>
@@ -285,6 +329,9 @@ const Users = () => {
                     <StyledTableCell>{user.attributes.name}</StyledTableCell>
                     <StyledTableCell>{user.attributes.email}</StyledTableCell>
                     <StyledTableCell>
+                      {user.attributes.email_verified ? "Yes" : "No"}
+                    </StyledTableCell>
+                    <StyledTableCell>
                       {user.attributes.is_admin ? "Yes" : "No"}
                     </StyledTableCell>
                     <StyledTableCell align="right">
@@ -298,7 +345,7 @@ const Users = () => {
                 ))
               ) : (
                 <TableRow>
-                  <StyledTableCell colSpan={4}>No users found</StyledTableCell>
+                  <StyledTableCell colSpan={6}>No users found</StyledTableCell>
                 </TableRow>
               )}
             </TableBody>
