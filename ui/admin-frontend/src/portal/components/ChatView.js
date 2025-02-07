@@ -325,9 +325,10 @@ const ChatView = () => {
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
     const currentConfig = getConfig();
-    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${
-      sessionId ? `?session_id=${sessionId}` : ""
-    }`;
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = process.env.NODE_ENV === "development"
+      ? `${wsProtocol}//localhost:8080/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`
+      : `${wsProtocol}//${window.location.host}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`;
 
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
