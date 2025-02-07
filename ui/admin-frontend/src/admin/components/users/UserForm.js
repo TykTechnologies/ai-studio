@@ -312,6 +312,7 @@ const UserForm = () => {
                 error={!!errors.name}
                 helperText={errors.name}
                 required
+                autoComplete="off"
               />
             </Grid>
             <Grid item xs={12}>
@@ -324,6 +325,7 @@ const UserForm = () => {
                 error={!!errors.email}
                 helperText={errors.email}
                 required
+                autoComplete="off"
               />
             </Grid>
             {!id && (

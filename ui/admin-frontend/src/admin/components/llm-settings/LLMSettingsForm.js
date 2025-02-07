@@ -460,6 +460,7 @@ const LLMSettingsForm = () => {
                 error={!!errors.model_name}
                 helperText={errors.model_name}
                 required
+                autoComplete="off"
                 tooltip="The name of the language model (e.g., 'gpt-3.5-turbo', 'text-davinci-003')"
               />
             </Grid>
@@ -560,6 +561,7 @@ const LLMSettingsForm = () => {
                 onChange={handleChange}
                 multiline
                 rows={4}
+                autoComplete="off"
                 tooltip="A long-form text prompt that sets the context or behavior for the language model"
               />
             </Grid>
@@ -628,6 +630,7 @@ const LLMSettingsForm = () => {
             onChange={handleModelPriceChange}
             required
             margin="normal"
+            autoComplete="off"
           />
         </StyledDialogContent>
         <DialogActions>
