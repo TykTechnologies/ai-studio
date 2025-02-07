@@ -32,6 +32,7 @@ func TestChatEndpoints(t *testing.T) {
 			Type       string `json:"type"`
 			Attributes struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -46,6 +47,7 @@ func TestChatEndpoints(t *testing.T) {
 			Type: "chats",
 			Attributes: struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -57,6 +59,7 @@ func TestChatEndpoints(t *testing.T) {
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "Test Chat",
+				Description:   "Test Chat Description",
 				LLMSettingsID: llmSettings.ID,
 				LLMID:         llm.ID,
 				GroupIDs:      []uint{group.ID},
@@ -71,6 +74,7 @@ func TestChatEndpoints(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Chat", response["data"].Attributes.Name)
+	assert.Equal(t, "Test Chat Description", response["data"].Attributes.Description)
 
 	chatID := response["data"].ID
 
@@ -84,6 +88,7 @@ func TestChatEndpoints(t *testing.T) {
 			Type       string `json:"type"`
 			Attributes struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -98,6 +103,7 @@ func TestChatEndpoints(t *testing.T) {
 			Type: "chats",
 			Attributes: struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -109,6 +115,7 @@ func TestChatEndpoints(t *testing.T) {
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "Updated Chat",
+				Description:   "Updated Chat Description",
 				LLMSettingsID: llmSettings.ID,
 				LLMID:         llm.ID,
 				GroupIDs:      []uint{group.ID},
@@ -128,6 +135,7 @@ func TestChatEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, listResponse["data"], 1)
 	assert.Equal(t, "Updated Chat", listResponse["data"][0].Attributes.Name)
+	assert.Equal(t, "Updated Chat Description", listResponse["data"][0].Attributes.Description)
 
 	// Test Get Chats by Group ID
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/by-group?group_id=%d", group.ID), nil)
@@ -138,6 +146,7 @@ func TestChatEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, groupChatsResponse["data"], 1)
 	assert.Equal(t, "Updated Chat", groupChatsResponse["data"][0].Attributes.Name)
+	assert.Equal(t, "Updated Chat Description", groupChatsResponse["data"][0].Attributes.Description)
 
 	// Test Delete Chat
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
@@ -161,6 +170,7 @@ func TestChatEndpointsErrors(t *testing.T) {
 			Type       string `json:"type"`
 			Attributes struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -175,6 +185,7 @@ func TestChatEndpointsErrors(t *testing.T) {
 			Type: "chats",
 			Attributes: struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -186,6 +197,7 @@ func TestChatEndpointsErrors(t *testing.T) {
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "Updated Chat",
+				Description:   "Updated Chat Description",
 				LLMSettingsID: 1,
 				LLMID:         1,
 				GroupIDs:      []uint{1},
@@ -205,6 +217,7 @@ func TestChatEndpointsErrors(t *testing.T) {
 			Type       string `json:"type"`
 			Attributes struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -219,6 +232,7 @@ func TestChatEndpointsErrors(t *testing.T) {
 			Type: "chats",
 			Attributes: struct {
 				Name                string `json:"name"`
+				Description         string `json:"description"`
 				LLMSettingsID       uint   `json:"llm_settings_id"`
 				LLMID               uint   `json:"llm_id"`
 				GroupIDs            []uint `json:"group_ids"`
@@ -230,6 +244,7 @@ func TestChatEndpointsErrors(t *testing.T) {
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
 			}{
 				Name:          "",
+				Description:   "",
 				LLMSettingsID: 0,
 				LLMID:         0,
 				GroupIDs:      []uint{},

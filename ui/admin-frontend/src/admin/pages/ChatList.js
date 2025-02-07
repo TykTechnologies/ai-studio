@@ -211,6 +211,9 @@ const ChatList = () => {
                     <StyledTableHeaderCell onClick={() => handleSort("name")}>
                       Name
                     </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("description")}>
+                      Description
+                    </StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("llm_id")}>
                       LLM
                     </StyledTableHeaderCell>
@@ -231,6 +234,9 @@ const ChatList = () => {
                       sx={{ cursor: "pointer" }}
                     >
                       <StyledTableCell>{chat.attributes.name}</StyledTableCell>
+                      <StyledTableCell>
+                        {chat.attributes.description || "-"}
+                      </StyledTableCell>
                       <StyledTableCell>
                         {llms[chat.attributes.llm_id] || "Unknown LLM"}
                       </StyledTableCell>
