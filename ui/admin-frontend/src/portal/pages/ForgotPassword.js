@@ -55,6 +55,7 @@ const ForgotPassword = () => {
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
           />
           <Button
             type="submit"
