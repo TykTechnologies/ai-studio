@@ -11,6 +11,15 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/switches"
 )
 
+const maxBodySize = 65535 // Maximum size for TEXT column (64KB)
+
+func truncateString(s string, maxSize int) string {
+	if len(s) <= maxSize {
+		return s
+	}
+	return s[:maxSize]
+}
+
 func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
 	llm, app, response, err := switches.AnalyzeResponse(llm, app, statusCode, body, r)
 	if err != nil {
@@ -23,8 +32,8 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		UserID:       app.UserID,
 		TimeStamp:    time.Now(),
 		Vendor:       string(llm.Vendor),
-		RequestBody:  string(reqBody),
-		ResponseBody: string(body),
+		RequestBody:  truncateString(string(reqBody), maxBodySize),
+		ResponseBody: truncateString(string(body), maxBodySize),
 		ResponseCode: statusCode,
 	}
 
@@ -44,8 +53,8 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		UserID:       app.UserID,
 		TimeStamp:    time.Now(),
 		Vendor:       string(llm.Vendor),
-		RequestBody:  string(reqBody),
-		ResponseBody: string(responses),
+		RequestBody:  truncateString(string(reqBody), maxBodySize),
+		ResponseBody: truncateString(string(responses), maxBodySize),
 		ResponseCode: statusCode,
 	}
 
