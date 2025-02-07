@@ -223,6 +223,13 @@ const ChatDetails = () => {
           </Grid>
 
           <Grid item xs={3}>
+            <FieldLabel>Description:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{chat.attributes.description || "No description"}</FieldValue>
+          </Grid>
+
+          <Grid item xs={3}>
             <FieldLabel>Filters:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
@@ -330,11 +337,10 @@ const ChatDetails = () => {
                 </ListItemIcon>
                 <ListItemText
                   primary={file.attributes.file_name}
-                  secondary={`Size: ${file.attributes.length} bytes${
-                    file.attributes.description
+                  secondary={`Size: ${file.attributes.length} bytes${file.attributes.description
                       ? ` • ${file.attributes.description}`
                       : ""
-                  }`}
+                    }`}
                 />
               </ListItem>
             ))}

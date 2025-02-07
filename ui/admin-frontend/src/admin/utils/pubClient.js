@@ -1,8 +1,10 @@
 import axios from "axios";
 import { getBaseUrl } from "./urlUtils";
 
+const isDev = process.env.NODE_ENV === "development";
+
 const pubClient = axios.create({
-  baseURL: getBaseUrl(),
+  baseURL: isDev ? "" : getBaseUrl(), // In dev mode, use relative URLs to allow proxy to work
   withCredentials: true,
 });
 
@@ -26,7 +28,7 @@ pubClient.interceptors.response.use(
 // Function to fetch CSRF token
 const fetchCSRFToken = async () => {
   try {
-    const response = await axios.get(`${getBaseUrl()}/csrf-token`, {
+    const response = await axios.get(isDev ? "/csrf-token" : `${getBaseUrl()}/csrf-token`, {
       withCredentials: true,
     });
     return response.headers["x-csrf-token"];
@@ -68,7 +70,7 @@ export const logout = async () => {
 
 // Export a function to reinitialize the client with updated config
 export const reinitializePubClient = () => {
-  pubClient.defaults.baseURL = getBaseUrl();
+  pubClient.defaults.baseURL = isDev ? "" : getBaseUrl();
 };
 
 export default pubClient;
