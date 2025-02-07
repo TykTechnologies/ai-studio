@@ -366,6 +366,7 @@ const ChatView = () => {
       };
 
       ws.current.onerror = (error) => {
+        console.error("WebSocket error:", error);
         setMessages((prevMessages) => [
           ...prevMessages,
           {
@@ -391,19 +392,56 @@ const ChatView = () => {
               isComplete: true,
             },
           ]);
+          // Implement reconnection logic here
+          reconnectWithDelay();
         }
       };
     };
 
+    let reconnectTimeout = null;
+    const reconnectAttempts = useRef(0);
+    const maxReconnectAttempts = 5; // Maximum reconnection attempts
+    const initialReconnectDelay = 500; // 0.5 second initial delay
+
+    const reconnectWithDelay = () => {
+      if (reconnectAttempts.current >= maxReconnectAttempts) {
+        console.error("Max reconnection attempts reached. Connection permanently closed.");
+        setMessages((prevMessages) => {
+          return [
+            ...prevMessages,
+            {
+              type: "system",
+              content: `:::system Error: Max reconnection attempts reached. Connection permanently closed. Please refresh the page to try again. Error details: ${event.reason || "Unknown error"}:::`,
+              isComplete: true,
+            },
+          ];
+        });
+        return; // Stop reconnection attempts
+      }
+
+      const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current); // Exponential backoff
+      console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1})`);
+
+      reconnectTimeout = setTimeout(() => {
+        reconnectAttempts.current++;
+        console.log("Reconnecting WebSocket...");
+        setupWebSocket(); // Re-establish WebSocket connection
+      }, delay);
+    };
+
     const delay = 1000; // 1 second delay, adjust as needed
+    // Delay initial websocket connection for 1 second
     const timer = setTimeout(() => {
       setupWebSocket();
     }, delay);
 
+    // Clear timeout and close websocket on unmount
     return () => {
       if (keepAliveInterval) {
         clearInterval(keepAliveInterval);
       }
+      clearTimeout(reconnectTimeout);
+      clearTimeout(timer);
       closeWebSocket();
     };
   }, [chatId, location.search]);
