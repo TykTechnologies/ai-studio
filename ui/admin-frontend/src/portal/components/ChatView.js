@@ -320,15 +320,18 @@ const ChatView = () => {
     setError(null);
   }, [chatId]);
 
+  const reconnectAttempts = useRef(0);
+
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
     const currentConfig = getConfig();
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = process.env.NODE_ENV === "development"
-      ? `${wsProtocol}//localhost:8080/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`
-      : `${wsProtocol}//${window.location.host}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`;
+    const wsUrl =
+      process.env.NODE_ENV === "development"
+        ? `${wsProtocol}//localhost:8080/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`
+        : `${wsProtocol}//${window.location.host}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`;
 
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
@@ -400,33 +403,36 @@ const ChatView = () => {
     };
 
     let reconnectTimeout = null;
-    const reconnectAttempts = useRef(0);
     const maxReconnectAttempts = 5; // Maximum reconnection attempts
     const initialReconnectDelay = 500; // 0.5 second initial delay
 
     const reconnectWithDelay = () => {
       if (reconnectAttempts.current >= maxReconnectAttempts) {
-        console.error("Max reconnection attempts reached. Connection permanently closed.");
-        setMessages((prevMessages) => {
-          return [
-            ...prevMessages,
-            {
-              type: "system",
-              content: `:::system Error: Max reconnection attempts reached. Connection permanently closed. Please refresh the page to try again. Error details: ${event.reason || "Unknown error"}:::`,
-              isComplete: true,
-            },
-          ];
-        });
-        return; // Stop reconnection attempts
+        console.error(
+          "Max reconnection attempts reached. Connection permanently closed.",
+        );
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content:
+              ":::system Error: Max reconnection attempts reached. Connection permanently closed. Please refresh the page to try again.:::",
+            isComplete: true,
+          },
+        ]);
+        return;
       }
 
-      const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current); // Exponential backoff
-      console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1})`);
+      const delay =
+        initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
+      console.log(
+        `Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1})`,
+      );
 
       reconnectTimeout = setTimeout(() => {
         reconnectAttempts.current++;
         console.log("Reconnecting WebSocket...");
-        setupWebSocket(); // Re-establish WebSocket connection
+        setupWebSocket();
       }, delay);
     };
 
@@ -637,7 +643,7 @@ const ChatView = () => {
       localStorage.setItem("chatSessionId", data.payload);
       // Update URL without page reload using history.replaceState
       const newUrl = `/chat/${chatId}?continue_id=${data.payload}`;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState({}, "", newUrl);
     } else if (data.type === "stream_chunk" || data.type === "ai_message") {
       setIsLoading(false);
       setMessages((prevMessages) => {
