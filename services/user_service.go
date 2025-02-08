@@ -95,9 +95,9 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	return user, nil
 }
 
-func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool) (models.Users, int64, int, error) {
+func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
 	var users models.Users
-	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all, sort)
 	if err != nil {
 		return nil, 0, 0, err
 	}
