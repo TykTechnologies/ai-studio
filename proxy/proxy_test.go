@@ -451,7 +451,7 @@ func TestEdgeCasesRequests(t *testing.T) {
 }
 
 func TestAnalyzeResponse(t *testing.T) {
-	// Set up a test database
+	// Set up a test database with large request/response bodies
 	db := setupDB(t)
 
 	// Start recording analytics
@@ -478,15 +478,19 @@ func TestAnalyzeResponse(t *testing.T) {
 	app := &models.App{ID: 1, UserID: 1}
 	statusCode := 200
 
-	// Create test response and verify it's valid JSON
-	responseBody := []byte(`{
+	// Create a large response body that exceeds the 64KB limit
+	largeContent := make([]byte, 70000) // 70KB
+	for i := range largeContent {
+		largeContent[i] = 'a'
+	}
+	responseBody := []byte(fmt.Sprintf(`{
         "id": "mock-123",
         "object": "chat.completion",
         "model": "test-model",
         "choices": [
             {
                 "message": {
-                    "content": "Test response"
+                    "content": "%s"
                 }
             }
         ],
@@ -495,7 +499,13 @@ func TestAnalyzeResponse(t *testing.T) {
             "completion_tokens": 20,
             "total_tokens": 30
         }
-    }`)
+    }`, string(largeContent)))
+
+	// Create a large request body
+	largeRequest := make([]byte, 70000) // 70KB
+	for i := range largeRequest {
+		largeRequest[i] = 'b'
+	}
 
 	// Verify the JSON is valid
 	var testParse map[string]interface{}
@@ -513,7 +523,7 @@ func TestAnalyzeResponse(t *testing.T) {
 
 	// Call analyzeResponse with the valid JSON
 	// fmt.Println("Calling analyzeResponse, response body is: ", string(responseBody))
-	proxy.analyzeResponse(llm, app, statusCode, responseBody, []byte{}, r)
+	proxy.analyzeResponse(llm, app, statusCode, responseBody, largeRequest, r)
 
 	// Add retry logic with timeout
 	var recordedAnalytics analytics.LLMChatRecord
@@ -523,14 +533,25 @@ func TestAnalyzeResponse(t *testing.T) {
 
 	found := false
 	var lastErr error
+	var proxyLog analytics.ProxyLog
 	for !found {
 		select {
 		case <-timeout:
 			t.Fatalf("Timeout waiting for analytics record to be created. Last error: %v", lastErr)
 		case <-ticker.C:
+			// Check both analytics record and proxy log
 			result := db.First(&recordedAnalytics)
 			if result.Error == nil {
-				found = true
+				// Also check proxy log
+				logResult := db.First(&proxyLog)
+				if logResult.Error == nil {
+					found = true
+					// Verify truncation
+					assert.LessOrEqual(t, len(proxyLog.RequestBody), 65535, "Request body should be truncated to 64KB")
+					assert.LessOrEqual(t, len(proxyLog.ResponseBody), 65535, "Response body should be truncated to 64KB")
+				} else {
+					lastErr = logResult.Error
+				}
 			} else {
 				lastErr = result.Error
 			}
