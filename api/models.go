@@ -69,6 +69,7 @@ type UserResponse struct {
 		ShowChat      bool   `json:"show_chat"`
 		ShowPortal    bool   `json:"show_portal"`
 		EmailVerified bool   `json:"email_verified"`
+		APIKey        string `json:"api_key"`
 	} `json:"attributes"`
 }
 

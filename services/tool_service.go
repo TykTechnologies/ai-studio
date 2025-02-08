@@ -1,11 +1,13 @@
 package services
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/universalclient"
 )
 
 // CreateTool creates a new tool with validity checks
@@ -376,4 +378,69 @@ func (s *Service) HasToolDependency(toolID uint, dependencyID uint) (bool, error
 	}
 
 	return tool.HasDependency(s.DB, dependencyID)
+}
+
+// ListToolOperationsFromSpec retrieves all operations from the tool's OpenAPI spec
+func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	if tool.OASSpec == "" {
+		return nil, fmt.Errorf("tool has no OpenAPI specification")
+	}
+
+	// Decode the Base64 OAS spec
+	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+	}
+
+	client, err := universalclient.NewClient(decodedSpec, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OpenAPI spec: %w", err)
+	}
+
+	return client.ListOperations()
+}
+
+// CallToolOperation calls an operation from the tool's OpenAPI spec
+func (s *Service) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	if tool.OASSpec == "" {
+		return nil, fmt.Errorf("tool has no OpenAPI specification")
+	}
+
+	// Decode the Base64 OAS spec
+	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+	}
+
+	// Create options slice for the client
+	options := []universalclient.ClientOption{
+		universalclient.WithResponseFormat(universalclient.ResponseFormatJSON),
+	}
+
+	// Add auth option if tool has authentication configured
+	if tool.AuthSchemaName != "" && tool.AuthKey != "" {
+		options = append(options, universalclient.WithAuth(tool.AuthSchemaName, tool.AuthKey))
+	}
+
+	client, err := universalclient.NewClient(decodedSpec, "", options...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OpenAPI spec: %w", err)
+	}
+
+	result, err := client.CallOperation(operationID, params, payload, headers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call operation: %w", err)
+	}
+
+	return result, nil
 }

@@ -1,6 +1,8 @@
 package models
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"time"
 
 	"gorm.io/gorm"
@@ -20,19 +22,37 @@ type User struct {
 	IsAdmin           bool
 	ShowPortal        bool
 	ShowChat          bool
+	APIKey            string
 }
 
 type Users []User
 
 func NewUser() *User {
-	return &User{
+	u := &User{
 		ShowPortal: true,
 		ShowChat:   true,
 	}
+
+	u.GenerateAPIKey()
+	return u
+}
+
+func (u *User) GenerateAPIKey() error {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		return err
+	}
+	u.APIKey = base64.URLEncoding.EncodeToString(key)
+	return nil
 }
 
 func (u *User) Get(db *gorm.DB, id uint) error {
 	return db.First(u, id).Error
+}
+
+func (u *User) GetByAPIKey(db *gorm.DB, apiKey string) error {
+	return db.Where("api_key = ?", apiKey).First(u).Error
 }
 
 func (u *User) Create(db *gorm.DB) error {
