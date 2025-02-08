@@ -32,11 +32,7 @@ const ChatDashboard = () => {
   const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchData();
-  }, [currentPage]);
-
-  const fetchData = async () => {
+  const fetchData = React.useCallback(async () => {
     try {
       setLoading(true);
       const [historyResponse, chatRoomsResponse] = await Promise.all([
@@ -54,7 +50,11 @@ const ChatDashboard = () => {
       setError("Failed to fetch data. Please try again later.");
       setLoading(false);
     }
-  };
+  }, [currentPage]);
+
+  useEffect(() => {
+    fetchData();
+  }, [currentPage, fetchData]);
 
   const handleContinueChat = (chatId, sessionId) => {
     navigate(`/chat/${chatId}?continue_id=${sessionId}`);
