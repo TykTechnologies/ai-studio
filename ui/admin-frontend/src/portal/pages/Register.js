@@ -175,6 +175,7 @@ const Register = () => {
             onChange={(e) => setName(e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
           />
           <TextField
             fullWidth
@@ -184,6 +185,7 @@ const Register = () => {
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
           />
           <TextField
             fullWidth

@@ -223,6 +223,7 @@ const ModelPriceForm = () => {
                 error={!!errors.model_name}
                 helperText={errors.model_name}
                 required
+                autoComplete="off"
                 tooltip="The name of the language model (e.g., 'gpt-3.5-turbo', 'text-davinci-003')"
               />
             </Grid>
@@ -280,6 +281,7 @@ const ModelPriceForm = () => {
                 error={!!errors.currency}
                 helperText={errors.currency}
                 required
+                autoComplete="off"
                 tooltip="The currency for the cost per token (e.g., USD)"
               />
             </Grid>

@@ -400,6 +400,7 @@ const ChatForm = () => {
                 error={!!errors.name}
                 helperText={errors.name}
                 required
+                autoComplete="off"
               />
             </Grid>
             <Grid item xs={12}>
@@ -524,6 +525,7 @@ const ChatForm = () => {
                 multiline
                 rows={4}
                 placeholder="Enter the system prompt for this chat"
+                autoComplete="off"
               />
             </Grid>
 
