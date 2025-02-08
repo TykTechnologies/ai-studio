@@ -115,6 +115,7 @@ const OperationsInput = ({ value, onChange }) => {
         onKeyDown={handleInputKeyDown}
         placeholder="Type and press comma or enter to add"
         sx={{ flexGrow: 1, "& fieldset": { border: "none" } }}
+        autoComplete="off"
       />
     </Paper>
   );
@@ -582,6 +583,7 @@ const ToolForm = () => {
                 error={!!errors.name}
                 helperText={errors.name}
                 required
+                autoComplete="off"
               />
             </Grid>
             <Grid item xs={12}>
@@ -596,6 +598,7 @@ const ToolForm = () => {
                 multiline
                 rows={4}
                 required
+                autoComplete="off"
               />
             </Grid>
             <Grid item xs={12}>
@@ -642,6 +645,7 @@ const ToolForm = () => {
                 multiline
                 rows={12}
                 variant="outlined"
+                autoComplete="off"
               />
             </Grid>
           </Grid>
@@ -798,6 +802,7 @@ const ToolForm = () => {
                     name="auth_schema_name"
                     value={tool.auth_schema_name}
                     onChange={handleChange}
+                    autoComplete="off"
                   />
                 </Grid>
                 <Grid item xs={12}>
