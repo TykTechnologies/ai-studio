@@ -80,7 +80,29 @@ const Login = () => {
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"
             required
-            autoComplete="off"
+            autoComplete="username"
+            autoFocus
+            InputLabelProps={{
+              shrink: true,
+              sx: {
+                position: "relative",
+                transform: "none",
+                marginBottom: "8px",
+              }
+            }}
+            sx={{
+              "& .MuiInputBase-input:-webkit-autofill": {
+                "-webkit-box-shadow": "0 0 0 100px #fff inset",
+                "-webkit-text-fill-color": "inherit",
+              },
+              "& .MuiInputLabel-root": {
+                position: "relative",
+                transform: "none !important",
+              },
+              "& .MuiInputBase-root": {
+                marginTop: "0",
+              }
+            }}
           />
           <TextField
             fullWidth
@@ -90,6 +112,28 @@ const Login = () => {
             onChange={(e) => setPassword(e.target.value)}
             margin="normal"
             required
+            autoComplete="current-password"
+            InputLabelProps={{
+              shrink: true,
+              sx: {
+                position: "relative",
+                transform: "none",
+                marginBottom: "8px",
+              }
+            }}
+            sx={{
+              "& .MuiInputBase-input:-webkit-autofill": {
+                "-webkit-box-shadow": "0 0 0 100px #fff inset",
+                "-webkit-text-fill-color": "inherit",
+              },
+              "& .MuiInputLabel-root": {
+                position: "relative",
+                transform: "none !important",
+              },
+              "& .MuiInputBase-root": {
+                marginTop: "0",
+              }
+            }}
           />
           <Button
             type="submit"

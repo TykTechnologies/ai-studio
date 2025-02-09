@@ -492,7 +492,7 @@ func (a *API) setupRoutes() {
 
 	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
 	if chaOK && chatEnabled.Bool() {
-		a.SetupWebSocketRoute(authed)
+		a.SetupChatRoutes(authed)
 	}
 
 }

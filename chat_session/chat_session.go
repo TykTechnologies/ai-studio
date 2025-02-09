@@ -259,6 +259,20 @@ func (cs *ChatSession) CurrentTools() map[string]models.Tool {
 	return cs.tools
 }
 
+// GetCurrentDatasources returns a slice of current datasources
+func (cs *ChatSession) GetCurrentDatasources() []*models.Datasource {
+	datasources := make([]*models.Datasource, 0, len(cs.datasources))
+	for _, ds := range cs.datasources {
+		datasources = append(datasources, ds)
+	}
+	return datasources
+}
+
+// NotifyStatus sends a status message through the chat session
+func (cs *ChatSession) NotifyStatus(status string) {
+	cs.sendStatus(status)
+}
+
 func (cs *ChatSession) AddPreProcessor(fn func(*models.UserMessage) error) {
 	cs.preProcessors = append(cs.preProcessors, fn)
 }
@@ -576,7 +590,7 @@ func isToolCaller(name string) bool {
 }
 
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
-	pl := fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT/]\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	pl := fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT]\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
 	return llms.HumanChatMessage{
 		Content: pl,
 	}
