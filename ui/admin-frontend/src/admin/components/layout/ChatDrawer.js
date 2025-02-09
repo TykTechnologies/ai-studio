@@ -82,6 +82,7 @@ const ChatDrawer = () => {
 
   return (
     <BaseDrawer
+      id="chat"
       menuItems={getMenuItems()}
       showToolbar={false}
       customStyles={{

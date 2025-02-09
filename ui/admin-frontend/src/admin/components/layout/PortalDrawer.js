@@ -115,6 +115,7 @@ const PortalDrawer = () => {
 
   return (
     <BaseDrawer
+      id="portal"
       menuItems={getMenuItems()}
       showToolbar={false}
       customStyles={{

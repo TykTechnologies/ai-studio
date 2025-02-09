@@ -178,6 +178,7 @@ const Drawer = () => {
 
   return (
     <BaseDrawer
+      id="admin"
       menuItems={getMenuItems()}
       isCollapsible={true}
     />
