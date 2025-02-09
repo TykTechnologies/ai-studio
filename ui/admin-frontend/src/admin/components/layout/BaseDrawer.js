@@ -9,8 +9,9 @@ import {
   Toolbar,
   IconButton,
   Divider,
-  useTheme,
 } from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
+import adminTheme from "../../theme";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandLess from "@mui/icons-material/ExpandLess";
@@ -35,35 +36,36 @@ const BaseDrawer = ({
 
   const handleExpandClick = (itemId, parentId = null) => {
     setExpandedItems((prevState) => {
-      // If this is a nested item, we need to ensure parent stays open
-      if (parentId) {
-        return {
-          ...prevState,
-          [parentId]: true, // Keep parent expanded
-          [itemId]: !prevState[itemId], // Toggle current item
-        };
+      const newState = { ...prevState };
+      
+      // Toggle only the clicked item
+      newState[itemId] = !prevState[itemId];
+      
+      // If this is a nested item and we're expanding it, ensure parent stays open
+      if (parentId && !prevState[itemId]) {
+        newState[parentId] = true;
       }
-      return {
-        ...prevState,
-        [itemId]: !prevState[itemId],
-      };
+      
+      return newState;
     });
   };
 
   const renderMenuItem = (item, depth = 0, parentId = null) => {
-    const hasSubItems = item.subItems && item.subItems.length > 0;
-    const isExpanded = expandedItems[item.id];
+    // Ensure each item has a unique ID
+    const itemId = item.id || item.text;
+    const hasSubItems = item.subItems;
+    const isExpanded = expandedItems[itemId];
     const commonStyles = {
       pl: open ? depth * 4 + 2 : 2,
     };
 
     if (hasSubItems) {
       return (
-        <React.Fragment key={item.id}>
+        <React.Fragment key={itemId}>
           <ListItem
             button
-            onClick={() => handleExpandClick(item.id, parentId)}
-            sx={commonStyles}
+            onClick={() => handleExpandClick(itemId, parentId)}
+            sx={{ ...commonStyles, cursor: 'pointer' }}
           >
             {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
             {open && (
@@ -79,7 +81,7 @@ const BaseDrawer = ({
           </ListItem>
           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
-              {item.subItems.map((subItem) => renderMenuItem(subItem, depth + 1, item.id))}
+              {hasSubItems && item.subItems.map((subItem) => renderMenuItem(subItem, depth + 1, item.id))}
             </List>
           </Collapse>
         </React.Fragment>
@@ -111,7 +113,8 @@ const BaseDrawer = ({
   const currentWidth = open ? drawerWidth : minimizedWidth;
 
   return (
-    <Drawer
+    <ThemeProvider theme={adminTheme}>
+      <Drawer
       variant="permanent"
       sx={{
         width: currentWidth,
@@ -120,8 +123,7 @@ const BaseDrawer = ({
           width: currentWidth,
           boxSizing: "border-box",
           overflow: "visible",
-          transition: "width 0.2s",
-          ...customStyles,
+          transition: "width 0.2s"
         },
       }}
     >
@@ -140,12 +142,13 @@ const BaseDrawer = ({
       >
         {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
       </IconButton>
-      <List>
+      <List sx={{ mt: customStyles.marginTop ? customStyles.marginTop : 0 }}>
         {menuItems.map((item) => renderMenuItem(item))}
       </List>
       <Divider />
-    </Drawer>
+      </Drawer>
+    </ThemeProvider>
   );
 };
 
-export default BaseDrawer; 
+export default BaseDrawer;
