@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,6 +14,8 @@ type ProviderAPI struct {
 }
 
 func NewProviderAPI(api *API) *ProviderAPI {
+	// Initialize secrets package with database reference
+	secrets.SetDBRef(api.service.DB)
 	return &ProviderAPI{
 		api: api,
 	}
@@ -74,7 +77,10 @@ func (a *ProviderAPI) configureProvider(c *gin.Context) {
 	var newProvider providers.OpenAPIProvider
 	switch id {
 	case "tyk":
-		newProvider = tyk.NewTykDashboardProvider(req.Config)
+		// Resolve any secret references in the token
+		config := req.Config
+		config.Token = secrets.GetValue(config.Token)
+		newProvider = tyk.NewTykDashboardProvider(config)
 	default:
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -143,8 +149,31 @@ func (a *ProviderAPI) getProviderSpecs(c *gin.Context) {
 		return
 	}
 
+	// For Tyk provider, check if it's configured
+	if id == "tyk" {
+		tykProvider, ok := provider.(*tyk.TykDashboardProvider)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Invalid provider type"}},
+			})
+			return
+		}
+		if tykProvider.Config.URL == "" || tykProvider.Config.Token == "" {
+			c.JSON(http.StatusOK, gin.H{"data": []providers.APISpec{}})
+			return
+		}
+	}
+
 	specs, err := provider.GetAPISpecs()
 	if err != nil {
+		// Return empty array instead of error for unconfigured provider
+		if err.Error() == "error making request: Get \"/api/apis\": unsupported protocol scheme \"\"" {
+			c.JSON(http.StatusOK, gin.H{"data": []providers.APISpec{}})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

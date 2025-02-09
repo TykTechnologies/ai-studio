@@ -23,13 +23,23 @@ ZwIDAQAB
 -----END PUBLIC KEY-----
 `
 
-var features = map[string]interface{}{}
+var (
+	features     = map[string]interface{}{}
+	featuresInit = make(chan struct{})
+	initialized  bool
+)
 
 func FeatureSet() map[string]interface{} {
+	if !initialized {
+		<-featuresInit // Wait for initialization
+	}
 	return features
 }
 
 func Entitlement(name string) (*Feature, bool) {
+	if !initialized {
+		<-featuresInit // Wait for initialization
+	}
 	f, ok := features[name]
 	if !ok {
 		return nil, false
@@ -45,13 +55,20 @@ func Entitlement(name string) (*Feature, bool) {
 }
 
 func LicenseService() {
+	// Initialize features on first run
+	if err := IsLicensed(); err != nil {
+		log.Fatalf("License is not valid: %v", err)
+	}
+	initialized = true
+	close(featuresInit)
+
+	// Start periodic check
 	for {
+		time.Sleep(10 * time.Minute)
 		if err := IsLicensed(); err != nil {
 			log.Fatalf("License is not valid: %v", err)
 		}
-		time.Sleep(10 * time.Minute)
 	}
-
 }
 
 func IsLicensed() error {

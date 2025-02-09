@@ -448,13 +448,14 @@ type ToolInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name           string `json:"name"`
-			Description    string `json:"description"`
-			ToolType       string `json:"tool_type"`
-			OASSpec        string `json:"oas_spec"`
-			PrivacyScore   int    `json:"privacy_score"`
-			AuthKey        string `json:"auth_key"`
-			AuthSchemaName string `json:"auth_schema_name"`
+			Name           string   `json:"name"`
+			Description    string   `json:"description"`
+			ToolType       string   `json:"tool_type"`
+			OASSpec        string   `json:"oas_spec"`
+			PrivacyScore   int      `json:"privacy_score"`
+			AuthKey        string   `json:"auth_key"`
+			AuthSchemaName string   `json:"auth_schema_name"`
+			Operations     []string `json:"operations"`
 		} `json:"attributes"`
 	} `json:"data"`
 }

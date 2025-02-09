@@ -141,22 +141,13 @@ const ToolList = () => {
 
   const handleImportTool = async (toolData) => {
     try {
-      setLoading(true);
-      await apiClient.post("/tools", {
-        data: {
-          type: "tools",
-          attributes: {
-            ...toolData,
-            oas_spec: btoa(toolData.oas_spec), // Base64 encode the spec
-          },
-        },
-      });
       setSnackbar({
         open: true,
         message: "Tool imported successfully",
         severity: "success",
       });
-      fetchTools();
+      // Navigate to the tool details page
+      navigate(`/admin/tools/${toolData.id}`);
     } catch (error) {
       console.error("Error importing tool", error);
       setSnackbar({
