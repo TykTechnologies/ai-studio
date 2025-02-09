@@ -80,6 +80,7 @@ const Login = () => {
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
           />
           <TextField
             fullWidth

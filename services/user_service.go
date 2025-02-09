@@ -36,6 +36,27 @@ func (s *Service) GetUserByID(id uint) (*models.User, error) {
 	return user, nil
 }
 
+func (a *Service) GetUserByAPIKey(apiKey string) (*models.User, error) {
+	user := models.NewUser()
+	if err := user.GetByAPIKey(a.DB, apiKey); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (a *Service) GenerateAPIKeyForUser(id uint) error {
+	user, err := a.GetUserByID(id)
+	if err != nil {
+		return err
+	}
+
+	if err := user.GenerateAPIKey(); err != nil {
+		return err
+	}
+
+	return user.Update(a.DB)
+}
+
 func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	user := models.NewUser()
 	if err := user.GetByEmail(s.DB, email); err != nil {

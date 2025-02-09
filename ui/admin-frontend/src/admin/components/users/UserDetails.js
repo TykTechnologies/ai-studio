@@ -29,12 +29,17 @@ import {
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
 import { Divider } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import { IconButton, Tooltip, Snackbar } from "@mui/material";
 
 const UserDetails = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userGroups, setUserGroups] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
+  const [showSnackbar, setShowSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -46,6 +51,34 @@ const UserDetails = () => {
     handlePageSizeChange,
     updatePaginationData,
   } = usePagination();
+
+  const handleCopyApiKey = async () => {
+    try {
+      await navigator.clipboard.writeText(user.attributes.api_key);
+      setSnackbarMessage("API Key copied to clipboard");
+      setShowSnackbar(true);
+    } catch (err) {
+      setSnackbarMessage("Failed to copy API Key");
+      setShowSnackbar(true);
+    }
+  };
+
+  const handleRollApiKey = async () => {
+    try {
+      const response = await apiClient.post(`/users/${id}/roll-api-key`);
+      setUser(response.data.data);
+      setSnackbarMessage("API Key successfully regenerated");
+      setShowSnackbar(true);
+    } catch (error) {
+      console.error("Error rolling API key", error);
+      setSnackbarMessage("Failed to regenerate API Key");
+      setShowSnackbar(true);
+    }
+  };
+
+  const maskedApiKey = user?.attributes?.api_key
+    ? `${user.attributes.api_key.substring(0, 4)}${"*".repeat(20)}${user.attributes.api_key.slice(-4)}`
+    : "********";
 
   const fetchUserDetails = useCallback(async () => {
     try {
@@ -121,6 +154,29 @@ const UserDetails = () => {
           </Grid>
           <Grid item xs={9}>
             <FieldValue>{user.attributes.email}</FieldValue>
+          </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>API Key:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" alignItems="center">
+              <FieldValue>{maskedApiKey}</FieldValue>
+              <Tooltip title="Copy API Key">
+                <IconButton onClick={handleCopyApiKey} size="small">
+                  <ContentCopyIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Regenerate API Key">
+                <IconButton
+                  onClick={handleRollApiKey}
+                  size="small"
+                  color="primary"
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Grid>
 
           <Grid item xs={3}>

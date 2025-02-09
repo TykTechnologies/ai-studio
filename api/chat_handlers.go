@@ -34,6 +34,7 @@ func (a *API) createChat(c *gin.Context) {
 
 	chat, err := a.service.CreateChat(
 		input.Data.Attributes.Name,
+		input.Data.Attributes.Description,
 		input.Data.Attributes.LLMSettingsID,
 		input.Data.Attributes.LLMID,
 		input.Data.Attributes.GroupIDs,
@@ -148,6 +149,7 @@ func (a *API) updateChat(c *gin.Context) {
 	chat, err := a.service.UpdateChat(
 		uint(id),
 		input.Data.Attributes.Name,
+		input.Data.Attributes.Description,
 		input.Data.Attributes.LLMSettingsID,
 		input.Data.Attributes.LLMID,
 		input.Data.Attributes.GroupIDs,
@@ -505,6 +507,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 		ID:   strconv.FormatUint(uint64(chat.ID), 10),
 		Attributes: struct {
 			Name                string              `json:"name"`
+			Description         string              `json:"description"`
 			LLMSettingsID       uint                `json:"llm_settings_id"`
 			LLMID               uint                `json:"llm_id"`
 			Groups              []GroupResponse     `json:"groups"`
@@ -518,6 +521,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			DefaultTools        []ToolResponse      `json:"default_tools"`
 		}{
 			Name:                chat.Name,
+			Description:         chat.Description,
 			LLMSettingsID:       chat.LLMSettingsID,
 			LLMID:               chat.LLMID,
 			Groups:              serializeGroups(chat.Groups),
