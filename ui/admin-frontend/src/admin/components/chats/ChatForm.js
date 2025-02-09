@@ -42,6 +42,7 @@ import {
 const ChatForm = () => {
   const [chat, setChat] = useState({
     name: "",
+    description: "",
     llm_settings_id: "",
     llm_id: "",
     groups: [],
@@ -196,6 +197,7 @@ const ChatForm = () => {
       const chatData = response.data.data.attributes;
       setChat({
         name: chatData.name,
+        description: chatData.description || "",
         llm_settings_id: chatData.llm_settings_id,
         llm_id: chatData.llm_id,
         groups: chatData.groups.map((group) => group.id.toString()),
@@ -398,6 +400,19 @@ const ChatForm = () => {
                 error={!!errors.name}
                 helperText={errors.name}
                 required
+                autoComplete="off"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                name="description"
+                value={chat.description}
+                onChange={handleChange}
+                multiline
+                rows={2}
+                placeholder="Enter a description for this chat room"
               />
             </Grid>
             <Grid item xs={12}>
@@ -510,6 +525,7 @@ const ChatForm = () => {
                 multiline
                 rows={4}
                 placeholder="Enter the system prompt for this chat"
+                autoComplete="off"
               />
             </Grid>
 

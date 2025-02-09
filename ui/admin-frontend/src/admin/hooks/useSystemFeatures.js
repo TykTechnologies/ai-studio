@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
-import apiClient from "../utils/apiClient";
-import axios from "axios";
-import { getConfig } from "../../config";
+import pubClient from "../utils/pubClient";
 
 const useSystemFeatures = () => {
   const [features, setFeatures] = useState({
@@ -15,13 +13,7 @@ const useSystemFeatures = () => {
   useEffect(() => {
     const fetchFeatures = async () => {
       try {
-        const config = getConfig();
-        const response = await axios.get(
-          `${config.API_BASE_URL}/common/system`,
-          {
-            withCredentials: true,
-          },
-        );
+        const response = await pubClient.get("/common/system");
         setFeatures(response.data.features);
       } catch (err) {
         console.error("Error fetching system features:", err);

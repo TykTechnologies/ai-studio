@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "operation-call",
+    "attributes": {
+      "operation_id": "searchQuery",
+      "parameters": {
+        "engine": ["google"],
+        "num": ["10"],
+        "q": ["Tyk Technologies achievements awards recognition"]
+      },
+      "headers": {
+        "Accept": ["application/json"]
+      }
+    }
+  }
+}

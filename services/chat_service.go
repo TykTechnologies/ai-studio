@@ -8,11 +8,12 @@ import (
 )
 
 // CreateChat creates a new chat
-func (s *Service) CreateChat(name string, llmSettingsID, llmID uint, groupIDs []uint,
+func (s *Service) CreateChat(name string, description string, llmSettingsID, llmID uint, groupIDs []uint,
 	filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint, defaultTools []uint) (*models.Chat, error) {
 
 	chat := &models.Chat{
 		Name:                name,
+		Description:         description,
 		LLMSettingsID:       llmSettingsID,
 		LLMID:               llmID,
 		RagResultsPerSource: ragN,
@@ -85,7 +86,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
-func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, groupIDs []uint,
+func (s *Service) UpdateChat(id uint, name string, description string, llmSettingsID, llmID uint, groupIDs []uint,
 	filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint, defaultToolIDs []uint) (*models.Chat, error) {
 	// Start a transaction
 	tx := s.DB.Begin()
@@ -108,6 +109,7 @@ func (s *Service) UpdateChat(id uint, name string, llmSettingsID, llmID uint, gr
 	// Update chat fields
 	updates := map[string]interface{}{
 		"name":                   name,
+		"description":            description,
 		"llm_settings_id":        llmSettingsID,
 		"llm_id":                 llmID,
 		"rag_results_per_source": ragN,
