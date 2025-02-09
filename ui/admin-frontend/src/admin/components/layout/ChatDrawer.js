@@ -83,13 +83,10 @@ const ChatDrawer = () => {
   return (
     <BaseDrawer
       menuItems={getMenuItems()}
-      drawerWidth={240}
-      minimizedWidth={60}
       showToolbar={false}
       customStyles={{
         marginTop: "64px"
       }}
-      defaultOpen={true}
       defaultExpandedItems={{
         "chat-rooms": true
       }}

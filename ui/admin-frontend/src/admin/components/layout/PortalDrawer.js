@@ -116,13 +116,10 @@ const PortalDrawer = () => {
   return (
     <BaseDrawer
       menuItems={getMenuItems()}
-      drawerWidth={240}
-      minimizedWidth={60}
       showToolbar={false}
       customStyles={{
         marginTop: "64px"
       }}
-      defaultOpen={true}
       defaultExpandedItems={{
         "resources": true,
         "llms": false,

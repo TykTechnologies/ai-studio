@@ -179,10 +179,7 @@ const Drawer = () => {
   return (
     <BaseDrawer
       menuItems={getMenuItems()}
-      drawerWidth={240}
-      minimizedWidth={60}
       isCollapsible={true}
-      showToolbar={true}
     />
   );
 };
