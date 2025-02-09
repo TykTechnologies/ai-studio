@@ -1,6 +1,8 @@
 package models
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"time"
 
 	"gorm.io/gorm"
@@ -20,19 +22,37 @@ type User struct {
 	IsAdmin           bool
 	ShowPortal        bool
 	ShowChat          bool
+	APIKey            string
 }
 
 type Users []User
 
 func NewUser() *User {
-	return &User{
+	u := &User{
 		ShowPortal: true,
 		ShowChat:   true,
 	}
+
+	u.GenerateAPIKey()
+	return u
+}
+
+func (u *User) GenerateAPIKey() error {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		return err
+	}
+	u.APIKey = base64.URLEncoding.EncodeToString(key)
+	return nil
 }
 
 func (u *User) Get(db *gorm.DB, id uint) error {
 	return db.First(u, id).Error
+}
+
+func (u *User) GetByAPIKey(db *gorm.DB, apiKey string) error {
+	return db.Where("api_key = ?", apiKey).First(u).Error
 }
 
 func (u *User) Create(db *gorm.DB) error {
@@ -67,9 +87,20 @@ func (u *User) SetPassword(password string) error {
 	return nil
 }
 
-func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64
-	query := db.Model(&User{}).Order("name ASC") // Added Order clause here
+	query := db.Model(&User{})
+
+	// Handle sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC") // Default sort by ID ascending
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err

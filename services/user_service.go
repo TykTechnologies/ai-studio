@@ -36,6 +36,27 @@ func (s *Service) GetUserByID(id uint) (*models.User, error) {
 	return user, nil
 }
 
+func (a *Service) GetUserByAPIKey(apiKey string) (*models.User, error) {
+	user := models.NewUser()
+	if err := user.GetByAPIKey(a.DB, apiKey); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (a *Service) GenerateAPIKeyForUser(id uint) error {
+	user, err := a.GetUserByID(id)
+	if err != nil {
+		return err
+	}
+
+	if err := user.GenerateAPIKey(); err != nil {
+		return err
+	}
+
+	return user.Update(a.DB)
+}
+
 func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	user := models.NewUser()
 	if err := user.GetByEmail(s.DB, email); err != nil {
@@ -95,9 +116,9 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	return user, nil
 }
 
-func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool) (models.Users, int64, int, error) {
+func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
 	var users models.Users
-	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all, sort)
 	if err != nil {
 		return nil, 0, 0, err
 	}

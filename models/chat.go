@@ -10,6 +10,7 @@ type Chat struct {
 	gorm.Model
 	ID                  uint         `gorm:"primaryKey" json:"id"`
 	Name                string       `json:"name"`
+	Description         string       `json:"description"`
 	Groups              []Group      `gorm:"many2many:chat_groups;"`
 	LLMSettingsID       uint         `json:"llm_settings_id"`
 	LLMSettings         *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
@@ -100,6 +101,7 @@ func (c *Chat) Update(db *gorm.DB) error {
 		// Update the chat's fields
 		if err := tx.Model(c).Updates(Chat{
 			Name:          c.Name,
+			Description:   c.Description,
 			LLMSettingsID: c.LLMSettingsID,
 			LLMID:         c.LLMID,
 		}).Error; err != nil {

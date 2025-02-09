@@ -320,14 +320,18 @@ const ChatView = () => {
     setError(null);
   }, [chatId]);
 
+  const reconnectAttempts = useRef(0);
+
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const continueId = searchParams.get("continue_id");
     const sessionId = searchParams.get("continue_id");
     const currentConfig = getConfig();
-    const wsUrl = `${currentConfig.API_BASE_URL}/common/ws/chat/${chatId}${
-      sessionId ? `?session_id=${sessionId}` : ""
-    }`;
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl =
+      process.env.NODE_ENV === "development"
+        ? `${wsProtocol}//localhost:8080/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`
+        : `${wsProtocol}//${window.location.host}/common/ws/chat/${chatId}${sessionId ? `?session_id=${sessionId}` : ""}`;
 
     setIsNewChat(!continueId); // Set isNewChat based on whether there's a continue_id
     setHasUpdatedChatName(false);
@@ -366,6 +370,7 @@ const ChatView = () => {
       };
 
       ws.current.onerror = (error) => {
+        console.error("WebSocket error:", error);
         setMessages((prevMessages) => [
           ...prevMessages,
           {
@@ -391,19 +396,59 @@ const ChatView = () => {
               isComplete: true,
             },
           ]);
+          // Implement reconnection logic here
+          reconnectWithDelay();
         }
       };
     };
 
+    let reconnectTimeout = null;
+    const maxReconnectAttempts = 5; // Maximum reconnection attempts
+    const initialReconnectDelay = 500; // 0.5 second initial delay
+
+    const reconnectWithDelay = () => {
+      if (reconnectAttempts.current >= maxReconnectAttempts) {
+        console.error(
+          "Max reconnection attempts reached. Connection permanently closed.",
+        );
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "system",
+            content:
+              ":::system Error: Max reconnection attempts reached. Connection permanently closed. Please refresh the page to try again.:::",
+            isComplete: true,
+          },
+        ]);
+        return;
+      }
+
+      const delay =
+        initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
+      console.log(
+        `Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1})`,
+      );
+
+      reconnectTimeout = setTimeout(() => {
+        reconnectAttempts.current++;
+        console.log("Reconnecting WebSocket...");
+        setupWebSocket();
+      }, delay);
+    };
+
     const delay = 1000; // 1 second delay, adjust as needed
+    // Delay initial websocket connection for 1 second
     const timer = setTimeout(() => {
       setupWebSocket();
     }, delay);
 
+    // Clear timeout and close websocket on unmount
     return () => {
       if (keepAliveInterval) {
         clearInterval(keepAliveInterval);
       }
+      clearTimeout(reconnectTimeout);
+      clearTimeout(timer);
       closeWebSocket();
     };
   }, [chatId, location.search]);
@@ -596,6 +641,9 @@ const ChatView = () => {
     if (data.type === "session_id") {
       setSessionId(data.payload);
       localStorage.setItem("chatSessionId", data.payload);
+      // Update URL without page reload using history.replaceState
+      const newUrl = `/chat/${chatId}?continue_id=${data.payload}`;
+      window.history.replaceState({}, "", newUrl);
     } else if (data.type === "stream_chunk" || data.type === "ai_message") {
       setIsLoading(false);
       setMessages((prevMessages) => {

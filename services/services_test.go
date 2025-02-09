@@ -47,7 +47,7 @@ func TestUserService(t *testing.T) {
 	assert.NotNil(t, authenticatedUser)
 
 	// Test GetAllUsers
-	users, _, _, err := service.GetAllUsers(10, 1, true)
+	users, _, _, err := service.GetAllUsers(10, 1, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, users, 1)
 
