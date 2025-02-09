@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -23,6 +24,7 @@ import (
 func (a *API) createTool(c *gin.Context) {
 	var input ToolInput
 	if err := c.ShouldBindJSON(&input); err != nil {
+		fmt.Printf("Error binding JSON: %v\n", err)
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -31,6 +33,8 @@ func (a *API) createTool(c *gin.Context) {
 		})
 		return
 	}
+
+	fmt.Printf("Received tool input: %+v\n", input)
 
 	if input.Data.Attributes.Name == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -64,16 +68,24 @@ func (a *API) createTool(c *gin.Context) {
 		}
 	}
 
-	tool, err := a.service.CreateTool(
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.ToolType,
-		input.Data.Attributes.OASSpec,
-		input.Data.Attributes.PrivacyScore,
-		input.Data.Attributes.AuthSchemaName,
-		input.Data.Attributes.AuthKey,
-	)
-	if err != nil {
+	// Create the tool
+	tool := &models.Tool{
+		Name:           input.Data.Attributes.Name,
+		Description:    input.Data.Attributes.Description,
+		ToolType:       input.Data.Attributes.ToolType,
+		OASSpec:        input.Data.Attributes.OASSpec,
+		PrivacyScore:   input.Data.Attributes.PrivacyScore,
+		AuthSchemaName: input.Data.Attributes.AuthSchemaName,
+		AuthKey:        input.Data.Attributes.AuthKey,
+	}
+
+	// Add operations
+	for _, op := range input.Data.Attributes.Operations {
+		tool.AddOperation(op)
+	}
+
+	// Save to database
+	if err := tool.Create(a.config.DB); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -158,18 +170,36 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.UpdateTool(
-		uint(id),
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.ToolType,
-		input.Data.Attributes.OASSpec,
-		input.Data.Attributes.PrivacyScore,
-		input.Data.Attributes.AuthSchemaName,
-		input.Data.Attributes.AuthKey,
-	)
+	// Get existing tool
+	tool, err := a.service.GetToolByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	// Update fields
+	tool.Name = input.Data.Attributes.Name
+	tool.Description = input.Data.Attributes.Description
+	tool.ToolType = input.Data.Attributes.ToolType
+	tool.OASSpec = input.Data.Attributes.OASSpec
+	tool.PrivacyScore = input.Data.Attributes.PrivacyScore
+	tool.AuthSchemaName = input.Data.Attributes.AuthSchemaName
+	tool.AuthKey = input.Data.Attributes.AuthKey
+
+	// Update operations
+	tool.AvailableOperations = ""
+	for _, op := range input.Data.Attributes.Operations {
+		tool.AddOperation(op)
+	}
+
+	// Save changes
+	if err := tool.Update(a.config.DB); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`

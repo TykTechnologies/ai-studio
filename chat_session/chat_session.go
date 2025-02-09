@@ -272,8 +272,25 @@ func (cs *ChatSession) Stop() {
 
 func (cs *ChatSession) Start() error {
 	if err := cs.initSession(); err != nil {
+		slog.Error("Failed to initialize chat session", "error", err)
 		return fmt.Errorf("error initializing chat session: %v", err)
 	}
+
+	if cs.chatRef.LLMSettings == nil {
+		slog.Error("LLM settings is nil")
+		return fmt.Errorf("LLM settings not configured")
+	}
+
+	if cs.chatRef.LLM == nil {
+		slog.Error("LLM is nil")
+		return fmt.Errorf("LLM not configured")
+	}
+
+	slog.Info("Chat session configuration",
+		"llm_settings_id", cs.chatRef.LLMSettingsID,
+		"llm_id", cs.chatRef.LLMID,
+		"llm_settings", cs.chatRef.LLMSettings != nil,
+		"llm", cs.chatRef.LLM != nil)
 
 	err := cs.handleDefaults()
 	if err != nil {
@@ -451,12 +468,27 @@ func (cs *ChatSession) initSession() error {
 	}
 
 	if cs.chatRef == nil {
+		slog.Error("Chat reference is nil")
 		return fmt.Errorf("no chat reference")
 	}
 
+	slog.Info("Chat reference loaded",
+		"llm_settings_id", cs.chatRef.LLMSettingsID,
+		"llm_id", cs.chatRef.LLMID)
+
 	if cs.chatRef.LLMSettings == nil {
+		slog.Error("LLM settings is nil")
 		return fmt.Errorf("no LLM settings")
 	}
+
+	if cs.chatRef.LLM == nil {
+		slog.Error("LLM is nil")
+		return fmt.Errorf("no LLM configuration")
+	}
+
+	slog.Info("LLM configuration",
+		"vendor", cs.chatRef.LLM.Vendor,
+		"model", cs.chatRef.LLMSettings.ModelName)
 
 	cs.chatHistory = NewGormChatMessageHistory(cs.db, cs.id, cs.chatRef.ID, cs.userID, cs.getSystemPrompt())
 
