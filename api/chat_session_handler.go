@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -287,12 +288,6 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 		if errInner != nil {
 			return errInner
 		}
-		// After adding, send a summary status
-		dsNames := []string{}
-		for _, ds := range session.GetCurrentDatasources() {
-			dsNames = append(dsNames, ds.Name)
-		}
-		//session.NotifyStatus(fmt.Sprintf("Currently using %d datasources: %v", len(dsNames), dsNames))
 		return nil
 	})
 	if err != nil {
@@ -324,11 +319,6 @@ func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 	hub := getChatHub()
 	err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
 		session.RemoveDatasource(uint(datasourceID))
-		dsNames := []string{}
-		for _, ds := range session.GetCurrentDatasources() {
-			dsNames = append(dsNames, ds.Name)
-		}
-		// session.NotifyStatus(fmt.Sprintf("Currently using %d datasources: %v", len(dsNames), dsNames))
 		return nil
 	})
 	if err != nil {
@@ -396,11 +386,6 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		if e := session.AddTool(input.ToolID, *tool); e != nil {
 			return e
 		}
-		toolNames := []string{}
-		for _, t := range session.CurrentTools() {
-			toolNames = append(toolNames, t.Name)
-		}
-		// session.NotifyStatus(fmt.Sprintf("Currently using %d tools: %v", len(toolNames), toolNames))
 		return nil
 	})
 	if err != nil {
@@ -433,11 +418,6 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 	hub := getChatHub()
 	err := hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
 		session.RemoveTool(toolID)
-		toolNames := []string{}
-		for _, t := range session.CurrentTools() {
-			toolNames = append(toolNames, t.Name)
-		}
-		// session.NotifyStatus(fmt.Sprintf("Currently using %d tools: %v", len(toolNames), toolNames))
 		return nil
 	})
 	if err != nil {
@@ -519,6 +499,13 @@ func readFileContents(file multipart.File) ([]byte, error) {
 func (a *API) editMessageInChatSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	msgIDStr := c.Param("message_id")
+
+	// if it starts with temp_, reject
+	if strings.HasPrefix(msgIDStr, "temp_") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot edit a temporary (unsaved) message."})
+		return
+	}
+
 	msgID, err := strconv.ParseUint(msgIDStr, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{

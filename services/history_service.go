@@ -2,6 +2,8 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
@@ -129,10 +131,14 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 	var msg models.CMessage
 	err := s.DB.First(&msg, messageID).Error
 	if err != nil {
-		return err
+		slog.Error("Failed to find message", "messageID", messageID, "error", err)
+		return fmt.Errorf("failed to find message: %w", err)
 	}
 
+	slog.Debug("Found message", "message", msg)
+
 	if msg.Session != sessionID {
+		slog.Error("Session mismatch", "messageSession", msg.Session, "requestedSession", sessionID)
 		return gorm.ErrRecordNotFound
 	}
 
@@ -148,20 +154,28 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 	}
 	jsonBytes, err := json.Marshal(updatedMsg)
 	if err != nil {
-		return err
+		slog.Error("Failed to marshal user message", "error", err)
+		return fmt.Errorf("failed to marshal message: %w", err)
 	}
+
+	slog.Debug("Updating message content", "content", string(jsonBytes))
 
 	// update the content
 	msg.Content = jsonBytes
 	if err := s.DB.Save(&msg).Error; err != nil {
-		return err
+		slog.Error("Failed to save updated message", "error", err)
+		return fmt.Errorf("failed to save message: %w", err)
 	}
 
+	slog.Debug("Successfully updated message, removing subsequent messages")
+
 	// remove subsequent messages in the same session that are created AFTER this message
-	err = s.DB.Where("session = ? AND id > ?", sessionID, messageID).Delete(&models.CMessage{}).Error
-	if err != nil {
-		return err
+	result := s.DB.Where("session = ? AND id > ?", sessionID, messageID).Delete(&models.CMessage{})
+	if result.Error != nil {
+		slog.Error("Failed to delete subsequent messages", "error", result.Error)
+		return fmt.Errorf("failed to delete subsequent messages: %w", result.Error)
 	}
+	slog.Debug("Deleted subsequent messages", "count", result.RowsAffected)
 
 	return nil
 }

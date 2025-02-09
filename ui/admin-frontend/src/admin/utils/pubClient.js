@@ -4,7 +4,7 @@ import { getBaseUrl } from "./urlUtils";
 const isDev = process.env.NODE_ENV === "development";
 
 const pubClient = axios.create({
-  baseURL: isDev ? "" : getBaseUrl(), // In dev mode, use relative URLs to allow proxy to work
+  baseURL: isDev ? "http://localhost:8080" : getBaseUrl(), // Hardcode backend URL for dev
   withCredentials: true,
 });
 

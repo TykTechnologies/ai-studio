@@ -23,7 +23,7 @@ import ChatSidebar from './chat/ChatSidebar';
 /**
  * This ChatView ensures:
  * 1) Consecutive system/error messages merge into the last system message.
- * 2) "[CONTEXT]" blocks or ":::system" lines are handled in SystemMessage component with toggling.
+ * 2) "[CONTEXT]" blocks or ":::system" lines are handled in the single unified MessageContent logic with toggling.
  */
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -101,8 +101,9 @@ const ChatView = () => {
             content: lastMessage.content + content,
           };
         } else {
+          // Assign a local random ID that doesn't have "temp_" so it can be edited if needed
           newMessages.push({
-            id: `temp_${Math.random()}`,
+            id: Math.floor(Math.random() * 1_000_000_000),
             type: 'ai',
             content: content,
             isComplete: data.type === 'ai_message',
@@ -114,7 +115,8 @@ const ChatView = () => {
       setMessages((prevMessages) => [
         ...prevMessages,
         {
-          id: `temp_${Math.random()}`,
+          // remove "temp_" prefix approach
+          id: Math.floor(Math.random() * 1_000_000_000),
           type: 'user',
           content: data.payload,
           isComplete: true,
@@ -129,7 +131,11 @@ const ChatView = () => {
         return;
       }
 
-      if (data.type == "system") {
+      // The user specifically asked that 'system' lines or 'tool' lines should remain so we can see them as system messages
+      // We'll unify them in the front-end rendering
+      if (data.type === 'system') {
+        // for the example, let's do nothing special here if we want them merged with system
+        // or we can do the same approach as below
         return;
       }
 
@@ -145,7 +151,7 @@ const ChatView = () => {
       setMessages((prevMessages) => [
         ...prevMessages,
         {
-          id: `temp_${Math.random()}`,
+          id: Math.floor(Math.random() * 1_000_000_000),
           type: 'system',
           content: messageContent,
           isComplete: true,
@@ -261,6 +267,7 @@ const ChatView = () => {
           }
 
           return {
+            // keep the actual ID from DB so it can be edited
             id: msg.id,
             type: displayType,
             content: content,
@@ -396,7 +403,7 @@ const ChatView = () => {
         setMessages((prevMessages) => [
           ...prevMessages,
           {
-            id: `temp_${Math.random()}`,
+            id: Math.floor(Math.random() * 1_000_000_000),
             type: 'system',
             content: ':::system Error: Failed to load databases and tools:::',
             isComplete: true,
@@ -500,7 +507,8 @@ const ChatView = () => {
       setMessages((prevMessages) => [
         ...prevMessages,
         {
-          id: `temp_${Math.random()}`,
+          // assign a local ID that is not prefixed with "temp_"
+          id: Math.floor(Math.random() * 1_000_000_000),
           type: 'user',
           content: messageContent,
           isComplete: true,
