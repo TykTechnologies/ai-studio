@@ -38,10 +38,8 @@ const BaseDrawer = ({
     setExpandedItems((prevState) => {
       const newState = { ...prevState };
       
-      // Toggle only the clicked item
       newState[itemId] = !prevState[itemId];
-      
-      // If this is a nested item and we're expanding it, ensure parent stays open
+
       if (parentId && !prevState[itemId]) {
         newState[parentId] = true;
       }
@@ -51,7 +49,6 @@ const BaseDrawer = ({
   };
 
   const renderMenuItem = (item, depth = 0, parentId = null) => {
-    // Ensure each item has a unique ID
     const itemId = item.id || item.text;
     const hasSubItems = item.subItems;
     const isExpanded = expandedItems[itemId];
@@ -93,7 +90,7 @@ const BaseDrawer = ({
           component={StyledNavLink}
           to={item.path}
           sx={commonStyles}
-          end={item.path === "/admin/"}
+          {...(item.path === "/admin/" ? { end: true } : {})}
         >
           {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
           {open && (
@@ -142,7 +139,9 @@ const BaseDrawer = ({
       >
         {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
       </IconButton>
-      <List sx={{ mt: customStyles.marginTop ? customStyles.marginTop : 0 }}>
+      <List 
+        sx={{ mt: customStyles.marginTop ? customStyles.marginTop : 0 }}
+      >
         {menuItems.map((item) => renderMenuItem(item))}
       </List>
       <Divider />

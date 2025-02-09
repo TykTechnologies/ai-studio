@@ -11,30 +11,56 @@ import adminTheme from '../../theme';
 // Mock MUI components
 jest.mock('@mui/material', () => ({
   ...jest.requireActual('@mui/material'),
-  Drawer: ({ children, sx, ...props }) => (
-    <div role="presentation" style={{ width: sx?.width }}>
-      {children}
-    </div>
-  ),
+  Drawer: ({ children, sx, variant, anchor, open, ...props }) => {
+    // Filter out MUI-specific props and merge styles
+    const { PaperProps, ModalProps, SlideProps, ...filteredProps } = props;
+    const style = {
+      ...(sx?.width && { width: sx.width }),
+      ...(PaperProps?.style || {}),
+    };
+    return (
+      <div role="presentation" style={style} {...filteredProps}>
+        {children}
+      </div>
+    );
+  },
   Toolbar: () => <div role="toolbar" />,
-  List: ({ children, sx }) => {
+  List: ({ children, sx, component, disablePadding, ...props }) => {
     // Transform MUI's mt shorthand to marginTop using theme spacing
     const style = {
       ...sx,
       marginTop: sx?.mt ? testTheme.spacing(sx.mt) : undefined,
     };
-    return <ul style={style}>{children}</ul>;
+    // Filter out MUI-specific props
+    const { component: comp, disablePadding: dp, ...filteredProps } = props;
+    return <ul style={style} {...filteredProps}>{children}</ul>;
   },
   ListItem: ({ children, button, component: Component = 'li', ...props }) => {
     const Comp = Component || 'li';
-    return <Comp {...props}>{children}</Comp>;
+    // Filter out MUI-specific props
+    const { end, button: buttonProp, ...filteredProps } = props;
+    return <Comp {...filteredProps}>{children}</Comp>;
   },
-  ListItemIcon: ({ children }) => <span>{children}</span>,
-  ListItemText: ({ primary }) => <span>{primary}</span>,
-  Collapse: ({ children, in: isIn }) => (isIn ? <div>{children}</div> : null),
-  IconButton: ({ children, onClick }) => (
-    <button onClick={onClick}>{children}</button>
-  ),
+  ListItemIcon: ({ children, ...props }) => {
+    // Filter out MUI-specific props
+    const { sx, className, ...filteredProps } = props;
+    return <span {...filteredProps}>{children}</span>;
+  },
+  ListItemText: ({ primary, primaryTypographyProps, ...props }) => {
+    // Filter out MUI-specific props
+    const { sx, inset, className, ...filteredProps } = props;
+    return <span {...filteredProps}>{primary}</span>;
+  },
+  Collapse: ({ children, in: isIn, timeout, unmountOnExit, ...props }) => {
+    // Filter out MUI-specific props
+    const { orientation, collapsedSize, sx, className, ...filteredProps } = props;
+    return isIn ? <div {...filteredProps}>{children}</div> : null;
+  },
+  IconButton: ({ children, onClick, sx, ...props }) => {
+    // Filter out MUI-specific props
+    const { edge, size, color, ...filteredProps } = props;
+    return <button onClick={onClick} {...filteredProps}>{children}</button>;
+  },
   Divider: () => <hr />,
 }));
 
@@ -49,10 +75,8 @@ jest.mock('@mui/icons-material/Person', () => () => 'PersonIcon');
 
 // Mock StyledNavLink component
 jest.mock('../../styles/sharedStyles', () => ({
-  StyledNavLink: ({ children, to, ...props }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
+  StyledNavLink: ({ children, to, component, ...props }) => (
+    <a href={to} {...props}>{children}</a>
   ),
 }));
 
