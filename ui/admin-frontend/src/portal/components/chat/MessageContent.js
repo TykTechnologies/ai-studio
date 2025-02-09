@@ -1,99 +1,119 @@
-import React from 'react';
-import SystemMessage from './SystemMessage';
-import ContextMessage from './ContextMessage';
+import React, { useState } from 'react';
+import { Box, TextField, IconButton } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
+import CancelIcon from '@mui/icons-material/Cancel';
 import MarkdownMessage from './MarkdownMessage';
+import pubClient from '../../../admin/utils/pubClient';
+import SystemMessage from './SystemMessage';
 
-const MessageContent = ({ content, messageIndex, expandedGroups, toggleGroup }) => {
-	if (!content) {
-		return null;
-	}
+const MessageContent = ({
+	content,
+	messageIndex,
+	expandedGroups,
+	toggleGroup,
+	messageId,
+	messageType,
+	sessionId,
+	onEditSuccess,
+}) => {
+	const [isEditing, setIsEditing] = useState(false);
+	const [editText, setEditText] = useState(content || '');
 
-	const segments = content.split(/((?::::|\%\%\%)system[\s\S]*?(?::::|\%\%\%)|\[CONTEXT\][\s\S]*?\[\/CONTEXT\])/g);
-
-	const groupSystemMessages = (segments) => {
-		let groupedSegments = [];
-		let currentSystemGroup = [];
-
-		segments.forEach((segment) => {
-			if (segment.match(/(:::|\%\%\%)system/)) {
-				currentSystemGroup.push(
-					segment
-						.replace(/(:::|\%\%\%)system\s*([\s\S]*?)(:::|\%\%\%)/, '$2')
-						.trim()
-				);
-			} else if (segment.match(/\[CONTEXT\][\s\S]*?\[\/CONTEXT\]/)) {
-				const contextContent = segment
-					.replace(/\[CONTEXT\]([\s\S]*?)\[\/CONTEXT\]/, '$1')
-					.trim();
-				groupedSegments.push({
-					type: 'context-group',
-					messages: [contextContent],
-				});
-			} else if (segment.trim()) {
-				if (currentSystemGroup.length > 0) {
-					groupedSegments.push({
-						type: 'system-group',
-						messages: currentSystemGroup,
-					});
-					currentSystemGroup = [];
-				}
-				if (segment.trim()) {
-					groupedSegments.push({
-						type: 'content',
-						content: segment,
-					});
-				}
-			}
-		});
-
-		if (currentSystemGroup.length > 0) {
-			groupedSegments.push({
-				type: 'system-group',
-				messages: currentSystemGroup,
-			});
-		}
-
-		return groupedSegments;
+	// Only user messages can be edited:
+	const handleEditClick = () => {
+		setIsEditing(true);
 	};
 
-	const groupedSegments = groupSystemMessages(segments);
+	const handleCancelClick = () => {
+		setIsEditing(false);
+		setEditText(content);
+	};
+
+	const handleSaveClick = async () => {
+		if (!sessionId || !messageId) {
+			setIsEditing(false);
+			return;
+		}
+		try {
+			await pubClient.put(`/common/chat-sessions/${sessionId}/messages/${messageId}`, {
+				new_content: editText,
+			});
+			setIsEditing(false);
+			if (onEditSuccess) {
+				onEditSuccess();
+			}
+		} catch (err) {
+			console.error('Error editing message:', err);
+			setIsEditing(false);
+		}
+	};
+
+	// If user message is in editing mode:
+	if (messageType === 'user' && isEditing) {
+		return (
+			<Box>
+				<TextField
+					variant="outlined"
+					fullWidth
+					multiline
+					value={editText}
+					onChange={(e) => setEditText(e.target.value)}
+					sx={{ mb: 1 }}
+				/>
+				<Box sx={{ display: 'flex', gap: 1 }}>
+					<IconButton color="success" onClick={handleSaveClick}>
+						<SaveIcon />
+					</IconButton>
+					<IconButton color="inherit" onClick={handleCancelClick}>
+						<CancelIcon />
+					</IconButton>
+				</Box>
+			</Box>
+		);
+	}
+
+	// For system messages and messages containing system/context blocks
+	if (messageType === 'system' || content.includes(':::system') || content.includes('[CONTEXT]')) {
+		const groupId = messageType === 'system' ? `system-${messageIndex}` : `system-message-${messageIndex}`;
+		return (
+			<SystemMessage
+				content={content}
+				groupId={groupId}
+				isExpanded={expandedGroups[groupId]}
+				toggleGroup={() => toggleGroup(groupId)}
+			/>
+		);
+	}
 
 	return (
-		<>
-			{groupedSegments.map((segment, index) => {
-				const groupId = `${segment.type}-${messageIndex}-${index}`;
-				const isExpanded = expandedGroups[groupId];
-
-				if (segment.type === 'system-group') {
-					return (
-						<SystemMessage
-							key={groupId}
-							messages={segment.messages}
-							groupId={groupId}
-							isExpanded={isExpanded}
-							toggleGroup={toggleGroup}
-						/>
-					);
-				} else if (segment.type === 'context-group') {
-					return (
-						<ContextMessage
-							key={groupId}
-							content={segment.messages[0]}
-							groupId={groupId}
-							isExpanded={isExpanded}
-							toggleGroup={toggleGroup}
-						/>
-					);
-				} else {
-					return (
-						<MarkdownMessage
-							key={groupId}
-							content={segment.content}
-						/>
-					);
-				}
-			})}
-		</>
+		<Box
+			sx={{
+				position: 'relative',
+				'&:hover .edit-button': {
+					visibility: messageType === 'user' ? 'visible' : 'hidden',
+				},
+			}}
+		>
+			{messageType === 'user' && (
+				<IconButton
+					className="edit-button"
+					size="small"
+					onClick={handleEditClick}
+					sx={{
+						position: 'absolute',
+						top: 0,
+						right: 0,
+						visibility: 'hidden',
+						zIndex: 100,
+						opacity: 0.8,
+					}}
+				>
+					<EditIcon fontSize="small" />
+				</IconButton>
+			)}
+			<MarkdownMessage content={content} />
+		</Box>
 	);
 };
 

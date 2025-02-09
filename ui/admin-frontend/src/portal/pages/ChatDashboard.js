@@ -18,7 +18,7 @@ import {
   Button,
   Paper,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
 import pubClient from "../../admin/utils/pubClient";
@@ -31,6 +31,7 @@ const ChatDashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -56,8 +57,18 @@ const ChatDashboard = () => {
     fetchData();
   }, [currentPage, fetchData]);
 
+  const shouldStartNewChat = () => {
+    const currentPath = location.pathname;
+    const searchParams = new URLSearchParams(location.search);
+    return currentPath.startsWith('/chat/') && searchParams.has('continue_id');
+  };
+
   const handleContinueChat = (chatId, sessionId) => {
-    navigate(`/chat/${chatId}?continue_id=${sessionId}`);
+    if (shouldStartNewChat()) {
+      navigate(`/chat/${chatId}`);
+    } else {
+      navigate(`/chat/${chatId}?continue_id=${sessionId}`);
+    }
   };
 
   const handleStartNewChat = (chatId) => {

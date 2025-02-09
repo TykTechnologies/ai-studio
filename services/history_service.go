@@ -1,7 +1,10 @@
 package services
 
 import (
+	"encoding/json"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
 )
 
 // CreateChatHistoryRecord creates a new ChatHistoryRecord
@@ -119,4 +122,46 @@ func (s *Service) GetCMessagesForSessionPaginated(sessionID string, pageSize, pa
 	totalPages := int((totalCount + int64(pageSize) - 1) / int64(pageSize))
 
 	return messages, totalCount, totalPages, nil
+}
+
+// EditUserMessage updates the user message in session, then removes all subsequent messages so conversation can be replayed
+func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent string) error {
+	var msg models.CMessage
+	err := s.DB.First(&msg, messageID).Error
+	if err != nil {
+		return err
+	}
+
+	if msg.Session != sessionID {
+		return gorm.ErrRecordNotFound
+	}
+
+	// We'll store user messages as {"role":"human","text":"..."} so that the front-end
+	// sees it as a user message after reloading
+	type userMessage struct {
+		Role string `json:"role"`
+		Text string `json:"text"`
+	}
+	updatedMsg := userMessage{
+		Role: "human",
+		Text: newContent,
+	}
+	jsonBytes, err := json.Marshal(updatedMsg)
+	if err != nil {
+		return err
+	}
+
+	// update the content
+	msg.Content = jsonBytes
+	if err := s.DB.Save(&msg).Error; err != nil {
+		return err
+	}
+
+	// remove subsequent messages in the same session that are created AFTER this message
+	err = s.DB.Where("session = ? AND id > ?", sessionID, messageID).Delete(&models.CMessage{}).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
