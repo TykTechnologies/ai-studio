@@ -1,12 +1,60 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
+import { flushSync } from 'react-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import GroupIcon from '@mui/icons-material/Group';
 import PersonIcon from '@mui/icons-material/Person';
 import BaseDrawer from './BaseDrawer';
 import adminTheme from '../../theme';
+
+// Mock useNavigate hook
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
+
+// Mock localStorage
+const createMockStorage = () => {
+  let store = {};
+  return {
+    getItem: jest.fn(key => {
+      return store[key] || null;
+    }),
+    setItem: jest.fn((key, value) => {
+      store[key] = value;
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    }),
+    getStore: () => {
+      return store;
+    },
+    removeItem: jest.fn(key => {
+      delete store[key];
+    }),
+    length: 0,
+    key: jest.fn()
+  };
+};
+
+let mockStorage;
+
+beforeEach(() => {
+  mockStorage = createMockStorage();
+  Object.defineProperty(window, 'localStorage', {
+    value: mockStorage,
+    writable: false,
+    configurable: true
+  });
+  jest.clearAllMocks();
+});
+
+afterEach(() => {
+  mockStorage.clear();
+});
 
 // Mock MUI components
 jest.mock('@mui/material', () => ({
@@ -39,7 +87,7 @@ jest.mock('@mui/material', () => ({
     const Comp = Component || 'li';
     // Filter out MUI-specific props
     const { end, button: buttonProp, ...filteredProps } = props;
-    return <Comp {...filteredProps}>{children}</Comp>;
+    return <Comp key={props.key || props.id || props.to} {...filteredProps}>{children}</Comp>;
   },
   ListItemIcon: ({ children, ...props }) => {
     // Filter out MUI-specific props
@@ -54,7 +102,7 @@ jest.mock('@mui/material', () => ({
   Collapse: ({ children, in: isIn, timeout, unmountOnExit, ...props }) => {
     // Filter out MUI-specific props
     const { orientation, collapsedSize, sx, className, ...filteredProps } = props;
-    return isIn ? <div {...filteredProps}>{children}</div> : null;
+    return isIn ? <div key={props.key} {...filteredProps}>{children}</div> : null;
   },
   IconButton: ({ children, onClick, sx, ...props }) => {
     // Filter out MUI-specific props
@@ -109,6 +157,11 @@ const renderWithProviders = (component) => {
 };
 
 describe('BaseDrawer', () => {
+  beforeEach(() => {
+    mockStorage.clear();
+    mockNavigate.mockClear();
+  });
+
   // Sample menu items for testing
   const testMenuItems = [
     {
@@ -316,5 +369,138 @@ describe('BaseDrawer', () => {
     
     // Parent should still be expanded
     expect(screen.getByText('Child')).toBeInTheDocument();
+  });
+
+  describe('Persistent State', () => {
+    const flushPromises = () => new Promise(resolve => setTimeout(resolve, 100));
+
+    it('uses different storage keys for different drawer ids', async () => {
+      // Render first drawer and wait for initial effect
+      renderWithProviders(<BaseDrawer id="admin" menuItems={testMenuItems} defaultOpen={true} />);
+      await act(async () => {
+        await flushPromises();
+      });
+      
+      // Trigger state update and wait for effect
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button'));
+        await flushPromises();
+      });
+      
+      // Render second drawer and wait for initial effect
+      renderWithProviders(<BaseDrawer id="portal" menuItems={testMenuItems} defaultOpen={true} />);
+      await act(async () => {
+        await flushPromises();
+      });
+      
+      // Trigger state update and wait for effect
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button')[1]);
+        await flushPromises();
+      });
+
+      const store = mockStorage.getStore();
+      
+      expect(store['drawer_state_admin']).toBeTruthy();
+      expect(store['drawer_state_portal']).toBeTruthy();
+      
+      const adminState = JSON.parse(store['drawer_state_admin']);
+      const portalState = JSON.parse(store['drawer_state_portal']);
+      
+      expect(adminState).toMatchObject({
+        isOpen: false,
+        expanded: expect.any(Object)
+      });
+      expect(portalState).toMatchObject({
+        isOpen: false,
+        expanded: expect.any(Object)
+      });
+    });
+
+    it('persists and restores drawer state', async () => {
+      const { rerender } = renderWithProviders(
+        <BaseDrawer id="test" menuItems={testMenuItems} defaultOpen={true} />
+      );
+
+      // Wait for initial render effect
+      await act(async () => {
+        await flushPromises();
+      });
+
+      // Expand team and wait for effect
+      await act(async () => {
+        fireEvent.click(screen.getByText('Team'));
+        await flushPromises();
+      });
+      
+      // Click users and wait for effect
+      await act(async () => {
+        fireEvent.click(screen.getByText('Users'));
+        await flushPromises();
+      });
+      
+      // Close drawer and wait for effect
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button'));
+        await flushPromises();
+      });
+
+      // Get the final state from localStorage
+      const store = mockStorage.getStore();
+      
+      expect(store['drawer_state_test']).toBeTruthy();
+      
+      const finalState = JSON.parse(store['drawer_state_test']);
+      
+      expect(finalState).toMatchObject({
+        isOpen: false,
+        expanded: { team: true },
+        selectedPath: '/admin/users'
+      });
+
+      // Unmount and remount component
+      rerender(<BaseDrawer id="test" menuItems={testMenuItems} />);
+      
+      // Wait for rerender effect
+      await act(async () => {
+        await flushPromises();
+      });
+
+      // Verify state was restored
+      expect(screen.getByRole('presentation')).toHaveStyle({ width: '60px' }); // drawer closed
+
+      // Open drawer and verify expanded state
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button'));
+        await flushPromises();
+      });
+
+      expect(screen.getByText('Users')).toBeInTheDocument(); // team is still expanded
+    });
+
+    it('uses default values when no stored state exists', () => {
+      renderWithProviders(
+        <BaseDrawer 
+          id="new-drawer" 
+          menuItems={testMenuItems}
+          defaultOpen={true}
+          defaultExpandedItems={{ team: true }}
+        />
+      );
+
+      // Should use default values
+      expect(screen.getByRole('presentation')).toHaveStyle({ width: '240px' }); // defaultOpen: true
+      expect(screen.getByText('Users')).toBeInTheDocument(); // team expanded by default
+    });
+
+    it('generates random id if none provided', () => {
+      renderWithProviders(<BaseDrawer menuItems={testMenuItems} />);
+      
+      // Should still save state with a generated key
+      expect(mockStorage.setItem).toHaveBeenCalledWith(
+        expect.stringMatching(/^drawer_state_.+/),
+        expect.any(String)
+      );
+    });
   });
 });
