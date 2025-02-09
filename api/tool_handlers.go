@@ -1250,3 +1250,118 @@ func (a *API) setToolDependencies(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
 }
+
+// @Summary List Tool Operations from OpenAPI Spec
+// @Description List all operations available in the tool's OpenAPI specification
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Success 200 {object} OperationsListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/spec-operations [get]
+// @Security BearerAuth
+func (a *API) listToolSpecOperations(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	operations, err := a.service.ListToolOperationsFromSpec(uint(toolID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": struct {
+			Type       string   `json:"type"`
+			Operations []string `json:"operations"`
+		}{
+			Type:       "spec-operations",
+			Operations: operations,
+		},
+	})
+}
+
+// CallOperationInput represents the input for calling a tool operation
+type CallOperationInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			OperationID string                 `json:"operation_id"`
+			Parameters  map[string][]string    `json:"parameters"`
+			Payload     map[string]interface{} `json:"payload"`
+			Headers     map[string][]string    `json:"headers"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// @Summary Call Tool Operation
+// @Description Call an operation from the tool's OpenAPI specification
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path int true "Tool ID"
+// @Param operation body CallOperationInput true "Operation details"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/call-operation [post]
+// @Security BearerAuth
+func (a *API) callToolOperation(c *gin.Context) {
+	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool ID"}},
+		})
+		return
+	}
+
+	var input CallOperationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	result, err := a.service.CallToolOperation(
+		uint(toolID),
+		input.Data.Attributes.OperationID,
+		input.Data.Attributes.Parameters,
+		input.Data.Attributes.Payload,
+		input.Data.Attributes.Headers,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}

@@ -234,6 +234,7 @@ func serializeUser(user *models.User) UserResponse {
 			ShowChat      bool   `json:"show_chat"`
 			ShowPortal    bool   `json:"show_portal"`
 			EmailVerified bool   `json:"email_verified"`
+			APIKey        string `json:"api_key"`
 		}{
 			Email:         user.Email,
 			Name:          user.Name,
@@ -241,6 +242,7 @@ func serializeUser(user *models.User) UserResponse {
 			ShowChat:      user.ShowChat,
 			ShowPortal:    user.ShowPortal,
 			EmailVerified: user.EmailVerified,
+			APIKey:        user.APIKey,
 		},
 	}
 }
@@ -298,4 +300,59 @@ func (a *API) getUserAccessibleCatalogues(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// @Summary Roll API Key
+// @Description Generate a new API key for a user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} UserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /users/{id}/roll-api-key [post]
+// @Security BearerAuth
+func (a *API) rollUserAPIKey(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
+		})
+		return
+	}
+
+	// Generate new API key
+	err = a.service.GenerateAPIKeyForUser(uint(id))
+	if err != nil {
+		status := http.StatusInternalServerError
+		title := "Internal Server Error"
+		detail := err.Error()
+
+		c.JSON(status, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: title, Detail: detail}},
+		})
+		return
+	}
+
+	// Fetch updated user
+	user, err := a.service.GetUserByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeUser(user)})
 }

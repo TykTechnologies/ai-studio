@@ -95,6 +95,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		)
 
 		api.router.Use(func(c *gin.Context) {
+			// Skip API calls
+			if c.GetHeader("Authorization") != "" {
+				c.Next()
+				return
+			}
+
 			csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				c.Request = r
 				c.Next()
@@ -269,6 +275,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/users/:id", a.deleteUser)
 	v1.GET("/users", a.listUsers)
 	v1.GET("/users/:id/catalogues", a.getUserAccessibleCatalogues)
+	v1.POST("users/:id/roll-api-key", a.rollUserAPIKey)
 
 	// Group routes
 	v1.POST("/groups", a.createGroup)
@@ -417,6 +424,9 @@ func (a *API) setupRoutes() {
 	v1.POST("/tools/:id/operations", a.addOperationToTool)
 	v1.DELETE("/tools/:id/operations", a.removeOperationFromTool)
 	v1.GET("/tools/:id/operations", a.getToolOperations)
+
+	v1.GET("/tools/:id/spec-operations", a.listToolSpecOperations)
+	v1.POST("/tools/:id/call-operation", a.callToolOperation)
 
 	v1.POST("/tools/:id/dependencies/:dependency_id", a.addDependencyToTool)
 	v1.DELETE("/tools/:id/dependencies/:dependency_id", a.removeDependencyFromTool)

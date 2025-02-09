@@ -69,6 +69,7 @@ type UserResponse struct {
 		ShowChat      bool   `json:"show_chat"`
 		ShowPortal    bool   `json:"show_portal"`
 		EmailVerified bool   `json:"email_verified"`
+		APIKey        string `json:"api_key"`
 	} `json:"attributes"`
 }
 
@@ -408,6 +409,7 @@ type ChatInput struct {
 		Type       string `json:"type"`
 		Attributes struct {
 			Name                string `json:"name"`
+			Description         string `json:"description"`
 			LLMSettingsID       uint   `json:"llm_settings_id"`
 			LLMID               uint   `json:"llm_id"`
 			GroupIDs            []uint `json:"group_ids"`
@@ -428,6 +430,7 @@ type ChatResponse struct {
 	ID         string `json:"id"`
 	Attributes struct {
 		Name                string              `json:"name"`
+		Description         string              `json:"description"`
 		LLMSettingsID       uint                `json:"llm_settings_id"`
 		LLMID               uint                `json:"llm_id"`
 		Groups              []GroupResponse     `json:"groups"`

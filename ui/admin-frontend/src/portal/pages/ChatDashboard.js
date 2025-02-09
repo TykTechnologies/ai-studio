@@ -97,7 +97,7 @@ const ChatDashboard = () => {
       }}
     >
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Chat Studio
+        Chat Dashboard
       </Typography>
 
       {chatRooms.length > 0 && (
@@ -121,13 +121,36 @@ const ChatDashboard = () => {
                     }}
                   >
                     <CardContent>
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
-                        <ChatIcon
-                          sx={{ mr: 1, fontSize: 20, color: "text.secondary" }}
-                        />
-                        <Typography variant="body1" component="div" noWrap>
-                          {chat.attributes.name}
-                        </Typography>
+                      <Box>
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", mb: 1 }}
+                        >
+                          <ChatIcon
+                            sx={{
+                              mr: 1,
+                              fontSize: 20,
+                              color: "text.secondary",
+                            }}
+                          />
+                          <Typography variant="body1" component="div" noWrap>
+                            {chat.attributes.name}
+                          </Typography>
+                        </Box>
+                        {chat.attributes.description && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {chat.attributes.description}
+                          </Typography>
+                        )}
                       </Box>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
