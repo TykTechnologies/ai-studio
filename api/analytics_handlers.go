@@ -123,7 +123,7 @@ func (a *API) getChatRecordsPerUser(c *gin.Context) {
 	c.JSON(http.StatusOK, chartData)
 }
 
-// Helper function to parse date range from query parameters
+// Helper function to parse date range and interaction type from query parameters
 func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	startDateStr := c.Query("start_date")
 	endDateStr := c.Query("end_date")
@@ -139,6 +139,21 @@ func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	}
 
 	return startDate, endDate, nil
+}
+
+// Helper function to get interaction type from query parameters
+func getInteractionType(c *gin.Context) *analytics.InteractionType {
+	typeStr := c.Query("interaction_type")
+	if typeStr == "" {
+		return nil
+	}
+
+	interactionType := analytics.InteractionType(typeStr)
+	if interactionType != analytics.ChatInteraction && interactionType != analytics.ProxyInteraction {
+		return nil
+	}
+
+	return &interactionType
 }
 
 // getCostAnalysis godoc
@@ -165,7 +180,7 @@ func (a *API) getCostAnalysis(c *gin.Context) {
 		return
 	}
 
-	chartDataMap, err := analytics.GetCostAnalysis(a.service.DB, startDate, endDate)
+	chartDataMap, err := analytics.GetCostAnalysis(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -203,7 +218,7 @@ func (a *API) getMostUsedLLMModels(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetMostUsedLLMModels(a.service.DB, startDate, endDate)
+	chartData, err := analytics.GetMostUsedLLMModels(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -317,7 +332,7 @@ func (a *API) getTokenUsagePerUser(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetTokenUsagePerUser(a.service.DB, startDate, endDate)
+	chartData, err := analytics.GetTokenUsagePerUser(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -355,7 +370,7 @@ func (a *API) getTokenUsagePerApp(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetTokenUsagePerApp(a.service.DB, startDate, endDate)
+	chartData, err := analytics.GetTokenUsagePerApp(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -643,7 +658,7 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 		return
 	}
 
-	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate)
+	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

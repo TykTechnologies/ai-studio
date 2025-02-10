@@ -268,7 +268,7 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 
 	if err := a.notifyAdmin(user); err != nil {
 		// Log the error, but don't return it to prevent leaking information
-		fmt.Printf("Failed to send admin notification: %v\n", err)
+		slog.Error("Failed to send admin notification:", "error", err)
 	}
 
 	return nil
@@ -380,7 +380,6 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 	return a.SendEmail(a.Config.AdminEmail, subject, body)
 }
 func (a *AuthService) SendEmail(to, subject, body string) error {
-	fmt.Println("Sending email to: ", to)
 	m := mail.NewMessage()
 	m.SetHeader("From", a.Config.FromEmail)
 	m.SetHeader("To", to)
@@ -551,7 +550,7 @@ func (a *AuthService) AdminOnly() gin.HandlerFunc {
 
 		user := u.(*models.User)
 		if !user.IsAdmin {
-			fmt.Println("User is not admin")
+			slog.Error("user is not admin", "user", user.Name)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
 			c.Abort()
 			return

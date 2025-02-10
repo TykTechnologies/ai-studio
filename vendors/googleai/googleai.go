@@ -142,7 +142,6 @@ func (v *GoogleAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStream
 
 	// not a streaming endpoint, but they are streaming
 	if isStream {
-		fmt.Println("streaming is not allowed for this endpoint")
 		return fmt.Errorf("streaming is not allowed for this endpoint")
 	}
 
