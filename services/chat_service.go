@@ -67,8 +67,14 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 		return nil, err
 	}
 
+<<<<<<< HEAD
+	if chat.LLM != nil {
+		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey)
+	}
+=======
 	chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey)
 
+>>>>>>> origin/main
 	for i := range chat.DefaultTools {
 		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey)
 	}

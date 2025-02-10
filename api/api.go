@@ -16,6 +16,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/licensing"
+	"github.com/TykTechnologies/midsommar/v2/providers"
+	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-contrib/cors"
@@ -50,10 +52,21 @@ type API struct {
 	auth        *auth.AuthService
 	proxy       *proxy.Proxy
 	staticFiles embed.FS
+	providers   *providers.Registry
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
 	gin.SetMode(gin.ReleaseMode)
+
+	// Initialize provider registry
+	providerRegistry := providers.NewRegistry()
+
+	// Register the Tyk Dashboard provider by default
+	tykProvider := tyk.NewTykDashboardProvider(providers.ProviderConfig{})
+	if err := providerRegistry.RegisterProvider("tyk", tykProvider); err != nil {
+		log.Printf("Failed to register Tyk provider: %v", err)
+	}
+
 	api := &API{
 		service:     service,
 		router:      gin.Default(),
@@ -62,6 +75,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		config:      config,
 		proxy:       proxy,
 		staticFiles: staticFiles,
+		providers:   providerRegistry,
 	}
 
 	// Generate a random 32-byte key for CSRF
@@ -429,6 +443,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/tools/:id/filters", a.getToolFilters)                     // Get all filters for a tool
 	v1.PUT("/tools/:id/filters", a.setToolFilters)                     // Replace all filters for a tool
 
+	// Provider routes
+	providerAPI := NewProviderAPI(a)
+	providerAPI.RegisterRoutes(v1)
+
 	// Model Price routes
 	v1.POST("/model-prices", a.createModelPrice)
 	v1.GET("/model-prices/:id", a.getModelPrice)
@@ -529,7 +547,7 @@ func (a *API) devCorsMiddleware() gin.HandlerFunc {
 func (a *API) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cors.New(cors.Config{
-			AllowOrigins:     []string{"http://localhost:3000"}, // Update with your frontend URL
+			AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"}, // Update with your frontend URL
 			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"},
 			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token"},
