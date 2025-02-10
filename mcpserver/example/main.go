@@ -170,7 +170,7 @@ func main() {
 		Handler: handler,
 		NotificationHandler: func(ctx context.Context, notification interface{}) error {
 			// Handle notifications (e.g., send to client)
-			fmt.Printf("Notification: %+v\n", notification)
+			// fmt.Printf("Notification: %+v\n", notification)
 			return nil
 		},
 	})
@@ -184,10 +184,10 @@ func main() {
         "params": {}
     }`)
 
-	response, err := server.HandleRequest(ctx, request)
+	_, err := server.HandleRequest(ctx, request)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Response: %s\n", response)
+	// fmt.Printf("Response: %s\n", response)
 }
