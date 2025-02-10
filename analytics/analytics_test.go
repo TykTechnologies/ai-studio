@@ -83,12 +83,43 @@ func TestRecordContentMessage(t *testing.T) {
 	assert.Equal(t, "TestName", chatRecord.Name)
 	assert.Equal(t, "openai", chatRecord.Vendor)
 	assert.Equal(t, 30, chatRecord.TotalTokens)
+	assert.Equal(t, ChatInteraction, chatRecord.InteractionType)
 
 	chatLog, err := waitForRecord[LLMChatLogEntry](db, "name = ?", "TestName")
 	require.NoError(t, err)
 	assert.Equal(t, "TestName", chatLog.Name)
 	assert.Equal(t, "Test prompt", chatLog.Prompt)
 	assert.Equal(t, "Test content", chatLog.Response)
+}
+
+func TestRecordProxyInteraction(t *testing.T) {
+	db := setupTestDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	StartRecording(ctx, db)
+
+	now := time.Now()
+	rec := &LLMChatRecord{
+		Name:            "TestProxy",
+		Vendor:          "openai",
+		PromptTokens:    10,
+		ResponseTokens:  20,
+		TotalTokens:     30,
+		TimeStamp:       now,
+		UserID:          1,
+		AppID:           1,
+		InteractionType: ProxyInteraction,
+	}
+
+	recordChatRecord(rec)
+
+	proxyRecord, err := waitForRecord[LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestProxy", ProxyInteraction)
+	require.NoError(t, err)
+	assert.Equal(t, "TestProxy", proxyRecord.Name)
+	assert.Equal(t, "openai", proxyRecord.Vendor)
+	assert.Equal(t, 30, proxyRecord.TotalTokens)
+	assert.Equal(t, ProxyInteraction, proxyRecord.InteractionType)
 }
 
 func TestRecordToolCall(t *testing.T) {
@@ -170,50 +201,83 @@ func TestGetChatRecordsPerUser(t *testing.T) {
 }
 
 func TestCostCalculation(t *testing.T) {
-	t.Skip()
-	db := setupTestDB(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	StartRecording(ctx, db)
-
-	now := time.Now()
-	mc := &llms.MessageContent{
-		Parts: []llms.ContentPart{
-			llms.TextContent{Text: "Test prompt"},
+	tests := []struct {
+		name            string
+		interactionType InteractionType
+	}{
+		{
+			name:            "Chat Interaction Cost",
+			interactionType: ChatInteraction,
+		},
+		{
+			name:            "Proxy Interaction Cost",
+			interactionType: ProxyInteraction,
 		},
 	}
-	cr := &llms.ContentResponse{
-		Choices: []*llms.ContentChoice{
-			{
-				Content: "Test content",
-				GenerationInfo: map[string]interface{}{
-					"PromptTokens":   10,
-					"ResponseTokens": 20,
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupTestDB(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			StartRecording(ctx, db)
+
+			now := time.Now()
+			mc := &llms.MessageContent{
+				Parts: []llms.ContentPart{
+					llms.TextContent{Text: "Test prompt"},
 				},
-			},
-		},
+			}
+			cr := &llms.ContentResponse{
+				Choices: []*llms.ContentChoice{
+					{
+						Content: "Test content",
+						GenerationInfo: map[string]interface{}{
+							"PromptTokens":   10,
+							"ResponseTokens": 20,
+						},
+					},
+				},
+			}
+
+			// Create a mock service that implements the required method
+			mockService := &mockService{
+				GetModelPriceByModelNameAndVendorFunc: func(modelName, vendor string) (*models.ModelPrice, error) {
+					return &models.ModelPrice{
+						ModelName: modelName,
+						Vendor:    vendor,
+						CPT:       0.002, // $0.002 per token
+					}, nil
+				},
+			}
+
+			if tt.interactionType == ChatInteraction {
+				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+			} else {
+				rec := &LLMChatRecord{
+					Name:            "TestModel",
+					Vendor:          string(models.OPENAI),
+					PromptTokens:    10,
+					ResponseTokens:  20,
+					TotalTokens:     30,
+					TimeStamp:       now,
+					UserID:          1,
+					AppID:           1,
+					InteractionType: ProxyInteraction,
+				}
+				recordChatRecord(rec)
+			}
+
+			chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestModel", tt.interactionType)
+			require.NoError(t, err)
+
+			// Check if the cost is calculated correctly
+			expectedCost := 0.002 * float64(30) // CPT * TotalTokens
+			assert.InDelta(t, expectedCost, chatRecord.Cost, 0.0001)
+			assert.Equal(t, tt.interactionType, chatRecord.InteractionType)
+		})
 	}
-
-	// Create a mock service that implements the required method
-	mockService := &mockService{
-		GetModelPriceByModelNameAndVendorFunc: func(modelName, vendor string) (*models.ModelPrice, error) {
-			return &models.ModelPrice{
-				ModelName: modelName,
-				Vendor:    vendor,
-				CPT:       0.002, // $0.002 per token
-			}, nil
-		},
-	}
-
-	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
-
-	chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ?", "TestModel")
-	require.NoError(t, err)
-
-	// Check if the cost is calculated correctly
-	expectedCost := 0.002 * float64(30) // CPT * TotalTokens
-	assert.InDelta(t, expectedCost, chatRecord.Cost, 0.0001)
 }
 
 func TestCostCalculationWithoutPrice(t *testing.T) {
