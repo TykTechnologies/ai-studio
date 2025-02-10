@@ -9,10 +9,9 @@ import { encodeSpec, validateSpec } from '../utils/specUtils';
 export const createTool = async (toolData) => {
   try {
     // Validate and encode the OAS spec
-    console.log("1");
     validateSpec(toolData.oas_spec);
     const encodedSpec = encodeSpec(toolData.oas_spec);
-    console.log("2");
+
     // Prepare the tool input
     const toolInput = {
       data: {
@@ -32,10 +31,8 @@ export const createTool = async (toolData) => {
         },
       },
     };
-    console.log("3");
     // Create the tool
     const response = await apiClient.post('/tools', toolInput);
-    console.log("4");
     return response.data;
   } catch (error) {
     console.error('Error creating tool:', error);
@@ -65,9 +62,7 @@ export const getProviders = async () => {
  */
 export const configureProvider = async (providerId, config) => {
   try {
-    await apiClient.post(`/providers/${providerId}/configure`, {
-      config: config
-    });
+    await apiClient.post(`/providers/${providerId}/configure`, { config });
     const response = await apiClient.get(`/providers/${providerId}/specs`);
     return response.data.data;
   } catch (error) {

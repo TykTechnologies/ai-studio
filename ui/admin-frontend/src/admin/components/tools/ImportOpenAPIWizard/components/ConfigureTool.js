@@ -1,4 +1,5 @@
 import React from 'react';
+import { PROVIDER_TYPES } from '../constants';
 import {
   Box,
   Typography,
@@ -12,7 +13,8 @@ const ConfigureTool = ({
   onConfigChange,
   loading,
   error,
-  selectedAPI
+  selectedAPI,
+  importMethod = PROVIDER_TYPES.DIRECT_IMPORT // default to direct import if not specified
 }) => {
   const handleChange = (field) => (event) => {
     onConfigChange({
@@ -71,54 +73,58 @@ const ConfigureTool = ({
         inputProps={{ min: 0, max: 100 }}
       />
 
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" gutterBottom>
-          Authentication Details
-        </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          Type: {selectedAPI?.security_details?.type || 'None'}
-          {selectedAPI?.security_details?.in && ` (in ${selectedAPI.security_details.in})`}
-        </Typography>
-      </Box>
+      {(importMethod === PROVIDER_TYPES.TYK_DASHBOARD || importMethod === PROVIDER_TYPES.DIRECT_IMPORT) && (
+        <>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Authentication Details
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Type: {selectedAPI?.security_details?.type || "None"}
+              {selectedAPI?.security_details?.in && ` (in ${selectedAPI.security_details.in})`}
+            </Typography>
+          </Box>
 
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" gutterBottom>
-          Available Operations
-        </Typography>
-        {toolConfig.operations.map((operationId, index) => (
-          <Typography key={index} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            {operationId}
-          </Typography>
-        ))}
-      </Box>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Available Operations
+            </Typography>
+            {toolConfig.operations.map((operationId, index) => (
+              <Typography key={index} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {operationId}
+              </Typography>
+            ))}
+          </Box>
 
-      <TextField
-        fullWidth
-        label="Auth Schema Name"
-        value={toolConfig.auth_schema_name || ''}
-        onChange={handleChange('auth_schema_name')}
-        margin="normal"
-        helperText={`Name of the security scheme in OpenAPI spec (${selectedAPI?.security_details?.type || 'none'}${selectedAPI?.security_details?.in ? ` in ${selectedAPI.security_details.in}` : ''})`}
-        autoComplete="off"
-      />
+          <TextField
+            fullWidth
+            label="Auth Schema Name"
+            value={toolConfig.auth_schema_name || ""}
+            onChange={handleChange("auth_schema_name")}
+            margin="normal"
+            helperText={`Name of the security scheme in OpenAPI spec (${selectedAPI?.security_details?.type || "none"}${selectedAPI?.security_details?.in ? ` in ${selectedAPI.security_details.in}` : ""})`}
+            autoComplete="off"
+          />
 
-      <TextField
-        fullWidth
-        label="Auth Key"
-        type="password"
-        value={toolConfig.auth_key}
-        onChange={handleChange('auth_key')}
-        margin="normal"
-        helperText={toolConfig.auth_key ? "API key auto-generated" : "API key or token for authentication"}
-        disabled={toolConfig.auth_key !== ''}
-        autoComplete="new-password"
-        InputProps={{
-          autoComplete: 'new-password',
-          form: {
-            autoComplete: 'off',
-          },
-        }}
-      />
+          <TextField
+            fullWidth
+            label="Auth Key"
+            type="password"
+            value={toolConfig.auth_key}
+            onChange={handleChange("auth_key")}
+            margin="normal"
+            helperText={toolConfig.auth_key ? "API key auto-generated" : "API key or token for authentication"}
+            disabled={toolConfig.auth_key !== ""}
+            autoComplete="new-password"
+            InputProps={{
+              autoComplete: "new-password",
+              form: {
+                autoComplete: "off",
+              },
+            }}
+          />
+        </>
+      )}
     </Box>
   );
 };

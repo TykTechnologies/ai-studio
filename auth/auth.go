@@ -500,11 +500,6 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-<<<<<<< HEAD
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-=======
 
 		cookie, cookieErr := c.Cookie(a.Config.CookieName)
 		if cookieErr != nil {
@@ -529,7 +524,6 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 
 			c.Set("user", user)
 			c.Next()
->>>>>>> origin/main
 		}
 
 		user := &models.User{}

@@ -33,9 +33,34 @@ type OpenAPIProvider interface {
 	ValidateCredentials() error
 }
 
+// ImportMethod represents the method used to import an OpenAPI spec
+type ImportMethod struct {
+	Type        string `json:"type"`         // "provider", "url", or "file"
+	Name        string `json:"name"`         // Display name for the method
+	Description string `json:"description"`  // Description of the import method
+	Provider    string `json:"provider"`     // Provider ID ("tyk", "direct", etc.)
+	NeedsConfig bool   `json:"needs_config"` // Whether this method needs configuration
+}
+
 // ProviderConfig represents the configuration for a provider
 type ProviderConfig struct {
 	URL           string `json:"url"`
 	Token         string `json:"token"`
 	SelectedAPIID string `json:"selected_api_id,omitempty"`
+}
+
+// ImportConfig represents the configuration for direct imports
+type ImportConfig struct {
+	URL      string `json:"url,omitempty"`       // For URL imports
+	Name     string `json:"name"`                // Name for the imported spec
+	FileData []byte `json:"file_data,omitempty"` // For file imports
+}
+
+// ImportStep represents a step in the import process
+type ImportStep struct {
+	Type        string         `json:"type"`         // "config", "select_api", "import_method"
+	Methods     []ImportMethod `json:"methods"`      // Available import methods for this step
+	Provider    string         `json:"provider"`     // Provider ID
+	CurrentStep int            `json:"current_step"` // Current step number
+	TotalSteps  int            `json:"total_steps"`  // Total number of steps
 }

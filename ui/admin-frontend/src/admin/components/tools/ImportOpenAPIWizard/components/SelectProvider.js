@@ -1,16 +1,32 @@
-import React, { useEffect } from 'react';
+import React from "react";
 import {
   Box,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
   Alert,
+  alpha,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
+  Paper,
   CircularProgress,
-  ListItemIcon,
-  alpha
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+} from "@mui/material";
+import StorageIcon from "@mui/icons-material/Storage";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+
+import { PROVIDER_TYPES } from "../constants";
+
+const getProviderIcon = (provider) => {
+  if (!provider) return null;
+  const type = provider.attributes?.type || provider.type;
+  switch (type) {
+    case PROVIDER_TYPES.TYK_DASHBOARD:
+      return StorageIcon;
+    case PROVIDER_TYPES.DIRECT_IMPORT:
+      return UploadFileIcon;
+    default:
+      return null;
+  }
+};
 
 const SelectProvider = ({
   providers,
@@ -18,16 +34,17 @@ const SelectProvider = ({
   onSelect,
   loading,
   error,
-  onFetchProviders
 }) => {
-  useEffect(() => {
-    onFetchProviders();
-  }, [onFetchProviders]);
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" my={4}>
-        <CircularProgress />
+      <Box>
+        <Typography variant="h6" gutterBottom>
+          Select Import Method
+        </Typography>
+        <Box display="flex" justifyContent="center" my={4}>
+          <CircularProgress />
+        </Box>
       </Box>
     );
   }
@@ -35,7 +52,7 @@ const SelectProvider = ({
   return (
     <Box>
       <Typography variant="h6" gutterBottom>
-        Select API Provider
+        Select Import Method
       </Typography>
 
       {error && (
@@ -44,42 +61,64 @@ const SelectProvider = ({
         </Alert>
       )}
 
-      <List>
-        {providers.map((provider) => (
-          <ListItem
-            key={provider.id}
-            button
-            selected={selectedProvider?.id === provider.id}
-            onClick={() => onSelect(provider)}
-            sx={{
-              '&.Mui-selected': {
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
-                '&:hover': {
-                  backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.15),
-                },
-              },
-              borderRadius: 1,
-              mb: 1,
-            }}
-          >
-            {selectedProvider?.id === provider.id && (
-              <ListItemIcon>
-                <CheckCircleIcon color="primary" />
-              </ListItemIcon>
-            )}
-            <ListItemText
-              primary={provider.name}
-              secondary={provider.description}
-            />
-          </ListItem>
-        ))}
-      </List>
-
-      {providers.length === 0 && !loading && !error && (
-        <Typography color="text.secondary" align="center">
-          No providers available
+      {providers.length === 0 && (
+        <Typography color="text.secondary" align="center" sx={{ my: 2 }}>
+          No import methods available
         </Typography>
       )}
+
+      <RadioGroup
+        value={selectedProvider?.id || ""}
+        onChange={(e) => {
+          const provider = providers.find((p) => p.id === e.target.value);
+          if (provider) {
+            console.log('Selected provider:', provider);
+            onSelect(provider);
+          }
+        }}
+      >
+        {providers.map((provider) => {
+          const Icon = getProviderIcon(provider);
+          return (
+            <Paper
+              key={provider.id}
+              elevation={0}
+              variant="outlined"
+              sx={{
+                mb: 2,
+                p: 2,
+                borderColor: (theme) =>
+                  selectedProvider?.id === provider.id
+                    ? theme.palette.primary.main
+                    : "inherit",
+                bgcolor: (theme) =>
+                  selectedProvider?.id === provider.id
+                    ? alpha(theme.palette.primary.main, 0.04)
+                    : "inherit",
+              }}
+            >
+              <FormControlLabel
+                value={provider.id}
+                control={<Radio />}
+                label={
+                  <Box sx={{ ml: 1 }}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Icon color={selectedProvider?.id === provider.id ? "primary" : "action"} />
+                      <Typography variant="subtitle1" color="text.primary">
+                        {provider.attributes?.name || provider.name}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                        {provider.attributes?.description || provider.description}
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: "100%" }}
+              />
+            </Paper>
+          );
+        })}
+      </RadioGroup>
     </Box>
   );
 };
