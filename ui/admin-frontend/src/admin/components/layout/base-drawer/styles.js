@@ -25,21 +25,9 @@ export const ToggleButton = styled(MuiIconButton)(({ theme }) => ({
   left: 'calc(100% - 20px)',
   top: '78px',
   zIndex: 9,
+  '--IconButton-hoverBg': 'rgba(0, 0, 0, 0.04)',
   '&:hover': {
-    backgroundColor: '#ECECEF',
-    opacity: 0.8,
-    '& .MuiSvgIcon-root': {
-      opacity: 0.7,
-      transition: theme.transitions.create('opacity', {
-        duration: theme.transitions.duration.shorter,
-      }),
-    },
-  },
-  '& .MuiSvgIcon-root': {
-    opacity: 1,
-    transition: theme.transitions.create('opacity', {
-      duration: theme.transitions.duration.shorter,
-    }),
+    backgroundColor: 'var(--IconButton-hoverBg)',
   },
 }));
 
