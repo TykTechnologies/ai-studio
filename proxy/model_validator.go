@@ -94,8 +94,6 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 
 		llm, ok := p.GetLLM(llmSlug)
 		if !ok {
-			fmt.Println(r.URL.String())
-			fmt.Println(vars)
 			errMsg := fmt.Sprintf("[modelValidator] LLM '%s' not found", llmSlug)
 			respondWithError(w, http.StatusNotFound, errMsg, nil)
 			return
