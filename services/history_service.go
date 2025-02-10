@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -126,7 +125,7 @@ func (s *Service) GetCMessagesForSessionPaginated(sessionID string, pageSize, pa
 	return messages, totalCount, totalPages, nil
 }
 
-// EditUserMessage updates the user message in session, then removes all subsequent messages so conversation can be replayed
+// EditUserMessage removes the edited message and all subsequent messages
 func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent string) error {
 	var msg models.CMessage
 	err := s.DB.First(&msg, messageID).Error
@@ -142,40 +141,15 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 		return gorm.ErrRecordNotFound
 	}
 
-	// We'll store user messages as {"role":"human","text":"..."} so that the front-end
-	// sees it as a user message after reloading
-	type userMessage struct {
-		Role string `json:"role"`
-		Text string `json:"text"`
-	}
-	updatedMsg := userMessage{
-		Role: "human",
-		Text: newContent,
-	}
-	jsonBytes, err := json.Marshal(updatedMsg)
-	if err != nil {
-		slog.Error("Failed to marshal user message", "error", err)
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
+	slog.Debug("Removing message and subsequent messages")
 
-	slog.Debug("Updating message content", "content", string(jsonBytes))
-
-	// update the content
-	msg.Content = jsonBytes
-	if err := s.DB.Save(&msg).Error; err != nil {
-		slog.Error("Failed to save updated message", "error", err)
-		return fmt.Errorf("failed to save message: %w", err)
-	}
-
-	slog.Debug("Successfully updated message, removing subsequent messages")
-
-	// remove subsequent messages in the same session that are created AFTER this message
-	result := s.DB.Where("session = ? AND id > ?", sessionID, messageID).Delete(&models.CMessage{})
+	// remove the message being edited and all subsequent messages in the same session
+	result := s.DB.Where("session = ? AND id >= ?", sessionID, messageID).Delete(&models.CMessage{})
 	if result.Error != nil {
-		slog.Error("Failed to delete subsequent messages", "error", result.Error)
-		return fmt.Errorf("failed to delete subsequent messages: %w", result.Error)
+		slog.Error("Failed to delete messages", "error", result.Error)
+		return fmt.Errorf("failed to delete messages: %w", result.Error)
 	}
-	slog.Debug("Deleted subsequent messages", "count", result.RowsAffected)
+	slog.Debug("Deleted messages", "count", result.RowsAffected)
 
 	return nil
 }

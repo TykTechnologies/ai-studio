@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, TextField, IconButton, Typography } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -236,10 +236,22 @@ const MessageContent = ({
 	messageId,
 	messageType,
 	sessionId,
+	showSystemMessages,
 	onEditSuccess
 }) => {
 	const [isEditing, setIsEditing] = useState(false);
-	const [editText, setEditText] = useState(content || '');
+	const [editText, setEditText] = useState('');
+
+	const stripContextWrapper = (text) => {
+		const contextMatch = text.match(/\[CONTEXT\][\s\S]*?\[\/CONTEXT\]\s*([\s\S]*)/);
+		return contextMatch ? contextMatch[1].trim() : text;
+	};
+
+	useEffect(() => {
+		if (content) {
+			setEditText(stripContextWrapper(content));
+		}
+	}, [content]);
 
 	const canEdit = messageType === 'user' && !String(messageId).startsWith('temp_');
 
@@ -250,7 +262,7 @@ const MessageContent = ({
 
 	const handleCancelClick = () => {
 		setIsEditing(false);
-		setEditText(content);
+		setEditText(stripContextWrapper(content));
 	};
 
 	const handleSaveClick = async () => {
@@ -262,7 +274,10 @@ const MessageContent = ({
 			await pubClient.put(
 				`/common/chat-sessions/${sessionId}/messages/${messageId}`,
 				{
-					new_content: editText
+					new_content: {
+						role: "human",
+						text: editText
+					}
 				},
 				{
 					headers: {
@@ -272,8 +287,9 @@ const MessageContent = ({
 				}
 			);
 			setIsEditing(false);
+
 			if (onEditSuccess) {
-				onEditSuccess();
+				onEditSuccess(editText);
 			}
 		} catch (err) {
 			console.error('Error editing message:', err);
@@ -293,10 +309,26 @@ const MessageContent = ({
 					sx={{ mb: 1 }}
 				/>
 				<Box sx={{ display: 'flex', gap: 1 }}>
-					<IconButton color="success" onClick={handleSaveClick}>
+					<IconButton
+						onClick={handleSaveClick}
+						sx={{
+							color: '#666',
+							'&:hover': {
+								color: '#333'
+							}
+						}}
+					>
 						<SaveIcon />
 					</IconButton>
-					<IconButton color="inherit" onClick={handleCancelClick}>
+					<IconButton
+						onClick={handleCancelClick}
+						sx={{
+							color: '#666',
+							'&:hover': {
+								color: '#333'
+							}
+						}}
+					>
 						<CancelIcon />
 					</IconButton>
 				</Box>
@@ -306,17 +338,36 @@ const MessageContent = ({
 
 	const baseGroupId = `message-${messageIndex}`;
 
-	// Handle system message type or messages containing system/context blocks
+	// Handle system/error message types or messages containing system/context blocks
 	if (messageType === 'system' || content.includes(':::system') || content.includes('[CONTEXT]')) {
+		// If system messages are hidden and this is the first system message (not error), return null
+		if (!showSystemMessages && messageType === 'system' && messageIndex === 0 && !content.includes('Error:')) {
+			return null;
+		}
+
 		const segments = messageType === 'system'
 			? [{ type: 'system', text: content.replace(/(?::{3}|%%%)system\s*/i, '').replace(/(?::{3}|%%%)/g, '').trim() }]
 			: extractSystemBlocks(content);
+
+		// If system messages are hidden, filter out context blocks and first system message
+		const visibleSegments = showSystemMessages
+			? segments
+			: segments.filter(segment => {
+				if (segment.type === 'context') return false;
+				if (segment.type === 'system' && messageIndex === 0 && !segment.text.includes('Error:')) return false;
+				return true;
+			});
+
+		// If there are no visible segments after filtering, return null
+		if (visibleSegments.length === 0) {
+			return null;
+		}
 
 		// Group consecutive system messages
 		const processedSegments = [];
 		let currentSystemGroup = [];
 
-		segments.forEach((segment, index) => {
+		visibleSegments.forEach((segment, index) => {
 			if (segment.type === 'system') {
 				currentSystemGroup.push(segment.text);
 			} else {

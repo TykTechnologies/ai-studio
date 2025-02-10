@@ -28,7 +28,7 @@ pubClient.interceptors.response.use(
 // Function to fetch CSRF token
 const fetchCSRFToken = async () => {
   try {
-    const response = await axios.get(isDev ? "/csrf-token" : `${getBaseUrl()}/csrf-token`, {
+    const response = await axios.get(isDev ? "http://localhost:8080/csrf-token" : `${getBaseUrl()}/csrf-token`, {
       withCredentials: true,
     });
     return response.headers["x-csrf-token"];

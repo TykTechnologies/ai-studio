@@ -35,64 +35,48 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 	const fetchChatHistory = useCallback(async (currentSessionId) => {
 		try {
 			const response = await pubClient.get(`/common/sessions/${currentSessionId}/messages?limit=100`);
-			if (!response.data || !response.data.data || !Array.isArray(response.data.data)) {
+			if (!response.data || !Array.isArray(response.data)) {
 				return [];
 			}
-			const historicalMessages = response.data.data
+
+			const historicalMessages = response.data
 				.map((msg) => {
 					try {
-						const parsedContent = JSON.parse(msg.attributes.content);
+						const content = msg.attributes?.content || msg.content;
+						const parsedContent = JSON.parse(content);
 
-						// Keep tool-related system messages, skip others
-						if (parsedContent.role === "system") {
-							const content = parsedContent.text || parsedContent.content || msg.attributes.content;
-							const isToolMessage = content.includes("Tool '") && content.includes("added to room");
-							if (!isToolMessage) {
+						// Handle different message roles
+						const messageContent = parsedContent.context
+							? `[CONTEXT]${parsedContent.context}[/CONTEXT]${parsedContent.text}`
+							: parsedContent.text;
+
+						switch (parsedContent.role) {
+							case 'human':
+								console.log('Processing human message:', parsedContent);
+								return {
+									type: 'user',
+									content: messageContent,
+									isComplete: true
+								};
+							case 'ai':
+								return {
+									type: 'ai',
+									content: messageContent,
+									isComplete: true
+								};
+							case 'system':
+								const systemText = parsedContent.text.includes(':::system')
+									? messageContent
+									: `:::system ${messageContent}:::`;
+								return {
+									type: 'system',
+									content: systemText,
+									isComplete: true
+								};
+							default:
+								console.log('Unknown role:', parsedContent.role);
 								return null;
-							}
-							return {
-								type: "system",
-								content: content,
-								isComplete: true
-							};
 						}
-
-						// Extract content after context blocks if present, but only for user messages
-						const extractContent = (text, role) => {
-							if (!text) return text;
-							if (role === 'human') {
-								const contextMatch = text.match(/\[CONTEXT\]([\s\S]*?)\[\/CONTEXT\]/i);
-								if (contextMatch) {
-									const afterContext = text.substring(text.lastIndexOf('[/CONTEXT]') + 11).trim();
-									return afterContext || text;
-								}
-							}
-							return text;
-						};
-
-						// Handle tool messages
-						if (parsedContent.role === "tool" || (parsedContent.parts && parsedContent.parts[0]?.type === "tool_call")) {
-							const toolCall = parsedContent.parts?.[0]?.tool_call;
-							return {
-								type: "tool",
-								content: toolCall ? toolCall.function.name : msg.attributes.content,
-								isComplete: true,
-							};
-						}
-
-						let content = extractContent(parsedContent.text, parsedContent.role) ||
-							extractContent(parsedContent.content, parsedContent.role) ||
-							msg.attributes.content;
-						if (parsedContent.role === "human" && content) {
-							const messageMatch = content.match(/Message:\s*([\s\S]*)/);
-							content = messageMatch ? messageMatch[1].trim() : content;
-						}
-
-						return {
-							type: parsedContent.role === "human" ? "user" : "ai",
-							content: content,
-							isComplete: true,
-						};
 					} catch (e) {
 						// If parsing fails, treat it as an AI message with direct content
 						return {
@@ -158,20 +142,17 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 					setIsLoading(true); // Set loading before fetching history
 					fetchChatHistory(continueId).then((messages) => {
 						if (Array.isArray(messages)) {
-							messages.forEach(msg => {
-								if (msg.type === 'user') {
-									onMessageReceived({
-										type: 'user_message',
-										payload: msg.content,
-										isComplete: true
-									});
-								} else {
-									onMessageReceived({
-										type: 'ai_message',
-										payload: msg.content,
-										isComplete: true
-									});
-								}
+							// Send all messages at once in history format
+							onMessageReceived({
+								type: 'history',
+								payload: JSON.stringify(messages.map(msg => ({
+									attributes: {
+										content: JSON.stringify({
+											role: msg.type === 'user' ? 'human' : msg.type === 'ai' ? 'ai' : 'system',
+											text: msg.content
+										})
+									}
+								})))
 							});
 						}
 						setIsLoading(false);
@@ -192,6 +173,30 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 						// Update URL with new session ID
 						const newUrl = `/chat/${chatId}?continue_id=${newSessionId}`;
 						window.history.replaceState({}, "", newUrl);
+
+						// Handle tools and datasources
+						if (data.tools && Array.isArray(data.tools)) {
+							data.tools.forEach(tool => {
+								const uniqueId = `tool-${tool.id}`;
+								onMessageReceived({
+									type: "system",
+									payload: `Tool '${tool.name}' added to room`,
+									isComplete: true,
+									tool: { ...tool, type: 'tool', uniqueId }
+								});
+							});
+						}
+						if (data.datasources && Array.isArray(data.datasources)) {
+							data.datasources.forEach(ds => {
+								const uniqueId = `database-${ds.id}`;
+								onMessageReceived({
+									type: "system",
+									payload: `Datasource '${ds.name}' added to room`,
+									isComplete: true,
+									datasource: { ...ds, type: 'database', uniqueId }
+								});
+							});
+						}
 					} else if (data.type === "user_message") {
 						onMessageReceived({
 							type: "user_message",

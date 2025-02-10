@@ -43,13 +43,14 @@ import (
 // @name Authorization
 
 type API struct {
-	service     *services.Service
-	router      *gin.Engine
-	config      *auth.Config
-	disableCORS bool
-	auth        *auth.AuthService
-	proxy       *proxy.Proxy
-	staticFiles embed.FS
+	service             *services.Service
+	router              *gin.Engine
+	config              *auth.Config
+	disableCORS         bool
+	auth                *auth.AuthService
+	proxy               *proxy.Proxy
+	staticFiles         embed.FS
+	setupChatRoutesFunc func(*gin.RouterGroup)
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
@@ -63,6 +64,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		proxy:       proxy,
 		staticFiles: staticFiles,
 	}
+	api.setupChatRoutesFunc = api.SetupChatRoutes
 
 	// Generate a random 32-byte key for CSRF
 	csrfKey := make([]byte, 32)
@@ -76,7 +78,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		// Add CSRF middleware
 		csrfMiddleware := csrf.Protect(
 			csrfKey,
-			csrf.Secure(true), // Set to false for HTTP in development
+			csrf.Secure(false), // Allow HTTP in development
 			csrf.Path("/"),
 		)
 
@@ -240,11 +242,6 @@ func (a *API) setupRoutes() {
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
 	authed.GET("/history", a.listChatHistoryRecordsForMe)
-	authed.POST("/chat-sessions/:session_id/datasources", a.addDatasourceToChatSession)
-	authed.DELETE("/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
-	authed.POST("/chat-sessions/:session_id/tools", a.addToolToChatSession)
-	authed.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
-	authed.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
@@ -491,8 +488,8 @@ func (a *API) setupRoutes() {
 	v1.GET("/secrets", a.listSecrets)
 
 	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
-	if chaOK && chatEnabled.Bool() {
-		a.SetupChatRoutes(authed)
+	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
+		a.setupChatRoutesFunc(authed)
 	}
 
 }
