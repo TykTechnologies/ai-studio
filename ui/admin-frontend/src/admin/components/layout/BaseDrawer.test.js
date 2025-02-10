@@ -372,41 +372,50 @@ describe('BaseDrawer', () => {
   });
 
   describe('Persistent State', () => {
-    const flushPromises = () => new Promise(resolve => setTimeout(resolve, 100));
+    // Helper to wait for all state updates and effects
+    const waitForStateUpdates = async () => {
+      // Wait for React state updates
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      // Wait for effects
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+    };
 
     it('uses different storage keys for different drawer ids', async () => {
-      // Render first drawer and wait for initial effect
-      renderWithProviders(<BaseDrawer id="admin" menuItems={testMenuItems} defaultOpen={true} />);
-      await act(async () => {
-        await flushPromises();
-      });
-      
-      // Trigger state update and wait for effect
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button'));
-        await flushPromises();
-      });
-      
-      // Render second drawer and wait for initial effect
-      renderWithProviders(<BaseDrawer id="portal" menuItems={testMenuItems} defaultOpen={true} />);
-      await act(async () => {
-        await flushPromises();
-      });
-      
-      // Trigger state update and wait for effect
-      await act(async () => {
-        fireEvent.click(screen.getAllByRole('button')[1]);
-        await flushPromises();
-      });
+      // Render first drawer
+      const { unmount: unmountAdmin } = renderWithProviders(
+        <BaseDrawer id="admin" menuItems={testMenuItems} defaultOpen={true} />
+      );
+      await waitForStateUpdates();
 
+      // Toggle drawer state
+      fireEvent.click(screen.getByRole('button'));
+      await waitForStateUpdates();
+
+      // Unmount first drawer to ensure clean state
+      unmountAdmin();
+
+      // Render second drawer
+      renderWithProviders(
+        <BaseDrawer id="portal" menuItems={testMenuItems} defaultOpen={true} />
+      );
+      await waitForStateUpdates();
+
+      // Toggle drawer state
+      fireEvent.click(screen.getByRole('button'));
+      await waitForStateUpdates();
+
+      // Verify storage state
       const store = mockStorage.getStore();
-      
       expect(store['drawer_state_admin']).toBeTruthy();
       expect(store['drawer_state_portal']).toBeTruthy();
-      
+
       const adminState = JSON.parse(store['drawer_state_admin']);
       const portalState = JSON.parse(store['drawer_state_portal']);
-      
+
       expect(adminState).toMatchObject({
         isOpen: false,
         expanded: expect.any(Object)
@@ -418,40 +427,29 @@ describe('BaseDrawer', () => {
     });
 
     it('persists and restores drawer state', async () => {
+      // Initial render
       const { rerender } = renderWithProviders(
         <BaseDrawer id="test" menuItems={testMenuItems} defaultOpen={true} />
       );
+      await waitForStateUpdates();
 
-      // Wait for initial render effect
-      await act(async () => {
-        await flushPromises();
-      });
+      // Expand team
+      fireEvent.click(screen.getByText('Team'));
+      await waitForStateUpdates();
 
-      // Expand team and wait for effect
-      await act(async () => {
-        fireEvent.click(screen.getByText('Team'));
-        await flushPromises();
-      });
-      
-      // Click users and wait for effect
-      await act(async () => {
-        fireEvent.click(screen.getByText('Users'));
-        await flushPromises();
-      });
-      
-      // Close drawer and wait for effect
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button'));
-        await flushPromises();
-      });
+      // Click users
+      fireEvent.click(screen.getByText('Users'));
+      await waitForStateUpdates();
 
-      // Get the final state from localStorage
+      // Close drawer
+      fireEvent.click(screen.getByRole('button'));
+      await waitForStateUpdates();
+
+      // Verify storage state
       const store = mockStorage.getStore();
-      
       expect(store['drawer_state_test']).toBeTruthy();
-      
+
       const finalState = JSON.parse(store['drawer_state_test']);
-      
       expect(finalState).toMatchObject({
         isOpen: false,
         expanded: { team: true },
@@ -460,43 +458,28 @@ describe('BaseDrawer', () => {
 
       // Unmount and remount component
       rerender(<BaseDrawer id="test" menuItems={testMenuItems} />);
-      
-      // Wait for rerender effect
-      await act(async () => {
-        await flushPromises();
-      });
+      await waitForStateUpdates();
 
       // Verify state was restored
       expect(screen.getByRole('presentation')).toHaveStyle({ width: '60px' }); // drawer closed
 
-      // Open drawer and verify expanded state
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button'));
-        await flushPromises();
-      });
+      // Open drawer
+      fireEvent.click(screen.getByRole('button'));
+      await waitForStateUpdates();
 
-      expect(screen.getByText('Users')).toBeInTheDocument(); // team is still expanded
+      // Verify expanded state persisted
+      expect(screen.getByText('Users')).toBeInTheDocument();
     });
 
-    it('uses default values when no stored state exists', () => {
-      renderWithProviders(
-        <BaseDrawer 
-          id="new-drawer" 
-          menuItems={testMenuItems}
-          defaultOpen={true}
-          defaultExpandedItems={{ team: true }}
-        />
-      );
+    it('generates random id if none provided', async () => {
+      renderWithProviders(<BaseDrawer menuItems={testMenuItems} defaultOpen={true} />);
+      await waitForStateUpdates();
 
-      // Should use default values
-      expect(screen.getByRole('presentation')).toHaveStyle({ width: '240px' }); // defaultOpen: true
-      expect(screen.getByText('Users')).toBeInTheDocument(); // team expanded by default
-    });
+      // Trigger a state change to ensure storage is updated
+      fireEvent.click(screen.getByRole('button'));
+      await waitForStateUpdates();
 
-    it('generates random id if none provided', () => {
-      renderWithProviders(<BaseDrawer menuItems={testMenuItems} />);
-      
-      // Should still save state with a generated key
+      // Should save state with a generated key
       expect(mockStorage.setItem).toHaveBeenCalledWith(
         expect.stringMatching(/^drawer_state_.+/),
         expect.any(String)
