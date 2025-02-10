@@ -14,10 +14,13 @@ import {
   MenuItem,
   Snackbar,
   Box,
+  Stack,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
+import DownloadIcon from "@mui/icons-material/Download";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import ImportOpenAPIWizard from "../components/tools/ImportOpenAPIWizard";
 import {
   StyledPaper,
   TitleBox,
@@ -38,6 +41,7 @@ const ToolList = () => {
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedTool, setSelectedTool] = useState(null);
+  const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -135,6 +139,27 @@ const ToolList = () => {
     navigate("/admin/tools/new");
   };
 
+  const handleImportTool = async (toolData) => {
+    try {
+      setSnackbar({
+        open: true,
+        message: "Tool imported successfully",
+        severity: "success",
+      });
+      // Navigate to the tool details page
+      navigate(`/admin/tools/${toolData.id}`);
+    } catch (error) {
+      console.error("Error importing tool", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to import tool",
+        severity: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading && tools.length === 0) {
     return <CircularProgress />;
   }
@@ -145,13 +170,20 @@ const ToolList = () => {
 
   return (
     <>
-      <>
-        <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request." />
-            <Typography variant="h5">Tools</Typography>
-          </Box>
+      <TitleBox top="64px">
+        <Box display="flex" alignItems="center">
+          <InfoTooltip title="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request." />
+          <Typography variant="h5">Tools</Typography>
+        </Box>
 
+        <Stack direction="row" spacing={2}>
+          <StyledButton
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            onClick={() => setImportWizardOpen(true)}
+          >
+            Import OpenAPI
+          </StyledButton>
           <StyledButton
             variant="contained"
             startIcon={<AddIcon />}
@@ -159,65 +191,65 @@ const ToolList = () => {
           >
             Add Tool
           </StyledButton>
-        </TitleBox>
-        <ContentBox>
-          {tools.length === 0 ? (
-            <EmptyStateWidget
-              title="No tools added yet"
-              description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request. Click the button below to add a new tool configuration."
-              buttonText="Add Tool"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddTool}
+        </Stack>
+      </TitleBox>
+      <ContentBox>
+        {tools.length === 0 ? (
+          <EmptyStateWidget
+            title="No tools added yet"
+            description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request. Click the button below to add a new tool configuration."
+            buttonText="Add Tool"
+            buttonIcon={<AddIcon />}
+            onButtonClick={handleAddTool}
+          />
+        ) : (
+          <StyledPaper>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <StyledTableHeaderCell onClick={() => handleSort("name")}>
+                    Name
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                  <StyledTableHeaderCell
+                    onClick={() => handleSort("privacy_score")}
+                  >
+                    Privacy Score
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {tools.map((tool) => (
+                  <StyledTableRow
+                    key={tool.id}
+                    onClick={() => handleToolClick(tool)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <StyledTableCell>{tool.attributes.name}</StyledTableCell>
+                    <StyledTableCell>{tool.attributes.description}</StyledTableCell>
+                    <StyledTableCell>{tool.attributes.privacy_score}</StyledTableCell>
+                    <StyledTableCell align="right">
+                      <IconButton
+                        onClick={(event) => handleMenuOpen(event, tool)}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </StyledTableCell>
+                  </StyledTableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <PaginationControls
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
             />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => handleSort("privacy_score")}
-                    >
-                      Privacy Score
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {tools.map((tool) => (
-                    <StyledTableRow
-                      key={tool.id}
-                      onClick={() => handleToolClick(tool)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{tool.attributes.name}</StyledTableCell>
-                      <StyledTableCell>{tool.attributes.description}</StyledTableCell>
-                      <StyledTableCell>{tool.attributes.privacy_score}</StyledTableCell>
-                      <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, tool)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-              />
-            </StyledPaper>
-          )}
-        </ContentBox>
-      </>
+          </StyledPaper>
+        )}
+      </ContentBox>
 
       <Menu
         anchorEl={anchorEl}
@@ -233,6 +265,12 @@ const ToolList = () => {
           Delete Tool
         </MenuItem>
       </Menu>
+
+      <ImportOpenAPIWizard
+        open={importWizardOpen}
+        onClose={() => setImportWizardOpen(false)}
+        onImport={handleImportTool}
+      />
 
       <Snackbar
         open={snackbar.open}
