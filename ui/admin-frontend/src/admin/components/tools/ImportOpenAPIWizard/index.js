@@ -159,6 +159,17 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
                 reader.onerror = () => reject(new Error("Failed to read file"));
                 reader.readAsText(directSpec.file);
               });
+            } else if (directSpec.type === 'paste') {
+              // For pasted content, use the spec directly
+              spec = directSpec.spec;
+              
+              // Detect format and validate
+              const format = detectFormat(spec);
+              validateSpec(spec, format);
+              
+              // Extract operations and auth details
+              directSpec.operations = extractOperations(spec, format);
+              directSpec.security_details = extractAuthDetails(spec, format);
             } else {
               throw new Error("Invalid specification source");
             }
