@@ -184,7 +184,7 @@ func main() {
         "params": {}
     }`)
 
-	response, err := server.HandleRequest(ctx, request)
+	_, err := server.HandleRequest(ctx, request)
 	if err != nil {
 		panic(err)
 	}

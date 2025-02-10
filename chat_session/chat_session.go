@@ -437,7 +437,6 @@ func (cs *ChatSession) getSystemPrompt() string {
 				cs.chatRef.ExtraContext[i].Content)
 		}
 
-		fmt.Println("Injecting default context into system prompt")
 		prompt = fmt.Sprintf("%s\n\n%s", contextStr, prompt)
 	}
 
@@ -519,13 +518,11 @@ func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
 
 func (cs *ChatSession) preProcessMessage(msg *models.UserMessage) error {
 	for _, fn := range cs.preProcessors {
-		fmt.Println(msg)
 		if err := fn(msg); err != nil {
 			return err
 		}
 	}
 
-	fmt.Println("no issue found")
 	return nil
 }
 

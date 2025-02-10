@@ -115,7 +115,6 @@ func ExtractTextFromPDFUsingPopplerWithOptions(fileName string, timeout time.Dur
 
 func ExtractPDFText(fileName string, data []byte) (string, error) {
 	// dump to file
-	fmt.Println("dumping to temp file")
 	tmpFile, err := os.CreateTemp("/tmp", "pdf_extract-*.txt")
 	if err != nil {
 		return "", err
@@ -131,7 +130,6 @@ func ExtractPDFText(fileName string, data []byte) (string, error) {
 		return "", err
 	}
 
-	fmt.Println("extracting text")
 	var buf bytes.Buffer
 	b, err := r.GetPlainText()
 	if err != nil {
@@ -139,7 +137,6 @@ func ExtractPDFText(fileName string, data []byte) (string, error) {
 	}
 	buf.ReadFrom(b)
 
-	fmt.Println("done")
 	return buf.String(), nil
 }
 
