@@ -156,7 +156,6 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		// Create a new session if no existing session was loaded
 		chatSession, err = a.createNewSession(chat, uint(userID))
 		if err != nil {
-			log.Println("Error creating new session:", err)
 			sendWSMessage(conn, "error", "Failed to create new session")
 			return
 		}
@@ -164,29 +163,23 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 
 	err = chatSession.Start()
 	if err != nil {
-		log.Println("Error starting chat session:", err)
 		sendWSMessage(conn, "error", "Failed to start chat session")
 		return
 	}
 	defer chatSession.Stop()
 
 	// Send the session ID to the client
-	fmt.Println("sending session ID")
 	sendWSMessage(conn, "session_id", chatSession.ID())
 	// Use the singleton ChatHub
 	hub := getChatHub()
-	fmt.Println("Adding session to chat hub")
 	hub.AddSession(chatSession.ID(), chatSession)
 	defer hub.RemoveSession(chatSession.ID())
 
 	// Handle incoming messages
-	fmt.Println("listening for inbound messages")
 	go handleIncomingMessages(conn, chatSession)
 
 	// Handle outgoing messages
-	fmt.Println("Handling outgoing messages")
 	handleOutgoingMessages(conn, chatSession)
-	fmt.Println("CLOSED")
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
@@ -436,7 +429,6 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 }
 
 func (a *API) UploadFileToSession(c *gin.Context) {
-	fmt.Println("File upload called")
 	sessionID := c.Param("session_id")
 
 	// Get the chat session
@@ -460,7 +452,6 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	fmt.Println("File uploaded:", header.Filename)
 
 	// Read the file contents
 	raw, err := readFileContents(file)
@@ -471,7 +462,6 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		}{{Title: "Error reading file", Detail: err.Error()}}})
 		return
 	}
-	fmt.Println("File contents read")
 
 	contents, err := filereader.Read(header.Filename, raw)
 	if err != nil {
@@ -481,11 +471,9 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		}{{Title: "Error parsing file", Detail: err.Error()}}})
 		return
 	}
-	fmt.Println("filereader completed")
 
 	// Add the file reference to the chat session
 	session.AddFileReference(header.Filename, contents)
-	fmt.Println("File reference added to chat session")
 
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
 }

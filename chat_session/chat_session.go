@@ -370,7 +370,7 @@ func (cs *ChatSession) sendError(err error) {
 	select {
 	case cs.errors <- err:
 	default:
-		fmt.Println("error sending error to channel")
+		slog.Error("error sending error to channel", "channel", "errors", "error", err)
 	}
 }
 
