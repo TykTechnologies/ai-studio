@@ -76,16 +76,17 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	rt := response.GetResponseTokens()
 
 	rec := &analytics.LLMChatRecord{
-		Vendor:         string(llm.Vendor),
-		PromptTokens:   response.GetPromptTokens(),
-		ResponseTokens: response.GetResponseTokens(),
-		TotalTokens:    pt + rt,
-		TimeStamp:      time.Now(),
-		Choices:        response.GetChoiceCount(),
-		ToolCalls:      response.GetToolCount(),
-		AppID:          app.ID,
-		UserID:         app.UserID,
-		Cost:           (cpt * float64(rt)) + (cpit * float64(pt)),
+		Vendor:          string(llm.Vendor),
+		PromptTokens:    response.GetPromptTokens(),
+		ResponseTokens:  response.GetResponseTokens(),
+		TotalTokens:     pt + rt,
+		TimeStamp:       time.Now(),
+		Choices:         response.GetChoiceCount(),
+		ToolCalls:       response.GetToolCount(),
+		AppID:           app.ID,
+		UserID:          app.UserID,
+		Cost:            (cpt * float64(rt)) + (cpit * float64(pt)),
+		InteractionType: analytics.ProxyInteraction,
 	}
 
 	analytics.RecordChatRecord(rec)
