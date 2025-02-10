@@ -564,6 +564,7 @@ func TestAnalyzeResponse(t *testing.T) {
 	assert.Equal(t, 30, recordedAnalytics.TotalTokens)
 	assert.Equal(t, uint(1), recordedAnalytics.AppID)
 	assert.Equal(t, uint(1), recordedAnalytics.UserID)
+	assert.Equal(t, analytics.ProxyInteraction, recordedAnalytics.InteractionType)
 	expectedCost := (0.001 * float64(20)) + (0.001 * float64(10))
 	assert.InDelta(t, expectedCost, recordedAnalytics.Cost, 0.0001)
 }
