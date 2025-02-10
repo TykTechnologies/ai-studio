@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -26,7 +26,8 @@ import {
   StyledPaper,
   TitleBox,
 } from "../styles/sharedStyles";
-import { Line, Bar } from "react-chartjs-2";
+import { MemoizedLineChart, MemoizedBarChart } from "../components/common/MemoizedChart";
+import DateRangePicker from "../components/common/DateRangePicker";
 import { styled } from "@mui/material/styles";
 
 import AddIcon from "@mui/icons-material/Add";
@@ -286,7 +287,7 @@ const Dashboard = () => {
     fetchData();
   };
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -299,47 +300,111 @@ const Dashboard = () => {
         beginAtZero: true,
       },
     },
-  };
+    animation: {
+      duration: 750,
+      animations: {
+        numbers: {
+          type: 'number',
+          properties: ['data'],
+          from: (ctx) => {
+            if (ctx.type === 'data') {
+              if (ctx.parsed && ctx.parsed.y !== undefined) {
+                return ctx.parsed.y;
+              }
+              return 0;
+            }
+          }
+        }
+      }
+    }
+  }), []); // Empty dependency array since options never change
 
-  const createLineChartData = (data, label) => ({
-    labels: data.labels,
-    datasets: [
-      {
-        label: label,
-        data: data.data,
-        borderColor: "rgb(75, 192, 192)",
+  // Memoize chart data creation
+  const userActivityChartData = useMemo(() => {
+    if (!userActivityData) return null;
+    return {
+      labels: userActivityData.labels,
+      datasets: [
+        {
+          label: "Unique Users",
+          data: userActivityData.data,
+          borderColor: "rgb(75, 192, 192)",
+          tension: 0.1,
+        },
+      ],
+    };
+  }, [userActivityData]);
+
+  const chatInteractionsChartData = useMemo(() => {
+    if (!chatData) return null;
+    return {
+      labels: chatData.labels,
+      datasets: [
+        {
+          label: "Chat Interactions",
+          data: chatData.data,
+          borderColor: "rgb(75, 192, 192)",
+          tension: 0.1,
+        },
+      ],
+    };
+  }, [chatData]);
+
+  // Memoize random color generation to maintain consistent colors between renders
+  const getRandomColor = useMemo(() => {
+    const colors = {};
+    return (key) => {
+      if (!colors[key]) {
+        const r = Math.floor(Math.random() * 255);
+        const g = Math.floor(Math.random() * 255);
+        const b = Math.floor(Math.random() * 255);
+        colors[key] = `rgb(${r}, ${g}, ${b})`;
+      }
+      return colors[key];
+    };
+  }, []);
+
+  const costAnalysisChartData = useMemo(() => {
+    if (!costData || Object.keys(costData).length === 0) return null;
+    return {
+      labels: Object.values(costData)[0].labels,
+      datasets: Object.entries(costData).map(([currency, chartData]) => ({
+        label: `Cost (${currency})`,
+        data: chartData.data,
+        borderColor: getRandomColor(currency),
         tension: 0.1,
-      },
-    ],
-  });
+      })),
+    };
+  }, [costData, getRandomColor]);
 
-  const createBarChartData = (data, label) => ({
-    labels: data.labels,
-    datasets: [
-      {
-        label: label,
-        data: data.data,
-        backgroundColor: "rgba(75, 192, 192, 0.6)",
-      },
-    ],
-  });
+  const llmModelsChartData = useMemo(() => {
+    if (!llmModelData) return null;
+    return {
+      labels: llmModelData.labels,
+      datasets: [
+        {
+          label: "LLM Models",
+          data: llmModelData.data,
+          backgroundColor: "rgba(75, 192, 192, 0.6)",
+        },
+      ],
+    };
+  }, [llmModelData]);
 
-  const createMultiLineChartData = (data) => ({
-    labels: Object.values(data)[0].labels,
-    datasets: Object.entries(data).map(([currency, chartData]) => ({
-      label: `Cost (${currency})`,
-      data: chartData.data,
-      borderColor: getRandomColor(),
-      tension: 0.1,
-    })),
-  });
+  const toolUsageChartData = useMemo(() => {
+    if (!toolUsageData) return null;
+    return {
+      labels: toolUsageData.labels,
+      datasets: [
+        {
+          label: "Tool Usage",
+          data: toolUsageData.data,
+          backgroundColor: "rgba(75, 192, 192, 0.6)",
+        },
+      ],
+    };
+  }, [toolUsageData]);
 
-  const getRandomColor = () => {
-    const r = Math.floor(Math.random() * 255);
-    const g = Math.floor(Math.random() * 255);
-    const b = Math.floor(Math.random() * 255);
-    return `rgb(${r}, ${g}, ${b})`;
-  };
 
   const StyledSectionTitle = styled(Box)(({ theme }) => ({
     marginBottom: theme.spacing(3),
@@ -422,39 +487,27 @@ const Dashboard = () => {
           <TitleBox top="64px">
             <Typography variant="h4">Dashboard</Typography>
             <Stack direction="row" spacing={2} alignItems="center">
-              <TextField
-                label="Start Date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                size="small"
-              />
-              <TextField
-                label="End Date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                size="small"
-              />
-              <ToggleButtonGroup
-                value={interactionType}
-                exclusive
-                onChange={handleInteractionTypeChange}
-                size="small"
-                sx={{ mr: 2 }}
-              >
-                <ToggleButton value={null}>All</ToggleButton>
-                <ToggleButton value="chat">Chat</ToggleButton>
-                <ToggleButton value="proxy">Proxy</ToggleButton>
-              </ToggleButtonGroup>
-              <StyledButton
-                variant="contained"
-                onClick={handleDateChange}
-              >
-                Update
-              </StyledButton>
+              <Box display="flex" alignItems="center" gap={2}>
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                  onUpdate={handleDateChange}
+                  updateMode="manual"
+                  label=""
+                />
+                <ToggleButtonGroup
+                  value={interactionType}
+                  exclusive
+                  onChange={handleInteractionTypeChange}
+                  size="small"
+                >
+                  <ToggleButton value={null}>All</ToggleButton>
+                  <ToggleButton value="chat">Chat</ToggleButton>
+                  <ToggleButton value="proxy">Proxy</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
             </Stack>
           </TitleBox>
 
@@ -470,12 +523,9 @@ const Dashboard = () => {
                     Unique Users per Day
                   </Typography>
                   {userActivityData ? (
-                    <Line
+                    <MemoizedLineChart
                       options={chartOptions}
-                      data={createLineChartData(
-                        userActivityData,
-                        "Unique Users",
-                      )}
+                      data={userActivityChartData}
                     />
                   ) : (
                     <NoDataMessage message="No user activity data available for the selected period." />
@@ -488,9 +538,9 @@ const Dashboard = () => {
                     Chat Interactions per Day
                   </Typography>
                   {chatData ? (
-                    <Line
+                    <MemoizedLineChart
                       options={chartOptions}
-                      data={createLineChartData(chatData, "Chat Interactions")}
+                      data={chatInteractionsChartData}
                     />
                   ) : (
                     <NoDataMessage message="No chat interaction data available for the selected period." />
@@ -514,9 +564,9 @@ const Dashboard = () => {
                     Cost Analysis by Currency {interactionType ? `(${interactionType})` : '(All)'}
                   </Typography>
                   {Object.keys(costData).length > 0 ? (
-                    <Line
+                    <MemoizedLineChart
                       options={chartOptions}
-                      data={createMultiLineChartData(costData)}
+                      data={costAnalysisChartData}
                     />
                   ) : (
                     <NoDataMessage message="No cost analysis data available for the selected period." />
@@ -615,9 +665,9 @@ const Dashboard = () => {
                     Most Used LLM Models {interactionType ? `(${interactionType})` : '(All)'}
                   </Typography>
                   {llmModelData ? (
-                    <Bar
+                    <MemoizedBarChart
                       options={chartOptions}
-                      data={createBarChartData(llmModelData, "LLM Models")}
+                      data={llmModelsChartData}
                     />
                   ) : (
                     <NoDataMessage message="No LLM model usage data available for the selected period." />
@@ -630,9 +680,9 @@ const Dashboard = () => {
                     Tool Usage Statistics
                   </Typography>
                   {toolUsageData ? (
-                    <Bar
+                    <MemoizedBarChart
                       options={chartOptions}
-                      data={createBarChartData(toolUsageData, "Tool Usage")}
+                      data={toolUsageChartData}
                     />
                   ) : (
                     <NoDataMessage message="No tool usage data available for the selected period." />
