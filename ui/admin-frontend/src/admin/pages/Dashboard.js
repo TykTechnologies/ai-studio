@@ -18,6 +18,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import {
   StyledButton,
@@ -170,6 +172,11 @@ const Dashboard = () => {
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [interactionType, setInteractionType] = useState(null);
+
+  const handleInteractionTypeChange = (event, newValue) => {
+    setInteractionType(newValue);
+  };
 
   useEffect(() => {
     fetchData();
@@ -200,22 +207,46 @@ const Dashboard = () => {
         vendorModelCostResponse,
       ] = await Promise.all([
         apiClient.get("/analytics/chat-records-per-day", {
-          params: { start_date: startDate, end_date: endDate },
+          params: { 
+            start_date: startDate, 
+            end_date: endDate,
+            ...(interactionType && { interaction_type: interactionType }),
+          },
         }),
         apiClient.get("/analytics/cost-analysis", {
-          params: { start_date: startDate, end_date: endDate },
+          params: { 
+            start_date: startDate, 
+            end_date: endDate,
+            ...(interactionType && { interaction_type: interactionType }),
+          },
         }),
         apiClient.get("/analytics/most-used-llm-models", {
-          params: { start_date: startDate, end_date: endDate },
+          params: { 
+            start_date: startDate, 
+            end_date: endDate,
+            ...(interactionType && { interaction_type: interactionType }),
+          },
         }),
         apiClient.get("/analytics/tool-usage-statistics", {
-          params: { start_date: startDate, end_date: endDate },
+          params: { 
+            start_date: startDate, 
+            end_date: endDate,
+            ...(interactionType && { interaction_type: interactionType }),
+          },
         }),
         apiClient.get("/analytics/unique-users-per-day", {
-          params: { start_date: startDate, end_date: endDate },
+          params: { 
+            start_date: startDate, 
+            end_date: endDate,
+            ...(interactionType && { interaction_type: interactionType }),
+          },
         }),
         apiClient.get("/analytics/total-cost-per-vendor-and-model", {
-          params: { start_date: startDate, end_date: endDate },
+          params: { 
+            start_date: startDate, 
+            end_date: endDate,
+            ...(interactionType && { interaction_type: interactionType }),
+          },
         }),
       ]);
 
@@ -407,6 +438,17 @@ const Dashboard = () => {
                 InputLabelProps={{ shrink: true }}
                 size="small"
               />
+              <ToggleButtonGroup
+                value={interactionType}
+                exclusive
+                onChange={handleInteractionTypeChange}
+                size="small"
+                sx={{ mr: 2 }}
+              >
+                <ToggleButton value={null}>All</ToggleButton>
+                <ToggleButton value="chat">Chat</ToggleButton>
+                <ToggleButton value="proxy">Proxy</ToggleButton>
+              </ToggleButtonGroup>
               <StyledButton
                 variant="contained"
                 onClick={handleDateChange}
@@ -469,7 +511,7 @@ const Dashboard = () => {
               <Grid item xs={12}>
                 <ChartPaper elevation={3}>
                   <Typography variant="h6" gutterBottom>
-                    Cost Analysis by Currency
+                    Cost Analysis by Currency {interactionType ? `(${interactionType})` : '(All)'}
                   </Typography>
                   {Object.keys(costData).length > 0 ? (
                     <Line
@@ -484,7 +526,7 @@ const Dashboard = () => {
               <Grid item xs={12}>
                 <StyledPaper elevation={3} style={{ padding: "20px" }}>
                   <Typography variant="h6" gutterBottom>
-                    Total Cost per Vendor and Model
+                    Total Cost per Vendor and Model {interactionType ? `(${interactionType})` : '(All)'}
                   </Typography>
                   {vendorModelCostData.length > 0 ? (
                     <>
@@ -570,7 +612,7 @@ const Dashboard = () => {
               <Grid item xs={12} md={6}>
                 <ChartPaper elevation={3}>
                   <Typography variant="h6" gutterBottom>
-                    Most Used LLM Models
+                    Most Used LLM Models {interactionType ? `(${interactionType})` : '(All)'}
                   </Typography>
                   {llmModelData ? (
                     <Bar
