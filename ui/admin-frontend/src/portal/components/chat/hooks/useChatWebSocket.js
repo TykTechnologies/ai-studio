@@ -52,7 +52,6 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 
 						switch (parsedContent.role) {
 							case 'human':
-								console.log('Processing human message:', parsedContent);
 								return {
 									type: 'user',
 									content: messageContent,
@@ -73,6 +72,12 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 									content: systemText,
 									isComplete: true
 								};
+							case 'tool':
+								return {
+									type: 'ai',
+									content: messageContent,
+									isComplete: true
+								};
 							default:
 								console.log('Unknown role:', parsedContent.role);
 								return null;
@@ -87,7 +92,14 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 					}
 				})
 				.filter((msg) => msg !== null);
-			return historicalMessages;
+
+			// Get tools from userEntitlements
+			const userEntitlements = JSON.parse(localStorage.getItem("userEntitlements") || "{}");
+			const tools = userEntitlements?.data?.tool_catalogues?.[0]?.attributes?.tools || [];
+
+			const reorderedMessages = reorderAndMergeToolMessages(historicalMessages, tools);
+
+			return reorderedMessages;
 		} catch (error) {
 			console.error("Error fetching chat history:", error);
 			return [{
@@ -116,26 +128,26 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 		let keepAliveInterval;
 
 		const setupWebSocket = () => {
-			closeWebSocket();
-
-			ws.current = new WebSocket(wsUrl);
+			// Don't close existing connection if we're reconnecting
+			if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
+				ws.current = new WebSocket(wsUrl);
+			}
 
 			ws.current.onopen = () => {
+				console.log('WebSocket connection established');
 				setIsConnected(true);
 				isConnectedRef.current = true;
 				reconnectAttempts.current = 0;
+				setError(null); // Clear any previous errors
+				setIsLoading(false); // Ensure loading state is cleared
 
 				if (loadingTimeoutRef.current) {
 					clearTimeout(loadingTimeoutRef.current);
 					loadingTimeoutRef.current = null;
 				}
 
-				keepAliveInterval = setInterval(() => {
-					if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-						ws.current.send(JSON.stringify({ type: "ping" }));
-					}
-				}, 10000);
-
+				// The server will send pings every ~54 seconds
+				// Browser will automatically respond with pongs
 				if (continueId) {
 					setSessionId(continueId);
 					setIsNewChat(false);
@@ -218,25 +230,43 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 
 			ws.current.onerror = (error) => {
 				console.error("WebSocket error:", error);
-				onMessageReceived({
-					type: "system",
-					payload: `Failed to connect to chat. ${error.message}`,
-				});
-				setIsLoading(false);
+				// Only set error if we're not in the process of reconnecting
+				if (reconnectAttempts.current === 0) {
+					onMessageReceived({
+						type: "system",
+						payload: `WebSocket error occurred. Attempting to reconnect...`,
+					});
+					setError(`WebSocket error: ${error.message}`);
+				}
 			};
 
 			ws.current.onclose = (event) => {
-				setIsConnected(false);
-				isConnectedRef.current = false;
+				console.log('WebSocket connection closed', event);
+
 				if (keepAliveInterval) {
 					clearInterval(keepAliveInterval);
 				}
+
+				// Always update connection state
+				setIsConnected(false);
+				isConnectedRef.current = false;
+				setIsLoading(false);
+
 				if (!event.wasClean) {
-					onMessageReceived({
-						type: "system",
-						payload: `Connection closed unexpectedly: ${event.reason || "Unknown reason"}`,
-					});
-					reconnectWithDelay();
+					// Only show reconnection message if we haven't reached max attempts
+					if (reconnectAttempts.current < maxReconnectAttempts) {
+						onMessageReceived({
+							type: "system",
+							payload: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
+						});
+						reconnectWithDelay();
+					} else {
+						onMessageReceived({
+							type: "system",
+							payload: "Maximum reconnection attempts reached. Please refresh the page.",
+						});
+						setError("Maximum reconnection attempts reached. Please refresh the page.");
+					}
 				}
 			};
 		};
@@ -247,20 +277,23 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 
 		const reconnectWithDelay = () => {
 			if (reconnectAttempts.current >= maxReconnectAttempts) {
-				console.error("Max reconnection attempts reached. Connection permanently closed.");
-				onMessageReceived({
-					type: "system",
-					payload: "Max reconnection attempts reached. Connection permanently closed. Please refresh the page to try again.",
-				});
+				console.error("Max reconnection attempts reached.");
+				setError("Maximum reconnection attempts reached. Please refresh the page.");
 				return;
 			}
 
 			const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
-			console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1})`);
+			console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
 
 			reconnectTimeout = setTimeout(() => {
 				reconnectAttempts.current++;
 				console.log("Reconnecting WebSocket...");
+
+				// Close existing connection if it's still around
+				if (ws.current) {
+					ws.current.close();
+				}
+
 				setupWebSocket();
 			}, delay);
 		};
@@ -283,9 +316,6 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 		}, 1000);
 
 		return () => {
-			if (keepAliveInterval) {
-				clearInterval(keepAliveInterval);
-			}
 			if (loadingTimeoutRef.current) {
 				clearTimeout(loadingTimeoutRef.current);
 			}
@@ -293,6 +323,8 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 			clearTimeout(timer);
 			closeWebSocket();
 			setIsLoading(false);
+			setIsConnected(false);
+			isConnectedRef.current = false;
 		};
 	}, [chatId, closeWebSocket, onMessageReceived, fetchChatHistory]);
 
@@ -309,4 +341,108 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 		error,
 		setError
 	};
+};
+
+const reorderAndMergeToolMessages = (messages) => {
+	console.log("Reordering and merging tool messages");
+	const result = [...messages];
+
+	//
+	// STEP 1: Reorder so that each group appears in the order:
+	//   ai (AI response explanation)
+	//   ai (tool_use ...)
+	//   ai (tool_result ...)
+	//
+	for (let i = 0; i < result.length; i++) {
+		if (result[i]?.type === 'ai' && result[i]?.content.includes('tool_use')) {
+			// Check if we have a trio: tool_use, tool_result, and explanation.
+			if (
+				i + 2 < result.length &&
+				result[i + 1]?.type === 'ai' && result[i + 1]?.content.includes('tool_result') &&
+				result[i + 2]?.type === 'ai' &&
+				!result[i + 2]?.content.includes('tool_use') &&
+				!result[i + 2]?.content.includes('tool_result')
+			) {
+				// Remove the explanation message from its current position
+				// and insert it before the tool_use message.
+				const explanation = result.splice(i + 2, 1)[0];
+				result.splice(i, 0, explanation);
+				i += 2; // Skip the group we just processed.
+			}
+		}
+	}
+
+	//
+	// STEP 2: Merge tool_use and tool_result *into* the closest AI response.
+	//
+	// We now expect groups ordered as:
+	//   ai (explanation)
+	//   ai (tool_use ...)
+	//   ai (tool_result ...)
+	//
+	for (let i = 0; i < result.length; i++) {
+		const current = result[i];
+		if (
+			current?.type === 'ai' &&
+			!current.content.includes('tool_use') &&
+			!current.content.includes('tool_result')
+		) {
+			// Check if the next two messages are tool_use and tool_result.
+			if (
+				i + 2 < result.length &&
+				result[i + 1]?.type === 'ai' && result[i + 1].content.includes('tool_use') &&
+				result[i + 2]?.type === 'ai' && result[i + 2].content.includes('tool_result')
+			) {
+				// --- Process the tool_use message ---
+				// Remove the "tool_use" prefix and trim the content.
+				const toolUseRaw = result[i + 1].content.replace(/\/?tool_use\s*:?/ig, '').trim();
+				let functionName = "unknown";
+				let parameters = {};
+				try {
+					const toolUseData = JSON.parse(toolUseRaw);
+					// Extract the function name and parameters.
+					functionName = toolUseData?.function?.name || functionName;
+					parameters = toolUseData?.function?.arguments || parameters;
+				} catch (err) {
+					console.error('Error parsing tool_use JSON:', err);
+				}
+
+				// --- Process the tool_result message ---
+				// Remove the "tool_result" prefix and trim the content.
+				const toolResultRaw = result[i + 2].content.replace(/\/?tool_result\s*:?/ig, '').trim();
+				let contentData = {};
+				try {
+					const toolResultData = JSON.parse(toolResultRaw);
+					contentData = toolResultData?.content || contentData;
+				} catch (err) {
+					console.error('Error parsing tool_result JSON:', err);
+				}
+
+				// Calculate the byte length of the tool result content (its JSON string).
+				const contentString = JSON.stringify(contentData);
+				let byteCount = 0;
+				try {
+					// Use TextEncoder to accurately measure the UTF-8 byte length.
+					byteCount = new TextEncoder().encode(contentString).length;
+				} catch (err) {
+					// Fallback (note: this may be inaccurate for multi-byte characters).
+					byteCount = contentString.length;
+				}
+
+				// --- Build the new system message ---
+				// Note: We build a block that starts with :::system and ends with :::,
+				// with the required lines inside.
+				const systemMsg = `\n:::systemUsing function: \`${functionName}()\`::::::systemParameters: ${JSON.stringify(parameters)}::::::systemContent: Function \`${functionName}()\` returned: \`${byteCount}\` bytes:::\n
+[CONTEXT]${contentString}[/CONTEXT]\n`;
+
+				// Append the system block to the current AI explanation.
+				current.content += systemMsg;
+
+				// Remove the tool_use and tool_result messages.
+				result.splice(i + 1, 2);
+			}
+		}
+	}
+
+	return result;
 };

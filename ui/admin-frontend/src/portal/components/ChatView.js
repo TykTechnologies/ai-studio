@@ -85,41 +85,59 @@ const ChatView = () => {
    */
   const lastTypeRef = useRef(null);
 
+  // const reorderToolMessages = (messages) => {
+  //   console.log("Reordering tool messages", messages);
+  //   const result = [...messages];
+
+  //   for (let i = 0; i < result.length; i++) {
+  //     // Look for an AI message that contains "tool_use"
+  //     if (result[i]?.type === 'ai' && result[i]?.content.includes('tool_use')) {
+  //       // Check if the next two messages exist:
+  //       // - The second message should be a tool_result message.
+  //       // - The third message is the explanation (should not include "tool_use" or "tool_result").
+  //       if (
+  //         i + 2 < result.length &&
+  //         result[i + 1]?.type === 'ai' && result[i + 1]?.content.includes('tool_result') &&
+  //         result[i + 2]?.type === 'ai' &&
+  //         !result[i + 2]?.content.includes('tool_use') &&
+  //         !result[i + 2]?.content.includes('tool_result')
+  //       ) {
+  //         // Remove the explanation message from its current position.
+  //         const explanation = result.splice(i + 2, 1)[0];
+  //         // Insert the explanation message before the tool_use message.
+  //         result.splice(i, 0, explanation);
+  //         // Skip ahead by two positions since we've just processed this group.
+  //         i += 2;
+  //       }
+  //     }
+  //   }
+
+  //   return result;
+  // };
+
+
   const handleRealtimeChunks = useCallback((data) => {
     const currentType = data.type;
     const lastType = lastTypeRef.current;
-
-    console.log('Processing incoming WS message:', {
-      currentType,
-      lastType,
-      payload: data.payload
-    });
 
     // If the server sends the entire chat history
     if (data.type === 'history') {
       try {
         const parsed = JSON.parse(data.payload);
         if (Array.isArray(parsed)) {
-          console.log('Processing history messages:', parsed);
           const processedMessages = parsed.map(msg => {
             try {
               const content = msg.attributes?.content || msg.content;
-              console.log('Processing message content:', content);
               const parsedContent = JSON.parse(content);
-              console.log('Parsed content:', parsedContent);
 
               // Keep the original text which may include context tags
               const messageText = parsedContent.text || parsedContent.content;
               const context = parsedContent.context;
 
-              // Log the role and content being processed
-              console.log('Processing message role:', parsedContent.role, 'text:', messageText);
-
               const messageContent = context ? `[CONTEXT]${context}[/CONTEXT]${messageText}` : messageText;
 
               switch (parsedContent.role) {
                 case 'human':
-                  console.log('Creating user message from human role');
                   return {
                     id: Math.floor(Math.random() * 1_000_000_000),
                     type: 'user',
@@ -144,6 +162,13 @@ const ChatView = () => {
                     content: systemText,
                     isComplete: true
                   };
+                case 'tool':
+                  return {
+                    id: Math.floor(Math.random() * 1_000_000_000),
+                    type: 'ai',
+                    content: messageContent,
+                    isComplete: true
+                  };
                 default:
                   console.log('Unknown role:', parsedContent.role);
                   return null;
@@ -154,6 +179,7 @@ const ChatView = () => {
             }
           }).filter(msg => msg !== null);
 
+          // const reorderedMessages = reorderToolMessages(processedMessages);
           setMessages(processedMessages);
         }
       } catch (err) {
@@ -278,6 +304,14 @@ const ChatView = () => {
   });
 
   useEffect(() => {
+    // Clear error states when connection is restored
+    if (isConnected) {
+      setError(null);
+      setWsError(null);
+    }
+  }, [isConnected, setError, setWsError]);
+
+  useEffect(() => {
     if ((error || wsError) && !isNewChat) {
       console.warn('Encountered error in ChatView:', error || wsError);
     }
@@ -369,6 +403,7 @@ const ChatView = () => {
         const currentChat = userEntitlements.chats.find((chat) => chat.id === chatId);
         if (currentChat) {
           setShowTools(currentChat.attributes.tool_support);
+          setChatName(currentChat.attributes.name);
         }
 
         const [databasesResponse, toolsResponse] = await Promise.all([
@@ -602,8 +637,8 @@ const ChatView = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // If there's an error from WS (and not a new chat), show it
-  if ((error || wsError) && !isNewChat) {
+  // Only show error if we have an error AND we're not connected AND it's not a new chat
+  if ((error || wsError) && !isConnected && !isNewChat) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
         <Alert severity="error">{error || wsError}</Alert>
@@ -636,6 +671,13 @@ const ChatView = () => {
         },
       }}
     >
+      {chatName && (
+        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+          <Typography variant="h6" component="h1">
+            {chatName}
+          </Typography>
+        </Box>
+      )}
       <Grid container sx={{ flexGrow: 1, overflow: 'hidden' }}>
         <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <Paper
@@ -668,7 +710,7 @@ const ChatView = () => {
                 },
               }}
             >
-              {messages.length > 0 && (
+              {messages.length > 1 && (
                 <Box sx={{ p: 1, textAlign: 'right' }}>
                   <Typography
                     variant="caption"
