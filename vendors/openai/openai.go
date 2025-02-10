@@ -158,7 +158,6 @@ func (v *OpenAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamin
 
 	// not a streaming endpoint, but they are streaming
 	if req.Stream {
-		fmt.Println("streaming is not allowed for this endpoint")
 		return fmt.Errorf("streaming is not allowed for this endpoint")
 	}
 

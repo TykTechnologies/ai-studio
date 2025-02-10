@@ -564,6 +564,7 @@ func TestAnalyzeResponse(t *testing.T) {
 	assert.Equal(t, 30, recordedAnalytics.TotalTokens)
 	assert.Equal(t, uint(1), recordedAnalytics.AppID)
 	assert.Equal(t, uint(1), recordedAnalytics.UserID)
+	assert.Equal(t, analytics.ProxyInteraction, recordedAnalytics.InteractionType)
 	expectedCost := (0.001 * float64(20)) + (0.001 * float64(10))
 	assert.InDelta(t, expectedCost, recordedAnalytics.Cost, 0.0001)
 }
@@ -1256,8 +1257,6 @@ func TestModelValidationMiddlewareRouteParams(t *testing.T) {
 	// Create router
 	router := mux.NewRouter()
 	router.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", func(w http.ResponseWriter, r *http.Request) {
-		// Add debug logging
-		fmt.Printf("Request URL: %s\n", r.URL.Path)
 
 		// Apply model validation middleware
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

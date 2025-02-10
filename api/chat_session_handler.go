@@ -185,7 +185,6 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	if chatSession == nil {
 		chatSession, err = a.createNewSession(chat, uint(userID))
 		if err != nil {
-			log.Println("Error creating new session:", err)
 			sendWSMessage(conn, "error", "Failed to create new session")
 			return
 		}
@@ -193,7 +192,6 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 
 	err = chatSession.Start()
 	if err != nil {
-		log.Println("Error starting chat session:", err)
 		sendWSMessage(conn, "error", "Failed to start chat session")
 		return
 	}
@@ -213,12 +211,15 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	if err := conn.WriteJSON(msg); err != nil {
 		log.Println("Error writing session message:", err)
 	}
+
 	hub := getChatHub()
 	hub.AddSession(chatSession.ID(), chatSession)
 	defer hub.RemoveSession(chatSession.ID())
 
 	go handleIncomingMessages(conn, chatSession)
-	handleOutgoingMessages(conn, chatSession)
+
+  
+  handleOutgoingMessages(conn, chatSession)
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
