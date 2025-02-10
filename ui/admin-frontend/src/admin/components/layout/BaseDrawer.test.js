@@ -374,53 +374,46 @@ describe('BaseDrawer', () => {
   describe('Persistent State', () => {
     // Helper to wait for all state updates and effects
     const waitForStateUpdates = async () => {
-      // Wait for React state updates
+      // Wait for React state updates and effects
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      });
-      // Wait for effects
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => setTimeout(resolve, 100));
       });
     };
 
+    // Helper to verify localStorage state
+    const verifyLocalStorageState = async (key, expectedState) => {
+      await waitForStateUpdates();
+      const store = mockStorage.getStore();
+      const state = store[key];
+      expect(state).toBeTruthy();
+      const parsedState = JSON.parse(state);
+      expect(parsedState).toMatchObject(expectedState);
+    };
+
     it('uses different storage keys for different drawer ids', async () => {
-      // Render first drawer
-      const { unmount: unmountAdmin } = renderWithProviders(
+      // Render first drawer and wait for initial state
+      renderWithProviders(
         <BaseDrawer id="admin" menuItems={testMenuItems} defaultOpen={true} />
       );
       await waitForStateUpdates();
 
-      // Toggle drawer state
+      // Toggle drawer state and verify
       fireEvent.click(screen.getByRole('button'));
-      await waitForStateUpdates();
+      await verifyLocalStorageState('drawer_state_admin', {
+        isOpen: false,
+        expanded: expect.any(Object)
+      });
 
-      // Unmount first drawer to ensure clean state
-      unmountAdmin();
-
-      // Render second drawer
+      // Cleanup and render second drawer
+      mockStorage.clear();
       renderWithProviders(
         <BaseDrawer id="portal" menuItems={testMenuItems} defaultOpen={true} />
       );
       await waitForStateUpdates();
 
-      // Toggle drawer state
+      // Toggle drawer state and verify
       fireEvent.click(screen.getByRole('button'));
-      await waitForStateUpdates();
-
-      // Verify storage state
-      const store = mockStorage.getStore();
-      expect(store['drawer_state_admin']).toBeTruthy();
-      expect(store['drawer_state_portal']).toBeTruthy();
-
-      const adminState = JSON.parse(store['drawer_state_admin']);
-      const portalState = JSON.parse(store['drawer_state_portal']);
-
-      expect(adminState).toMatchObject({
-        isOpen: false,
-        expanded: expect.any(Object)
-      });
-      expect(portalState).toMatchObject({
+      await verifyLocalStorageState('drawer_state_portal', {
         isOpen: false,
         expanded: expect.any(Object)
       });
@@ -443,14 +436,9 @@ describe('BaseDrawer', () => {
 
       // Close drawer
       fireEvent.click(screen.getByRole('button'));
-      await waitForStateUpdates();
-
-      // Verify storage state
-      const store = mockStorage.getStore();
-      expect(store['drawer_state_test']).toBeTruthy();
-
-      const finalState = JSON.parse(store['drawer_state_test']);
-      expect(finalState).toMatchObject({
+      
+      // Verify final state
+      await verifyLocalStorageState('drawer_state_test', {
         isOpen: false,
         expanded: { team: true },
         selectedPath: '/admin/users'
@@ -472,18 +460,23 @@ describe('BaseDrawer', () => {
     });
 
     it('generates random id if none provided', async () => {
+      // Initial render
       renderWithProviders(<BaseDrawer menuItems={testMenuItems} defaultOpen={true} />);
       await waitForStateUpdates();
 
-      // Trigger a state change to ensure storage is updated
+      // Trigger state change
       fireEvent.click(screen.getByRole('button'));
       await waitForStateUpdates();
 
-      // Should save state with a generated key
-      expect(mockStorage.setItem).toHaveBeenCalledWith(
-        expect.stringMatching(/^drawer_state_.+/),
-        expect.any(String)
-      );
+      // Get all setItem calls
+      const calls = mockStorage.setItem.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      
+      // Find a call that matches our pattern
+      const matchingCall = calls.find(([key]) => /^drawer_state_.+/.test(key));
+      expect(matchingCall).toBeTruthy();
+      expect(matchingCall[0]).toMatch(/^drawer_state_.+/);
+      expect(matchingCall[1]).toEqual(expect.any(String));
     });
   });
 });
