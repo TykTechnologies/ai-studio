@@ -179,7 +179,7 @@ func RecordContentMessage(
 	}
 
 	rec.Choices = len(cr.Choices)
-	rec.Name = name
+	rec.Name = price.ModelName
 	rec.Vendor = string(vendor)
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
