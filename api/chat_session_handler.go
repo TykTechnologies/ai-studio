@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
@@ -31,6 +32,14 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
+
+const (
+	// Time allowed to read the next pong message from the peer
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period (must be less than pongWait)
+	pingPeriod = (pongWait * 9) / 10
+)
 
 type ChatMessage struct {
 	Type        string               `json:"type"`
@@ -136,7 +145,30 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
-	log.Println("WebSocket connection established")
+
+	// Set up ping/pong handlers
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	// Start ping ticker
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					log.Printf("Error sending ping: %v", err)
+					return
+				}
+			}
+		}
+	}()
+
+	log.Println("WebSocket connection established with ping/pong handlers")
 
 	sessionID := c.Query("session_id")
 
