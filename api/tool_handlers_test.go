@@ -18,32 +18,33 @@ func TestToolEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name         string `json:"name"`
-				Description  string `json:"description"`
-				ToolType     string `json:"tool_type"`
-				OASSpec      string `json:"oas_spec"`
-				PrivacyScore int    `json:"privacy_score"`
-
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
 			Attributes: struct {
-				Name         string `json:"name"`
-				Description  string `json:"description"`
-				ToolType     string `json:"tool_type"`
-				OASSpec      string `json:"oas_spec"`
-				PrivacyScore int    `json:"privacy_score"`
-
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			}{
 				Name:         "Test Tool",
 				Description:  "A test tool",
 				ToolType:     models.ToolTypeREST,
 				OASSpec:      `{"openapi": "3.0.0"}`,
 				PrivacyScore: 8,
+				Operations:   []string{"operation1", "operation2"},
 			},
 		},
 	}
@@ -67,32 +68,33 @@ func TestToolEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name         string `json:"name"`
-				Description  string `json:"description"`
-				ToolType     string `json:"tool_type"`
-				OASSpec      string `json:"oas_spec"`
-				PrivacyScore int    `json:"privacy_score"`
-
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
 			Attributes: struct {
-				Name         string `json:"name"`
-				Description  string `json:"description"`
-				ToolType     string `json:"tool_type"`
-				OASSpec      string `json:"oas_spec"`
-				PrivacyScore int    `json:"privacy_score"`
-
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
 				ToolType:     models.ToolTypeREST,
 				OASSpec:      `{"openapi": "3.0.1"}`,
 				PrivacyScore: 9,
+				Operations:   []string{"operation1", "operation2", "operation3"},
 			},
 		},
 	}
@@ -151,30 +153,33 @@ func TestToolEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name           string `json:"name"`
-				Description    string `json:"description"`
-				ToolType       string `json:"tool_type"`
-				OASSpec        string `json:"oas_spec"`
-				PrivacyScore   int    `json:"privacy_score"`
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
 			Attributes: struct {
-				Name           string `json:"name"`
-				Description    string `json:"description"`
-				ToolType       string `json:"tool_type"`
-				OASSpec        string `json:"oas_spec"`
-				PrivacyScore   int    `json:"privacy_score"`
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
 				ToolType:     models.ToolTypeREST,
 				OASSpec:      `{"openapi": "3.0.1"}`,
 				PrivacyScore: 9,
+				Operations:   []string{"operation1", "operation2", "operation3"},
 			},
 		},
 	}
@@ -190,32 +195,33 @@ func TestToolEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name         string `json:"name"`
-				Description  string `json:"description"`
-				ToolType     string `json:"tool_type"`
-				OASSpec      string `json:"oas_spec"`
-				PrivacyScore int    `json:"privacy_score"`
-
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
 			Attributes: struct {
-				Name         string `json:"name"`
-				Description  string `json:"description"`
-				ToolType     string `json:"tool_type"`
-				OASSpec      string `json:"oas_spec"`
-				PrivacyScore int    `json:"privacy_score"`
-
-				AuthKey        string `json:"auth_key"`
-				AuthSchemaName string `json:"auth_schema_name"`
+				Name           string   `json:"name"`
+				Description    string   `json:"description"`
+				ToolType       string   `json:"tool_type"`
+				OASSpec        string   `json:"oas_spec"`
+				PrivacyScore   int      `json:"privacy_score"`
+				AuthKey        string   `json:"auth_key"`
+				AuthSchemaName string   `json:"auth_schema_name"`
+				Operations     []string `json:"operations"`
 			}{
 				Name:         "",
 				Description:  "",
 				ToolType:     "",
 				OASSpec:      "",
 				PrivacyScore: -1,
+				Operations:   []string{},
 			},
 		},
 	}

@@ -129,7 +129,7 @@ func (ds *DataSession) ProcessRAGForDatasource(withDSID uint, db *gorm.DB) error
 		}
 	}
 
-	fmt.Println("processing RAG for datasource with id", withDSID)
+	// fmt.Println("processing RAG for datasource with id", withDSID)
 	asDocs, err := textsplitter.CreateDocuments(
 		splitter,
 		texts,

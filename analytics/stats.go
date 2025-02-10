@@ -115,18 +115,23 @@ func getUserName(db *gorm.DB, userID uint) string {
 	return "User " + strUserID // Placeholder implementation
 }
 
-// GetCostAnalysis returns the total cost per day for each currency
-func GetCostAnalysis(db *gorm.DB, startDate, endDate time.Time) (map[string]*ChartData, error) {
+// GetCostAnalysis returns the total cost per day for each currency and interaction type
+func GetCostAnalysis(db *gorm.DB, startDate, endDate time.Time, interactionType *InteractionType) (map[string]*ChartData, error) {
 	var results []struct {
 		Date     string
 		Currency string
 		Cost     float64
 	}
 
-	err := db.Model(&LLMChatRecord{}).
+	query := db.Model(&LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, currency, SUM(cost) as cost").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
-		Group("DATE(time_stamp), currency").
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("DATE(time_stamp), currency").
 		Order("date, currency").
 		Find(&results).Error
 
@@ -151,16 +156,21 @@ func GetCostAnalysis(db *gorm.DB, startDate, endDate time.Time) (map[string]*Cha
 }
 
 // GetMostUsedLLMModels returns the usage count for each LLM model
-func GetMostUsedLLMModels(db *gorm.DB, startDate, endDate time.Time) (*ChartData, error) {
+func GetMostUsedLLMModels(db *gorm.DB, startDate, endDate time.Time, interactionType *InteractionType) (*ChartData, error) {
 	var results []struct {
 		Name  string
 		Count int64
 	}
 
-	err := db.Model(&LLMChatRecord{}).
+	query := db.Model(&LLMChatRecord{}).
 		Select("name, COUNT(*) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
-		Group("name").
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("name").
 		Order("count DESC").
 		Limit(10). // Limit to top 10 models
 		Find(&results).Error
@@ -246,16 +256,21 @@ func GetUniqueUsersPerDay(db *gorm.DB, startDate, endDate time.Time) (*ChartData
 }
 
 // GetTokenUsagePerUser returns the total token usage for each user
-func GetTokenUsagePerUser(db *gorm.DB, startDate, endDate time.Time) (*ChartData, error) {
+func GetTokenUsagePerUser(db *gorm.DB, startDate, endDate time.Time, interactionType *InteractionType) (*ChartData, error) {
 	var results []struct {
 		UserID uint
 		Tokens int64
 	}
 
-	err := db.Model(&LLMChatRecord{}).
+	query := db.Model(&LLMChatRecord{}).
 		Select("user_id, SUM(total_tokens) as tokens").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
-		Group("user_id").
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("user_id").
 		Order("tokens DESC").
 		Limit(10). // Limit to top 10 users
 		Find(&results).Error
@@ -278,16 +293,21 @@ func GetTokenUsagePerUser(db *gorm.DB, startDate, endDate time.Time) (*ChartData
 }
 
 // GetTokenUsagePerApp returns the total token usage for each app
-func GetTokenUsagePerApp(db *gorm.DB, startDate, endDate time.Time) (*ChartData, error) {
+func GetTokenUsagePerApp(db *gorm.DB, startDate, endDate time.Time, interactionType *InteractionType) (*ChartData, error) {
 	var results []struct {
 		AppID  uint
 		Tokens int64
 	}
 
-	err := db.Model(&LLMChatRecord{}).
+	query := db.Model(&LLMChatRecord{}).
 		Select("app_id, SUM(total_tokens) as tokens").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
-		Group("app_id").
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("app_id").
 		Order("tokens DESC").
 		Limit(10). // Limit to top 10 apps
 		Find(&results).Error
@@ -512,14 +532,19 @@ type VendorModelCost struct {
 	Currency  string  `json:"currency"`
 }
 
-// Update the GetTotalCostPerVendorAndModel function
-func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time) ([]VendorModelCost, error) {
+// GetTotalCostPerVendorAndModel returns the total cost per vendor and model, optionally filtered by interaction type
+func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *InteractionType) ([]VendorModelCost, error) {
 	var results []VendorModelCost
 
-	err := db.Model(&LLMChatRecord{}).
+	query := db.Model(&LLMChatRecord{}).
 		Select("vendor, name as model, SUM(cost) as total_cost, currency").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
-		Group("vendor, name, currency").
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("vendor, name, currency").
 		Order("vendor, total_cost DESC").
 		Find(&results).Error
 

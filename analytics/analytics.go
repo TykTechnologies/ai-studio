@@ -15,24 +15,33 @@ import (
 	"gorm.io/gorm"
 )
 
+// InteractionType defines the type of LLM interaction
+type InteractionType string
+
+const (
+	ChatInteraction  InteractionType = "chat"
+	ProxyInteraction InteractionType = "proxy"
+)
+
 // Records requests
 type LLMChatRecord struct {
 	gorm.Model
-	ID             uint `gorm:"primaryKey"`
-	Name           string
-	Vendor         string
-	TotalTimeMS    int
-	PromptTokens   int
-	ResponseTokens int
-	TotalTokens    int
-	TimeStamp      time.Time
-	UserID         uint
-	Choices        int
-	ToolCalls      int
-	ChatID         string
-	AppID          uint
-	Cost           float64
-	Currency       string
+	ID              uint `gorm:"primaryKey"`
+	Name            string
+	Vendor          string
+	TotalTimeMS     int
+	PromptTokens    int
+	ResponseTokens  int
+	TotalTokens     int
+	TimeStamp       time.Time
+	UserID          uint
+	Choices         int
+	ToolCalls       int
+	ChatID          string
+	AppID           uint
+	Cost            float64
+	Currency        string
+	InteractionType InteractionType `gorm:"type:string;default:'chat'"`
 }
 
 // logs content
@@ -170,7 +179,7 @@ func RecordContentMessage(
 	}
 
 	rec.Choices = len(cr.Choices)
-	rec.Name = name
+	rec.Name = price.ModelName
 	rec.Vendor = string(vendor)
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
@@ -183,6 +192,7 @@ func RecordContentMessage(
 	rec.AppID = appID
 	rec.Cost = cpt*float64(responseTokens) + cpit*float64(promptTokens)
 	rec.Currency = price.Currency
+	rec.InteractionType = ChatInteraction
 
 	// LLM Response
 	chatLog := &LLMChatLogEntry{}

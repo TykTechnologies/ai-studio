@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -9,13 +10,13 @@ import (
 func OpenAIValidator(r *http.Request) (string, error) {
 	h := r.Header.Get("Authorization")
 	if h == "" {
-		fmt.Println("missing authorization header")
+		slog.Error("missing authorization header", "package", "proxy", "function", "OpenAIValidator")
 		return "", fmt.Errorf("missing authorization header")
 	}
 
 	split := strings.Split(h, "Bearer ")
 	if len(split) != 2 {
-		fmt.Println("missing Bearer part")
+		slog.Error("missing Bearer part", "package", "proxy", "function", "OpenAIValidator")
 		return "", fmt.Errorf("invalid authorization header")
 	}
 
