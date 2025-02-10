@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -1051,7 +1052,7 @@ func (a *API) listChatHistoryRecordsForMe(c *gin.Context) {
 func (a *API) getUserAccessibleTools(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		fmt.Println("User not found in context: ", user)
+		slog.Error("user not found in context", "user", user)
 		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`

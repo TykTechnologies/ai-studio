@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
@@ -17,7 +17,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import { Line } from "react-chartjs-2";
+import { MemoizedLineChart } from "../common/MemoizedChart";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -128,7 +128,7 @@ const LLMDetails = () => {
     );
   };
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     scales: {
@@ -159,9 +159,9 @@ const LLMDetails = () => {
         text: "Vendor Token Usage Over Time",
       },
     },
-  };
+  }), []); // Empty dependency array since options never change
 
-  const chartData = {
+  const chartData = useMemo(() => ({
     labels: vendorUsageData?.labels || [],
     datasets: [
       {
@@ -171,7 +171,7 @@ const LLMDetails = () => {
         tension: 0.1,
       },
     ],
-  };
+  }), [vendorUsageData]);
 
   if (loading) return <CircularProgress />;
   if (!llm) return <Typography>LLM not found</Typography>;
@@ -193,16 +193,18 @@ const LLMDetails = () => {
         <Box height={300}>
           {" "}
           {/* Reduced height from 400 to 250 */}
-          <Line options={chartOptions} data={chartData} />
+          <MemoizedLineChart options={chartOptions} data={chartData} />
         </Box>
-        <Box mt={2}>
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-          />
-        </Box>
+          <Box mt={2}>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+              onUpdate={fetchVendorUsage}
+              updateMode="immediate"
+            />
+          </Box>
 
         <Divider sx={{ my: 3 }} />
 

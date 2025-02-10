@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
@@ -14,7 +14,7 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import { Line } from "react-chartjs-2";
+import { MemoizedLineChart } from "../common/MemoizedChart";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -116,7 +116,7 @@ const LLMSettingsDetails = () => {
     }
   };
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     scales: {
@@ -147,9 +147,9 @@ const LLMSettingsDetails = () => {
         text: "Model Usage Over Time",
       },
     },
-  };
+  }), []); // Empty dependency array since options never change
 
-  const chartData = {
+  const chartData = useMemo(() => ({
     labels: usageData?.labels || [],
     datasets: [
       {
@@ -159,7 +159,7 @@ const LLMSettingsDetails = () => {
         tension: 0.1,
       },
     ],
-  };
+  }), [usageData]);
 
   if (loading) return <CircularProgress />;
   if (!setting) return <Typography>LLM Call Settings not found</Typography>;
@@ -179,7 +179,7 @@ const LLMSettingsDetails = () => {
       <ContentBox>
         <SectionTitle>Model Usage Statistics</SectionTitle>
         <Box height={300}>
-          <Line options={chartOptions} data={chartData} />
+          <MemoizedLineChart options={chartOptions} data={chartData} />
         </Box>
         <Box mt={2}>
           <DateRangePicker
@@ -187,6 +187,8 @@ const LLMSettingsDetails = () => {
             endDate={endDate}
             onStartDateChange={setStartDate}
             onEndDateChange={setEndDate}
+            onUpdate={fetchUsageData}
+            updateMode="immediate"
           />
         </Box>
 

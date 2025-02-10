@@ -19,8 +19,17 @@ import (
 // @Success 200 {object} map[string]interface{}
 // @Router /common/system [get]
 func (a *API) handleFeatureSet(c *gin.Context) {
-	featureSet := licensing.FeatureSet()
-	featureSet["docs_url"] = config.Get().DocsURL
+	featureSet := make(map[string]interface{})
+
+	// Safely copy features
+	for k, v := range licensing.FeatureSet() {
+		featureSet[k] = v
+	}
+
+	// Add docs URL if config is available
+	if cfg := config.Get(); cfg != nil {
+		featureSet["docs_url"] = cfg.DocsURL
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"features": featureSet,

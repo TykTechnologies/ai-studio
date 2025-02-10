@@ -1,6 +1,8 @@
 package services
 
 import (
+	"fmt"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
 )
@@ -95,6 +97,9 @@ func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*
 	if err := modelPrice.GetByModelNameAndVendor(s.DB, modelName, vendor); err != nil {
 		if err.Error() == gorm.ErrRecordNotFound.Error() {
 			// not found, create it
+			if modelName == "" {
+				modelName = fmt.Sprintf("%s_%s", vendor, "default")
+			}
 			modelPrice.ModelName = modelName
 			modelPrice.Vendor = vendor
 			modelPrice.CPT = 0.0

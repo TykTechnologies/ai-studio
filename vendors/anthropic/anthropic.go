@@ -149,7 +149,6 @@ func (v *Anthropic) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStrea
 
 	// not a streaming endpoint, but they are streaming
 	if req.Stream {
-		fmt.Println("streaming is not allowed for this endpoint")
 		return fmt.Errorf("streaming is not allowed for this endpoint")
 	}
 
