@@ -1257,8 +1257,6 @@ func TestModelValidationMiddlewareRouteParams(t *testing.T) {
 	// Create router
 	router := mux.NewRouter()
 	router.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", func(w http.ResponseWriter, r *http.Request) {
-		// Add debug logging
-		fmt.Printf("Request URL: %s\n", r.URL.Path)
 
 		// Apply model validation middleware
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
