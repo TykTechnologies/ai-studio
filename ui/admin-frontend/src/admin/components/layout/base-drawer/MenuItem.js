@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import {
   List,
   ListItem,
-  ListItemButton,
   ListItemIcon,
   ListItemText,
   Collapse,
@@ -27,28 +26,28 @@ const MenuItem = ({
   
   const commonStyles = {
     pl: open ? depth * 4 + 2 : 2,
+    cursor: 'pointer',
   };
 
   if (hasSubItems) {
     return (
       <React.Fragment key={itemId}>
-        <ListItem disablePadding>
-          <ListItemButton
-            onClick={() => onExpandClick(itemId, parentId)}
-            sx={{ ...commonStyles, cursor: 'pointer' }}
-          >
-            {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
-            {open && (
-              <ListItemText
-                primary={item.text}
-                primaryTypographyProps={{
-                  variant: depth > 0 ? 'body2' : 'body1',
-                  color: depth > 0 ? 'text.secondary' : 'text.primary',
-                }}
-              />
-            )}
-            {open && (isExpanded ? <ExpandLess /> : <ExpandMore />)}
-          </ListItemButton>
+        <ListItem
+          button
+          onClick={() => onExpandClick(itemId, parentId)}
+          sx={commonStyles}
+        >
+          {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
+          {open && (
+            <ListItemText
+              primary={item.text}
+              primaryTypographyProps={{
+                variant: depth > 0 ? 'body2' : 'body1',
+                color: depth > 0 ? 'text.secondary' : 'text.primary',
+              }}
+            />
+          )}
+          {open && (isExpanded ? <ExpandLess /> : <ExpandMore />)}
         </ListItem>
         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
           <List component="div" disablePadding>
@@ -71,25 +70,23 @@ const MenuItem = ({
   }
 
   return (
-    <ListItem disablePadding>
-      <ListItemButton
-        component={StyledNavLink}
-        to={item.path}
-        sx={commonStyles}
-        onClick={() => onPathSelect(item.path)}
-        {...(item.path === '/admin/' ? { end: true } : {})}
-      >
-        {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
-        {open && (
-          <ListItemText
-            primary={item.text}
-            primaryTypographyProps={{
-              variant: depth > 0 ? 'body2' : 'body1',
-              color: depth > 0 ? 'text.secondary' : 'text.primary',
-            }}
-          />
-        )}
-      </ListItemButton>
+    <ListItem
+      component={StyledNavLink}
+      to={item.path}
+      sx={commonStyles}
+      onClick={() => onPathSelect(item.path)}
+      {...(item.path === '/admin/' ? { end: true } : {})}
+    >
+      {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
+      {open && (
+        <ListItemText
+          primary={item.text}
+          primaryTypographyProps={{
+            variant: depth > 0 ? 'body2' : 'body1',
+            color: depth > 0 ? 'text.secondary' : 'text.primary',
+          }}
+        />
+      )}
     </ListItem>
   );
 };

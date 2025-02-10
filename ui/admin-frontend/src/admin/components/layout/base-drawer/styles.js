@@ -1,5 +1,5 @@
 import { styled } from '@mui/material/styles';
-import { Drawer as MuiDrawer, IconButton as MuiIconButton } from '@mui/material';
+import { Drawer as MuiDrawer, IconButton as MuiIconButton, ListItemButton } from '@mui/material';
 
 export const StyledDrawer = styled(MuiDrawer, {
   shouldForwardProp: prop => !['width', 'open'].includes(prop),
@@ -18,7 +18,7 @@ export const StyledDrawer = styled(MuiDrawer, {
 }));
 
 export const ToggleButton = styled(MuiIconButton)(({ theme }) => ({
-  backgroundColor: theme.palette.grey[200],
+  backgroundColor: '#ECECEF',
   alignSelf: 'flex-end',
   marginRight: theme.spacing(1),
   position: 'absolute',
@@ -26,7 +26,20 @@ export const ToggleButton = styled(MuiIconButton)(({ theme }) => ({
   top: '78px',
   zIndex: 9,
   '&:hover': {
-    backgroundColor: theme.palette.grey[300],
+    backgroundColor: '#ECECEF',
+    opacity: 0.8,
+    '& .MuiSvgIcon-root': {
+      opacity: 0.7,
+      transition: theme.transitions.create('opacity', {
+        duration: theme.transitions.duration.shorter,
+      }),
+    },
+  },
+  '& .MuiSvgIcon-root': {
+    opacity: 1,
+    transition: theme.transitions.create('opacity', {
+      duration: theme.transitions.duration.shorter,
+    }),
   },
 }));
 
