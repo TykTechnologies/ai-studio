@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/tmc/langchaingo/llms"
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,9 +33,11 @@ var upgrader = websocket.Upgrader{
 }
 
 type ChatMessage struct {
-	Type     string   `json:"type"`
-	Payload  string   `json:"payload"`
-	FileRefs []string `json:"file_refs"`
+	Type        string               `json:"type"`
+	Payload     string               `json:"payload"`
+	FileRefs    []string             `json:"file_refs"`
+	Tools       []models.Tool        `json:"tools,omitempty"`
+	Datasources []*models.Datasource `json:"datasources,omitempty"`
 }
 
 type ChatHub struct {
@@ -164,7 +167,20 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	}
 	defer chatSession.Stop()
 
-	sendWSMessage(conn, "session_id", chatSession.ID())
+	// Send session ID with current tools and datasources
+	tools := make([]models.Tool, 0)
+	for _, tool := range chatSession.CurrentTools() {
+		tools = append(tools, tool)
+	}
+	msg := ChatMessage{
+		Type:        "session_id",
+		Payload:     chatSession.ID(),
+		Tools:       tools,
+		Datasources: chatSession.GetCurrentDatasources(),
+	}
+	if err := conn.WriteJSON(msg); err != nil {
+		log.Println("Error writing session message:", err)
+	}
 	hub := getChatHub()
 	hub.AddSession(chatSession.ID(), chatSession)
 	defer hub.RemoveSession(chatSession.ID())
@@ -229,22 +245,6 @@ func handleIncomingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) 
 	}
 }
 
-func handleOutgoingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
-	for {
-		select {
-		case chunk := <-cs.OutputStream():
-			// Live streaming content
-			sendWSMessage(conn, "stream_chunk", string(chunk))
-		case err := <-cs.Errors():
-			// Errors
-			sendWSMessage(conn, "error", err.Error())
-		case msg := <-cs.OutputMessage():
-			// System or AI messages
-			sendWSMessage(conn, "system", msg.Payload)
-		}
-	}
-}
-
 func sendWSMessage(conn *websocket.Conn, msgType string, payload string) {
 	message := ChatMessage{
 		Type:    msgType,
@@ -255,16 +255,56 @@ func sendWSMessage(conn *websocket.Conn, msgType string, payload string) {
 	}
 }
 
+func handleOutgoingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
+	var currentMessage strings.Builder
+	var isStreaming bool
+	for {
+		select {
+		case chunk := <-cs.OutputStream():
+			// Try to parse as JSON to check if it's a combined message
+			var mc llms.MessageContent
+			err := json.Unmarshal(chunk, &mc)
+			if err == nil && mc.Role == llms.ChatMessageTypeAI {
+				// If it's a valid AI message, send as a regular message
+				// and mark that we're not streaming
+				sendWSMessage(conn, "message", string(chunk))
+				currentMessage.Reset()
+				isStreaming = false
+			} else if err != nil {
+				// Only send stream chunks for non-JSON content (actual streaming text)
+				sendWSMessage(conn, "stream_chunk", string(chunk))
+				isStreaming = true
+			}
+
+		case err := <-cs.Errors():
+			// Errors
+			sendWSMessage(conn, "error", err.Error())
+			currentMessage.Reset()
+			isStreaming = false
+
+		case msg := <-cs.OutputMessage():
+			// Only send system messages or messages when we're not in streaming mode
+			if strings.Contains(msg.Payload, ":::system") {
+				sendWSMessage(conn, "system", msg.Payload)
+			} else if !isStreaming {
+				// Only send as message if we're not currently streaming
+				sendWSMessage(conn, "message", msg.Payload)
+			}
+			currentMessage.Reset()
+		}
+	}
+}
+
 func (a *API) SetupChatRoutes(r *gin.RouterGroup) {
 	r.GET("/ws/chat/:chat_id", func(c *gin.Context) {
 		a.HandleChatWebSocket(c)
 	})
-	r.POST("/common/chat-sessions/:session_id/datasources", a.addDatasourceToChatSession)
-	r.DELETE("/common/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
-	r.POST("/common/chat-sessions/:session_id/tools", a.addToolToChatSession)
-	r.DELETE("/common/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
-	r.POST("/common/chat-sessions/:session_id/upload", a.UploadFileToSession)
-	r.PUT("/common/chat-sessions/:session_id/messages/:message_id", a.editMessageInChatSession)
+	r.POST("/chat-sessions/:session_id/datasources", a.addDatasourceToChatSession)
+	r.DELETE("/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
+	r.POST("/chat-sessions/:session_id/tools", a.addToolToChatSession)
+	r.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
+	r.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
+	r.PUT("/chat-sessions/:session_id/messages/:message_id", a.editMessageInChatSession)
 }
 
 func (a *API) addDatasourceToChatSession(c *gin.Context) {
@@ -518,7 +558,7 @@ func (a *API) editMessageInChatSession(c *gin.Context) {
 	}
 
 	var req struct {
-		NewContent string `json:"new_content" binding:"required"`
+		NewContent json.RawMessage `json:"new_content" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -530,7 +570,7 @@ func (a *API) editMessageInChatSession(c *gin.Context) {
 		return
 	}
 
-	if err := a.service.EditUserMessage(sessionID, uint(msgID), req.NewContent); err != nil {
+	if err := a.service.EditUserMessage(sessionID, uint(msgID), string(req.NewContent)); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

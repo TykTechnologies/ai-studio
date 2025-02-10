@@ -157,7 +157,16 @@ func (h *GormChatMessageHistory) addMessage(ctx context.Context, mc llms.Message
 
 // AddAIMessage adds an AIMessage to the chat message history
 func (h *GormChatMessageHistory) AddAIMessage(ctx context.Context, text string) error {
-	mc := llms.TextParts(llms.ChatMessageTypeAI, text)
+	var mc llms.MessageContent
+	// Try to parse the text as JSON first to see if it's a combined message
+	err := json.Unmarshal([]byte(text), &mc)
+	if err == nil && mc.Role == llms.ChatMessageTypeAI {
+		// If it's already a valid MessageContent with AI role, use it directly
+		return h.addMessage(ctx, mc)
+	}
+
+	// If it's not a valid JSON or not an AI message, create a new text message
+	mc = llms.TextParts(llms.ChatMessageTypeAI, text)
 	return h.addMessage(ctx, mc)
 }
 

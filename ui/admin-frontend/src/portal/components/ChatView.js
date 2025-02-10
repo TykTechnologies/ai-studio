@@ -21,9 +21,9 @@ import ChatInput from './chat/ChatInput';
 import ChatSidebar from './chat/ChatSidebar';
 
 /**
- * This ChatView ensures:
- * 1) Consecutive system/error messages merge into the last system message.
- * 2) "[CONTEXT]" blocks or ":::system" lines are handled in the single unified MessageContent logic with toggling.
+ * Modified ChatView to remove the extra REST fetch of chat messages.
+ * Now it only listens for a 'history' message from the WebSocket
+ * to load old messages once, ensuring only a single request is made.
  */
 const ChatView = () => {
   const [currentlyUsing, setCurrentlyUsing] = useState([]);
@@ -34,11 +34,14 @@ const ChatView = () => {
   const [error, setError] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [chatName, setChatName] = useState('');
   const [showTools, setShowTools] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [autoScroll, setAutoScroll] = useState(true);
+  const [showSystemMessages, setShowSystemMessages] = useState(() => {
+    const saved = localStorage.getItem('showSystemMessages');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -49,6 +52,12 @@ const ChatView = () => {
   const location = useLocation();
   const messageContainerRef = useRef(null);
   const navigate = useNavigate();
+
+  /**
+   * We no longer fetch messages from REST. Instead, once our
+   * WebSocket is open, the server will send a "history" type
+   * message that we use to populate 'messages'.
+   */
 
   const updateChatName = useCallback(async (name, currentSessionId) => {
     try {
@@ -74,75 +83,155 @@ const ChatView = () => {
    * handleRealtimeChunks merges repeated system/error lines into the last system message
    * if that last system message is also "system".
    */
+  const lastTypeRef = useRef(null);
+
   const handleRealtimeChunks = useCallback((data) => {
-    if (data.type === 'stream_chunk' || data.type === 'ai_message') {
+    const currentType = data.type;
+    const lastType = lastTypeRef.current;
+
+    console.log('Processing incoming WS message:', {
+      currentType,
+      lastType,
+      payload: data.payload
+    });
+
+    // If the server sends the entire chat history
+    if (data.type === 'history') {
+      try {
+        const parsed = JSON.parse(data.payload);
+        if (Array.isArray(parsed)) {
+          console.log('Processing history messages:', parsed);
+          const processedMessages = parsed.map(msg => {
+            try {
+              const content = msg.attributes?.content || msg.content;
+              console.log('Processing message content:', content);
+              const parsedContent = JSON.parse(content);
+              console.log('Parsed content:', parsedContent);
+
+              // Keep the original text which may include context tags
+              const messageText = parsedContent.text || parsedContent.content;
+              const context = parsedContent.context;
+
+              // Log the role and content being processed
+              console.log('Processing message role:', parsedContent.role, 'text:', messageText);
+
+              const messageContent = context ? `[CONTEXT]${context}[/CONTEXT]${messageText}` : messageText;
+
+              switch (parsedContent.role) {
+                case 'human':
+                  console.log('Creating user message from human role');
+                  return {
+                    id: Math.floor(Math.random() * 1_000_000_000),
+                    type: 'user',
+                    content: messageContent,
+                    isComplete: true
+                  };
+                case 'ai':
+                  return {
+                    id: Math.floor(Math.random() * 1_000_000_000),
+                    type: 'ai',
+                    content: messageContent,
+                    isComplete: true
+                  };
+                case 'system':
+                  // Ensure system messages have the :::system::: wrapper
+                  const systemText = messageText.includes(':::system')
+                    ? messageContent
+                    : `:::system ${messageContent}:::`;
+                  return {
+                    id: Math.floor(Math.random() * 1_000_000_000),
+                    type: 'system',
+                    content: systemText,
+                    isComplete: true
+                  };
+                default:
+                  console.log('Unknown role:', parsedContent.role);
+                  return null;
+              }
+            } catch (e) {
+              console.error('Failed to parse message:', e);
+              return null;
+            }
+          }).filter(msg => msg !== null);
+
+          setMessages(processedMessages);
+        }
+      } catch (err) {
+        console.error('Failed to parse incoming history:', err);
+      }
+      return;
+    }
+
+    // Update last message type
+    lastTypeRef.current = currentType;
+
+    // Process AI messages and stream chunks
+    if (currentType === 'stream_chunk' || currentType === 'message' || currentType === 'ai_message') {
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
         const lastMessage = newMessages[newMessages.length - 1];
-        let content = data.payload;
+        let content;
+        let isComplete = false;
 
-        if (data.type === 'ai_message') {
-          try {
-            const parsed = JSON.parse(data.payload);
-            content = parsed.text;
-          } catch (e) {
+        try {
+          if (currentType === 'message' || currentType === 'ai_message') {
+            const parsedPayload = JSON.parse(data.payload);
+            if (parsedPayload.role === 'ai') {
+              content = parsedPayload.text;
+              isComplete = true;
+            } else {
+              content = data.payload;
+            }
+          } else {
             content = data.payload;
           }
+        } catch (e) {
+          content = data.payload;
         }
 
-        if (
-          lastMessage &&
-          lastMessage.type === 'ai' &&
-          !lastMessage.isComplete &&
-          data.type === 'stream_chunk'
-        ) {
+        if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
           newMessages[newMessages.length - 1] = {
             ...lastMessage,
             content: lastMessage.content + content,
+            isComplete: isComplete
           };
         } else {
-          // Assign a local random ID that doesn't have "temp_" so it can be edited if needed
           newMessages.push({
             id: Math.floor(Math.random() * 1_000_000_000),
             type: 'ai',
             content: content,
-            isComplete: data.type === 'ai_message',
+            isComplete: isComplete
           });
         }
         return newMessages;
       });
-    } else if (data.type === 'user_message') {
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        {
-          // remove "temp_" prefix approach
-          id: Math.floor(Math.random() * 1_000_000_000),
-          type: 'user',
-          content: data.payload,
-          isComplete: true,
-        },
-      ]);
+    } else if (data.type === 'historical_user_message' || data.type === 'user_message') {
+      // Handle both historical and real-time user messages
+      // For historical messages or non-edited real-time messages, add to the list
+      if (data.type === 'historical_user_message' || !data.isEdited) {
+        console.log('Adding user message:', data);
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            id: Math.floor(Math.random() * 1_000_000_000),
+            type: 'user',
+            content: data.payload,
+            isComplete: true,
+          },
+        ]);
+      }
     } else if (data.type === 'error' || data.type === 'system' || data.type === 'tool') {
       let messageContent = data.payload;
 
       // Skip "Currently using" tool status messages
       if (messageContent.includes('Currently using')) {
-        console.log("REMOVING!")
-        return;
-      }
-
-      // The user specifically asked that 'system' lines or 'tool' lines should remain so we can see them as system messages
-      // We'll unify them in the front-end rendering
-      if (data.type === 'system') {
-        // for the example, let's do nothing special here if we want them merged with system
-        // or we can do the same approach as below
+        console.log("Skipping 'Currently using' system message");
         return;
       }
 
       if (data.type === 'error') {
         messageContent = `:::system Error: ${data.payload}:::`;
       } else if (data.type === 'tool') {
-        // For tool messages, don't wrap in system markers if they already are
         if (!data.payload.includes(':::system')) {
           messageContent = `:::system ${data.payload}:::`;
         }
@@ -157,9 +246,16 @@ const ChatView = () => {
           isComplete: true,
         },
       ]);
-
     } else if (data.type === 'session_id') {
-      // no-op, we handle it in the hook
+      // This is the initial "session_id" from server
+      // We might store it or set tools/datasources
+      if (data.tools) {
+        setCurrentlyUsing(data.tools);
+      }
+      if (data.datasources) {
+        setCurrentlyUsing(prev => [...prev, ...data.datasources]);
+      }
+      console.log('Session ID received:', data.payload);
     }
   }, []);
 
@@ -181,113 +277,14 @@ const ChatView = () => {
     updateChatName,
   });
 
-  // We unify message parsing so if the server returns either
-  // { data: [...] } or just [ ... ],
-  // we handle it gracefully and do not overwrite messages with []:
-  const parseFetchedMessages = (respData) => {
-    let messages = [];
-    if (Array.isArray(respData)) {
-      messages = respData;
-    } else if (respData && Array.isArray(respData.data)) {
-      messages = respData.data;
+  useEffect(() => {
+    if ((error || wsError) && !isNewChat) {
+      console.warn('Encountered error in ChatView:', error || wsError);
     }
-    // Filter out "Currently using" messages
-    return messages.filter(msg => {
-      if (msg?.attributes?.content) {
-        try {
-          const parsed = JSON.parse(msg.attributes.content);
-          if (parsed.role === 'system' && parsed.text?.includes('Currently using')) {
-            return false;
-          }
-        } catch (e) {
-          // If parsing fails, keep the message
-        }
-      }
-      return true;
-    });
-  };
+  }, [error, wsError, isNewChat]);
 
-  const fetchMessagesForSession = useCallback(async (sessionID) => {
-    if (!sessionID) return;
-    setIsFetchingHistory(true);
-    setError(null);
-    try {
-      const response = await pubClient.get(`/common/sessions/${sessionID}/messages?page_size=500`);
-      const messagesData = parseFetchedMessages(response.data);
-      if (!messagesData.length) {
-        setMessages([]);
-        setIsFetchingHistory(false);
-        return;
-      }
-      const newMessages = messagesData
-        .filter(msg => msg && msg.attributes)
-        .map((msg) => {
-          let content = msg.attributes.content;
-          let role = 'assistant';
-          try {
-            const parsed = JSON.parse(content);
-            role = parsed.role || 'assistant';
-
-            // Skip "Currently using" messages
-            if (parsed.role === 'system' && parsed.text?.includes('Currently using')) {
-              return null;
-            }
-
-            if (parsed.text) {
-              content = parsed.text;
-            } else if (parsed.content) {
-              content = parsed.content;
-            }
-          } catch (e) {
-            // fallback: not valid JSON, interpret as text
-          }
-
-          let displayType;
-          switch (role.toLowerCase()) {
-            case 'user':
-            case 'human':
-              displayType = 'user';
-              break;
-            case 'assistant':
-              displayType = 'ai';
-              break;
-            case 'system':
-              displayType = 'system';
-              // Always wrap system messages in :::system markers if they don't already have them
-              if (!content.startsWith(':::system')) {
-                content = `:::system ${content}:::`;
-              }
-              break;
-            case 'tool':
-              displayType = 'tool';
-              break;
-            default:
-              displayType = 'ai';
-              break;
-          }
-
-          return {
-            // keep the actual ID from DB so it can be edited
-            id: msg.id,
-            type: displayType,
-            content: content,
-            // For existing messages, mark them as complete so new lines won't merge
-            isComplete: true,
-          };
-        });
-
-      setMessages(newMessages);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-      if (sessionID) {
-        setError('Error fetching messages from DB');
-      }
-    }
-    setIsFetchingHistory(false);
-  }, []);
-
-  const scrollToBottom = () => {
+  // Automatic scrolling
+  const scrollToBottom = useCallback(() => {
     if (messageContainerRef.current) {
       const scrollHeight = messageContainerRef.current.scrollHeight;
       const height = messageContainerRef.current.clientHeight;
@@ -297,13 +294,13 @@ const ChatView = () => {
         behavior: 'smooth',
       });
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (autoScroll) {
       scrollToBottom();
     }
-  }, [messages, autoScroll]);
+  }, [messages, autoScroll, scrollToBottom]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -335,7 +332,6 @@ const ChatView = () => {
     const resizeObserver = new ResizeObserver(() => {
       try {
         if (autoScroll) {
-          // Check if already scrolled to bottom before calling scrollToBottom
           if (messageContainer.scrollHeight - messageContainer.clientHeight - messageContainer.scrollTop > 1) {
             debouncedScrollToBottom();
           }
@@ -415,13 +411,7 @@ const ChatView = () => {
     fetchData();
   }, [chatId]);
 
-  useEffect(() => {
-    if (sessionId && isConnected) {
-      fetchMessagesForSession(sessionId);
-    }
-  }, [sessionId, isConnected, fetchMessagesForSession]);
-
-  // Handle chat navigation - clean up state when unmounting
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (closeWebSocket) {
@@ -435,18 +425,11 @@ const ChatView = () => {
       setError(null);
       setUploadedFiles([]);
       setIsUploading(false);
-      setIsFetchingHistory(false);
       setChatName('');
       setExpandedGroups({});
       setAutoScroll(true);
     };
   }, [chatId, closeWebSocket]);
-
-  useEffect(() => {
-    if ((error || wsError) && !isNewChat) {
-      setIsFetchingHistory(false);
-    }
-  }, [error, wsError, isNewChat]);
 
   const onDrop = useCallback(
     (acceptedFiles) => {
@@ -507,7 +490,7 @@ const ChatView = () => {
       setMessages((prevMessages) => [
         ...prevMessages,
         {
-          // assign a local ID that is not prefixed with "temp_"
+          // assign a local ID
           id: Math.floor(Math.random() * 1_000_000_000),
           type: 'user',
           content: messageContent,
@@ -619,7 +602,8 @@ const ChatView = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if ((error || wsError) && !isNewChat && !isFetchingHistory) {
+  // If there's an error from WS (and not a new chat), show it
+  if ((error || wsError) && !isNewChat) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
         <Alert severity="error">{error || wsError}</Alert>
@@ -627,7 +611,7 @@ const ChatView = () => {
     );
   }
 
-  if (isLoading || isFetchingHistory) {
+  if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
         <CircularProgress />
@@ -684,41 +668,80 @@ const ChatView = () => {
                 },
               }}
             >
-              {messages.map((message, index) => (
-                <Box
-                  key={message.id || index}
-                  sx={{
-                    width: '100%',
-                    p: 2,
-                    borderTop: index > 0 ? '1px solid #e0e0e0' : 'none',
-                    borderBottom:
-                      index === messages.length - 1 ? '1px solid #e0e0e0' : 'none',
-                    opacity: message.isComplete === false ? 0.9 : 1,
-                  }}
-                >
-                  {message.type !== 'system' && (
-                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                      {message.type === 'user'
-                        ? 'You:'
-                        : message.type === 'ai'
-                          ? 'Assistant:'
-                          : 'Tool:'}
-                    </Typography>
-                  )}
-                  <MessageContent
-                    content={message.content}
-                    messageIndex={index}
-                    expandedGroups={expandedGroups}
-                    toggleGroup={toggleGroup}
-                    messageId={message.id}
-                    messageType={message.type}
-                    sessionId={sessionId}
-                    onEditSuccess={() => {
-                      fetchMessagesForSession(sessionId);
+              {messages.length > 0 && (
+                <Box sx={{ p: 1, textAlign: 'right' }}>
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    onClick={() => {
+                      const newValue = !showSystemMessages;
+                      setShowSystemMessages(newValue);
+                      localStorage.setItem('showSystemMessages', JSON.stringify(newValue));
                     }}
-                  />
+                    sx={{
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      color: showSystemMessages ? 'primary.main' : 'text.secondary',
+                      '&:hover': {
+                        color: 'primary.main',
+                      },
+                    }}
+                  >
+                    {showSystemMessages ? 'Hide' : 'Show'} System and Context Messages
+                  </Typography>
                 </Box>
-              ))}
+              )}
+              {messages.map((message, index) => {
+                // Only skip pure system messages when hidden
+                if (!showSystemMessages && message.type === 'system') {
+                  return null;
+                }
+                return (
+                  <Box
+                    key={message.id || index}
+                    sx={{
+                      width: '100%',
+                      p: 2,
+                      borderTop: index > 0 ? '1px solid #e0e0e0' : 'none',
+                      borderBottom:
+                        index === messages.length - 1 ? '1px solid #e0e0e0' : 'none',
+                      opacity: message.isComplete === false ? 0.9 : 1,
+                    }}
+                  >
+                    {message.type !== 'system' && (
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                        {message.type === 'user'
+                          ? 'You:'
+                          : message.type === 'ai'
+                            ? 'Assistant:'
+                            : 'Tool:'}
+                      </Typography>
+                    )}
+                    <MessageContent
+                      content={message.content}
+                      messageIndex={index}
+                      expandedGroups={expandedGroups}
+                      toggleGroup={toggleGroup}
+                      messageId={message.id}
+                      messageType={message.type}
+                      sessionId={sessionId}
+                      showSystemMessages={showSystemMessages}
+                      onEditSuccess={(editedText) => {
+                        // If the user edits, we re-broadcast or re-fetch
+                        const newMsg = {
+                          type: 'user_message',
+                          payload: editedText,
+                          file_refs: [],
+                          isEdited: true
+                        };
+                        sendMessage(newMsg);
+                        // We won't do an extra fetch. We'll rely on the server's WS broadcast.
+                      }}
+                    />
+                  </Box>
+                );
+              })}
             </Box>
 
             {!autoScroll && (
