@@ -42,20 +42,18 @@ const MainLayout = () => {
         const attributes = response.data.attributes;
         setEntitlements(attributes);
 
-        // If we're an admin user and at root
-        if (attributes.is_admin && location.pathname === "/") {
+        // If we're an admin user and either at root or portal dashboard,
+        // force redirect to admin dashboard
+        if (
+          attributes.is_admin &&
+          (location.pathname === "/" ||
+            location.pathname === "/portal/dashboard")
+        ) {
           const storedAdminPath = getStoredPath('admin');
           setCurrentTab("admin");
           navigate(storedAdminPath || "/admin/dash", { replace: true });
-        } 
-        // If at portal dashboard and admin, redirect to admin
-        else if (attributes.is_admin && location.pathname === "/portal/dashboard") {
-          const storedAdminPath = getStoredPath('admin');
-          setCurrentTab("admin");
-          navigate(storedAdminPath || "/admin/dash", { replace: true });
-        }
-        // Otherwise check stored paths based on current location
-        else {
+        } else {
+          // Set initial tab based on current location
           if (location.pathname.startsWith("/admin")) {
             const storedPath = getStoredPath('admin');
             setCurrentTab("admin");
