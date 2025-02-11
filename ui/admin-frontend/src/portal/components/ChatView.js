@@ -128,6 +128,11 @@ const ChatView = () => {
           const processedMessages = parsed.map(msg => {
             try {
               const content = msg.attributes?.content || msg.content;
+              const messageId = msg.id || msg.attributes?.id;
+              if (!messageId) {
+                console.error('Message ID missing from server response:', msg);
+                return null;
+              }
               const parsedContent = JSON.parse(content);
 
               // Keep the original text which may include context tags
@@ -139,14 +144,14 @@ const ChatView = () => {
               switch (parsedContent.role) {
                 case 'human':
                   return {
-                    id: Math.floor(Math.random() * 1_000_000_000),
+                    id: messageId,
                     type: 'user',
                     content: messageContent,
                     isComplete: true
                   };
                 case 'ai':
                   return {
-                    id: Math.floor(Math.random() * 1_000_000_000),
+                    id: messageId,
                     type: 'ai',
                     content: messageContent,
                     isComplete: true
@@ -157,14 +162,14 @@ const ChatView = () => {
                     ? messageContent
                     : `:::system ${messageContent}:::`;
                   return {
-                    id: Math.floor(Math.random() * 1_000_000_000),
+                    id: messageId,
                     type: 'system',
                     content: systemText,
                     isComplete: true
                   };
                 case 'tool':
                   return {
-                    id: Math.floor(Math.random() * 1_000_000_000),
+                    id: messageId,
                     type: 'ai',
                     content: messageContent,
                     isComplete: true
@@ -215,36 +220,68 @@ const ChatView = () => {
           content = data.payload;
         }
 
-        if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
-          newMessages[newMessages.length - 1] = {
-            ...lastMessage,
-            content: lastMessage.content + content,
-            isComplete: isComplete
-          };
+        // For streaming chunks, always append to the last AI message if it's not complete
+        if (currentType === 'stream_chunk') {
+          if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              content: lastMessage.content + content,
+              isComplete: false
+            };
+          } else {
+            // Start a new streaming message
+            newMessages.push({
+              id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+              type: 'ai',
+              content: content,
+              isComplete: false
+            });
+          }
         } else {
-          newMessages.push({
-            id: Math.floor(Math.random() * 1_000_000_000),
-            type: 'ai',
-            content: content,
-            isComplete: isComplete
-          });
+          // For complete messages, either update the last message or create a new one
+          if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              content: content,
+              isComplete: true
+            };
+          } else {
+            newMessages.push({
+              id: data.id || `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+              type: 'ai',
+              content: content,
+              isComplete: true
+            });
+          }
         }
         return newMessages;
       });
     } else if (data.type === 'historical_user_message' || data.type === 'user_message') {
       // Handle both historical and real-time user messages
-      // For historical messages or non-edited real-time messages, add to the list
       if (data.type === 'historical_user_message' || !data.isEdited) {
         console.log('Adding user message:', data);
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          {
-            id: Math.floor(Math.random() * 1_000_000_000),
-            type: 'user',
-            content: data.payload,
-            isComplete: true,
-          },
-        ]);
+        setMessages((prevMessages) => {
+          // If this is a response to a temp message, update its ID
+          const lastMessage = prevMessages[prevMessages.length - 1];
+          if (lastMessage && lastMessage.type === 'user' && lastMessage.id.startsWith('temp_')) {
+            const updatedMessages = [...prevMessages];
+            updatedMessages[updatedMessages.length - 1] = {
+              ...lastMessage,
+              id: data.id || lastMessage.id
+            };
+            return updatedMessages;
+          }
+          // Otherwise add as a new message
+          return [
+            ...prevMessages,
+            {
+              id: data.id || `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+              type: 'user',
+              content: data.payload,
+              isComplete: true,
+            },
+          ];
+        });
       }
     } else if (data.type === 'error' || data.type === 'system' || data.type === 'tool') {
       let messageContent = data.payload;
@@ -266,7 +303,7 @@ const ChatView = () => {
       setMessages((prevMessages) => [
         ...prevMessages,
         {
-          id: Math.floor(Math.random() * 1_000_000_000),
+          id: data.id || `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
           type: 'system',
           content: messageContent,
           isComplete: true,
@@ -297,6 +334,7 @@ const ChatView = () => {
     closeWebSocket,
     error: wsError,
     setError: setWsError,
+    ws,
   } = useChatWebSocket({
     chatId,
     onMessageReceived: handleRealtimeChunks,
@@ -434,7 +472,7 @@ const ChatView = () => {
         setMessages((prevMessages) => [
           ...prevMessages,
           {
-            id: Math.floor(Math.random() * 1_000_000_000),
+            id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
             type: 'system',
             content: ':::system Error: Failed to load databases and tools:::',
             isComplete: true,
@@ -516,6 +554,7 @@ const ChatView = () => {
     e.preventDefault();
     if ((inputMessage.trim() || uploadedFiles.length > 0) && isConnected) {
       const messageContent = inputMessage.trim();
+      const tempId = `temp_${Math.floor(Math.random() * 1_000_000_000)}`;
       const message = {
         type: 'user_message',
         payload: messageContent,
@@ -525,8 +564,7 @@ const ChatView = () => {
       setMessages((prevMessages) => [
         ...prevMessages,
         {
-          // assign a local ID
-          id: Math.floor(Math.random() * 1_000_000_000),
+          id: tempId,
           type: 'user',
           content: messageContent,
           isComplete: true,
@@ -769,16 +807,29 @@ const ChatView = () => {
                       messageType={message.type}
                       sessionId={sessionId}
                       showSystemMessages={showSystemMessages}
-                      onEditSuccess={(editedText) => {
-                        // If the user edits, we re-broadcast or re-fetch
-                        const newMsg = {
+                      chatId={chatId}
+                      onEditSuccess={(editedText, messageId) => {
+                        // Update the message content and remove all subsequent messages
+                        setMessages(prevMessages => {
+                          const messageIndex = prevMessages.findIndex(msg => msg.id === messageId);
+                          if (messageIndex === -1) return prevMessages;
+
+                          // Keep messages up to and including the edited message
+                          const updatedMessages = prevMessages.slice(0, messageIndex + 1);
+                          // Update the edited message
+                          updatedMessages[messageIndex] = {
+                            ...updatedMessages[messageIndex],
+                            content: editedText
+                          };
+                          return updatedMessages;
+                        });
+
+                        // Send the new message
+                        sendMessage({
                           type: 'user_message',
                           payload: editedText,
-                          file_refs: [],
-                          isEdited: true
-                        };
-                        sendMessage(newMsg);
-                        // We won't do an extra fetch. We'll rely on the server's WS broadcast.
+                          file_refs: []
+                        });
                       }}
                     />
                   </Box>

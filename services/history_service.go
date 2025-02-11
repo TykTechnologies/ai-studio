@@ -153,3 +153,32 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 
 	return nil
 }
+
+// EditUserMessageByIndex removes messages from the specified index onwards
+func (s *Service) EditUserMessageByIndex(sessionID string, messageIndex int) error {
+	var messages []models.CMessage
+	err := s.DB.Where("session = ?", sessionID).Order("created_at asc").Find(&messages).Error
+	if err != nil {
+		slog.Error("Failed to find messages", "error", err)
+		return fmt.Errorf("failed to find messages: %w", err)
+	}
+
+	if messageIndex >= len(messages) {
+		return fmt.Errorf("message index out of range")
+	}
+
+	// Get the ID of the message at the specified index
+	messageID := messages[messageIndex].ID
+
+	slog.Debug("Removing messages from index", "messageIndex", messageIndex, "messageID", messageID)
+
+	// Remove all messages from this index onwards
+	result := s.DB.Where("session = ? AND id >= ?", sessionID, messageID).Delete(&models.CMessage{})
+	if result.Error != nil {
+		slog.Error("Failed to delete messages", "error", result.Error)
+		return fmt.Errorf("failed to delete messages: %w", result.Error)
+	}
+	slog.Debug("Deleted messages", "count", result.RowsAffected)
+
+	return nil
+}

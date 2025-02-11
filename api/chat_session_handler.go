@@ -218,8 +218,7 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 
 	go handleIncomingMessages(conn, chatSession)
 
-  
-  handleOutgoingMessages(conn, chatSession)
+	handleOutgoingMessages(conn, chatSession)
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
@@ -573,7 +572,36 @@ func (a *API) editMessageInChatSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	msgIDStr := c.Param("message_id")
 
-	// if it starts with temp_, reject
+	var req struct {
+		NewContent json.RawMessage `json:"new_content" binding:"required"`
+		Index      *int            `json:"index,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// If index is provided, use EditUserMessageByIndex
+	if req.Index != nil {
+		if err := a.service.EditUserMessageByIndex(sessionID, *req.Index); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Messages removed from index"})
+		return
+	}
+
+	// Otherwise, handle normal message editing
 	if strings.HasPrefix(msgIDStr, "temp_") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot edit a temporary (unsaved) message."})
 		return
@@ -586,19 +614,6 @@ func (a *API) editMessageInChatSession(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid message ID"}},
-		})
-		return
-	}
-
-	var req struct {
-		NewContent json.RawMessage `json:"new_content" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
 	}

@@ -43,6 +43,11 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 				.map((msg) => {
 					try {
 						const content = msg.attributes?.content || msg.content;
+						const messageId = msg.id;
+						if (!messageId) {
+							console.error('Message ID missing from server response:', msg);
+							return null;
+						}
 						const parsedContent = JSON.parse(content);
 
 						// Handle different message roles
@@ -53,12 +58,14 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 						switch (parsedContent.role) {
 							case 'human':
 								return {
+									id: messageId,
 									type: 'user',
 									content: messageContent,
 									isComplete: true
 								};
 							case 'ai':
 								return {
+									id: messageId,
 									type: 'ai',
 									content: messageContent,
 									isComplete: true
@@ -68,12 +75,14 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 									? messageContent
 									: `:::system ${messageContent}:::`;
 								return {
+									id: messageId,
 									type: 'system',
 									content: systemText,
 									isComplete: true
 								};
 							case 'tool':
 								return {
+									id: messageId,
 									type: 'ai',
 									content: messageContent,
 									isComplete: true
@@ -85,6 +94,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 					} catch (e) {
 						// If parsing fails, treat it as an AI message with direct content
 						return {
+							id: msg.id,
 							type: "ai",
 							content: msg.attributes.content,
 							isComplete: true,
@@ -103,6 +113,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 		} catch (error) {
 			console.error("Error fetching chat history:", error);
 			return [{
+				id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 				type: "system",
 				content: "Error: Failed to load chat history",
 				isComplete: true,
@@ -158,6 +169,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 							onMessageReceived({
 								type: 'history',
 								payload: JSON.stringify(messages.map(msg => ({
+									id: msg.id,
 									attributes: {
 										content: JSON.stringify({
 											role: msg.type === 'user' ? 'human' : msg.type === 'ai' ? 'ai' : 'system',
@@ -191,6 +203,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 							data.tools.forEach(tool => {
 								const uniqueId = `tool-${tool.id}`;
 								onMessageReceived({
+									id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 									type: "system",
 									payload: `Tool '${tool.name}' added to room`,
 									isComplete: true,
@@ -202,6 +215,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 							data.datasources.forEach(ds => {
 								const uniqueId = `database-${ds.id}`;
 								onMessageReceived({
+									id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 									type: "system",
 									payload: `Datasource '${ds.name}' added to room`,
 									isComplete: true,
@@ -210,7 +224,9 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 							});
 						}
 					} else if (data.type === "user_message") {
+						// For user messages, pass through the server's ID
 						onMessageReceived({
+							id: data.id,
 							type: "user_message",
 							payload: data.payload,
 							isComplete: true
@@ -221,6 +237,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 				} catch (error) {
 					console.error("Error parsing websocket message:", error);
 					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: "system",
 						payload: "Error: Failed to parse message from server",
 						isComplete: true
@@ -233,6 +250,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 				// Only set error if we're not in the process of reconnecting
 				if (reconnectAttempts.current === 0) {
 					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: "system",
 						payload: `WebSocket error occurred. Attempting to reconnect...`,
 					});
@@ -256,12 +274,14 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 					// Only show reconnection message if we haven't reached max attempts
 					if (reconnectAttempts.current < maxReconnectAttempts) {
 						onMessageReceived({
+							id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 							type: "system",
 							payload: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
 						});
 						reconnectWithDelay();
 					} else {
 						onMessageReceived({
+							id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 							type: "system",
 							payload: "Maximum reconnection attempts reached. Please refresh the page.",
 						});
@@ -307,6 +327,7 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 				if (!isConnectedRef.current) {
 					setIsLoading(false);
 					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: "system",
 						payload: "Connection timeout. Please try again.",
 						isComplete: true
