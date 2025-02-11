@@ -9,7 +9,7 @@ on:
 jobs:
   golangci-lint:
     if: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m-2
     steps:
       -
         name: Checkout
@@ -38,7 +38,7 @@ jobs:
 
   ui-test:
     name: UI tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m-2
     steps:
       -
         name: Checkout
@@ -62,7 +62,7 @@ jobs:
 
   go-test:
     name: Go tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m-2
     steps:
       -
         name: Checkout main repository
