@@ -20,7 +20,8 @@ COPY . .
 ARG TARGETARCH
 ENV NODE_ENV notDevelopment
 
-RUN make clean && \
+RUN touch docs/site/public/empty && \
+    make clean && \
     make build-admin-frontend-clean && \
     GOOS=linux GOARCH=$TARGETARCH go build -o midsommar .
 
