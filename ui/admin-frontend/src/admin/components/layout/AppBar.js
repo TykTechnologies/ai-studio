@@ -8,8 +8,7 @@ import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import { useNavigate } from "react-router-dom";
 import { styled } from "@mui/material/styles";
 import { StyledIconButton } from "../../styles/sharedStyles";
-import apiClient from "../../utils/apiClient";
-import pubClient from "../../utils/pubClient";
+import pubClient, { logout } from "../../utils/pubClient";
 
 const StyledLink = styled("a")(({ theme }) => ({
   color: "white",
@@ -38,14 +37,8 @@ const MyAppBar = () => {
     fetchSystemSettings();
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await apiClient.post("/logout");
-      localStorage.removeItem("token");
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+  const handleLogout = () => {
+    logout();
   };
 
   return (

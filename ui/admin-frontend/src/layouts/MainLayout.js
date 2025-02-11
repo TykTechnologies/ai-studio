@@ -7,7 +7,7 @@ import AdminLayout from "../admin/components/layout/MainLayout";
 import ChatDrawer from "../admin/components/layout/ChatDrawer";
 import PortalDrawer from "../admin/components/layout/PortalDrawer";
 import { useNavigate } from "react-router-dom";
-import pubClient from "../admin/utils/pubClient";
+import pubClient, { logout } from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
 import portalTheme from "../portal/theme/portalTheme";
 import { DRAWER_WIDTH } from "../constants/layout";
@@ -37,6 +37,11 @@ const MainLayout = () => {
 
   useEffect(() => {
     const fetchEntitlements = async () => {
+      if (location.pathname === '/login') {
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await pubClient.get("/common/me");
         const attributes = response.data.attributes;
@@ -121,13 +126,8 @@ const MainLayout = () => {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await pubClient.post("/common/logout");
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+  const handleLogout = () => {
+    logout();
   };
 
   if (loading) return null;
