@@ -37,10 +37,6 @@ const MyAppBar = () => {
     fetchSystemSettings();
   }, []);
 
-  const handleLogout = () => {
-    logout();
-  };
-
   return (
     <AppBar
       position="fixed"
@@ -77,7 +73,7 @@ const MyAppBar = () => {
           Portal Dashboard
         </StyledLink>
 
-        <StyledIconButton color="inherit" onClick={handleLogout}>
+        <StyledIconButton color="inherit" onClick={logout}>
           <LogoutIcon />
         </StyledIconButton>
       </Toolbar>
