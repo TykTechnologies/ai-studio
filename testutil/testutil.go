@@ -1,4 +1,4 @@
-package api
+package testutil
 
 import (
 	"bytes"
@@ -6,15 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/gin-gonic/gin"
+	"github.com/go-mail/mail"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -22,7 +21,17 @@ import (
 
 var emptyFile embed.FS
 
-func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
+type MockMailer struct{}
+
+func (m *MockMailer) DialAndSend(msg ...*mail.Message) error {
+	return nil
+}
+
+func NewMockMailer() *MockMailer {
+	return &MockMailer{}
+}
+
+func SetupTestAPI(t *testing.T) (*api.API, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err, "Failed to open database")
 
@@ -45,12 +54,12 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 		TestMode:            true,
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
+	a := api.NewAPI(service, true, auth.NewAuthService(config, NewMockMailer(), service), config, nil, emptyFile)
 
-	return api, db
+	return a, db
 }
 
-func performRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
+func PerformRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
 	var reqBody []byte
 	if body != nil {
 		reqBody, _ = json.Marshal(body)
@@ -60,15 +69,4 @@ func performRequest(r http.Handler, method, path string, body interface{}) *http
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
-}
-
-func TestMain(m *testing.M) {
-	gin.SetMode(gin.TestMode)
-
-	// Initialize features for test mode
-	licensing.InitializeForTests(map[string]interface{}{
-		"feature_chat": true,
-	})
-
-	os.Exit(m.Run())
 }

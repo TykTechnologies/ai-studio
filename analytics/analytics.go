@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -86,20 +87,28 @@ var (
 	logEntryChan   chan *LLMChatLogEntry
 	toolCallChan   chan *ToolCallRecord
 	proxyLogChan   chan *ProxyLog
+	recStarted     bool
+	recMutex       sync.RWMutex
 )
 
 func RecordProxyLog(log *ProxyLog) {
+	recMutex.RLock()
 	if !recStarted {
+		recMutex.RUnlock()
 		return
 	}
+	recMutex.RUnlock()
 
 	proxyLogChan <- log
 }
 
 func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
+	recMutex.RLock()
 	if !recStarted {
+		recMutex.RUnlock()
 		return
 	}
+	recMutex.RUnlock()
 
 	tcEntry := &ToolCallRecord{}
 	tcEntry.TimeStamp = t
@@ -120,10 +129,12 @@ func RecordContentMessage(
 	t time.Time,
 	svc services.ServiceInterface,
 ) {
-
+	recMutex.RLock()
 	if !recStarted {
+		recMutex.RUnlock()
 		return
 	}
+	recMutex.RUnlock()
 
 	rec := &LLMChatRecord{}
 
@@ -253,13 +264,14 @@ func initDB(db *gorm.DB) {
 	}
 }
 
-var recStarted bool
-
 func StartRecording(ctx context.Context, db *gorm.DB) {
+	recMutex.Lock()
 	if recStarted {
+		recMutex.Unlock()
 		return
 	}
 	recStarted = true
+	recMutex.Unlock()
 
 	initDB(db)
 
@@ -304,11 +316,13 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 				}
 			case <-ctx.Done():
 				slog.Info("shutting down analytics recording")
+				recMutex.Lock()
+				recStarted = false
+				recMutex.Unlock()
 				close(chatRecordChan)
 				close(logEntryChan)
 				close(toolCallChan)
 				close(proxyLogChan)
-				recStarted = false
 				return
 			}
 		}
