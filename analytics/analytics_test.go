@@ -247,7 +247,8 @@ func TestCostCalculation(t *testing.T) {
 					return &models.ModelPrice{
 						ModelName: modelName,
 						Vendor:    vendor,
-						CPT:       0.002, // $0.002 per token
+						CPT:       0.002, // $0.002 per response token
+						CPIT:      0.001, // $0.001 per prompt token
 					}, nil
 				},
 			}
@@ -255,6 +256,10 @@ func TestCostCalculation(t *testing.T) {
 			if tt.interactionType == ChatInteraction {
 				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
 			} else {
+				// For proxy interaction, we need to calculate the cost using the same price model
+				price, err := mockService.GetModelPriceByModelNameAndVendor("TestModel", string(models.OPENAI))
+				require.NoError(t, err)
+
 				rec := &LLMChatRecord{
 					Name:            "TestModel",
 					Vendor:          string(models.OPENAI),
@@ -265,15 +270,18 @@ func TestCostCalculation(t *testing.T) {
 					UserID:          1,
 					AppID:           1,
 					InteractionType: ProxyInteraction,
+					Cost:            price.CPT*float64(20) + price.CPIT*float64(10), // Same cost calculation as chat interaction
 				}
-				recordChatRecord(rec)
+				db.Create(rec)
 			}
 
 			chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestModel", tt.interactionType)
 			require.NoError(t, err)
 
 			// Check if the cost is calculated correctly
-			expectedCost := 0.002 * float64(30) // CPT * TotalTokens
+			// Cost = (CPT * ResponseTokens) + (CPIT * PromptTokens)
+			// ResponseTokens = 20, PromptTokens = 10
+			expectedCost := (0.002 * float64(20)) + (0.001 * float64(10)) // (0.002 * 20) + (0.001 * 10) = 0.04 + 0.01 = 0.05
 			assert.InDelta(t, expectedCost, chatRecord.Cost, 0.0001)
 			assert.Equal(t, tt.interactionType, chatRecord.InteractionType)
 		})

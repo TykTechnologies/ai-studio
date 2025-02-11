@@ -368,7 +368,7 @@ func (a *API) deactivateAppCredential(c *gin.Context) {
 
 func serializeApp(app *models.App) AppResponse {
 	return AppResponse{
-		Type: "apps",
+		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
 			Name          string `json:"name"`

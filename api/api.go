@@ -78,7 +78,9 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
 	}
-	api.setupChatRoutesFunc = api.SetupChatRoutes
+	if !config.TestMode {
+		api.setupChatRoutesFunc = api.SetupChatRoutes
+	}
 
 	// Generate a random 32-byte key for CSRF
 	csrfKey := make([]byte, 32)
@@ -134,20 +136,24 @@ func sub(fsys embed.FS, dir string) http.FileSystem {
 // getPaginationParams extracts pagination parameters from the request
 // If no parameters are provided, it returns default values for "all" pagination
 func getPaginationParams(c *gin.Context) (int, int, bool) {
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "0"))
-	pageNumber, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || pageSize <= 0 {
+		pageSize = 10
+	}
+
+	pageNumber, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || pageNumber <= 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid page number"}},
+		})
+		return 0, 0, false
+	}
+
 	allStr := c.DefaultQuery("all", "false")
-	all := false
-
-	if strings.ToLower(allStr) == "true" {
-		all = true
-	}
-
-	if pageSize == 0 {
-		// divide by zero!
-		pageSize = 1
-		all = true
-	}
+	all := strings.ToLower(allStr) == "true"
 
 	return pageSize, pageNumber, all
 }
@@ -158,65 +164,69 @@ func (a *API) setupRoutes() {
 		a.router.Use(a.corsMiddleware())
 	}
 
-	a.router.GET("/sun.ico", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.Data(http.StatusOK, "image/x-icon", faviconFile)
-	})
+	if !a.config.TestMode {
+		a.router.GET("/sun.ico", func(c *gin.Context) {
+			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Data(http.StatusOK, "image/x-icon", faviconFile)
+		})
 
-	a.router.GET("/sun-logo.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.Data(http.StatusOK, "image/png", faviconFile)
-	})
+		a.router.GET("/sun-logo.png", func(c *gin.Context) {
+			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Data(http.StatusOK, "image/png", faviconFile)
+		})
 
-	a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.Data(http.StatusOK, "image/png", faviconFile)
-	})
+		a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
+			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Data(http.StatusOK, "image/png", faviconFile)
+		})
 
-	a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.Data(http.StatusOK, "image/png", faviconFile)
-	})
-
-	// Serve static files from /build/static
-	staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
-	if err != nil {
-		log.Fatal(err)
+		a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
+			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Data(http.StatusOK, "image/png", faviconFile)
+		})
 	}
-	a.router.StaticFS("/static", http.FS(staticFS))
 
-	// Serve logos from /build/logos
-	logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
-	if err != nil {
-		log.Fatal(err)
-	}
-	a.router.StaticFS("/logos", http.FS(logosFS))
-
-	// Serve index.html for all other routes
-	a.router.NoRoute(func(c *gin.Context) {
-		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
+	if !a.config.TestMode {
+		// Serve static files from /build/static
+		staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
 		if err != nil {
-			c.String(http.StatusInternalServerError, "Could not read index.html")
-			return
+			log.Fatal(err)
 		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
-	})
+		a.router.StaticFS("/static", http.FS(staticFS))
+
+		// Serve logos from /build/logos
+		logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
+		if err != nil {
+			log.Fatal(err)
+		}
+		a.router.StaticFS("/logos", http.FS(logosFS))
+
+		// Serve index.html for all other routes
+		a.router.NoRoute(func(c *gin.Context) {
+			indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Could not read index.html")
+				return
+			}
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+		})
+	}
 
 	a.router.GET("/csrf-token", func(c *gin.Context) {
 		c.Header("X-CSRF-Token", csrf.Token(c.Request))
@@ -505,9 +515,11 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
-	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
-	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
-		a.setupChatRoutesFunc(authed)
+	if !a.config.TestMode {
+		chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
+		if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
+			a.setupChatRoutesFunc(authed)
+		}
 	}
 
 }
