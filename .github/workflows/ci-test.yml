@@ -6,21 +6,15 @@ on:
     branches:
       - master
 
-defaults:
-  run:
-    working-directory: midsommar
-
 jobs:
   golangci-lint:
     runs-on: ubuntu-latest
-    if: false
     steps:
       -
         name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
-          path: midsommar
 
       -
         name: Fetch base branch
@@ -31,7 +25,6 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         uses: golangci/golangci-lint-action@v3
         with:
-          working-directory: midsommar
           version: latest
           args: --out-format=checkstyle:golanglint.xml --timeout=300s --max-issues-per-linter=0 --max-same-issues=0 --new-from-rev=origin/${{ github.base_ref }}
       -
@@ -52,14 +45,13 @@ jobs:
     steps:
       -
         name: Checkout main repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          path: midsommar
           fetch-depth: 2
 
       -
         name: Checkout langchaingo repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: lonelycode/langchaingo
           path: langchaingo
@@ -69,8 +61,8 @@ jobs:
         name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version-file: midsommar/go.mod
-          cache-dependency-path: midsommar/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       -
         name: Setup Hugo
@@ -81,7 +73,7 @@ jobs:
 
       -
         name: Use Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: "18"
 
@@ -158,4 +150,8 @@ jobs:
         run: |
           cp .env.example .env
           cd docs/site && hugo && cd ../..
+          # Ensure UI is built before running tests that might depend on it
+          if [ -d "ui/admin-frontend" ]; then
+            cd ui/admin-frontend && CI=false npm run build && cd ../..
+          fi
           go test ./...
