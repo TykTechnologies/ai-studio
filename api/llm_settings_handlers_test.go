@@ -135,8 +135,16 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 	var listResponse map[string][]LLMSettingsResponse
 	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 	assert.NoError(t, err)
-	assert.Len(t, listResponse["data"], 1)
-	assert.Equal(t, "UpdatedTestModel", listResponse["data"][0].Attributes.ModelName)
+	assert.Len(t, listResponse["data"], 2) // 1 test item + 1 default item
+	// Find the updated test model in the response
+	var found bool
+	for _, setting := range listResponse["data"] {
+		if setting.Attributes.ModelName == "UpdatedTestModel" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Updated test model should be in the response")
 
 	// Test Search LLMSettings
 	w = performRequest(api.router, "GET", "/api/v1/llm-settings/search?model_name=Updated", nil)
@@ -145,8 +153,8 @@ func TestLLMSettingsEndpoints(t *testing.T) {
 	var searchResponse map[string][]LLMSettingsResponse
 	err = json.Unmarshal(w.Body.Bytes(), &searchResponse)
 	assert.NoError(t, err)
-	assert.Len(t, searchResponse["data"], 1)
-	assert.Equal(t, "UpdatedTestModel", searchResponse["data"][0].Attributes.ModelName)
+	assert.Len(t, searchResponse["data"], 1)                                            // Only our updated model should match the search
+	assert.Equal(t, "UpdatedTestModel", searchResponse["data"][0].Attributes.ModelName) // Search should find our updated model
 
 	// Test Delete LLMSettings
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/llm-settings/%s", settingsID), nil)

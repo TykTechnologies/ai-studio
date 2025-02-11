@@ -1,56 +1,62 @@
-package api
+package testing
 
 import (
 	"bytes"
-	"embed"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/gin-gonic/gin"
+	"github.com/go-mail/mail"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-var emptyFile embed.FS
+type MockMailer struct{}
 
-func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
+func (m *MockMailer) DialAndSend(msg ...*mail.Message) error {
+	return nil
+}
+
+func NewMockMailer() *MockMailer {
+	return &MockMailer{}
+}
+
+func SetupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err, "Failed to open database")
 
 	err = models.InitModels(db)
 	assert.NoError(t, err, "Failed to init models")
 
-	service := services.NewService(db)
+	return db
+}
 
-	config := &auth.Config{
+func SetupTestService(db *gorm.DB) *services.Service {
+	return services.NewService(db)
+}
+
+func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {
+	return &auth.Config{
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",
 		CookieSecure:        true,
 		CookieHTTPOnly:      true,
 		CookieSameSite:      http.SameSiteStrictMode,
-		ResetTokenExpiry:    time.Hour,
+		ResetTokenExpiry:    3600,
 		FrontendURL:         "http://example.com",
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 		TestMode:            true,
 	}
-
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
-
-	return api, db
 }
 
-func performRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
+func PerformRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
 	var reqBody []byte
 	if body != nil {
 		reqBody, _ = json.Marshal(body)
@@ -60,15 +66,4 @@ func performRequest(r http.Handler, method, path string, body interface{}) *http
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
-}
-
-func TestMain(m *testing.M) {
-	gin.SetMode(gin.TestMode)
-
-	// Initialize features for test mode
-	licensing.InitializeForTests(map[string]interface{}{
-		"feature_chat": true,
-	})
-
-	os.Exit(m.Run())
 }

@@ -431,8 +431,8 @@ type ChatResponse struct {
 	Attributes struct {
 		Name                string              `json:"name"`
 		Description         string              `json:"description"`
-		LLMSettingsID       uint                `json:"llm_settings_id"`
-		LLMID               uint                `json:"llm_id"`
+		LLMSettingsID       string              `json:"llm_settings_id"`
+		LLMID               string              `json:"llm_id"`
 		Groups              []GroupResponse     `json:"groups"`
 		Filters             []FilterResponse    `json:"filters"`
 		RagN                int                 `json:"rag_n"`

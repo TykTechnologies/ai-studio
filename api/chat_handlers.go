@@ -50,7 +50,7 @@ func (a *API) createChat(c *gin.Context) {
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
+			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
 	}
@@ -165,7 +165,7 @@ func (a *API) updateChat(c *gin.Context) {
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
+			}{{Title: "Not Found", Detail: err.Error()}},
 		})
 		return
 	}
@@ -198,11 +198,11 @@ func (a *API) deleteChat(c *gin.Context) {
 
 	err = a.service.DeleteChat(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
+			}{{Title: "Not Found", Detail: err.Error()}},
 		})
 		return
 	}
@@ -508,8 +508,8 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 		Attributes: struct {
 			Name                string              `json:"name"`
 			Description         string              `json:"description"`
-			LLMSettingsID       uint                `json:"llm_settings_id"`
-			LLMID               uint                `json:"llm_id"`
+			LLMSettingsID       string              `json:"llm_settings_id"`
+			LLMID               string              `json:"llm_id"`
 			Groups              []GroupResponse     `json:"groups"`
 			Filters             []FilterResponse    `json:"filters"`
 			RagN                int                 `json:"rag_n"`
@@ -522,8 +522,8 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 		}{
 			Name:                chat.Name,
 			Description:         chat.Description,
-			LLMSettingsID:       chat.LLMSettingsID,
-			LLMID:               chat.LLMID,
+			LLMSettingsID:       strconv.FormatUint(uint64(chat.LLMSettingsID), 10),
+			LLMID:               strconv.FormatUint(uint64(chat.LLMID), 10),
 			Groups:              serializeGroups(chat.Groups),
 			Filters:             serializeFilters(chat.Filters),
 			RagN:                chat.RagResultsPerSource,
