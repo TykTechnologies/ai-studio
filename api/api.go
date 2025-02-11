@@ -52,6 +52,7 @@ type API struct {
 	auth                *auth.AuthService
 	proxy               *proxy.Proxy
 	staticFiles         embed.FS
+	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
 }
 
