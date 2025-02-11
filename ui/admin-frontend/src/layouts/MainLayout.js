@@ -80,23 +80,18 @@ const MainLayout = () => {
   }, [location.pathname, loading]);
 
   const handleTabChange = (tab) => {
-    console.log("Tab change requested:", tab);
+    setCurrentTab(tab);
 
-    // Only navigate if we're switching to a different tab
-    if (tab !== currentTab) {
-      setCurrentTab(tab);
-
-      switch (tab) {
-        case "chat":
-          navigate("/chat/dashboard");
-          break;
-        case "portal":
-          navigate("/portal/dashboard");
-          break;
-        case "admin":
-          navigate("/admin/dash");
-          break;
-      }
+    switch (tab) {
+      case "chat":
+        navigate("/chat/dashboard");
+        break;
+      case "portal":
+        navigate("/portal/dashboard");
+        break;
+      case "admin":
+        navigate("/admin/dash");
+        break;
     }
   };
 

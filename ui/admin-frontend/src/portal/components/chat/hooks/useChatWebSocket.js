@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import pubClient from '../../../../admin/utils/pubClient';
 
-export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) => {
+export const useChatWebSocket = ({ chatId, onMessageReceived }) => {
 	const [isConnected, setIsConnected] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [sessionId, setSessionId] = useState(null);
-	const [isNewChat, setIsNewChat] = useState(true);
-	const [hasUpdatedChatName, setHasUpdatedChatName] = useState(false);
 	const [error, setError] = useState(null);
 	const ws = useRef(null);
 	const reconnectAttempts = useRef(0);
@@ -19,8 +17,6 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 			ws.current = null;
 			setIsConnected(false);
 			setSessionId(null);
-			setIsNewChat(true);
-			setHasUpdatedChatName(false);
 		}
 	}, []);
 
@@ -132,10 +128,6 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 			? `${wsProtocol}//localhost:8080/common/ws/chat/${chatId}${continueId ? `?session_id=${continueId}` : ""}`
 			: `${wsProtocol}//${window.location.host}/common/ws/chat/${chatId}${continueId ? `?session_id=${continueId}` : ""}`;
 
-		// Always treat as new chat unless explicitly continuing
-		setIsNewChat(!continueId);
-		setHasUpdatedChatName(false);
-
 		let keepAliveInterval;
 
 		const setupWebSocket = () => {
@@ -161,7 +153,6 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 				// Browser will automatically respond with pongs
 				if (continueId) {
 					setSessionId(continueId);
-					setIsNewChat(false);
 					setIsLoading(true); // Set loading before fetching history
 					fetchChatHistory(continueId).then((messages) => {
 						if (Array.isArray(messages)) {
@@ -353,10 +344,6 @@ export const useChatWebSocket = ({ chatId, onMessageReceived, updateChatName }) 
 		isConnected,
 		isLoading,
 		sessionId,
-		isNewChat,
-		hasUpdatedChatName,
-		setHasUpdatedChatName,
-		setIsNewChat,
 		sendMessage,
 		closeWebSocket,
 		error,

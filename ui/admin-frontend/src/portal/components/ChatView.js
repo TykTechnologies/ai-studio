@@ -34,7 +34,6 @@ const ChatView = () => {
   const [error, setError] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [chatName, setChatName] = useState('');
   const [showTools, setShowTools] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [autoScroll, setAutoScroll] = useState(true);
@@ -58,26 +57,6 @@ const ChatView = () => {
    * WebSocket is open, the server will send a "history" type
    * message that we use to populate 'messages'.
    */
-
-  const updateChatName = useCallback(async (name, currentSessionId) => {
-    try {
-      let truncatedName = name.trim().slice(0, 60);
-      if (name.length > 60) {
-        truncatedName += '...';
-      }
-      await pubClient.put(`/common/chat-history-records/${currentSessionId}/name`, {
-        name: truncatedName,
-      });
-      setChatName(truncatedName);
-    } catch (error) {
-      console.error('Error updating chat name:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to update chat name',
-        severity: 'error',
-      });
-    }
-  }, []);
 
   /**
    * handleRealtimeChunks merges repeated system/error lines into the last system message
@@ -326,10 +305,6 @@ const ChatView = () => {
     isConnected,
     isLoading,
     sessionId,
-    isNewChat,
-    hasUpdatedChatName,
-    setHasUpdatedChatName,
-    setIsNewChat,
     sendMessage,
     closeWebSocket,
     error: wsError,
@@ -337,8 +312,7 @@ const ChatView = () => {
     ws,
   } = useChatWebSocket({
     chatId,
-    onMessageReceived: handleRealtimeChunks,
-    updateChatName,
+    onMessageReceived: handleRealtimeChunks
   });
 
   useEffect(() => {
@@ -350,10 +324,10 @@ const ChatView = () => {
   }, [isConnected, setError, setWsError]);
 
   useEffect(() => {
-    if ((error || wsError) && !isNewChat) {
+    if (error || wsError) {
       console.warn('Encountered error in ChatView:', error || wsError);
     }
-  }, [error, wsError, isNewChat]);
+  }, [error, wsError]);
 
   // Automatic scrolling
   const scrollToBottom = useCallback(() => {
@@ -441,7 +415,6 @@ const ChatView = () => {
         const currentChat = userEntitlements.chats.find((chat) => chat.id === chatId);
         if (currentChat) {
           setShowTools(currentChat.attributes.tool_support);
-          setChatName(currentChat.attributes.name);
         }
 
         const [databasesResponse, toolsResponse] = await Promise.all([
@@ -498,7 +471,6 @@ const ChatView = () => {
       setError(null);
       setUploadedFiles([]);
       setIsUploading(false);
-      setChatName('');
       setExpandedGroups({});
       setAutoScroll(true);
     };
@@ -570,12 +542,6 @@ const ChatView = () => {
           isComplete: true,
         },
       ]);
-
-      if (isNewChat && !hasUpdatedChatName && sessionId) {
-        updateChatName(inputMessage.trim(), sessionId);
-        setHasUpdatedChatName(true);
-        setIsNewChat(false);
-      }
 
       setInputMessage('');
       setUploadedFiles([]);
@@ -675,8 +641,8 @@ const ChatView = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // Only show error if we have an error AND we're not connected AND it's not a new chat
-  if ((error || wsError) && !isConnected && !isNewChat) {
+  // Only show error if we have an error AND we're not connected
+  if ((error || wsError) && !isConnected) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
         <Alert severity="error">{error || wsError}</Alert>
@@ -709,13 +675,6 @@ const ChatView = () => {
         },
       }}
     >
-      {chatName && (
-        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
-          <Typography variant="h6" component="h1">
-            {chatName}
-          </Typography>
-        </Box>
-      )}
       <Grid container sx={{ flexGrow: 1, overflow: 'hidden' }}>
         <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <Paper
