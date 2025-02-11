@@ -126,10 +126,6 @@ const MainLayout = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-  };
-
   if (loading) return null;
 
   const showAdmin = entitlements?.is_admin;
@@ -146,7 +142,7 @@ const MainLayout = () => {
       showPortal={showPortal}
       currentTab={currentTab}
       onTabChange={handleTabChange}
-      onLogout={handleLogout}
+      onLogout={logout}
     />
   );
 
