@@ -237,7 +237,8 @@ const MessageContent = ({
 	messageType,
 	sessionId,
 	showSystemMessages,
-	onEditSuccess
+	onEditSuccess,
+	chatId
 }) => {
 	const [isEditing, setIsEditing] = useState(false);
 	const [editText, setEditText] = useState('');
@@ -253,12 +254,14 @@ const MessageContent = ({
 		}
 	}, [content]);
 
-	const canEdit = messageType === 'user' && !String(messageId).startsWith('temp_');
+	const isUserMessage = messageType === 'user';
+	const canEdit = isUserMessage;
 
 	const handleEditClick = () => {
-		if (!canEdit) return;
+		if (!isUserMessage) return;
 		setIsEditing(true);
 	};
+
 
 	const handleCancelClick = () => {
 		setIsEditing(false);
@@ -266,30 +269,53 @@ const MessageContent = ({
 	};
 
 	const handleSaveClick = async () => {
-		if (!sessionId || !canEdit) {
+		if (!sessionId || !isUserMessage) {
 			setIsEditing(false);
 			return;
 		}
 		try {
-			await pubClient.put(
-				`/common/chat-sessions/${sessionId}/messages/${messageId}`,
-				{
-					new_content: {
-						role: "human",
-						text: editText
-					}
-				},
-				{
-					headers: {
-						'Cache-Control': 'no-cache',
-						Pragma: 'no-cache'
-					}
-				}
-			);
-			setIsEditing(false);
+			const isTemp = String(messageId).startsWith('temp_');
 
+			if (isTemp) {
+				// For temp IDs, use the index-based editing
+				await pubClient.put(
+					`/common/chat-sessions/${sessionId}/messages/${messageId}`,
+					{
+						new_content: {
+							role: "human",
+							text: editText
+						},
+						index: messageIndex
+					},
+					{
+						headers: {
+							'Cache-Control': 'no-cache',
+							Pragma: 'no-cache'
+						}
+					}
+				);
+			} else {
+				// For real IDs, use the normal edit endpoint
+				await pubClient.put(
+					`/common/chat-sessions/${sessionId}/messages/${messageId}`,
+					{
+						new_content: {
+							role: "human",
+							text: editText
+						}
+					},
+					{
+						headers: {
+							'Cache-Control': 'no-cache',
+							Pragma: 'no-cache'
+						}
+					}
+				);
+			}
+
+			setIsEditing(false);
 			if (onEditSuccess) {
-				onEditSuccess(editText);
+				onEditSuccess(editText, messageId, isTemp);
 			}
 		} catch (err) {
 			console.error('Error editing message:', err);
@@ -429,7 +455,7 @@ const MessageContent = ({
 							);
 						}
 					})}
-					{canEdit && (
+					{isUserMessage && (
 						<IconButton
 							className="edit-button"
 							size="small"
@@ -464,7 +490,7 @@ const MessageContent = ({
 			}}
 		>
 			<MarkdownMessage content={content} />
-			{canEdit && (
+			{isUserMessage && (
 				<IconButton
 					className="edit-button"
 					size="small"
