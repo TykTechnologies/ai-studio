@@ -80,7 +80,6 @@ const MainLayout = () => {
   }, [location.pathname, loading]);
 
   const handleTabChange = (tab) => {
-    console.log("Tab change requested:", tab);
     setCurrentTab(tab);
 
     switch (tab) {
