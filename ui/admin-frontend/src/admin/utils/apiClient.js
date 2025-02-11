@@ -1,59 +1,44 @@
-import axios from "axios";
-import { getConfig } from "../../config";
+import axios from 'axios';
+
+let apiClientInstance = null;
 
 const createApiClient = () => {
-  const config = getConfig();
-  return axios.create({
-    baseURL: `${config.API_BASE_URL}/api/v1`,
+  const instance = axios.create({
+    baseURL: 'http://localhost:8080/api/v1',
     withCredentials: true,
   });
-};
 
-let apiClient = createApiClient();
-
-// Function to fetch CSRF token
-const fetchCSRFToken = async () => {
-  const config = getConfig();
-  try {
-    const response = await axios.get(`${config.API_BASE_URL}/csrf-token`, {
-      withCredentials: true,
-    });
-    return response.headers["x-csrf-token"];
-  } catch (error) {
-    console.error("Error fetching CSRF token:", error);
-    return null;
-  }
-};
-
-// Request interceptor to add CSRF token
-apiClient.interceptors.request.use(
-  async (config) => {
-    if (config.method !== "get") {
-      const token = await fetchCSRFToken();
-      if (token) {
-        config.headers["X-CSRF-Token"] = token;
+  // Add a request interceptor to handle errors
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        // Handle unauthorized access
+        window.location.href = '/login';
       }
+      return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  },
-);
+  );
 
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      window.location.href = "/login";
-    }
-    return Promise.reject(error);
-  },
-);
-
-// Export a function to reinitialize the client with updated config
-export const reinitializeApiClient = () => {
-  apiClient = createApiClient();
+  return instance;
 };
 
-export default apiClient;
+// Initialize the API client instance
+apiClientInstance = createApiClient();
+
+// Provider API endpoints
+export const providerAPI = {
+  listProviders: () => apiClientInstance.get('/providers'),
+  configureProvider: (providerId, config) => apiClientInstance.post(`/providers/${providerId}/configure`, {
+    config,
+  }),
+  getProviderSpecs: (providerId) => apiClientInstance.get(`/providers/${providerId}/specs`),
+};
+
+// Function to reinitialize the API client with new configuration
+export const reinitializeApiClient = () => {
+  apiClientInstance = createApiClient();
+  return apiClientInstance;
+};
+
+export default apiClientInstance;

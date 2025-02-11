@@ -87,15 +87,16 @@ func main() {
 		DB:                     db,
 		Service:                service,
 		CookieName:             "session",
-		CookieSecure:           true,
+		CookieSecure:           os.Getenv("DEVMODE") == "", // false in dev mode
 		CookieHTTPOnly:         true,
-		CookieSameSite:         http.SameSiteStrictMode,
+		CookieSameSite:         http.SameSiteLaxMode, // less restrictive
+		CookieDomain:           "",                   // empty for development to work with localhost
 		ResetTokenExpiry:       time.Hour,
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,
 		FromEmail:              appConf.FromEmail,
-		TestMode:               false,
+		TestMode:               os.Getenv("DEVMODE") != "",
 		SMTPPort:               appConf.SMTPPort,
 		SMTPHost:               appConf.SMTPServer,
 		SMTPUsername:           appConf.SMTPUser,
