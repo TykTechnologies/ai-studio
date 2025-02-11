@@ -7,7 +7,7 @@ import AdminLayout from "../admin/components/layout/MainLayout";
 import ChatDrawer from "../admin/components/layout/ChatDrawer";
 import PortalDrawer from "../admin/components/layout/PortalDrawer";
 import { useNavigate } from "react-router-dom";
-import pubClient from "../admin/utils/pubClient";
+import pubClient, { logout } from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
 import portalTheme from "../portal/theme/portalTheme";
 import { DRAWER_WIDTH } from "../constants/layout";
@@ -21,11 +21,27 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  console.log("Features:", features);
-  console.log("Entitlements:", entitlements);
+  const getStoredPath = (tab) => {
+    try {
+      const key = `drawer_state_${tab}`;
+      const state = localStorage.getItem(key);
+      if (state) {
+        const { selectedPath } = JSON.parse(state);
+        return selectedPath;
+      }
+    } catch (error) {
+      console.error('Error reading stored path:', error);
+    }
+    return null;
+  };
 
   useEffect(() => {
     const fetchEntitlements = async () => {
+      if (location.pathname === '/login') {
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await pubClient.get("/common/me");
         const attributes = response.data.attributes;
@@ -38,16 +54,29 @@ const MainLayout = () => {
           (location.pathname === "/" ||
             location.pathname === "/portal/dashboard")
         ) {
+          const storedAdminPath = getStoredPath('admin');
           setCurrentTab("admin");
-          navigate("/admin/dash", { replace: true }); // Added replace: true
+          navigate(storedAdminPath || "/admin/dash", { replace: true });
         } else {
           // Set initial tab based on current location
           if (location.pathname.startsWith("/admin")) {
+            const storedPath = getStoredPath('admin');
             setCurrentTab("admin");
+            if (storedPath && storedPath !== location.pathname) {
+              navigate(storedPath, { replace: true });
+            }
           } else if (location.pathname.startsWith("/chat")) {
+            const storedPath = getStoredPath('chat');
             setCurrentTab("chat");
+            if (storedPath && storedPath !== location.pathname) {
+              navigate(storedPath, { replace: true });
+            }
           } else if (location.pathname.startsWith("/portal")) {
+            const storedPath = getStoredPath('portal');
             setCurrentTab("portal");
+            if (storedPath && storedPath !== location.pathname) {
+              navigate(storedPath, { replace: true });
+            }
           }
         }
 
@@ -82,25 +111,18 @@ const MainLayout = () => {
   const handleTabChange = (tab) => {
     setCurrentTab(tab);
 
+    const storedPath = getStoredPath(tab);
+
     switch (tab) {
       case "chat":
-        navigate("/chat/dashboard");
+        navigate(storedPath || "/chat/dashboard");
         break;
       case "portal":
-        navigate("/portal/dashboard");
+        navigate(storedPath || "/portal/dashboard");
         break;
       case "admin":
-        navigate("/admin/dash");
+        navigate(storedPath || "/admin/dash");
         break;
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await pubClient.post("/common/logout");
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
     }
   };
 
@@ -120,7 +142,7 @@ const MainLayout = () => {
       showPortal={showPortal}
       currentTab={currentTab}
       onTabChange={handleTabChange}
-      onLogout={handleLogout}
+      onLogout={logout}
     />
   );
 
