@@ -62,6 +62,7 @@ jobs:
 
   go-test:
     name: Go tests
+    needs: ui-test
     runs-on: ubuntu-latest-m-2
     steps:
       -
