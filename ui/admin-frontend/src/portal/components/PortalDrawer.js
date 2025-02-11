@@ -9,7 +9,7 @@ import {
   Toolbar,
   useTheme,
 } from "@mui/material";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ChatIcon from "@mui/icons-material/Chat";
 import CodeIcon from "@mui/icons-material/Code";
@@ -30,6 +30,8 @@ const CACHE_EXPIRY = 10000; // 10s
 
 const PortalDrawer = () => {
   const { features, loading } = useSystemFeatures();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [uiOptions, setUiOptions] = useState(null);
   const [openDev, setOpenDev] = useState(true);
@@ -61,7 +63,7 @@ const PortalDrawer = () => {
           JSON.stringify({
             data: { ...newData, ui_options: newUiOptions },
             timestamp: Date.now(),
-          }),
+          })
         );
       } catch (error) {
         console.error("Failed to fetch user entitlements:", error);
@@ -85,6 +87,26 @@ const PortalDrawer = () => {
 
   const handleChatRoomsClick = () => {
     setOpenChatRooms(!openChatRooms);
+  };
+
+  /**
+   * Always start a brand new session if user is on the same chat route.
+   * If user is on /chat/5 and clicks the same chat 5, we do a quick away to /chat/dashboard
+   * then re-navigate to /chat/5. Also remove old session from localStorage.
+   */
+  const handleChatClick = (chatId) => {
+    // Remove any old session:
+    localStorage.removeItem('chatSessionId');
+
+    // If user is already on same route, forcibly navigate away, then back:
+    if (location.pathname === `/chat/${chatId}`) {
+      navigate('/chat/dashboard');
+      setTimeout(() => {
+        navigate(`/chat/${chatId}`);
+      }, 0);
+    } else {
+      navigate(`/chat/${chatId}`);
+    }
   };
 
   if (loading) {
@@ -120,7 +142,7 @@ const PortalDrawer = () => {
           padding: "16px",
         }}
       >
-        <ListItem button component={Link} to="/portal/dashboard" sx={{ mb: 1 }}>
+        <ListItem button component={Link} to="/chat/dashboard" sx={{ mb: 1 }}>
           <ListItemIcon>
             <DashboardIcon />
           </ListItemIcon>
@@ -160,8 +182,7 @@ const PortalDrawer = () => {
                   <ListItem
                     key={chat.id}
                     button
-                    component={Link}
-                    to={`/portal/chat/${chat.id}`}
+                    onClick={() => handleChatClick(chat.id)}
                     sx={{ pl: 4, mb: 1 }}
                   >
                     <ListItemIcon>

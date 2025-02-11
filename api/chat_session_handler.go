@@ -3,16 +3,17 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
-	"strconv"
-	"unicode/utf8"
-
-	"encoding/json"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
+	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/filereader"
@@ -20,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/tmc/langchaingo/llms"
 )
 
 var upgrader = websocket.Upgrader{
@@ -27,14 +29,24 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		// Add logic here to check the origin of the request
-		return true // For now, we're allowing all origins
+		return true
 	},
 }
 
+const (
+	// Time allowed to read the next pong message from the peer
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period (must be less than pongWait)
+	pingPeriod = (pongWait * 9) / 10
+)
+
 type ChatMessage struct {
-	Type     string   `json:"type"`
-	Payload  string   `json:"payload"`
-	FileRefs []string `json:"file_refs"`
+	Type        string               `json:"type"`
+	Payload     string               `json:"payload"`
+	FileRefs    []string             `json:"file_refs"`
+	Tools       []models.Tool        `json:"tools,omitempty"`
+	Datasources []*models.Datasource `json:"datasources,omitempty"`
 }
 
 type ChatHub struct {
@@ -89,9 +101,8 @@ func getChatHub() *ChatHub {
 	return chatHub
 }
 
+// HandleChatWebSocket sets up the WebSocket for the given chat session.
 func (a *API) HandleChatWebSocket(c *gin.Context) {
-	// ws://your-server/ws/chat/:chat_id?session_id=<optional_previously_received_session_id>
-
 	uObj, ok := c.Get("user")
 	if !ok {
 		c.JSON(http.StatusUnauthorized, ErrorResponse{
@@ -129,22 +140,41 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	}
 
 	log.Println("Attempting to upgrade connection to WebSocket")
-
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	log.Println("WebSocket connection established")
 	defer conn.Close()
 
-	// Get session ID from query parameter
+	// Set up ping/pong handlers
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	// Start ping ticker
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					log.Printf("Error sending ping: %v", err)
+					return
+				}
+			}
+		}
+	}()
+
+	log.Println("WebSocket connection established with ping/pong handlers")
+
 	sessionID := c.Query("session_id")
 
 	var chatSession *chat_session.ChatSession
-
 	if sessionID != "" {
-		// Attempt to load existing session
 		chatSession, err = a.loadExistingSession(sessionID, uint(userID))
 		if err != nil {
 			log.Println("Error loading existing session:", err)
@@ -154,7 +184,6 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	}
 
 	if chatSession == nil {
-		// Create a new session if no existing session was loaded
 		chatSession, err = a.createNewSession(chat, uint(userID))
 		if err != nil {
 			sendWSMessage(conn, "error", "Failed to create new session")
@@ -169,28 +198,36 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	}
 	defer chatSession.Stop()
 
-	// Send the session ID to the client
-	sendWSMessage(conn, "session_id", chatSession.ID())
-	// Use the singleton ChatHub
+	// Send session ID with current tools and datasources
+	tools := make([]models.Tool, 0)
+	for _, tool := range chatSession.CurrentTools() {
+		tools = append(tools, tool)
+	}
+	msg := ChatMessage{
+		Type:        "session_id",
+		Payload:     chatSession.ID(),
+		Tools:       tools,
+		Datasources: chatSession.GetCurrentDatasources(),
+	}
+	if err := conn.WriteJSON(msg); err != nil {
+		log.Println("Error writing session message:", err)
+	}
+
 	hub := getChatHub()
 	hub.AddSession(chatSession.ID(), chatSession)
 	defer hub.RemoveSession(chatSession.ID())
 
-	// Handle incoming messages
 	go handleIncomingMessages(conn, chatSession)
 
-	// Handle outgoing messages
 	handleOutgoingMessages(conn, chatSession)
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
-	history := chat_session.NewGormChatMessageHistory(a.service.DB, sessionID, 0, userID, "") // ignore system prompt as we are pulling from DB
-
+	history := chat_session.NewGormChatMessageHistory(a.service.DB, sessionID, 0, userID, "")
 	chat, err := history.GetAssociatedChat(context.Background())
 	if err != nil {
 		return nil, err
 	}
-
 	chatSession, err := chat_session.NewChatSession(
 		chat,
 		chat_session.ChatStream,
@@ -203,7 +240,6 @@ func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.
 	if err != nil {
 		return nil, err
 	}
-
 	return chatSession, nil
 }
 
@@ -215,12 +251,11 @@ func (a *API) createNewSession(chat *models.Chat, userID uint) (*chat_session.Ch
 		a.service,
 		chat.Filters,
 		&userID,
-		nil, // No session ID
+		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	return chatSession, nil
 }
 
@@ -231,29 +266,14 @@ func handleIncomingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) 
 			log.Println("Error reading message:", err)
 			return
 		}
-
 		var chatMessage ChatMessage
 		err = json.Unmarshal(message, &chatMessage)
 		if err != nil {
 			log.Println("Error unmarshalling message:", err)
 			continue
 		}
-
 		if chatMessage.Type == "user_message" {
 			cs.Input() <- &models.UserMessage{Payload: chatMessage.Payload, FileRef: chatMessage.FileRefs}
-		}
-	}
-}
-
-func handleOutgoingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
-	for {
-		select {
-		// case msg := <-cs.OutputMessage():
-		// 	sendWSMessage(conn, "ai_message", msg.Payload)
-		case chunk := <-cs.OutputStream():
-			sendWSMessage(conn, "stream_chunk", string(chunk))
-		case err := <-cs.Errors():
-			sendWSMessage(conn, "error", err.Error())
 		}
 	}
 }
@@ -263,139 +283,191 @@ func sendWSMessage(conn *websocket.Conn, msgType string, payload string) {
 		Type:    msgType,
 		Payload: payload,
 	}
-	err := conn.WriteJSON(message)
-	if err != nil {
+	if err := conn.WriteJSON(message); err != nil {
 		log.Println("Error writing message:", err)
 	}
 }
 
-// Add this method to your API struct to set up the WebSocket route
-func (a *API) SetupWebSocketRoute(r *gin.RouterGroup) {
+func handleOutgoingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
+	var currentMessage strings.Builder
+	var isStreaming bool
+	for {
+		select {
+		case chunk := <-cs.OutputStream():
+			// Try to parse as JSON to check if it's a combined message
+			var mc llms.MessageContent
+			err := json.Unmarshal(chunk, &mc)
+			if err == nil && mc.Role == llms.ChatMessageTypeAI {
+				// If it's a valid AI message, send as a regular message
+				// and mark that we're not streaming
+				sendWSMessage(conn, "message", string(chunk))
+				currentMessage.Reset()
+				isStreaming = false
+			} else if err != nil {
+				// Only send stream chunks for non-JSON content (actual streaming text)
+				sendWSMessage(conn, "stream_chunk", string(chunk))
+				isStreaming = true
+			}
+
+		case err := <-cs.Errors():
+			// Errors
+			sendWSMessage(conn, "error", err.Error())
+			currentMessage.Reset()
+			isStreaming = false
+
+		case msg := <-cs.OutputMessage():
+			// Only send system messages or messages when we're not in streaming mode
+			if strings.Contains(msg.Payload, ":::system") {
+				sendWSMessage(conn, "system", msg.Payload)
+			} else if !isStreaming {
+				// Only send as message if we're not currently streaming
+				sendWSMessage(conn, "message", msg.Payload)
+			}
+			currentMessage.Reset()
+		}
+	}
+}
+
+func (a *API) SetupChatRoutes(r *gin.RouterGroup) {
 	r.GET("/ws/chat/:chat_id", func(c *gin.Context) {
 		a.HandleChatWebSocket(c)
 	})
+	r.POST("/chat-sessions/:session_id/datasources", a.addDatasourceToChatSession)
+	r.DELETE("/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
+	r.POST("/chat-sessions/:session_id/tools", a.addToolToChatSession)
+	r.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
+	r.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
+	r.PUT("/chat-sessions/:session_id/messages/:message_id", a.editMessageInChatSession)
 }
 
-func (a *API) AddDatasourceToChatSession(sessionID string, datasourceID uint) error {
-	hub := getChatHub()
-	return hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
-		return session.AddDatasource(datasourceID)
-	})
-}
-
-func (a *API) RemoveDatasourceFromChatSession(sessionID string, datasourceID uint) error {
-	hub := getChatHub()
-	return hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
-		session.RemoveDatasource(datasourceID)
-		return nil
-	})
-}
-
-func (a *API) AddToolToChatSession(sessionID string, toolID string, tool models.Tool) error {
-	hub := getChatHub()
-	return hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
-		return session.AddTool(toolID, tool)
-	})
-}
-
-func (a *API) RemoveToolFromChatSession(sessionID string, toolID string) error {
-	hub := getChatHub()
-	return hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
-		session.RemoveTool(toolID)
-		return nil
-	})
-}
-
-// addDatasourceToChatSession handles adding a datasource to an active chat session
 func (a *API) addDatasourceToChatSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	var input struct {
 		DatasourceID uint `json:"datasource_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Invalid input", Detail: err.Error()}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid input", Detail: err.Error()}},
+		})
 		return
 	}
 
-	err := a.AddDatasourceToChatSession(sessionID, input.DatasourceID)
+	hub := getChatHub()
+	err := hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+		errInner := session.AddDatasource(input.DatasourceID)
+		if errInner != nil {
+			return errInner
+		}
+		return nil
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error adding datasource", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error adding datasource", Detail: err.Error()}},
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Datasource added successfully"})
 }
 
-// removeDatasourceFromChatSession handles removing a datasource from an active chat session
 func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	datasourceID, err := strconv.ParseUint(c.Param("datasource_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Invalid datasource ID", Detail: "Datasource ID must be a valid number"}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid datasource ID", Detail: "Datasource ID must be a valid number"}},
+		})
 		return
 	}
 
-	err = a.RemoveDatasourceFromChatSession(sessionID, uint(datasourceID))
+	hub := getChatHub()
+	err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+		session.RemoveDatasource(uint(datasourceID))
+		return nil
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error removing datasource", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error removing datasource", Detail: err.Error()}},
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Datasource removed successfully"})
 }
 
-// addToolToChatSession handles adding a tool to an active chat session
 func (a *API) addToolToChatSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	var input struct {
-		ToolID string      `json:"tool_id" binding:"required"`
-		Tool   models.Tool `json:"tool" binding:"required"`
+		ToolID string `json:"tool_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Invalid input", Detail: err.Error()}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid input", Detail: err.Error()}},
+		})
 		return
 	}
 
 	toolId, err := strconv.Atoi(input.ToolID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Invalid tool ID", Detail: "Tool ID must be a valid number"}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid tool ID", Detail: "Tool ID must be a valid number"}},
+		})
 		return
 	}
 
 	tool, err := a.service.GetToolByID(uint(toolId))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error retrieving tool", Detail: err.Error()}},
+		})
+		return
+	}
 	tool.OASSpec, err = helpers.DecodeToUTF8(tool.OASSpec)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error decoding OAS spec", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error decoding OAS spec", Detail: err.Error()}},
+		})
 		return
 	}
 
-	err = a.AddToolToChatSession(sessionID, input.ToolID, *tool)
+	hub := getChatHub()
+	err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+		if e := session.AddTool(input.ToolID, *tool); e != nil {
+			return e
+		}
+		return nil
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error adding tool", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error adding tool", Detail: err.Error()}},
+		})
 		return
 	}
 
@@ -412,17 +484,22 @@ func byteArrayToUTF8StringBuffer(data []byte) string {
 	return buf.String()
 }
 
-// removeToolFromChatSession handles removing a tool from an active chat session
 func (a *API) removeToolFromChatSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	toolID := c.Param("tool_id")
 
-	err := a.RemoveToolFromChatSession(sessionID, toolID)
+	hub := getChatHub()
+	err := hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+		session.RemoveTool(toolID)
+		return nil
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error removing tool", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error removing tool", Detail: err.Error()}},
+		})
 		return
 	}
 
@@ -432,48 +509,52 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 func (a *API) UploadFileToSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 
-	// Get the chat session
 	hub := getChatHub()
 	session, exists := hub.GetSession(sessionID)
 	if !exists {
-		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Session not found", Detail: "Chat session does not exist"}}})
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Session not found", Detail: "Chat session does not exist"}},
+		})
 		return
 	}
 
-	// Get the file from the request
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Invalid file", Detail: err.Error()}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid file", Detail: err.Error()}},
+		})
 		return
 	}
 	defer file.Close()
 
-	// Read the file contents
 	raw, err := readFileContents(file)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error reading file", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error reading file", Detail: err.Error()}},
+		})
 		return
 	}
 
 	contents, err := filereader.Read(header.Filename, raw)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{Title: "Error parsing file", Detail: err.Error()}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Error parsing file", Detail: err.Error()}},
+		})
 		return
 	}
 
-	// Add the file reference to the chat session
 	session.AddFileReference(header.Filename, contents)
 
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded and added to the chat session successfully"})
@@ -485,4 +566,68 @@ func readFileContents(file multipart.File) ([]byte, error) {
 		return []byte{}, fmt.Errorf("error reading file: %v", err)
 	}
 	return contents, nil
+}
+
+// editMessageInChatSession updates a user message in a session, then removes subsequent messages
+func (a *API) editMessageInChatSession(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	msgIDStr := c.Param("message_id")
+
+	var req struct {
+		NewContent json.RawMessage `json:"new_content" binding:"required"`
+		Index      *int            `json:"index,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// If index is provided, use EditUserMessageByIndex
+	if req.Index != nil {
+		if err := a.service.EditUserMessageByIndex(sessionID, *req.Index); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Messages removed from index"})
+		return
+	}
+
+	// Otherwise, handle normal message editing
+	if strings.HasPrefix(msgIDStr, "temp_") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot edit a temporary (unsaved) message."})
+		return
+	}
+
+	msgID, err := strconv.ParseUint(msgIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid message ID"}},
+		})
+		return
+	}
+
+	if err := a.service.EditUserMessage(sessionID, uint(msgID), string(req.NewContent)); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Message updated"})
 }

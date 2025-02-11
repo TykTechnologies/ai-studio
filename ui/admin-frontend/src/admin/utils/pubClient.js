@@ -4,7 +4,7 @@ import { getBaseUrl } from "./urlUtils";
 const isDev = process.env.NODE_ENV === "development";
 
 const pubClient = axios.create({
-  baseURL: isDev ? "" : getBaseUrl(), // In dev mode, use relative URLs to allow proxy to work
+  baseURL: isDev ? "http://localhost:8080" : getBaseUrl(), // Hardcode backend URL for dev
   withCredentials: true,
 });
 
@@ -28,7 +28,7 @@ pubClient.interceptors.response.use(
 // Function to fetch CSRF token
 const fetchCSRFToken = async () => {
   try {
-    const response = await axios.get(isDev ? "/csrf-token" : `${getBaseUrl()}/csrf-token`, {
+    const response = await axios.get(isDev ? "http://localhost:8080/csrf-token" : `${getBaseUrl()}/csrf-token`, {
       withCredentials: true,
     });
     return response.headers["x-csrf-token"];
