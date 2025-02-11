@@ -127,7 +127,8 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		return
 	}
 
-	chat, err := a.service.GetChatByID(uint(chatID))
+	chat := &models.Chat{}
+	err = chat.Get(a.service.DB, uint(chatID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
