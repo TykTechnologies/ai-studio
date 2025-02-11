@@ -65,8 +65,8 @@ start-dev: stop-dev
 		git clone https://github.com/lonelycode/langchaingo ../langchaingo; \
 		echo "langchaingo repository cloned"; \
 	fi
-	@screen -dmS midsommar -t frontend bash -c 'make start-frontend'
-	@screen -S midsommar -X screen -t backend bash -c 'make start-backend'
+	@screen -dmS midsommar -t frontend bash -c 'make start-frontend; echo "\nProcess ended with status $?. Press any key to close this window."; read -n 1'
+	@screen -S midsommar -X screen -t backend bash -c 'make start-backend; echo "\nProcess ended with status $?. Press any key to close this window."; read -n 1'
 	@screen -r midsommar
 
 build-docker-multiarch:

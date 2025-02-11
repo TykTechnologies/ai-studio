@@ -894,9 +894,14 @@ func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []l
 			break
 		}
 
-		// remove the earliest message before the first message
-		msgs = append(msgs[:1], msgs[2:]...)
-		removed++
+		// Keep the first message (system prompt) and remove the second message if we have enough messages
+		if len(msgs) >= 3 {
+			msgs = append(msgs[:1], msgs[2:]...)
+			removed++
+		} else {
+			// Not enough messages to remove while keeping system prompt
+			break
+		}
 	}
 
 	fmt.Println("REMOVED", removed, "messages to stay within token limit")
