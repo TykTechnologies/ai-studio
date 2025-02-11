@@ -8,7 +8,7 @@ on:
 
 jobs:
   golangci-lint:
-    if: false # temporary disable
+    if: false
     runs-on: ubuntu-latest
     steps:
       -
@@ -36,13 +36,33 @@ jobs:
           path: |
             golanglint.xml
 
-  test:
-    name: Unit tests
+  ui-test:
+    name: UI tests
     runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
 
-    strategy:
-      fail-fast: false
+      -
+        name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
 
+      -
+        name: Build and Test UI
+        run: |
+          cd ui/admin-frontend
+          npm ci
+          npm test
+          CI=false npm run build
+
+  go-test:
+    name: Go tests
+    runs-on: ubuntu-latest
     steps:
       -
         name: Checkout main repository
@@ -73,57 +93,51 @@ jobs:
           extended: true
 
       -
-        name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-
-      -
-        name: Install Dependencies and basic hygiene test
-        id: hygiene
-        run: |
-          go install golang.org/x/tools/cmd/goimports@latest
+        name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@latest
 
       -
         name: Fetch base branch
         if: ${{ github.event_name == 'pull_request' }}
         run: git fetch origin ${{ github.base_ref }}
 
+      # Improved Go dependency caching
       -
-        name: Cache
+        name: Go Cache
         uses: actions/cache@v3
         with:
-          path: ~/go/pkg/mod
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 
+      # Cache Hugo resources
       -
-        name: Cache node modules
+        name: Cache Hugo resources
         uses: actions/cache@v3
-        env:
-          cache-name: cache-node-modules
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/ui/**') }}
+          path: docs/site/resources
+          key: ${{ runner.os }}-hugomod-${{ hashFiles('docs/site/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+            ${{ runner.os }}-hugomod-
 
       -
-        name: Build UI
+        name: Build Docs
         run: |
-          cd ui/admin-frontend
-          npm ci
-          npm test
-          CI=false npm run build
-          cd ../..
+          cp .env.example .env
+          cd docs/site && hugo && cd ../..
 
       -
         name: Run Go Tests
         id: ci-tests
         run: |
-          cp .env.example .env
-          cd docs/site && hugo && cd ../..
-          go test ./...
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      -
+        name: Upload coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: coverage.txt
