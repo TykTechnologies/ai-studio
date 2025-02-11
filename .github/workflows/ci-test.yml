@@ -15,23 +15,27 @@ jobs:
     runs-on: ubuntu-latest
     if: false
     steps:
-      - name: Checkout
+      -
+        name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
           path: midsommar
 
-      - name: Fetch base branch
+      -
+        name: Fetch base branch
         if: ${{ github.event_name == 'pull_request' }}
         run: git fetch origin ${{ github.base_ref }}
-      - name: golangci-lint
+      -
+        name: golangci-lint
         if: ${{ github.event_name == 'pull_request' }}
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: midsommar
           version: latest
           args: --out-format=checkstyle:golanglint.xml --timeout=300s --max-issues-per-linter=0 --max-same-issues=0 --new-from-rev=origin/${{ github.base_ref }}
-      - uses: actions/upload-artifact@v3
+      -
+        uses: actions/upload-artifact@v3
         with:
           name: golangcilint
           retention-days: 1
@@ -46,46 +50,54 @@ jobs:
       fail-fast: false
 
     steps:
-      - name: Checkout main repository
+      -
+        name: Checkout main repository
         uses: actions/checkout@v3
         with:
           path: midsommar
           fetch-depth: 2
 
-      - name: Checkout langchaingo repository
+      -
+        name: Checkout langchaingo repository
         uses: actions/checkout@v3
         with:
           repository: lonelycode/langchaingo
           path: langchaingo
           fetch-depth: 2
 
-      - name: Setup Golang
+      -
+        name: Setup Golang
         uses: actions/setup-go@v5
         with:
           go-version-file: midsommar/go.mod
           cache-dependency-path: midsommar/go.sum
 
-      - name: Setup Hugo
+      -
+        name: Setup Hugo
         uses: peaceiris/actions-hugo@v2
         with:
           hugo-version: 'latest'
           extended: true
 
-      - name: Use Node.js
+      -
+        name: Use Node.js
         uses: actions/setup-node@v2
         with:
           node-version: "18"
 
-      - name: Install Dependencies and basic hygiene test
+      -
+        name: Install Dependencies and basic hygiene test
         id: hygiene
         run: |
           go install golang.org/x/tools/cmd/goimports@latest
 
-      - name: Fetch base branch
+      -
+        name: Fetch base branch
         if: ${{ github.event_name == 'pull_request' }}
         run: git fetch origin ${{ github.base_ref }}
 
-      - name: Cache
+      -
+        name: Cache
         uses: actions/cache@v3
         with:
           path: ~/go/pkg/mod
@@ -93,7 +105,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Check for UI changes
+      -
+        name: Check for UI changes
         id: check_changes
         uses: dorny/paths-filter@v2
         with:
@@ -101,9 +114,10 @@ jobs:
             ui:
               - 'ui/**'
 
-      - name: Cache node modules
+      -
+        name: Cache node modules
         if: steps.check_changes.outputs.ui == 'true'
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         env:
           cache-name: cache-node-modules
         with:
@@ -114,31 +128,34 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      - name: Install JavaScript dependencies
+      -
+        name: Install JavaScript dependencies
         if: steps.check_changes.outputs.ui == 'true'
         run: |
           cd ui/admin-frontend
           npm ci
           cd ../..
 
-      - name: Run JavaScript tests
+      -
+        name: Run JavaScript tests
         if: steps.check_changes.outputs.ui == 'true'
         run: |
           cd ui/admin-frontend
           npm test
           cd ../..
 
-      - name: Build
+      -
+        name: Build
         if: steps.check_changes.outputs.ui == 'true'
         run: |
           cd ui/admin-frontend
           CI=false npm run build
           cd ../..
 
-      - name: Run Go Tests
+      -
+        name: Run Go Tests
         id: ci-tests
         run: |
           cp .env.example .env
           cd docs/site && hugo && cd ../..
           go test ./...
-
