@@ -36,33 +36,8 @@ jobs:
           path: |
             golanglint.xml
 
-  ui-test:
-    name: UI tests
-    runs-on: ubuntu-latest-m-2
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v4
-
-      -
-        name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-
-      -
-        name: Build and Test UI
-        run: |
-          cd ui/admin-frontend
-          npm ci
-          npm test
-          CI=false npm run build
-
-  go-test:
-    name: Go tests
-    needs: ui-test
+  test:
+    name: Tests
     runs-on: ubuntu-latest-m-2
     steps:
       -
@@ -94,6 +69,14 @@ jobs:
           extended: true
 
       -
+        name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      -
         name: Install goimports
         run: go install golang.org/x/tools/cmd/goimports@latest
 
@@ -123,6 +106,15 @@ jobs:
           key: ${{ runner.os }}-hugomod-${{ hashFiles('docs/site/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-hugomod-
+
+      -
+        name: Build UI
+        run: |
+          cd ui/admin-frontend
+          npm ci
+          npm test
+          CI=false npm run build
+          cd ../..
 
       -
         name: Build Docs
