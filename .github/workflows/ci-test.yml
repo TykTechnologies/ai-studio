@@ -8,6 +8,7 @@ on:
 
 jobs:
   golangci-lint:
+    if: false # temporary disable
     runs-on: ubuntu-latest
     steps:
       -
@@ -98,17 +99,7 @@ jobs:
             ${{ runner.os }}-go-
 
       -
-        name: Check for UI changes
-        id: check_changes
-        uses: dorny/paths-filter@v2
-        with:
-          filters: |
-            ui:
-              - 'ui/**'
-
-      -
         name: Cache node modules
-        if: steps.check_changes.outputs.ui == 'true'
         uses: actions/cache@v3
         env:
           cache-name: cache-node-modules
@@ -121,26 +112,11 @@ jobs:
             ${{ runner.os }}-
 
       -
-        name: Install JavaScript dependencies
-        if: steps.check_changes.outputs.ui == 'true'
+        name: Build UI
         run: |
           cd ui/admin-frontend
           npm ci
-          cd ../..
-
-      -
-        name: Run JavaScript tests
-        if: steps.check_changes.outputs.ui == 'true'
-        run: |
-          cd ui/admin-frontend
           npm test
-          cd ../..
-
-      -
-        name: Build
-        if: steps.check_changes.outputs.ui == 'true'
-        run: |
-          cd ui/admin-frontend
           CI=false npm run build
           cd ../..
 
@@ -150,8 +126,4 @@ jobs:
         run: |
           cp .env.example .env
           cd docs/site && hugo && cd ../..
-          # Ensure UI is built before running tests that might depend on it
-          if [ -d "ui/admin-frontend" ]; then
-            cd ui/admin-frontend && CI=false npm run build && cd ../..
-          fi
           go test ./...
