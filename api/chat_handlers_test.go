@@ -1,33 +1,82 @@
-package api
+package api_test
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/api"
+	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
+	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestChatEndpoints(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
-	// Create test data
-	group, err := api.service.CreateGroup("Test Group")
+	// Create test user
+	user := &models.User{
+		Email:         "test@test.com",
+		Name:          "Test User",
+		IsAdmin:       true,
+		EmailVerified: true,
+		ShowPortal:    true,
+		ShowChat:      true,
+	}
+	err := user.Create(db)
 	assert.NoError(t, err)
 
-	llmSettings, err := api.service.CreateLLMSettings(&models.LLMSettings{ModelName: "TestModel"})
+	// Create default group
+	defaultGroup := &models.Group{
+		Name: "Default",
+	}
+	err = defaultGroup.Create(db)
 	assert.NoError(t, err)
 
-	llm, err := api.service.CreateLLM(
-		"TestLLM", "api-key", "http://api.test", 75,
+	// Add user to default group
+	err = service.AddUserToGroup(user.ID, defaultGroup.ID)
+	assert.NoError(t, err)
+
+	// Create test group
+	group, err := service.CreateGroup("Test Group")
+	assert.NoError(t, err)
+
+	// Create LLM settings
+	llmSettings, err := service.CreateLLMSettings(&models.LLMSettings{
+		ModelName:   "claude-3-sonnet-20240229",
+		MaxTokens:   4000,
+		Temperature: 0.7,
+	})
+	assert.NoError(t, err)
+
+	// Create LLM
+	llm, err := service.CreateLLM(
+		"Default Anthropic", "api-key", "https://api.anthropic.com", 75,
 		"Short desc", "Long desc", "http://logo.test",
-		models.OPENAI, true, nil, "", []string{})
+		"anthropic", true, nil, "", []string{})
+	assert.NoError(t, err)
+
+	// Create default chat
+	defaultChat := &models.Chat{
+		Name:          "Default Chat",
+		Groups:        []models.Group{*defaultGroup, *group},
+		SupportsTools: true,
+		SystemPrompt:  "You are a helpful assistant.",
+		LLMSettingsID: llmSettings.ID,
+		LLMID:         llm.ID,
+	}
+	err = defaultChat.Create(db)
 	assert.NoError(t, err)
 
 	// Test Create Chat
-	createChatInput := ChatInput{
+	createChatInput := api.ChatInput{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -67,10 +116,10 @@ func TestChatEndpoints(t *testing.T) {
 		},
 	}
 
-	w := performRequest(api.router, "POST", "/api/v1/chats", createChatInput)
+	w := apitest.PerformRequest(a.Router(), "POST", "/api/v1/chats", createChatInput)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	var response map[string]ChatResponse
+	var response map[string]api.ChatResponse
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Chat", response["data"].Attributes.Name)
@@ -79,11 +128,11 @@ func TestChatEndpoints(t *testing.T) {
 	chatID := response["data"].ID
 
 	// Test Get Chat
-	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
+	w = apitest.PerformRequest(a.Router(), "GET", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Test Update Chat
-	updateChatInput := ChatInput{
+	updateChatInput := api.ChatInput{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -123,49 +172,81 @@ func TestChatEndpoints(t *testing.T) {
 		},
 	}
 
-	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/chats/%s", chatID), updateChatInput)
+	w = apitest.PerformRequest(a.Router(), "PATCH", fmt.Sprintf("/api/v1/chats/%s", chatID), updateChatInput)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Test List Chats
-	w = performRequest(api.router, "GET", "/api/v1/chats", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/chats", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var listResponse map[string][]ChatResponse
+	var listResponse map[string][]api.ChatResponse
 	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 	assert.NoError(t, err)
-	assert.Len(t, listResponse["data"], 1)
-	assert.Equal(t, "Updated Chat", listResponse["data"][0].Attributes.Name)
-	assert.Equal(t, "Updated Chat Description", listResponse["data"][0].Attributes.Description)
+	// Verify the updated chat is in the response
+	found := false
+	for _, chat := range listResponse["data"] {
+		if chat.Attributes.Name == "Updated Chat" {
+			found = true
+			assert.Equal(t, "Updated Chat Description", chat.Attributes.Description)
+			assert.Equal(t, strconv.FormatUint(uint64(llmSettings.ID), 10), chat.Attributes.LLMSettingsID)
+			assert.Equal(t, strconv.FormatUint(uint64(llm.ID), 10), chat.Attributes.LLMID)
+			assert.Len(t, chat.Attributes.Groups, 1)
+			groupID, err := strconv.ParseUint(chat.Attributes.Groups[0].ID, 10, 32)
+			assert.NoError(t, err)
+			assert.Equal(t, group.ID, uint(groupID))
+			break
+		}
+	}
+	assert.True(t, found, "Updated test chat should be in the response")
+	assert.Len(t, listResponse["data"], 2) // 1 test chat + 1 default chat
 
 	// Test Get Chats by Group ID
-	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/by-group?group_id=%d", group.ID), nil)
+	w = apitest.PerformRequest(a.Router(), "GET", fmt.Sprintf("/api/v1/chats/by-group?group_id=%d", group.ID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var groupChatsResponse map[string][]ChatResponse
+	var groupChatsResponse map[string][]api.ChatResponse
 	err = json.Unmarshal(w.Body.Bytes(), &groupChatsResponse)
 	assert.NoError(t, err)
-	assert.Len(t, groupChatsResponse["data"], 1)
-	assert.Equal(t, "Updated Chat", groupChatsResponse["data"][0].Attributes.Name)
-	assert.Equal(t, "Updated Chat Description", groupChatsResponse["data"][0].Attributes.Description)
+	// Verify the updated chat is in the response
+	found = false
+	for _, chat := range groupChatsResponse["data"] {
+		if chat.Attributes.Name == "Updated Chat" {
+			found = true
+			assert.Equal(t, "Updated Chat Description", chat.Attributes.Description)
+			assert.Equal(t, strconv.FormatUint(uint64(llmSettings.ID), 10), chat.Attributes.LLMSettingsID)
+			assert.Equal(t, strconv.FormatUint(uint64(llm.ID), 10), chat.Attributes.LLMID)
+			assert.Len(t, chat.Attributes.Groups, 1)
+			groupID, err := strconv.ParseUint(chat.Attributes.Groups[0].ID, 10, 32)
+			assert.NoError(t, err)
+			assert.Equal(t, group.ID, uint(groupID))
+			break
+		}
+	}
+	assert.True(t, found, "Updated test chat should be in the response")
+	assert.Len(t, groupChatsResponse["data"], 2) // 1 test chat + 1 default chat
 
 	// Test Delete Chat
-	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
+	w = apitest.PerformRequest(a.Router(), "DELETE", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
 	// Verify chat is deleted
-	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
+	w = apitest.PerformRequest(a.Router(), "GET", fmt.Sprintf("/api/v1/chats/%s", chatID), nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestChatEndpointsErrors(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Test Get non-existent chat
-	w := performRequest(api.router, "GET", "/api/v1/chats/999", nil)
+	w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/chats/999", nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
 	// Test Update non-existent chat
-	updateChatInput := ChatInput{
+	updateChatInput := api.ChatInput{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -204,15 +285,15 @@ func TestChatEndpointsErrors(t *testing.T) {
 			},
 		},
 	}
-	w = performRequest(api.router, "PATCH", "/api/v1/chats/999", updateChatInput)
+	w = apitest.PerformRequest(a.Router(), "PATCH", "/api/v1/chats/999", updateChatInput)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
 	// Test Delete non-existent chat
-	w = performRequest(api.router, "DELETE", "/api/v1/chats/999", nil)
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	w = apitest.PerformRequest(a.Router(), "DELETE", "/api/v1/chats/999", nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 
 	// Test Create chat with invalid input
-	invalidCreateChatInput := ChatInput{
+	invalidCreateChatInput := api.ChatInput{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -251,14 +332,14 @@ func TestChatEndpointsErrors(t *testing.T) {
 			},
 		},
 	}
-	w = performRequest(api.router, "POST", "/api/v1/chats", invalidCreateChatInput)
+	w = apitest.PerformRequest(a.Router(), "POST", "/api/v1/chats", invalidCreateChatInput)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// Test Get chats by non-existent group
-	w = performRequest(api.router, "GET", "/api/v1/chats/by-group?group_id=999", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/chats/by-group?group_id=999", nil)
 	assert.Equal(t, http.StatusOK, w.Code) // This should return an empty list, not an error
 
-	var emptyResponse map[string][]ChatResponse
+	var emptyResponse map[string][]api.ChatResponse
 	err := json.Unmarshal(w.Body.Bytes(), &emptyResponse)
 	assert.NoError(t, err)
 	assert.Len(t, emptyResponse["data"], 0)

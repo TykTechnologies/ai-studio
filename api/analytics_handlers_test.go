@@ -99,17 +99,15 @@ func TestGetCostAnalysis(t *testing.T) {
 
 			assert.Equal(t, http.StatusOK, w.Code)
 
-			var response map[string]map[string]*analytics.ChartData
+			var response map[string]*analytics.ChartData
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			require.NoError(t, err)
 
 			// Verify the total cost matches expected
 			totalCost := 0.0
-			for _, data := range response {
-				for _, chartData := range data {
-					for _, cost := range chartData.Data {
-						totalCost += cost
-					}
+			for _, chartData := range response {
+				for _, cost := range chartData.Data {
+					totalCost += cost
 				}
 			}
 			assert.InDelta(t, tt.expectedCost, totalCost, 0.001)
