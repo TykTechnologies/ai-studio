@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ type CustomResponseRecorder struct {
 	size         int
 	written      bool
 	status       int
+	mu           sync.RWMutex // Protects ResponseRecorder access
 }
 
 func (r *CustomResponseRecorder) CloseNotify() <-chan bool {
@@ -38,14 +40,20 @@ func (r *CustomResponseRecorder) Pusher() http.Pusher {
 }
 
 func (r *CustomResponseRecorder) Size() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.size
 }
 
 func (r *CustomResponseRecorder) Written() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.written
 }
 
 func (r *CustomResponseRecorder) WriteHeaderNow() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if !r.written {
 		r.written = true
 		r.ResponseRecorder.WriteHeader(r.status)
@@ -53,14 +61,20 @@ func (r *CustomResponseRecorder) WriteHeaderNow() {
 }
 
 func (r *CustomResponseRecorder) Status() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.status
 }
 
 func (r *CustomResponseRecorder) WriteHeader(code int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.status = code
 }
 
 func (r *CustomResponseRecorder) Write(b []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.WriteHeaderNow()
 	n, err := r.ResponseRecorder.Write(b)
 	r.size += n
@@ -72,7 +86,16 @@ func (r *CustomResponseRecorder) WriteString(s string) (int, error) {
 }
 
 func (r *CustomResponseRecorder) Flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.ResponseRecorder.Flush()
+}
+
+// GetBody returns a copy of the current body content in a thread-safe way
+func (r *CustomResponseRecorder) GetBody() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.Body.String()
 }
 
 func NewCustomResponseRecorder() *CustomResponseRecorder {
@@ -178,8 +201,8 @@ func TestChatSSE(t *testing.T) {
 		// Parse response in a goroutine
 		go func() {
 			for {
-				// Read the response body
-				body := w.Body.String()
+				// Read the response body using thread-safe method
+				body := w.GetBody()
 				if body == "" {
 					time.Sleep(100 * time.Millisecond)
 					continue
