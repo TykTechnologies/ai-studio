@@ -13,8 +13,6 @@ import (
 	"text/template"
 	"time"
 
-	"os"
-
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -422,138 +420,13 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		// If no valid auth and test mode is enabled, check if this is a login attempt
-		if a.Config.TestMode && c.Request.URL.Path == "/auth/login" {
-			// Only create test user and set cookie during login
-			var user models.User
-			result := a.Config.DB.Where("email = ?", "test@test.com").First(&user)
-			if result.Error == gorm.ErrRecordNotFound {
-				// Create test user if it doesn't exist
-				// Create test user if it doesn't exist
-				user = models.User{
-					Email:         "test@test.com",
-					Name:          "Test User",
-					IsAdmin:       true,
-					EmailVerified: true,
-					ShowPortal:    true,
-					ShowChat:      true,
-				}
-				if err := user.Create(a.Config.DB); err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create test user"})
-					return
-				}
-
-				// Get or create default group
-				defaultGroup, err := a.getDefaultGroup()
-				if err != nil {
-					if err == gorm.ErrRecordNotFound {
-						defaultGroup = &models.Group{
-							Name: "Default",
-						}
-						if err := a.Config.DB.Create(defaultGroup).Error; err != nil {
-							c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create default group"})
-							return
-						}
-					} else {
-						c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to get default group"})
-						return
-					}
-				}
-
-				// Add user to default group
-				if err := a.Config.Service.AddUserToGroup(user.ID, defaultGroup.ID); err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to add user to default group"})
-					return
-				}
-
-				// Create default chat for test mode
-				chat := &models.Chat{
-					Name:          "Default Chat",
-					Groups:        []models.Group{*defaultGroup},
-					SupportsTools: true,
-					SystemPrompt:  "You are a helpful assistant.",
-				}
-
-				// Get or create default LLM settings
-				var llmSettings models.LLMSettings
-				result = a.Config.DB.Where("model_name = ?", "claude-3-sonnet-20240229").First(&llmSettings)
-				if result.Error == gorm.ErrRecordNotFound {
-					llmSettings = models.LLMSettings{
-						ModelName:   "claude-3-sonnet-20240229",
-						MaxTokens:   4000,
-						Temperature: 0.7,
-					}
-					if err := a.Config.DB.Create(&llmSettings).Error; err != nil {
-						c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create LLM settings"})
-						return
-					}
-				} else if result.Error != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-					return
-				}
-				chat.LLMSettingsID = llmSettings.ID
-
-				// Get or create default LLM
-				var llm models.LLM
-				result = a.Config.DB.Where("vendor = ?", "anthropic").First(&llm)
-				if result.Error == gorm.ErrRecordNotFound {
-					llm = models.LLM{
-						Name:        "Default Anthropic",
-						Vendor:      "anthropic",
-						Active:      true,
-						APIKey:      os.Getenv("TYK_AI_LICENSE"),
-						APIEndpoint: "https://api.anthropic.com",
-					}
-					if err := a.Config.DB.Create(&llm).Error; err != nil {
-						c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create LLM"})
-						return
-					}
-				} else if result.Error != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-					return
-				}
-				chat.LLMID = llm.ID
-
-				if err := chat.Create(a.Config.DB); err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create default chat"})
-					return
-				}
-			} else if result.Error != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-				return
-			}
-			// Create session token for test user
-			token, err := a.generateToken()
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate session token"})
-				return
-			}
-
-			// Set cookie
-			http.SetCookie(c.Writer, &http.Cookie{
-				Name:     a.Config.CookieName,
-				Value:    token,
-				Expires:  time.Now().Add(24 * time.Hour),
-				Secure:   a.Config.CookieSecure,
-				HttpOnly: a.Config.CookieHTTPOnly,
-				SameSite: a.Config.CookieSameSite,
-				Path:     "/",
-				Domain:   a.Config.CookieDomain,
-			})
-
-			// Update test user with session token
-			user.SessionToken = token
-			if err := user.Update(a.Config.DB); err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to update test user"})
-				return
-			}
-
-			c.Set("user", &user)
+		// In test mode, allow the request to proceed
+		if a.Config.TestMode {
 			c.Next()
 			return
 		}
 
-		// No valid authentication found and not in test mode
+		// No valid authentication found
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 	}
 }
