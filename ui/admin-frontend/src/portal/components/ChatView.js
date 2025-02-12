@@ -15,14 +15,14 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import pubClient from '../../admin/utils/pubClient';
 
-import { useChatWebSocket } from './chat/hooks/useChatWebSocket';
+import { useChatSSE } from './chat/hooks/useChatSSE';
 import MessageContent from './chat/MessageContent';
 import ChatInput from './chat/ChatInput';
 import ChatSidebar from './chat/ChatSidebar';
 
 /**
- * Modified ChatView to remove the extra REST fetch of chat messages.
- * Now it only listens for a 'history' message from the WebSocket
+ * Modified ChatView to use Server-Sent Events (SSE) instead of WebSocket.
+ * It listens for a 'history' message from the SSE connection
  * to load old messages once, ensuring only a single request is made.
  */
 const ChatView = () => {
@@ -54,7 +54,7 @@ const ChatView = () => {
 
   /**
    * We no longer fetch messages from REST. Instead, once our
-   * WebSocket is open, the server will send a "history" type
+   * SSE connection is open, the server will send a "history" type
    * message that we use to populate 'messages'.
    */
 
@@ -306,11 +306,10 @@ const ChatView = () => {
     isLoading,
     sessionId,
     sendMessage,
-    closeWebSocket,
-    error: wsError,
-    setError: setWsError,
-    ws,
-  } = useChatWebSocket({
+    closeConnection,
+    error: sseError,
+    setError: setSSEError,
+  } = useChatSSE({
     chatId,
     onMessageReceived: handleRealtimeChunks
   });
@@ -319,15 +318,15 @@ const ChatView = () => {
     // Clear error states when connection is restored
     if (isConnected) {
       setError(null);
-      setWsError(null);
+      setSSEError(null);
     }
-  }, [isConnected, setError, setWsError]);
+  }, [isConnected, setError, setSSEError]);
 
   useEffect(() => {
-    if (error || wsError) {
-      console.warn('Encountered error in ChatView:', error || wsError);
+    if (error || sseError) {
+      console.warn('Encountered error in ChatView:', error || sseError);
     }
-  }, [error, wsError]);
+  }, [error, sseError]);
 
   // Automatic scrolling
   const scrollToBottom = useCallback(() => {
@@ -460,8 +459,8 @@ const ChatView = () => {
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (closeWebSocket) {
-        closeWebSocket();
+      if (closeConnection) {
+        closeConnection();
       }
       setMessages([]);
       setCurrentlyUsing([]);
@@ -474,7 +473,7 @@ const ChatView = () => {
       setExpandedGroups({});
       setAutoScroll(true);
     };
-  }, [chatId, closeWebSocket]);
+  }, [chatId, closeConnection]);
 
   const onDrop = useCallback(
     (acceptedFiles) => {
@@ -642,10 +641,10 @@ const ChatView = () => {
   };
 
   // Only show error if we have an error AND we're not connected
-  if ((error || wsError) && !isConnected) {
+  if ((error || sseError) && !isConnected) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
-        <Alert severity="error">{error || wsError}</Alert>
+        <Alert severity="error">{error || sseError}</Alert>
       </Box>
     );
   }
