@@ -96,10 +96,17 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      -
         name: Build and Push Image
-        run: |
-          docker build -t tykio/midsommar:latest .
-          docker push tykio/midsommar:latest
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: tykio/midsommar:latest
 
       -
         name: Deploy to Remote Server
