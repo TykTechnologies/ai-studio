@@ -8,54 +8,33 @@ FORCE_BUILD := false
 all: build
 
 # Build target
-build: build-admin-frontend build-golang
+build: build-frontend build-binaries
 
-# Build admin frontend
-build-admin-frontend:
-	@if [ ! -d "$(ADMIN_FRONTEND_DIR)/build" ] || [ "$(FORCE_BUILD)" = "true" ]; then \
-		cd $(ADMIN_FRONTEND_DIR) && \
-		npm run build && \
-		cd ../..; \
-	else \
-		echo "Admin frontend build already exists. Use FORCE_BUILD=true to rebuild."; \
-	fi
+# Build frontend
+build-frontend:
+	cd $(ADMIN_FRONTEND_DIR) && npm run build
 
-# Build admin frontend
-build-admin-frontend-clean:
-	cd ui/admin-frontend && \
-	npm install && \
-	npm run build
+# Build Go binaries for all architectures
+build-binaries:
+	GOOS=linux GOARCH=amd64 go build -o midsommar-amd64
+	GOOS=linux GOARCH=arm64 go build -o midsommar-arm64
+	chmod +x midsommar-*
 
-# Build Golang
-build-golang:
-	go build
+# Build for local development (single architecture)
+build-local:
+	cd $(ADMIN_FRONTEND_DIR) && npm run build
+	go build -o midsommar
 
 # Test target
-test: build-admin-frontend
+test:
 	go test ./...
 
 # Clean target
 clean:
+	rm -f midsommar*
 	rm -rf $(ADMIN_FRONTEND_DIR)/build
-	rm -f midsommar
 
-# Start frontend development mode
-start-frontend:
-	cd $(ADMIN_FRONTEND_DIR) && SITE_URL=http://localhost:8080 npm start
-
-# Stop frontend development mode
-stop-frontend:
-	@pkill -f "npm start" || true
-
-# Start backend
-start-backend: build-golang
-	./midsommar
-
-# Stop backend
-stop-backend:
-	@pkill -f "./midsommar" || true
-
-# Start both frontend and backend in screen
+# Development targets
 start-dev: stop-dev
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
@@ -65,22 +44,20 @@ start-dev: stop-dev
 		git clone https://github.com/lonelycode/langchaingo ../langchaingo; \
 		echo "langchaingo repository cloned"; \
 	fi
-	@screen -dmS midsommar -t frontend bash -c 'make start-frontend; echo "\nProcess ended with status $?. Press any key to close this window."; read -n 1'
-	@screen -S midsommar -X screen -t backend bash -c 'make start-backend; echo "\nProcess ended with status $?. Press any key to close this window."; read -n 1'
+	@screen -dmS midsommar -t frontend bash -c 'cd $(ADMIN_FRONTEND_DIR) && SITE_URL=http://localhost:8080 npm start; read -n 1'
+	@screen -S midsommar -X screen -t backend bash -c 'go run main.go; read -n 1'
 	@screen -r midsommar
 
-build-docker-multiarch:
-	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/midsommar:latest --push .
+stop-dev:
+	@pkill -f "npm start" || true
+	@pkill -f "./midsommar" || true
+	@screen -S midsommar -X quit || true
 
+# Build extras only (transformer and reranker)
 build-docker-extras:
 	cd extra/transformer_server && \
 	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/transformer_server_cpu:latest --push -f dockerfile.cpu .
 	cd extra/reranker && \
 	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/reranker_cpu:latest --push -f dockerfile.cpu .
-# Stop both frontend and backend
-stop-dev:
-	make stop-frontend
-	make stop-backend
-	@screen -S midsommar -X quit || true
 
-.PHONY: all build build-admin-frontend build-golang test clean start-frontend stop-frontend start-backend stop-backend start-all stop-all
+.PHONY: all build build-frontend build-binaries build-local test clean start-dev stop-dev

@@ -10,21 +10,71 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      -
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      -
+        name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.2'
 
-      - name: Login to Docker Hub
+      -
+        name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: ui/admin-frontend/package-lock.json
+
+      -
+        name: Install and Build Frontend
+        working-directory: ui/admin-frontend
+        run: |
+          npm ci
+          npm run build
+        env:
+          NODE_ENV: production
+
+      -
+        name: Build Go Binaries
+        run: |
+          git clone https://github.com/lonelycode/langchaingo.git /tmp/langchaingo
+          GOOS=linux GOARCH=amd64 go build -o midsommar-amd64
+          GOOS=linux GOARCH=arm64 go build -o midsommar-arm64
+          chmod +x midsommar-*
+
+      -
+        name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push Docker image
-        run: make build-docker-multiarch
+      -
+        name: Build and Push AMD64 Image
+        run: |
+          docker build --platform linux/amd64 -t tykio/midsommar:latest-amd64 .
+          docker push tykio/midsommar:latest-amd64
 
-      - name: Deploy to Remote Server
+      -
+        name: Build and Push ARM64 Image
+        run: |
+          docker build --platform linux/arm64 -t tykio/midsommar:latest-arm64 .
+          docker push tykio/midsommar:latest-arm64
+
+      -
+        name: Create and Push Manifest
+        run: |
+          docker manifest create tykio/midsommar:latest \
+            tykio/midsommar:latest-amd64 \
+            tykio/midsommar:latest-arm64
+          docker manifest push tykio/midsommar:latest
+
+      -
+        name: Deploy to Remote Server
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
