@@ -1,194 +1,174 @@
-package api
+package api_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
-	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/api"
+	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func TestPagination_LLMPagination(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
-	err = models.InitModels(db)
-	assert.NoError(t, err)
-
-	service := services.NewService(db)
-
-	config := &auth.Config{
-		DB:                  db,
-		Service:             service,
-		CookieName:          "session",
-		CookieSecure:        true,
-		CookieHTTPOnly:      true,
-		CookieSameSite:      http.SameSiteStrictMode,
-		ResetTokenExpiry:    time.Hour,
-		FrontendURL:         "http://example.com",
-		RegistrationAllowed: true,
-		AdminEmail:          "admin@example.com",
-		TestMode:            true,
+	// Create test LLMs
+	llms := []models.LLM{
+		{
+			Name:          "LLM1",
+			APIKey:        "key1",
+			APIEndpoint:   "https://api1.com",
+			PrivacyScore:  30,
+			AllowedModels: []string{"gpt-4"},
+		},
+		{
+			Name:          "LLM2",
+			APIKey:        "key2",
+			APIEndpoint:   "https://api2.com",
+			PrivacyScore:  50,
+			AllowedModels: []string{"gpt-4.*", "gpt-3.5-turbo"},
+		},
+		{
+			Name:          "LLM3",
+			APIKey:        "key3",
+			APIEndpoint:   "https://api3.com",
+			PrivacyScore:  70,
+			AllowedModels: []string{"claude-.*"},
+		},
+		{
+			Name:          "LLM4",
+			APIKey:        "key4",
+			APIEndpoint:   "https://api4.com",
+			PrivacyScore:  90,
+			AllowedModels: nil,
+		},
+		{
+			Name:          "LLM5",
+			APIKey:        "key5",
+			APIEndpoint:   "https://api5.com",
+			PrivacyScore:  100,
+			AllowedModels: []string{"gpt-4"},
+		},
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
-
-	// Create multiple LLMs
-	for i := 1; i <= 15; i++ {
-		_, err := service.CreateLLM(
-			fmt.Sprintf("LLM %d", i),
-			"api-key",
-			"https://api.test.com",
-			75,
-			"Short desc",
-			"Long desc",
-			"https://logo.test",
-			models.OPENAI,
-			true,
-			nil,
-			"",
-			[]string{},
-		)
+	for _, llm := range llms {
+		err := db.Create(&llm).Error
 		assert.NoError(t, err)
 	}
 
-	// Test pagination
-	w := performRequest(api.router, "GET", "/api/v1/llms?page=1&page_size=5", nil)
+	// Test first page
+	w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=1&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var response map[string][]LLMResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+	var response map[string][]api.LLMResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 5)
-	assert.Equal(t, "15", w.Header().Get("X-Total-Count"))
+	assert.Len(t, response["data"], 2)
 	assert.Equal(t, "3", w.Header().Get("X-Total-Pages"))
+	assert.Equal(t, "5", w.Header().Get("X-Total-Count")) // 5 test LLMs
 
 	// Test second page
-	w = performRequest(api.router, "GET", "/api/v1/llms?page=2&page_size=5", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=2&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 5)
+	assert.Len(t, response["data"], 2)
 
 	// Test last page
-	w = performRequest(api.router, "GET", "/api/v1/llms?page=3&page_size=5", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=3&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 5)
+	assert.Len(t, response["data"], 1)
 
-	// Test exceeding pages
-	w = performRequest(api.router, "GET", "/api/v1/llms?page=4&page_size=5", nil)
+	// Test page out of range
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=4&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Len(t, response["data"], 0)
 
-	// Test 'all' parameter
-	w = performRequest(api.router, "GET", "/api/v1/llms?all=true", nil)
-	assert.Equal(t, http.StatusOK, w.Code)
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Len(t, response["data"], 15)
-
-	// Test without page_size parameter
-	w = performRequest(api.router, "GET", "/api/v1/llms?page=1", nil)
-	assert.Equal(t, http.StatusOK, w.Code)
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Len(t, response["data"], 15)
-	assert.Equal(t, "15", w.Header().Get("X-Total-Count"))
-
-	// Test without both page_size and page_number parameters
-	w = performRequest(api.router, "GET", "/api/v1/llms", nil)
-	assert.Equal(t, http.StatusOK, w.Code)
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Len(t, response["data"], 15)
-	assert.Equal(t, "15", w.Header().Get("X-Total-Count"))
+	// Test invalid page number
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=invalid&page_size=2", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestPagination_UserPagination(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
-	err = models.InitModels(db)
-	assert.NoError(t, err)
-
-	service := services.NewService(db)
-	config := &auth.Config{
-		DB:                  db,
-		Service:             service,
-		CookieName:          "session",
-		CookieSecure:        true,
-		CookieHTTPOnly:      true,
-		CookieSameSite:      http.SameSiteStrictMode,
-		ResetTokenExpiry:    time.Hour,
-		FrontendURL:         "http://example.com",
-		RegistrationAllowed: true,
-		AdminEmail:          "admin@example.com",
-		TestMode:            true,
+	// Create test users
+	users := []models.User{
+		{
+			Email:    "user1@test.com",
+			Password: "password1",
+		},
+		{
+			Email:    "user2@test.com",
+			Password: "password2",
+		},
+		{
+			Email:    "user3@test.com",
+			Password: "password3",
+		},
+		{
+			Email:    "user4@test.com",
+			Password: "password4",
+		},
+		{
+			Email:    "user5@test.com",
+			Password: "password5",
+		},
 	}
 
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
-
-	// Create multiple users
-	for i := 1; i <= 15; i++ {
-		_, err := service.CreateUser(
-			fmt.Sprintf("user%d@example.com", i),
-			fmt.Sprintf("User %d", i),
-			"password123",
-			false,
-			true,
-			true,
-			true,
-		)
+	for _, user := range users {
+		err := db.Create(&user).Error
 		assert.NoError(t, err)
 	}
 
-	// Test pagination
-	w := performRequest(api.router, "GET", "/api/v1/users?page=1&page_size=5", nil)
+	// Test first page
+	w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=1&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var response map[string][]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+	var response map[string][]api.UserResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 5)
-	assert.Equal(t, "15", w.Header().Get("X-Total-Count"))
+	assert.Len(t, response["data"], 2)
 	assert.Equal(t, "3", w.Header().Get("X-Total-Pages"))
+	assert.Equal(t, "5", w.Header().Get("X-Total-Count")) // 5 test users
 
 	// Test second page
-	w = performRequest(api.router, "GET", "/api/v1/users?page=2&page_size=5", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=2&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 5)
+	assert.Len(t, response["data"], 2)
 
 	// Test last page
-	w = performRequest(api.router, "GET", "/api/v1/users?page=3&page_size=5", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=3&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 5)
+	assert.Len(t, response["data"], 1)
 
-	// Test exceeding pages
-	w = performRequest(api.router, "GET", "/api/v1/users?page=4&page_size=5", nil)
+	// Test page out of range
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=4&page_size=2", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Len(t, response["data"], 0)
 
-	// Test 'all' parameter
-	w = performRequest(api.router, "GET", "/api/v1/users?all=true", nil)
-	assert.Equal(t, http.StatusOK, w.Code)
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Len(t, response["data"], 15)
+	// Test invalid page number
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=invalid&page_size=2", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

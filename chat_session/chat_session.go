@@ -259,6 +259,20 @@ func (cs *ChatSession) CurrentTools() map[string]models.Tool {
 	return cs.tools
 }
 
+// GetCurrentDatasources returns a slice of current datasources
+func (cs *ChatSession) GetCurrentDatasources() []*models.Datasource {
+	datasources := make([]*models.Datasource, 0, len(cs.datasources))
+	for _, ds := range cs.datasources {
+		datasources = append(datasources, ds)
+	}
+	return datasources
+}
+
+// NotifyStatus sends a status message through the chat session
+func (cs *ChatSession) NotifyStatus(status string) {
+	cs.sendStatus(status)
+}
+
 func (cs *ChatSession) AddPreProcessor(fn func(*models.UserMessage) error) {
 	cs.preProcessors = append(cs.preProcessors, fn)
 }
@@ -366,9 +380,7 @@ func (cs *ChatSession) Start() error {
 }
 
 func (cs *ChatSession) sendOutput(resp string) {
-	select {
-	case cs.outputMessages <- &ChatResponse{Payload: resp}:
-	}
+	// Disabled to prevent duplicate messages
 }
 
 func (cs *ChatSession) sendStatus(resp string) {
@@ -605,7 +617,7 @@ func isToolCaller(name string) bool {
 }
 
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
-	pl := fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT/]\nMessage: \n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	pl := fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT]\n%s", cs.joinDocuments(docs, "\n\n"), payload)
 	return llms.HumanChatMessage{
 		Content: pl,
 	}
@@ -670,50 +682,121 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		}
 	}
 
+	ctx := context.Background()
+
 	if toolCall {
-		// add the whole tool call to history
-		ctx := context.Background()
-		err := cs.chatHistory.AddMessage(ctx, toolCallRequest)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
-			return err
-		}
-
-		// add the tool results to the history
-		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
-			return err
-		}
-
+		// Get final response from LLM with tool results
 		history, err := cs.getMessages()
 		if err != nil {
 			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
 			return err
 		}
 
-		// also check with tool calls!
-		cs.PreflightTokenLengthCheck(history)
-		toolCallResp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
+		// First store the tool call with tool_use block
+		toolCallData := map[string]interface{}{
+			"tool_call_id": toolCallRequest.Parts[0].(llms.ToolCall).ID,
+			"type":         toolCallRequest.Parts[0].(llms.ToolCall).Type,
+			"function": map[string]interface{}{
+				"name":      toolCallRequest.Parts[0].(llms.ToolCall).FunctionCall.Name,
+				"arguments": json.RawMessage(toolCallRequest.Parts[0].(llms.ToolCall).FunctionCall.Arguments),
+			},
+		}
+		toolCallJSON, err := json.Marshal(toolCallData)
 		if err != nil {
-			cs.sendError(fmt.Errorf("[toolcall] error generating content after tool call: %v", err))
+			cs.sendError(fmt.Errorf("error marshaling tool call: %v", err))
 			return err
 		}
 
-		cs.llmResponses <- &LLMResponseWrapper{Response: toolCallResp, Opts: w.Opts}
+		toolCallMessage := llms.MessageContent{
+			Role: llms.ChatMessageTypeAI,
+			Parts: []llms.ContentPart{
+				llms.TextContent{
+					Text: fmt.Sprintf("tool_use\n%s\n/tool_use", string(toolCallJSON)),
+				},
+			},
+		}
+		err = cs.chatHistory.AddMessage(ctx, toolCallMessage)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
 
+		// Then store the tool result with tool_result block
+		for _, part := range toolCallResult.Parts {
+			if toolResp, ok := part.(llms.ToolCallResponse); ok {
+				toolResultData := map[string]interface{}{
+					"tool_call_id": toolResp.ToolCallID,
+					"content":      json.RawMessage(toolResp.Content),
+				}
+				toolResultJSON, err := json.Marshal(toolResultData)
+				if err != nil {
+					cs.sendError(fmt.Errorf("error marshaling tool result: %v", err))
+					return err
+				}
+
+				toolResultMessage := llms.MessageContent{
+					Role: llms.ChatMessageTypeTool,
+					Parts: []llms.ContentPart{
+						llms.TextContent{
+							Text: fmt.Sprintf("tool_result\n%s\n/tool_result", string(toolResultJSON)),
+						},
+					},
+				}
+				err = cs.chatHistory.AddMessage(ctx, toolResultMessage)
+				if err != nil {
+					cs.sendError(fmt.Errorf("error adding tool result to history: %v", err))
+					return err
+				}
+			}
+		}
+
+		// Get updated history with tool call and result
+		history, err = cs.getMessages()
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
+			return err
+		}
+
+		// Check token length and get LLM response based on updated history
+		history = cs.PreflightTokenLengthCheck(history)
+		resp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
+			return err
+		}
+
+		// Send the new LLM response to continue the conversation
+		cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: w.Opts}
 	}
 
 	if content != "" {
-		// Acknowlkedge the AI message
-		cs.sendOutput(content)
+		// For regular messages without tool calls
+		err := cs.chatHistory.AddAIMessage(ctx, content)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
+			return err
+		}
+		// Only send to output stream if this is not a tool call
 		if !toolCall {
-			// only store non-tool call MESSAGES from the AI as AI messages
-			err := cs.chatHistory.AddAIMessage(context.Background(), content)
+			// Send only the final message with proper formatting
+			finalMsg := llms.MessageContent{
+				Role: llms.ChatMessageTypeAI,
+				Parts: []llms.ContentPart{
+					llms.TextContent{
+						Text: content,
+					},
+				},
+			}
+			_, err := json.Marshal(finalMsg)
 			if err != nil {
-				cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
+				cs.sendError(fmt.Errorf("error marshaling final message: %v", err))
 				return err
 			}
+			// select {
+			// case cs.outputStream <- finalMsgBytes:
+			// default:
+			// 	return fmt.Errorf("streaming channel is full")
+			// }
 		}
 	}
 
@@ -811,9 +894,14 @@ func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []l
 			break
 		}
 
-		// remove the earliest message before the first message
-		msgs = append(msgs[:1], msgs[2:]...)
-		removed++
+		// Keep the first message (system prompt) and remove the second message if we have enough messages
+		if len(msgs) >= 3 {
+			msgs = append(msgs[:1], msgs[2:]...)
+			removed++
+		} else {
+			// Not enough messages to remove while keeping system prompt
+			break
+		}
 	}
 
 	fmt.Println("REMOVED", removed, "messages to stay within token limit")
@@ -1067,6 +1155,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				asStr = filtered
 			}
 
+			// Create tool response
 			toolResp := llms.ToolCallResponse{
 				ToolCallID: t.ID,
 				Name:       t.FunctionCall.Name,
@@ -1095,14 +1184,18 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
-	select {
-	case cs.outputStream <- chunk:
-	case <-ctx.Done():
-		return nil
-	default:
-		return fmt.Errorf("streaming channel is full")
+	// Try to parse as JSON to check if it's a final message
+	var msg llms.MessageContent
+	if err := json.Unmarshal(chunk, &msg); err != nil {
+		// Not JSON, send as stream chunk
+		select {
+		case cs.outputStream <- chunk:
+		case <-ctx.Done():
+			return nil
+		default:
+			return fmt.Errorf("streaming channel is full")
+		}
 	}
-
 	return nil
 }
 

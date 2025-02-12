@@ -106,12 +106,15 @@ func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort
 		return 0, 0, err
 	}
 
-	totalPages := int(totalCount) / pageSize
-	if int(totalCount)%pageSize != 0 {
-		totalPages++
+	var totalPages int
+	if pageSize > 0 {
+		totalPages = int(totalCount) / pageSize
+		if int(totalCount)%pageSize != 0 {
+			totalPages++
+		}
 	}
 
-	if !all {
+	if !all && pageSize > 0 {
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
 	}

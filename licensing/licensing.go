@@ -29,6 +29,15 @@ var (
 	initialized  bool
 )
 
+// InitializeForTests sets up the licensing features for test mode
+func InitializeForTests(testFeatures map[string]interface{}) {
+	features = testFeatures
+	if !initialized {
+		initialized = true
+		close(featuresInit)
+	}
+}
+
 func FeatureSet() map[string]interface{} {
 	if !initialized {
 		<-featuresInit // Wait for initialization
