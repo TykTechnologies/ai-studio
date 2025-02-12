@@ -164,8 +164,7 @@ func (a *API) setupRoutes() {
 		a.router.Use(a.corsMiddleware())
 	}
 
-	if !a.config.TestMode {
-		a.router.GET("/sun.ico", func(c *gin.Context) {
+	a.router.GET("/sun.ico", func(c *gin.Context) {
 			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
 			if err != nil {
 				c.Status(http.StatusNotFound)
@@ -174,120 +173,56 @@ func (a *API) setupRoutes() {
 			c.Data(http.StatusOK, "image/x-icon", faviconFile)
 		})
 
-		a.router.GET("/sun-logo.png", func(c *gin.Context) {
-			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-			c.Data(http.StatusOK, "image/png", faviconFile)
-		})
-
-		a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
-			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-			c.Data(http.StatusOK, "image/png", faviconFile)
-		})
-
-		a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
-			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-			c.Data(http.StatusOK, "image/png", faviconFile)
-		})
-
-		// Serve static files from /build directory
-		buildFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build")
+	a.router.GET("/sun-logo.png", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
 		if err != nil {
-			log.Fatal(err)
+			c.Status(http.StatusNotFound)
+			return
 		}
+		c.Data(http.StatusOK, "image/png", faviconFile)
+	})
 
-		// Serve static files and handle SPA routing
-		a.router.NoRoute(func(c *gin.Context) {
-			// Get the requested path
-			path := c.Request.URL.Path
+	a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/png", faviconFile)
+	})
 
-			// Remove leading slash and handle root path
-			trimmedPath := strings.TrimPrefix(path, "/")
-			if trimmedPath == "" {
-				trimmedPath = "index.html"
-			}
+	a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/png", faviconFile)
+	})
 
-			log.Printf("Serving static file: %s", trimmedPath)
-
-			// Try to serve the requested file
-			content, err := fs.ReadFile(buildFS, trimmedPath)
-			if err != nil {
-				// Check if this is an API request
-				if strings.HasPrefix(path, "/api/") {
-					log.Printf("API 404: %s", path)
-					c.Status(http.StatusNotFound)
-					return
-				}
-
-				// For non-API routes, serve index.html for client-side routing
-				log.Printf("Falling back to index.html for path: %s", path)
-				content, err = fs.ReadFile(buildFS, "index.html")
-				if err != nil {
-					log.Printf("Error reading index.html: %v", err)
-					c.String(http.StatusInternalServerError, "Could not read index.html")
-					return
-				}
-			}
-
-			// Debug: List available files in buildFS
-			if err := fs.WalkDir(buildFS, ".", func(p string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-				log.Printf("Available file: %s (isDir: %t)", p, d.IsDir())
-				return nil
-			}); err != nil {
-				log.Printf("Error walking buildFS: %v", err)
-			}
-
-			// Determine content type
-			var contentType string
-			switch {
-			case strings.HasSuffix(trimmedPath, ".html"):
-				contentType = "text/html"
-			case strings.HasSuffix(trimmedPath, ".js"):
-				contentType = "application/javascript"
-			case strings.HasSuffix(trimmedPath, ".css"):
-				contentType = "text/css"
-			case strings.HasSuffix(trimmedPath, ".png"):
-				contentType = "image/png"
-			case strings.HasSuffix(trimmedPath, ".jpg"), strings.HasSuffix(trimmedPath, ".jpeg"):
-				contentType = "image/jpeg"
-			case strings.HasSuffix(trimmedPath, ".ico"):
-				contentType = "image/x-icon"
-			case strings.HasSuffix(trimmedPath, ".svg"):
-				contentType = "image/svg+xml"
-			case strings.HasSuffix(trimmedPath, ".json"):
-				contentType = "application/json"
-			case strings.HasSuffix(trimmedPath, ".woff"):
-				contentType = "font/woff"
-			case strings.HasSuffix(trimmedPath, ".woff2"):
-				contentType = "font/woff2"
-			case strings.HasSuffix(trimmedPath, ".ttf"):
-				contentType = "font/ttf"
-			default:
-				contentType = "text/html"
-			}
-
-			// Add charset for text-based content types
-			if strings.HasPrefix(contentType, "text/") || contentType == "application/javascript" || contentType == "application/json" {
-				contentType += "; charset=utf-8"
-			}
-
-			c.Data(http.StatusOK, contentType, content)
-		})
+	// Serve static files from /build/static
+	staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
+	if err != nil {
+		log.Fatal(err)
 	}
+	a.router.StaticFS("/static", http.FS(staticFS))
+
+	// Serve logos from /build/logos
+	logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
+	if err != nil {
+		log.Fatal(err)
+	}
+	a.router.StaticFS("/logos", http.FS(logosFS))
+
+	// Serve index.html for all other routes
+	a.router.NoRoute(func(c *gin.Context) {
+		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Could not read index.html")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+	})
 
 	a.router.GET("/csrf-token", func(c *gin.Context) {
 		c.Header("X-CSRF-Token", csrf.Token(c.Request))
