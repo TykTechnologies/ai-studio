@@ -146,7 +146,7 @@ func main() {
 		// Create a new API instance
 		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles) // true to disable CORS for development
 
-		//listEmbeddedFiles(staticFiles)
+		// listEmbeddedFiles(staticFiles)
 		// Run the API
 		listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
 		log.Println("server listening on", listenOn)
