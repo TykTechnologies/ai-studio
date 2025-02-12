@@ -1,4 +1,10 @@
-FROM --platform=linux/arm64 gcr.io/distroless/static-debian12:nonroot
+FROM --platform=linux/arm64 debian:bookworm-slim
+
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends \
+	ca-certificates \
+	libsqlite3-0 \
+	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
