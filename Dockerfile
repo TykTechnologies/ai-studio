@@ -1,10 +1,9 @@
-FROM --platform=$TARGETPLATFORM gcr.io/distroless/static-debian12:nonroot
+FROM --platform=linux/arm64 gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-# Copy pre-built binaries and assets
-COPY midsommar-amd64 midsommar-arm64 ./
-COPY docker-entrypoint.sh ./
+# Copy pre-built binary and assets
+COPY midsommar-arm64 ./midsommar
 COPY templates ./templates
 COPY ui/admin-frontend/build ./ui/admin-frontend/build
 COPY docs/site/public ./docs/site/public
@@ -12,5 +11,5 @@ COPY docs/site/public ./docs/site/public
 # Expose the required ports
 EXPOSE 8080 9090
 
-# Run the appropriate binary based on architecture
-ENTRYPOINT ["./docker-entrypoint.sh"]
+# Run the binary directly
+ENTRYPOINT ["./midsommar"]

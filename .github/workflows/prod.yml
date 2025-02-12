@@ -75,14 +75,12 @@ jobs:
           cd docs/site && hugo && cd ../..
 
       -
-        name: Build Go Binaries
+        name: Build Go Binary
         run: |
           git clone https://github.com/lonelycode/langchaingo.git /tmp/langchaingo
-          echo "Building AMD64 binary"
-          GOOS=linux GOARCH=amd64 go build -o midsommar-amd64
           echo "Building ARM64 binary"
           GOOS=linux GOARCH=arm64 go build -o midsommar-arm64
-          chmod +x midsommar-*
+          chmod +x midsommar-arm64
 
       -
         name: Login to Docker Hub
@@ -92,17 +90,10 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      -
-        name: Build and Push Multi-arch Image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: tykio/midsommar:latest
+        name: Build and Push Image
+        run: |
+          docker build -t tykio/midsommar:latest .
+          docker push tykio/midsommar:latest
 
       -
         name: Deploy to Remote Server
