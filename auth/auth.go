@@ -395,8 +395,8 @@ func (a *AuthService) SendEmail(to, subject, body string) error {
 
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cookie, err := c.Cookie(a.Config.CookieName)
-		if err != nil && a.Config.TestMode {
+		// First check for test mode
+		if a.Config.TestMode {
 			// In test mode, if no cookie is present, create or get test admin user
 			var user models.User
 			result := a.Config.DB.Where("email = ?", "test@test.com").First(&user)
@@ -500,39 +500,35 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		cookie, cookieErr := c.Cookie(a.Config.CookieName)
-		if cookieErr != nil {
-			authHeader := c.Request.Header.Get("Authorization")
-			if authHeader == "" {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		// Try to get auth from cookie first
+		cookie, err := c.Cookie(a.Config.CookieName)
+		if err == nil {
+			// Cookie exists, validate it
+			user := &models.User{}
+			if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
+				c.Set("user", user)
+				c.Next()
 				return
 			}
+		}
 
+		// No valid cookie, try API key
+		authHeader := c.Request.Header.Get("Authorization")
+		if authHeader != "" {
 			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-				return
+			if len(parts) == 2 {
+				apiKey := parts[1]
+				user, err := a.Config.Service.GetUserByAPIKey(apiKey)
+				if err == nil {
+					c.Set("user", user)
+					c.Next()
+					return
+				}
 			}
-
-			apiKey := parts[1]
-			user, err := a.Config.Service.GetUserByAPIKey(apiKey)
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-				return
-			}
-
-			c.Set("user", user)
-			c.Next()
 		}
 
-		user := &models.User{}
-		if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-		}
-
-		c.Set("user", user)
-		c.Next()
+		// No valid authentication found
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 	}
 }
 
