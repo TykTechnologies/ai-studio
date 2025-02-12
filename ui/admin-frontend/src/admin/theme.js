@@ -2,7 +2,7 @@ import { createTheme } from "@mui/material/styles";
 
 const theme = createTheme({
   typography: {
-    fontFamily: ["Inter", "sans-serif"].join(","),
+    fontFamily: ["Inter-Regular", "sans-serif"].join(","),
     fontOpticalSizing: "auto",
     fontStyle: "normal",
     body1: {

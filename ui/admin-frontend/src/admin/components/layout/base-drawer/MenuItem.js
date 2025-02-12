@@ -2,14 +2,13 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import {
   List,
-  ListItem,
-  ListItemIcon,
   ListItemText,
   Collapse,
 } from '@mui/material';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { StyledNavLink } from '../../../styles/sharedStyles';
+import { StyledListItem, ListItemIcon } from './styles';
 
 const MenuItem = ({ 
   item, 
@@ -23,19 +22,13 @@ const MenuItem = ({
   const itemId = item.id || item.text;
   const hasSubItems = item.subItems;
   const isExpanded = expandedItems[itemId];
-  
-  const commonStyles = {
-    pl: open ? depth * 4 + 2 : 2,
-    cursor: 'pointer',
-  };
 
   if (hasSubItems) {
     return (
       <React.Fragment key={itemId}>
-        <ListItem
-          button
+        <StyledListItem
           onClick={() => onExpandClick(itemId, parentId)}
-          sx={commonStyles}
+          depth={depth}
         >
           {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
           {open && (
@@ -43,12 +36,11 @@ const MenuItem = ({
               primary={item.text}
               primaryTypographyProps={{
                 variant: depth > 0 ? 'body2' : 'body1',
-                color: depth > 0 ? 'text.secondary' : 'text.primary',
               }}
             />
           )}
           {open && (isExpanded ? <ExpandLess /> : <ExpandMore />)}
-        </ListItem>
+        </StyledListItem>
         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
           <List component="div" disablePadding>
             {item.subItems.map((subItem) => (
@@ -70,10 +62,10 @@ const MenuItem = ({
   }
 
   return (
-    <ListItem
+    <StyledListItem
       component={StyledNavLink}
       to={item.path}
-      sx={commonStyles}
+      depth={depth}
       onClick={() => onPathSelect(item.path)}
       {...(item.path === '/admin/' ? { end: true } : {})}
     >
@@ -83,11 +75,10 @@ const MenuItem = ({
           primary={item.text}
           primaryTypographyProps={{
             variant: depth > 0 ? 'body2' : 'body1',
-            color: depth > 0 ? 'text.secondary' : 'text.primary',
           }}
         />
       )}
-    </ListItem>
+    </StyledListItem>
   );
 };
 

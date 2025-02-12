@@ -13,8 +13,6 @@ import (
 	"text/template"
 	"time"
 
-	"os"
-
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -395,7 +393,7 @@ func (a *AuthService) SendEmail(to, subject, body string) error {
 
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cookie, err := c.Cookie(a.Config.CookieName)
+		/* cookie, err := c.Cookie(a.Config.CookieName)
 		if err != nil && a.Config.TestMode {
 			// In test mode, if no cookie is present, create or get test admin user
 			var user models.User
@@ -498,7 +496,7 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 			c.Set("user", &user)
 			c.Next()
 			return
-		}
+		} */
 
 		cookie, cookieErr := c.Cookie(a.Config.CookieName)
 		if cookieErr != nil {

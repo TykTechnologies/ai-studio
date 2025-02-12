@@ -1,17 +1,18 @@
 import React from "react";
-import { AppBar, Toolbar, Tabs, Tab, Box, IconButton } from "@mui/material";
 import LogoutIcon from "@mui/icons-material/Logout";
-import { styled } from "@mui/material/styles";
-
 import { logout } from "../../admin/utils/pubClient";
-
-const StyledTab = styled(Tab)(({ theme }) => ({
-  color: "white",
-  "&.Mui-selected": {
-    color: "#21ecba",
-  },
-  minHeight: "64px",
-}));
+import {
+  StyledAppBar,
+  StyledToolbar,
+  NavigationContainer,
+  LogoContainer,
+  Logo,
+  TabsContainer,
+  StyledTabs,
+  StyledTab,
+  StyledLogoutButton,
+  TabIndicatorProps,
+} from "./styles";
 
 const TopNavigation = ({
   showAdmin,
@@ -47,57 +48,39 @@ const TopNavigation = ({
     });
   }
 
-  const handleLogout = async () => {
-    await logout();
-  };
-
   return (
-    <AppBar
-      position="fixed"
-      sx={{
-        zIndex: (theme) => theme.zIndex.drawer + 1,
-        background:
-          "linear-gradient(91deg, #03031C 12.29%, #8438FA 92.06%, #B421FA 105%)",
-      }}
-    >
-      <Toolbar>
-        <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
-          <img
-            src="/logos/tyk-portal-logo.png"
-            alt="Logo"
-            style={{
-              height: "25px",
-              marginRight: "20px",
-            }}
-          />
-          <Tabs
-            value={currentTab}
-            onChange={(e, value) => {
-              console.log("Tab clicked:", value); // Add this log
-              onTabChange(value);
-            }}
-            textColor="inherit"
-            TabIndicatorProps={{
-              style: {
-                backgroundColor: "#21ecba",
-              },
-            }}
-          >
-            {tabs.map((tab) => (
-              <StyledTab
-                key={tab.value}
-                label={tab.label}
-                value={tab.value}
-                data-testid={tab.dataTestId}
-              />
-            ))}
-          </Tabs>
-        </Box>
-        <IconButton onClick={handleLogout} sx={{ color: "white" }}>
+    <StyledAppBar position="fixed">
+      <StyledToolbar>
+        <NavigationContainer>
+          <LogoContainer>
+            <Logo
+              src="/logos/tyk-portal-logo.png"
+              alt="Logo"
+            />
+          </LogoContainer>
+          <TabsContainer>
+            <StyledTabs
+              value={currentTab}
+              onChange={(e, value) => onTabChange(value)}
+              textColor="inherit"
+              TabIndicatorProps={TabIndicatorProps}
+            >
+              {tabs.map((tab) => (
+                <StyledTab
+                  key={tab.value}
+                  label={tab.label}
+                  value={tab.value}
+                  data-testid={tab.dataTestId}
+                />
+              ))}
+            </StyledTabs>
+          </TabsContainer>
+        </NavigationContainer>
+        <StyledLogoutButton onClick={logout}>
           <LogoutIcon />
-        </IconButton>
-      </Toolbar>
-    </AppBar>
+        </StyledLogoutButton>
+      </StyledToolbar>
+    </StyledAppBar>
   );
 };
 
