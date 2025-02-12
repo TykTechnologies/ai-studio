@@ -63,8 +63,18 @@ jobs:
         name: Build UI
         run: |
           cd ui/admin-frontend
+          echo "Installing dependencies..."
           npm ci
-          CI=false npm run build
+          echo "Building UI..."
+          PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+          echo "Checking build output..."
+          ls -la build
+          echo "Checking static directory..."
+          ls -la build/static
+          echo "Checking index.html..."
+          cat build/index.html | head -n 5
+          echo "Verifying static files..."
+          find build -type f
           cd ../..
 
       -
@@ -84,6 +94,11 @@ jobs:
         name: Build Go Binaries
         run: |
           git clone https://github.com/lonelycode/langchaingo.git /tmp/langchaingo
+          echo "Verifying UI build directory"
+          if [ ! -d "ui/admin-frontend/build" ]; then
+            echo "UI build directory not found"
+            exit 1
+          fi
           echo "Building ARM64 binary"
           CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 CGO_ENABLED=1 go build -o midsommar-arm64
           chmod +x midsommar-arm64

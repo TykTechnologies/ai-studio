@@ -201,28 +201,52 @@ func (a *API) setupRoutes() {
 			c.Data(http.StatusOK, "image/png", faviconFile)
 		})
 
-		// Serve static files from /build/static
-		staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
+		// Serve static files from /build directory
+		buildFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build")
 		if err != nil {
 			log.Fatal(err)
 		}
-		a.router.StaticFS("/static", http.FS(staticFS))
 
-		// Serve logos from /build/logos
-		logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
-		if err != nil {
-			log.Fatal(err)
-		}
-		a.router.StaticFS("/logos", http.FS(logosFS))
-
-		// Serve index.html for all other routes
+		// First try to serve static files
 		a.router.NoRoute(func(c *gin.Context) {
-			indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
-			if err != nil {
-				c.String(http.StatusInternalServerError, "Could not read index.html")
-				return
+			// Try to serve the requested file directly
+			path := c.Request.URL.Path
+			if path == "/" {
+				path = "index.html"
 			}
-			c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+
+			// Remove leading slash for fs.Sub
+			path = strings.TrimPrefix(path, "/")
+
+			// Try to read the file
+			content, err := fs.ReadFile(buildFS, path)
+			if err != nil {
+				// If file not found, serve index.html
+				content, err = fs.ReadFile(buildFS, "index.html")
+				if err != nil {
+					c.String(http.StatusInternalServerError, "Could not read index.html")
+					return
+				}
+			}
+
+			// Set content type based on file extension
+			contentType := "text/plain"
+			switch {
+			case strings.HasSuffix(path, ".html"):
+				contentType = "text/html"
+			case strings.HasSuffix(path, ".js"):
+				contentType = "application/javascript"
+			case strings.HasSuffix(path, ".css"):
+				contentType = "text/css"
+			case strings.HasSuffix(path, ".png"):
+				contentType = "image/png"
+			case strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".jpeg"):
+				contentType = "image/jpeg"
+			case strings.HasSuffix(path, ".ico"):
+				contentType = "image/x-icon"
+			}
+
+			c.Data(http.StatusOK, contentType+"; charset=utf-8", content)
 		})
 	}
 
