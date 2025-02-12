@@ -78,7 +78,9 @@ jobs:
         name: Build Go Binaries
         run: |
           git clone https://github.com/lonelycode/langchaingo.git /tmp/langchaingo
+          echo "Building AMD64 binary"
           GOOS=linux GOARCH=amd64 go build -o midsommar-amd64
+          echo "Building ARM64 binary"
           GOOS=linux GOARCH=arm64 go build -o midsommar-arm64
           chmod +x midsommar-*
 
