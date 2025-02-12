@@ -207,46 +207,85 @@ func (a *API) setupRoutes() {
 			log.Fatal(err)
 		}
 
-		// First try to serve static files
+		// Serve static files and handle SPA routing
 		a.router.NoRoute(func(c *gin.Context) {
-			// Try to serve the requested file directly
+			// Get the requested path
 			path := c.Request.URL.Path
-			if path == "/" {
-				path = "index.html"
+
+			// Remove leading slash and handle root path
+			trimmedPath := strings.TrimPrefix(path, "/")
+			if trimmedPath == "" {
+				trimmedPath = "index.html"
 			}
 
-			// Remove leading slash for fs.Sub
-			path = strings.TrimPrefix(path, "/")
+			log.Printf("Serving static file: %s", trimmedPath)
 
-			// Try to read the file
-			content, err := fs.ReadFile(buildFS, path)
+			// Try to serve the requested file
+			content, err := fs.ReadFile(buildFS, trimmedPath)
 			if err != nil {
-				// If file not found, serve index.html
+				// Check if this is an API request
+				if strings.HasPrefix(path, "/api/") {
+					log.Printf("API 404: %s", path)
+					c.Status(http.StatusNotFound)
+					return
+				}
+
+				// For non-API routes, serve index.html for client-side routing
+				log.Printf("Falling back to index.html for path: %s", path)
 				content, err = fs.ReadFile(buildFS, "index.html")
 				if err != nil {
+					log.Printf("Error reading index.html: %v", err)
 					c.String(http.StatusInternalServerError, "Could not read index.html")
 					return
 				}
 			}
 
-			// Set content type based on file extension
-			contentType := "text/plain"
-			switch {
-			case strings.HasSuffix(path, ".html"):
-				contentType = "text/html"
-			case strings.HasSuffix(path, ".js"):
-				contentType = "application/javascript"
-			case strings.HasSuffix(path, ".css"):
-				contentType = "text/css"
-			case strings.HasSuffix(path, ".png"):
-				contentType = "image/png"
-			case strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".jpeg"):
-				contentType = "image/jpeg"
-			case strings.HasSuffix(path, ".ico"):
-				contentType = "image/x-icon"
+			// Debug: List available files in buildFS
+			if err := fs.WalkDir(buildFS, ".", func(p string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				log.Printf("Available file: %s (isDir: %t)", p, d.IsDir())
+				return nil
+			}); err != nil {
+				log.Printf("Error walking buildFS: %v", err)
 			}
 
-			c.Data(http.StatusOK, contentType+"; charset=utf-8", content)
+			// Determine content type
+			var contentType string
+			switch {
+			case strings.HasSuffix(trimmedPath, ".html"):
+				contentType = "text/html"
+			case strings.HasSuffix(trimmedPath, ".js"):
+				contentType = "application/javascript"
+			case strings.HasSuffix(trimmedPath, ".css"):
+				contentType = "text/css"
+			case strings.HasSuffix(trimmedPath, ".png"):
+				contentType = "image/png"
+			case strings.HasSuffix(trimmedPath, ".jpg"), strings.HasSuffix(trimmedPath, ".jpeg"):
+				contentType = "image/jpeg"
+			case strings.HasSuffix(trimmedPath, ".ico"):
+				contentType = "image/x-icon"
+			case strings.HasSuffix(trimmedPath, ".svg"):
+				contentType = "image/svg+xml"
+			case strings.HasSuffix(trimmedPath, ".json"):
+				contentType = "application/json"
+			case strings.HasSuffix(trimmedPath, ".woff"):
+				contentType = "font/woff"
+			case strings.HasSuffix(trimmedPath, ".woff2"):
+				contentType = "font/woff2"
+			case strings.HasSuffix(trimmedPath, ".ttf"):
+				contentType = "font/ttf"
+			default:
+				contentType = "text/plain"
+			}
+
+			// Add charset for text-based content types
+			if strings.HasPrefix(contentType, "text/") || contentType == "application/javascript" || contentType == "application/json" {
+				contentType += "; charset=utf-8"
+			}
+
+			c.Data(http.StatusOK, contentType, content)
 		})
 	}
 
