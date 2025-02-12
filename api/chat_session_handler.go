@@ -20,25 +20,16 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	"github.com/tmc/langchaingo/llms"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Add logic here to check the origin of the request
-		return true
-	},
-}
-
 const (
-	// Time allowed to read the next pong message from the peer
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period (must be less than pongWait)
-	pingPeriod = (pongWait * 9) / 10
+	// SSE event types
+	eventSession     = "session_id"
+	eventMessage     = "message"
+	eventStreamChunk = "stream_chunk"
+	eventError       = "error"
+	eventSystem      = "system"
 )
 
 type ChatMessage struct {
@@ -101,8 +92,8 @@ func getChatHub() *ChatHub {
 	return chatHub
 }
 
-// HandleChatWebSocket sets up the WebSocket for the given chat session.
-func (a *API) HandleChatWebSocket(c *gin.Context) {
+// HandleChatSSE handles Server-Sent Events for chat sessions
+func (a *API) HandleChatSSE(c *gin.Context) {
 	uObj, ok := c.Get("user")
 	if !ok {
 		c.JSON(http.StatusUnauthorized, ErrorResponse{
@@ -139,37 +130,16 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		return
 	}
 
-	log.Println("Attempting to upgrade connection to WebSocket")
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	defer conn.Close()
+	// Set headers for SSE
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache, no-transform")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")  // Disable buffering in Nginx
+	c.Writer.Header().Set("Content-Encoding", "none") // Prevent compression
 
-	// Set up ping/pong handlers
-	conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-
-	// Start ping ticker
-	ticker := time.NewTicker(pingPeriod)
-	defer ticker.Stop()
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
-					log.Printf("Error sending ping: %v", err)
-					return
-				}
-			}
-		}
-	}()
-
-	log.Println("WebSocket connection established with ping/pong handlers")
+	// Create a channel for client disconnection
+	clientGone := c.Writer.CloseNotify()
 
 	sessionID := c.Query("session_id")
 
@@ -178,7 +148,7 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		chatSession, err = a.loadExistingSession(sessionID, uint(userID))
 		if err != nil {
 			log.Println("Error loading existing session:", err)
-			sendWSMessage(conn, "error", "Failed to load existing session")
+			sendSSEMessage(c.Writer, eventError, "Failed to load existing session")
 			return
 		}
 	}
@@ -186,14 +156,14 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 	if chatSession == nil {
 		chatSession, err = a.createNewSession(chat, uint(userID))
 		if err != nil {
-			sendWSMessage(conn, "error", "Failed to create new session")
+			sendSSEMessage(c.Writer, eventError, "Failed to create new session")
 			return
 		}
 	}
 
 	err = chatSession.Start()
 	if err != nil {
-		sendWSMessage(conn, "error", "Failed to start chat session")
+		sendSSEMessage(c.Writer, eventError, "Failed to start chat session")
 		return
 	}
 	defer chatSession.Stop()
@@ -204,22 +174,90 @@ func (a *API) HandleChatWebSocket(c *gin.Context) {
 		tools = append(tools, tool)
 	}
 	msg := ChatMessage{
-		Type:        "session_id",
+		Type:        eventSession,
 		Payload:     chatSession.ID(),
 		Tools:       tools,
 		Datasources: chatSession.GetCurrentDatasources(),
 	}
-	if err := conn.WriteJSON(msg); err != nil {
-		log.Println("Error writing session message:", err)
+
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("Error marshaling session message:", err)
+		return
 	}
+	sendSSEMessage(c.Writer, eventSession, string(msgBytes))
 
 	hub := getChatHub()
 	hub.AddSession(chatSession.ID(), chatSession)
 	defer hub.RemoveSession(chatSession.ID())
 
-	go handleIncomingMessages(conn, chatSession)
+	// Start keep-alive goroutine
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sendSSEMessage(c.Writer, "ping", "")
+				c.Writer.Flush()
+			case <-clientGone:
+				return
+			}
+		}
+	}()
 
-	handleOutgoingMessages(conn, chatSession)
+	handleSSEOutgoingMessages(c.Writer, chatSession, clientGone)
+}
+
+func sendSSEMessage(w http.ResponseWriter, event, data string) {
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
+	w.(http.Flusher).Flush()
+}
+
+func handleSSEOutgoingMessages(w http.ResponseWriter, cs *chat_session.ChatSession, done <-chan bool) {
+	var currentMessage strings.Builder
+	var isStreaming bool
+	for {
+		select {
+		case <-done:
+			return
+		case chunk := <-cs.OutputStream():
+			// Try to parse as JSON to check if it's a combined message
+			var mc llms.MessageContent
+			err := json.Unmarshal(chunk, &mc)
+			if err == nil && mc.Role == llms.ChatMessageTypeAI {
+				// If it's a valid AI message, send as a regular message
+				// and mark that we're not streaming
+				sendSSEMessage(w, eventMessage, string(chunk))
+				currentMessage.Reset()
+				isStreaming = false
+			} else if err != nil {
+				// Only send stream chunks for non-JSON content (actual streaming text)
+				sendSSEMessage(w, eventStreamChunk, string(chunk))
+				isStreaming = true
+			}
+
+		case err := <-cs.Errors():
+			// Errors
+			sendSSEMessage(w, eventError, err.Error())
+			currentMessage.Reset()
+			isStreaming = false
+
+		case msg := <-cs.OutputMessage():
+			// Only send system messages or messages when we're not in streaming mode
+			if strings.Contains(msg.Payload, ":::system") {
+				// If already wrapped in :::system::: tags, send as is
+				sendSSEMessage(w, eventSystem, msg.Payload)
+			} else if strings.Contains(msg.Payload, "Tool") || strings.Contains(msg.Payload, "Datasource") {
+				// If it's a tool/datasource message, wrap it in :::system::: tags
+				sendSSEMessage(w, eventSystem, fmt.Sprintf(":::system %s:::", msg.Payload))
+			} else if !isStreaming {
+				// Only send as message if we're not currently streaming
+				sendSSEMessage(w, eventMessage, msg.Payload)
+			}
+			currentMessage.Reset()
+		}
+	}
 }
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
@@ -259,85 +297,64 @@ func (a *API) createNewSession(chat *models.Chat, userID uint) (*chat_session.Ch
 	return chatSession, nil
 }
 
-func handleIncomingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
-	for {
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("Error reading message:", err)
-			return
-		}
-		var chatMessage ChatMessage
-		err = json.Unmarshal(message, &chatMessage)
-		if err != nil {
-			log.Println("Error unmarshalling message:", err)
-			continue
-		}
-		if chatMessage.Type == "user_message" {
-			cs.Input() <- &models.UserMessage{Payload: chatMessage.Payload, FileRef: chatMessage.FileRefs}
-		}
-	}
-}
-
-func sendWSMessage(conn *websocket.Conn, msgType string, payload string) {
-	message := ChatMessage{
-		Type:    msgType,
-		Payload: payload,
-	}
-	if err := conn.WriteJSON(message); err != nil {
-		log.Println("Error writing message:", err)
-	}
-}
-
-func handleOutgoingMessages(conn *websocket.Conn, cs *chat_session.ChatSession) {
-	var currentMessage strings.Builder
-	var isStreaming bool
-	for {
-		select {
-		case chunk := <-cs.OutputStream():
-			// Try to parse as JSON to check if it's a combined message
-			var mc llms.MessageContent
-			err := json.Unmarshal(chunk, &mc)
-			if err == nil && mc.Role == llms.ChatMessageTypeAI {
-				// If it's a valid AI message, send as a regular message
-				// and mark that we're not streaming
-				sendWSMessage(conn, "message", string(chunk))
-				currentMessage.Reset()
-				isStreaming = false
-			} else if err != nil {
-				// Only send stream chunks for non-JSON content (actual streaming text)
-				sendWSMessage(conn, "stream_chunk", string(chunk))
-				isStreaming = true
-			}
-
-		case err := <-cs.Errors():
-			// Errors
-			sendWSMessage(conn, "error", err.Error())
-			currentMessage.Reset()
-			isStreaming = false
-
-		case msg := <-cs.OutputMessage():
-			// Only send system messages or messages when we're not in streaming mode
-			if strings.Contains(msg.Payload, ":::system") {
-				sendWSMessage(conn, "system", msg.Payload)
-			} else if !isStreaming {
-				// Only send as message if we're not currently streaming
-				sendWSMessage(conn, "message", msg.Payload)
-			}
-			currentMessage.Reset()
-		}
-	}
-}
-
 func (a *API) SetupChatRoutes(r *gin.RouterGroup) {
-	r.GET("/ws/chat/:chat_id", func(c *gin.Context) {
-		a.HandleChatWebSocket(c)
-	})
+	r.GET("/chat/:chat_id", a.HandleChatSSE)
+	r.POST("/chat/:chat_id/messages", a.handleSSEUserMessage)
 	r.POST("/chat-sessions/:session_id/datasources", a.addDatasourceToChatSession)
 	r.DELETE("/chat-sessions/:session_id/datasources/:datasource_id", a.removeDatasourceFromChatSession)
 	r.POST("/chat-sessions/:session_id/tools", a.addToolToChatSession)
 	r.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
 	r.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
 	r.PUT("/chat-sessions/:session_id/messages/:message_id", a.editMessageInChatSession)
+}
+
+// handleSSEUserMessage handles user messages sent via POST for SSE connections
+func (a *API) handleSSEUserMessage(c *gin.Context) {
+	sessionID := c.Query("session_id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Missing session ID", Detail: "Session ID is required"}},
+		})
+		return
+	}
+
+	var chatMessage ChatMessage
+	if err := c.ShouldBindJSON(&chatMessage); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid message", Detail: err.Error()}},
+		})
+		return
+	}
+
+	hub := getChatHub()
+	session, exists := hub.GetSession(sessionID)
+	if !exists {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Session not found", Detail: "Chat session does not exist"}},
+		})
+		return
+	}
+
+	if chatMessage.Type == "user_message" {
+		session.Input() <- &models.UserMessage{Payload: chatMessage.Payload, FileRef: chatMessage.FileRefs}
+		c.JSON(http.StatusOK, gin.H{"message": "Message sent successfully"})
+	} else {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid message type", Detail: "Only user_message type is supported"}},
+		})
+	}
 }
 
 func (a *API) addDatasourceToChatSession(c *gin.Context) {

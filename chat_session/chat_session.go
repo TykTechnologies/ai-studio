@@ -384,13 +384,14 @@ func (cs *ChatSession) sendOutput(resp string) {
 }
 
 func (cs *ChatSession) sendStatus(resp string) {
+	msg := fmt.Sprintf(":::system %s:::", resp)
 	select {
-	case cs.outputMessages <- &ChatResponse{Payload: resp}:
+	case cs.outputMessages <- &ChatResponse{Payload: msg}:
 	}
 
 	if cs.outputStream != nil {
 		select {
-		case cs.outputStream <- []byte(fmt.Sprintf(":::system \n\n %s \n\n :::", resp)):
+		case cs.outputStream <- []byte(msg):
 		}
 	}
 }

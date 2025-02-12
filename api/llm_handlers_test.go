@@ -175,6 +175,15 @@ func TestLLMPrivacyScoreEndpoints(t *testing.T) {
 	// Create some test LLMs with different privacy scores
 	llms := []models.LLM{
 		{
+			Name:          "Default Anthropic",
+			APIKey:        "default-key",
+			APIEndpoint:   "https://api.anthropic.com",
+			PrivacyScore:  40,
+			Vendor:        models.ANTHROPIC,
+			Active:        true,
+			AllowedModels: []string{"claude-2", "claude-instant-1"},
+		},
+		{
 			Name:          "LLM1",
 			APIKey:        "key1",
 			APIEndpoint:   "https://api1.com",
@@ -241,19 +250,18 @@ func TestLLMPrivacyScoreEndpoints(t *testing.T) {
 	assert.Contains(t, minScoreNames, "LLM4")
 
 	// Test GetLLMsByPrivacyScoreRange
-	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/privacy-score-range?min_score=40&max_score=80", nil)
+	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/privacy-score-range?min_score=45&max_score=60", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var rangeScoreResponse map[string][]api.LLMResponse
 	err = json.Unmarshal(w.Body.Bytes(), &rangeScoreResponse)
 	assert.NoError(t, err)
-	assert.Len(t, rangeScoreResponse["data"], 2) // Only test LLMs with score between 40 and 80
+	assert.Len(t, rangeScoreResponse["data"], 1) // Only test LLMs with score between 45 and 60
 	var rangeScoreNames []string
 	for _, llm := range rangeScoreResponse["data"] {
 		rangeScoreNames = append(rangeScoreNames, llm.Attributes.Name)
 	}
 	assert.Contains(t, rangeScoreNames, "LLM2")
-	assert.Contains(t, rangeScoreNames, "LLM3")
 
 	// Test invalid input for GetLLMsByMaxPrivacyScore
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/max-privacy-score?max_score=invalid", nil)

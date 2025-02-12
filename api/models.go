@@ -900,11 +900,9 @@ type PaginatedProxyLogs struct {
 }
 
 type FrontendConfig struct {
-	APIBaseURL        string `json:"API_BASE_URL"`
-	WebsocketHost     string `json:"WEBSOCKET_HOST"`
-	ProxyURL          string `json:"PROXY_URL"`
-	DefaultSignUpMode string `json:"DEFAULT_SIGNUP_MODE"`
-	// Add other configuration values as needed
+	APIBaseURL        string `json:"apiBaseURL"`
+	ProxyURL          string `json:"proxyURL"`
+	DefaultSignUpMode string `json:"defaultSignUpMode"`
 }
 
 // FileStoreInput represents the input for filestore-related operations

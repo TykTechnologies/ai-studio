@@ -105,6 +105,121 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 	c.Set("user", user)
 	return nil
 }
+
+func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Try to get auth from cookie first
+		cookie, err := c.Cookie(a.Config.CookieName)
+		if err == nil {
+			// Cookie exists, validate it
+			user := &models.User{}
+			if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
+				c.Set("user", user)
+				c.Next()
+				return
+			}
+		}
+
+		// Try to get token from query parameter
+		token := c.Query("token")
+		if token != "" {
+			user, err := a.Config.Service.GetUserByAPIKey(token)
+			if err == nil {
+				c.Set("user", user)
+				c.Next()
+				return
+			}
+		}
+
+		// Try to get token from Authorization header
+		authHeader := c.Request.Header.Get("Authorization")
+		if authHeader != "" {
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 {
+				apiKey := parts[1]
+				user, err := a.Config.Service.GetUserByAPIKey(apiKey)
+				if err == nil {
+					c.Set("user", user)
+					c.Next()
+					return
+				}
+			}
+		}
+
+		// In test mode, allow the request to proceed
+		if a.Config.TestMode {
+			c.Next()
+			return
+		}
+
+		// No valid authentication found
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	}
+}
+
+func (a *AuthService) AdminOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.Config.TestMode {
+			c.Next()
+			return
+		}
+		u, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		user := u.(*models.User)
+		if !user.IsAdmin {
+			slog.Error("user is not admin", "user", user.Name)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
+	userInterface, exists := c.Get("user")
+	if !exists {
+		return nil, errors.New("user not found in context")
+	}
+
+	user, ok := userInterface.(*models.User)
+	if !ok {
+		return nil, errors.New("invalid user type in context")
+	}
+
+	return user, nil
+}
+
+func (a *AuthService) Logout(c *gin.Context) error {
+	user, err := a.LoadUserFromContext(c)
+	if err != nil {
+		return err
+	}
+
+	user.SessionToken = ""
+	if err := user.Update(a.Config.DB); err != nil {
+		return err
+	}
+
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     a.Config.CookieName,
+		Value:    "",
+		Expires:  time.Now().Add(-1 * time.Hour),
+		Secure:   a.Config.CookieSecure,
+		HttpOnly: a.Config.CookieHTTPOnly,
+		SameSite: a.Config.CookieSameSite,
+		Path:     "/",
+		Domain:   a.Config.CookieDomain,
+	})
+
+	return nil
+}
+
 func (a *AuthService) ResetPassword(email string) error {
 	user := &models.User{}
 	if err := user.GetByEmail(a.Config.DB, email); err != nil {
@@ -148,6 +263,41 @@ func (a *AuthService) ResetPassword(email string) error {
 
 	return nil
 }
+
+func (a *AuthService) ValidateResetToken(token string) (*models.User, error) {
+	user := &models.User{}
+	if err := a.Config.DB.Where("reset_token = ?", token).First(user).Error; err != nil {
+		return nil, err
+	}
+
+	if time.Now().After(user.ResetTokenExpiry) {
+		return nil, errors.New("reset token has expired")
+	}
+
+	return user, nil
+}
+
+func (a *AuthService) UpdatePassword(user *models.User, oldPassword, newPassword string) error {
+	if oldPassword == newPassword {
+		return errors.New("new password must be different from the old password")
+	}
+
+	if err := a.ValidatePasswordComplexity(newPassword); err != nil {
+		return err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	user.Password = string(hashedPassword)
+	user.ResetToken = ""
+	user.ResetTokenExpiry = time.Time{}
+
+	return user.Update(a.Config.DB)
+}
+
 func (a *AuthService) ValidatePasswordComplexity(password string) error {
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters long")
@@ -301,6 +451,7 @@ func (a *AuthService) ResendVerificationEmail(email string) error {
 
 	return nil
 }
+
 func (a *AuthService) VerifyEmail(token string) error {
 	user := &models.User{}
 	if err := a.Config.DB.Where("verification_token = ?", token).First(user).Error; err != nil {
@@ -377,6 +528,7 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 
 	return a.SendEmail(a.Config.AdminEmail, subject, body)
 }
+
 func (a *AuthService) SendEmail(to, subject, body string) error {
 	m := mail.NewMessage()
 	m.SetHeader("From", a.Config.FromEmail)
@@ -389,142 +541,4 @@ func (a *AuthService) SendEmail(to, subject, body string) error {
 		return nil
 	}
 	return a.Mailer.DialAndSend(m)
-}
-
-func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Try to get auth from cookie first
-		cookie, err := c.Cookie(a.Config.CookieName)
-		if err == nil {
-			// Cookie exists, validate it
-			user := &models.User{}
-			if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
-				c.Set("user", user)
-				c.Next()
-				return
-			}
-		}
-
-		// No valid cookie, try API key
-		authHeader := c.Request.Header.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 {
-				apiKey := parts[1]
-				user, err := a.Config.Service.GetUserByAPIKey(apiKey)
-				if err == nil {
-					c.Set("user", user)
-					c.Next()
-					return
-				}
-			}
-		}
-
-		// In test mode, allow the request to proceed
-		if a.Config.TestMode {
-			c.Next()
-			return
-		}
-
-		// No valid authentication found
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-	}
-}
-
-func (a *AuthService) AdminOnly() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if a.Config.TestMode {
-			c.Next()
-			return
-		}
-		u, ok := c.Get("user")
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-		}
-
-		user := u.(*models.User)
-		if !user.IsAdmin {
-			slog.Error("user is not admin", "user", user.Name)
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
-			c.Abort()
-			return
-		}
-
-		c.Next()
-	}
-}
-
-func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
-	userInterface, exists := c.Get("user")
-	if !exists {
-		return nil, errors.New("user not found in context")
-	}
-
-	user, ok := userInterface.(*models.User)
-	if !ok {
-		return nil, errors.New("invalid user type in context")
-	}
-
-	return user, nil
-}
-
-func (a *AuthService) Logout(c *gin.Context) error {
-	user, err := a.LoadUserFromContext(c)
-	if err != nil {
-		return err
-	}
-
-	user.SessionToken = ""
-	if err := user.Update(a.Config.DB); err != nil {
-		return err
-	}
-
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     a.Config.CookieName,
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		Secure:   a.Config.CookieSecure,
-		HttpOnly: a.Config.CookieHTTPOnly,
-		SameSite: a.Config.CookieSameSite,
-		Path:     "/",
-		Domain:   a.Config.CookieDomain,
-	})
-
-	return nil
-}
-
-func (a *AuthService) ValidateResetToken(token string) (*models.User, error) {
-	user := &models.User{}
-	if err := a.Config.DB.Where("reset_token = ?", token).First(user).Error; err != nil {
-		return nil, err
-	}
-
-	if time.Now().After(user.ResetTokenExpiry) {
-		return nil, errors.New("reset token has expired")
-	}
-
-	return user, nil
-}
-
-func (a *AuthService) UpdatePassword(user *models.User, oldPassword, newPassword string) error {
-
-	if oldPassword == newPassword {
-		return errors.New("new password must be different from the old password")
-	}
-
-	if err := a.ValidatePasswordComplexity(newPassword); err != nil {
-		return err
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	user.Password = string(hashedPassword)
-	user.ResetToken = ""
-	user.ResetTokenExpiry = time.Time{}
-
-	return user.Update(a.Config.DB)
 }

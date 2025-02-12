@@ -36,6 +36,7 @@ RUN apk add --no-cache poppler-utils
 # Copy the binary from builder
 COPY --from=builder /app/templates .
 COPY --from=builder /app/midsommar .
+COPY --from=builder /app/ui/admin-frontend/build /app/ui/admin-frontend/build
 
 # Expose the required ports
 EXPOSE 8080 9090

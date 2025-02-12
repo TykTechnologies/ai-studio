@@ -6,11 +6,31 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLLMSettingsEndpoints(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	api, db := setupTestAPI(t)
+
+	// Create default LLM settings
+	defaultSettings := models.LLMSettings{
+		ModelName:         "Default Model",
+		MaxLength:         100,
+		MaxTokens:         50,
+		Metadata:          map[string]interface{}{"key": "value"},
+		MinLength:         10,
+		RepetitionPenalty: 1.2,
+		Seed:              42,
+		StopWords:         []string{"stop1", "stop2"},
+		Temperature:       0.7,
+		TopK:              40,
+		TopP:              0.9,
+		SystemPrompt:      "Default prompt",
+	}
+	if err := db.Create(&defaultSettings).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	// Test Create LLMSettings
 	createLLMSettingsInput := LLMSettingsInput{
