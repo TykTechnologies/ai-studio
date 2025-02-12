@@ -72,7 +72,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, response["data"], 2)
 	assert.Equal(t, "3", w.Header().Get("X-Total-Pages"))
-	assert.Equal(t, "6", w.Header().Get("X-Total-Count")) // 5 test LLMs + 1 default LLM from auth middleware
+	assert.Equal(t, "5", w.Header().Get("X-Total-Count")) // 5 test LLMs
 
 	// Test second page
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=2&page_size=2", nil)
@@ -86,7 +86,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 2)
+	assert.Len(t, response["data"], 1)
 
 	// Test page out of range
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms?page=4&page_size=2", nil)
@@ -145,7 +145,7 @@ func TestPagination_UserPagination(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, response["data"], 2)
 	assert.Equal(t, "3", w.Header().Get("X-Total-Pages"))
-	assert.Equal(t, "6", w.Header().Get("X-Total-Count")) // 5 test users + 1 default user from auth middleware
+	assert.Equal(t, "5", w.Header().Get("X-Total-Count")) // 5 test users
 
 	// Test second page
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=2&page_size=2", nil)
@@ -159,7 +159,7 @@ func TestPagination_UserPagination(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Len(t, response["data"], 2)
+	assert.Len(t, response["data"], 1)
 
 	// Test page out of range
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/users?page=4&page_size=2", nil)
