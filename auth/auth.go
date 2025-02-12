@@ -424,7 +424,7 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		if a.Config.TestMode {
 			c.Next()
 			return
-		} */
+		}
 
 		// No valid authentication found
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})

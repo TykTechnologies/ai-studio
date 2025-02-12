@@ -25,13 +25,11 @@ const BaseDrawer = ({
   const {
     open,
     expandedItems,
+    selectedPath,
     handleDrawerToggle,
     handleExpandClick,
+    handlePathSelect,
   } = useDrawerState(STORAGE_KEY, defaultOpen, defaultExpandedItems);
-
-  const handlePathSelect = (path) => {
-    saveSelectedPath(STORAGE_KEY, path);
-  };
 
   const currentWidth = open ? drawerWidth : minimizedWidth;
 
@@ -55,6 +53,7 @@ const BaseDrawer = ({
                 expandedItems={expandedItems}
                 onExpandClick={handleExpandClick}
                 onPathSelect={handlePathSelect}
+                selectedPath={selectedPath}
               />
             ))}
           </List>

@@ -51,8 +51,15 @@ export const MenuList = styled('div')(({ theme, customMarginTop }) => ({
 export const StyledListItem = styled(ListItemButton)(({ theme, depth = 0 }) => ({
   padding: '8px 16px',
   paddingLeft: depth === 0 ? '60px' : '76px',
-  '&:hover': {
-    backgroundColor: depth === 0 ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
+  height: '60px',
+  borderBottom: '1px solid #D8D8DF',
+  '& .MuiListItemText-root': {
+    marginLeft: '16px',
+  },
+  '&:hover, &.Mui-selected': {
+    background: depth === 0 ? 
+      'linear-gradient(90deg, rgba(35, 226, 194, 0.2) 0px, rgba(35, 226, 194, 0.2) 58px, #23E2C2 58px, #23E2C2 60px, #fff 60px)' : 
+      'transparent',
   },
   '& .MuiListItemIcon-root': {
     color: '#fff',

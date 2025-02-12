@@ -18,10 +18,14 @@ const MenuItem = ({
   expandedItems,
   onExpandClick,
   onPathSelect,
+  selectedPath,
 }) => {
   const itemId = item.id || item.text;
   const hasSubItems = item.subItems;
   const isExpanded = expandedItems[itemId];
+
+  const isSelected = selectedPath === item.path || 
+    (hasSubItems && item.subItems?.some(subItem => subItem.path === selectedPath));
 
   if (hasSubItems) {
     return (
@@ -29,6 +33,7 @@ const MenuItem = ({
         <StyledListItem
           onClick={() => onExpandClick(itemId, parentId)}
           depth={depth}
+          selected={isSelected}
         >
           {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
           {open && (
@@ -53,6 +58,7 @@ const MenuItem = ({
                 expandedItems={expandedItems}
                 onExpandClick={onExpandClick}
                 onPathSelect={onPathSelect}
+                selectedPath={selectedPath}
               />
             ))}
           </List>
@@ -67,6 +73,7 @@ const MenuItem = ({
       to={item.path}
       depth={depth}
       onClick={() => onPathSelect(item.path)}
+      selected={selectedPath === item.path}
       {...(item.path === '/admin/' ? { end: true } : {})}
     >
       {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
@@ -96,6 +103,7 @@ MenuItem.propTypes = {
   expandedItems: PropTypes.object.isRequired,
   onExpandClick: PropTypes.func.isRequired,
   onPathSelect: PropTypes.func.isRequired,
+  selectedPath: PropTypes.string,
 };
 
 export default React.memo(MenuItem);
