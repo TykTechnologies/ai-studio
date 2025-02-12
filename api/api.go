@@ -25,25 +25,6 @@ import (
 	"github.com/gorilla/csrf"
 )
 
-// @title           Midsommar API
-// @version         1.0
-// @description     This is the API for the Midsommar user and group management system.
-// @termsOfService  http://swagger.io/terms/
-
-// @contact.name   API Support
-// @contact.url    http://www.swagger.io/support
-// @contact.email  support@swagger.io
-
-// @license.name  Apache 2.0
-// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host      localhost:8080
-// @BasePath  /api/v1
-
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-
 type API struct {
 	service             *services.Service
 	router              *gin.Engine
@@ -78,9 +59,8 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
 	}
-	if !config.TestMode {
-		api.setupChatRoutesFunc = api.SetupChatRoutes
-	}
+
+	api.setupChatRoutesFunc = api.SetupChatRoutes
 
 	// Generate a random 32-byte key for CSRF
 	csrfKey := make([]byte, 32)
@@ -157,6 +137,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 
 	return pageSize, pageNumber, all
 }
+
 func (a *API) setupRoutes() {
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
@@ -200,9 +181,7 @@ func (a *API) setupRoutes() {
 			}
 			c.Data(http.StatusOK, "image/png", faviconFile)
 		})
-	}
 
-	if !a.config.TestMode {
 		// Serve static files from /build/static
 		staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
 		if err != nil {
@@ -322,7 +301,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/catalogues/:id", a.deleteCatalogue)
 	v1.GET("/catalogues", a.listCatalogues)
 	v1.GET("/catalogues/search", a.searchCatalogues)
-	v1.GET("/catalogues/search-by-stub", a.searchCataloguesByNameStub) // Add this line
+	v1.GET("/catalogues/search-by-stub", a.searchCataloguesByNameStub)
 	v1.POST("/catalogues/:id/llms", a.addLLMToCatalogue)
 	v1.DELETE("/catalogues/:id/llms/:llmId", a.removeLLMFromCatalogue)
 	v1.GET("/catalogues/:id/llms", a.listCatalogueLLMs)
@@ -445,10 +424,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/tools/:id/filestores", a.getToolFileStores)
 	v1.PUT("/tools/:id/filestores", a.setToolFileStores)
 
-	v1.POST("/tools/:id/filters/:filter_id", a.addFilterToTool)        // Add a filter to a tool
-	v1.DELETE("/tools/:id/filters/:filter_id", a.removeFilterFromTool) // Remove a filter from a tool
-	v1.GET("/tools/:id/filters", a.getToolFilters)                     // Get all filters for a tool
-	v1.PUT("/tools/:id/filters", a.setToolFilters)                     // Replace all filters for a tool
+	v1.POST("/tools/:id/filters/:filter_id", a.addFilterToTool)
+	v1.DELETE("/tools/:id/filters/:filter_id", a.removeFilterFromTool)
+	v1.GET("/tools/:id/filters", a.getToolFilters)
+	v1.PUT("/tools/:id/filters", a.setToolFilters)
 
 	// Provider routes
 	providerAPI := NewProviderAPI(a)
@@ -475,7 +454,6 @@ func (a *API) setupRoutes() {
 	v1.GET("/filters", a.listFilters)
 
 	// Chat History Record routes
-
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)
 	v1.GET("/chat-history-records/:id", a.getChatHistoryRecord)
@@ -515,51 +493,30 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
-	if !a.config.TestMode {
-		chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
-		if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
-			a.setupChatRoutesFunc(authed)
-		}
+	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
+	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
+		a.setupChatRoutesFunc(authed)
 	}
-
 }
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-
-		// Allow the specific origin
-		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-
-		// Allow credentials
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		// Allow specific headers
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Total-Count, X-Total-Pages")
-
-		// Expose headers
-		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Total-Count, X-Total-Pages")
-
-		// Allow methods
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-
-		// Handle preflight requests
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
+	return cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	})
 }
 
 func (a *API) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cors.New(cors.Config{
-			AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"}, // Update with your frontend URL
+			AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"},
 			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"},
-			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token"},
+			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
+			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
 			AllowCredentials: true,
 			MaxAge:           12 * time.Hour,
 		})(c)
@@ -584,13 +541,8 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
-	// Construct the base URLs
+	// Construct the base URL
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
-	websocketScheme := "ws"
-	if scheme == "https" {
-		websocketScheme = "wss"
-	}
-	websocketHost := fmt.Sprintf("%s://%s", websocketScheme, host)
 
 	suMode := "both"
 	if config.Get().DefaultSignupMode != "" {
@@ -599,7 +551,6 @@ func (a *API) handleGetConfig(c *gin.Context) {
 
 	config := FrontendConfig{
 		APIBaseURL:        apiBaseURL,
-		WebsocketHost:     websocketHost,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
 	}

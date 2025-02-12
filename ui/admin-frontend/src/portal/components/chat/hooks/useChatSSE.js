@@ -1,32 +1,40 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import pubClient from '../../../../admin/utils/pubClient';
 
-export const useChatWebSocket = ({ chatId, onMessageReceived }) => {
+export const useChatSSE = ({ chatId, onMessageReceived }) => {
 	const [isConnected, setIsConnected] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [sessionId, setSessionId] = useState(null);
 	const [error, setError] = useState(null);
-	const ws = useRef(null);
+	const eventSource = useRef(null);
 	const reconnectAttempts = useRef(0);
 	const isConnectedRef = useRef(false);
 	const loadingTimeoutRef = useRef(null);
 
-	const closeWebSocket = useCallback(() => {
-		if (ws.current) {
-			ws.current.close();
-			ws.current = null;
+	const closeConnection = useCallback(() => {
+		if (eventSource.current) {
+			eventSource.current.close();
+			eventSource.current = null;
 			setIsConnected(false);
 			setSessionId(null);
 		}
 	}, []);
 
-	const sendMessage = useCallback((message) => {
-		if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-			ws.current.send(JSON.stringify(message));
-			return true;
+	const sendMessage = useCallback(async (message) => {
+		console.log("Sending message with sessionId:", sessionId);
+		if (!sessionId) {
+			console.warn("Cannot send message: sessionId is null");
+			return false;
 		}
-		return false;
-	}, []);
+
+		try {
+			await pubClient.post(`/common/chat/${chatId}/messages?session_id=${sessionId}`, message);
+			return true;
+		} catch (error) {
+			console.error('Error sending message:', error);
+			return false;
+		}
+	}, [chatId, sessionId]);
 
 	const fetchChatHistory = useCallback(async (currentSessionId) => {
 		try {
@@ -120,113 +128,180 @@ export const useChatWebSocket = ({ chatId, onMessageReceived }) => {
 	useEffect(() => {
 		const searchParams = new URLSearchParams(window.location.search);
 		const continueId = searchParams.get("continue_id");
-		const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-
-		// Only use continueId if it's present in the URL
-		// This ensures we don't use any stored session when starting a new chat
-		const wsUrl = process.env.NODE_ENV === "development"
-			? `${wsProtocol}//localhost:8080/common/ws/chat/${chatId}${continueId ? `?session_id=${continueId}` : ""}`
-			: `${wsProtocol}//${window.location.host}/common/ws/chat/${chatId}${continueId ? `?session_id=${continueId}` : ""}`;
 
 		let keepAliveInterval;
+		const maxReconnectAttempts = 5;
+		const initialReconnectDelay = 500;
 
-		const setupWebSocket = () => {
-			// Don't close existing connection if we're reconnecting
-			if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
-				ws.current = new WebSocket(wsUrl);
+		const setupEventSource = () => {
+			const baseUrl = pubClient.defaults.baseURL;
+			const token = localStorage.getItem('token');
+			const params = new URLSearchParams();
+			if (continueId) {
+				params.append('session_id', continueId);
+			}
+			if (token) {
+				params.append('token', token);
+			}
+			const url = `${baseUrl}/common/chat/${chatId}${params.toString() ? `?${params.toString()}` : ''}`;
+			console.log('Setting up SSE connection to:', url);
+
+			if (!eventSource.current || eventSource.current.readyState === EventSource.CLOSED) {
+				console.log('Creating new EventSource');
+				eventSource.current = new EventSource(url, {
+					withCredentials: true
+				});
 			}
 
-			ws.current.onopen = () => {
-				console.log('WebSocket connection established');
+			eventSource.current.onopen = () => {
+				console.log('SSE connection established');
 				setIsConnected(true);
 				isConnectedRef.current = true;
 				reconnectAttempts.current = 0;
-				setError(null); // Clear any previous errors
-				setIsLoading(false); // Ensure loading state is cleared
+				setError(null);
+				setIsLoading(false);
 
 				if (loadingTimeoutRef.current) {
 					clearTimeout(loadingTimeoutRef.current);
 					loadingTimeoutRef.current = null;
 				}
-
-				// The server will send pings every ~54 seconds
-				// Browser will automatically respond with pongs
-				if (continueId) {
-					setSessionId(continueId);
-					setIsLoading(true); // Set loading before fetching history
-					fetchChatHistory(continueId).then((messages) => {
-						if (Array.isArray(messages)) {
-							// Send all messages at once in history format
-							onMessageReceived({
-								type: 'history',
-								payload: JSON.stringify(messages.map(msg => ({
-									id: msg.id,
-									attributes: {
-										content: JSON.stringify({
-											role: msg.type === 'user' ? 'human' : msg.type === 'ai' ? 'ai' : 'system',
-											text: msg.content
-										})
-									}
-								})))
-							});
-						}
-						setIsLoading(false);
-					}).catch(() => {
-						setIsLoading(false);
-					});
-				} else {
-					setIsLoading(false);
-				}
 			};
 
-			ws.current.onmessage = (event) => {
+			// Listen specifically for session_id events
+			eventSource.current.addEventListener('session_id', (event) => {
 				try {
+					console.log('SSE session_id event received:', event.data);
 					const data = JSON.parse(event.data);
-					if (data.type === "session_id") {
-						const newSessionId = data.payload;
-						setSessionId(newSessionId);
-						// Update URL with new session ID
-						const newUrl = `/chat/${chatId}?continue_id=${newSessionId}`;
+					console.log('Processing session_id message:', data);
+					const newSessionId = data.payload;
+					console.log('Setting new sessionId:', newSessionId);
+					setSessionId(newSessionId);
+					// Update URL with new session ID
+					const newUrl = `/chat/${chatId}?continue_id=${newSessionId}`;
+					console.log('Updating URL to:', newUrl);
+					try {
 						window.history.replaceState({}, "", newUrl);
+						console.log('URL updated successfully');
+					} catch (err) {
+						console.error('Failed to update URL:', err);
+					}
 
-						// Handle tools and datasources
-						if (data.tools && Array.isArray(data.tools)) {
-							data.tools.forEach(tool => {
-								const uniqueId = `tool-${tool.id}`;
-								onMessageReceived({
-									id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
-									type: "system",
-									payload: `Tool '${tool.name}' added to room`,
-									isComplete: true,
-									tool: { ...tool, type: 'tool', uniqueId }
-								});
-							});
-						}
-						if (data.datasources && Array.isArray(data.datasources)) {
-							data.datasources.forEach(ds => {
-								const uniqueId = `database-${ds.id}`;
-								onMessageReceived({
-									id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
-									type: "system",
-									payload: `Datasource '${ds.name}' added to room`,
-									isComplete: true,
-									datasource: { ...ds, type: 'database', uniqueId }
-								});
-							});
-						}
-					} else if (data.type === "user_message") {
-						// For user messages, pass through the server's ID
-						onMessageReceived({
-							id: data.id,
-							type: "user_message",
-							payload: data.payload,
-							isComplete: true
+					// Handle tools and datasources
+					if (data.tools && Array.isArray(data.tools)) {
+						data.tools.forEach(tool => {
+							const uniqueId = `tool-${tool.id}`;
+							tool.type = 'tool';
+							tool.uniqueId = uniqueId;
 						});
-					} else {
-						onMessageReceived(data);
+					}
+					if (data.datasources && Array.isArray(data.datasources)) {
+						data.datasources.forEach(ds => {
+							const uniqueId = `database-${ds.id}`;
+							ds.type = 'database';
+							ds.uniqueId = uniqueId;
+						});
+					}
+					// Forward the entire session_id message
+					onMessageReceived(data);
+
+					if (continueId) {
+						setIsLoading(true);
+						fetchChatHistory(continueId).then((messages) => {
+							if (Array.isArray(messages)) {
+								onMessageReceived({
+									type: 'history',
+									payload: JSON.stringify(messages.map(msg => ({
+										id: msg.id,
+										attributes: {
+											content: JSON.stringify({
+												role: msg.type === 'user' ? 'human' : msg.type === 'ai' ? 'ai' : 'system',
+												text: msg.content
+											})
+										}
+									})))
+								});
+							}
+							setIsLoading(false);
+						}).catch(() => {
+							setIsLoading(false);
+						});
 					}
 				} catch (error) {
-					console.error("Error parsing websocket message:", error);
+					console.error("Error parsing SSE message:", error);
+					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+						type: "system",
+						payload: "Error: Failed to parse message from server",
+						isComplete: true
+					});
+				}
+			});
+
+			// Handle stream_chunk events
+			eventSource.current.addEventListener('stream_chunk', (event) => {
+				try {
+					console.log('SSE stream_chunk received:', event.data);
+					onMessageReceived({
+						type: 'stream_chunk',
+						payload: event.data
+					});
+				} catch (error) {
+					console.error("Error handling stream chunk:", error);
+				}
+			});
+
+			// Handle message events
+			eventSource.current.addEventListener('message', (event) => {
+				try {
+					console.log('SSE message received:', event.data);
+					const data = JSON.parse(event.data);
+					onMessageReceived(data);
+				} catch (error) {
+					console.error("Error parsing message:", error);
+				}
+			});
+
+			// Handle system events
+			eventSource.current.addEventListener('system', (event) => {
+				try {
+					console.log('SSE system message received:', event.data);
+					const messageContent = event.data.includes(':::system')
+						? event.data
+						: `:::system ${event.data}:::`;
+					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+						type: 'system',
+						content: messageContent,
+						isComplete: true
+					});
+				} catch (error) {
+					console.error("Error handling system message:", error);
+				}
+			});
+
+			// Handle error events
+			eventSource.current.addEventListener('error', (event) => {
+				try {
+					console.log('SSE error message received:', event.data);
+					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+						type: 'system',
+						content: `:::system Error: ${event.data}:::`,
+						isComplete: true
+					});
+				} catch (error) {
+					console.error("Error handling error message:", error);
+				}
+			});
+
+			// Handle any other events
+			eventSource.current.onmessage = (event) => {
+				try {
+					console.log('SSE generic message received:', event.data);
+					const data = JSON.parse(event.data);
+					onMessageReceived(data);
+				} catch (error) {
+					console.error("Error parsing generic message:", error);
 					onMessageReceived({
 						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: "system",
@@ -236,82 +311,51 @@ export const useChatWebSocket = ({ chatId, onMessageReceived }) => {
 				}
 			};
 
-			ws.current.onerror = (error) => {
-				console.error("WebSocket error:", error);
-				// Only set error if we're not in the process of reconnecting
-				if (reconnectAttempts.current === 0) {
-					onMessageReceived({
-						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
-						type: "system",
-						payload: `WebSocket error occurred. Attempting to reconnect...`,
-					});
-					setError(`WebSocket error: ${error.message}`);
-				}
-			};
-
-			ws.current.onclose = (event) => {
-				console.log('WebSocket connection closed', event);
-
-				if (keepAliveInterval) {
-					clearInterval(keepAliveInterval);
-				}
-
-				// Always update connection state
+			eventSource.current.onerror = (error) => {
+				console.error("SSE error:", error);
 				setIsConnected(false);
 				isConnectedRef.current = false;
 				setIsLoading(false);
 
-				if (!event.wasClean) {
-					// Only show reconnection message if we haven't reached max attempts
-					if (reconnectAttempts.current < maxReconnectAttempts) {
-						onMessageReceived({
-							id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
-							type: "system",
-							payload: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
-						});
-						reconnectWithDelay();
-					} else {
-						onMessageReceived({
-							id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
-							type: "system",
-							payload: "Maximum reconnection attempts reached. Please refresh the page.",
-						});
-						setError("Maximum reconnection attempts reached. Please refresh the page.");
-					}
+				if (reconnectAttempts.current < maxReconnectAttempts) {
+					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+						type: "system",
+						payload: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
+					});
+
+					const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
+					console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
+
+					setTimeout(() => {
+						reconnectAttempts.current++;
+						console.log("Reconnecting SSE...");
+
+						if (eventSource.current) {
+							eventSource.current.close();
+						}
+
+						setupEventSource();
+					}, delay);
+				} else {
+					onMessageReceived({
+						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
+						type: "system",
+						payload: "Maximum reconnection attempts reached. Please refresh the page.",
+					});
+					setError("Maximum reconnection attempts reached. Please refresh the page.");
 				}
 			};
-		};
 
-		let reconnectTimeout = null;
-		const maxReconnectAttempts = 5;
-		const initialReconnectDelay = 500;
-
-		const reconnectWithDelay = () => {
-			if (reconnectAttempts.current >= maxReconnectAttempts) {
-				console.error("Max reconnection attempts reached.");
-				setError("Maximum reconnection attempts reached. Please refresh the page.");
-				return;
-			}
-
-			const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
-			console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
-
-			reconnectTimeout = setTimeout(() => {
-				reconnectAttempts.current++;
-				console.log("Reconnecting WebSocket...");
-
-				// Close existing connection if it's still around
-				if (ws.current) {
-					ws.current.close();
-				}
-
-				setupWebSocket();
-			}, delay);
+			// Handle ping events to keep connection alive
+			eventSource.current.addEventListener('ping', () => {
+				console.log('Received ping');
+			});
 		};
 
 		setIsLoading(true);
 		const timer = setTimeout(() => {
-			setupWebSocket();
+			setupEventSource();
 
 			// Set loading timeout
 			loadingTimeoutRef.current = setTimeout(() => {
@@ -331,21 +375,20 @@ export const useChatWebSocket = ({ chatId, onMessageReceived }) => {
 			if (loadingTimeoutRef.current) {
 				clearTimeout(loadingTimeoutRef.current);
 			}
-			clearTimeout(reconnectTimeout);
 			clearTimeout(timer);
-			closeWebSocket();
+			closeConnection();
 			setIsLoading(false);
 			setIsConnected(false);
 			isConnectedRef.current = false;
 		};
-	}, [chatId, closeWebSocket, onMessageReceived, fetchChatHistory]);
+	}, [chatId, closeConnection, onMessageReceived, fetchChatHistory]);
 
 	return {
 		isConnected,
 		isLoading,
 		sessionId,
 		sendMessage,
-		closeWebSocket,
+		closeConnection,
 		error,
 		setError
 	};
@@ -433,13 +476,10 @@ const reorderAndMergeToolMessages = (messages) => {
 					// Use TextEncoder to accurately measure the UTF-8 byte length.
 					byteCount = new TextEncoder().encode(contentString).length;
 				} catch (err) {
-					// Fallback (note: this may be inaccurate for multi-byte characters).
 					byteCount = contentString.length;
 				}
 
-				// --- Build the new system message ---
-				// Note: We build a block that starts with :::system and ends with :::,
-				// with the required lines inside.
+				// Build the new system message
 				const systemMsg = `\n:::systemUsing function: \`${functionName}()\`::::::systemParameters: ${JSON.stringify(parameters)}::::::systemContent: Function \`${functionName}()\` returned: \`${byteCount}\` bytes:::\n
 [CONTEXT]${contentString}[/CONTEXT]\n`;
 
