@@ -81,12 +81,15 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc libsqlite3-dev
 
       -
-        name: Build Go Binary
+        name: Build Go Binaries
         run: |
           git clone https://github.com/lonelycode/langchaingo.git /tmp/langchaingo
           echo "Building ARM64 binary"
           CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 CGO_ENABLED=1 go build -o midsommar-arm64
           chmod +x midsommar-arm64
+          echo "Building AMD64 binary"
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o midsommar-amd64
+          chmod +x midsommar-amd64
 
       -
         name: Login to Docker Hub
@@ -94,6 +97,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       -
         name: Set up Docker Buildx
@@ -104,7 +111,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: tykio/midsommar:latest
 
