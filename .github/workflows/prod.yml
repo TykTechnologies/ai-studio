@@ -33,8 +33,10 @@ jobs:
         name: Install and Build Frontend
         working-directory: ui/admin-frontend
         run: |
-          npm ci
-          npm run build
+          npm install -g npm@latest
+          npm ci --no-audit --no-fund
+          npm install --save-dev @babel/plugin-proposal-private-property-in-object @babel/plugin-transform-private-property-in-object
+          CI=false npm run build
         env:
           NODE_ENV: production
 
