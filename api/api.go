@@ -277,7 +277,7 @@ func (a *API) setupRoutes() {
 			case strings.HasSuffix(trimmedPath, ".ttf"):
 				contentType = "font/ttf"
 			default:
-				contentType = "text/plain"
+				contentType = "text/html"
 			}
 
 			// Add charset for text-based content types
