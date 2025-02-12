@@ -41,6 +41,8 @@ cp .env.example .env
 
 Then, fill in the required environment variables in the .env file, most importantly you'll need the `TYK_AI_LICENSE_KEY`, which you can get from the AI Team.
 
+Note: Environment variables set in your system or Docker environment will take precedence over values in the .env file. This is useful when you need to override specific settings without modifying the .env file, especially in container environments.
+
 To start the app in Docker, run the following command:
 
 ```bash
