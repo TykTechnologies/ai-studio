@@ -37,7 +37,7 @@ var globalConfig *AppConf
 func getConfigFromEnv() *AppConf {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("Error loading .env file")
 	}
 
 	conf := &AppConf{}
@@ -125,7 +125,8 @@ func getConfigFromEnv() *AppConf {
 	}
 
 	if conf.DatabaseType != "sqlite" && conf.DatabaseType != "postgres" {
-		log.Fatalf("Unsupported DATABASE_TYPE: %s. Supported types are 'sqlite' and 'postgres'", conf.DatabaseType)
+		log.Printf("Warning: Unsupported DATABASE_TYPE: %s. Defaulting to sqlite", conf.DatabaseType)
+		conf.DatabaseType = "sqlite"
 	}
 
 	filterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")
