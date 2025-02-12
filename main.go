@@ -28,7 +28,7 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed ui/admin-frontend/build
+//go:embed ui/admin-frontend/build templates docs/site/public
 var staticFiles embed.FS
 
 func printWelcome() {

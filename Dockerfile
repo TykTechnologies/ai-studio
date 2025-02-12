@@ -10,11 +10,8 @@ WORKDIR /app
 
 # Set up architecture-specific binary selection
 ARG TARGETARCH
-# Copy pre-built binary and assets
+# Copy pre-built binary (static files are embedded)
 COPY midsommar-${TARGETARCH} ./midsommar
-COPY templates ./templates
-COPY ui/admin-frontend/build ./ui/admin-frontend/build
-COPY docs/site/public ./docs/site/public
 
 # Expose the required ports
 EXPOSE 8080 9090
