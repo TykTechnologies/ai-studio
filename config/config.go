@@ -35,12 +35,20 @@ type AppConf struct {
 var globalConfig *AppConf
 
 func getConfigFromEnv() *AppConf {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
 	conf := &AppConf{}
+
+	// Try to load .env file first
+	if envMap, err := godotenv.Read(".env"); err == nil {
+		log.Println("Successfully loaded .env file (environment variables will take precedence if set)")
+		// Set environment variables from .env file if they're not already set
+		for key, value := range envMap {
+			if os.Getenv(key) == "" {
+				os.Setenv(key, value)
+			}
+		}
+	} else {
+		log.Println("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
+	}
 
 	conf.SMTPServer = os.Getenv("SMTP_SERVER")
 	if conf.SMTPServer == "" {
@@ -125,7 +133,8 @@ func getConfigFromEnv() *AppConf {
 	}
 
 	if conf.DatabaseType != "sqlite" && conf.DatabaseType != "postgres" {
-		log.Fatalf("Unsupported DATABASE_TYPE: %s. Supported types are 'sqlite' and 'postgres'", conf.DatabaseType)
+		log.Printf("Warning: Unsupported DATABASE_TYPE: %s. Defaulting to sqlite", conf.DatabaseType)
+		conf.DatabaseType = "sqlite"
 	}
 
 	filterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")

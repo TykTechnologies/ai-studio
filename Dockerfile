@@ -1,44 +1,23 @@
-# Build stage
-FROM golang:1.23.2-alpine AS builder
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends \
+	ca-certificates \
+	libsqlite3-0 \
+	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# set up
-RUN apk add git make npm
-
-# Copy go mod and sum files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN git clone https://github.com/lonelycode/langchaingo.git /langchaingo
-RUN go mod download
-
-# Copy the source code
-COPY . .
-
-# Build the application for multiple architectures
+# Set up architecture-specific binary selection
 ARG TARGETARCH
-ENV NODE_ENV notDevelopment
-
-RUN mkdir -p docs/site/public && \
-    touch docs/site/public/empty && \
-    make clean && \
-    make build-admin-frontend-clean && \
-    GOOS=linux GOARCH=$TARGETARCH go build -o midsommar .
-
-# Final stage
-FROM alpine:latest
-
-WORKDIR /app
-
-RUN apk add --no-cache poppler-utils
-
-# Copy the binary from builder
-COPY --from=builder /app/templates .
-COPY --from=builder /app/midsommar .
+# Copy pre-built binary and assets
+COPY midsommar-${TARGETARCH} ./midsommar
+COPY templates ./templates
+COPY ui/admin-frontend/build ./ui/admin-frontend/build
+COPY docs/site/public ./docs/site/public
 
 # Expose the required ports
 EXPOSE 8080 9090
 
-# Run the binary
-ENTRYPOINT ["/app/midsommar"]
+# Run the binary directly
+ENTRYPOINT ["./midsommar"]

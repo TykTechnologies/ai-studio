@@ -78,9 +78,8 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
 	}
-	if !config.TestMode {
-		api.setupChatRoutesFunc = api.SetupChatRoutes
-	}
+
+	api.setupChatRoutesFunc = api.SetupChatRoutes
 
 	// Generate a random 32-byte key for CSRF
 	csrfKey := make([]byte, 32)
@@ -157,6 +156,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 
 	return pageSize, pageNumber, all
 }
+
 func (a *API) setupRoutes() {
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
@@ -200,31 +200,53 @@ func (a *API) setupRoutes() {
 			}
 			c.Data(http.StatusOK, "image/png", faviconFile)
 		})
-	}
 
-	if !a.config.TestMode {
-		// Serve static files from /build/static
-		staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
+		// Serve static files from /build directory
+		buildFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build")
 		if err != nil {
 			log.Fatal(err)
 		}
-		a.router.StaticFS("/static", http.FS(staticFS))
 
-		// Serve logos from /build/logos
-		logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
-		if err != nil {
-			log.Fatal(err)
-		}
-		a.router.StaticFS("/logos", http.FS(logosFS))
-
-		// Serve index.html for all other routes
+		// First try to serve static files
 		a.router.NoRoute(func(c *gin.Context) {
-			indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
-			if err != nil {
-				c.String(http.StatusInternalServerError, "Could not read index.html")
-				return
+			// Try to serve the requested file directly
+			path := c.Request.URL.Path
+			if path == "/" {
+				path = "index.html"
 			}
-			c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+
+			// Remove leading slash for fs.Sub
+			path = strings.TrimPrefix(path, "/")
+
+			// Try to read the file
+			content, err := fs.ReadFile(buildFS, path)
+			if err != nil {
+				// If file not found, serve index.html
+				content, err = fs.ReadFile(buildFS, "index.html")
+				if err != nil {
+					c.String(http.StatusInternalServerError, "Could not read index.html")
+					return
+				}
+			}
+
+			// Set content type based on file extension
+			contentType := "text/plain"
+			switch {
+			case strings.HasSuffix(path, ".html"):
+				contentType = "text/html"
+			case strings.HasSuffix(path, ".js"):
+				contentType = "application/javascript"
+			case strings.HasSuffix(path, ".css"):
+				contentType = "text/css"
+			case strings.HasSuffix(path, ".png"):
+				contentType = "image/png"
+			case strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".jpeg"):
+				contentType = "image/jpeg"
+			case strings.HasSuffix(path, ".ico"):
+				contentType = "image/x-icon"
+			}
+
+			c.Data(http.StatusOK, contentType+"; charset=utf-8", content)
 		})
 	}
 
@@ -322,7 +344,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/catalogues/:id", a.deleteCatalogue)
 	v1.GET("/catalogues", a.listCatalogues)
 	v1.GET("/catalogues/search", a.searchCatalogues)
-	v1.GET("/catalogues/search-by-stub", a.searchCataloguesByNameStub) // Add this line
+	v1.GET("/catalogues/search-by-stub", a.searchCataloguesByNameStub)
 	v1.POST("/catalogues/:id/llms", a.addLLMToCatalogue)
 	v1.DELETE("/catalogues/:id/llms/:llmId", a.removeLLMFromCatalogue)
 	v1.GET("/catalogues/:id/llms", a.listCatalogueLLMs)
@@ -445,10 +467,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/tools/:id/filestores", a.getToolFileStores)
 	v1.PUT("/tools/:id/filestores", a.setToolFileStores)
 
-	v1.POST("/tools/:id/filters/:filter_id", a.addFilterToTool)        // Add a filter to a tool
-	v1.DELETE("/tools/:id/filters/:filter_id", a.removeFilterFromTool) // Remove a filter from a tool
-	v1.GET("/tools/:id/filters", a.getToolFilters)                     // Get all filters for a tool
-	v1.PUT("/tools/:id/filters", a.setToolFilters)                     // Replace all filters for a tool
+	v1.POST("/tools/:id/filters/:filter_id", a.addFilterToTool)
+	v1.DELETE("/tools/:id/filters/:filter_id", a.removeFilterFromTool)
+	v1.GET("/tools/:id/filters", a.getToolFilters)
+	v1.PUT("/tools/:id/filters", a.setToolFilters)
 
 	// Provider routes
 	providerAPI := NewProviderAPI(a)
@@ -475,7 +497,6 @@ func (a *API) setupRoutes() {
 	v1.GET("/filters", a.listFilters)
 
 	// Chat History Record routes
-
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)
 	v1.GET("/chat-history-records/:id", a.getChatHistoryRecord)
@@ -515,51 +536,30 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
-	if !a.config.TestMode {
-		chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
-		if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
-			a.setupChatRoutesFunc(authed)
-		}
+	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
+	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
+		a.setupChatRoutesFunc(authed)
 	}
-
 }
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-
-		// Allow the specific origin
-		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-
-		// Allow credentials
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		// Allow specific headers
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Total-Count, X-Total-Pages")
-
-		// Expose headers
-		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Total-Count, X-Total-Pages")
-
-		// Allow methods
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-
-		// Handle preflight requests
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
+	return cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	})
 }
 
 func (a *API) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cors.New(cors.Config{
-			AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"}, // Update with your frontend URL
+			AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"},
 			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"},
-			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token"},
+			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
+			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
 			AllowCredentials: true,
 			MaxAge:           12 * time.Hour,
 		})(c)
@@ -584,13 +584,8 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
-	// Construct the base URLs
+	// Construct the base URL
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
-	websocketScheme := "ws"
-	if scheme == "https" {
-		websocketScheme = "wss"
-	}
-	websocketHost := fmt.Sprintf("%s://%s", websocketScheme, host)
 
 	suMode := "both"
 	if config.Get().DefaultSignupMode != "" {
@@ -599,7 +594,6 @@ func (a *API) handleGetConfig(c *gin.Context) {
 
 	config := FrontendConfig{
 		APIBaseURL:        apiBaseURL,
-		WebsocketHost:     websocketHost,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
 	}
