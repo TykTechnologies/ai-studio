@@ -20,6 +20,19 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.23.2'
+          cache-dependency-path: go.sum
+
+      # Improved Go dependency caching
+      -
+        name: Go Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       -
         name: Use Node.js
@@ -29,6 +42,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
+      # Cache Hugo resources
+      -
+        name: Cache Hugo resources
+        uses: actions/cache@v3
+        with:
+          path: docs/site/resources
+          key: ${{ runner.os }}-hugomod-${{ hashFiles('docs/site/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-hugomod-
+
+      -
+        name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+
       -
         name: Build UI
         run: |
@@ -36,6 +66,12 @@ jobs:
           npm ci
           CI=false npm run build
           cd ../..
+
+      -
+        name: Build Docs
+        run: |
+          cp .env.example .env
+          cd docs/site && hugo && cd ../..
 
       -
         name: Build Go Binaries
