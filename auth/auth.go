@@ -13,6 +13,8 @@ import (
 	"text/template"
 	"time"
 
+	"os"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -105,7 +107,6 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 	c.Set("user", user)
 	return nil
 }
-
 func (a *AuthService) ResetPassword(email string) error {
 	user := &models.User{}
 	if err := user.GetByEmail(a.Config.DB, email); err != nil {
@@ -149,7 +150,6 @@ func (a *AuthService) ResetPassword(email string) error {
 
 	return nil
 }
-
 func (a *AuthService) ValidatePasswordComplexity(password string) error {
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters long")
@@ -303,7 +303,6 @@ func (a *AuthService) ResendVerificationEmail(email string) error {
 
 	return nil
 }
-
 func (a *AuthService) VerifyEmail(token string) error {
 	user := &models.User{}
 	if err := a.Config.DB.Where("verification_token = ?", token).First(user).Error; err != nil {
@@ -380,7 +379,6 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 
 	return a.SendEmail(a.Config.AdminEmail, subject, body)
 }
-
 func (a *AuthService) SendEmail(to, subject, body string) error {
 	m := mail.NewMessage()
 	m.SetHeader("From", a.Config.FromEmail)
@@ -431,6 +429,7 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 			result := a.Config.DB.Where("email = ?", "test@test.com").First(&user)
 			if result.Error == gorm.ErrRecordNotFound {
 				// Create test user if it doesn't exist
+				// Create test user if it doesn't exist
 				user = models.User{
 					Email:         "test@test.com",
 					Name:          "Test User",
@@ -443,11 +442,86 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create test user"})
 					return
 				}
+
+				// Get or create default group
+				defaultGroup, err := a.getDefaultGroup()
+				if err != nil {
+					if err == gorm.ErrRecordNotFound {
+						defaultGroup = &models.Group{
+							Name: "Default",
+						}
+						if err := a.Config.DB.Create(defaultGroup).Error; err != nil {
+							c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create default group"})
+							return
+						}
+					} else {
+						c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to get default group"})
+						return
+					}
+				}
+
+				// Add user to default group
+				if err := a.Config.Service.AddUserToGroup(user.ID, defaultGroup.ID); err != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to add user to default group"})
+					return
+				}
+
+				// Create default chat for test mode
+				chat := &models.Chat{
+					Name:          "Default Chat",
+					Groups:        []models.Group{*defaultGroup},
+					SupportsTools: true,
+					SystemPrompt:  "You are a helpful assistant.",
+				}
+
+				// Get or create default LLM settings
+				var llmSettings models.LLMSettings
+				result = a.Config.DB.Where("model_name = ?", "claude-3-sonnet-20240229").First(&llmSettings)
+				if result.Error == gorm.ErrRecordNotFound {
+					llmSettings = models.LLMSettings{
+						ModelName:   "claude-3-sonnet-20240229",
+						MaxTokens:   4000,
+						Temperature: 0.7,
+					}
+					if err := a.Config.DB.Create(&llmSettings).Error; err != nil {
+						c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create LLM settings"})
+						return
+					}
+				} else if result.Error != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+					return
+				}
+				chat.LLMSettingsID = llmSettings.ID
+
+				// Get or create default LLM
+				var llm models.LLM
+				result = a.Config.DB.Where("vendor = ?", "anthropic").First(&llm)
+				if result.Error == gorm.ErrRecordNotFound {
+					llm = models.LLM{
+						Name:        "Default Anthropic",
+						Vendor:      "anthropic",
+						Active:      true,
+						APIKey:      os.Getenv("TYK_AI_LICENSE"),
+						APIEndpoint: "https://api.anthropic.com",
+					}
+					if err := a.Config.DB.Create(&llm).Error; err != nil {
+						c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create LLM"})
+						return
+					}
+				} else if result.Error != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+					return
+				}
+				chat.LLMID = llm.ID
+
+				if err := chat.Create(a.Config.DB); err != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create default chat"})
+					return
+				}
 			} else if result.Error != nil {
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 				return
 			}
-
 			// Create session token for test user
 			token, err := a.generateToken()
 			if err != nil {
@@ -561,6 +635,7 @@ func (a *AuthService) ValidateResetToken(token string) (*models.User, error) {
 }
 
 func (a *AuthService) UpdatePassword(user *models.User, oldPassword, newPassword string) error {
+
 	if oldPassword == newPassword {
 		return errors.New("new password must be different from the old password")
 	}
