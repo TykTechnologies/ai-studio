@@ -71,6 +71,7 @@ jobs:
         name: Build Docs
         run: |
           cp .env.example .env
+          git clone https://github.com/alex-shpak/hugo-book.git docs/site/themes/hugo-book
           cd docs/site && hugo && cd ../..
 
       -
