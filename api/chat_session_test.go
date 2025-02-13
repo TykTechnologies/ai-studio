@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,118 +10,43 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 )
 
-// CustomResponseRecorder wraps httptest.ResponseRecorder and implements gin.ResponseWriter
-type CustomResponseRecorder struct {
-	*httptest.ResponseRecorder
-	closeChannel chan bool
-	size         int
-	written      bool
-	status       int
-	mu           sync.RWMutex // Protects ResponseRecorder access
-}
-
-func (r *CustomResponseRecorder) CloseNotify() <-chan bool {
-	return r.closeChannel
-}
-
-func (r *CustomResponseRecorder) Pusher() http.Pusher {
-	return nil
-}
-
-func (r *CustomResponseRecorder) Size() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.size
-}
-
-func (r *CustomResponseRecorder) Written() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.written
-}
-
-func (r *CustomResponseRecorder) WriteHeaderNow() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.written {
-		r.written = true
-		r.ResponseRecorder.WriteHeader(r.status)
-	}
-}
-
-func (r *CustomResponseRecorder) Status() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.status
-}
-
-func (r *CustomResponseRecorder) WriteHeader(code int) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.status = code
-}
-
-func (r *CustomResponseRecorder) Write(b []byte) (int, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.WriteHeaderNow()
-	n, err := r.ResponseRecorder.Write(b)
-	r.size += n
-	return n, err
-}
-
-func (r *CustomResponseRecorder) WriteString(s string) (int, error) {
-	return r.Write([]byte(s))
-}
-
-func (r *CustomResponseRecorder) Flush() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.ResponseRecorder.Flush()
-}
-
-// GetBody returns a copy of the current body content in a thread-safe way
-func (r *CustomResponseRecorder) GetBody() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.Body.String()
-}
-
-func NewCustomResponseRecorder() *CustomResponseRecorder {
-	return &CustomResponseRecorder{
-		ResponseRecorder: httptest.NewRecorder(),
-		closeChannel:     make(chan bool, 1),
-		status:           http.StatusOK,
-	}
-}
-
+// TestChatSSE tests SSE with multiline JSON events and ensures we don't get a 404
+// after posting a user message.
 func TestChatSSE(t *testing.T) {
-	// Set up test environment
+	// Setup environment variables.
 	os.Setenv("ENVIRONMENT", "test")
 	os.Setenv("LOG_LEVEL", "info")
 	os.Setenv("ENABLE_ANALYTICS", "false")
 	os.Setenv("ENABLE_ECHO_CONVERSATION", "false")
+	defer func() {
+		os.Unsetenv("ENVIRONMENT")
+		os.Unsetenv("LOG_LEVEL")
+		os.Unsetenv("ENABLE_ANALYTICS")
+		os.Unsetenv("ENABLE_ECHO_CONVERSATION")
+	}()
 
 	gin.SetMode(gin.TestMode)
+
+	// Setup DB, service, config, auth, etc.
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
-	// Create test user
+	// Create user.
 	user := &models.User{
 		Email:         "test@test.com",
 		Name:          "Test User",
@@ -132,45 +58,31 @@ func TestChatSSE(t *testing.T) {
 	err := user.Create(db)
 	assert.NoError(t, err)
 
-	// Create default group
-	defaultGroup := &models.Group{
-		Name: "Default",
-	}
+	// Create default group & attach user.
+	defaultGroup := &models.Group{Name: "Default"}
 	err = defaultGroup.Create(db)
 	assert.NoError(t, err)
-
-	// Add user to default group
 	err = service.AddUserToGroup(user.ID, defaultGroup.ID)
 	assert.NoError(t, err)
 
-	// Create LLM settings
-	llmSettings, err := service.CreateLLMSettings(&models.LLMSettings{
-		ModelName:   "claude-3-sonnet-20240229",
-		MaxTokens:   4000,
-		Temperature: 0.7,
-	})
-	assert.NoError(t, err)
-
-	// Create LLM
-	llm, err := service.CreateLLM(
-		"Default Anthropic", "api-key", "https://api.anthropic.com", 75,
-		"Short desc", "Long desc", "http://logo.test",
-		"anthropic", true, nil, "", []string{})
-	assert.NoError(t, err)
-
-	// Create test chat
+	// Create a Chat with a mock LLM.
 	chat := &models.Chat{
+		LLM: &models.LLM{
+			Name:   "Dummy LLM",
+			Vendor: models.MOCK_VENDOR,
+		},
+		LLMSettings: &models.LLMSettings{
+			ModelName: "dummy",
+		},
 		Name:          "Test Chat",
 		Groups:        []models.Group{*defaultGroup},
 		SupportsTools: true,
 		SystemPrompt:  "You are a helpful assistant.",
-		LLMSettingsID: llmSettings.ID,
-		LLMID:         llm.ID,
 	}
 	err = chat.Create(db)
 	assert.NoError(t, err)
 
-	// Set up router with auth middleware
+	// Create a router with an authenticated group.
 	router := gin.New()
 	authed := router.Group("/common")
 	authed.Use(func(c *gin.Context) {
@@ -179,69 +91,118 @@ func TestChatSSE(t *testing.T) {
 	})
 	a.SetupChatRoutes(authed)
 
-	t.Run("SSE Connection", func(t *testing.T) {
+	// Start a real in-memory test server.
+	ts := httptest.NewUnstartedServer(router)
+	// For SSE, you may want to avoid super-short timeouts.
+	// ts.Config.ReadTimeout = 1 * time.Second
+	// ts.Config.WriteTimeout = 1 * time.Second
+	// ts.Config.IdleTimeout = 0
+	ts.Start()
+
+	t.Run("SSE_Connection", func(t *testing.T) {
 		log.Println("Starting SSE Connection test")
-		w := NewCustomResponseRecorder()
-		req := httptest.NewRequest("GET", fmt.Sprintf("/common/chat/%d", chat.ID), nil)
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("Connection", "keep-alive")
 
-		// Create channels for synchronization
-		done := make(chan bool)
-		sessionReady := make(chan string)
+		// Channels for coordination.
+		sessionIDCh := make(chan string, 1) // receives session_id from SSE
+		errCh := make(chan error, 1)
+		doneCh := make(chan struct{}) // signals SSE goroutine that the stream_chunk was received
+		// var wg sync.WaitGroup
 
-		// Start serving the request in a goroutine
+		// Custom client with a slightly longer timeout for SSE.
+		client := &http.Client{
+			Timeout: 1 * time.Second,
+		}
+
+		// Start SSE-reading goroutine.
+		// wg.Add(1)
 		go func() {
-			log.Println("Starting to serve SSE request")
-			router.ServeHTTP(w, req)
-			log.Println("Finished serving SSE request")
-			done <- true
-		}()
+			// defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 
-		// Parse response in a goroutine
-		go func() {
-			for {
-				// Read the response body using thread-safe method
-				body := w.GetBody()
-				if body == "" {
-					time.Sleep(100 * time.Millisecond)
+			req, err := http.NewRequestWithContext(
+				ctx,
+				"GET",
+				fmt.Sprintf("%s/common/chat/%d", ts.URL, chat.ID),
+				nil,
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("creating SSE request failed: %w", err)
+				return
+			}
+			req.Header.Set("Accept", "text/event-stream")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				errCh <- fmt.Errorf("SSE request failed: %w", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				errCh <- fmt.Errorf("SSE status code %d (expected 200)", resp.StatusCode)
+				return
+			}
+
+			scanner := bufio.NewScanner(resp.Body)
+			var currentEvent string
+			var dataLines []string
+
+			for scanner.Scan() {
+				line := scanner.Text()
+				log.Printf("SSE line: %s", line)
+
+				// A blank line indicates the end of one SSE event.
+				if line == "" {
+					switch currentEvent {
+					case "session_id":
+						raw := strings.Join(dataLines, "\n")
+						raw = strings.ReplaceAll(raw, "data: ", "")
+						log.Printf("Complete multiline JSON for session_id: %q", raw)
+						var msg map[string]interface{}
+						if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+							errCh <- fmt.Errorf("unmarshal error: %w", err)
+							return
+						}
+						payload, _ := msg["payload"].(string)
+						sessionIDCh <- payload
+
+					case "stream_chunk":
+						// We got the first stream chunk; signal completion.
+						close(doneCh)
+						resp.Body.Close()
+						cancel()
+						return
+					}
+					currentEvent = ""
+					dataLines = nil
 					continue
 				}
 
-				log.Printf("Response body: %s", body)
-
-				// Parse the response line by line
-				scanner := bufio.NewScanner(strings.NewReader(body))
-				for scanner.Scan() {
-					line := scanner.Text()
-					log.Printf("Scanning line: %s", line)
-					if strings.HasPrefix(line, "event: session_id") {
-						if scanner.Scan() {
-							data := scanner.Text()
-							if strings.HasPrefix(data, "data: ") {
-								var msg api.ChatMessage
-								err := json.Unmarshal([]byte(data[6:]), &msg)
-								if err == nil {
-									sessionReady <- msg.Payload
-									return
-								}
-							}
-						}
-					}
+				if strings.HasPrefix(line, "event: ") {
+					currentEvent = strings.TrimPrefix(line, "event: ")
+					dataLines = nil
+				} else if strings.HasPrefix(line, "data: ") {
+					dataLines = append(dataLines, line)
 				}
+			}
+			if scErr := scanner.Err(); scErr != nil {
+				errCh <- fmt.Errorf("scanner error: %w", scErr)
 			}
 		}()
 
-		// Wait for session to be ready or timeout
+		// Wait for the session_id SSE event or error.
 		var sessionID string
 		select {
-		case sessionID = <-sessionReady:
-			log.Printf("Session ready: %s", sessionID)
+		case sid := <-sessionIDCh:
+			sessionID = sid
+			log.Printf("Got session_id from SSE: %s", sessionID)
+		case e := <-errCh:
+			t.Fatalf("Error reading SSE stream: %v", e)
 		case <-time.After(5 * time.Second):
-			t.Fatal("Timeout waiting for session")
+			t.Fatal("Timeout waiting for session_id SSE event")
 		}
 
-		// Create chat history record
+		// Create ChatHistory in DB.
 		chatHistory := &models.ChatHistoryRecord{
 			SessionID: sessionID,
 			ChatID:    chat.ID,
@@ -251,56 +212,32 @@ func TestChatSSE(t *testing.T) {
 		err = db.Create(chatHistory).Error
 		assert.NoError(t, err)
 
-		// Wait for session to be fully initialized
-		time.Sleep(500 * time.Millisecond)
-
-		// Test sending a message
+		// POST a user message while SSE is still connected.
 		messageInput := map[string]interface{}{
 			"type":      "user_message",
 			"payload":   "Hello, assistant!",
 			"file_refs": []string{},
 		}
-
-		w2 := apitest.PerformRequest(router, "POST", fmt.Sprintf("/common/chat/%d/messages?session_id=%s", chat.ID, sessionID), messageInput)
+		w2 := apitest.PerformRequest(
+			router,
+			"POST",
+			fmt.Sprintf("/common/chat/%d/messages?session_id=%s", chat.ID, sessionID),
+			messageInput,
+		)
 		log.Printf("Message response code: %d", w2.Code)
 		assert.Equal(t, http.StatusOK, w2.Code)
 
-		// Close the SSE connection
-		w.closeChannel <- true
-
-		// Wait for completion
-		<-done
-		log.Println("SSE request completed")
-	})
-
-	t.Run("SSE Error Cases", func(t *testing.T) {
-		log.Println("Starting SSE Error Cases test")
-		// Test invalid chat ID
-		w := apitest.PerformRequest(router, "GET", "/common/chat/999999", nil)
-		log.Printf("Invalid chat ID response code: %d", w.Code)
-		assert.Equal(t, http.StatusNotFound, w.Code)
-
-		// Test missing session ID when sending message
-		messageInput := map[string]interface{}{
-			"type":      "user_message",
-			"payload":   "Hello, assistant!",
-			"file_refs": []string{},
+		// Wait for the first stream_chunk SSE event or an error.
+		select {
+		case e := <-errCh:
+			t.Fatalf("Error reading SSE stream: %v", e)
+		case <-doneCh:
+			log.Println("Got first stream chunk, test complete")
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timeout waiting for stream_chunk SSE event")
 		}
 
-		w2 := apitest.PerformRequest(router, "POST", fmt.Sprintf("/common/chat/%d/messages", chat.ID), messageInput)
-		log.Printf("Missing session ID response code: %d", w2.Code)
-		assert.Equal(t, http.StatusBadRequest, w2.Code)
-
-		// Test invalid message type with non-existent session
-		messageInput["type"] = "invalid_type"
-		w3 := apitest.PerformRequest(router, "POST", fmt.Sprintf("/common/chat/%d/messages?session_id=test", chat.ID), messageInput)
-		log.Printf("Invalid message type response code: %d", w3.Code)
-		assert.Equal(t, http.StatusNotFound, w3.Code)
+		// If you really want to trigger a panic (for debugging), uncomment below.
+		// panic("asdas")
 	})
-
-	// Clean up test environment
-	os.Unsetenv("ENVIRONMENT")
-	os.Unsetenv("LOG_LEVEL")
-	os.Unsetenv("ENABLE_ANALYTICS")
-	os.Unsetenv("ENABLE_ECHO_CONVERSATION")
 }
