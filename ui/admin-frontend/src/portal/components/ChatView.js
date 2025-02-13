@@ -201,10 +201,13 @@ const ChatView = () => {
 
         // For streaming chunks, always append to the last AI message if it's not complete
         if (currentType === 'stream_chunk') {
+          // Decode escaped newlines from SSE data
+          const decodedContent = content.replace(/\\n/g, '\n');
+
           if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
             newMessages[newMessages.length - 1] = {
               ...lastMessage,
-              content: lastMessage.content + content,
+              content: lastMessage.content + decodedContent,
               isComplete: false
             };
           } else {
@@ -212,7 +215,7 @@ const ChatView = () => {
             newMessages.push({
               id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
               type: 'ai',
-              content: content,
+              content: decodedContent,
               isComplete: false
             });
           }
