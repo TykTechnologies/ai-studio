@@ -210,7 +210,9 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 }
 
 func sendSSEMessage(w http.ResponseWriter, event, data string) {
-	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
+	// Encode newlines in data to ensure proper SSE format
+	encodedData := strings.ReplaceAll(data, "\n", "\\n")
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, encodedData)
 	w.(http.Flusher).Flush()
 }
 

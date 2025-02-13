@@ -24,6 +24,7 @@ const MarkdownMessage = ({ content }) => {
 				pre: Pre,
 				code: ({ node, inline, className, children, ...props }) => {
 					const match = /language-(\w+)/.exec(className || '');
+					const language = match ? match[1] : 'text'; // Default to 'text' for unknown/unspecified languages
 
 					if (inline) {
 						return (
@@ -33,19 +34,17 @@ const MarkdownMessage = ({ content }) => {
 						);
 					}
 
-					return match ? (
+					// Always use SyntaxHighlighter for code blocks
+					return (
 						<SyntaxHighlighter
 							style={a11yDark}
-							language={match[1]}
+							language={language}
 							PreTag="div"
+							showLineNumbers={!inline && language !== 'text'} // Show line numbers except for plain text
 							{...props}
 						>
 							{String(children).replace(/\n$/, '')}
 						</SyntaxHighlighter>
-					) : (
-						<code className={className} {...props}>
-							{children}
-						</code>
 					);
 				},
 			}}
