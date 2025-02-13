@@ -45,7 +45,7 @@ start-dev: stop-dev
 		echo "langchaingo repository cloned"; \
 	fi
 	@screen -dmS midsommar -t frontend bash -c 'cd $(ADMIN_FRONTEND_DIR) && SITE_URL=http://localhost:8080 npm start; read -n 1'
-	@screen -S midsommar -X screen -t backend bash -c 'go run main.go; read -n 1'
+	@screen -S midsommar -X screen -t backend bash -c 'go build && ./midsommar; read -n 1'
 	@screen -r midsommar
 
 stop-dev:
