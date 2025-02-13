@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { List, Toolbar, Divider } from '@mui/material';
+import { List, Toolbar } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -38,6 +38,7 @@ const BaseDrawer = ({
       <StyledDrawer
         variant="permanent"
         width={currentWidth}
+        open={open}
       >
         {showToolbar && <Toolbar />}
         <ToggleButton onClick={handleDrawerToggle}>
@@ -45,7 +46,7 @@ const BaseDrawer = ({
         </ToggleButton>
         <MenuList customMarginTop={customStyles.marginTop}>
           <List>
-            {menuItems.map((item) => (
+            {menuItems.map((item, index) => (
               <MenuItem
                 key={item.id || item.text}
                 item={item}
@@ -54,10 +55,11 @@ const BaseDrawer = ({
                 onExpandClick={handleExpandClick}
                 onPathSelect={handlePathSelect}
                 selectedPath={selectedPath}
+                disableRipple
+                isFirstItem={index === 0}
               />
             ))}
           </List>
-          <Divider />
         </MenuList>
       </StyledDrawer>
     </ThemeProvider>

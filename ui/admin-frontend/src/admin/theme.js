@@ -15,15 +15,22 @@ const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#CCCCCC",
-      light: "#21ecba1a", // Light teal for hover
+      main: "#23E2C2",
+      light: "#82F5D8", // Light teal for hover
     },
     secondary: {
       main: "#21ecba",
     },
     background: {
       default: "#FFFFFF",
+      defaultSubdued:'#E6E6EA', 
       paper: "#FFFFFF",
+      surfaceDefaultBoldest: '#031E3D',
+      surfaceDefaultHover: '#B7F9E926',
+      surfaceDefaultSelected: '#B7F9E973'
+    },
+    border: {
+      neutralDefault: '#D8D8DF'
     },
     gray: {
       ligh: "#F5F5F5",
@@ -33,9 +40,9 @@ const theme = createTheme({
     custom: {
       white: "#FFFFFF",
       leaf: "#21ecba",
-      purpleExtraDark: "#5525AA",
-      purpleDark: "#8437fa",
-      purpleLight: "#972afc",
+      purpleExtraDark: "#5900CB",
+      purpleDark: "#8438FA",
+      purpleLight: "#B421FA",
       purpleExtraLight: "#F0E4FF",
       teal: "#21ecba",
       lightTeal: "rgb(33 236 186 / 7%)",
@@ -44,8 +51,9 @@ const theme = createTheme({
     },
     text: {
       light: "#FFFFFF",
-      dark: "#000000",
-      default: "#000000",
+      dark: "#023056",
+      default: "#03031C",
+      defaultSubdued: '#414160'
     },
   },
   components: {
