@@ -140,13 +140,19 @@ export const SubListItem = styled(ListItemButton, {
   '&:hover, &:active, &.Mui-selected, &.Mui-focusVisible': {
     background: 'transparent !important',
   },
-  '& .MuiListItemText-root .MuiTypography-root': {
-    fontFamily: 'Inter-Medium',
-    fontSize: '14px',
-    lineHeight: '20px',
-    color: theme.palette.text.defaultSubdued,
-    position: 'relative',
-    zIndex: 2,
+  '& .MuiListItemText-root': {
+    overflow: 'hidden',
+    '& .MuiTypography-root': {
+      fontFamily: 'Inter-Medium',
+      fontSize: '14px',
+      lineHeight: '20px',
+      color: theme.palette.text.defaultSubdued,
+      position: 'relative',
+      zIndex: 2,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis'
+    }
   },
   '&::after': {
     content: '""',
