@@ -2,21 +2,11 @@ import React from 'react';
 import {
   Dashboard,
   Person,
-  Group,
   People,
   SmartToy,
-  Settings,
-  AttachMoney,
-  Storage,
-  Build,
   DataObject,
-  FolderOpen,
-  FilterList,
-  SettingsInputComponent,
-  Apps,
   Web,
-  Chat,
-  VpnKey,
+  SettingsInputComponent,
 } from '@mui/icons-material';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
@@ -43,7 +33,6 @@ const Drawer = () => {
         { 
           id: 'users',
           text: 'Users', 
-          icon: <Person />, 
           path: '/admin/users' 
         },
         ...(!features.feature_gateway ||
@@ -52,7 +41,6 @@ const Drawer = () => {
           ? [{ 
               id: 'groups',
               text: 'Groups', 
-              icon: <Group />, 
               path: '/admin/groups' 
             }]
           : []),
@@ -62,19 +50,17 @@ const Drawer = () => {
       text: 'AI',
       icon: <SmartToy />,
       subItems: [
-        { text: 'LLMs', icon: <SmartToy />, path: '/admin/llms' },
+        { text: 'LLMs', path: '/admin/llms' },
         ...(features.feature_chat
           ? [
               {
                 text: 'Call Settings',
-                icon: <Settings />,
                 path: '/admin/llm-settings',
               },
             ]
           : []),
         {
           text: 'Model Prices',
-          icon: <AttachMoney />,
           path: '/admin/model-prices',
         },
       ],
@@ -85,11 +71,10 @@ const Drawer = () => {
       subItems: [
         {
           text: 'Vector Sources',
-          icon: <Storage />,
           path: '/admin/datasources',
         },
         ...(features.feature_chat
-          ? [{ text: 'Tools', icon: <Build />, path: '/admin/tools' }]
+          ? [{ text: 'Tools', path: '/admin/tools' }]
           : []),
       ],
     },
@@ -101,10 +86,9 @@ const Drawer = () => {
             subItems: [
               {
                 text: 'Filters',
-                icon: <FilterList />,
                 path: '/admin/filters',
               },
-              { text: 'Secrets', icon: <VpnKey />, path: '/admin/secrets' },
+              { text: 'Secrets', path: '/admin/secrets' },
             ],
           },
         ]
@@ -117,7 +101,7 @@ const Drawer = () => {
             text: 'Apps and Credentials',
             icon: <Web />,
             subItems: [
-              { text: 'Apps', icon: <Apps />, path: '/admin/apps' },
+              { text: 'Apps', path: '/admin/apps' },
             ],
           },
         ]
@@ -127,13 +111,12 @@ const Drawer = () => {
             icon: <Web />,
             subItems: [
               ...(features.feature_portal || features.feature_gateway
-                ? [{ text: 'Apps', icon: <Apps />, path: '/admin/apps' }]
+                ? [{ text: 'Apps', path: '/admin/apps' }]
                 : []),
               ...(features.feature_chat
                 ? [
                     {
                       text: 'Chat Rooms',
-                      icon: <Chat />,
                       path: '/admin/chats',
                     },
                   ]
@@ -142,27 +125,23 @@ const Drawer = () => {
                 ? [
                     {
                       text: 'Catalogs',
-                      icon: <FolderOpen />,
                       subItems: [
                         ...(features.feature_portal
                           ? [
                               {
                                 text: 'LLMs',
-                                icon: <SmartToy />,
                                 path: '/admin/catalogs/llms',
                               },
                             ]
                           : []),
                         {
                           text: 'Data',
-                          icon: <DataObject />,
                           path: '/admin/catalogs/data',
                         },
                         ...(features.feature_chat
                           ? [
                               {
                                 text: 'Tools',
-                                icon: <Build />,
                                 path: '/admin/catalogs/tools',
                               },
                             ]
