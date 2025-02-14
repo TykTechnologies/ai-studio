@@ -39,7 +39,6 @@ const ChatDrawer = () => {
         subItems: userEntitlements?.chats?.map((chat) => ({
           id: `chat-${chat.id}`,
           text: chat.attributes.name,
-          icon: <ChatBubbleOutline />,
           path: `/chat/${chat.id}`
         }))
       }

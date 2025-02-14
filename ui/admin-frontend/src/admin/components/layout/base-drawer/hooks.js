@@ -9,6 +9,7 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems) =>
         return {
           open: state.isOpen ?? defaultOpen,
           expanded: state.expanded ?? defaultExpandedItems,
+          selectedPath: state.selectedPath ?? '',
         };
       }
     } catch (error) {
@@ -17,12 +18,14 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems) =>
     return {
       open: defaultOpen,
       expanded: defaultExpandedItems,
+      selectedPath: '',
     };
   };
 
   const initialState = getInitialState();
   const [open, setOpen] = useState(initialState.open);
   const [expandedItems, setExpandedItems] = useState(initialState.expanded);
+  const [selectedPath, setSelectedPath] = useState(initialState.selectedPath);
 
   useEffect(() => {
     try {
@@ -33,12 +36,13 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems) =>
           ...currentState,
           isOpen: open,
           expanded: expandedItems,
+          selectedPath,
         })
       );
     } catch (error) {
       console.error('Error updating drawer state:', error);
     }
-  }, [open, expandedItems, storageKey]);
+  }, [open, expandedItems, selectedPath, storageKey]);
 
   const handleDrawerToggle = () => setOpen(!open);
   
@@ -53,10 +57,16 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems) =>
     });
   };
 
+  const handlePathSelect = (path) => {
+    setSelectedPath(path);
+  };
+
   return {
     open,
     expandedItems,
+    selectedPath,
     handleDrawerToggle,
     handleExpandClick,
+    handlePathSelect,
   };
 };

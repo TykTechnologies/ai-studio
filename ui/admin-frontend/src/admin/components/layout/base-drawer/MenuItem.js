@@ -2,65 +2,83 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import {
   List,
-  ListItem,
-  ListItemIcon,
   ListItemText,
   Collapse,
 } from '@mui/material';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { StyledNavLink } from '../../../styles/sharedStyles';
+import { ParentListItem, SubListItem, ListItemIcon } from './styles';
 
 const MenuItem = ({ 
   item, 
   depth = 0, 
   parentId = null,
+  rootParentId = null,
   open,
   expandedItems,
   onExpandClick,
   onPathSelect,
+  selectedPath,
+  disableRipple,
+  isFirstItem,
 }) => {
   const itemId = item.id || item.text;
   const hasSubItems = item.subItems;
   const isExpanded = expandedItems[itemId];
-  
-  const commonStyles = {
-    pl: open ? depth * 4 + 2 : 2,
-    cursor: 'pointer',
-  };
+  const immediateParentId = parentId || itemId;
+
+  const isSelected = selectedPath === item.path || 
+    (hasSubItems && item.subItems?.some(subItem => {
+      if (subItem.path === selectedPath) return true;
+      if (subItem.subItems) {
+        return subItem.subItems.some(deepSubItem => deepSubItem.path === selectedPath);
+      }
+      return false;
+    }));
+
+  const ListItemComponent = depth === 0 ? ParentListItem : SubListItem;
 
   if (hasSubItems) {
     return (
       <React.Fragment key={itemId}>
-        <ListItem
-          button
+        <ListItemComponent
           onClick={() => onExpandClick(itemId, parentId)}
-          sx={commonStyles}
+          depth={depth}
+          selected={isSelected}
+          disableRipple
+          disableTouchRipple
+          isParent={depth === 0}
+          rootParentId={immediateParentId}
+          itemId={itemId}
+          hasSubItems={hasSubItems}
+          open={open}
+          isFirstItem={depth === 0 && isFirstItem}
         >
           {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
-          {open && (
-            <ListItemText
-              primary={item.text}
-              primaryTypographyProps={{
-                variant: depth > 0 ? 'body2' : 'body1',
-                color: depth > 0 ? 'text.secondary' : 'text.primary',
-              }}
-            />
-          )}
-          {open && (isExpanded ? <ExpandLess /> : <ExpandMore />)}
-        </ListItem>
+          <ListItemText
+            primary={item.text}
+            primaryTypographyProps={{
+              variant: depth > 0 ? 'body2' : 'body1',
+            }}
+          />
+          {isExpanded ? <ExpandLess /> : <ExpandMore />}
+        </ListItemComponent>
         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
           <List component="div" disablePadding>
-            {item.subItems.map((subItem) => (
+            {item.subItems.map((subItem, index) => (
               <MenuItem
                 key={subItem.id || subItem.text}
                 item={subItem}
                 depth={depth + 1}
                 parentId={item.id}
+                rootParentId={immediateParentId}
                 open={open}
                 expandedItems={expandedItems}
                 onExpandClick={onExpandClick}
                 onPathSelect={onPathSelect}
+                selectedPath={selectedPath}
+                isFirstItem={index === 0}
               />
             ))}
           </List>
@@ -70,24 +88,29 @@ const MenuItem = ({
   }
 
   return (
-    <ListItem
+    <ListItemComponent
       component={StyledNavLink}
       to={item.path}
-      sx={commonStyles}
+      depth={depth}
       onClick={() => onPathSelect(item.path)}
+      selected={selectedPath === item.path}
+      disableRipple
+      disableTouchRipple
+      rootParentId={immediateParentId}
+      itemId={itemId}
+      hasSubItems={hasSubItems}
+      open={open}
+      isFirstItem={depth === 0 && isFirstItem}
       {...(item.path === '/admin/' ? { end: true } : {})}
     >
       {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
-      {open && (
-        <ListItemText
-          primary={item.text}
-          primaryTypographyProps={{
-            variant: depth > 0 ? 'body2' : 'body1',
-            color: depth > 0 ? 'text.secondary' : 'text.primary',
-          }}
-        />
-      )}
-    </ListItem>
+      <ListItemText
+        primary={item.text}
+        primaryTypographyProps={{
+          variant: depth > 0 ? 'body2' : 'body1',
+        }}
+      />
+    </ListItemComponent>
   );
 };
 
@@ -101,10 +124,14 @@ MenuItem.propTypes = {
   }).isRequired,
   depth: PropTypes.number,
   parentId: PropTypes.string,
+  rootParentId: PropTypes.string,
   open: PropTypes.bool.isRequired,
   expandedItems: PropTypes.object.isRequired,
   onExpandClick: PropTypes.func.isRequired,
   onPathSelect: PropTypes.func.isRequired,
+  selectedPath: PropTypes.string,
+  disableRipple: PropTypes.bool,
+  isFirstItem: PropTypes.bool,
 };
 
 export default React.memo(MenuItem);

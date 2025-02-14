@@ -51,7 +51,6 @@ const PortalDrawer = () => {
           {
             id: 'llms',
             text: 'LLMs',
-            icon: <Psychology />,
             subItems: userEntitlements?.catalogues?.map(catalogue => ({
               id: `llm-${catalogue.id}`,
               text: catalogue.attributes.name,
@@ -61,7 +60,6 @@ const PortalDrawer = () => {
           {
             id: 'databases',
             text: 'Databases',
-            icon: <Storage />,
             subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
               id: `db-${catalogue.id}`,
               text: catalogue.attributes.name,
