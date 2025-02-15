@@ -29,6 +29,7 @@ import {
   Legend,
   TimeScale,
 } from "chart.js";
+import { Line } from "react-chartjs-2";
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../../components/common/DateRangePicker";
 import {
@@ -65,6 +66,7 @@ const LLMDetails = () => {
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
   const [vendorUsageData, setVendorUsageData] = useState(null);
+  const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -103,16 +105,26 @@ const LLMDetails = () => {
 
   const fetchVendorUsage = async () => {
     try {
-      const response = await apiClient.get(`/analytics/vendor-usage`, {
-        params: {
-          start_date: startDate,
-          end_date: endDate,
-          vendor: llm.attributes.vendor,
-        },
-      });
-      setVendorUsageData(response.data);
+      const [usageResponse, budgetResponse] = await Promise.all([
+        apiClient.get(`/analytics/vendor-usage`, {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+            vendor: llm.attributes.vendor,
+          },
+        }),
+        apiClient.get(`/analytics/budget-usage-for-llm`, {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+            llm_id: id,
+          },
+        }),
+      ]);
+      setVendorUsageData(usageResponse.data);
+      setBudgetUsageData(budgetResponse.data);
     } catch (error) {
-      console.error("Error fetching vendor usage data", error);
+      console.error("Error fetching usage data", error);
     }
   };
 
@@ -128,7 +140,7 @@ const LLMDetails = () => {
     );
   };
 
-  const chartOptions = useMemo(() => ({
+  const tokenChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     scales: {
@@ -156,18 +168,63 @@ const LLMDetails = () => {
       },
       title: {
         display: true,
-        text: "Vendor Token Usage Over Time",
+        text: "Token Usage Over Time",
       },
     },
-  }), []); // Empty dependency array since options never change
+  }), []);
 
-  const chartData = useMemo(() => ({
+  const costChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Cost ($)",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "Cost Over Time",
+      },
+    },
+  }), []);
+
+  const tokenChartData = useMemo(() => ({
     labels: vendorUsageData?.labels || [],
     datasets: [
       {
         label: "Token Usage",
-        data: vendorUsageData?.data || [],
+        data: vendorUsageData?.token_usage || [],
         borderColor: "rgb(75, 192, 192)",
+        tension: 0.1,
+      },
+    ],
+  }), [vendorUsageData]);
+
+  const costChartData = useMemo(() => ({
+    labels: vendorUsageData?.labels || [],
+    datasets: [
+      {
+        label: "Cost",
+        data: vendorUsageData?.cost || [],
+        borderColor: "rgb(255, 99, 132)",
         tension: 0.1,
       },
     ],
@@ -189,32 +246,35 @@ const LLMDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Vendor Usage Statistics</SectionTitle>
-        <Box height={300}>
-          {" "}
-          {/* Reduced height from 400 to 250 */}
-          <MemoizedLineChart options={chartOptions} data={chartData} />
+        <SectionTitle>Token Usage</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={tokenChartOptions} data={tokenChartData} />
         </Box>
-          <Box mt={2}>
-            <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-              onUpdate={fetchVendorUsage}
-              updateMode="immediate"
-            />
-          </Box>
+
+        <SectionTitle>Cost</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={costChartOptions} data={costChartData} />
+        </Box>
+        <Box mt={2}>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            onUpdate={fetchVendorUsage}
+            updateMode="immediate"
+          />
+        </Box>
 
         <Divider sx={{ my: 3 }} />
 
         <SectionTitle>LLM Description</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
+            <FieldLabel>Active:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>{llm.attributes.name}</FieldValue>
+            <FieldValue>{llm.attributes.active ? "Yes" : "No"}</FieldValue>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Short Description:</FieldLabel>
@@ -254,6 +314,21 @@ const LLMDetails = () => {
                   sx={{ ml: 1, fontSize: 20, color: "text.secondary" }}
                 />
               </Tooltip>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Monthly Budget:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box>
+              <FieldValue>
+                {llm.attributes.monthly_budget ? `$${llm.attributes.monthly_budget}` : 'No budget limit'}
+              </FieldValue>
+              {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
+                </Typography>
+              )}
             </Box>
           </Grid>
         </Grid>
@@ -336,7 +411,7 @@ const LLMDetails = () => {
           </Grid>
           <Grid item xs={9}>
             {llm.attributes.allowed_models &&
-            llm.attributes.allowed_models.length > 0 ? (
+              llm.attributes.allowed_models.length > 0 ? (
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                 {llm.attributes.allowed_models.map((model, index) => (
                   <Chip
@@ -419,6 +494,21 @@ const LLMDetails = () => {
               />
               {llm.attributes.active ? "Active" : "Inactive"}
             </FieldValue>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Monthly Budget:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box>
+              <FieldValue>
+                {llm.attributes.monthly_budget ? `$${llm.attributes.monthly_budget}` : 'No budget limit'}
+              </FieldValue>
+              {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
+                </Typography>
+              )}
+            </Box>
           </Grid>
         </Grid>
 

@@ -9,21 +9,15 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/go-mail/mail"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-type MockMailer struct{}
-
-func (m *MockMailer) DialAndSend(msg ...*mail.Message) error {
-	return nil
-}
-
-func NewMockMailer() *MockMailer {
-	return &MockMailer{}
+func NewMockMailer() *notifications.MailService {
+	return notifications.NewTestMailService()
 }
 
 func SetupTestDB(t *testing.T) *gorm.DB {

@@ -39,15 +39,6 @@ type GroupDataCatalogueInput struct {
 	} `json:"data"`
 }
 
-// GroupToolInput represents the input for adding a tool to a group
-// @Description Group-Tool relationship input model
-type GroupToolInput struct {
-	Data struct {
-		Type string `json:"type"`
-		ID   string `json:"id"`
-	} `json:"data"`
-}
-
 // UserGroupInput represents the input for adding a user to a group
 // @Description User-group relationship input model
 type UserGroupInput struct {
@@ -83,7 +74,7 @@ type GroupResponse struct {
 	} `json:"attributes"`
 }
 
-// ErrorResponse represents the structure of an error response
+// ErrorResponse represents an error response
 // @Description Error response model
 type ErrorResponse struct {
 	Errors []struct {
@@ -92,6 +83,7 @@ type ErrorResponse struct {
 	} `json:"errors"`
 }
 
+// LLMInput represents the input for LLM-related operations
 // @Description LLM input model
 type LLMInput struct {
 	Data struct {
@@ -131,6 +123,8 @@ type LLMResponse struct {
 		Filters          []FilterResponse `json:"filters"`
 		DefaultModel     string           `json:"default_model"`
 		AllowedModels    []string         `json:"allowed_models"`
+		MonthlyBudget    *float64         `json:"monthly_budget"`
+		BudgetStartDate  *time.Time       `json:"budget_start_date"`
 	} `json:"attributes"`
 }
 
@@ -145,8 +139,6 @@ type CatalogueInput struct {
 	} `json:"data"`
 }
 
-// CatalogueResponse represents the response for catalogue-related operations
-// @Description Catalogue response model
 // CatalogueResponse represents the response for catalogue-related operations
 // @Description Catalogue response model
 type CatalogueResponse struct {
@@ -176,7 +168,7 @@ type GroupCatalogueInput struct {
 	} `json:"data"`
 }
 
-// UserAccessibleCataloguesResponse represents the response for user accessible catalogues
+// UserAccessibleCataloguesResponse represents the response for user-accessible catalogues
 // @Description User accessible catalogues response model
 type UserAccessibleCataloguesResponse struct {
 	Type       string `json:"type"`
@@ -257,7 +249,7 @@ type DatasourceResponse struct {
 		EmbedAPIKey      string              `json:"embed_api_key"`
 		EmbedModel       string              `json:"embed_model"`
 		Active           bool                `json:"active"`
-		Files            []FileStoreResponse `json:"files"` // Added Files field
+		Files            []FileStoreResponse `json:"files"`
 	} `json:"attributes"`
 }
 
@@ -314,7 +306,9 @@ type CredentialInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Active bool `json:"active"`
+			KeyID  string `json:"key_id"`
+			Secret string `json:"secret"`
+			Active bool   `json:"active"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -352,16 +346,19 @@ type AppResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name          string `json:"name"`
-		Description   string `json:"description"`
-		UserID        uint   `json:"user_id"`
-		CredentialID  uint   `json:"credential_id"`
-		DatasourceIDs []uint `json:"datasource_ids"`
-		LLMIDs        []uint `json:"llm_ids"`
+		Name            string     `json:"name"`
+		Description     string     `json:"description"`
+		UserID          uint       `json:"user_id"`
+		CredentialID    uint       `json:"credential_id"`
+		DatasourceIDs   []uint     `json:"datasource_ids"`
+		LLMIDs          []uint     `json:"llm_ids"`
+		MonthlyBudget   *float64   `json:"monthly_budget"`
+		BudgetStartDate *time.Time `json:"budget_start_date"`
 	} `json:"attributes"`
 }
 
 // LLMSettingsInput represents the input structure for creating or updating LLM settings
+// @Description LLM settings input model
 type LLMSettingsInput struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -383,6 +380,7 @@ type LLMSettingsInput struct {
 }
 
 // LLMSettingsResponse represents the response structure for LLM settings
+// @Description LLM settings response model
 type LLMSettingsResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
@@ -440,7 +438,7 @@ type ChatResponse struct {
 		SystemPrompt        string              `json:"system_prompt"`
 		DefaultDataSourceID int                 `json:"default_data_source_id"`
 		DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
-		ExtraContext        []FileStoreResponse `json:"extra_context"` // Add this field
+		ExtraContext        []FileStoreResponse `json:"extra_context"`
 		DefaultTools        []ToolResponse      `json:"default_tools"`
 	} `json:"attributes"`
 }
@@ -479,7 +477,7 @@ type ToolResponse struct {
 		AuthSchemaName string              `json:"auth_schema_name"`
 		FileStores     []FileStoreResponse `json:"file_stores"`
 		Filters        []FilterResponse    `json:"filters"`
-		Dependencies   []ToolResponse      `json:"dependencies"` // Add this line
+		Dependencies   []ToolResponse      `json:"dependencies"`
 	} `json:"attributes"`
 }
 
@@ -737,6 +735,7 @@ type AuthResponse struct {
 }
 
 // LoginResponse represents the response for successful login
+// @Description Login response model
 type LoginResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -747,6 +746,7 @@ type LoginResponse struct {
 }
 
 // RegisterResponse represents the response for successful registration
+// @Description Register response model
 type RegisterResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -757,6 +757,7 @@ type RegisterResponse struct {
 }
 
 // LogoutResponse represents the response for successful logout
+// @Description Logout response model
 type LogoutResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -766,7 +767,8 @@ type LogoutResponse struct {
 	} `json:"data"`
 }
 
-// ForgotPasswordResponse represents the response for forgot password request
+// ForgotPasswordResponse represents the response for a successful forgot password request
+// @Description ForgotPassword response model
 type ForgotPasswordResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -776,7 +778,8 @@ type ForgotPasswordResponse struct {
 	} `json:"data"`
 }
 
-// ResetPasswordResponse represents the response for successful password reset
+// ResetPasswordResponse represents the response for a successful password reset
+// @Description ResetPassword response model
 type ResetPasswordResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -787,6 +790,7 @@ type ResetPasswordResponse struct {
 }
 
 // VerifyEmailResponse represents the response for successful email verification
+// @Description VerifyEmail response model
 type VerifyEmailResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -797,6 +801,7 @@ type VerifyEmailResponse struct {
 }
 
 // ResendVerificationResponse represents the response for resending verification email
+// @Description ResendVerification response model
 type ResendVerificationResponse struct {
 	Data struct {
 		Type       string `json:"type"`
@@ -829,6 +834,7 @@ type UserWithEntitlementsResponse struct {
 }
 
 // AppListResponse represents the response for listing apps
+// @Description App list response model
 type AppListResponse struct {
 	Data []AppResponse `json:"data"`
 	Meta struct {
@@ -840,21 +846,25 @@ type AppListResponse struct {
 }
 
 // AppDetailResponse represents the detailed response for app-related operations
+// @Description App detail response model
 type AppDetailResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name          string           `json:"name"`
-		Description   string           `json:"description"`
-		UserID        uint             `json:"user_id"`
-		CredentialID  uint             `json:"credential_id"`
-		DatasourceIDs []uint           `json:"datasource_ids"`
-		LLMIDs        []uint           `json:"llm_ids"`
-		Credential    CredentialDetail `json:"credential"`
+		Name            string           `json:"name"`
+		Description     string           `json:"description"`
+		UserID          uint             `json:"user_id"`
+		CredentialID    uint             `json:"credential_id"`
+		DatasourceIDs   []uint           `json:"datasource_ids"`
+		LLMIDs          []uint           `json:"llm_ids"`
+		MonthlyBudget   *float64         `json:"monthly_budget"`
+		BudgetStartDate *time.Time       `json:"budget_start_date"`
+		Credential      CredentialDetail `json:"credential"`
 	} `json:"attributes"`
 }
 
 // CredentialDetail represents the credential details
+// @Description Credential detail model
 type CredentialDetail struct {
 	KeyID  string `json:"key_id"`
 	Secret string `json:"secret"`
@@ -862,6 +872,7 @@ type CredentialDetail struct {
 }
 
 // CMessageResponse represents the response structure for a CMessage
+// @Description CMessage response model
 type CMessageResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
@@ -874,6 +885,7 @@ type CMessageResponse struct {
 }
 
 // ProxyLogResponse represents the response structure for a proxy log entry
+// @Description Proxy log response model
 type ProxyLogResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
@@ -889,6 +901,7 @@ type ProxyLogResponse struct {
 }
 
 // PaginatedProxyLogs represents the paginated response for proxy logs
+// @Description Proxy log list response model
 type PaginatedProxyLogs struct {
 	Data []ProxyLogResponse `json:"data"`
 	Meta struct {
@@ -899,6 +912,8 @@ type PaginatedProxyLogs struct {
 	} `json:"meta"`
 }
 
+// FrontendConfig holds front-end configuration settings
+// @Description Front-end config model
 type FrontendConfig struct {
 	APIBaseURL        string `json:"apiBaseURL"`
 	ProxyURL          string `json:"proxyURL"`
@@ -969,6 +984,7 @@ type SecretListResponse struct {
 }
 
 // DependencyInput represents the input for adding or removing a dependency
+// @Description Dependency input model
 type DependencyInput struct {
 	Data struct {
 		Type string `json:"type"`
@@ -977,6 +993,7 @@ type DependencyInput struct {
 }
 
 // DependencyListResponse represents the response for listing dependencies
+// @Description Dependency list response model
 type DependencyListResponse struct {
 	Data []ToolResponse `json:"data"`
 }

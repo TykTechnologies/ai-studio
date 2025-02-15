@@ -64,6 +64,7 @@ const SectionTitle = ({ children }) => (
     {children}
   </Typography>
 );
+
 const ExpandableMessage = ({ message, isCode = false }) => {
   const [expanded, setExpanded] = useState(false);
 
@@ -73,11 +74,9 @@ const ExpandableMessage = ({ message, isCode = false }) => {
 
   const formatMessage = (msg) => {
     try {
-      // Attempt to parse as JSON
       const parsed = JSON.parse(msg);
       return JSON.stringify(parsed, null, 2);
     } catch (e) {
-      // If parsing fails, return as plain text
       return msg;
     }
   };
@@ -118,6 +117,7 @@ const AppDetails = () => {
   const [datasources, setDatasources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
+  const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [proxyLogs, setProxyLogs] = useState([]);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -195,7 +195,6 @@ const AppDetails = () => {
         },
       }));
 
-      // Show success message
       setSnackbar({
         open: true,
         message: "App approved successfully",
@@ -233,15 +232,18 @@ const AppDetails = () => {
 
   const fetchTokenUsageAndCost = async () => {
     try {
-      const response = await apiClient.get(
-        `/analytics/token-usage-and-cost-for-app`,
-        {
+      const [usageResponse, budgetResponse] = await Promise.all([
+        apiClient.get(`/analytics/token-usage-and-cost-for-app`, {
           params: { start_date: startDate, end_date: endDate, app_id: id },
-        },
-      );
-      setTokenUsageAndCostData(response.data);
+        }),
+        apiClient.get(`/analytics/budget-usage-for-app`, {
+          params: { app_id: id },
+        }),
+      ]);
+      setTokenUsageAndCostData(usageResponse.data);
+      setBudgetUsageData(budgetResponse.data);
     } catch (error) {
-      console.error("Error fetching token usage and cost data", error);
+      console.error("Error fetching usage and budget data", error);
     }
   };
 
@@ -309,20 +311,9 @@ const AppDetails = () => {
   if (loading) return <CircularProgress />;
   if (!app) return <Typography>App not found</Typography>;
 
-  const chartOptions = {
+  const tokenChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: "index",
-      intersect: false,
-    },
-    stacked: false,
-    plugins: {
-      title: {
-        display: true,
-        text: "Token Usage and Cost Over Time",
-      },
-    },
     scales: {
       x: {
         type: "time",
@@ -335,43 +326,77 @@ const AppDetails = () => {
         },
       },
       y: {
-        type: "linear",
-        display: true,
-        position: "left",
+        beginAtZero: true,
         title: {
           display: true,
           text: "Token Usage",
         },
       },
-      y1: {
-        type: "linear",
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
         display: true,
-        position: "right",
-        title: {
-          display: true,
-          text: "Cost",
-        },
-        grid: {
-          drawOnChartArea: false,
-        },
+        text: "Token Usage Over Time",
       },
     },
   };
 
-  const chartData = {
+  const costChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Cost ($)",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "Cost Over Time",
+      },
+    },
+  };
+
+  const tokenChartData = {
     labels: tokenUsageAndCostData?.labels || [],
     datasets: [
       {
         label: "Token Usage",
         data: tokenUsageAndCostData?.datasets[0]?.data || [],
         borderColor: "rgb(75, 192, 192)",
-        yAxisID: "y",
+        tension: 0.1,
       },
+    ],
+  };
+
+  const costChartData = {
+    labels: tokenUsageAndCostData?.labels || [],
+    datasets: [
       {
         label: "Cost",
         data: tokenUsageAndCostData?.datasets[1]?.data || [],
         borderColor: "rgb(255, 99, 132)",
-        yAxisID: "y1",
+        tension: 0.1,
       },
     ],
   };
@@ -397,9 +422,14 @@ const AppDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>App Token Usage and Cost</SectionTitle>
-        <Box height={300}>
-          <Line options={chartOptions} data={chartData} />
+        <SectionTitle>Token Usage</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={tokenChartOptions} data={tokenChartData} />
+        </Box>
+
+        <SectionTitle>Cost</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={costChartOptions} data={costChartData} />
         </Box>
         <Box mt={2} mb={4}>
           <DateRangePicker
@@ -452,6 +482,21 @@ const AppDetails = () => {
               {datasources.map((datasource) => (
                 <Chip key={datasource.id} label={datasource.attributes.name} />
               ))}
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Monthly Budget:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box>
+              <FieldValue>
+                {app.attributes.monthly_budget ? `$${app.attributes.monthly_budget}` : 'No budget limit'}
+              </FieldValue>
+              {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
+                </Typography>
+              )}
             </Box>
           </Grid>
         </Grid>

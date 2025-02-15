@@ -63,6 +63,8 @@ const LLMForm = () => {
     filters: [],
     default_model: "",
     allowed_models: [],
+    monthly_budget: null,
+    budget_start_date: null,
   });
   const [vendors, setVendors] = useState([]);
   const [filters, setFilters] = useState(null);
@@ -156,6 +158,13 @@ const LLMForm = () => {
     } else if (name === "filters") {
       const stringFilters = value.map((filterId) => filterId.toString());
       setLLM({ ...llm, filters: stringFilters });
+    } else if (name === "monthly_budget") {
+      const numValue = value === '' ? null : parseFloat(value);
+      setLLM(prev => ({
+        ...prev,
+        monthly_budget: numValue,
+        budget_start_date: numValue ? new Date().toISOString() : null
+      }));
     } else {
       setLLM({ ...llm, [name]: value });
     }
@@ -317,6 +326,27 @@ const LLMForm = () => {
                 value={llm.default_model}
                 onChange={handleChange}
                 helperText="Specify the default model to use for this LLM (e.g., gpt-4, claude-2)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Monthly Budget"
+                name="monthly_budget"
+                type="number"
+                inputProps={{
+                  step: "0.01",
+                  min: "0"
+                }}
+                value={llm.monthly_budget || ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                  setLLM(prev => ({ ...prev, monthly_budget: value }));
+                }}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+                helperText="Leave empty for no budget limit"
               />
             </Grid>
             <Grid item xs={12}>

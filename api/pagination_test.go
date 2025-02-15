@@ -3,7 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
-	"testing"
+	gotest "testing"
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPagination_LLMPagination(t *testing.T) {
+func TestPagination_LLMPagination(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
@@ -100,7 +100,7 @@ func TestPagination_LLMPagination(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestPagination_UserPagination(t *testing.T) {
+func TestPagination_UserPagination(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)

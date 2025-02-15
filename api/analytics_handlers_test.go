@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +20,7 @@ func setupAnalyticsTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&analytics.LLMChatRecord{})
+	err = db.AutoMigrate(&models.LLMChatRecord{})
 	require.NoError(t, err)
 
 	return db
@@ -37,20 +37,20 @@ func TestGetCostAnalysis(t *testing.T) {
 
 	// Insert test data
 	now := time.Now()
-	testData := []analytics.LLMChatRecord{
+	testData := []models.LLMChatRecord{
 		{
 			Vendor:          "openai",
 			Cost:            10.0,
 			Currency:        "USD",
 			TimeStamp:       now,
-			InteractionType: analytics.ChatInteraction,
+			InteractionType: models.ChatInteraction,
 		},
 		{
 			Vendor:          "openai",
 			Cost:            20.0,
 			Currency:        "USD",
 			TimeStamp:       now,
-			InteractionType: analytics.ProxyInteraction,
+			InteractionType: models.ProxyInteraction,
 		},
 	}
 	for _, record := range testData {
@@ -64,12 +64,12 @@ func TestGetCostAnalysis(t *testing.T) {
 	}{
 		{
 			name:            "Filter Chat Interactions",
-			interactionType: string(analytics.ChatInteraction),
+			interactionType: string(models.ChatInteraction),
 			expectedCost:    10.0,
 		},
 		{
 			name:            "Filter Proxy Interactions",
-			interactionType: string(analytics.ProxyInteraction),
+			interactionType: string(models.ProxyInteraction),
 			expectedCost:    20.0,
 		},
 		{
@@ -99,7 +99,7 @@ func TestGetCostAnalysis(t *testing.T) {
 
 			assert.Equal(t, http.StatusOK, w.Code)
 
-			var response map[string]*analytics.ChartData
+			var response map[string]*models.ChartData
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			require.NoError(t, err)
 
@@ -121,20 +121,20 @@ func TestGetMostUsedLLMModels(t *testing.T) {
 
 	// Insert test data
 	now := time.Now()
-	testData := []analytics.LLMChatRecord{
+	testData := []models.LLMChatRecord{
 		{
 			Name:            "gpt-4",
-			InteractionType: analytics.ChatInteraction,
+			InteractionType: models.ChatInteraction,
 			TimeStamp:       now,
 		},
 		{
 			Name:            "gpt-4",
-			InteractionType: analytics.ProxyInteraction,
+			InteractionType: models.ProxyInteraction,
 			TimeStamp:       now,
 		},
 		{
 			Name:            "gpt-4",
-			InteractionType: analytics.ProxyInteraction,
+			InteractionType: models.ProxyInteraction,
 			TimeStamp:       now,
 		},
 	}
@@ -149,12 +149,12 @@ func TestGetMostUsedLLMModels(t *testing.T) {
 	}{
 		{
 			name:            "Filter Chat Interactions",
-			interactionType: string(analytics.ChatInteraction),
+			interactionType: string(models.ChatInteraction),
 			expectedCount:   1,
 		},
 		{
 			name:            "Filter Proxy Interactions",
-			interactionType: string(analytics.ProxyInteraction),
+			interactionType: string(models.ProxyInteraction),
 			expectedCount:   2,
 		},
 		{
@@ -183,7 +183,7 @@ func TestGetMostUsedLLMModels(t *testing.T) {
 
 			assert.Equal(t, http.StatusOK, w.Code)
 
-			var response analytics.ChartData
+			var response models.ChartData
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			require.NoError(t, err)
 

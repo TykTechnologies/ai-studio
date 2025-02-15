@@ -18,6 +18,7 @@ import {
   Chip,
   Switch,
   FormControlLabel,
+  InputAdornment,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -37,6 +38,8 @@ const AppForm = () => {
     user_id: "",
     llm_ids: [],
     datasource_ids: [],
+    monthly_budget: null,
+    budget_start_date: null,
   });
   const [credential, setCredential] = useState(null);
   const [users, setUsers] = useState([]);
@@ -162,7 +165,16 @@ const AppForm = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setApp({ ...app, [name]: value });
+    if (name === "monthly_budget") {
+      const numValue = value === '' ? null : parseFloat(value);
+      setApp(prev => ({
+        ...prev,
+        monthly_budget: numValue,
+        budget_start_date: numValue ? new Date().toISOString() : null
+      }));
+    } else {
+      setApp({ ...app, [name]: value });
+    }
   };
 
   const handleMultiSelectChange = (e) => {
@@ -313,6 +325,27 @@ const AppForm = () => {
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Monthly Budget"
+                name="monthly_budget"
+                type="number"
+                inputProps={{
+                  step: "0.01",
+                  min: "0"
+                }}
+                value={app.monthly_budget || ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                  setApp(prev => ({ ...prev, monthly_budget: value }));
+                }}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+                helperText="Leave empty for no budget limit"
+              />
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
