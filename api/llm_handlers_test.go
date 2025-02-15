@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"testing"
+	gotest "testing"
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLLMEndpoints(t *testing.T) {
+func TestLLMEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
@@ -165,7 +165,7 @@ func TestLLMEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
-func TestLLMPrivacyScoreEndpoints(t *testing.T) {
+func TestLLMPrivacyScoreEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)

@@ -151,6 +151,7 @@ const Dashboard = () => {
   const [toolUsageData, setToolUsageData] = useState(null);
   const [userActivityData, setUserActivityData] = useState(null);
   const [vendorModelCostData, setVendorModelCostData] = useState([]);
+  const [budgetUsageData, setBudgetUsageData] = useState([]);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
 
   const [llms, setLLMs] = useState([]);
@@ -206,49 +207,51 @@ const Dashboard = () => {
         toolUsageResponse,
         userActivityResponse,
         vendorModelCostResponse,
+        budgetUsageResponse,
       ] = await Promise.all([
         apiClient.get("/analytics/chat-records-per-day", {
-          params: { 
-            start_date: startDate, 
+          params: {
+            start_date: startDate,
             end_date: endDate,
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
         apiClient.get("/analytics/cost-analysis", {
-          params: { 
-            start_date: startDate, 
+          params: {
+            start_date: startDate,
             end_date: endDate,
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
         apiClient.get("/analytics/most-used-llm-models", {
-          params: { 
-            start_date: startDate, 
+          params: {
+            start_date: startDate,
             end_date: endDate,
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
         apiClient.get("/analytics/tool-usage-statistics", {
-          params: { 
-            start_date: startDate, 
+          params: {
+            start_date: startDate,
             end_date: endDate,
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
         apiClient.get("/analytics/unique-users-per-day", {
-          params: { 
-            start_date: startDate, 
+          params: {
+            start_date: startDate,
             end_date: endDate,
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
         apiClient.get("/analytics/total-cost-per-vendor-and-model", {
-          params: { 
-            start_date: startDate, 
+          params: {
+            start_date: startDate,
             end_date: endDate,
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
+        apiClient.get("/analytics/budget-usage"),
       ]);
 
       setChatData(chatDataResponse.data);
@@ -257,6 +260,7 @@ const Dashboard = () => {
       setToolUsageData(toolUsageResponse.data);
       setUserActivityData(userActivityResponse.data);
       setVendorModelCostData(vendorModelCostResponse.data);
+      setBudgetUsageData(budgetUsageResponse.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       if (error.response) {
@@ -277,6 +281,7 @@ const Dashboard = () => {
       setToolUsageData(null);
       setUserActivityData(null);
       setVendorModelCostData([]);
+      setBudgetUsageData([]); // Ensure it's always an array
     } finally {
       setLLMsLoading(false);
       setChatsLoading(false);
@@ -546,6 +551,88 @@ const Dashboard = () => {
                     <NoDataMessage message="No chat interaction data available for the selected period." />
                   )}
                 </ChartPaper>
+              </Grid>
+            </Grid>
+          </Box>
+
+          <Divider sx={{ my: 4 }} />
+
+          <Box sx={{ p: 3 }}>
+            <SectionTitle
+              title="Budget Usage"
+              helpText="Overview of budget utilization for LLMs and Apps"
+            />
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <StyledPaper elevation={3} style={{ padding: "20px" }}>
+                  <Typography variant="h6" gutterBottom>
+                    Current Budget Usage
+                  </Typography>
+                  {Array.isArray(budgetUsageData) && budgetUsageData.length > 0 ? (
+                    <TableContainer>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <StyledTableCell>Name</StyledTableCell>
+                            <StyledTableCell>Type</StyledTableCell>
+                            <StyledTableCell>Budget Start</StyledTableCell>
+                            <StyledTableCell align="right">Monthly Budget</StyledTableCell>
+                            <StyledTableCell align="right">Current Usage</StyledTableCell>
+                            <StyledTableCell align="right">Usage %</StyledTableCell>
+                            <StyledTableCell align="right">Days Left</StyledTableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {budgetUsageData.map((item, index) => {
+                            const usagePercent = item.monthlyBudget ?
+                              (item.currentUsage / item.monthlyBudget) * 100 : 0;
+                            return (
+                              <StyledTableRow key={index}>
+                                <StyledTableCell>{item.name}</StyledTableCell>
+                                <StyledTableCell>{item.type}</StyledTableCell>
+                                <StyledTableCell>
+                                  {item.budgetStartDate ?
+                                    new Date(item.budgetStartDate).toLocaleDateString() :
+                                    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString()}
+                                </StyledTableCell>
+                                <StyledTableCell align="right">
+                                  {item.monthlyBudget ? `$${item.monthlyBudget.toFixed(2)}` : 'No limit'}
+                                </StyledTableCell>
+                                <StyledTableCell align="right">
+                                  ${item.currentUsage.toFixed(2)}
+                                </StyledTableCell>
+                                <StyledTableCell
+                                  align="right"
+                                  sx={{
+                                    color: usagePercent >= 100 ? 'error.main' :
+                                      usagePercent >= 80 ? 'warning.main' :
+                                        'success.main'
+                                  }}
+                                >
+                                  {item.monthlyBudget ? `${usagePercent.toFixed(1)}%` : 'N/A'}
+                                </StyledTableCell>
+                                <StyledTableCell align="right">
+                                  {(() => {
+                                    const now = new Date();
+                                    const startDate = item.budgetStartDate ?
+                                      new Date(item.budgetStartDate) :
+                                      new Date(now.getFullYear(), now.getMonth(), 1);
+                                    const endDate = new Date(startDate);
+                                    endDate.setMonth(endDate.getMonth() + 1);
+                                    const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+                                    return `${daysLeft} days`;
+                                  })()}
+                                </StyledTableCell>
+                              </StyledTableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  ) : (
+                    <NoDataMessage message="No budget usage data available." />
+                  )}
+                </StyledPaper>
               </Grid>
             </Grid>
           </Box>

@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
@@ -468,6 +469,8 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			Filters          []FilterResponse `json:"filters"`
 			DefaultModel     string           `json:"default_model"`
 			AllowedModels    []string         `json:"allowed_models"`
+			MonthlyBudget    *float64         `json:"monthly_budget"`
+			BudgetStartDate  *time.Time       `json:"budget_start_date"`
 		}{
 			Name:             llm.Name,
 			APIKey:           llm.APIKey,
@@ -481,6 +484,8 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			Filters:          serializeFilters(llm.Filters),
 			DefaultModel:     llm.DefaultModel,
 			AllowedModels:    llm.AllowedModels,
+			MonthlyBudget:    llm.MonthlyBudget,
+			BudgetStartDate:  llm.BudgetStartDate,
 		},
 	}
 }

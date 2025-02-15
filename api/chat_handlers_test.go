@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"testing"
+	gotest "testing"
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestChatEndpoints(t *testing.T) {
+func TestChatEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
@@ -234,7 +234,7 @@ func TestChatEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestChatEndpointsErrors(t *testing.T) {
+func TestChatEndpointsErrors(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)

@@ -21,7 +21,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&LLMChatRecord{}, &LLMChatLogEntry{}, &ToolCallRecord{}, &models.ModelPrice{})
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.LLMChatLogEntry{}, &models.ToolCallRecord{}, &models.ModelPrice{})
 	require.NoError(t, err)
 
 	return db
@@ -78,14 +78,14 @@ func TestRecordContentMessage(t *testing.T) {
 
 	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, now, svc)
 
-	chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ?", "TestName")
+	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestName")
 	require.NoError(t, err)
 	assert.Equal(t, "TestName", chatRecord.Name)
 	assert.Equal(t, "openai", chatRecord.Vendor)
 	assert.Equal(t, 30, chatRecord.TotalTokens)
-	assert.Equal(t, ChatInteraction, chatRecord.InteractionType)
+	assert.Equal(t, models.ChatInteraction, chatRecord.InteractionType)
 
-	chatLog, err := waitForRecord[LLMChatLogEntry](db, "name = ?", "TestName")
+	chatLog, err := waitForRecord[models.LLMChatLogEntry](db, "name = ?", "TestName")
 	require.NoError(t, err)
 	assert.Equal(t, "TestName", chatLog.Name)
 	assert.Equal(t, "Test prompt", chatLog.Prompt)
@@ -100,7 +100,7 @@ func TestRecordProxyInteraction(t *testing.T) {
 	StartRecording(ctx, db)
 
 	now := time.Now()
-	rec := &LLMChatRecord{
+	rec := &models.LLMChatRecord{
 		Name:            "TestProxy",
 		Vendor:          "openai",
 		PromptTokens:    10,
@@ -109,17 +109,17 @@ func TestRecordProxyInteraction(t *testing.T) {
 		TimeStamp:       now,
 		UserID:          1,
 		AppID:           1,
-		InteractionType: ProxyInteraction,
+		InteractionType: models.ProxyInteraction,
 	}
 
 	recordChatRecord(rec)
 
-	proxyRecord, err := waitForRecord[LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestProxy", ProxyInteraction)
+	proxyRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestProxy", models.ProxyInteraction)
 	require.NoError(t, err)
 	assert.Equal(t, "TestProxy", proxyRecord.Name)
 	assert.Equal(t, "openai", proxyRecord.Vendor)
 	assert.Equal(t, 30, proxyRecord.TotalTokens)
-	assert.Equal(t, ProxyInteraction, proxyRecord.InteractionType)
+	assert.Equal(t, models.ProxyInteraction, proxyRecord.InteractionType)
 }
 
 func TestRecordToolCall(t *testing.T) {
@@ -132,7 +132,7 @@ func TestRecordToolCall(t *testing.T) {
 	now := time.Now()
 	RecordToolCall("TestTool", now, 50, 1)
 
-	toolCall, err := waitForRecord[ToolCallRecord](db, "name = ?", "TestTool")
+	toolCall, err := waitForRecord[models.ToolCallRecord](db, "name = ?", "TestTool")
 	require.NoError(t, err)
 	assert.Equal(t, "TestTool", toolCall.Name)
 	assert.Equal(t, 50, toolCall.ExecTime)
@@ -145,7 +145,7 @@ func TestGetChatRecordsPerDay(t *testing.T) {
 	// Insert test data
 	startDate := time.Now().AddDate(0, 0, -5)
 	for i := 0; i < 5; i++ {
-		db.Create(&LLMChatRecord{
+		db.Create(&models.LLMChatRecord{
 			TimeStamp: startDate.AddDate(0, 0, i),
 		})
 	}
@@ -165,7 +165,7 @@ func TestGetToolCallsPerDay(t *testing.T) {
 	// Insert test data
 	startDate := time.Now().AddDate(0, 0, -5)
 	for i := 0; i < 5; i++ {
-		db.Create(&ToolCallRecord{
+		db.Create(&models.ToolCallRecord{
 			TimeStamp: startDate.AddDate(0, 0, i),
 		})
 	}
@@ -185,7 +185,7 @@ func TestGetChatRecordsPerUser(t *testing.T) {
 	// Insert test data
 	startDate := time.Now().AddDate(0, 0, -5)
 	for i := 0; i < 3; i++ {
-		db.Create(&LLMChatRecord{
+		db.Create(&models.LLMChatRecord{
 			TimeStamp: startDate,
 			UserID:    uint(i + 1),
 		})
@@ -203,15 +203,15 @@ func TestGetChatRecordsPerUser(t *testing.T) {
 func TestCostCalculation(t *testing.T) {
 	tests := []struct {
 		name            string
-		interactionType InteractionType
+		interactionType models.InteractionType
 	}{
 		{
 			name:            "Chat Interaction Cost",
-			interactionType: ChatInteraction,
+			interactionType: models.ChatInteraction,
 		},
 		{
 			name:            "Proxy Interaction Cost",
-			interactionType: ProxyInteraction,
+			interactionType: models.ProxyInteraction,
 		},
 	}
 
@@ -253,14 +253,14 @@ func TestCostCalculation(t *testing.T) {
 				},
 			}
 
-			if tt.interactionType == ChatInteraction {
+			if tt.interactionType == models.ChatInteraction {
 				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
 			} else {
 				// For proxy interaction, we need to calculate the cost using the same price model
 				price, err := mockService.GetModelPriceByModelNameAndVendor("TestModel", string(models.OPENAI))
 				require.NoError(t, err)
 
-				rec := &LLMChatRecord{
+				rec := &models.LLMChatRecord{
 					Name:            "TestModel",
 					Vendor:          string(models.OPENAI),
 					PromptTokens:    10,
@@ -269,13 +269,13 @@ func TestCostCalculation(t *testing.T) {
 					TimeStamp:       now,
 					UserID:          1,
 					AppID:           1,
-					InteractionType: ProxyInteraction,
+					InteractionType: models.ProxyInteraction,
 					Cost:            price.CPT*float64(20) + price.CPIT*float64(10), // Same cost calculation as chat interaction
 				}
 				db.Create(rec)
 			}
 
-			chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestModel", tt.interactionType)
+			chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestModel", tt.interactionType)
 			require.NoError(t, err)
 
 			// Check if the cost is calculated correctly
@@ -322,7 +322,7 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 
 	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
 
-	chatRecord, err := waitForRecord[LLMChatRecord](db, "name = ?", "TestModel")
+	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestModel")
 	require.NoError(t, err)
 
 	// Check if the cost is zero when price is not available
@@ -332,6 +332,7 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 // Mock service for testing
 type mockService struct {
 	GetModelPriceByModelNameAndVendorFunc func(modelName, vendor string) (*models.ModelPrice, error)
+	SendEmailFunc                         func(to, subject, body string) error
 }
 
 func (m *mockService) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
@@ -366,3 +367,34 @@ func (m *mockService) GetAppByCredentialID(credID uint) (*models.App, error) {
 func (m *mockService) GetLLMSettingsByID(id uint) (*models.LLMSettings, error) {
 	return nil, nil
 }
+
+func (m *mockService) SendEmail(to, subject, body string) error {
+	if m.SendEmailFunc != nil {
+		return m.SendEmailFunc(to, subject, body)
+	}
+	return nil
+}
+
+func (m *mockService) GetDB() *gorm.DB {
+	return nil
+}
+
+func (m *mockService) AuthenticateUser(email, password string) (*models.User, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetUserByAPIKey(apiKey string) (*models.User, error) {
+	return nil, nil
+}
+
+func (m *mockService) GetUserByEmail(email string) (*models.User, error) {
+	return nil, nil
+}
+
+func (m *mockService) AddUserToGroup(userID, groupID uint) error {
+	return nil
+}
+
+// Ensure mockService implements both ServiceInterface and EmailSender
+var _ services.ServiceInterface = (*mockService)(nil)
+var _ models.EmailSender = (*mockService)(nil)

@@ -14,25 +14,16 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
-	"github.com/go-mail/mail"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-type Dialer func(host string, port int, username, password string) *mail.Dialer
-type Mailer interface {
-	DialAndSend(m ...*mail.Message) error
-}
-
-type MailDialer interface {
-	DialAndSend(m *mail.Message) error
-}
-
 type Config struct {
 	DB           *gorm.DB
-	Service      *services.Service
+	Service      services.ServiceInterface
 	CookieName   string
 	CookieSecure bool
 
@@ -44,28 +35,26 @@ type Config struct {
 	CookieSameSite         http.SameSite
 	RegistrationAllowed    bool
 	AdminEmail             string
-	FromEmail              string
-	SMTPHost               string
-	SMTPPort               int
-	SMTPUsername           string
-	SMTPPassword           string
 	TestMode               bool
 	AllowedRegisterDomains []string
 }
 
+// Ensure AuthService implements models.EmailSender
+var _ models.EmailSender = (*AuthService)(nil)
+
 type AuthService struct {
-	Config     *Config
-	DB         *gorm.DB
-	Service    *services.Service
-	TokenStore map[string]*models.User
-	Mailer     Mailer
+	Config      *Config
+	DB          *gorm.DB
+	Service     services.ServiceInterface
+	TokenStore  map[string]*models.User
+	MailService *notifications.MailService // Exported for testing
 }
 
-func NewAuthService(config *Config, mailer Mailer, service *services.Service) *AuthService {
+func NewAuthService(config *Config, mailService *notifications.MailService, service services.ServiceInterface) *AuthService {
 	return &AuthService{
-		Config:  config,
-		Mailer:  mailer,
-		Service: service,
+		Config:      config,
+		MailService: mailService,
+		Service:     service,
 	}
 }
 
@@ -530,15 +519,5 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 }
 
 func (a *AuthService) SendEmail(to, subject, body string) error {
-	m := mail.NewMessage()
-	m.SetHeader("From", a.Config.FromEmail)
-	m.SetHeader("To", to)
-	m.SetHeader("Subject", subject)
-	m.SetBody("text/plain", body)
-
-	if a.Config.SMTPHost == "" {
-		slog.Warn("smtp host not set, not sending email")
-		return nil
-	}
-	return a.Mailer.DialAndSend(m)
+	return a.MailService.SendEmail(to, subject, body)
 }

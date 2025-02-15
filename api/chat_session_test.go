@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
-	"testing"
+	gotest "testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +24,7 @@ import (
 
 // TestChatSSE tests SSE with multiline JSON events and ensures we don't get a 404
 // after posting a user message.
-func TestChatSSE(t *testing.T) {
+func TestChatSSE(t *gotest.T) {
 	// Setup environment variables.
 	os.Setenv("ENVIRONMENT", "test")
 	os.Setenv("LOG_LEVEL", "info")
@@ -99,7 +99,7 @@ func TestChatSSE(t *testing.T) {
 	// ts.Config.IdleTimeout = 0
 	ts.Start()
 
-	t.Run("SSE_Connection", func(t *testing.T) {
+	t.Run("SSE_Connection", func(t *gotest.T) {
 		log.Println("Starting SSE Connection test")
 
 		// Channels for coordination.

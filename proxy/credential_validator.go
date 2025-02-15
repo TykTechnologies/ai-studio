@@ -40,7 +40,11 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		var llmSlug, dsSlug, routeID string
 		switch pathParts[1] {
 		case "llm":
-			llmSlug = pathParts[3]
+			if len(pathParts) > 3 {
+				llmSlug = pathParts[3] // For /llm/stream/{llmSlug}
+			} else {
+				llmSlug = pathParts[2] // For /llm/{llmSlug}
+			}
 		case "datasource":
 			dsSlug = pathParts[2]
 		case "ai":
@@ -64,6 +68,8 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				respondWithError(w, http.StatusUnauthorized, "missing authorization header", nil)
 				return
 			}
+			// Strip Bearer prefix if present
+			token = strings.TrimPrefix(token, "Bearer ")
 		} else if llmSlug != "" {
 			llm, ok := cv.p.GetLLM(llmSlug)
 			if !ok {

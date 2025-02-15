@@ -13,24 +13,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/go-mail/mail"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 var emptyFile embed.FS
-
-type MockMailer struct{}
-
-func (m *MockMailer) DialAndSend(msg ...*mail.Message) error {
-	return nil
-}
-
-func NewMockMailer() *MockMailer {
-	return &MockMailer{}
-}
 
 func SetupTestAPI(t *testing.T) (*api.API, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -55,7 +45,8 @@ func SetupTestAPI(t *testing.T) (*api.API, *gorm.DB) {
 		TestMode:            true,
 	}
 
-	a := api.NewAPI(service, true, auth.NewAuthService(config, NewMockMailer(), service), config, nil, emptyFile)
+	mailService := notifications.NewTestMailService()
+	a := api.NewAPI(service, true, auth.NewAuthService(config, mailService, service), config, nil, emptyFile)
 
 	// Initialize test data
 	if err := SetupTestData(db, service); err != nil {

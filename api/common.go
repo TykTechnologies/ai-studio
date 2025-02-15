@@ -103,6 +103,8 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 				Filters          []FilterResponse `json:"filters"`
 				DefaultModel     string           `json:"default_model"`
 				AllowedModels    []string         `json:"allowed_models"`
+				MonthlyBudget    *float64         `json:"monthly_budget"`
+				BudgetStartDate  *time.Time       `json:"budget_start_date"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -113,6 +115,8 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 				Active:           llm.Active,
 				DefaultModel:     llm.DefaultModel,
 				AllowedModels:    llm.AllowedModels,
+				MonthlyBudget:    llm.MonthlyBudget,
+				BudgetStartDate:  llm.BudgetStartDate,
 			},
 		}
 	}
@@ -504,17 +508,21 @@ func (a *API) createUserApp(c *gin.Context) {
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name          string `json:"name"`
-			Description   string `json:"description"`
-			UserID        uint   `json:"user_id"`
-			CredentialID  uint   `json:"credential_id"`
-			DatasourceIDs []uint `json:"datasource_ids"`
-			LLMIDs        []uint `json:"llm_ids"`
+			Name            string     `json:"name"`
+			Description     string     `json:"description"`
+			UserID          uint       `json:"user_id"`
+			CredentialID    uint       `json:"credential_id"`
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
+			MonthlyBudget   *float64   `json:"monthly_budget"`
+			BudgetStartDate *time.Time `json:"budget_start_date"`
 		}{
-			Name:         app.Name,
-			Description:  app.Description,
-			UserID:       app.UserID,
-			CredentialID: app.CredentialID,
+			Name:            app.Name,
+			Description:     app.Description,
+			UserID:          app.UserID,
+			CredentialID:    app.CredentialID,
+			MonthlyBudget:   app.MonthlyBudget,
+			BudgetStartDate: app.BudgetStartDate,
 		},
 	}
 
@@ -702,6 +710,8 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 				Filters          []FilterResponse `json:"filters"`
 				DefaultModel     string           `json:"default_model"`
 				AllowedModels    []string         `json:"allowed_models"`
+				MonthlyBudget    *float64         `json:"monthly_budget"`
+				BudgetStartDate  *time.Time       `json:"budget_start_date"`
 			}{
 				Name:             llm.Name,
 				PrivacyScore:     llm.PrivacyScore,
@@ -712,6 +722,8 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 				Active:           llm.Active,
 				DefaultModel:     llm.DefaultModel,
 				AllowedModels:    llm.AllowedModels,
+				MonthlyBudget:    llm.MonthlyBudget,
+				BudgetStartDate:  llm.BudgetStartDate,
 			},
 		}
 	}
@@ -760,17 +772,21 @@ func (a *API) getUserApps(c *gin.Context) {
 			Type: "app",
 			ID:   strconv.FormatUint(uint64(app.ID), 10),
 			Attributes: struct {
-				Name          string `json:"name"`
-				Description   string `json:"description"`
-				UserID        uint   `json:"user_id"`
-				CredentialID  uint   `json:"credential_id"`
-				DatasourceIDs []uint `json:"datasource_ids"`
-				LLMIDs        []uint `json:"llm_ids"`
+				Name            string     `json:"name"`
+				Description     string     `json:"description"`
+				UserID          uint       `json:"user_id"`
+				CredentialID    uint       `json:"credential_id"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				MonthlyBudget   *float64   `json:"monthly_budget"`
+				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
-				Name:         app.Name,
-				Description:  app.Description,
-				UserID:       app.UserID,
-				CredentialID: app.CredentialID,
+				Name:            app.Name,
+				Description:     app.Description,
+				UserID:          app.UserID,
+				CredentialID:    app.CredentialID,
+				MonthlyBudget:   app.MonthlyBudget,
+				BudgetStartDate: app.BudgetStartDate,
 				DatasourceIDs: func() []uint {
 					ids := make([]uint, len(app.Datasources))
 					for i, ds := range app.Datasources {
@@ -878,13 +894,15 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name          string           `json:"name"`
-			Description   string           `json:"description"`
-			UserID        uint             `json:"user_id"`
-			CredentialID  uint             `json:"credential_id"`
-			DatasourceIDs []uint           `json:"datasource_ids"`
-			LLMIDs        []uint           `json:"llm_ids"`
-			Credential    CredentialDetail `json:"credential"`
+			Name            string           `json:"name"`
+			Description     string           `json:"description"`
+			UserID          uint             `json:"user_id"`
+			CredentialID    uint             `json:"credential_id"`
+			DatasourceIDs   []uint           `json:"datasource_ids"`
+			LLMIDs          []uint           `json:"llm_ids"`
+			MonthlyBudget   *float64         `json:"monthly_budget"`
+			BudgetStartDate *time.Time       `json:"budget_start_date"`
+			Credential      CredentialDetail `json:"credential"`
 		}{
 			Name:         app.Name,
 			Description:  app.Description,
@@ -909,6 +927,8 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 				Secret: credential.Secret,
 				Active: credential.Active,
 			},
+			MonthlyBudget:   app.MonthlyBudget,
+			BudgetStartDate: app.BudgetStartDate,
 		},
 	}
 

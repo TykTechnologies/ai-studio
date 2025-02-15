@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,13 +19,13 @@ import (
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/chat-records-per-day [get]
 func (a *API) getChatRecordsPerDay(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -35,7 +36,7 @@ func (a *API) getChatRecordsPerDay(c *gin.Context) {
 
 	chartData, err := analytics.GetChatRecordsPerDay(a.service.DB, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -56,13 +57,13 @@ func (a *API) getChatRecordsPerDay(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/tool-calls-per-day [get]
 func (a *API) getToolCallsPerDay(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -73,7 +74,7 @@ func (a *API) getToolCallsPerDay(c *gin.Context) {
 
 	chartData, err := analytics.GetToolCallsPerDay(a.service.DB, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -94,13 +95,13 @@ func (a *API) getToolCallsPerDay(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/chat-records-per-user [get]
 func (a *API) getChatRecordsPerUser(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -111,7 +112,7 @@ func (a *API) getChatRecordsPerUser(c *gin.Context) {
 
 	chartData, err := analytics.GetChatRecordsPerUser(a.service.DB, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -123,7 +124,7 @@ func (a *API) getChatRecordsPerUser(c *gin.Context) {
 	c.JSON(http.StatusOK, chartData)
 }
 
-// Helper function to parse date range and interaction type from query parameters
+// Helper function to parse date range from query parameters
 func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	startDateStr := c.Query("start_date")
 	endDateStr := c.Query("end_date")
@@ -142,17 +143,16 @@ func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 }
 
 // Helper function to get interaction type from query parameters
-func getInteractionType(c *gin.Context) *analytics.InteractionType {
+func getInteractionType(c *gin.Context) *models.InteractionType {
 	typeStr := c.Query("interaction_type")
 	if typeStr == "" {
 		return nil
 	}
 
-	interactionType := analytics.InteractionType(typeStr)
-	if interactionType != analytics.ChatInteraction && interactionType != analytics.ProxyInteraction {
+	interactionType := models.InteractionType(typeStr)
+	if interactionType != models.ChatInteraction && interactionType != models.ProxyInteraction {
 		return nil
 	}
-
 	return &interactionType
 }
 
@@ -165,13 +165,13 @@ func getInteractionType(c *gin.Context) *analytics.InteractionType {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/cost-analysis [get]
 func (a *API) getCostAnalysis(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -182,7 +182,7 @@ func (a *API) getCostAnalysis(c *gin.Context) {
 
 	chartDataMap, err := analytics.GetCostAnalysis(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -203,13 +203,13 @@ func (a *API) getCostAnalysis(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/most-used-llm-models [get]
 func (a *API) getMostUsedLLMModels(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -220,7 +220,7 @@ func (a *API) getMostUsedLLMModels(c *gin.Context) {
 
 	chartData, err := analytics.GetMostUsedLLMModels(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -241,13 +241,13 @@ func (a *API) getMostUsedLLMModels(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/tool-usage-statistics [get]
 func (a *API) getToolUsageStatistics(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -258,7 +258,7 @@ func (a *API) getToolUsageStatistics(c *gin.Context) {
 
 	chartData, err := analytics.GetToolUsageStatistics(a.service.DB, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -279,13 +279,13 @@ func (a *API) getToolUsageStatistics(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/unique-users-per-day [get]
 func (a *API) getUniqueUsersPerDay(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -296,7 +296,7 @@ func (a *API) getUniqueUsersPerDay(c *gin.Context) {
 
 	chartData, err := analytics.GetUniqueUsersPerDay(a.service.DB, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -317,13 +317,13 @@ func (a *API) getUniqueUsersPerDay(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/token-usage-per-user [get]
 func (a *API) getTokenUsagePerUser(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -334,7 +334,7 @@ func (a *API) getTokenUsagePerUser(c *gin.Context) {
 
 	chartData, err := analytics.GetTokenUsagePerUser(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -355,13 +355,13 @@ func (a *API) getTokenUsagePerUser(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/token-usage-per-app [get]
 func (a *API) getTokenUsagePerApp(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -372,7 +372,7 @@ func (a *API) getTokenUsagePerApp(c *gin.Context) {
 
 	chartData, err := analytics.GetTokenUsagePerApp(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -394,13 +394,13 @@ func (a *API) getTokenUsagePerApp(c *gin.Context) {
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param app_id query int true "App ID"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/token-usage-for-app [get]
 func (a *API) getTokenUsageForApp(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -411,7 +411,7 @@ func (a *API) getTokenUsageForApp(c *gin.Context) {
 
 	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -422,7 +422,7 @@ func (a *API) getTokenUsageForApp(c *gin.Context) {
 
 	chartData, err := analytics.GetTokenUsageForApp(a.service.DB, startDate, endDate, uint(appID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -444,13 +444,13 @@ func (a *API) getTokenUsageForApp(c *gin.Context) {
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param chat_id query string true "Chat ID"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/chat-interactions-for-chat [get]
 func (a *API) getChatInteractionsForChat(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -461,7 +461,7 @@ func (a *API) getChatInteractionsForChat(c *gin.Context) {
 
 	chatID := c.Query("chat_id")
 	if chatID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -472,7 +472,7 @@ func (a *API) getChatInteractionsForChat(c *gin.Context) {
 
 	chartData, err := analytics.GetChatInteractionsForChat(a.service.DB, startDate, endDate, chatID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -494,13 +494,13 @@ func (a *API) getChatInteractionsForChat(c *gin.Context) {
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param model_name query string true "Model Name"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/model-usage [get]
 func (a *API) getModelUsage(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -511,7 +511,7 @@ func (a *API) getModelUsage(c *gin.Context) {
 
 	modelName := c.Query("model_name")
 	if modelName == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -522,7 +522,7 @@ func (a *API) getModelUsage(c *gin.Context) {
 
 	chartData, err := analytics.GetModelUsage(a.service.DB, startDate, endDate, modelName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -544,13 +544,13 @@ func (a *API) getModelUsage(c *gin.Context) {
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param vendor query string true "Vendor Name"
 // @Success 200 {object} analytics.ChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/vendor-usage [get]
 func (a *API) getVendorUsage(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -561,7 +561,7 @@ func (a *API) getVendorUsage(c *gin.Context) {
 
 	vendor := c.Query("vendor")
 	if vendor == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -572,7 +572,7 @@ func (a *API) getVendorUsage(c *gin.Context) {
 
 	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -594,13 +594,13 @@ func (a *API) getVendorUsage(c *gin.Context) {
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param app_id query int true "App ID"
 // @Success 200 {object} analytics.MultiAxisChartData
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/token-usage-and-cost-for-app [get]
 func (a *API) getTokenUsageAndCostForApp(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -611,7 +611,7 @@ func (a *API) getTokenUsageAndCostForApp(c *gin.Context) {
 
 	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -622,7 +622,7 @@ func (a *API) getTokenUsageAndCostForApp(c *gin.Context) {
 
 	chartData, err := analytics.GetTokenUsageAndCostForApp(a.service.DB, startDate, endDate, uint(appID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -642,14 +642,21 @@ func (a *API) getTokenUsageAndCostForApp(c *gin.Context) {
 // @Produce json
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
-// @Success 200 {array} analytics.VendorModelCost
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+//
+//	@Success 200 {array} struct {
+//		Vendor    string  `json:"vendor"`
+//		Model     string  `json:"model"`
+//		Currency  string  `json:"currency"`
+//		TotalCost float64 `json:"totalCost"`
+//	}
+//
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/total-cost-per-vendor-and-model [get]
 func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -660,7 +667,7 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 
 	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate, getInteractionType(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -683,14 +690,14 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 // @Param app_id query int true "App ID"
 // @Param page query int false "Page number (default: 1)"
 // @Param page_size query int false "Page size (default: 10)"
-// @Success 200 {object} PaginatedProxyLogs
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} models.PaginatedProxyLogs
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/proxy-logs-for-app [get]
 func (a *API) getProxyLogsForApp(c *gin.Context) {
 	startDate, endDate, err := getDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -701,7 +708,7 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 
 	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -722,7 +729,7 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 
 	logs, totalCount, err := analytics.GetProxyLogsForAppID(a.service.DB, startDate, endDate, uint(appID), page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -733,8 +740,8 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 
 	totalPages := (totalCount + int64(pageSize) - 1) / int64(pageSize)
 
-	response := PaginatedProxyLogs{
-		Data: make([]ProxyLogResponse, len(logs)),
+	response := models.PaginatedProxyLogs{
+		Data: make([]models.ProxyLogResponse, len(logs)),
 		Meta: struct {
 			TotalCount int64 `json:"total_count"`
 			TotalPages int   `json:"total_pages"`
@@ -749,7 +756,7 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 	}
 
 	for i, log := range logs {
-		response.Data[i] = ProxyLogResponse{
+		response.Data[i] = models.ProxyLogResponse{
 			Type: "proxy_log",
 			ID:   strconv.FormatUint(uint64(log.ID), 10),
 			Attributes: struct {
@@ -770,6 +777,122 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 				ResponseCode: log.ResponseCode,
 			},
 		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// getBudgetUsage godoc
+// @Summary Get current monthly budget usage for apps and LLMs
+// @Description Returns usage of monthly budgets for apps and LLMs
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Success 200 {array} struct{Name string `json:"name"`;Type string `json:"type"`;MonthlyBudget *float64 `json:"monthlyBudget"`;CurrentUsage float64 `json:"currentUsage"`;UsagePercent float64 `json:"usagePercent"`}
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/budget-usage [get]
+func (a *API) getBudgetUsage(c *gin.Context) {
+	usageList, err := a.service.Budget.GetBudgetUsage()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to retrieve budget usage"}},
+		})
+		return
+	}
+
+	response := make([]map[string]interface{}, 0, len(usageList))
+	for _, u := range usageList {
+		entry := map[string]interface{}{
+			"name":            u.Name,
+			"type":            u.EntityType,
+			"monthlyBudget":   u.Budget,
+			"currentUsage":    u.Spent,
+			"usagePercent":    u.Usage,
+			"budgetStartDate": u.BudgetStartDate,
+		}
+		response = append(response, entry)
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// getBudgetUsageForApp godoc
+// @Summary Get budget usage for a specific app
+// @Description Get the current budget usage for a specific app
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param app_id query int true "App ID"
+//
+//	@Success 200 {object} struct {
+//		CurrentUsage  float64    `json:"current_usage"`
+//		MonthlyBudget *float64   `json:"monthly_budget"`
+//		Percentage    *float64   `json:"percentage"`
+//		StartDate     time.Time  `json:"start_date"`
+//	}
+//
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/budget-usage-for-app [get]
+func (a *API) getBudgetUsageForApp(c *gin.Context) {
+	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid app_id"}},
+		})
+		return
+	}
+
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get app"}},
+		})
+		return
+	}
+
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	if app.BudgetStartDate != nil {
+		start = *app.BudgetStartDate
+	}
+
+	spent, err := a.service.Budget.GetMonthlySpending(uint(appID), start, now)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get monthly spending"}},
+		})
+		return
+	}
+
+	var percentage *float64
+	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
+		p := (spent / *app.MonthlyBudget) * 100
+		percentage = &p
+	}
+
+	response := struct {
+		CurrentUsage  float64   `json:"current_usage"`
+		MonthlyBudget *float64  `json:"monthly_budget"`
+		Percentage    *float64  `json:"percentage"`
+		StartDate     time.Time `json:"start_date"`
+	}{
+		CurrentUsage:  spent,
+		MonthlyBudget: app.MonthlyBudget,
+		Percentage:    percentage,
+		StartDate:     start,
 	}
 
 	c.JSON(http.StatusOK, response)

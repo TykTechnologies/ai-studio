@@ -1,0 +1,9 @@
+- Ensure not to remove existing comments.
+- Always finish your code
+- Avoid having big refactorings and re-structure when not explictly asked. You goal is achieve the goal with minimal instructions
+- When you need to modify functionality which is outside of the current scrope, you need to explictly ask user permission, with detailed explanation. 
+- When planning ensure to split tasks to small testable milestones, and after each try to add the test and run it
+- If asked about specific feature, first check if there is file about it in features/ folder.
+- Before you finish the job, and you modified some implementation or added new stuff, ensure you will update feature spec in features folder
+- You really respect domain driven design, and try to develop independent, testable code and reduce dependencies between different domains.
+- When you asked to improve test coverage of some area, you need to run Go test with coverage profile, and after analyze coverage to see which parts of code not tested. 

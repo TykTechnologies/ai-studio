@@ -27,7 +27,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		return
 	}
 
-	l := &analytics.ProxyLog{
+	l := &models.ProxyLog{
 		AppID:        app.ID,
 		UserID:       app.UserID,
 		TimeStamp:    time.Now(),
@@ -38,20 +38,20 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	}
 
 	analytics.RecordProxyLog(l)
-	AnalyzeCompletionResponse(service, llm, app, response)
+	AnalyzeCompletionResponse(service, llm, app, response, time.Now())
 }
 
-func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte) {
+func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time) {
 	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, statusCode, responses, r, chunks)
 	if err != nil {
 		log.Printf("failed to analyze response: %v", err)
 		return
 	}
 
-	l := &analytics.ProxyLog{
+	l := &models.ProxyLog{
 		AppID:        app.ID,
 		UserID:       app.UserID,
-		TimeStamp:    time.Now(),
+		TimeStamp:    timestamp,
 		Vendor:       string(llm.Vendor),
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(responses), maxBodySize),
@@ -60,33 +60,42 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 
 	analytics.RecordProxyLog(l)
 
-	AnalyzeCompletionResponse(service, llm, app, response)
+	AnalyzeCompletionResponse(service, llm, app, response, timestamp)
 }
 
-func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse) {
+func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, timestamp time.Time) {
+	var pt, rt, choices, tools int
+	var model string
+
+	if response != nil {
+		pt = response.GetPromptTokens()
+		rt = response.GetResponseTokens()
+		choices = response.GetChoiceCount()
+		tools = response.GetToolCount()
+		model = response.GetModel()
+	}
+
 	cpt := 0.0
 	cpit := 0.0
-	price, err := service.GetModelPriceByModelNameAndVendor(response.GetModel(), string(llm.Vendor))
+	price, err := service.GetModelPriceByModelNameAndVendor(model, string(llm.Vendor))
 	if err == nil {
 		cpt = price.CPT
 		cpit = price.CPIT
 	}
 
-	pt := response.GetPromptTokens()
-	rt := response.GetResponseTokens()
-
-	rec := &analytics.LLMChatRecord{
+	rec := &models.LLMChatRecord{
+		LLMID:           llm.ID,
 		Vendor:          string(llm.Vendor),
-		PromptTokens:    response.GetPromptTokens(),
-		ResponseTokens:  response.GetResponseTokens(),
+		PromptTokens:    pt,
+		ResponseTokens:  rt,
 		TotalTokens:     pt + rt,
-		TimeStamp:       time.Now(),
-		Choices:         response.GetChoiceCount(),
-		ToolCalls:       response.GetToolCount(),
+		TimeStamp:       timestamp,
+		Choices:         choices,
+		ToolCalls:       tools,
 		AppID:           app.ID,
 		UserID:          app.UserID,
 		Cost:            (cpt * float64(rt)) + (cpit * float64(pt)),
-		InteractionType: analytics.ProxyInteraction,
+		InteractionType: models.ProxyInteraction,
 	}
 
 	analytics.RecordChatRecord(rec)

@@ -1,0 +1,10 @@
+Subject: Budget Alert: {{if .IsLLM}}LLM{{else}}App{{end}} {{.Name}} at {{.Threshold}}% Usage
+
+{{if .IsLLM}}
+The LLM {{.Name}} has {{if eq .Threshold 100}}exceeded{{else}}reached {{.Threshold}}% of{{end}} its monthly budget.
+{{else}}
+{{if .IsAdmin}}The application {{.Name}} (Owner: {{.OwnerEmail}}) has{{else}}Your application {{.Name}} has{{end}} {{if eq .Threshold 100}}exceeded{{else}}reached {{.Threshold}}% of{{end}} its monthly budget.
+{{end}}
+
+Current usage: {{.CurrentUsage}} {{.Currency}}
+Budget limit: {{.Budget}} {{.Currency}}
