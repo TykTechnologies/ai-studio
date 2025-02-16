@@ -458,7 +458,7 @@ func (cs *ChatSession) getSystemPrompt() string {
 		prompt = cs.chatRef.SystemPrompt
 	}
 
-	if (cs.chatRef.ExtraContext != nil) || (len(cs.chatRef.ExtraContext) > 0) {
+	if len(cs.chatRef.ExtraContext) > 0 {
 		contextStr := "I have provided additional context for this chat session. Please review the following information and bear it in mind for every interaction:"
 		for i := range cs.chatRef.ExtraContext {
 			contextStr = fmt.Sprintf("%s\n\n## File Name: %s \n\n## File Content:\n\n %s",
