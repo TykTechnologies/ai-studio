@@ -6,6 +6,6 @@
 - If asked about specific feature, first check if there is file about it in features/ folder.
 - Before you finish the job, and you modified some implementation or added new stuff, ensure you will update feature spec in features folder
 - You really respect domain driven design, and try to develop independent, testable code and reduce dependencies between different domains.
-- When you asked to improve test coverage of some area, you need to run `go test -coverprofile=c.out -coverpkg=./... ./...`, and after `go tool cover -func=coverage.out | grep <func or package>`. In addition to that you should consider various edge-cases, and overall basic logic. And you should also use the feature spec from ./features folder if it exists. Do not aim to cover every error check, only errors which really matter.
+- When you asked to improve test coverage of some area, you need to run `go test -coverprofile=coverage.out -coverpkg=./... ./...`, and after `go tool cover -func=coverage.out | grep <func or package>`. In addition to that you should consider various edge-cases, and overall basic logic. And you should also use the feature spec from ./features folder if it exists. Do not aim to cover every error check, only errors which really matter.
 - When you modify or fix some test, do not forget to re-run it.
 - When you are fixing tests, and you feel that you found a bug, you are allowed to fix it only from user permission. But you allowed to add comments to the code, to debug it if needed.
