@@ -1,10 +1,11 @@
 FROM debian:bookworm-slim
 
 RUN apt-get update && \
-	apt-get install -y --no-install-recommends \
-	ca-certificates \
-	libsqlite3-0 \
-	&& rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libsqlite3-0 \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
