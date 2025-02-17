@@ -1,5 +1,8 @@
 import React from "react";
 import LogoutIcon from "@mui/icons-material/Logout";
+import { styled } from "@mui/material/styles";
+import NotificationIcon from "../../admin/components/notifications/NotificationIcon";
+
 import { logout } from "../../admin/utils/pubClient";
 import {
   StyledAppBar,
@@ -76,6 +79,7 @@ const TopNavigation = ({
             </StyledTabs>
           </TabsContainer>
         </NavigationContainer>
+        <NotificationIcon sx={{ mr: 1 }} />
         <StyledLogoutButton onClick={logout}>
           <LogoutIcon />
         </StyledLogoutButton>

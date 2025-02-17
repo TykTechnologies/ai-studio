@@ -33,14 +33,16 @@ func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password
 }
 
 func (m *MailService) SendEmail(to, subject, body string) error {
+	// Backward compatibility: skip sending if SMTPHost is empty
+	if m.SMTPHost == "" {
+		return nil
+	}
+
 	msg := mail.NewMessage()
 	msg.SetHeader("From", m.FromEmail)
 	msg.SetHeader("To", to)
 	msg.SetHeader("Subject", subject)
 	msg.SetBody("text/plain", body)
 
-	if m.SMTPHost == "" {
-		return nil // Skip sending in test/dev mode
-	}
 	return m.Mailer.DialAndSend(msg)
 }

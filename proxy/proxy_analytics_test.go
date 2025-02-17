@@ -11,7 +11,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -20,8 +19,8 @@ func TestAnalyzeResponse(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	service := services.NewService(db)
-	mailService := notifications.NewTestMailService()
-	budgetService := services.NewBudgetService(db, mailService)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := services.NewBudgetService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 
@@ -103,8 +102,8 @@ func TestAnalyzeStreamingResponse(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	service := services.NewService(db)
-	mailService := notifications.NewTestMailService()
-	budgetService := services.NewBudgetService(db, mailService)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := services.NewBudgetService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 
@@ -221,8 +220,8 @@ func TestAnalyzeCompletionResponse(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	service := services.NewService(db)
-	mailService := notifications.NewTestMailService()
-	budgetService := services.NewBudgetService(db, mailService)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := services.NewBudgetService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 

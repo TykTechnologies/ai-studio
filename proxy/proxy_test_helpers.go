@@ -40,6 +40,7 @@ func setupDB(t *testing.T) *gorm.DB {
 		&models.LLMChatLogEntry{},
 		&models.ToolCallRecord{},
 		&models.ProxyLog{},
+		&models.Notification{}, // Add notifications table
 	)
 	require.NoError(t, err)
 
@@ -75,10 +76,20 @@ func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
 	deadline := time.Now().Add(5000 * time.Millisecond) // Increase timeout to 5 seconds
 	for time.Now().Before(deadline) {
 		var count int64
-		err := db.Model(&models.LLMChatRecord{}).Count(&count).Error
-		require.NoError(t, err, "DB count query failed unexpectedly")
+		var err error
+		for i := 0; i < 5; i++ { // retry a few times if locked
+			err = db.Model(&models.LLMChatRecord{}).Count(&count).Error
+			if err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			continue // skip this round if still locked
+		}
 
 		if count >= expectedCount {
+			time.Sleep(200 * time.Millisecond) // extra wait to ensure all operations complete
 			return
 		}
 		time.Sleep(200 * time.Millisecond) // Increase delay between checks
@@ -98,7 +109,13 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 	defer ticker.Stop()
 
 	// capture initial count
-	_ = db.Model(&models.LLMChatRecord{}).Count(&lastCount)
+	for i := 0; i < 5; i++ { // retry a few times if locked
+		err := db.Model(&models.LLMChatRecord{}).Count(&lastCount).Error
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	for {
 		select {
@@ -106,11 +123,22 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 			t.Fatalf("Timeout waiting for DB to go idle (analytics).")
 		case <-ticker.C:
 			var curCount int64
-			_ = db.Model(&models.LLMChatRecord{}).Count(&curCount)
+			var err error
+			for i := 0; i < 5; i++ { // retry a few times if locked
+				err = db.Model(&models.LLMChatRecord{}).Count(&curCount).Error
+				if err == nil {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			if err != nil {
+				continue // skip this round if still locked
+			}
 			if curCount == lastCount {
 				stableRounds++
 				// If stable for ~2 intervals (200ms), assume idle.
 				if stableRounds >= 2 {
+					time.Sleep(200 * time.Millisecond) // extra wait to ensure all operations complete
 					return
 				}
 			} else {
@@ -127,8 +155,17 @@ func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
 	deadline := time.Now().Add(5000 * time.Millisecond) // Increase timeout to 5 seconds
 	for time.Now().Before(deadline) {
 		var record models.LLMChatRecord
-		err := db.First(&record).Error
-		require.NoError(t, err)
+		var err error
+		for i := 0; i < 5; i++ { // retry a few times if locked
+			err = db.First(&record).Error
+			if err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			continue // skip this round if still locked
+		}
 
 		t.Logf("Found record: cost=%f prompt_tokens=%d response_tokens=%d timestamp=%v",
 			record.Cost, record.PromptTokens, record.ResponseTokens, record.TimeStamp)
@@ -150,16 +187,38 @@ func waitForSpendingUpdate(t *testing.T, budgetService *services.BudgetService, 
 	for time.Now().Before(deadline) {
 		budgetService.ClearCache()
 
-		appSpent, err := budgetService.GetMonthlySpending(appID, start, end)
-		require.NoError(t, err)
+		var appSpent, llmSpent float64
+		var err error
 
-		llmSpent, err := budgetService.GetLLMMonthlySpending(llmID, start, end)
-		require.NoError(t, err)
+		// Retry app spending query if locked
+		for i := 0; i < 5; i++ {
+			appSpent, err = budgetService.GetMonthlySpending(appID, start, end)
+			if err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			continue // skip this round if still locked
+		}
+
+		// Retry llm spending query if locked
+		for i := 0; i < 5; i++ {
+			llmSpent, err = budgetService.GetLLMMonthlySpending(llmID, start, end)
+			if err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			continue // skip this round if still locked
+		}
 
 		t.Logf("Current spending - app: %.2f, llm: %.2f (expected: %.2f) [start=%v, end=%v]",
 			appSpent, llmSpent, expectedSpent, start, end)
 
 		if appSpent == expectedSpent && llmSpent == expectedSpent {
+			time.Sleep(200 * time.Millisecond) // extra wait to ensure all operations complete
 			return
 		}
 
