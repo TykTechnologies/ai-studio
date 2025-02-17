@@ -6,14 +6,17 @@ import (
 )
 
 type Service struct {
-	DB     *gorm.DB
-	Budget *BudgetService
+	DB                  *gorm.DB
+	Budget              *BudgetService
+	NotificationService *NotificationService
 }
 
 func NewService(db *gorm.DB) *Service {
 	secrets.SetDBRef(db)
+	notificationService := NewNotificationService(db, nil) // We'll add mail service later if needed
 	return &Service{
-		DB: db,
+		DB:                  db,
+		NotificationService: notificationService,
 	}
 }
 

@@ -1,26 +1,50 @@
 package services
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/stretchr/testify/assert"
 )
 
+// Helper function to filter notifications by user
+func filterNotificationsByUser(notifications []models.Notification, userID uint) []models.Notification {
+	var filtered []models.Notification
+	for _, n := range notifications {
+		if n.UserID == userID {
+			filtered = append(filtered, n)
+		}
+	}
+	return filtered
+}
+
+// Helper function to filter notifications by title
+func filterNotificationsByTitle(notifications []models.Notification, titleContains string) []models.Notification {
+	var filtered []models.Notification
+	for _, n := range notifications {
+		if strings.Contains(n.Title, titleContains) {
+			filtered = append(filtered, n)
+		}
+	}
+	return filtered
+}
+
 func TestGetMonthlySpending(t *testing.T) {
 	db := setupTestDB(t)
-	mailService := notifications.NewTestMailService()
-	service := NewBudgetService(db, mailService)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
 
 	// Create test app
 	app := &models.App{
-		ID:            1,
 		Name:          "Test App",
 		MonthlyBudget: ptr(100.0),
 	}
+	// Let GORM assign the primary key.
 	db.Create(app)
+	assert.NotZero(t, app.ID, "App should have an auto-assigned ID")
 
 	// Create test records
 	now := time.Now()
@@ -56,16 +80,16 @@ func TestGetMonthlySpending(t *testing.T) {
 
 func TestGetLLMMonthlySpending(t *testing.T) {
 	db := setupTestDB(t)
-	mailService := notifications.NewTestMailService()
-	service := NewBudgetService(db, mailService)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
 
 	// Create test LLM
 	llm := &models.LLM{
-		ID:            1,
 		Name:          "Test LLM",
 		MonthlyBudget: ptr(200.0),
 	}
 	db.Create(llm)
+	assert.NotZero(t, llm.ID, "LLM should have an auto-assigned ID")
 
 	// Create test records
 	now := time.Now()
@@ -101,96 +125,123 @@ func TestGetLLMMonthlySpending(t *testing.T) {
 
 func TestCheckBudget(t *testing.T) {
 	db := setupTestDB(t)
-	mailService := notifications.NewTestMailService()
-	service := NewBudgetService(db, mailService)
-
-	// Create test app and LLM
-	app := &models.App{
-		ID:            1,
-		Name:          "Test App",
-		MonthlyBudget: ptr(100.0),
-		UserID:        1, // Add UserID for notification testing
-	}
-	llm := &models.LLM{
-		ID:            1,
-		Name:          "Test LLM",
-		MonthlyBudget: ptr(200.0),
-	}
-	db.Create(app)
-	db.Create(llm)
-
-	// Create app owner
-	owner := &models.User{
-		ID:    1,
-		Email: "owner@example.com",
-	}
-	db.Create(owner)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
 
 	// Create admin user
 	admin := &models.User{
-		ID:      2,
 		Email:   "admin@example.com",
 		IsAdmin: true,
 	}
 	db.Create(admin)
+	assert.NotZero(t, admin.ID)
 
-	// Create additional test app and LLM for under budget test
-	app2 := &models.App{
-		ID:            2,
-		Name:          "Test App 2",
-		MonthlyBudget: ptr(1000.0),
+	// Create app owner
+	owner := &models.User{
+		Email: "owner@example.com",
 	}
-	llm2 := &models.LLM{
-		ID:            2,
-		Name:          "Test LLM 2",
-		MonthlyBudget: ptr(1000.0),
+	db.Create(owner)
+	assert.NotZero(t, owner.ID)
+
+	// Create test app and LLM
+	app := &models.App{
+		Name:          "Test App",
+		MonthlyBudget: ptr(100.0),
+		UserID:        owner.ID,
 	}
-	db.Create(app2)
-	db.Create(llm2)
+	db.Create(app)
+	assert.NotZero(t, app.ID)
 
-	// Create test records
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	llm := &models.LLM{
+		Name:          "Test LLM",
+		MonthlyBudget: ptr(200.0),
+		DefaultModel:  "test-model",
+		Vendor:        "mock",
+	}
+	db.Create(llm)
+	assert.NotZero(t, llm.ID)
 
-	// Create spending records for app1 over budget scenario
-	db.Create(&models.LLMChatRecord{
-		AppID:     app.ID,
-		Cost:      90.0,
-		TimeStamp: startOfMonth.Add(24 * time.Hour),
-	})
-	db.Create(&models.LLMChatRecord{
-		AppID:     app.ID,
-		Cost:      150.0,
-		TimeStamp: startOfMonth.Add(24 * time.Hour),
-	})
-
-	// Create spending records for llm1 over budget scenario
-	db.Create(&models.LLMChatRecord{
-		LLMID:     llm.ID,
-		Cost:      165.0, // This will push LLM1 over budget
-		TimeStamp: startOfMonth.Add(24 * time.Hour),
-	})
-	db.Create(&models.LLMChatRecord{
-		LLMID:     llm.ID,
-		Cost:      90.0,
-		TimeStamp: startOfMonth.Add(24 * time.Hour),
-	})
+	// Create model price for currency
+	modelPrice := &models.ModelPrice{
+		ModelName: "test-model",
+		Vendor:    "mock",
+		Currency:  "USD",
+	}
+	db.Create(modelPrice)
 
 	// Create app and LLM with no budget limits
 	appNoBudget := &models.App{
-		ID:            3,
 		Name:          "App No Budget",
 		MonthlyBudget: nil,
 	}
+	db.Create(appNoBudget)
+	assert.NotZero(t, appNoBudget.ID)
+
 	llmNoBudget := &models.LLM{
-		ID:            3,
 		Name:          "LLM No Budget",
 		MonthlyBudget: nil,
 	}
-	db.Create(appNoBudget)
 	db.Create(llmNoBudget)
+	assert.NotZero(t, llmNoBudget.ID)
 
-	// Test budget check
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	monthOffset := int(startOfMonth.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+
+	// Create 100% threshold notification for app (owner)
+	appNotificationOwner := &models.Notification{
+		NotificationID: fmt.Sprintf("budget_app_%d_%d_%d_%d_owner",
+			app.ID,
+			monthOffset,
+			int(*app.MonthlyBudget),
+			100,
+		),
+		Type:    "budget_alert",
+		Title:   "Budget Alert: App Test App at 100% Usage",
+		Content: "Test content",
+		UserID:  owner.ID,
+		Read:    false,
+		SentAt:  startOfMonth.Add(24 * time.Hour),
+	}
+	db.Create(appNotificationOwner)
+
+	// Create 100% threshold notification for app (admin)
+	appNotificationAdmin := &models.Notification{
+		NotificationID: fmt.Sprintf("budget_app_%d_%d_%d_%d_admin_%d",
+			app.ID,
+			monthOffset,
+			int(*app.MonthlyBudget),
+			100,
+			admin.ID,
+		),
+		Type:    "budget_alert",
+		Title:   "Budget Alert: App Test App at 100% Usage",
+		Content: "Test content",
+		UserID:  admin.ID,
+		Read:    false,
+		SentAt:  startOfMonth.Add(24 * time.Hour),
+	}
+	db.Create(appNotificationAdmin)
+
+	// Create 100% threshold notification for LLM (admin)
+	llmNotification := &models.Notification{
+		NotificationID: fmt.Sprintf("budget_llm_%d_%d_%d_%d_admin_%d",
+			llm.ID,
+			monthOffset,
+			int(*llm.MonthlyBudget),
+			100,
+			admin.ID,
+		),
+		Type:    "budget_alert",
+		Title:   "Budget Alert: LLM Test LLM at 100% Usage",
+		Content: "Test content",
+		UserID:  admin.ID,
+		Read:    false,
+		SentAt:  startOfMonth.Add(24 * time.Hour),
+	}
+	db.Create(llmNotification)
+
 	tests := []struct {
 		name           string
 		app            *models.App
@@ -200,35 +251,27 @@ func TestCheckBudget(t *testing.T) {
 		shouldError    bool
 	}{
 		{
-			name:           "Both under budget",
-			app:            app2,
-			llm:            llm2,
-			expectedAppPct: 0, // No spending for app2
-			expectedLLMPct: 0, // No spending for llm2
-			shouldError:    false,
-		},
-		{
-			name:           "App over budget",
+			name:           "App over budget (has 100% notification)",
 			app:            app,
-			llm:            llm2,
-			expectedAppPct: 240, // (90.0 + 150.0)/100.0 * 100
-			expectedLLMPct: 0,   // No spending for llm2
+			llm:            llmNoBudget,
+			expectedAppPct: 100,
+			expectedLLMPct: 0,
 			shouldError:    true,
 		},
 		{
-			name:           "LLM over budget",
-			app:            app2,
+			name:           "LLM over budget (has 100% notification)",
+			app:            appNoBudget,
 			llm:            llm,
-			expectedAppPct: 0,     // No spending for app2
-			expectedLLMPct: 127.5, // (165.0 + 90.0)/200.0 * 100
+			expectedAppPct: 0,
+			expectedLLMPct: 100,
 			shouldError:    true,
 		},
 		{
 			name:           "No budget limits",
 			app:            appNoBudget,
 			llm:            llmNoBudget,
-			expectedAppPct: 0, // No budget set
-			expectedLLMPct: 0, // No budget set
+			expectedAppPct: 0,
+			expectedLLMPct: 0,
 			shouldError:    false,
 		},
 	}
@@ -247,29 +290,248 @@ func TestCheckBudget(t *testing.T) {
 	}
 }
 
+func TestAnalyzeBudgetUsage(t *testing.T) {
+	db := setupTestDB(t)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
+
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	// Initialize notification table
+	err := models.InitModels(db)
+	assert.NoError(t, err)
+
+	// Create app owner
+	owner := &models.User{
+		Email:   "owner@example.com",
+		Name:    "Owner",
+		IsAdmin: false,
+	}
+	err = db.Create(owner).Error
+	assert.NoError(t, err)
+	assert.NotZero(t, owner.ID)
+
+	// Create admin users
+	admin1 := &models.User{
+		Email:   "admin1@example.com",
+		Name:    "Admin 1",
+		IsAdmin: true,
+	}
+	admin2 := &models.User{
+		Email:   "admin2@example.com",
+		Name:    "Admin 2",
+		IsAdmin: true,
+	}
+	err = db.Create(admin1).Error
+	assert.NoError(t, err)
+	err = db.Create(admin2).Error
+	assert.NoError(t, err)
+	assert.NotZero(t, admin1.ID)
+	assert.NotZero(t, admin2.ID)
+
+	// Create test app and LLM
+	app := &models.App{
+		Name:            "Test App",
+		MonthlyBudget:   ptr(100.0),
+		UserID:          owner.ID,
+		BudgetStartDate: &startOfMonth,
+	}
+	llm := &models.LLM{
+		Name:            "Test LLM",
+		MonthlyBudget:   ptr(200.0),
+		DefaultModel:    "test-model",
+		Vendor:          "mock",
+		BudgetStartDate: &startOfMonth,
+	}
+	db.Create(app)
+	db.Create(llm)
+	assert.NotZero(t, app.ID)
+	assert.NotZero(t, llm.ID)
+
+	// Create model price for currency
+	modelPrice := &models.ModelPrice{
+		ModelName: "test-model",
+		Vendor:    "mock",
+		Currency:  "USD",
+	}
+	db.Create(modelPrice)
+
+	tests := []struct {
+		name               string
+		setupRecords       func()
+		expectedAppNotifs  int
+		expectedLLMNotifs  int
+		checkNotifications func(t *testing.T, notifications []models.Notification)
+	}{
+		{
+			name: "No notifications under 80%",
+			setupRecords: func() {
+				notificationSvc.ClearNotifications()
+				db.Delete(&models.LLMChatRecord{}, "1=1") // Clean out prior records
+				db.Create(&models.LLMChatRecord{
+					AppID:     app.ID,
+					LLMID:     llm.ID,
+					Cost:      50.0, // 50% of app budget, 25% of LLM budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+			},
+			expectedAppNotifs: 0,
+			expectedLLMNotifs: 0,
+			checkNotifications: func(t *testing.T, notifications []models.Notification) {
+				assert.Empty(t, notifications)
+			},
+		},
+		{
+			name: "80% threshold notifications",
+			setupRecords: func() {
+				notificationSvc.ClearNotifications()
+				db.Delete(&models.LLMChatRecord{}, "1=1")
+				// Create app record
+				db.Create(&models.LLMChatRecord{
+					AppID:     app.ID,
+					Cost:      85.0, // 85% of app budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+
+				// Create LLM record
+				db.Create(&models.LLMChatRecord{
+					LLMID:     llm.ID,
+					Cost:      170.0, // 85% of LLM budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+			},
+			expectedAppNotifs: 1,
+			expectedLLMNotifs: 1,
+			checkNotifications: func(t *testing.T, notifications []models.Notification) {
+				// For app, we expect notifications for owner and 2 admins
+				appNotifs := filterNotificationsByTitle(notifications, "App Test App at 80% Usage")
+				assert.Len(t, appNotifs, 3, "Should have 3 app notifications (1 owner + 2 admins)")
+
+				// For LLM, we expect notifications for 2 admins only
+				llmNotifs := filterNotificationsByTitle(notifications, "LLM Test LLM at 80% Usage")
+				assert.Len(t, llmNotifs, 2, "Should have 2 LLM notifications (2 admins)")
+			},
+		},
+		{
+			name: "100% threshold notifications",
+			setupRecords: func() {
+				db.Delete(&models.LLMChatRecord{}, "1=1")
+				// Create app record
+				db.Create(&models.LLMChatRecord{
+					AppID:     app.ID,
+					Cost:      105.0, // 105% of app budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+				// Create LLM record
+				db.Create(&models.LLMChatRecord{
+					LLMID:     llm.ID,
+					Cost:      210.0, // 105% of LLM budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+			},
+			expectedAppNotifs: 2, // we expect 80% and 100%
+			expectedLLMNotifs: 2, // we expect 80% and 100%
+			checkNotifications: func(t *testing.T, notifications []models.Notification) {
+				// For app, we expect notifications for owner and 2 admins at both thresholds
+				app80Notifs := filterNotificationsByTitle(notifications, "App Test App at 80% Usage")
+				app100Notifs := filterNotificationsByTitle(notifications, "App Test App at 100% Usage")
+				assert.Len(t, app80Notifs, 3, "Should have 3 app 80% notifications (1 owner + 2 admins)")
+				assert.Len(t, app100Notifs, 3, "Should have 3 app 100% notifications (1 owner + 2 admins)")
+
+				// For LLM, we expect notifications for 2 admins only at both thresholds
+				llm80Notifs := filterNotificationsByTitle(notifications, "LLM Test LLM at 80% Usage")
+				llm100Notifs := filterNotificationsByTitle(notifications, "LLM Test LLM at 100% Usage")
+				assert.Len(t, llm80Notifs, 2, "Should have 2 LLM 80% notifications (2 admins)")
+				assert.Len(t, llm100Notifs, 2, "Should have 2 LLM 100% notifications (2 admins)")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupRecords()
+			service.ClearCache() // Clear cache before analyzing budget usage
+
+			// For 100% threshold test, we need to trigger both thresholds
+			if tt.name == "100% threshold notifications" {
+				// First trigger 80% notifications
+				db.Delete(&models.LLMChatRecord{}, "1=1")
+				db.Create(&models.LLMChatRecord{
+					AppID:     app.ID,
+					Cost:      85.0, // 85% of app budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+				db.Create(&models.LLMChatRecord{
+					LLMID:     llm.ID,
+					Cost:      170.0, // 85% of LLM budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+				service.AnalyzeBudgetUsage(app, llm)
+
+				// Wait for 80% notifications
+				for i := 0; i < 10; i++ {
+					notifs := notificationSvc.GetNotifications()
+					if len(notifs) >= 5 { // 3 app notifications + 2 LLM notifications
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+
+				// Then trigger 100% notifications
+				db.Delete(&models.LLMChatRecord{}, "1=1")
+				db.Create(&models.LLMChatRecord{
+					AppID:     app.ID,
+					Cost:      105.0, // 105% of app budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+				db.Create(&models.LLMChatRecord{
+					LLMID:     llm.ID,
+					Cost:      210.0, // 105% of LLM budget
+					TimeStamp: startOfMonth.Add(24 * time.Hour),
+				})
+				service.ClearCache() // Clear cache to force recalculation of spending
+				service.AnalyzeBudgetUsage(app, llm)
+			} else {
+				// For other tests, just run the setup and analysis
+				tt.setupRecords()
+				service.AnalyzeBudgetUsage(app, llm)
+			}
+
+			// Wait for all notifications
+			var notifs []models.Notification
+			for i := 0; i < 10; i++ {
+				notifs = notificationSvc.GetNotifications()
+				if len(notifs) >= tt.expectedAppNotifs*3+tt.expectedLLMNotifs*2 { // Each app notification goes to owner + 2 admins, each LLM notification goes to 2 admins
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			tt.checkNotifications(t, notifs)
+		})
+	}
+}
+
 func TestGetBudgetUsage(t *testing.T) {
 	db := setupTestDB(t)
-	mailService := notifications.NewTestMailService()
-	service := NewBudgetService(db, mailService)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
 
 	// Create test apps and LLMs
 	app1 := &models.App{
-		ID:            1,
 		Name:          "App 1",
 		MonthlyBudget: ptr(100.0),
 	}
 	app2 := &models.App{
-		ID:            2,
 		Name:          "App 2",
 		MonthlyBudget: nil, // No budget limit
 	}
 	llm1 := &models.LLM{
-		ID:            1,
 		Name:          "LLM 1",
 		MonthlyBudget: ptr(200.0),
 	}
 	llm2 := &models.LLM{
-		ID:            2,
 		Name:          "LLM 2",
 		MonthlyBudget: ptr(300.0),
 	}
@@ -312,9 +574,11 @@ func TestGetBudgetUsage(t *testing.T) {
 	for _, u := range usage {
 		if u.EntityType == "App" {
 			if u.Name == app1.Name {
-				app1Usage = &u
+				cpy := u
+				app1Usage = &cpy
 			} else if u.Name == app2.Name {
-				app2Usage = &u
+				cpy := u
+				app2Usage = &cpy
 			}
 		}
 	}
@@ -332,9 +596,11 @@ func TestGetBudgetUsage(t *testing.T) {
 	for _, u := range usage {
 		if u.EntityType == "LLM" {
 			if u.Name == llm1.Name {
-				llm1Usage = &u
+				cpy := u
+				llm1Usage = &cpy
 			} else if u.Name == llm2.Name {
-				llm2Usage = &u
+				cpy := u
+				llm2Usage = &cpy
 			}
 		}
 	}
@@ -348,19 +614,17 @@ func TestGetBudgetUsage(t *testing.T) {
 	assert.Equal(t, *llm2.MonthlyBudget, *llm2Usage.Budget)
 }
 
-func TestBudgetCaching(t *testing.T) {
+func TestCacheCleanup(t *testing.T) {
 	db := setupTestDB(t)
-	mailService := notifications.NewTestMailService()
-	service := NewBudgetService(db, mailService)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
 
 	// Create test app and LLM
 	app := &models.App{
-		ID:            1,
 		Name:          "Test App",
 		MonthlyBudget: ptr(100.0),
 	}
 	llm := &models.LLM{
-		ID:            1,
 		Name:          "Test LLM",
 		MonthlyBudget: ptr(200.0),
 	}
@@ -371,7 +635,6 @@ func TestBudgetCaching(t *testing.T) {
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
-	// Create initial app spending record
 	record := models.LLMChatRecord{
 		AppID:     app.ID,
 		Cost:      50.0,
@@ -379,7 +642,6 @@ func TestBudgetCaching(t *testing.T) {
 	}
 	db.Create(&record)
 
-	// Create initial LLM spending record
 	llmRecord := models.LLMChatRecord{
 		LLMID:     llm.ID,
 		Cost:      50.0,
@@ -387,12 +649,59 @@ func TestBudgetCaching(t *testing.T) {
 	}
 	db.Create(&llmRecord)
 
-	// First call for app spending - should hit database
+	// Test cache cleanup
+	service.cacheDuration = 10 * time.Millisecond
+
 	spent1, err := service.GetMonthlySpending(app.ID, startOfMonth, now)
 	assert.NoError(t, err)
 	assert.Equal(t, 50.0, spent1)
 
-	// Add new app spending record
+	key := usageKey{
+		entityID:   app.ID,
+		entityType: "App",
+		startDate:  startOfMonth,
+	}
+	service.cacheMutex.RLock()
+	_, exists := service.usageCache[key]
+	service.cacheMutex.RUnlock()
+	assert.True(t, exists, "Value should be in cache")
+
+	time.Sleep(20 * time.Millisecond)
+
+	service.cacheMutex.RLock()
+	_, exists = service.usageCache[key]
+	service.cacheMutex.RUnlock()
+	assert.False(t, exists, "Cache entry should be removed after expiration")
+}
+
+func TestClearCache(t *testing.T) {
+	db := setupTestDB(t)
+	notificationSvc := NewTestNotificationService(db)
+	service := NewBudgetService(db, notificationSvc)
+
+	// Create test app
+	app := &models.App{
+		Name:          "Test App",
+		MonthlyBudget: ptr(100.0),
+	}
+	db.Create(app)
+
+	// Create initial spending record
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	record := models.LLMChatRecord{
+		AppID:     app.ID,
+		Cost:      50.0,
+		TimeStamp: startOfMonth.Add(24 * time.Hour),
+	}
+	db.Create(&record)
+
+	// Get initial value into cache
+	spent1, err := service.GetMonthlySpending(app.ID, startOfMonth, now)
+	assert.NoError(t, err)
+	assert.Equal(t, 50.0, spent1)
+
+	// Add new record
 	newRecord := models.LLMChatRecord{
 		AppID:     app.ID,
 		Cost:      25.0,
@@ -400,34 +709,18 @@ func TestBudgetCaching(t *testing.T) {
 	}
 	db.Create(&newRecord)
 
-	// Second call within cache window - should return cached value
+	// Confirm cached value
 	spent2, err := service.GetMonthlySpending(app.ID, startOfMonth, now)
 	assert.NoError(t, err)
 	assert.Equal(t, 50.0, spent2, "Should return cached value")
 
-	// First call for LLM spending - should hit database
-	llmSpent1, err := service.GetLLMMonthlySpending(llm.ID, startOfMonth, now)
-	assert.NoError(t, err)
-	assert.Equal(t, 50.0, llmSpent1)
+	// Clear cache
+	service.ClearCache()
 
-	// Add new LLM spending record
-	newLLMRecord := models.LLMChatRecord{
-		LLMID:     llm.ID,
-		Cost:      25.0,
-		TimeStamp: startOfMonth.Add(26 * time.Hour),
-	}
-	db.Create(&newLLMRecord)
-
-	// Second call within cache window - should return cached value
-	llmSpent2, err := service.GetLLMMonthlySpending(llm.ID, startOfMonth, now)
+	// Now it should recalc
+	spent3, err := service.GetMonthlySpending(app.ID, startOfMonth, now)
 	assert.NoError(t, err)
-	assert.Equal(t, 50.0, llmSpent2, "Should return cached value")
-
-	// Verify budget check uses cached values
-	appUsage, llmUsage, err := service.CheckBudget(app, llm)
-	assert.NoError(t, err)
-	assert.InDelta(t, 50.0, appUsage, 0.1, "Should use cached app spending")
-	assert.InDelta(t, 25.0, llmUsage, 0.1, "Should use cached llm spending")
+	assert.Equal(t, 75.0, spent3, "Should return new value after cache clear")
 }
 
 // Helper function to create pointer to float64

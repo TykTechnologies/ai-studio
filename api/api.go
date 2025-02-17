@@ -267,6 +267,12 @@ func (a *API) setupRoutes() {
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
 
+	// Notification routes
+	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
+	authed.GET("/api/v1/notifications", notificationHandlers.ListNotifications)
+	authed.GET("/api/v1/notifications/unread/count", notificationHandlers.UnreadCount)
+	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
+
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
 	v1.Use(a.auth.AdminOnly())

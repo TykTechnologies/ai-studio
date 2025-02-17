@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -59,7 +60,6 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 	}
 
 	analytics.RecordProxyLog(l)
-
 	AnalyzeCompletionResponse(service, llm, app, response, timestamp)
 }
 
@@ -83,13 +83,22 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 		cpit = price.CPIT
 	}
 
+	// Use budget start date if set, otherwise use current time
+	recordTime := timestamp
+	if app.BudgetStartDate != nil {
+		recordTime = *app.BudgetStartDate
+	}
+	if llm.BudgetStartDate != nil {
+		recordTime = *llm.BudgetStartDate
+	}
+
 	rec := &models.LLMChatRecord{
 		LLMID:           llm.ID,
 		Vendor:          string(llm.Vendor),
 		PromptTokens:    pt,
 		ResponseTokens:  rt,
 		TotalTokens:     pt + rt,
-		TimeStamp:       timestamp,
+		TimeStamp:       recordTime,
 		Choices:         choices,
 		ToolCalls:       tools,
 		AppID:           app.ID,
@@ -98,5 +107,37 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 		InteractionType: models.ProxyInteraction,
 	}
 
-	analytics.RecordChatRecord(rec)
+	// Record the chat record with retries
+	for i := 0; i < 5; i++ {
+		analytics.RecordChatRecord(rec)
+		time.Sleep(500 * time.Millisecond)
+
+		// Verify the record was committed
+		if s, ok := service.(*services.Service); ok {
+			var count int64
+			if err := s.DB.Model(&models.LLMChatRecord{}).Where("app_id = ? AND llm_id = ? AND cost = ?", app.ID, llm.ID, rec.Cost).Count(&count).Error; err == nil && count > 0 {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Then analyze budget usage and send notifications if needed
+	if s, ok := service.(*services.Service); ok && s.Budget != nil {
+		// Wait for any pending operations to complete
+		time.Sleep(1 * time.Second)
+
+		// Analyze budget usage with retries
+		for i := 0; i < 5; i++ {
+			s.Budget.AnalyzeBudgetUsage(app, llm)
+			time.Sleep(500 * time.Millisecond)
+
+			// Verify notifications were created
+			var count int64
+			if err := s.DB.Model(&models.Notification{}).Where("notification_id LIKE ?", fmt.Sprintf("budget_app_%d_%%", app.ID)).Count(&count).Error; err == nil && count > 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }

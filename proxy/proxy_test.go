@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -15,8 +14,8 @@ func TestProxySetup(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	service := services.NewService(db)
-	mailService := notifications.NewTestMailService()
-	budgetService := services.NewBudgetService(db, mailService)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := services.NewBudgetService(db, notificationSvc)
 
 	config := &Config{Port: 8080}
 	p := NewProxy(service, config, budgetService)
@@ -28,8 +27,8 @@ func TestConcurrentAccess(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	service := services.NewService(db)
-	mailService := notifications.NewTestMailService()
-	budgetService := services.NewBudgetService(db, mailService)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := services.NewBudgetService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 
 	var wg sync.WaitGroup

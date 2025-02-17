@@ -84,7 +84,7 @@ func main() {
 	// Create a new service instance
 	service := services.NewService(db)
 
-	// Initialize mail service first
+	// Initialize mail service and notification service
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
 	mailService := notifications.NewMailService(
 		appConf.FromEmail,
@@ -94,6 +94,9 @@ func main() {
 		appConf.SMTPPass,
 		mailer,
 	)
+
+	// Create notification service that will handle all notifications
+	notificationService := services.NewNotificationService(db, mailService)
 
 	// Initialize auth config and service
 	config := &auth.Config{
@@ -118,7 +121,7 @@ func main() {
 	ctx, stopRec := context.WithCancel(context.Background())
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
-	budgetService := services.NewBudgetService(db, mailService)
+	budgetService := services.NewBudgetService(db, notificationService)
 
 	// start the Proxy
 	pConfig := &proxy.Config{

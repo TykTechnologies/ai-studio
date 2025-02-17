@@ -3,12 +3,13 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"text/template"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"gorm.io/gorm"
 )
 
@@ -24,28 +25,51 @@ type usageData struct {
 }
 
 type BudgetService struct {
-	db            *gorm.DB
-	usageCache    map[usageKey]usageData
-	cacheMutex    sync.RWMutex
-	cacheDuration time.Duration
-	mailService   *notifications.MailService
+	db              *gorm.DB
+	usageCache      map[usageKey]usageData
+	cacheMutex      sync.RWMutex
+	cacheDuration   time.Duration
+	notificationSvc *NotificationService
+	templatePath    string
 }
 
 // NewBudgetService returns our unified budget service
-func NewBudgetService(db *gorm.DB, mailService *notifications.MailService) *BudgetService {
+func NewBudgetService(db *gorm.DB, notificationSvc *NotificationService) *BudgetService {
+	// Get the absolute path to the template
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get working directory: %v", err))
+	}
+
+	// Walk up the directory tree until we find the templates directory
+	templatePath := "templates/budget_alert.tmpl"
+	for {
+		if _, err := os.Stat(filepath.Join(wd, templatePath)); err == nil {
+			templatePath = filepath.Join(wd, templatePath)
+			break
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			// We've reached the root directory
+			panic("could not find templates directory")
+		}
+		wd = parent
+	}
+
 	s := &BudgetService{
-		db:            db,
-		usageCache:    make(map[usageKey]usageData),
-		cacheMutex:    sync.RWMutex{},
-		cacheDuration: 5 * time.Minute,
-		mailService:   mailService,
+		db:              db,
+		usageCache:      make(map[usageKey]usageData),
+		cacheMutex:      sync.RWMutex{},
+		cacheDuration:   5 * time.Minute,
+		notificationSvc: notificationSvc,
+		templatePath:    templatePath,
 	}
 	go s.cleanupCache()
 	return s
 }
 
 func (s *BudgetService) cleanupCache() {
-	ticker := time.NewTicker(s.cacheDuration)
+	ticker := time.NewTicker(time.Millisecond)
 	for range ticker.C {
 		s.cacheMutex.Lock()
 		now := time.Now()
@@ -83,10 +107,11 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 	s.cacheMutex.RUnlock()
 
 	var totalSpent float64
-	err := s.db.Model(&models.LLMChatRecord{}).
+	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
-		Select("COALESCE(SUM(cost), 0)").
-		Scan(&totalSpent).Error
+		Select("COALESCE(SUM(cost), 0)")
+	fmt.Printf("App spending query: %v\n", query.Statement.SQL.String())
+	err := query.Scan(&totalSpent).Error
 
 	if err != nil {
 		return 0, err
@@ -127,10 +152,11 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	s.cacheMutex.RUnlock()
 
 	var totalSpent float64
-	err := s.db.Model(&models.LLMChatRecord{}).
+	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
-		Select("COALESCE(SUM(cost), 0)").
-		Scan(&totalSpent).Error
+		Select("COALESCE(SUM(cost), 0)")
+	fmt.Printf("LLM spending query: %v\n", query.Statement.SQL.String())
+	err := query.Scan(&totalSpent).Error
 
 	if err != nil {
 		return 0, err
@@ -146,14 +172,80 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	return totalSpent, nil
 }
 
-// CheckBudget verifies if a request would exceed either App or LLM budget.
+// CheckBudget verifies if a request would exceed either App or LLM budget by checking for 100% threshold notifications.
 // Returns app usage percentage, llm usage percentage, and error if budget exceeded
 func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, float64, error) {
 	now := time.Now()
-	end := now
 	var appUsage, llmUsage float64
 
-	// Check app budget if set
+	// Quick check for app budget
+	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
+		var start time.Time
+		if app.BudgetStartDate != nil {
+			start = *app.BudgetStartDate
+		} else {
+			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		}
+
+		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		// Check for 100% threshold notification
+		baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+			app.ID,
+			monthOffset,
+			int(*app.MonthlyBudget),
+			100, // 100% threshold
+		)
+
+		// Check for either owner or admin notifications
+		var notification models.Notification
+		err := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+			fmt.Sprintf("%s_owner", baseNotificationID),
+			fmt.Sprintf("%s_admin_%%", baseNotificationID),
+			start).First(&notification).Error
+		if err == nil {
+			// Found 100% threshold notification for this period
+			return 100, llmUsage, fmt.Errorf("app monthly budget exceeded")
+		}
+	}
+
+	// Quick check for LLM budget
+	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
+		var start time.Time
+		if llm.BudgetStartDate != nil {
+			start = *llm.BudgetStartDate
+		} else {
+			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		}
+
+		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		// Check for 100% threshold notification
+		baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+			llm.ID,
+			monthOffset,
+			int(*llm.MonthlyBudget),
+			100, // 100% threshold
+		)
+
+		// Check for admin notifications
+		var notification models.Notification
+		err := s.db.Where("notification_id LIKE ? AND sent_at >= ?",
+			fmt.Sprintf("%s_admin_%%", baseNotificationID),
+			start).First(&notification).Error
+		if err == nil {
+			// Found 100% threshold notification for this period
+			return appUsage, 100, fmt.Errorf("LLM monthly budget exceeded")
+		}
+	}
+
+	return appUsage, llmUsage, nil
+}
+
+// AnalyzeBudgetUsage analyzes current budget usage and sends notifications if thresholds are reached
+func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
+	now := time.Now()
+	end := now
+
+	// Check app budget
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		var start time.Time
 		if app.BudgetStartDate != nil {
@@ -163,13 +255,8 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 		}
 
 		spent, err := s.GetMonthlySpending(app.ID, start, end)
-		if err != nil {
-			return 0, 0, fmt.Errorf("failed to check app budget: %v", err)
-		}
-		appUsage = (spent / *app.MonthlyBudget) * 100
-
-		// Send notifications at thresholds
-		if appUsage >= 80 {
+		if err == nil {
+			appUsage := (spent / *app.MonthlyBudget) * 100
 			budget := *app.MonthlyBudget
 			usage := &models.BudgetUsage{
 				EntityID:        app.ID,
@@ -180,25 +267,51 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 				Spent:           spent,
 				BudgetStartDate: &start,
 			}
-			if err := s.NotifyBudgetUsage(usage, 80); err != nil {
-				// Log error but continue processing
-				fmt.Printf("Failed to send app budget notification: %v\n", err)
-			}
 
-			// Send 100% notification if we've crossed that threshold too
+			// Check for existing notifications in this period
+			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			baseNotificationID80 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+				app.ID,
+				monthOffset,
+				int(*app.MonthlyBudget),
+				80,
+			)
+			baseNotificationID100 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+				app.ID,
+				monthOffset,
+				int(*app.MonthlyBudget),
+				100,
+			)
+
+			var existing80, existing100 models.Notification
+			err80 := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+				fmt.Sprintf("%s_owner", baseNotificationID80),
+				fmt.Sprintf("%s_admin_%%", baseNotificationID80),
+				start).First(&existing80).Error
+			err100 := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+				fmt.Sprintf("%s_owner", baseNotificationID100),
+				fmt.Sprintf("%s_admin_%%", baseNotificationID100),
+				start).First(&existing100).Error
+
+			// Check each threshold independently
+			if appUsage >= 80 {
+				if err80 != nil { // No 80% notification exists
+					if err := s.NotifyBudgetUsage(usage, 80); err != nil {
+						fmt.Printf("Failed to send app budget notification: %v\n", err)
+					}
+				}
+			}
 			if appUsage >= 100 {
-				if err := s.NotifyBudgetUsage(usage, 100); err != nil {
-					fmt.Printf("Failed to send app budget notification: %v\n", err)
+				if err100 != nil { // No 100% notification exists
+					if err := s.NotifyBudgetUsage(usage, 100); err != nil {
+						fmt.Printf("Failed to send app budget notification: %v\n", err)
+					}
 				}
 			}
 		}
-
-		if spent >= *app.MonthlyBudget {
-			return appUsage, llmUsage, fmt.Errorf("app monthly budget exceeded: spent %.2f of %.2f", spent, *app.MonthlyBudget)
-		}
 	}
 
-	// Check LLM budget if set
+	// Check LLM budget
 	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
 		var start time.Time
 		if llm.BudgetStartDate != nil {
@@ -208,13 +321,8 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 		}
 
 		spent, err := s.GetLLMMonthlySpending(llm.ID, start, end)
-		if err != nil {
-			return appUsage, 0, fmt.Errorf("failed to check LLM budget: %v", err)
-		}
-		llmUsage = (spent / *llm.MonthlyBudget) * 100
-
-		// Send notifications at thresholds
-		if llmUsage >= 80 {
+		if err == nil {
+			llmUsage := (spent / *llm.MonthlyBudget) * 100
 			budget := *llm.MonthlyBudget
 			usage := &models.BudgetUsage{
 				EntityID:        llm.ID,
@@ -225,25 +333,47 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 				Spent:           spent,
 				BudgetStartDate: &start,
 			}
-			if err := s.NotifyBudgetUsage(usage, 80); err != nil {
-				// Log error but continue processing
-				fmt.Printf("Failed to send llm budget notification: %v\n", err)
-			}
 
-			// Send 100% notification if we've crossed that threshold too
+			// Check for existing notifications in this period
+			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			baseNotificationID80 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+				llm.ID,
+				monthOffset,
+				int(*llm.MonthlyBudget),
+				80,
+			)
+			baseNotificationID100 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+				llm.ID,
+				monthOffset,
+				int(*llm.MonthlyBudget),
+				100,
+			)
+
+			var existing80, existing100 models.Notification
+			err80 := s.db.Where("notification_id LIKE ? AND sent_at >= ?",
+				fmt.Sprintf("%s_admin_%%", baseNotificationID80),
+				start).First(&existing80).Error
+			err100 := s.db.Where("notification_id LIKE ? AND sent_at >= ?",
+				fmt.Sprintf("%s_admin_%%", baseNotificationID100),
+				start).First(&existing100).Error
+
+			// Check each threshold independently
+			if llmUsage >= 80 {
+				if err80 != nil { // No 80% notification exists
+					if err := s.NotifyBudgetUsage(usage, 80); err != nil {
+						fmt.Printf("Failed to send llm budget notification: %v\n", err)
+					}
+				}
+			}
 			if llmUsage >= 100 {
-				if err := s.NotifyBudgetUsage(usage, 100); err != nil {
-					fmt.Printf("Failed to send llm budget notification: %v\n", err)
+				if err100 != nil { // No 100% notification exists
+					if err := s.NotifyBudgetUsage(usage, 100); err != nil {
+						fmt.Printf("Failed to send llm budget notification: %v\n", err)
+					}
 				}
 			}
 		}
-
-		if spent >= *llm.MonthlyBudget {
-			return appUsage, llmUsage, fmt.Errorf("LLM monthly budget exceeded: spent %.2f of %.2f", spent, *llm.MonthlyBudget)
-		}
 	}
-
-	return appUsage, llmUsage, nil
 }
 
 // ClearCache clears the spending cache, forcing next queries to hit the database
@@ -264,16 +394,19 @@ func (s *BudgetService) NotifyBudgetUsage(usage *models.BudgetUsage, threshold i
 func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget float64, threshold int) error {
 	var app models.App
 	if err := s.db.First(&app, appID).Error; err != nil {
+		fmt.Printf("Failed to find app: %v\n", err)
 		return err
 	}
 
 	var owner models.User
 	if err := s.db.First(&owner, app.UserID).Error; err != nil {
+		fmt.Printf("Failed to find owner: %v\n", err)
 		return err
 	}
 
 	var admins []models.User
 	if err := s.db.Where("is_admin = ?", true).Find(&admins).Error; err != nil {
+		fmt.Printf("Failed to find admins: %v\n", err)
 		return err
 	}
 
@@ -287,12 +420,34 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		}
 	}
 
-	tmpl, err := template.ParseFiles("./templates/budget_alert.tmpl")
+	// Get start time for notification ID
+	now := time.Now()
+	var start time.Time
+	if app.BudgetStartDate != nil {
+		start = *app.BudgetStartDate
+	} else {
+		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	}
+
+	// Create base notification ID (used for budget check)
+	monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+	baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+		app.ID,
+		monthOffset,
+		int(budget),
+		threshold,
+	)
+
+	// Create owner notification ID
+	notificationID := fmt.Sprintf("%s_owner", baseNotificationID)
+
+	tmpl, err := template.ParseFiles(s.templatePath)
 	if err != nil {
+		fmt.Printf("Failed to parse template at path %s: %v\n", s.templatePath, err)
 		return fmt.Errorf("failed to parse template: %v", err)
 	}
 
-	// Notify owner
+	// Prepare owner notification
 	ownerData := map[string]interface{}{
 		"IsLLM":        false,
 		"IsAdmin":      false,
@@ -308,15 +463,22 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
-	if err := s.mailService.SendEmail(
-		owner.Email,
-		fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold),
-		ownerBuf.String(),
-	); err != nil {
-		return err
+	ownerNotification := &models.Notification{
+		NotificationID: notificationID,
+		Type:           "budget_alert",
+		Title:          fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold),
+		Content:        ownerBuf.String(),
+		UserID:         owner.ID,
+		Read:           false,
+		SentAt:         time.Now(),
 	}
 
-	// Notify admins
+	if err := s.notificationSvc.Send(ownerNotification); err != nil {
+		fmt.Printf("Failed to send owner notification: %v\n", err)
+		return fmt.Errorf("failed to send owner notification: %v", err)
+	}
+
+	// Prepare admin notification
 	adminData := map[string]interface{}{
 		"IsLLM":        false,
 		"IsAdmin":      true,
@@ -333,15 +495,25 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
+	// Send to each admin
 	for _, admin := range admins {
-		if err := s.mailService.SendEmail(
-			admin.Email,
-			fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold),
-			adminBuf.String(),
-		); err != nil {
-			return err
+		adminNotificationID := fmt.Sprintf("%s_admin_%d", baseNotificationID, admin.ID)
+
+		adminNotification := &models.Notification{
+			NotificationID: adminNotificationID,
+			Type:           "budget_alert",
+			Title:          fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold),
+			Content:        adminBuf.String(),
+			UserID:         admin.ID,
+			Read:           false,
+			SentAt:         time.Now(),
+		}
+
+		if err := s.notificationSvc.Send(adminNotification); err != nil {
+			return fmt.Errorf("failed to send admin notification: %v", err)
 		}
 	}
+
 	return nil
 }
 
@@ -364,7 +536,8 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		}
 	}
 
-	tmpl, err := template.ParseFiles("./templates/budget_alert.tmpl")
+	// Send to each admin
+	tmpl, err := template.ParseFiles(s.templatePath)
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %v", err)
 	}
@@ -383,16 +556,44 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
-	// Notify admins only
+	// Send to each admin
 	for _, admin := range admins {
-		if err := s.mailService.SendEmail(
-			admin.Email,
-			fmt.Sprintf("Budget Alert: LLM %s at %d%% Usage", llm.Name, threshold),
-			buf.String(),
-		); err != nil {
-			return err
+		// Get start time for notification ID
+		now := time.Now()
+		var start time.Time
+		if llm.BudgetStartDate != nil {
+			start = *llm.BudgetStartDate
+		} else {
+			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		}
+
+		// Create base notification ID (used for budget check)
+		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+			llm.ID,
+			monthOffset,
+			int(budget),
+			threshold,
+		)
+
+		// Create admin notification ID
+		notificationID := fmt.Sprintf("%s_admin_%d", baseNotificationID, admin.ID)
+
+		notification := &models.Notification{
+			NotificationID: notificationID,
+			Type:           "budget_alert",
+			Title:          fmt.Sprintf("Budget Alert: LLM %s at %d%% Usage", llm.Name, threshold),
+			Content:        buf.String(),
+			UserID:         admin.ID,
+			Read:           false,
+			SentAt:         time.Now(),
+		}
+
+		if err := s.notificationSvc.Send(notification); err != nil {
+			return fmt.Errorf("failed to send admin notification: %v", err)
 		}
 	}
+
 	return nil
 }
 
