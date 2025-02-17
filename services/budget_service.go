@@ -33,6 +33,34 @@ type BudgetService struct {
 	templatePath    string
 }
 
+// calculateBudgetPeriodStart determines the start of the current budget period
+// based on a reference budget start date. It uses the day of the month from
+// the reference date to calculate the current period's start.
+func (s *BudgetService) calculateBudgetPeriodStart(referenceDate *time.Time, now time.Time) time.Time {
+	if referenceDate == nil {
+		// If no reference date, use 1st of current month
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	}
+
+	budgetDay := referenceDate.Day()
+	currentYear := now.Year()
+	currentMonth := now.Month()
+
+	// If we haven't reached the budget day in current month,
+	// the period started on the budget day of previous month
+	if now.Day() < budgetDay {
+		// Go back one month
+		if currentMonth == time.January {
+			currentMonth = time.December
+			currentYear--
+		} else {
+			currentMonth--
+		}
+	}
+
+	return time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+}
+
 // NewBudgetService returns our unified budget service
 func NewBudgetService(db *gorm.DB, notificationSvc *NotificationService) *BudgetService {
 	// Get the absolute path to the template
@@ -180,13 +208,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 
 	// Quick check for app budget
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
-		var start time.Time
-		if app.BudgetStartDate != nil {
-			start = *app.BudgetStartDate
-		} else {
-			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		}
-
+		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
 		// Check for 100% threshold notification
 		baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
@@ -210,13 +232,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 
 	// Quick check for LLM budget
 	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
-		var start time.Time
-		if llm.BudgetStartDate != nil {
-			start = *llm.BudgetStartDate
-		} else {
-			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		}
-
+		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
 		// Check for 100% threshold notification
 		baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
@@ -247,13 +263,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 
 	// Check app budget
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
-		var start time.Time
-		if app.BudgetStartDate != nil {
-			start = *app.BudgetStartDate
-		} else {
-			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		}
-
+		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
 		spent, err := s.GetMonthlySpending(app.ID, start, end)
 		if err == nil {
 			appUsage := (spent / *app.MonthlyBudget) * 100
@@ -313,13 +323,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 
 	// Check LLM budget
 	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
-		var start time.Time
-		if llm.BudgetStartDate != nil {
-			start = *llm.BudgetStartDate
-		} else {
-			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		}
-
+		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
 		spent, err := s.GetLLMMonthlySpending(llm.ID, start, end)
 		if err == nil {
 			llmUsage := (spent / *llm.MonthlyBudget) * 100
@@ -422,12 +426,7 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 
 	// Get start time for notification ID
 	now := time.Now()
-	var start time.Time
-	if app.BudgetStartDate != nil {
-		start = *app.BudgetStartDate
-	} else {
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	}
+	start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
 
 	// Create base notification ID (used for budget check)
 	monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
@@ -560,12 +559,7 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 	for _, admin := range admins {
 		// Get start time for notification ID
 		now := time.Now()
-		var start time.Time
-		if llm.BudgetStartDate != nil {
-			start = *llm.BudgetStartDate
-		} else {
-			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		}
+		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
 
 		// Create base notification ID (used for budget check)
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
@@ -600,7 +594,6 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 func (s *BudgetService) GetBudgetUsage() ([]models.BudgetUsage, error) {
 	var usages []models.BudgetUsage
 	now := time.Now()
-	defaultStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
 	// Get all Apps
 	var apps []models.App
@@ -608,12 +601,7 @@ func (s *BudgetService) GetBudgetUsage() ([]models.BudgetUsage, error) {
 		return nil, fmt.Errorf("failed to fetch apps: %v", err)
 	}
 	for _, app := range apps {
-		// Use budget start date if set, otherwise use start of current month
-		start := defaultStart
-		if app.BudgetStartDate != nil {
-			start = *app.BudgetStartDate
-		}
-
+		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
 		spent, err := s.GetMonthlySpending(app.ID, start, now)
 		if err != nil {
 			continue
@@ -638,12 +626,7 @@ func (s *BudgetService) GetBudgetUsage() ([]models.BudgetUsage, error) {
 		return nil, fmt.Errorf("failed to fetch LLMs: %v", err)
 	}
 	for _, llm := range llms {
-		// Use budget start date if set, otherwise use start of current month
-		start := defaultStart
-		if llm.BudgetStartDate != nil {
-			start = *llm.BudgetStartDate
-		}
-
+		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
 		spent, err := s.GetLLMMonthlySpending(llm.ID, start, now)
 		if err != nil {
 			continue

@@ -150,7 +150,8 @@ func TestGetChatRecordsPerDay(t *testing.T) {
 		})
 	}
 
-	chartData, err := GetChatRecordsPerDay(db, startDate, startDate.AddDate(0, 0, 4))
+	endDate := startDate.AddDate(0, 0, 4)
+	chartData, err := GetChatRecordsPerDay(db, &startDate, &endDate)
 	assert.NoError(t, err)
 	assert.Len(t, chartData.Labels, 5)
 	assert.Len(t, chartData.Data, 5)

@@ -129,7 +129,7 @@ func RecordContentMessage(
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
 	rec.ResponseTokens = responseTokens
-	rec.TotalTokens = totalTokens
+	rec.TotalTokens = promptTokens + responseTokens
 	rec.TimeStamp = t
 	rec.UserID = userID
 	rec.ToolCalls = toolCalls

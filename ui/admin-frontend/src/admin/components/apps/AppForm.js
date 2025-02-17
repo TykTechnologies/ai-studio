@@ -165,16 +165,21 @@ const AppForm = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === "monthly_budget") {
-      const numValue = value === '' ? null : parseFloat(value);
-      setApp(prev => ({
-        ...prev,
-        monthly_budget: numValue,
-        budget_start_date: numValue ? new Date().toISOString() : null
-      }));
-    } else {
-      setApp({ ...app, [name]: value });
-    }
+    setApp({ ...app, [name]: value });
+  };
+
+  const handleBudgetChange = (e) => {
+    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+    setApp(prev => ({
+      ...prev,
+      monthly_budget: value,
+      budget_start_date: value ? prev.budget_start_date || new Date().toISOString() : null
+    }));
+  };
+
+  const handleBudgetStartDateChange = (e) => {
+    const value = e.target.value ? new Date(e.target.value).toISOString() : null;
+    setApp(prev => ({ ...prev, budget_start_date: value }));
   };
 
   const handleMultiSelectChange = (e) => {
@@ -327,25 +332,41 @@ const AppForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Monthly Budget"
-                name="monthly_budget"
-                type="number"
-                inputProps={{
-                  step: "0.01",
-                  min: "0"
-                }}
-                value={app.monthly_budget || ''}
-                onChange={(e) => {
-                  const value = e.target.value === '' ? null : parseFloat(e.target.value);
-                  setApp(prev => ({ ...prev, monthly_budget: value }));
-                }}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                }}
-                helperText="Leave empty for no budget limit"
-              />
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Monthly Budget"
+                    name="monthly_budget"
+                    type="number"
+                    inputProps={{
+                      step: "0.01",
+                      min: "0"
+                    }}
+                    value={app.monthly_budget || ''}
+                    onChange={handleBudgetChange}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    }}
+                    helperText="Leave empty for no budget limit"
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Budget Start Date"
+                    name="budget_start_date"
+                    type="date"
+                    value={app.budget_start_date ? app.budget_start_date.split('T')[0] : ''}
+                    onChange={handleBudgetStartDateChange}
+                    disabled={!app.monthly_budget}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    helperText="Budget cycle start date"
+                  />
+                </Grid>
+              </Grid>
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
