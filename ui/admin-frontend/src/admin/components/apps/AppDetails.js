@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 import {
   Alert,
   Typography,
@@ -488,16 +489,14 @@ const AppDetails = () => {
             <FieldLabel>Monthly Budget:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <Box>
-              <FieldValue>
-                {app.attributes.monthly_budget ? `$${app.attributes.monthly_budget}` : 'No budget limit'}
-              </FieldValue>
-              {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
-                </Typography>
-              )}
-            </Box>
+            <FieldValue>
+              {formatBudgetDisplay({
+                monthlyBudget: app.attributes.monthly_budget,
+                currentUsage: budgetUsageData?.current_usage,
+                percentage: budgetUsageData?.percentage,
+                budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date
+              })}
+            </FieldValue>
           </Grid>
         </Grid>
 

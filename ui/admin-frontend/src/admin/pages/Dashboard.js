@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from "react";
-
-import { useNavigate } from "react-router-dom";
-
+import { useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../utils/apiClient";
+import { formatBudgetDisplay } from "../utils/budgetFormatter";
+
 import {
   Typography,
   Grid,
@@ -31,13 +31,9 @@ import DateRangePicker from "../components/common/DateRangePicker";
 import { styled } from "@mui/material/styles";
 
 import AddIcon from "@mui/icons-material/Add";
-
 import CloseIcon from "@mui/icons-material/Close";
-
 import CircularProgress from "@mui/material/CircularProgress";
-
 import DataUsageIcon from "@mui/icons-material/DataUsage";
-
 import ChatRoomWizard from "../components/wizards/ChatRoomWizard";
 
 import {
@@ -133,7 +129,6 @@ const GetStartedWidget = ({ openChatRoomWizard, onClose }) => (
 
 const Dashboard = () => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-
   const [isChatRoomWizardOpen, setIsChatRoomWizardOpen] = useState(false);
 
   const openChatRoomWizard = () => {
@@ -150,9 +145,7 @@ const Dashboard = () => {
   const [llmModelData, setLLMModelData] = useState(null);
   const [toolUsageData, setToolUsageData] = useState(null);
   const [userActivityData, setUserActivityData] = useState(null);
-  const [vendorModelCostData, setVendorModelCostData] = useState([]);
   const [budgetUsageData, setBudgetUsageData] = useState([]);
-  const [isTableExpanded, setIsTableExpanded] = useState(false);
 
   const [llms, setLLMs] = useState([]);
   const [llmsLoading, setLLMsLoading] = useState(true);
@@ -206,7 +199,6 @@ const Dashboard = () => {
         llmModelResponse,
         toolUsageResponse,
         userActivityResponse,
-        vendorModelCostResponse,
         budgetUsageResponse,
       ] = await Promise.all([
         apiClient.get("/analytics/chat-records-per-day", {
@@ -244,14 +236,12 @@ const Dashboard = () => {
             ...(interactionType && { interaction_type: interactionType }),
           },
         }),
-        apiClient.get("/analytics/total-cost-per-vendor-and-model", {
+        apiClient.get("/analytics/budget-usage", {
           params: {
             start_date: startDate,
             end_date: endDate,
-            ...(interactionType && { interaction_type: interactionType }),
           },
         }),
-        apiClient.get("/analytics/budget-usage"),
       ]);
 
       setChatData(chatDataResponse.data);
@@ -259,7 +249,6 @@ const Dashboard = () => {
       setLLMModelData(llmModelResponse.data);
       setToolUsageData(toolUsageResponse.data);
       setUserActivityData(userActivityResponse.data);
-      setVendorModelCostData(vendorModelCostResponse.data);
       setBudgetUsageData(budgetUsageResponse.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -280,7 +269,6 @@ const Dashboard = () => {
       setLLMModelData(null);
       setToolUsageData(null);
       setUserActivityData(null);
-      setVendorModelCostData([]);
       setBudgetUsageData([]); // Ensure it's always an array
     } finally {
       setLLMsLoading(false);
@@ -410,7 +398,6 @@ const Dashboard = () => {
     };
   }, [toolUsageData]);
 
-
   const StyledSectionTitle = styled(Box)(({ theme }) => ({
     marginBottom: theme.spacing(3),
     padding: theme.spacing(2),
@@ -429,9 +416,14 @@ const Dashboard = () => {
     color: theme.palette.text.secondary,
   }));
 
-  const toggleTableExpansion = () => {
-    setIsTableExpanded(!isTableExpanded);
-  };
+  const StyledLink = styled(RouterLink)(({ theme }) => ({
+    color: "inherit",
+    textDecoration: "none",
+    cursor: "pointer",
+    "&:hover": {
+      textDecoration: "underline",
+    }
+  }));
 
   const SectionTitle = ({ title, helpText }) => (
     <StyledSectionTitle>
@@ -475,6 +467,42 @@ const Dashboard = () => {
       border: 0,
     },
   }));
+
+  const renderBudgetTable = (items, title) => (
+    <StyledPaper elevation={3} style={{ padding: "20px", marginBottom: "20px" }}>
+      <Typography variant="h6" gutterBottom>
+        {title}
+      </Typography>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <StyledTableCell>Name</StyledTableCell>
+              <StyledTableCell align="right">Total Cost</StyledTableCell>
+              <StyledTableCell align="right">Budget</StyledTableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {items.map((item, index) => (
+              <StyledTableRow key={index}>
+                <StyledTableCell>
+                  <StyledLink to={`/admin/${(item.type || "").toLowerCase()}s/${item.entity_id || 0}`}>
+                    {item.name}
+                  </StyledLink>
+                </StyledTableCell>
+                <StyledTableCell align="right">
+                  ${parseFloat(item.totalCost || 0).toFixed(2)}
+                </StyledTableCell>
+                <StyledTableCell align="right">
+                  {formatBudgetDisplay(item)}
+                </StyledTableCell>
+              </StyledTableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </StyledPaper>
+  );
 
   return (
     <div>
@@ -559,90 +587,8 @@ const Dashboard = () => {
 
           <Box sx={{ p: 3 }}>
             <SectionTitle
-              title="Budget Usage"
-              helpText="Overview of budget utilization for LLMs and Apps"
-            />
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <StyledPaper elevation={3} style={{ padding: "20px" }}>
-                  <Typography variant="h6" gutterBottom>
-                    Current Budget Usage
-                  </Typography>
-                  {Array.isArray(budgetUsageData) && budgetUsageData.length > 0 ? (
-                    <TableContainer>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <StyledTableCell>Name</StyledTableCell>
-                            <StyledTableCell>Type</StyledTableCell>
-                            <StyledTableCell>Budget Start</StyledTableCell>
-                            <StyledTableCell align="right">Monthly Budget</StyledTableCell>
-                            <StyledTableCell align="right">Current Usage</StyledTableCell>
-                            <StyledTableCell align="right">Usage %</StyledTableCell>
-                            <StyledTableCell align="right">Days Left</StyledTableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {budgetUsageData.map((item, index) => {
-                            const usagePercent = item.monthlyBudget ?
-                              (item.currentUsage / item.monthlyBudget) * 100 : 0;
-                            return (
-                              <StyledTableRow key={index}>
-                                <StyledTableCell>{item.name}</StyledTableCell>
-                                <StyledTableCell>{item.type}</StyledTableCell>
-                                <StyledTableCell>
-                                  {item.budgetStartDate ?
-                                    new Date(item.budgetStartDate).toLocaleDateString() :
-                                    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString()}
-                                </StyledTableCell>
-                                <StyledTableCell align="right">
-                                  {item.monthlyBudget ? `$${item.monthlyBudget.toFixed(2)}` : 'No limit'}
-                                </StyledTableCell>
-                                <StyledTableCell align="right">
-                                  ${item.currentUsage.toFixed(2)}
-                                </StyledTableCell>
-                                <StyledTableCell
-                                  align="right"
-                                  sx={{
-                                    color: usagePercent >= 100 ? 'error.main' :
-                                      usagePercent >= 80 ? 'warning.main' :
-                                        'success.main'
-                                  }}
-                                >
-                                  {item.monthlyBudget ? `${usagePercent.toFixed(1)}%` : 'N/A'}
-                                </StyledTableCell>
-                                <StyledTableCell align="right">
-                                  {(() => {
-                                    const now = new Date();
-                                    const startDate = item.budgetStartDate ?
-                                      new Date(item.budgetStartDate) :
-                                      new Date(now.getFullYear(), now.getMonth(), 1);
-                                    const endDate = new Date(startDate);
-                                    endDate.setMonth(endDate.getMonth() + 1);
-                                    const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
-                                    return `${daysLeft} days`;
-                                  })()}
-                                </StyledTableCell>
-                              </StyledTableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  ) : (
-                    <NoDataMessage message="No budget usage data available." />
-                  )}
-                </StyledPaper>
-              </Grid>
-            </Grid>
-          </Box>
-
-          <Divider sx={{ my: 4 }} />
-
-          <Box sx={{ p: 3 }}>
-            <SectionTitle
               title="Cost Analysis"
-              helpText="Breakdown of costs for different currencies and usage of LLM models"
+              helpText="Breakdown of costs and budget utilization"
             />
             <Grid container spacing={3}>
               <Grid item xs={12}>
@@ -660,80 +606,22 @@ const Dashboard = () => {
                   )}
                 </ChartPaper>
               </Grid>
+
               <Grid item xs={12}>
-                <StyledPaper elevation={3} style={{ padding: "20px" }}>
-                  <Typography variant="h6" gutterBottom>
-                    Total Cost per Vendor and Model {interactionType ? `(${interactionType})` : '(All)'}
-                  </Typography>
-                  {vendorModelCostData.length > 0 ? (
-                    <>
-                      <TableContainer>
-                        <Table>
-                          <TableHead>
-                            <TableRow>
-                              <StyledTableCell>Vendor</StyledTableCell>
-                              <StyledTableCell>Model</StyledTableCell>
-                              <StyledTableCell align="right">
-                                Total Cost
-                              </StyledTableCell>
-                              <StyledTableCell>Currency</StyledTableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {vendorModelCostData
-                              .slice(0, isTableExpanded ? undefined : 5)
-                              .map((row, index) => (
-                                <StyledTableRow key={index}>
-                                  <StyledTableCell>
-                                    <Box
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <img
-                                        src={getVendorLogo(row.vendor)}
-                                        alt={getVendorName(row.vendor)}
-                                        style={{
-                                          width: 24,
-                                          height: 24,
-                                          marginRight: 8,
-                                          objectFit: "contain",
-                                        }}
-                                        onError={(e) => {
-                                          e.target.onerror = null;
-                                          e.target.src =
-                                            process.env.PUBLIC_URL +
-                                            "/images/placeholder-logo.png";
-                                        }}
-                                      />
-                                      {getVendorName(row.vendor)}
-                                    </Box>
-                                  </StyledTableCell>
-                                  <StyledTableCell>{row.model}</StyledTableCell>
-                                  <StyledTableCell align="right">
-                                    {row.totalCost.toFixed(2)}
-                                  </StyledTableCell>
-                                  <StyledTableCell>
-                                    {row.currency}
-                                  </StyledTableCell>
-                                </StyledTableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                      {vendorModelCostData.length > 5 && (
-                        <Box mt={2} textAlign="center">
-                          <Button onClick={toggleTableExpansion}>
-                            {isTableExpanded ? "Collapse" : "Expand"}
-                          </Button>
-                        </Box>
-                      )}
-                    </>
-                  ) : (
-                    <NoDataMessage message="No vendor and model cost data available for the selected period." />
-                  )}
-                </StyledPaper>
+                {Array.isArray(budgetUsageData) && budgetUsageData.length > 0 ? (
+                  <>
+                    {renderBudgetTable(
+                      budgetUsageData.filter(item => item.type === "LLM"),
+                      "LLM Costs"
+                    )}
+                    {renderBudgetTable(
+                      budgetUsageData.filter(item => item.type === "App"),
+                      "Application Costs"
+                    )}
+                  </>
+                ) : (
+                  <NoDataMessage message="No budget usage data available." />
+                )}
               </Grid>
             </Grid>
           </Box>

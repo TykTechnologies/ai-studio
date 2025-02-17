@@ -23,15 +23,36 @@ import (
 // @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/chat-records-per-day [get]
 func (a *API) getChatRecordsPerDay(c *gin.Context) {
-	startDate, endDate, err := getDateRange(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
-		return
+	var startDate, endDate *time.Time
+
+	// Parse start_date if provided
+	if startDateStr := c.Query("start_date"); startDateStr != "" {
+		parsedDate, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid start_date format"}},
+			})
+			return
+		}
+		startDate = &parsedDate
+	}
+
+	// Parse end_date if provided
+	if endDateStr := c.Query("end_date"); endDateStr != "" {
+		parsedDate, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid end_date format"}},
+			})
+			return
+		}
+		endDate = &parsedDate
 	}
 
 	chartData, err := analytics.GetChatRecordsPerDay(a.service.DB, startDate, endDate)
@@ -679,6 +700,109 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 	c.JSON(http.StatusOK, costs)
 }
 
+// getProxyLogsForLLM godoc
+// @Summary Get proxy logs for a specific LLM
+// @Description Get paginated proxy logs for a specific LLM by joining with chat records
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param llm_id query int true "LLM ID"
+// @Param page query int false "Page number (default: 1)"
+// @Param page_size query int false "Page size (default: 10)"
+// @Success 200 {object} models.PaginatedProxyLogs
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/proxy-logs-for-llm [get]
+func (a *API) getProxyLogsForLLM(c *gin.Context) {
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	llmID, err := strconv.ParseUint(c.Query("llm_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+		})
+		return
+	}
+
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+
+	logs, totalCount, err := analytics.GetProxyLogsForLLM(a.service.DB, startDate, endDate, uint(llmID), page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get proxy logs for LLM"}},
+		})
+		return
+	}
+
+	totalPages := (totalCount + int64(pageSize) - 1) / int64(pageSize)
+
+	response := models.PaginatedProxyLogs{
+		Data: make([]models.ProxyLogResponse, len(logs)),
+		Meta: struct {
+			TotalCount int64 `json:"total_count"`
+			TotalPages int   `json:"total_pages"`
+			PageSize   int   `json:"page_size"`
+			PageNumber int   `json:"page_number"`
+		}{
+			TotalCount: totalCount,
+			TotalPages: int(totalPages),
+			PageSize:   pageSize,
+			PageNumber: page,
+		},
+	}
+
+	for i, log := range logs {
+		response.Data[i] = models.ProxyLogResponse{
+			Type: "proxy_log",
+			ID:   strconv.FormatUint(uint64(log.ID), 10),
+			Attributes: struct {
+				AppID        uint      `json:"app_id"`
+				UserID       uint      `json:"user_id"`
+				TimeStamp    time.Time `json:"time_stamp"`
+				Vendor       string    `json:"vendor"`
+				RequestBody  string    `json:"request_body"`
+				ResponseBody string    `json:"response_body"`
+				ResponseCode int       `json:"response_code"`
+			}{
+				AppID:        log.AppID,
+				UserID:       log.UserID,
+				TimeStamp:    log.TimeStamp,
+				Vendor:       log.Vendor,
+				RequestBody:  log.RequestBody,
+				ResponseBody: log.ResponseBody,
+				ResponseCode: log.ResponseCode,
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
 // getProxyLogsForApp godoc
 // @Summary Get proxy logs for a specific app
 // @Description Get paginated proxy logs for a specific app
@@ -784,15 +908,66 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 
 // getBudgetUsage godoc
 // @Summary Get current monthly budget usage for apps and LLMs
-// @Description Returns usage of monthly budgets for apps and LLMs
+// @Description Returns usage of monthly budgets for apps and LLMs, with optional date range for total cost
 // @Tags Analytics
 // @Accept json
 // @Produce json
-// @Success 200 {array} struct{Name string `json:"name"`;Type string `json:"type"`;MonthlyBudget *float64 `json:"monthlyBudget"`;CurrentUsage float64 `json:"currentUsage"`;UsagePercent float64 `json:"usagePercent"`}
+// @Param start_date query string false "Start date (YYYY-MM-DD) for total cost calculation"
+// @Param end_date query string false "End date (YYYY-MM-DD) for total cost calculation"
+// @Success 200 {array} struct{Name string `json:"name"`;Type string `json:"type"`;MonthlyBudget *float64 `json:"monthlyBudget"`;CurrentUsage float64 `json:"currentUsage"`;UsagePercent float64 `json:"usagePercent"`;TotalCost float64 `json:"totalCost"`}
+// @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/budget-usage [get]
 func (a *API) getBudgetUsage(c *gin.Context) {
-	usageList, err := a.service.Budget.GetBudgetUsage()
+	var startDate, endDate time.Time
+	var err error
+
+	// Parse start_date if provided
+	if startDateStr := c.Query("start_date"); startDateStr != "" {
+		startDate, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid start_date format"}},
+			})
+			return
+		}
+	}
+
+	// Parse end_date if provided
+	if endDateStr := c.Query("end_date"); endDateStr != "" {
+		endDate, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid end_date format"}},
+			})
+			return
+		}
+	}
+
+	// Parse llm_id if provided
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	usageList, err := analytics.GetBudgetUsage(a.service.DB, &startDate, &endDate, llmID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
@@ -812,6 +987,8 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 			"currentUsage":    u.Spent,
 			"usagePercent":    u.Usage,
 			"budgetStartDate": u.BudgetStartDate,
+			"totalCost":       u.TotalCost,
+			"entity_id":       u.EntityID,
 		}
 		response = append(response, entry)
 	}
