@@ -214,8 +214,18 @@ func (a *API) setupRoutes() {
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
-	// Serve index.html for all other routes
+	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
+		// Check if it's a static file request
+		if strings.HasPrefix(c.Request.URL.Path, "/static/") ||
+			strings.HasPrefix(c.Request.URL.Path, "/logos/") ||
+			strings.HasSuffix(c.Request.URL.Path, ".ico") ||
+			strings.HasSuffix(c.Request.URL.Path, ".png") {
+			c.Next()
+			return
+		}
+
+		// For all other routes, serve the frontend application
 		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Could not read index.html")
@@ -236,6 +246,7 @@ func (a *API) setupRoutes() {
 	public.POST("/auth/register", a.handleRegister)
 	public.POST("/auth/forgot-password", a.handleForgotPassword)
 	public.POST("/auth/reset-password", a.handleResetPassword)
+	public.GET("/auth/validate-reset-token", a.handleValidateResetToken)
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)

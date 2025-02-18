@@ -68,7 +68,13 @@ All capabilities are implemented via a combination of:
   - Validated in `AuthService.ValidatePasswordComplexity()`.  
 - **Reset Tokens**:  
   - `User.ResetToken` and `User.ResetTokenExpiry` (set via `ResetPassword()`).  
-  - Expires after configured duration (`config.ResetTokenExpiry`, default 1 hour).  
+  - Expires after configured duration (`config.ResetTokenExpiry`, default 1 hour).
+  - Token validation flow:
+    1. User requests password reset via `/auth/forgot-password`
+    2. System sends email with reset link containing token
+    3. Frontend validates token via `/auth/validate-reset-token`
+    4. If valid, shows password reset form; if invalid, shows error with option to request new reset
+    5. New password submitted via `/auth/reset-password` with token
 - **Email Verification**:  
   - `User.VerificationToken` and `User.EmailVerified`.  
   - Triggered on user registration or via `ResendVerificationEmail()`.  
