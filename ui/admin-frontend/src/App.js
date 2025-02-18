@@ -49,6 +49,16 @@ function App() {
         reinitializePubClient();
         setConfigLoaded(true);
 
+        // Skip auth check for password reset and forgot password routes
+        const currentPath = window.location.pathname;
+        if (currentPath === '/reset-password' ||
+          currentPath === '/auth/reset-password' ||
+          currentPath === '/forgot-password' ||
+          currentPath === '/auth/forgot-password') {
+          setIsAuthenticated(false);
+          return;
+        }
+
         try {
           const response = await pubClient.get("/common/me");
           setIsAuthenticated(true);
@@ -150,6 +160,7 @@ function App() {
                 )
               }
             />
+            {/* Handle both /reset-password and /auth/reset-password */}
             <Route
               path="/reset-password"
               element={
@@ -159,6 +170,10 @@ function App() {
                   <ResetPassword />
                 )
               }
+            />
+            <Route
+              path="/auth/reset-password"
+              element={<Navigate to="/reset-password" replace state={{ preserveQuery: true }} />}
             />
 
             {/* Protected Routes with MainLayout */}
