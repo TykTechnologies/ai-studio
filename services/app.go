@@ -48,6 +48,14 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		}
 	}
 
+	// Send notification to admin users
+	if err := s.NotificationService.SendAdminAppNotification(
+		"New App Created",
+		"A new app '"+name+"' has been created.",
+	); err != nil {
+		// Ignore notification errors - they shouldn't fail app creation
+	}
+
 	return app, nil
 }
 

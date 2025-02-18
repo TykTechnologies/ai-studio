@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -18,6 +19,82 @@ func setupTestDBForApps(t *testing.T) *gorm.DB {
 	assert.NoError(t, err)
 
 	return db
+}
+
+func TestCreateAppWithNotifications(t *testing.T) {
+	t.Run("with SMTP configured", func(t *testing.T) {
+		db := setupTestDBForApps(t)
+		testMailer := notifications.NewTestMailer()
+		mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+		notificationService := NewNotificationService(db, mailService)
+		service := &Service{
+			DB:                  db,
+			NotificationService: notificationService,
+		}
+
+		// Create admin user with notifications enabled
+		admin := &models.User{
+			Email:                "admin@test.com",
+			Name:                 "Admin",
+			IsAdmin:              true,
+			NotificationsEnabled: true,
+			EmailVerified:        true,
+		}
+		err := admin.Create(db)
+		assert.NoError(t, err)
+
+		// Create app
+		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
+		assert.NoError(t, err)
+		assert.NotNil(t, app)
+
+		// Verify notification was sent
+		notifications := service.NotificationService.GetNotifications()
+		assert.Len(t, notifications, 1)
+		if len(notifications) > 0 {
+			assert.Equal(t, admin.ID, notifications[0].UserID)
+			assert.Contains(t, notifications[0].Title, "New App Created")
+		}
+
+		// Verify email was sent
+		sentEmails := testMailer.GetEmails()
+		assert.Len(t, sentEmails, 1)
+		if len(sentEmails) > 0 {
+			assert.Equal(t, "admin@test.com", sentEmails[0].To)
+		}
+	})
+
+	t.Run("without SMTP configured", func(t *testing.T) {
+		db := setupTestDBForApps(t)
+		// Create mail service without SMTP configuration
+		mailService := notifications.NewMailService("test@example.com", "", 0, "", "", nil)
+		service := NewService(db)
+		service.NotificationService = NewNotificationService(db, mailService)
+
+		// Create admin user with notifications enabled
+		admin := &models.User{
+			Email:                "admin@test.com",
+			Name:                 "Admin",
+			IsAdmin:              true,
+			NotificationsEnabled: true,
+			EmailVerified:        true,
+		}
+		err := admin.Create(db)
+		assert.NoError(t, err)
+
+		// Create app - should succeed even without SMTP
+		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
+		assert.NoError(t, err)
+		assert.NotNil(t, app)
+
+		// Verify notification was created but email wasn't sent
+		notifications := service.NotificationService.GetNotifications()
+		assert.Len(t, notifications, 1)
+		if len(notifications) > 0 {
+			assert.Equal(t, admin.ID, notifications[0].UserID)
+			assert.Contains(t, notifications[0].Title, "New App Created")
+		}
+	})
 }
 
 func TestCreateApp(t *testing.T) {
