@@ -68,15 +68,15 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 	}
 
 	if chat.LLM != nil {
-		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey)
+		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey, false) // false to resolve actual value
 	}
 	for i := range chat.DefaultTools {
-		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey)
+		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey, false) // false to resolve actual value
 	}
 
 	if chat.DefaultDataSource != nil {
-		chat.DefaultDataSource.DBConnAPIKey = secrets.GetValue(chat.DefaultDataSource.DBConnAPIKey)
-		chat.DefaultDataSource.EmbedAPIKey = secrets.GetValue(chat.DefaultDataSource.EmbedAPIKey)
+		chat.DefaultDataSource.DBConnAPIKey = secrets.GetValue(chat.DefaultDataSource.DBConnAPIKey, false) // false to resolve actual value
+		chat.DefaultDataSource.EmbedAPIKey = secrets.GetValue(chat.DefaultDataSource.EmbedAPIKey, false)   // false to resolve actual value
 	}
 
 	return chat, nil

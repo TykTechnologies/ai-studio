@@ -15,7 +15,8 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 		return nil, err
 	}
 
-	llm.APIKey = secrets.GetValue(llm.APIKey)
+	llm.APIKey = secrets.GetValue(llm.APIKey, true) // preserve reference for API responses
+	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, true)
 	return llm, nil
 }
 
@@ -180,8 +181,8 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 		return nil, err
 	}
 
-	llm.APIKey = secrets.GetValue(llm.APIKey)
-
+	llm.APIKey = secrets.GetValue(llm.APIKey, false) // false to resolve the actual value
+	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, false)
 	return llm, nil
 }
 
@@ -201,7 +202,8 @@ func (s *Service) GetActiveLLMs() (models.LLMs, error) {
 	}
 
 	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey)
+		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false) // false to resolve the actual value
+		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
 	}
 
 	return llms, nil
@@ -214,15 +216,6 @@ func (s *Service) GetLLMsByNameStub(name string) (models.LLMs, error) {
 	}
 	return llms, nil
 }
-
-// Remove this function as it's a duplicate of GetAllLLMs
-// func (s *Service) GetAllLLms() (*models.LLMs, error) {
-// 	llms := &models.LLMs{}
-// 	if err := llms.GetAll(s.DB); err != nil {
-// 		return nil, err
-// 	}
-// 	return llms, nil
-// }
 
 func (s *Service) GetLLMsByMaxPrivacyScore(score int) (models.LLMs, error) {
 	llms := models.LLMs{}
