@@ -20,8 +20,9 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   MenuItem,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -29,7 +30,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -560,14 +561,10 @@ const ToolForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit Tool" : "Add Tool"}</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/tools"
-          color="white"
-        >
+        <Link component={NavLink} to="/admin/tools">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Tools
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -857,14 +854,14 @@ const ToolForm = () => {
                 onChange={handleFileUpload}
               />
 
-              <Button
+              <StyledButtonPrimaryOutlined
                 variant="contained"
                 startIcon={<CloudUploadIcon />}
                 onClick={() => fileInputRef.current.click()}
                 sx={{ mt: 2 }}
               >
                 Upload Additional Tool Documentation
-              </Button>
+              </StyledButtonPrimaryOutlined>
             </AccordionDetails>
           </StyledAccordion>
 

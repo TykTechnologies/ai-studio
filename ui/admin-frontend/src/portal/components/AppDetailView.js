@@ -18,8 +18,9 @@ import {
   Card,
   CardContent,
   Tooltip,
+  Link,
 } from "@mui/material";
-
+import { NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -140,7 +141,7 @@ const AppDetailView = () => {
   );
 
   return (
-    <Box>
+    <Box sx={{p: 4}}>
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box
           display="flex"
@@ -151,12 +152,10 @@ const AppDetailView = () => {
           <Typography variant="h5" sx={{ color: "black" }}>
             App Details
           </Typography>
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate("/portal/apps")}
-          >
+          <Link component={NavLink} to="/portal/apps">
+            <ArrowBackIcon sx={{ mr: 1 }} />
             Back to Apps
-          </Button>
+          </Link>
         </Box>
 
         <SectionTitle>App Information</SectionTitle>

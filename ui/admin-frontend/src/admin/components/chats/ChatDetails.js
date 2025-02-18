@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -9,6 +9,7 @@ import {
   Button,
   Chip,
   Divider,
+  Link
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -185,13 +186,10 @@ const ChatDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Chat Room Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/chats")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/chats">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Chat Rooms
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6" gutterBottom>

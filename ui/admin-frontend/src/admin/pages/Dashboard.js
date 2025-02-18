@@ -409,9 +409,9 @@ const Dashboard = () => {
   const StyledSectionTitle = styled(Box)(({ theme }) => ({
     marginBottom: theme.spacing(3),
     padding: theme.spacing(2),
-    backgroundColor: theme.palette.custom.lightTeal,
+    backgroundColor: theme.palette.background.default,
     borderRadius: theme.shape.borderRadius,
-    border: `1px solid ${theme.palette.custom.teal}`,
+    border: `1px solid ${theme.palette.primary.main}`,
   }));
 
   const StyledTitle = styled(Typography)(({ theme }) => ({
@@ -450,25 +450,25 @@ const Dashboard = () => {
 
   const StyledTableCell = styled(TableCell)(({ theme }) => ({
     "&.MuiTableCell-head": {
-      backgroundColor: theme.palette.custom.purpleLight,
-      color: theme.palette.common.white,
+      backgroundColor: theme.palette.background.buttonSecondary,
+      fontFamily: 'Inter-Semibold',
+      color: theme.palette.text.primary,
+      borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
     },
+    color: theme.palette.text.primary,
+    borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
   }));
 
   const StyledTableRow = styled(TableRow)(({ theme }) => ({
     "&:nth-of-type(odd)": {
-      backgroundColor: theme.palette.custom.lightTeal,
+      backgroundColor: "transparent"
     },
-    "&:nth-of-type(even)": {
-      backgroundColor: theme.palette.common.white,
+    "& td": {
+    borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
     },
     "&:hover": {
-      backgroundColor: theme.palette.custom.hoverTeal,
-    },
-    // Remove last border
-    "&:last-child td, &:last-child th": {
-      border: 0,
-    },
+      backgroundColor: theme.palette.background.secondaryExtraLight
+    }
   }));
 
   return (

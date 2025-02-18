@@ -422,12 +422,12 @@ const Users = () => {
           </StyledDialogContent>
           <DialogActions>
             <Button onClick={handleCloseAddToGroupModal}>Cancel</Button>
-            <Button
+            <StyledButton
               onClick={isAddingGroup ? handleAddNewGroup : handleAddUserToGroup}
               color="primary"
             >
               {isAddingGroup ? "Add Group" : "Add to Group"}
-            </Button>
+            </StyledButton>
           </DialogActions>
         </StyledDialog>
 

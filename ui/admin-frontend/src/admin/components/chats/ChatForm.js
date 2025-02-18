@@ -22,6 +22,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Link
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -29,10 +30,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { FormControlLabel, Switch } from "@mui/material";
 
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -378,14 +379,10 @@ const ChatForm = () => {
         <Typography variant="h5">
           {id ? "Edit Chat Room" : "Add Chat Room"}
         </Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/chats"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/chats">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Chat Rooms
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -655,14 +652,14 @@ const ChatForm = () => {
               />
 
               {id && ( // Only show upload button if editing an existing chat
-                <Button
+                <StyledButtonPrimaryOutlined
                   variant="contained"
                   startIcon={<CloudUploadIcon />}
                   onClick={() => fileInputRef.current.click()}
                   sx={{ mt: 2 }}
                 >
                   Upload Context File
-                </Button>
+                </StyledButtonPrimaryOutlined>
               )}
 
               {!id && (

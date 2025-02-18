@@ -18,8 +18,9 @@ import {
   DialogActions,
   ListItemText,
   ListItemIcon,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
@@ -419,14 +420,10 @@ const LLMSettingsForm = () => {
         <Typography variant="h5">
           {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
         </Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/llm-settings"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/llm-settings">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to LLM Call Settings
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

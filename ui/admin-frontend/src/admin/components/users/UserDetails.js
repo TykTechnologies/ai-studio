@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
+import { useParams, useNavigate, Link as RouterLink, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -25,6 +25,8 @@ import {
   FieldValue,
   StyledTableRow,
   StyledButton,
+  StyledTableHeaderCell,
+  StyledTableCell,
 } from "../../styles/sharedStyles";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
@@ -133,13 +135,10 @@ const UserDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">User Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/users")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/users">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Users
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Grid container spacing={2} mb={4}>
@@ -210,28 +209,30 @@ const UserDetails = () => {
         {loading ? (
           <CircularProgress />
         ) : (
-          <TableContainer>
-            <Table>
+          <StyledPaper>
+            <TableContainer>
+              <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
+                  <StyledTableHeaderCell>Name</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {userGroups.length > 0 ? (
                   userGroups.map((group) => (
                     <StyledTableRow key={group.id}>
-                      <TableCell>{group.attributes.name}</TableCell>
+                      <StyledTableCell>{group.attributes.name}</StyledTableCell>
                     </StyledTableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell>User is not a member of any groups</TableCell>
+                    <StyledTableCell>User is not a member of any groups</StyledTableCell>
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
-          </TableContainer>
+              </Table>
+            </TableContainer>
+          </StyledPaper>
         )}
 
         <Box mt={4} mb={2}>
@@ -243,47 +244,51 @@ const UserDetails = () => {
           <CircularProgress />
         ) : (
           <>
-            <TableContainer>
-              <Table>
+            <StyledPaper>
+              <TableContainer>
+                <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Chat ID</TableCell>
-                    <TableCell>Action</TableCell>
+                    <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Chat ID</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Action</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {chatHistory.length > 0 ? (
                     chatHistory.map((record) => (
                       <StyledTableRow key={record.id}>
-                        <TableCell>{record.attributes.name}</TableCell>
-                        <TableCell>{record.attributes.chat_id}</TableCell>
-                        <TableCell>
-                          <RouterLink
+                        <StyledTableCell>{record.attributes.name}</StyledTableCell>
+                        <StyledTableCell>{record.attributes.chat_id}</StyledTableCell>
+                        <StyledTableCell>
+                          <Link
+                            component={RouterLink}
                             to={`/admin/users/${id}/chat-log/${record.attributes.session_id}`}
+                            sx={{ textDecoration: 'underline' }}
                           >
-                            <Link variant="body2">View Chat Log</Link>
-                          </RouterLink>
-                        </TableCell>
+                            View Chat Log
+                          </Link>
+                        </StyledTableCell>
                       </StyledTableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3}>
+                      <StyledTableCell colSpan={3}>
                         No chat history records found
-                      </TableCell>
+                      </StyledTableCell>
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
-            </TableContainer>
-            <PaginationControls
-              page={page}
-              pageSize={pageSize}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
-            />
+                </Table>
+              </TableContainer>
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </StyledPaper>
           </>
         )}
       </ContentBox>

@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
 import pubClient from "../../admin/utils/pubClient";
 import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
+import { StyledButton } from "../../admin/styles/sharedStyles";
 
 const PortalDashboard = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -85,14 +86,14 @@ const PortalDashboard = () => {
             Apps provide access to LLMs and Data sources via the AI Gateway for
             your code.
           </Typography>
-          <Button
+          <StyledButton
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
             onClick={handleCreateApp}
           >
             Create a new App
-          </Button>
+          </StyledButton>
         </Paper>
       )}
     </Container>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -180,13 +180,10 @@ const LLMDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/llms")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/llms">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to LLMs
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Vendor Usage Statistics</SectionTitle>
