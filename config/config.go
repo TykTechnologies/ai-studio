@@ -90,8 +90,8 @@ func getConfigFromEnv() *AppConf {
 	}
 
 	conf.AdminEmail = os.Getenv("ADMIN_EMAIL")
-	if conf.AdminEmail == "" {
-		log.Println("Warning: ADMIN_EMAIL environment variable is not set")
+	if conf.AdminEmail != "" {
+		log.Println("Warning: ADMIN_EMAIL is deprecated")
 	}
 
 	conf.FromEmail = os.Getenv("FROM_EMAIL")

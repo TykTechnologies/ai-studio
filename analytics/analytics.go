@@ -16,82 +16,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// InteractionType defines the type of LLM interaction
-type InteractionType string
-
-const (
-	ChatInteraction  InteractionType = "chat"
-	ProxyInteraction InteractionType = "proxy"
-)
-
-// Records requests
-type LLMChatRecord struct {
-	gorm.Model
-	ID              uint `gorm:"primaryKey"`
-	Name            string
-	Vendor          string
-	TotalTimeMS     int
-	PromptTokens    int
-	ResponseTokens  int
-	TotalTokens     int
-	TimeStamp       time.Time
-	UserID          uint
-	Choices         int
-	ToolCalls       int
-	ChatID          string
-	AppID           uint
-	Cost            float64
-	Currency        string
-	InteractionType InteractionType `gorm:"type:string;default:'chat'"`
-}
-
-// logs content
-type LLMChatLogEntry struct {
-	gorm.Model
-	ID        uint `gorm:"primaryKey"`
-	Name      string
-	Vendor    string
-	TimeStamp time.Time
-	Prompt    string
-	Response  string
-	Tokens    int
-	UserID    uint
-	ChatID    string
-	SessionID string
-}
-
-// records Tool Calls
-type ToolCallRecord struct {
-	gorm.Model
-	ID        uint `gorm:"primaryKey"`
-	ToolID    uint
-	Name      string
-	ExecTime  int
-	TimeStamp time.Time
-}
-
-type ProxyLog struct {
-	gorm.Model
-	ID           uint `gorm:"primaryKey"`
-	AppID        uint
-	UserID       uint
-	TimeStamp    time.Time
-	Vendor       string
-	RequestBody  string
-	ResponseBody string
-	ResponseCode int
-}
-
 var (
-	chatRecordChan chan *LLMChatRecord
-	logEntryChan   chan *LLMChatLogEntry
-	toolCallChan   chan *ToolCallRecord
-	proxyLogChan   chan *ProxyLog
+	chatRecordChan chan *models.LLMChatRecord
+	logEntryChan   chan *models.LLMChatLogEntry
+	toolCallChan   chan *models.ToolCallRecord
+	proxyLogChan   chan *models.ProxyLog
 	recStarted     bool
 	recMutex       sync.RWMutex
 )
 
-func RecordProxyLog(log *ProxyLog) {
+func RecordProxyLog(log *models.ProxyLog) {
 	recMutex.RLock()
 	if !recStarted {
 		recMutex.RUnlock()
@@ -110,7 +44,7 @@ func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
 	}
 	recMutex.RUnlock()
 
-	tcEntry := &ToolCallRecord{}
+	tcEntry := &models.ToolCallRecord{}
 	tcEntry.TimeStamp = t
 	tcEntry.ExecTime = execTime
 	tcEntry.Name = name
@@ -136,7 +70,7 @@ func RecordContentMessage(
 	}
 	recMutex.RUnlock()
 
-	rec := &LLMChatRecord{}
+	rec := &models.LLMChatRecord{}
 
 	totalTokens := 0
 	promptTokens := 0
@@ -195,7 +129,7 @@ func RecordContentMessage(
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
 	rec.ResponseTokens = responseTokens
-	rec.TotalTokens = totalTokens
+	rec.TotalTokens = promptTokens + responseTokens
 	rec.TimeStamp = t
 	rec.UserID = userID
 	rec.ToolCalls = toolCalls
@@ -203,10 +137,10 @@ func RecordContentMessage(
 	rec.AppID = appID
 	rec.Cost = cpt*float64(responseTokens) + cpit*float64(promptTokens)
 	rec.Currency = price.Currency
-	rec.InteractionType = ChatInteraction
+	rec.InteractionType = models.ChatInteraction
 
 	// LLM Response
-	chatLog := &LLMChatLogEntry{}
+	chatLog := &models.LLMChatLogEntry{}
 	chatLog.Name = name
 	chatLog.Vendor = string(vendor)
 	chatLog.TimeStamp = t
@@ -221,7 +155,7 @@ func RecordContentMessage(
 }
 
 // records a tool call
-func recordToolCall(tc *ToolCallRecord) {
+func recordToolCall(tc *models.ToolCallRecord) {
 	select {
 	case toolCallChan <- tc:
 	default:
@@ -229,12 +163,12 @@ func recordToolCall(tc *ToolCallRecord) {
 	}
 }
 
-func RecordChatRecord(record *LLMChatRecord) {
+func RecordChatRecord(record *models.LLMChatRecord) {
 	recordChatRecord(record)
 }
 
 // Records a chat record
-func recordChatRecord(record *LLMChatRecord) {
+func recordChatRecord(record *models.LLMChatRecord) {
 	select {
 	case chatRecordChan <- record:
 	default:
@@ -243,7 +177,7 @@ func recordChatRecord(record *LLMChatRecord) {
 }
 
 // Records a chat log entry
-func recordChatLogEntry(log *LLMChatLogEntry) {
+func recordChatLogEntry(log *models.LLMChatLogEntry) {
 	select {
 	case logEntryChan <- log:
 	default:
@@ -253,10 +187,10 @@ func recordChatLogEntry(log *LLMChatLogEntry) {
 
 func initDB(db *gorm.DB) {
 	err := db.AutoMigrate(
-		&LLMChatRecord{},
-		&LLMChatLogEntry{},
-		&ToolCallRecord{},
-		&ProxyLog{},
+		&models.LLMChatRecord{},
+		&models.LLMChatLogEntry{},
+		&models.ToolCallRecord{},
+		&models.ProxyLog{},
 	)
 
 	if err != nil {
@@ -286,10 +220,10 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 		}
 	}
 
-	chatRecordChan = make(chan *LLMChatRecord, defaultBufferSize)
-	logEntryChan = make(chan *LLMChatLogEntry, defaultBufferSize)
-	toolCallChan = make(chan *ToolCallRecord, defaultBufferSize)
-	proxyLogChan = make(chan *ProxyLog, defaultBufferSize)
+	chatRecordChan = make(chan *models.LLMChatRecord, defaultBufferSize)
+	logEntryChan = make(chan *models.LLMChatLogEntry, defaultBufferSize)
+	toolCallChan = make(chan *models.ToolCallRecord, defaultBufferSize)
+	proxyLogChan = make(chan *models.ProxyLog, defaultBufferSize)
 
 	go func() {
 		for {

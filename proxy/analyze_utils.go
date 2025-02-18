@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -27,7 +28,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		return
 	}
 
-	l := &analytics.ProxyLog{
+	l := &models.ProxyLog{
 		AppID:        app.ID,
 		UserID:       app.UserID,
 		TimeStamp:    time.Now(),
@@ -38,20 +39,20 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	}
 
 	analytics.RecordProxyLog(l)
-	AnalyzeCompletionResponse(service, llm, app, response)
+	AnalyzeCompletionResponse(service, llm, app, response, time.Now())
 }
 
-func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte) {
+func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time) {
 	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, statusCode, responses, r, chunks)
 	if err != nil {
 		log.Printf("failed to analyze response: %v", err)
 		return
 	}
 
-	l := &analytics.ProxyLog{
+	l := &models.ProxyLog{
 		AppID:        app.ID,
 		UserID:       app.UserID,
-		TimeStamp:    time.Now(),
+		TimeStamp:    timestamp,
 		Vendor:       string(llm.Vendor),
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(responses), maxBodySize),
@@ -59,35 +60,84 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 	}
 
 	analytics.RecordProxyLog(l)
-
-	AnalyzeCompletionResponse(service, llm, app, response)
+	AnalyzeCompletionResponse(service, llm, app, response, timestamp)
 }
 
-func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse) {
+func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, timestamp time.Time) {
+	var pt, rt, choices, tools int
+	var model string
+
+	if response != nil {
+		pt = response.GetPromptTokens()
+		rt = response.GetResponseTokens()
+		choices = response.GetChoiceCount()
+		tools = response.GetToolCount()
+		model = response.GetModel()
+	}
+
 	cpt := 0.0
 	cpit := 0.0
-	price, err := service.GetModelPriceByModelNameAndVendor(response.GetModel(), string(llm.Vendor))
+	price, err := service.GetModelPriceByModelNameAndVendor(model, string(llm.Vendor))
 	if err == nil {
 		cpt = price.CPT
 		cpit = price.CPIT
 	}
 
-	pt := response.GetPromptTokens()
-	rt := response.GetResponseTokens()
+	// Use budget start date if set, otherwise use current time
+	recordTime := timestamp
+	if app.BudgetStartDate != nil {
+		recordTime = *app.BudgetStartDate
+	}
+	if llm.BudgetStartDate != nil {
+		recordTime = *llm.BudgetStartDate
+	}
 
-	rec := &analytics.LLMChatRecord{
+	rec := &models.LLMChatRecord{
+		LLMID:           llm.ID,
 		Vendor:          string(llm.Vendor),
-		PromptTokens:    response.GetPromptTokens(),
-		ResponseTokens:  response.GetResponseTokens(),
+		PromptTokens:    pt,
+		ResponseTokens:  rt,
 		TotalTokens:     pt + rt,
-		TimeStamp:       time.Now(),
-		Choices:         response.GetChoiceCount(),
-		ToolCalls:       response.GetToolCount(),
+		TimeStamp:       recordTime,
+		Choices:         choices,
+		ToolCalls:       tools,
 		AppID:           app.ID,
 		UserID:          app.UserID,
 		Cost:            (cpt * float64(rt)) + (cpit * float64(pt)),
-		InteractionType: analytics.ProxyInteraction,
+		InteractionType: models.ProxyInteraction,
 	}
 
-	analytics.RecordChatRecord(rec)
+	// Record the chat record with retries
+	for i := 0; i < 5; i++ {
+		analytics.RecordChatRecord(rec)
+		time.Sleep(50 * time.Millisecond) // Reduced from 500ms
+
+		// Verify the record was committed
+		if s, ok := service.(*services.Service); ok {
+			var count int64
+			if err := s.DB.Model(&models.LLMChatRecord{}).Where("app_id = ? AND llm_id = ? AND cost = ?", app.ID, llm.ID, rec.Cost).Count(&count).Error; err == nil && count > 0 {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond) // Reduced from 100ms
+	}
+
+	// Then analyze budget usage and send notifications if needed
+	if s, ok := service.(*services.Service); ok && s.Budget != nil {
+		// Wait for any pending operations to complete
+		time.Sleep(100 * time.Millisecond) // Reduced from 1s
+
+		// Analyze budget usage with retries
+		for i := 0; i < 5; i++ {
+			s.Budget.AnalyzeBudgetUsage(app, llm)
+			time.Sleep(50 * time.Millisecond) // Reduced from 500ms
+
+			// Verify notifications were created
+			var count int64
+			if err := s.DB.Model(&models.Notification{}).Where("notification_id LIKE ?", fmt.Sprintf("budget_app_%d_%%", app.ID)).Count(&count).Error; err == nil && count > 0 {
+				break
+			}
+			time.Sleep(10 * time.Millisecond) // Reduced from 100ms
+		}
+	}
 }

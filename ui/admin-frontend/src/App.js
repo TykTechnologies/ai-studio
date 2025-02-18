@@ -31,6 +31,8 @@ import Login from "./portal/pages/Login";
 import Register from "./portal/pages/Register";
 import ForgotPassword from "./portal/pages/ForgotPassword";
 import ResetPassword from "./portal/pages/ResetPassword";
+import NotificationsPage from "./pages/NotificationsPage";
+import { NotificationProvider } from "./admin/context/NotificationContext";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -108,111 +110,116 @@ function App() {
 
   return (
     <Router>
-      <ThemeProvider theme={portalTheme}>
-        <CssBaseline />
-        <Routes>
-          {/* Public Routes */}
-          <Route
-            path="/login"
-            element={
-              isAuthenticated ? (
-                <Navigate
-                  to={
-                    entitlements?.is_admin ? "/admin/dash" : "/portal/dashboard"
-                  }
-                  replace
-                />
-              ) : (
-                <Login />
-              )
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/portal/dashboard" replace />
-              ) : (
-                <Register />
-              )
-            }
-          />
-          <Route
-            path="/forgot-password"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/portal/dashboard" replace />
-              ) : (
-                <ForgotPassword />
-              )
-            }
-          />
-          <Route
-            path="/reset-password"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/portal/dashboard" replace />
-              ) : (
-                <ResetPassword />
-              )
-            }
-          />
-
-          {/* Protected Routes with MainLayout */}
-          <Route
-            element={
-              isAuthenticated ? (
-                <MainLayout />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          >
-            {/* Portal Routes */}
-            <Route path="/portal/*" element={<PortalRoutes />} />
-
-            {/* Chat Routes */}
-            <Route path="/chat/*" element={<ChatRoutes />} />
-
-            {/* Admin Routes */}
-            <Route path="/admin/*" element={<AdminRoutes />} />
-
-            {/* Default redirect */}
+      <NotificationProvider>
+        <ThemeProvider theme={portalTheme}>
+          <CssBaseline />
+          <Routes>
+            {/* Public Routes */}
             <Route
-              path="/"
+              path="/login"
+              element={
+                isAuthenticated ? (
+                  <Navigate
+                    to={
+                      entitlements?.is_admin ? "/admin/dash" : "/portal/dashboard"
+                    }
+                    replace
+                  />
+                ) : (
+                  <Login />
+                )
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                isAuthenticated ? (
+                  <Navigate to="/portal/dashboard" replace />
+                ) : (
+                  <Register />
+                )
+              }
+            />
+            <Route
+              path="/forgot-password"
+              element={
+                isAuthenticated ? (
+                  <Navigate to="/portal/dashboard" replace />
+                ) : (
+                  <ForgotPassword />
+                )
+              }
+            />
+            <Route
+              path="/reset-password"
+              element={
+                isAuthenticated ? (
+                  <Navigate to="/portal/dashboard" replace />
+                ) : (
+                  <ResetPassword />
+                )
+              }
+            />
+
+            {/* Protected Routes with MainLayout */}
+            <Route
+              element={
+                isAuthenticated ? (
+                  <MainLayout />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            >
+              {/* Portal Routes */}
+              <Route path="/portal/*" element={<PortalRoutes />} />
+
+              {/* Chat Routes */}
+              <Route path="/chat/*" element={<ChatRoutes />} />
+
+              {/* Admin Routes */}
+              <Route path="/admin/*" element={<AdminRoutes />} />
+
+              {/* Common Routes */}
+              <Route path="/notifications" element={<NotificationsPage />} />
+
+              {/* Default redirect */}
+              <Route
+                path="/"
+                element={
+                  <Navigate
+                    to={
+                      isAuthenticated
+                        ? entitlements?.is_admin === true
+                          ? "/admin/dash"
+                          : entitlements?.ui_options?.show_portal
+                            ? "/portal/dashboard"
+                            : "/chat/dashboard"
+                        : "/login"
+                    }
+                    replace
+                  />
+                }
+              />
+            </Route>
+
+            {/* Catch all route */}
+            <Route
+              path="*"
               element={
                 <Navigate
                   to={
                     isAuthenticated
-                      ? entitlements?.is_admin === true
-                        ? "/admin/dash"
-                        : entitlements?.ui_options?.show_portal
-                          ? "/portal/dashboard"
-                          : "/chat/dashboard"
+                      ? "/admin/dash" // Just redirect to admin dash for unknown routes
                       : "/login"
                   }
                   replace
                 />
               }
             />
-          </Route>
-
-          {/* Catch all route */}
-          <Route
-            path="*"
-            element={
-              <Navigate
-                to={
-                  isAuthenticated
-                    ? "/admin/dash" // Just redirect to admin dash for unknown routes
-                    : "/login"
-                }
-                replace
-              />
-            }
-          />
-        </Routes>
-      </ThemeProvider>
+          </Routes>
+        </ThemeProvider>
+      </NotificationProvider>
     </Router>
   );
 }

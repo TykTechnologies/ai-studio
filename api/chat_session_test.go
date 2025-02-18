@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
-	"testing"
+	gotest "testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +20,12 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 // TestChatSSE tests SSE with multiline JSON events and ensures we don't get a 404
 // after posting a user message.
-func TestChatSSE(t *testing.T) {
+func TestChatSSE(t *gotest.T) {
 	// Setup environment variables.
 	os.Setenv("ENVIRONMENT", "test")
 	os.Setenv("LOG_LEVEL", "info")
@@ -43,7 +44,9 @@ func TestChatSSE(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	mockMailer := apitest.NewMockMailer()
+	notificationService := services.NewNotificationService(db, mockMailer)
+	authService := auth.NewAuthService(config, mockMailer, service, notificationService)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Create user.
@@ -99,26 +102,36 @@ func TestChatSSE(t *testing.T) {
 	// ts.Config.IdleTimeout = 0
 	ts.Start()
 
-	t.Run("SSE_Connection", func(t *testing.T) {
+	t.Run("SSE_Connection", func(t *gotest.T) {
 		log.Println("Starting SSE Connection test")
 
-		// Channels for coordination.
+		// Channels for coordination with buffering to prevent deadlocks
 		sessionIDCh := make(chan string, 1) // receives session_id from SSE
-		errCh := make(chan error, 1)
-		doneCh := make(chan struct{}) // signals SSE goroutine that the stream_chunk was received
-		// var wg sync.WaitGroup
+		errCh := make(chan error, 1)        // receives any errors
+		doneCh := make(chan struct{})       // signals test completion
+		cleanupCh := make(chan struct{})    // signals cleanup needed
+		defer close(cleanupCh)              // ensure cleanup on test completion
 
-		// Custom client with a slightly longer timeout for SSE.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Custom client without timeout - we'll use context for cancellation
 		client := &http.Client{
-			Timeout: 1 * time.Second,
+			Timeout: 0, // No timeout, we'll use context
 		}
 
-		// Start SSE-reading goroutine.
-		// wg.Add(1)
+		// Start SSE-reading goroutine
 		go func() {
-			// defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer func() {
+				if r := recover(); r != nil {
+					select {
+					case errCh <- fmt.Errorf("panic in SSE goroutine: %v", r):
+					default:
+					}
+				}
+			}()
 
+			// Create request with context
 			req, err := http.NewRequestWithContext(
 				ctx,
 				"GET",
@@ -126,72 +139,102 @@ func TestChatSSE(t *testing.T) {
 				nil,
 			)
 			if err != nil {
-				errCh <- fmt.Errorf("creating SSE request failed: %w", err)
+				select {
+				case errCh <- fmt.Errorf("creating SSE request failed: %w", err):
+				case <-ctx.Done():
+				}
 				return
 			}
 			req.Header.Set("Accept", "text/event-stream")
 
+			// Make the request
 			resp, err := client.Do(req)
 			if err != nil {
-				errCh <- fmt.Errorf("SSE request failed: %w", err)
+				select {
+				case errCh <- fmt.Errorf("SSE request failed: %w", err):
+				case <-ctx.Done():
+				}
 				return
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				errCh <- fmt.Errorf("SSE status code %d (expected 200)", resp.StatusCode)
+				select {
+				case errCh <- fmt.Errorf("SSE status code %d (expected 200)", resp.StatusCode):
+				case <-ctx.Done():
+				}
 				return
 			}
 
+			// Use scanner with a more robust event parsing
 			scanner := bufio.NewScanner(resp.Body)
 			var currentEvent string
 			var dataLines []string
 
 			for scanner.Scan() {
-				line := scanner.Text()
-				log.Printf("SSE line: %s", line)
+				select {
+				case <-ctx.Done():
+					return
+				case <-cleanupCh:
+					return
+				default:
+					line := scanner.Text()
+					log.Printf("SSE line: %s", line)
 
-				// A blank line indicates the end of one SSE event.
-				if line == "" {
-					switch currentEvent {
-					case "session_id":
-						raw := strings.Join(dataLines, "\n")
-						raw = strings.ReplaceAll(raw, "data: ", "")
-						log.Printf("Complete multiline JSON for session_id: %q", raw)
-						var msg map[string]interface{}
-						if err := json.Unmarshal([]byte(raw), &msg); err != nil {
-							errCh <- fmt.Errorf("unmarshal error: %w", err)
-							return
+					if line == "" {
+						if len(dataLines) > 0 {
+							switch currentEvent {
+							case "session_id":
+								raw := strings.Join(dataLines, "\n")
+								raw = strings.ReplaceAll(raw, "data: ", "")
+								var msg map[string]interface{}
+								if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+									select {
+									case errCh <- fmt.Errorf("unmarshal error: %w", err):
+									case <-ctx.Done():
+									}
+									return
+								}
+								if payload, ok := msg["payload"].(string); ok {
+									select {
+									case sessionIDCh <- payload:
+									case <-ctx.Done():
+										return
+									}
+								}
+							case "stream_chunk":
+								// Signal we got the stream chunk and exit
+								select {
+								case <-ctx.Done():
+								default:
+									close(doneCh)
+								}
+								return
+							}
 						}
-						payload, _ := msg["payload"].(string)
-						sessionIDCh <- payload
-
-					case "stream_chunk":
-						// We got the first stream chunk; signal completion.
-						close(doneCh)
-						resp.Body.Close()
-						cancel()
-						return
+						currentEvent = ""
+						dataLines = nil
+						continue
 					}
-					currentEvent = ""
-					dataLines = nil
-					continue
-				}
 
-				if strings.HasPrefix(line, "event: ") {
-					currentEvent = strings.TrimPrefix(line, "event: ")
-					dataLines = nil
-				} else if strings.HasPrefix(line, "data: ") {
-					dataLines = append(dataLines, line)
+					if strings.HasPrefix(line, "event: ") {
+						currentEvent = strings.TrimPrefix(line, "event: ")
+						dataLines = nil
+					} else if strings.HasPrefix(line, "data: ") {
+						dataLines = append(dataLines, line)
+					}
 				}
 			}
-			if scErr := scanner.Err(); scErr != nil {
-				// errCh <- fmt.Errorf("scanner error: %w", scErr)
-				return
+
+			if err := scanner.Err(); err != nil {
+				select {
+				case errCh <- fmt.Errorf("scanner error: %w", err):
+				case <-ctx.Done():
+				}
 			}
 		}()
 
-		// Wait for the session_id SSE event or error.
+		// Wait for the session_id SSE event or error with context
 		var sessionID string
 		select {
 		case sid := <-sessionIDCh:
@@ -199,8 +242,8 @@ func TestChatSSE(t *testing.T) {
 			log.Printf("Got session_id from SSE: %s", sessionID)
 		case e := <-errCh:
 			t.Fatalf("Error reading SSE stream: %v", e)
-		case <-time.After(5 * time.Second):
-			t.Fatal("Timeout waiting for session_id SSE event")
+		case <-ctx.Done():
+			t.Fatal("Context deadline exceeded waiting for session_id")
 		}
 
 		// Create ChatHistory in DB.
@@ -228,14 +271,14 @@ func TestChatSSE(t *testing.T) {
 		log.Printf("Message response code: %d", w2.Code)
 		assert.Equal(t, http.StatusOK, w2.Code)
 
-		// Wait for the first stream_chunk SSE event or an error.
+		// Wait for the stream_chunk event or error with context
 		select {
 		case e := <-errCh:
 			t.Fatalf("Error reading SSE stream: %v", e)
 		case <-doneCh:
 			log.Println("Got first stream chunk, test complete")
-		case <-time.After(5 * time.Second):
-			t.Fatal("Timeout waiting for stream_chunk SSE event")
+		case <-ctx.Done():
+			t.Fatal("Context deadline exceeded waiting for stream_chunk")
 		}
 
 		// If you really want to trigger a panic (for debugging), uncomment below.
