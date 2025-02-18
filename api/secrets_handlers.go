@@ -2,11 +2,27 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/gin-gonic/gin"
 )
+
+func checkSecretKey(c *gin.Context) bool {
+	if os.Getenv("TYK_AI_SECRET_KEY") == "" {
+		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Service Unavailable", Detail: "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set."}},
+		})
+		return false
+	}
+	return true
+}
 
 // @Summary Create a new secret
 // @Description Create a new secret with the provided information
@@ -17,11 +33,16 @@ import (
 // @Success 201 {object} SecretResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets [post]
 // @Security BearerAuth
 func (a *API) createSecret(c *gin.Context) {
+	if !checkSecretKey(c) {
+		return
+	}
 	var input SecretInput
 	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Printf("[DEBUG] Failed to bind JSON input: %v", err)
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -36,7 +57,9 @@ func (a *API) createSecret(c *gin.Context) {
 		Value:   input.Data.Attributes.Value,
 	}
 
+	log.Printf("[DEBUG] Creating secret with name: %s", secret.VarName)
 	if err := secrets.CreateSecret(a.config.DB, secret); err != nil {
+		log.Printf("[DEBUG] Failed to create secret: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -58,9 +81,13 @@ func (a *API) createSecret(c *gin.Context) {
 // @Success 200 {object} SecretResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets/{id} [get]
 // @Security BearerAuth
 func (a *API) getSecret(c *gin.Context) {
+	if !checkSecretKey(c) {
+		return
+	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -72,7 +99,7 @@ func (a *API) getSecret(c *gin.Context) {
 		return
 	}
 
-	secret, err := secrets.GetSecretByID(a.config.DB, uint(id))
+	secret, err := secrets.GetSecretByID(a.config.DB, uint(id), true) // Preserve reference format when viewing
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -97,9 +124,13 @@ func (a *API) getSecret(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets/{id} [patch]
 // @Security BearerAuth
 func (a *API) updateSecret(c *gin.Context) {
+	if !checkSecretKey(c) {
+		return
+	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -122,7 +153,7 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	secret, err := secrets.GetSecretByID(a.config.DB, uint(id))
+	secret, err := secrets.GetSecretByID(a.config.DB, uint(id), true) // Preserve reference format when editing
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -158,9 +189,13 @@ func (a *API) updateSecret(c *gin.Context) {
 // @Success 204 "No Content"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets/{id} [delete]
 // @Security BearerAuth
 func (a *API) deleteSecret(c *gin.Context) {
+	if !checkSecretKey(c) {
+		return
+	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -195,9 +230,13 @@ func (a *API) deleteSecret(c *gin.Context) {
 // @Param all query bool false "Return all records without pagination"
 // @Success 200 {object} SecretListResponse
 // @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets [get]
 // @Security BearerAuth
 func (a *API) listSecrets(c *gin.Context) {
+	if !checkSecretKey(c) {
+		return
+	}
 	pageSize, pageNumber, all := getPaginationParams(c)
 
 	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all)
@@ -240,7 +279,7 @@ func serializeSecret(secret *secrets.Secret) SecretResponse {
 			Value   string `json:"value"`
 			VarName string `json:"var_name"`
 		}{
-			Value:   secret.Value,
+			Value:   secret.GetValue(), // Use GetValue() to handle reference format
 			VarName: secret.VarName,
 		},
 	}

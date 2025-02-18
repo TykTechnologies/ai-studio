@@ -16,9 +16,13 @@ func TestSendAdminAppNotification(t *testing.T) {
 		// Setup test DB using existing helper
 		db := apitest.SetupTestDB(t)
 		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "", "", testMailer)
-		service := services.NewService(db)
-		service.NotificationService = services.NewNotificationService(db, mailService)
+		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
+		notificationService := services.NewNotificationService(db, mailService)
+		service := &services.Service{
+			DB:                  db,
+			NotificationService: notificationService,
+			Budget:              services.NewBudgetService(db, notificationService),
+		}
 
 		// Create admin users with different notification settings
 		admin1 := &models.User{
@@ -85,9 +89,13 @@ func TestSendAdminAppNotification(t *testing.T) {
 	t.Run("config admin email matches admin user", func(t *testing.T) {
 		db := apitest.SetupTestDB(t)
 		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "", "", testMailer)
-		service := services.NewService(db)
-		service.NotificationService = services.NewNotificationService(db, mailService)
+		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
+		notificationService := services.NewNotificationService(db, mailService)
+		service := &services.Service{
+			DB:                  db,
+			NotificationService: notificationService,
+			Budget:              services.NewBudgetService(db, notificationService),
+		}
 
 		// Create admin user with email matching config
 		adminUser := &models.User{
@@ -120,9 +128,13 @@ func TestSendAdminAppNotification(t *testing.T) {
 	t.Run("config admin email differs from admin users", func(t *testing.T) {
 		db := apitest.SetupTestDB(t)
 		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "", "", testMailer)
-		service := services.NewService(db)
-		service.NotificationService = services.NewNotificationService(db, mailService)
+		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
+		notificationService := services.NewNotificationService(db, mailService)
+		service := &services.Service{
+			DB:                  db,
+			NotificationService: notificationService,
+			Budget:              services.NewBudgetService(db, notificationService),
+		}
 
 		// Create admin user with different email
 		adminUser := &models.User{
