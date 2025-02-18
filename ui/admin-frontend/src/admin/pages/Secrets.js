@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
+import WarningIcon from "@mui/icons-material/Warning";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
@@ -20,6 +21,7 @@ import {
   MenuItem,
   Box,
   Snackbar,
+  Paper,
 } from "@mui/material";
 import {
   StyledPaper,
@@ -69,7 +71,11 @@ const Secrets = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching secrets", error);
-      setError("Failed to load secrets");
+      if (error.response?.status === 503) {
+        setError(error.response.data.errors[0].detail);
+      } else {
+        setError("Failed to load secrets");
+      }
     } finally {
       setLoading(false);
     }
@@ -129,7 +135,55 @@ const Secrets = () => {
   }
 
   if (error && secrets.length === 0) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            backgroundColor: '',
+            color: 'warning.dark',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 2,
+            mb: 3
+          }}
+        >
+          <WarningIcon color="error" sx={{ mt: 0.5 }} />
+          <Box>
+            <Typography variant="h6" color="warning.  " gutterBottom>
+              Secrets Management Unavailable
+            </Typography>
+            <Typography variant="body1" color="warning.dark">
+              {error}
+            </Typography>
+          </Box>
+        </Paper>
+        <Paper elevation={0} sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            How to Fix This
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            To enable secrets management, you need to:
+          </Typography>
+          <Box component="ol" sx={{ color: 'text.secondary', pl: 2 }}>
+            <li>
+              <Typography variant="body1">
+                Set the TYK_AI_SECRET_KEY environment variable with any string value
+              </Typography>
+            </li>
+            <li>
+              <Typography variant="body1">
+                Restart the server to apply the changes
+              </Typography>
+            </li>
+          </Box>
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
+            For more information, please refer to the documentation.
+          </Typography>
+        </Paper>
+      </Box>
+    );
   }
 
   return (

@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"time"
 
+	logrus "github.com/sirupsen/logrus"
+
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
@@ -21,6 +23,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/go-mail/mail"
@@ -38,6 +41,13 @@ func printWelcome() {
 
 func main() {
 	printWelcome()
+
+	// Set up debug logging
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+
 	appConf := config.Get()
 
 	err := licensing.IsLicensed()
@@ -83,6 +93,21 @@ func main() {
 	// Create a new service instance
 	service := services.NewService(db)
 
+	// Initialize mail service and notification service
+	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
+	mailService := notifications.NewMailService(
+		appConf.FromEmail,
+		appConf.SMTPServer,
+		appConf.SMTPPort,
+		appConf.SMTPUser,
+		appConf.SMTPPass,
+		mailer,
+	)
+
+	// Create notification service that will handle all notifications
+	notificationService := services.NewNotificationService(db, mailService)
+
+	// Initialize auth config and service
 	config := &auth.Config{
 		DB:                     db,
 		Service:                service,
@@ -95,29 +120,23 @@ func main() {
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,
-		FromEmail:              appConf.FromEmail,
 		TestMode:               os.Getenv("DEVMODE") != "",
-		SMTPPort:               appConf.SMTPPort,
-		SMTPHost:               appConf.SMTPServer,
-		SMTPUsername:           appConf.SMTPUser,
-		SMTPPassword:           appConf.SMTPPass,
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 	}
 
-	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
-	authService := auth.NewAuthService(config, mailer, service)
+	authService := auth.NewAuthService(config, mailService, service, notificationService)
 
 	// analytics
 	ctx, stopRec := context.WithCancel(context.Background())
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
+	budgetService := services.NewBudgetService(db, notificationService)
 
 	// start the Proxy
-
 	pConfig := &proxy.Config{
 		Port: 9090,
 	}
-	p := proxy.NewProxy(service, pConfig)
+	p := proxy.NewProxy(service, pConfig, budgetService)
 
 	gatewayEnabled, gatewayOk := licensing.Entitlement(licensing.FEATUREGateway)
 	if gatewayOk && gatewayEnabled.Bool() {

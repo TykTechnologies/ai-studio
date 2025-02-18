@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
@@ -50,6 +51,8 @@ func (a *API) createLLM(c *gin.Context) {
 		filters,
 		input.Data.Attributes.DefaultModel,
 		input.Data.Attributes.AllowedModels,
+		input.Data.Attributes.MonthlyBudget,
+		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -173,6 +176,8 @@ func (a *API) updateLLM(c *gin.Context) {
 		filters,
 		input.Data.Attributes.DefaultModel,
 		input.Data.Attributes.AllowedModels,
+		input.Data.Attributes.MonthlyBudget,
+		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -202,6 +207,17 @@ func (a *API) updateLLM(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+}
+
+func parseBudgetStartDate(dateStr *string) *time.Time {
+	if dateStr == nil {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, *dateStr)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 func sliceEqual(a, b []string) bool {
@@ -468,6 +484,8 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			Filters          []FilterResponse `json:"filters"`
 			DefaultModel     string           `json:"default_model"`
 			AllowedModels    []string         `json:"allowed_models"`
+			MonthlyBudget    *float64         `json:"monthly_budget"`
+			BudgetStartDate  *time.Time       `json:"budget_start_date"`
 		}{
 			Name:             llm.Name,
 			APIKey:           llm.APIKey,
@@ -481,6 +499,8 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			Filters:          serializeFilters(llm.Filters),
 			DefaultModel:     llm.DefaultModel,
 			AllowedModels:    llm.AllowedModels,
+			MonthlyBudget:    llm.MonthlyBudget,
+			BudgetStartDate:  llm.BudgetStartDate,
 		},
 	}
 }

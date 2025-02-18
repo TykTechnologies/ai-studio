@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -15,7 +16,22 @@ func SetDBRef(db *gorm.DB) {
 	dbRef = db
 }
 
-func GetValue(reference string) string {
+// IsSecretReference checks if a string is in the format $SECRET/NAME
+func IsSecretReference(value string) bool {
+	if !strings.HasPrefix(value, "$") {
+		return false
+	}
+
+	parts := strings.Split(value, "/")
+	return len(parts) == 2 && parts[0] == "$SECRET"
+}
+
+// GetSecretReference returns a secret reference string for a given name
+func GetSecretReference(name string) string {
+	return fmt.Sprintf("$SECRET/%s", name)
+}
+
+func GetValue(reference string, preserveRef bool) string {
 	if !strings.HasPrefix(reference, "$") {
 		return reference
 	}
@@ -35,8 +51,13 @@ func GetValue(reference string) string {
 	case "$ENV":
 		return os.Getenv(name)
 	case "$SECRET":
+		// If we're already dealing with a secret reference and preserveRef is true
+		if IsSecretReference(reference) && preserveRef {
+			return reference
+		}
+
 		if dbRef != nil {
-			val, err := GetSecretByVarName(dbRef, name)
+			val, err := GetSecretByVarName(dbRef, name, preserveRef)
 			if err != nil {
 				log.Println(err)
 				return reference

@@ -58,7 +58,7 @@ func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
 		return nil, err
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey)
+	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
 	return tool, nil
 }
 
@@ -79,7 +79,7 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 		return nil, err
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey)
+	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
 	return tool, nil
 }
 

@@ -57,6 +57,7 @@ const UserForm = () => {
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   useEffect(() => {
     fetchGroups();
@@ -89,7 +90,8 @@ const UserForm = () => {
       setIsAdmin(userData.attributes.is_admin);
       setShowPortal(userData.attributes.show_portal ?? true);
       setShowChat(userData.attributes.show_chat ?? true);
-      setEmailVerified(userData.attributes.email_verified ?? false); // Add this line
+      setEmailVerified(userData.attributes.email_verified ?? false);
+      setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -144,6 +146,7 @@ const UserForm = () => {
           show_portal: showPortal,
           show_chat: showChat,
           email_verified: emailVerified,
+          notifications_enabled: isAdmin ? notificationsEnabled : false,
           ...(password && { password }),
         },
       },
@@ -389,6 +392,20 @@ const UserForm = () => {
                 label="Email Verified"
               />
             </Grid>
+            {isAdmin && (
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notificationsEnabled}
+                      onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Enable Notifications"
+                />
+              </Grid>
+            )}
             <Grid item xs={12}>
               <StyledButton
                 variant="contained"
