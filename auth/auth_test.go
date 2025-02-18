@@ -45,6 +45,7 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 	suite.db = setupTestDB(suite.T())
 	suite.service = services.NewService(suite.db)
 	mockMailService := newMockMailService()
+	notificationService := services.NewNotificationService(suite.db, mockMailService)
 	config := auth.Config{
 		DB:                  suite.db,
 		Service:             suite.service,
@@ -57,7 +58,7 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 	}
-	suite.authService = auth.NewAuthService(&config, mockMailService, suite.service)
+	suite.authService = auth.NewAuthService(&config, mockMailService, suite.service, notificationService)
 }
 
 func (suite *AuthServiceTestSuite) TearDownTest() {
@@ -156,6 +157,30 @@ func (suite *AuthServiceTestSuite) TestResetPassword() {
 	})
 }
 func (suite *AuthServiceTestSuite) TestRegister() {
+	suite.Run("First user registration becomes admin with notifications", func() {
+		// Register first user
+		err := suite.authService.Register("admin@example.com", "Admin User", "Password123!", true, true)
+		assert.NoError(suite.T(), err)
+
+		var firstUser models.User
+		err = suite.db.Where("email = ?", "admin@example.com").First(&firstUser).Error
+		assert.NoError(suite.T(), err)
+		assert.True(suite.T(), firstUser.IsAdmin, "First user should be admin")
+		assert.True(suite.T(), firstUser.EmailVerified, "First user should have verified email")
+		assert.True(suite.T(), firstUser.NotificationsEnabled, "First user should have notifications enabled")
+
+		// Register second user
+		err = suite.authService.Register("user@example.com", "Regular User", "Password123!", true, true)
+		assert.NoError(suite.T(), err)
+
+		var secondUser models.User
+		err = suite.db.Where("email = ?", "user@example.com").First(&secondUser).Error
+		assert.NoError(suite.T(), err)
+		assert.False(suite.T(), secondUser.IsAdmin, "Second user should not be admin")
+		assert.False(suite.T(), secondUser.EmailVerified, "Second user should not have verified email")
+		assert.False(suite.T(), secondUser.NotificationsEnabled, "Second user should not have notifications enabled")
+	})
+
 	suite.Run("Successful registration", func() {
 		err := suite.authService.Register("test@example.com", "Test User", "Password123!", true, true)
 		assert.NoError(suite.T(), err)

@@ -17,8 +17,8 @@ import (
 // setupDB now enables WAL mode + busy timeout for in-memory SQLite to reduce "database is locked" errors.
 func setupDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
-		// This can reduce some locking overhead by skipping the default transaction wrapper per statement.
 		SkipDefaultTransaction: true,
+		PrepareStmt:            true, // Enable prepared statement cache
 	})
 	require.NoError(t, err)
 
@@ -27,8 +27,10 @@ func setupDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	_, _ = sqlDB.Exec("PRAGMA journal_mode = WAL;")
 	_, _ = sqlDB.Exec("PRAGMA busy_timeout = 5000;")
-	// Optionally reduce sync overhead further
 	_, _ = sqlDB.Exec("PRAGMA synchronous = NORMAL;")
+	_, _ = sqlDB.Exec("PRAGMA cache_size = 2000;")       // Increase cache size
+	_, _ = sqlDB.Exec("PRAGMA temp_store = MEMORY;")     // Store temp tables in memory
+	_, _ = sqlDB.Exec("PRAGMA mmap_size = 30000000000;") // Use memory-mapped I/O
 
 	// Migrate main models.
 	err = models.InitModels(db)
@@ -40,7 +42,7 @@ func setupDB(t *testing.T) *gorm.DB {
 		&models.LLMChatLogEntry{},
 		&models.ToolCallRecord{},
 		&models.ProxyLog{},
-		&models.Notification{}, // Add notifications table
+		&models.Notification{},
 	)
 	require.NoError(t, err)
 
@@ -60,11 +62,9 @@ func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 
 // tearDownTest ensures the analytics background goroutine does not outlive the DB.
 func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
-	// Wait for any pending analytics to complete
-	time.Sleep(200 * time.Millisecond)
-	cancel()                           // stop analytics goroutine
-	time.Sleep(100 * time.Millisecond) // Give analytics goroutine time to clean up
-	// Optionally close underlying DB connection:
+	time.Sleep(25 * time.Millisecond)
+	cancel()
+	time.Sleep(25 * time.Millisecond)
 	sqlDB, err := db.DB()
 	if err == nil {
 		_ = sqlDB.Close()
@@ -73,48 +73,47 @@ func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
 
 // waitForAnalytics ensures we have at least `expectedCount` LLMChatRecords.
 func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
-	deadline := time.Now().Add(5000 * time.Millisecond) // Increase timeout to 5 seconds
+	deadline := time.Now().Add(1500 * time.Millisecond) // Reduced from 2s to 1.5s
 	for time.Now().Before(deadline) {
 		var count int64
 		var err error
-		for i := 0; i < 5; i++ { // retry a few times if locked
+		for i := 0; i < 3; i++ {
 			err = db.Model(&models.LLMChatRecord{}).Count(&count).Error
 			if err == nil {
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(25 * time.Millisecond)
 		}
 		if err != nil {
-			continue // skip this round if still locked
+			continue
 		}
 
 		if count >= expectedCount {
-			time.Sleep(200 * time.Millisecond) // extra wait to ensure all operations complete
+			time.Sleep(25 * time.Millisecond)
 			return
 		}
-		time.Sleep(200 * time.Millisecond) // Increase delay between checks
+		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("Timeout waiting for analytics records. Expected at least: %d", expectedCount)
 }
 
 // waitUntilIdle waits until the analytics goroutine has not produced any *new*
-// LLMChatRecords for ~200ms, meaning it's idle. This helps avoid "table is locked"
-// if we do a DB Update concurrent with an ongoing analytics insert.
+// LLMChatRecords for ~100ms, meaning it's idle.
 func waitUntilIdle(t *testing.T, db *gorm.DB) {
 	var lastCount int64
 	var stableRounds int
-	timeout := time.NewTimer(5 * time.Second)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	timeout := time.NewTimer(1500 * time.Millisecond) // Reduced from 2s to 1.5s
+	ticker := time.NewTicker(25 * time.Millisecond)   // Reduced from 50ms to 25ms
 	defer timeout.Stop()
 	defer ticker.Stop()
 
 	// capture initial count
-	for i := 0; i < 5; i++ { // retry a few times if locked
+	for i := 0; i < 3; i++ {
 		err := db.Model(&models.LLMChatRecord{}).Count(&lastCount).Error
 		if err == nil {
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(25 * time.Millisecond)
 	}
 
 	for {
@@ -124,25 +123,23 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 		case <-ticker.C:
 			var curCount int64
 			var err error
-			for i := 0; i < 5; i++ { // retry a few times if locked
+			for i := 0; i < 3; i++ {
 				err = db.Model(&models.LLMChatRecord{}).Count(&curCount).Error
 				if err == nil {
 					break
 				}
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(25 * time.Millisecond)
 			}
 			if err != nil {
-				continue // skip this round if still locked
+				continue
 			}
 			if curCount == lastCount {
 				stableRounds++
-				// If stable for ~2 intervals (200ms), assume idle.
 				if stableRounds >= 2 {
-					time.Sleep(200 * time.Millisecond) // extra wait to ensure all operations complete
+					time.Sleep(25 * time.Millisecond)
 					return
 				}
 			} else {
-				// changed, reset
 				stableRounds = 0
 				lastCount = curCount
 			}
@@ -152,30 +149,29 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 
 // waitForRecordWithCost waits for a record to be written with a non-zero cost and returns the record
 func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
-	deadline := time.Now().Add(5000 * time.Millisecond) // Increase timeout to 5 seconds
+	deadline := time.Now().Add(1500 * time.Millisecond) // Reduced from 2s to 1.5s
 	for time.Now().Before(deadline) {
 		var record models.LLMChatRecord
 		var err error
-		for i := 0; i < 5; i++ { // retry a few times if locked
+		for i := 0; i < 3; i++ {
 			err = db.First(&record).Error
 			if err == nil {
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(25 * time.Millisecond)
 		}
 		if err != nil {
-			continue // skip this round if still locked
+			continue
 		}
 
 		t.Logf("Found record: cost=%f prompt_tokens=%d response_tokens=%d timestamp=%v",
 			record.Cost, record.PromptTokens, record.ResponseTokens, record.TimeStamp)
 
 		if record.Cost > 0 {
-			// Wait a bit to ensure the record is fully committed
-			time.Sleep(200 * time.Millisecond) // Increase delay
+			time.Sleep(25 * time.Millisecond)
 			return &record
 		}
-		time.Sleep(200 * time.Millisecond) // Increase delay between checks
+		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatal("Timeout waiting for record with cost")
 	return nil
@@ -183,7 +179,7 @@ func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
 
 // waitForSpendingUpdate waits for spending to be updated to an expected value
 func waitForSpendingUpdate(t *testing.T, budgetService *services.BudgetService, appID uint, llmID uint, start, end time.Time, expectedSpent float64) {
-	deadline := time.Now().Add(5000 * time.Millisecond) // Increase timeout to 5 seconds
+	deadline := time.Now().Add(1500 * time.Millisecond) // Reduced from 2s to 1.5s
 	for time.Now().Before(deadline) {
 		budgetService.ClearCache()
 
@@ -191,38 +187,38 @@ func waitForSpendingUpdate(t *testing.T, budgetService *services.BudgetService, 
 		var err error
 
 		// Retry app spending query if locked
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 3; i++ {
 			appSpent, err = budgetService.GetMonthlySpending(appID, start, end)
 			if err == nil {
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(25 * time.Millisecond)
 		}
 		if err != nil {
-			continue // skip this round if still locked
+			continue
 		}
 
 		// Retry llm spending query if locked
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 3; i++ {
 			llmSpent, err = budgetService.GetLLMMonthlySpending(llmID, start, end)
 			if err == nil {
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(25 * time.Millisecond)
 		}
 		if err != nil {
-			continue // skip this round if still locked
+			continue
 		}
 
 		t.Logf("Current spending - app: %.2f, llm: %.2f (expected: %.2f) [start=%v, end=%v]",
 			appSpent, llmSpent, expectedSpent, start, end)
 
 		if appSpent == expectedSpent && llmSpent == expectedSpent {
-			time.Sleep(200 * time.Millisecond) // extra wait to ensure all operations complete
+			time.Sleep(25 * time.Millisecond)
 			return
 		}
 
-		time.Sleep(200 * time.Millisecond) // Increase delay between checks
+		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("Timeout waiting for spending to update to %.2f", expectedSpent)
 }

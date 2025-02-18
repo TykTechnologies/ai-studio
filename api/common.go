@@ -1,10 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"html/template"
 	"log"
 	"log/slog"
 	"net/http"
@@ -557,35 +555,12 @@ type CreateAppRequest struct {
 }
 
 func (a *API) sendAdminAppNotification(app *models.App) error {
-	subject := "New App Created"
+	title := "New App Created"
 	appDetailsURL := fmt.Sprintf("%s/admin/apps/%d", a.config.FrontendURL, app.ID)
+	content := fmt.Sprintf("A new app has been created:\n\nName: %s\nDescription: %s\nView app details: %s",
+		app.Name, app.Description, appDetailsURL)
 
-	user, err := a.service.GetUserByID(app.UserID)
-	if err != nil {
-		return fmt.Errorf("failed to get user by ID: %w", err)
-	}
-
-	var body string
-	tmpl, err := template.ParseFiles("./templates/admin-app-notification.tmpl")
-	if err != nil {
-		// If template is not found, use a simple string
-		body = fmt.Sprintf("A new app has been created:\n\nName: %s\nDescription: %s\nCreated by User ID: %d\n\nView app details: %s",
-			app.Name, app.Description, app.UserID, appDetailsURL)
-	} else {
-		var buf bytes.Buffer
-		err = tmpl.Execute(&buf, map[string]interface{}{
-			"AppName":        app.Name,
-			"AppDescription": app.Description,
-			"UserName":       user.Name,
-			"AppDetailsURL":  appDetailsURL,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to execute email template: %w", err)
-		}
-		body = buf.String()
-	}
-
-	return a.auth.SendEmail(a.config.AdminEmail, subject, body)
+	return a.service.NotificationService.SendAdminAppNotification(title, content)
 }
 
 // getUserAccessibleDataSources godoc

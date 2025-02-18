@@ -43,18 +43,20 @@ type Config struct {
 var _ models.EmailSender = (*AuthService)(nil)
 
 type AuthService struct {
-	Config      *Config
-	DB          *gorm.DB
-	Service     services.ServiceInterface
-	TokenStore  map[string]*models.User
-	MailService *notifications.MailService // Exported for testing
+	Config              *Config
+	DB                  *gorm.DB
+	Service             services.ServiceInterface
+	TokenStore          map[string]*models.User
+	MailService         *notifications.MailService // Exported for testing
+	NotificationService *services.NotificationService
 }
 
-func NewAuthService(config *Config, mailService *notifications.MailService, service services.ServiceInterface) *AuthService {
+func NewAuthService(config *Config, mailService *notifications.MailService, service services.ServiceInterface, notificationService *services.NotificationService) *AuthService {
 	return &AuthService{
-		Config:      config,
-		MailService: mailService,
-		Service:     service,
+		Config:              config,
+		MailService:         mailService,
+		Service:             service,
+		NotificationService: notificationService,
 	}
 }
 
@@ -384,6 +386,7 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 	if count == 0 {
 		user.IsAdmin = true
 		user.EmailVerified = true
+		user.NotificationsEnabled = true
 	}
 
 	if err := user.Create(a.Config.DB); err != nil {
@@ -515,7 +518,7 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 		}
 	}
 
-	return a.SendEmail(a.Config.AdminEmail, subject, body)
+	return a.NotificationService.SendAdminAppNotification(subject, body)
 }
 
 func (a *AuthService) SendEmail(to, subject, body string) error {

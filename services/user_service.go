@@ -7,14 +7,20 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool) (*models.User, error) {
+func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool) (*models.User, error) {
+	// Only allow notifications if user is admin
+	if notificationsEnabled && !isAdmin {
+		return nil, fmt.Errorf("notifications can only be enabled for admin users")
+	}
+
 	user := &models.User{
-		Email:         email,
-		Name:          name,
-		IsAdmin:       isAdmin,
-		ShowChat:      showChat,
-		ShowPortal:    showPortal,
-		EmailVerified: emailVerified,
+		Email:                email,
+		Name:                 name,
+		IsAdmin:              isAdmin,
+		ShowChat:             showChat,
+		ShowPortal:           showPortal,
+		EmailVerified:        emailVerified,
+		NotificationsEnabled: notificationsEnabled,
 	}
 
 	if err := user.SetPassword(password); err != nil {
@@ -65,10 +71,15 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool) (*models.User, error) {
+func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool) (*models.User, error) {
 	user, err := s.GetUserByID(id)
 	if err != nil {
 		return nil, err
+	}
+
+	// Only allow notifications if user is admin
+	if notificationsEnabled && !isAdmin {
+		return nil, fmt.Errorf("notifications can only be enabled for admin users")
 	}
 
 	user.Email = email
@@ -77,6 +88,7 @@ func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat
 	user.ShowChat = showChat
 	user.ShowPortal = showPortal
 	user.EmailVerified = emailVerified
+	user.NotificationsEnabled = notificationsEnabled
 
 	if err := user.Update(s.DB); err != nil {
 		return nil, err

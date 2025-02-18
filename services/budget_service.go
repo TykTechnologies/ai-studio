@@ -494,23 +494,10 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
-	// Send to each admin
-	for _, admin := range admins {
-		adminNotificationID := fmt.Sprintf("%s_admin_%d", baseNotificationID, admin.ID)
-
-		adminNotification := &models.Notification{
-			NotificationID: adminNotificationID,
-			Type:           "budget_alert",
-			Title:          fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold),
-			Content:        adminBuf.String(),
-			UserID:         admin.ID,
-			Read:           false,
-			SentAt:         time.Now(),
-		}
-
-		if err := s.notificationSvc.Send(adminNotification); err != nil {
-			return fmt.Errorf("failed to send admin notification: %v", err)
-		}
+	// Send to admins using the new method
+	title := fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold)
+	if err := s.notificationSvc.SendAdminAppNotification(title, adminBuf.String()); err != nil {
+		return fmt.Errorf("failed to send admin notification: %v", err)
 	}
 
 	return nil
@@ -555,37 +542,10 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
-	// Send to each admin
-	for _, admin := range admins {
-		// Get start time for notification ID
-		now := time.Now()
-		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
-
-		// Create base notification ID (used for budget check)
-		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
-			llm.ID,
-			monthOffset,
-			int(budget),
-			threshold,
-		)
-
-		// Create admin notification ID
-		notificationID := fmt.Sprintf("%s_admin_%d", baseNotificationID, admin.ID)
-
-		notification := &models.Notification{
-			NotificationID: notificationID,
-			Type:           "budget_alert",
-			Title:          fmt.Sprintf("Budget Alert: LLM %s at %d%% Usage", llm.Name, threshold),
-			Content:        buf.String(),
-			UserID:         admin.ID,
-			Read:           false,
-			SentAt:         time.Now(),
-		}
-
-		if err := s.notificationSvc.Send(notification); err != nil {
-			return fmt.Errorf("failed to send admin notification: %v", err)
-		}
+	// Send to admins using the new method
+	title := fmt.Sprintf("Budget Alert: LLM %s at %d%% Usage", llm.Name, threshold)
+	if err := s.notificationSvc.SendAdminAppNotification(title, buf.String()); err != nil {
+		return fmt.Errorf("failed to send admin notification: %v", err)
 	}
 
 	return nil

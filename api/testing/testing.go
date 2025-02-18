@@ -34,6 +34,17 @@ func SetupTestService(db *gorm.DB) *services.Service {
 	return services.NewService(db)
 }
 
+func SetupTestNotificationService(db *gorm.DB) *services.NotificationService {
+	return services.NewNotificationService(db, NewMockMailer())
+}
+
+func SetupTestAuthService(db *gorm.DB, service *services.Service) *auth.AuthService {
+	config := SetupTestAuthConfig(db, service)
+	mockMailer := NewMockMailer()
+	notificationService := SetupTestNotificationService(db)
+	return auth.NewAuthService(config, mockMailer, service, notificationService)
+}
+
 func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {
 	return &auth.Config{
 		DB:                  db,

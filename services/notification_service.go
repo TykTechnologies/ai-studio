@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"gorm.io/gorm"
@@ -126,4 +127,53 @@ func (s *NotificationService) GetUnreadCount(userID uint) (int64, error) {
 		return 0, fmt.Errorf("error counting unread notifications: %v", result.Error)
 	}
 	return count, nil
+}
+
+// SendAdminAppNotification sends a notification to all admin users who have notifications enabled
+// and also sends an email to the admin email from config for backward compatibility
+func (s *NotificationService) SendAdminAppNotification(title, content string) error {
+	// Find all admin users with notifications enabled
+	var adminUsers []models.User
+	if err := s.db.Where("is_admin = ? AND notifications_enabled = ?", true, true).Find(&adminUsers).Error; err != nil {
+		return fmt.Errorf("error finding admin users: %v", err)
+	}
+
+	// Send notifications to admin users
+	for _, admin := range adminUsers {
+		notification := &models.Notification{
+			UserID:         admin.ID,
+			Title:          title,
+			Content:        content,
+			NotificationID: fmt.Sprintf("admin_app_%d_%d", admin.ID, time.Now().UnixNano()),
+			SentAt:         time.Now(),
+		}
+		if err := s.Send(notification); err != nil {
+			// Log error but continue with other admins
+			fmt.Printf("Error sending notification to admin %s: %v\n", admin.Email, err)
+		}
+	}
+
+	// For backward compatibility, also send email to admin email from config if set and not already included
+	if s.mailService != nil {
+		adminEmail := config.Get().AdminEmail
+		if adminEmail != "" {
+			// Check if adminEmail is not already in the list of admin users
+			alreadyIncluded := false
+			for _, admin := range adminUsers {
+				if admin.Email == adminEmail {
+					alreadyIncluded = true
+					break
+				}
+			}
+
+			if !alreadyIncluded {
+				if err := s.mailService.SendEmail(adminEmail, title, content); err != nil {
+					// Log error but don't fail the entire operation
+					fmt.Printf("Error sending email to admin email %s: %v\n", adminEmail, err)
+				}
+			}
+		}
+	}
+
+	return nil
 }
