@@ -51,6 +51,8 @@ func (a *API) createLLM(c *gin.Context) {
 		filters,
 		input.Data.Attributes.DefaultModel,
 		input.Data.Attributes.AllowedModels,
+		input.Data.Attributes.MonthlyBudget,
+		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -174,6 +176,8 @@ func (a *API) updateLLM(c *gin.Context) {
 		filters,
 		input.Data.Attributes.DefaultModel,
 		input.Data.Attributes.AllowedModels,
+		input.Data.Attributes.MonthlyBudget,
+		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -203,6 +207,17 @@ func (a *API) updateLLM(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+}
+
+func parseBudgetStartDate(dateStr *string) *time.Time {
+	if dateStr == nil {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, *dateStr)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 func sliceEqual(a, b []string) bool {

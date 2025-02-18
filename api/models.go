@@ -100,9 +100,11 @@ type LLMInput struct {
 			LogoURL          string   `json:"logo_url"`
 			Vendor           string   `json:"vendor"`
 			Active           bool     `json:"active"`
-			Filters          []int    `json:"filters"`
+			Filters          []uint   `json:"filters"`
 			DefaultModel     string   `json:"default_model"`
 			AllowedModels    []string `json:"allowed_models"`
+			MonthlyBudget    *float64 `json:"monthly_budget"`
+			BudgetStartDate  *string  `json:"budget_start_date"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -333,11 +335,13 @@ type AppInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name          string `json:"name"`
-			Description   string `json:"description"`
-			UserID        uint   `json:"user_id"`
-			DatasourceIDs []uint `json:"datasource_ids"`
-			LLMIDs        []uint `json:"llm_ids"`
+			Name            string     `json:"name"`
+			Description     string     `json:"description"`
+			UserID          uint       `json:"user_id"`
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
+			MonthlyBudget   *float64   `json:"monthly_budget"`
+			BudgetStartDate *time.Time `json:"budget_start_date"`
 		} `json:"attributes"`
 	} `json:"data"`
 }

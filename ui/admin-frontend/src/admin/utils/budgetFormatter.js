@@ -6,11 +6,12 @@ const calculateBudgetPeriodStart = (referenceDate) => {
 	if (!referenceDate) {
 		// If no reference date, use 1st of current month
 		const now = getNow();
-		return new Date(now.getFullYear(), now.getMonth(), 1);
+		return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
 	}
 
-	// Use the reference date directly
-	return new Date(referenceDate);
+	// Parse the ISO date string and ensure it's in UTC
+	const date = new Date(referenceDate);
+	return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 };
 
 // Format the budget period as a string (e.g., "Jan 14 - Feb 13")
@@ -22,9 +23,7 @@ const formatBudgetPeriod = (startDate) => {
 	}
 
 	const start = new Date(startDate);
-	const end = new Date(startDate);
-	end.setMonth(end.getMonth() + 1);
-	end.setDate(end.getDate() - 1);
+	const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, start.getUTCDate()));
 
 	return `${start.toLocaleString('default', { month: 'short' })} ${start.getDate()} - ${end.toLocaleString('default', { month: 'short' })} ${end.getDate()}`;
 };

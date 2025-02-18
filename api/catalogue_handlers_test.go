@@ -92,9 +92,11 @@ func TestCatalogueEndpoints(t *testing.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -108,9 +110,11 @@ func TestCatalogueEndpoints(t *testing.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -119,6 +123,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				ShortDescription: "A test LLM",
 				LongDescription:  "This is a test LLM for API testing",
 				LogoURL:          "https://testllm.com/logo.png",
+				Vendor:           "Test Vendor",
 			},
 		},
 	}

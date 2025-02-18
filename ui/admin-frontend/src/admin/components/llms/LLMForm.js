@@ -173,8 +173,14 @@ const LLMForm = () => {
   };
 
   const handleBudgetStartDateChange = (e) => {
-    const value = e.target.value ? new Date(e.target.value).toISOString() : null;
-    setLLM(prev => ({ ...prev, budget_start_date: value }));
+    const value = e.target.value;
+    if (!value) {
+      setLLM(prev => ({ ...prev, budget_start_date: null }));
+      return;
+    }
+    // Create date in local timezone and convert to UTC
+    const date = new Date(value + 'T00:00:00Z');
+    setLLM(prev => ({ ...prev, budget_start_date: date.toISOString() }));
   };
 
   const handleSwitchChange = (e) => {
@@ -361,7 +367,7 @@ const LLMForm = () => {
                     label="Budget Start Date"
                     name="budget_start_date"
                     type="date"
-                    value={llm.budget_start_date ? llm.budget_start_date.split('T')[0] : ''}
+                    value={llm.budget_start_date ? new Date(llm.budget_start_date).toISOString().split('T')[0] : ''}
                     onChange={handleBudgetStartDateChange}
                     disabled={!llm.monthly_budget}
                     InputLabelProps={{
