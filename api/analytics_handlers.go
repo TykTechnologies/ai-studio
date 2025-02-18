@@ -686,7 +686,23 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 		return
 	}
 
-	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate, getInteractionType(c))
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate, getInteractionType(c), llmID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
