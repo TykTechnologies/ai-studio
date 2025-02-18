@@ -15,7 +15,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Box,
+  Button,
 } from "@mui/material";
 import {
   StyledTableCell,
@@ -23,6 +23,7 @@ import {
   StyledTableRow,
   StyledPaper,
   StyledButton,
+  StyledButtonCritical
 } from "../../admin/styles/sharedStyles";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -148,7 +149,7 @@ const AppListView = () => {
                   onClick={() => handleRowClick(app.id)}
                   sx={{ cursor: "pointer" }}
                 >
-                  <StyledTableCell component="th" scope="row">
+                  <StyledTableCell>
                     {app.attributes.name}
                   </StyledTableCell>
                   <StyledTableCell>{app.attributes.description}</StyledTableCell>
@@ -183,10 +184,10 @@ const AppListView = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <StyledButton onClick={handleDeleteCancel}>Cancel</StyledButton>
-          <StyledButton onClick={handleDeleteConfirm} autoFocus>
+          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <StyledButtonCritical onClick={handleDeleteConfirm} autoFocus>
             Delete
-          </StyledButton>
+          </StyledButtonCritical>
         </DialogActions>
       </Dialog>
     </Container>

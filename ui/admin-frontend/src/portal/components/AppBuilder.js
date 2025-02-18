@@ -155,13 +155,13 @@ const AppBuilder = () => {
         <Typography variant="body1" paragraph>
           Your app has been successfully submitted for approval.
         </Typography>
-        <Button
+        <StyledButton
           variant="contained"
           color="primary"
           onClick={() => navigate("/portal/apps")}
         >
           View your Apps and Credentials
-        </Button>
+        </StyledButton>
       </Container>
     );
   }

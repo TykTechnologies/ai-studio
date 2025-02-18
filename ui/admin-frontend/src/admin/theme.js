@@ -32,11 +32,15 @@ const theme = createTheme({
       buttonPrimaryDefault: '#343452',
       buttonPrimaryDefaultHover: '#181834',
       buttonPrimaryOutlineHover: '#EEFEFA',
-      buttonSecondary: '#EDEDF0'
+      buttonSecondary: '#EDEDF0',
+      buttonCritical: '#D82C0D',
+      buttonCriticalHover: '#AE2410'
     },
     border: {
       neutralDefault: '#D8D8DF',
-      neutralHovered: '#9D9DAF'
+      neutralHovered: '#9D9DAF',
+      criticalDefault: '#AE2410',
+      criticalHover: '#8B1D12'
     },
     gray: {
       ligh: "#F5F5F5",
@@ -56,6 +60,7 @@ const theme = createTheme({
       emptyStateBackground: "#23ebba11",
     },
     text: {
+      primary: "#03031C",
       light: "#FFFFFF",
       dark: "#023056",
       default: "#03031C",
@@ -65,6 +70,9 @@ const theme = createTheme({
   components: {
     MuiTypography: {
       styleOverrides: {
+        root: ({ theme }) => ({
+          color: theme.palette.text.primary 
+        }),
         h5: {
           fontWeight: "bold",
         },
@@ -180,8 +188,9 @@ const theme = createTheme({
         root: ({ theme }) => ({
           '&.Mui-selected': {
             backgroundColor: theme.palette.background.secondaryExtraLight,
+            fontFamily: 'Inter-Medium',
             '&:hover': {
-              backgroundColor: theme.palette.background.secondaryExtraLight
+              backgroundColor: theme.palette.background.secondaryExtraLight,
             }
           }
         })
@@ -192,6 +201,8 @@ const theme = createTheme({
         root: ({ theme }) => ({
           color: theme.palette.text.defaultSubdued,
           textDecoration: 'none',
+          cursor: 'pointer',
+          fontFamily: 'Inter-Semibold',
           display: 'flex',
           alignItems: 'center',
           '&:hover': {
@@ -230,7 +241,16 @@ const theme = createTheme({
           }
         })
       }
-    }
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: "16px",
+          boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.1)",
+          backgroundColor: "#ffffff",
+        },
+      },
+    },
   },
 });
 

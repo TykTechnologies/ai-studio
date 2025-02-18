@@ -103,7 +103,7 @@ const LLMListView = () => {
                 <Typography gutterBottom variant="h6" component="div">
                   {llm.attributes.name}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.defaultSubdued">
                   {llm.attributes.short_description}
                 </Typography>
                 <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
@@ -122,7 +122,7 @@ const LLMListView = () => {
                         process.env.PUBLIC_URL + "/images/placeholder-logo.png";
                     }}
                   />
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.defaultSubdued">
                     {getVendorName(llm.attributes.vendor)}
                   </Typography>
                 </Box>
