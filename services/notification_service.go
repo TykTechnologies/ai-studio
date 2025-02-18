@@ -77,10 +77,12 @@ func (s *NotificationService) Send(notification *models.Notification) error {
 		return fmt.Errorf("error creating notification: %v", err)
 	}
 
-	// Send email
-	if err := s.mailService.SendEmail(user.Email, notification.Title, notification.Content); err != nil {
-		// Log error but don't fail the notification creation
-		fmt.Printf("Error sending email notification: %v\n", err)
+	// Send email if mail service is configured
+	if s.mailService != nil {
+		if err := s.mailService.SendEmail(user.Email, notification.Title, notification.Content); err != nil {
+			// Log error but don't fail the notification creation
+			fmt.Printf("Error sending email notification: %v\n", err)
+		}
 	}
 
 	return nil
