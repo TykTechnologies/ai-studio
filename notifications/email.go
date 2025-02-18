@@ -1,6 +1,9 @@
 package notifications
 
 import (
+	"log"
+	"os"
+
 	"github.com/go-mail/mail"
 )
 
@@ -40,6 +43,13 @@ func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password
 }
 
 func (m *MailService) SendEmail(to, subject, body string) error {
+	// In dev mode with no SMTP, print to console
+	if os.Getenv("DEVMODE") == "true" && m.SMTPHost == "" {
+		log.Printf("\n=== DEV MODE EMAIL ===\nTo: %s\nFrom: %s\nSubject: %s\n\n%s\n==================\n",
+			to, m.FromEmail, subject, body)
+		return nil
+	}
+
 	// Skip sending if SMTP is not configured
 	if m.Mailer == nil {
 		return nil
