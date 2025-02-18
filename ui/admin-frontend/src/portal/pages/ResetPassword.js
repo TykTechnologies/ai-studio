@@ -31,13 +31,30 @@ const ResetPassword = () => {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
-    const tokenFromUrl = searchParams.get("token");
-    if (tokenFromUrl) {
-      setToken(tokenFromUrl);
-    } else {
-      setError("No reset token found. Please request a new password reset.");
+    let tokenFromUrl = searchParams.get("token");
+
+    if (!tokenFromUrl) {
+      navigate("/forgot-password");
+      return;
     }
-  }, [location]);
+
+    console.log("Found reset token:", tokenFromUrl); // Debug log
+    setToken(tokenFromUrl);
+    // Validate token immediately
+    validateToken(tokenFromUrl);
+  }, [location, navigate]);
+
+  const validateToken = async (tokenToValidate) => {
+    try {
+      await apiClient.get(`/auth/validate-reset-token?token=${tokenToValidate}`);
+      console.log("Token validated successfully");
+    } catch (err) {
+      setError(
+        err.response?.data?.errors?.[0]?.detail ||
+        "Invalid or expired reset token. Please request a new password reset."
+      );
+    }
+  };
 
   useEffect(() => {
     const checkPasswordCriteria = () => {
@@ -120,6 +137,83 @@ const ResetPassword = () => {
     </Box>
   );
 
+  const renderContent = () => {
+    if (error) {
+      return (
+        <Box sx={{ textAlign: "center" }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => navigate("/forgot-password")}
+          >
+            Request Password Reset
+          </Button>
+        </Box>
+      );
+    }
+
+    if (!token) {
+      return (
+        <Box sx={{ textAlign: "center" }}>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            No reset token provided. Please request a password reset.
+          </Alert>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => navigate("/forgot-password")}
+          >
+            Request Password Reset
+          </Button>
+        </Box>
+      );
+    }
+
+    return (
+      <form onSubmit={handleSubmit}>
+        <TextField
+          fullWidth
+          label="New Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onFocus={() => setPasswordFocused(true)}
+          onBlur={() => setPasswordFocused(false)}
+          margin="normal"
+          required
+        />
+        {passwordFocused && renderPasswordCriteria()}
+        <TextField
+          fullWidth
+          label="Confirm New Password"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          margin="normal"
+          required
+          error={password !== confirmPassword && confirmPassword !== ""}
+          helperText={
+            password !== confirmPassword && confirmPassword !== ""
+              ? "Passwords do not match"
+              : ""
+          }
+        />
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          fullWidth
+          sx={{ mt: 2 }}
+        >
+          Reset Password
+        </Button>
+      </form>
+    );
+  };
+
   return (
     <Box
       sx={{
@@ -134,49 +228,7 @@ const ResetPassword = () => {
         <Typography variant="h4" component="h1" gutterBottom align="center">
           Reset Password
         </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-        <form onSubmit={handleSubmit}>
-          <TextField
-            fullWidth
-            label="New Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onFocus={() => setPasswordFocused(true)}
-            onBlur={() => setPasswordFocused(false)}
-            margin="normal"
-            required
-          />
-          {passwordFocused && renderPasswordCriteria()}
-          <TextField
-            fullWidth
-            label="Confirm New Password"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            margin="normal"
-            required
-            error={password !== confirmPassword && confirmPassword !== ""}
-            helperText={
-              password !== confirmPassword && confirmPassword !== ""
-                ? "Passwords do not match"
-                : ""
-            }
-          />
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            fullWidth
-            sx={{ mt: 2 }}
-          >
-            Reset Password
-          </Button>
-        </form>
+        {renderContent()}
         <Snackbar
           open={!!successMessage}
           autoHideDuration={3000}

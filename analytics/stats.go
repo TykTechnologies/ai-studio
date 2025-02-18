@@ -557,7 +557,7 @@ type VendorModelCost struct {
 }
 
 // GetTotalCostPerVendorAndModel returns the total cost per vendor and model
-func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *models.InteractionType) ([]VendorModelCost, error) {
+func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *models.InteractionType, llmID *uint) ([]VendorModelCost, error) {
 	var results []VendorModelCost
 
 	query := db.Model(&models.LLMChatRecord{}).
@@ -566,6 +566,10 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	if llmID != nil {
+		query = query.Where("llm_id = ?", *llmID)
 	}
 
 	err := query.Group("vendor, name, currency").
