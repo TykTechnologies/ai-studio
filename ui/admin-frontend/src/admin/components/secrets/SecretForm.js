@@ -12,12 +12,12 @@ import {
   InputAdornment,
   Link
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -145,10 +145,14 @@ const SecretForm = () => {
         <Typography variant="h5">
           {id ? "Edit Secret" : "Add Secret"}
         </Typography>
-        <Link component={NavLink} to="/admin/secrets">
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Back to Secrets
-          </Link>
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/secrets"
+          color="inherit"
+        >
+          Back to Secrets
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

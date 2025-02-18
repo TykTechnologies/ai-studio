@@ -10,10 +10,10 @@ import {
   Alert,
   Link
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -124,10 +124,14 @@ const FilterForm = () => {
         <Typography variant="h5">
           {id ? "Edit Filter" : "Add Filter"}
         </Typography>
-        <Link component={NavLink} to="/admin/filters">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/filters"
+          color="inherit"
+        >
           Back to Filters
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

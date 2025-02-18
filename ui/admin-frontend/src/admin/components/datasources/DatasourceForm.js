@@ -28,7 +28,7 @@ import {
   ListItemSecondaryAction,
   Link
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
@@ -45,6 +45,7 @@ import {
   ContentBox,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import {
   getVendorData,
@@ -335,10 +336,14 @@ const DatasourceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Datasource" : "Add Datasource"}
         </Typography>
-        <Link component={NavLink} to="/admin/datasources">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/datasources"
+          color="inherit"
+        >
           Back to Datasources
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

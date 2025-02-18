@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -12,14 +12,13 @@ import {
   ListItem,
   ListItemText,
   Divider,
-  Tooltip,
-  Link
+  Tooltip
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -64,10 +63,13 @@ const ToolCatalogueDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Tool Catalog Details</Typography>
-        <Link component={NavLink} to="/admin/catalogs/tools">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/catalogs/tools")}
+          color="inherit"
+        >
           Back to Tool Catalogs
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Catalog Description</SectionTitle>

@@ -21,11 +21,11 @@ import {
   Link,
   InputAdornment,
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -247,10 +247,14 @@ const AppForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit App" : "Add App"}</Typography>
-        <Link component={NavLink} to="/admin/apps">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/apps"
+          color="inherit"
+        >
           Back to Apps
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

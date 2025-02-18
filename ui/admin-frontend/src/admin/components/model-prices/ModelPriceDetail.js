@@ -1,5 +1,5 @@
 import React, { useState, useEffect} from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -13,7 +13,7 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -56,10 +56,13 @@ const ModelPriceDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Model Price Details</Typography>
-        <Link component={NavLink} to="/admin/model-prices">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/model-prices")}
+          color="inherit"
+        >
           Back to Model Prices
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Basic Information</SectionTitle>

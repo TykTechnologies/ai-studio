@@ -19,9 +19,7 @@ import {
   TableRow,
   Paper,
   Snackbar,
-  Link,
 } from "@mui/material";
-import { NavLink } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { Line } from "react-chartjs-2";
@@ -48,6 +46,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import DateRangePicker from "../common/DateRangePicker";
 import PaginationControls from "../common/PaginationControls";
@@ -420,10 +419,13 @@ const AppDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">App Details</Typography>
-        <Link component={NavLink} to="/admin/apps">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/apps")}
+          color="inherit"
+        >
           Back to Apps
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>

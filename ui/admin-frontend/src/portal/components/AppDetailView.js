@@ -18,9 +18,7 @@ import {
   Card,
   CardContent,
   Tooltip,
-  Link,
 } from "@mui/material";
-import { NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -28,7 +26,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { getConfig } from "../../config"; // Add this import
-import { StyledButtonCritical } from "../../admin/styles/sharedStyles";
+import { StyledButtonCritical, StyledButtonLink } from "../../admin/styles/sharedStyles";
 
 import pubClient from "../../admin/utils/pubClient";
 
@@ -171,10 +169,12 @@ const AppDetailView = () => {
           <Typography variant="h5" sx={{ color: "black" }}>
             App Details
           </Typography>
-          <Link component={NavLink} to="/portal/apps">
-            <ArrowBackIcon sx={{ mr: 1 }} />
+          <StyledButtonLink
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate("/portal/apps")}
+          >
             Back to Apps
-          </Link>
+          </StyledButtonLink>
         </Box>
 
         <SectionTitle>App Information</SectionTitle>

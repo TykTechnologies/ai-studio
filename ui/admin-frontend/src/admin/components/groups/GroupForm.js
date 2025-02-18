@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import { TextField, Button, Typography, CircularProgress, Link } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -72,10 +72,13 @@ const GroupForm = () => {
         <Typography variant="h5">
           {id ? "Edit Group" : "Create Group"}
         </Typography>
-        <Link component={NavLink} to="/admin/groups">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          color="inherit"
+          onClick={() => navigate("/admin/groups")}
+        >
           Back to Groups
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <form onSubmit={handleSubmit}>

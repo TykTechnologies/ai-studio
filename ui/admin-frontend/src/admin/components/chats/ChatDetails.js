@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -30,7 +30,7 @@ import {
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../common/DateRangePicker";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -186,10 +186,13 @@ const ChatDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Chat Room Details</Typography>
-        <Link component={NavLink} to="/admin/chats">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/chats")}
+          color="inherit"
+        >
           Back to Chat Rooms
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6" gutterBottom>

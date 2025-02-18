@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -51,6 +51,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 import Chip from "@mui/material/Chip";
@@ -381,10 +382,13 @@ const LLMDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Details</Typography>
-        <Link component={NavLink} to="/admin/llms">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/llms")}
+          color="inherit"
+        >
           Back to LLMs
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>
