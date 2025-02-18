@@ -156,6 +156,13 @@ func RecordContentMessage(
 
 // records a tool call
 func recordToolCall(tc *models.ToolCallRecord) {
+	recMutex.RLock()
+	if !recStarted {
+		recMutex.RUnlock()
+		return
+	}
+	recMutex.RUnlock()
+
 	select {
 	case toolCallChan <- tc:
 	default:
@@ -169,6 +176,13 @@ func RecordChatRecord(record *models.LLMChatRecord) {
 
 // Records a chat record
 func recordChatRecord(record *models.LLMChatRecord) {
+	recMutex.RLock()
+	if !recStarted {
+		recMutex.RUnlock()
+		return
+	}
+	recMutex.RUnlock()
+
 	select {
 	case chatRecordChan <- record:
 	default:
@@ -178,6 +192,13 @@ func recordChatRecord(record *models.LLMChatRecord) {
 
 // Records a chat log entry
 func recordChatLogEntry(log *models.LLMChatLogEntry) {
+	recMutex.RLock()
+	if !recStarted {
+		recMutex.RUnlock()
+		return
+	}
+	recMutex.RUnlock()
+
 	select {
 	case logEntryChan <- log:
 	default:
@@ -209,7 +230,7 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 
 	initDB(db)
 
-	defaultBufferSize := 100
+	defaultBufferSize := 1000
 	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_ZIZE")
 	if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)

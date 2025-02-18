@@ -8,17 +8,32 @@ The **Midsommar** codebase includes a secure secrets management feature enabling
 
 ### Understanding Secret References
 
-Secret references use the format `$SECRET/VAR_NAME` to reference stored secrets. For example, `$SECRET/OPENAI_KEY` references a secret stored with the variable name "OPENAI_KEY". This pattern allows for:
+The system supports two types of references for accessing sensitive data:
+
+1. **Secret References** use the format `$SECRET/VAR_NAME` to reference stored secrets. For example, `$SECRET/OPENAI_KEY` references a secret stored with the variable name "OPENAI_KEY".
+
+2. **Environment Variables** use the format `$ENV/VAR_NAME` to reference environment variables. For example, `$ENV/API_KEY` will resolve to the value of the API_KEY environment variable.
+
+These patterns allow for:
 - Secure storage of sensitive values
 - Easy reference in configuration
 - Consistent secret management across the application
+- Flexible integration with environment-based configuration
 
-Secret references can be used in any string field where sensitive data needs to be stored securely. Common use cases include:
+Both secret references and environment variables can be used in any string field where sensitive data needs to be stored securely. Common use cases include:
+
+**Using Secret References:**
 - API Keys (e.g., `$SECRET/OPENAI_KEY`)
 - API Endpoints (e.g., `$SECRET/CUSTOM_API_ENDPOINT`)
 - Database Credentials
 - Service URLs
 - Authentication Tokens
+
+**Using Environment Variables:**
+- Development Configuration (e.g., `$ENV/DEBUG_MODE`)
+- Local API Keys (e.g., `$ENV/LOCAL_API_KEY`)
+- Service-specific Settings (e.g., `$ENV/SERVICE_PORT`)
+- Runtime Configuration (e.g., `$ENV/LOG_LEVEL`)
 
 ### When to Use Secret References
 
@@ -54,9 +69,10 @@ Secret references can be used in any string field where sensitive data needs to 
        if err := llm.Get(s.DB, id); err != nil {
            return nil, err
        }
-       // Preserve references for all secret fields
-       llm.APIKey = secrets.GetValue(llm.APIKey, true)
-       llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, true)
+       // Preserve references for all secret and environment fields
+       llm.APIKey = secrets.GetValue(llm.APIKey, true)         // e.g., "$SECRET/OPENAI_KEY"
+       llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, true) // e.g., "$SECRET/CUSTOM_API_ENDPOINT"
+       llm.LogLevel = secrets.GetValue(llm.LogLevel, true)     // e.g., "$ENV/LOG_LEVEL"
        return llm, nil
    }
    ```
@@ -70,9 +86,10 @@ Secret references can be used in any string field where sensitive data needs to 
            return nil, err
        }
        for i := range llms {
-           // Resolve all secret fields
-           llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
-           llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+           // Resolve all secret and environment fields
+           llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)         // resolves $SECRET or $ENV
+           llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false) // resolves $SECRET or $ENV
+           llms[i].LogLevel = secrets.GetValue(llms[i].LogLevel, false)     // resolves $ENV/LOG_LEVEL to actual value
        }
        return llms, nil
    }
@@ -81,8 +98,9 @@ Secret references can be used in any string field where sensitive data needs to 
 3. **Proxy/Runtime Layer**
    ```go
    // Always resolve values when making external calls
-   config.Token = secrets.GetValue(config.Token, false) // resolve for API calls
-   config.Endpoint = secrets.GetValue(config.Endpoint, false) // resolve endpoint
+   config.Token = secrets.GetValue(config.Token, false)     // resolves $SECRET/API_TOKEN
+   config.Endpoint = secrets.GetValue(config.Endpoint, false) // resolves $SECRET/API_ENDPOINT
+   config.Debug = secrets.GetValue(config.Debug, false)     // resolves $ENV/DEBUG_MODE
    ```
 
 ### Best Practices
@@ -100,15 +118,21 @@ Secret references can be used in any string field where sensitive data needs to 
    - Remember to resolve all secret fields before use
 
 3. **Testing**
-   - Test both behaviors:
+   - Test both reference types and behaviors:
      ```go
      // Test API response preserves references
      assert.Equal(t, "$SECRET/OPENAI_KEY", response.APIKey)
      assert.Equal(t, "$SECRET/CUSTOM_API_ENDPOINT", response.APIEndpoint)
+     assert.Equal(t, "$ENV/DEBUG_MODE", response.DebugMode)
      
      // Test operation gets actual values
      assert.Equal(t, "actual-secret-value", resolvedKey)
      assert.Equal(t, "https://api.example.com", resolvedEndpoint)
+     assert.Equal(t, "true", resolvedDebugMode) // from environment variable
+     
+     // Test environment variable resolution
+     os.Setenv("TEST_MODE", "development")
+     assert.Equal(t, "development", secrets.GetValue("$ENV/TEST_MODE", false))
      ```
 
 4. **Error Handling**
