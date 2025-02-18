@@ -5,20 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"testing"
+	gotest "testing"
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
-	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestChatEndpoints(t *testing.T) {
+func TestChatEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Create test user
@@ -60,7 +59,7 @@ func TestChatEndpoints(t *testing.T) {
 	llm, err := service.CreateLLM(
 		"Default Anthropic", "api-key", "https://api.anthropic.com", 75,
 		"Short desc", "Long desc", "http://logo.test",
-		"anthropic", true, nil, "", []string{})
+		"anthropic", true, nil, "", []string{}, nil, nil)
 	assert.NoError(t, err)
 
 	// Create default chat
@@ -234,11 +233,11 @@ func TestChatEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestChatEndpointsErrors(t *testing.T) {
+func TestChatEndpointsErrors(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Test Get non-existent chat

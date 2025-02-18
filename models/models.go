@@ -25,6 +25,8 @@ func InitModels(db *gorm.DB) error {
 		&ChatHistoryRecord{},
 		&ToolCatalogue{}, // Done
 		&secrets.Secret{},
+		&LLMChatRecord{},
+		&Notification{}, // For storing notifications
 	)
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {

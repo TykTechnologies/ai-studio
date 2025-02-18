@@ -4,20 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"testing"
+	gotest "testing"
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
-	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLLMEndpoints(t *testing.T) {
+func TestLLMEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Test Create LLM
@@ -34,9 +33,11 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -50,9 +51,11 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -103,9 +106,11 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -119,9 +124,11 @@ func TestLLMEndpoints(t *testing.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			}{
 				Name:             "Updated Test LLM",
 				APIKey:           "updated-api-key",
@@ -154,7 +161,6 @@ func TestLLMEndpoints(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 	assert.NoError(t, err)
 	assert.Greater(t, len(listResponse["data"]), 0)
-	// assert.ElementsMatch(t, []string{"gpt-4.*", "gpt-3.5-turbo", "claude-.*"}, listResponse["data"][0].Attributes.AllowedModels) // ordering is not guaranteed
 
 	// Test Search LLMs
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/search?name=Updated", nil)
@@ -165,11 +171,11 @@ func TestLLMEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
-func TestLLMPrivacyScoreEndpoints(t *testing.T) {
+func TestLLMPrivacyScoreEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Create some test LLMs with different privacy scores

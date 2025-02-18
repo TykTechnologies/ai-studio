@@ -39,12 +39,16 @@ func TestCredentialEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Active bool `json:"active"`
+				KeyID  string `json:"key_id"`
+				Secret string `json:"secret"`
+				Active bool   `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "credentials",
 			Attributes: struct {
-				Active bool `json:"active"`
+				KeyID  string `json:"key_id"`
+				Secret string `json:"secret"`
+				Active bool   `json:"active"`
 			}{
 				Active: true,
 			},
@@ -124,12 +128,16 @@ func TestCredentialEndpoints_ErrorCases(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Active bool `json:"active"`
+				KeyID  string `json:"key_id"`
+				Secret string `json:"secret"`
+				Active bool   `json:"active"`
 			} `json:"attributes"`
 		}{
 			Type: "credentials",
 			Attributes: struct {
-				Active bool `json:"active"`
+				KeyID  string `json:"key_id"`
+				Secret string `json:"secret"`
+				Active bool   `json:"active"`
 			}{
 				Active: true,
 			},

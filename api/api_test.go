@@ -8,44 +8,21 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/auth"
+	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/licensing"
-	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 var emptyFile embed.FS
 
 func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err, "Failed to open database")
-
-	err = models.InitModels(db)
-	assert.NoError(t, err, "Failed to init models")
-
-	service := services.NewService(db)
-
-	config := &auth.Config{
-		DB:                  db,
-		Service:             service,
-		CookieName:          "session",
-		CookieSecure:        true,
-		CookieHTTPOnly:      true,
-		CookieSameSite:      http.SameSiteStrictMode,
-		ResetTokenExpiry:    time.Hour,
-		FrontendURL:         "http://example.com",
-		RegistrationAllowed: true,
-		AdminEmail:          "admin@example.com",
-		TestMode:            true,
-	}
-
-	api := NewAPI(service, true, auth.NewAuthService(config, newMockMailer(), service), config, nil, emptyFile)
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := apitest.SetupTestAuthService(db, service)
+	api := NewAPI(service, true, authService, config, nil, emptyFile)
 
 	return api, db
 }
