@@ -144,8 +144,8 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 	if err != nil || pageNumber <= 0 {
 		c.AbortWithStatusJSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
+				Title  string "json:\"title\""
+				Detail string "json:\"detail\""
 			}{{Title: "Bad Request", Detail: "Invalid page number"}},
 		})
 		return 0, 0, false
@@ -165,13 +165,13 @@ func (a *API) setupRoutes() {
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {
-			faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-			c.Data(http.StatusOK, "image/x-icon", faviconFile)
-		})
+		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/x-icon", faviconFile)
+	})
 
 	a.router.GET("/sun-logo.png", func(c *gin.Context) {
 		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
@@ -239,6 +239,7 @@ func (a *API) setupRoutes() {
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
 	public.POST("/auth/resend-verification", a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)
+	public.GET("/auth/features", a.handleFeatureSet)
 
 	// routes for portal users
 	authed := public.Group("/common")
@@ -265,6 +266,12 @@ func (a *API) setupRoutes() {
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
+
+	// Notification routes
+	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
+	authed.GET("/api/v1/notifications", notificationHandlers.ListNotifications)
+	authed.GET("/api/v1/notifications/unread/count", notificationHandlers.UnreadCount)
+	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
@@ -493,8 +500,11 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/model-usage", a.getModelUsage)
 	v1.GET("/analytics/vendor-usage", a.getVendorUsage)
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
+	v1.GET("/analytics/budget-usage", a.getBudgetUsage)
+	v1.GET("/analytics/budget-usage-for-app", a.getBudgetUsageForApp)
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
+	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
 
 	// FileStore routes
 	v1.POST("/filestore", a.createFileStore)
@@ -528,20 +538,16 @@ func (a *API) devCorsMiddleware() gin.HandlerFunc {
 }
 
 func (a *API) corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		cors.New(cors.Config{
-			AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"},
-			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
-			ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
-			AllowCredentials: true,
-			MaxAge:           12 * time.Hour,
-		})(c)
-	}
-}
-
-func (a *API) GetUserID() uint {
-	return 0
+	return cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
+		ExposeHeaders: []string{
+			"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID",
+		},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	})
 }
 
 func (a *API) handleGetConfig(c *gin.Context) {

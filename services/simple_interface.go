@@ -1,25 +1,29 @@
 package services
 
-import "github.com/TykTechnologies/midsommar/v2/models"
+import (
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
+)
 
-// Used by proxy and some tests
 type ServiceInterface interface {
-	// LLM related methods
+	// LLM
 	GetActiveLLMs() (models.LLMs, error)
 	GetLLMByID(id uint) (*models.LLM, error)
-
 	GetLLMSettingsByID(id uint) (*models.LLMSettings, error)
-
-	// Datasource related methods
+	// DS
 	GetActiveDatasources() (models.Datasources, error)
 	GetDatasourceByID(id uint) (*models.Datasource, error)
-
-	// Credential related methods
+	// Cred
 	GetCredentialBySecret(secret string) (*models.Credential, error)
-
-	// App related methods
+	// App
 	GetAppByCredentialID(credID uint) (*models.App, error)
-
-	// Analytics related methods
+	// Analytics
 	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
+	// DB
+	GetDB() *gorm.DB
+	// Auth
+	AuthenticateUser(email, password string) (*models.User, error)
+	GetUserByAPIKey(apiKey string) (*models.User, error)
+	GetUserByEmail(email string) (*models.User, error)
+	AddUserToGroup(userID, groupID uint) error
 }

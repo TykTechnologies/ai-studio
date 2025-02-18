@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
@@ -148,6 +149,8 @@ func (a *API) updateApp(c *gin.Context) {
 		input.Data.Attributes.Description,
 		datasourceIDs,
 		llmIDs,
+		input.Data.Attributes.MonthlyBudget,
+		input.Data.Attributes.BudgetStartDate,
 	)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -371,19 +374,23 @@ func serializeApp(app *models.App) AppResponse {
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name          string `json:"name"`
-			Description   string `json:"description"`
-			UserID        uint   `json:"user_id"`
-			CredentialID  uint   `json:"credential_id"`
-			DatasourceIDs []uint `json:"datasource_ids"`
-			LLMIDs        []uint `json:"llm_ids"`
+			Name            string     `json:"name"`
+			Description     string     `json:"description"`
+			UserID          uint       `json:"user_id"`
+			CredentialID    uint       `json:"credential_id"`
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
+			MonthlyBudget   *float64   `json:"monthly_budget"`
+			BudgetStartDate *time.Time `json:"budget_start_date"`
 		}{
-			Name:          app.Name,
-			Description:   app.Description,
-			UserID:        app.UserID,
-			CredentialID:  app.CredentialID,
-			DatasourceIDs: getDatasourceIDs(app.Datasources),
-			LLMIDs:        getLLMIDs(app.LLMs),
+			Name:            app.Name,
+			Description:     app.Description,
+			UserID:          app.UserID,
+			CredentialID:    app.CredentialID,
+			DatasourceIDs:   getDatasourceIDs(app.Datasources),
+			LLMIDs:          getLLMIDs(app.LLMs),
+			MonthlyBudget:   app.MonthlyBudget,
+			BudgetStartDate: app.BudgetStartDate,
 		},
 	}
 }

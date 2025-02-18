@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
@@ -30,26 +31,32 @@ func TestAppEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name          string `json:"name"`
-				Description   string `json:"description"`
-				UserID        uint   `json:"user_id"`
-				DatasourceIDs []uint `json:"datasource_ids"`
-				LLMIDs        []uint `json:"llm_ids"`
+				Name            string     `json:"name"`
+				Description     string     `json:"description"`
+				UserID          uint       `json:"user_id"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				MonthlyBudget   *float64   `json:"monthly_budget"`
+				BudgetStartDate *time.Time `json:"budget_start_date"`
 			} `json:"attributes"`
 		}{
 			Type: "app",
 			Attributes: struct {
-				Name          string `json:"name"`
-				Description   string `json:"description"`
-				UserID        uint   `json:"user_id"`
-				DatasourceIDs []uint `json:"datasource_ids"`
-				LLMIDs        []uint `json:"llm_ids"`
+				Name            string     `json:"name"`
+				Description     string     `json:"description"`
+				UserID          uint       `json:"user_id"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				MonthlyBudget   *float64   `json:"monthly_budget"`
+				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
-				Name:          "Test App",
-				Description:   "Test Description",
-				UserID:        user.ID,
-				DatasourceIDs: []uint{},
-				LLMIDs:        []uint{},
+				Name:            "Test App",
+				Description:     "Test Description",
+				UserID:          user.ID,
+				DatasourceIDs:   []uint{},
+				LLMIDs:          []uint{},
+				MonthlyBudget:   nil,
+				BudgetStartDate: nil,
 			},
 		},
 	}
@@ -91,26 +98,32 @@ func TestAppPagination(t *testing.T) {
 			Data: struct {
 				Type       string `json:"type"`
 				Attributes struct {
-					Name          string `json:"name"`
-					Description   string `json:"description"`
-					UserID        uint   `json:"user_id"`
-					DatasourceIDs []uint `json:"datasource_ids"`
-					LLMIDs        []uint `json:"llm_ids"`
+					Name            string     `json:"name"`
+					Description     string     `json:"description"`
+					UserID          uint       `json:"user_id"`
+					DatasourceIDs   []uint     `json:"datasource_ids"`
+					LLMIDs          []uint     `json:"llm_ids"`
+					MonthlyBudget   *float64   `json:"monthly_budget"`
+					BudgetStartDate *time.Time `json:"budget_start_date"`
 				} `json:"attributes"`
 			}{
 				Type: "app",
 				Attributes: struct {
-					Name          string `json:"name"`
-					Description   string `json:"description"`
-					UserID        uint   `json:"user_id"`
-					DatasourceIDs []uint `json:"datasource_ids"`
-					LLMIDs        []uint `json:"llm_ids"`
+					Name            string     `json:"name"`
+					Description     string     `json:"description"`
+					UserID          uint       `json:"user_id"`
+					DatasourceIDs   []uint     `json:"datasource_ids"`
+					LLMIDs          []uint     `json:"llm_ids"`
+					MonthlyBudget   *float64   `json:"monthly_budget"`
+					BudgetStartDate *time.Time `json:"budget_start_date"`
 				}{
-					Name:          fmt.Sprintf("Test App %d", i),
-					Description:   fmt.Sprintf("Test Description %d", i),
-					UserID:        user.ID,
-					DatasourceIDs: []uint{},
-					LLMIDs:        []uint{},
+					Name:            fmt.Sprintf("Test App %d", i),
+					Description:     fmt.Sprintf("Test Description %d", i),
+					UserID:          user.ID,
+					DatasourceIDs:   []uint{},
+					LLMIDs:          []uint{},
+					MonthlyBudget:   nil,
+					BudgetStartDate: nil,
 				},
 			},
 		}

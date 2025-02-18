@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
@@ -51,7 +52,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, llmIDs []uint) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
@@ -64,6 +65,8 @@ func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, ll
 
 	app.Name = name
 	app.Description = description
+	app.MonthlyBudget = monthlyBudget
+	app.BudgetStartDate = budgetStartDate
 
 	// Update datasources
 	if err := s.updateAppDatasources(app, datasourceIDs); err != nil {

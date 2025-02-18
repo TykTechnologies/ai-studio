@@ -9,21 +9,15 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/go-mail/mail"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-type MockMailer struct{}
-
-func (m *MockMailer) DialAndSend(msg ...*mail.Message) error {
-	return nil
-}
-
-func NewMockMailer() *MockMailer {
-	return &MockMailer{}
+func NewMockMailer() *notifications.MailService {
+	return notifications.NewTestMailService()
 }
 
 func SetupTestDB(t *testing.T) *gorm.DB {
@@ -38,6 +32,17 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 
 func SetupTestService(db *gorm.DB) *services.Service {
 	return services.NewService(db)
+}
+
+func SetupTestNotificationService(db *gorm.DB) *services.NotificationService {
+	return services.NewNotificationService(db, NewMockMailer())
+}
+
+func SetupTestAuthService(db *gorm.DB, service *services.Service) *auth.AuthService {
+	config := SetupTestAuthConfig(db, service)
+	mockMailer := NewMockMailer()
+	notificationService := SetupTestNotificationService(db)
+	return auth.NewAuthService(config, mockMailer, service, notificationService)
 }
 
 func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {

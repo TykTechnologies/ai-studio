@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
@@ -75,7 +74,33 @@ func (v *Mock) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int,
 }
 
 func (v *Mock) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	response := &responses.DummyResponse{Model: "test-vendor"}
+	if len(chunks) == 0 {
+		return llm, app, nil, fmt.Errorf("no chunks received")
+	}
+
+	// Try to parse the final chunk which might contain usage info
+	response := &MockResponse{Model: "test-vendor"}
+
+	// First try to parse as a complete response (like in proxy_budget_test.go)
+	err := json.Unmarshal(chunks[len(chunks)-1], response)
+	if err == nil && response.Usage.TotalTokens > 0 {
+		return llm, app, response, nil
+	}
+
+	// If that fails or doesn't have usage info, try to parse resps which might have the usage info
+	err = json.Unmarshal(resps, response)
+	if err == nil && response.Usage.TotalTokens > 0 {
+		return llm, app, response, nil
+	}
+
+	// If both fail, create a response with default values
+	response = &MockResponse{
+		Model: "test-vendor",
+	}
+	response.Usage.PromptTokens = 5
+	response.Usage.CompletionTokens = 10
+	response.Usage.TotalTokens = 15
+
 	return llm, app, response, nil
 }
 

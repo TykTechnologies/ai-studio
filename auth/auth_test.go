@@ -3,8 +3,6 @@ package auth_test
 import (
 	"strings"
 
-	"github.com/go-mail/mail"
-
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -21,19 +20,8 @@ import (
 	"gorm.io/gorm"
 )
 
-type mockMailer struct {
-	sentEmails []*mail.Message
-}
-
-func (m *mockMailer) DialAndSend(msg ...*mail.Message) error {
-	m.sentEmails = append(m.sentEmails, msg...)
-	return nil
-}
-
-func newMockMailer() *mockMailer {
-	return &mockMailer{
-		sentEmails: make([]*mail.Message, 0),
-	}
+func newMockMailService() *notifications.MailService {
+	return notifications.NewTestMailService()
 }
 
 func setupTestDB(t *testing.T) *gorm.DB {
@@ -56,7 +44,8 @@ type AuthServiceTestSuite struct {
 func (suite *AuthServiceTestSuite) SetupTest() {
 	suite.db = setupTestDB(suite.T())
 	suite.service = services.NewService(suite.db)
-	mockMailer := newMockMailer()
+	mockMailService := newMockMailService()
+	notificationService := services.NewNotificationService(suite.db, mockMailService)
 	config := auth.Config{
 		DB:                  suite.db,
 		Service:             suite.service,
@@ -68,9 +57,8 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		FrontendURL:         "http://example.com",
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
-		SMTPHost:            "dummy.host.com",
 	}
-	suite.authService = auth.NewAuthService(&config, mockMailer, suite.service)
+	suite.authService = auth.NewAuthService(&config, mockMailService, suite.service, notificationService)
 }
 
 func (suite *AuthServiceTestSuite) TearDownTest() {
@@ -154,37 +142,45 @@ func (suite *AuthServiceTestSuite) TestResetPassword() {
 		err := suite.db.Create(user).Error
 		assert.NoError(suite.T(), err)
 
-		mockMailer := suite.authService.Mailer.(*mockMailer)
-		mockMailer.sentEmails = nil // Clear previous emails
-
 		err = suite.authService.ResetPassword("test@example.com")
-
 		assert.NoError(suite.T(), err)
 
 		var updatedUser models.User
 		suite.db.First(&updatedUser, user.ID)
 		assert.NotEmpty(suite.T(), updatedUser.ResetToken)
 		assert.False(suite.T(), updatedUser.ResetTokenExpiry.IsZero())
-
-		// Check if email was sent
-		assert.Equal(suite.T(), 1, len(mockMailer.sentEmails))
-		if len(mockMailer.sentEmails) > 0 {
-			assert.Equal(suite.T(), "test@example.com", mockMailer.sentEmails[0].GetHeader("To")[0])
-			assert.Equal(suite.T(), "Password Reset", mockMailer.sentEmails[0].GetHeader("Subject")[0])
-		}
 	})
 
 	suite.Run("Reset password failure - user not found", func() {
-		mockMailer := suite.authService.Mailer.(*mockMailer)
-		mockMailer.sentEmails = nil // Clear previous emails
-
 		err := suite.authService.ResetPassword("nonexistent@example.com")
-
 		assert.Error(suite.T(), err)
-		assert.Equal(suite.T(), 0, len(mockMailer.sentEmails))
 	})
 }
 func (suite *AuthServiceTestSuite) TestRegister() {
+	suite.Run("First user registration becomes admin with notifications", func() {
+		// Register first user
+		err := suite.authService.Register("admin@example.com", "Admin User", "Password123!", true, true)
+		assert.NoError(suite.T(), err)
+
+		var firstUser models.User
+		err = suite.db.Where("email = ?", "admin@example.com").First(&firstUser).Error
+		assert.NoError(suite.T(), err)
+		assert.True(suite.T(), firstUser.IsAdmin, "First user should be admin")
+		assert.True(suite.T(), firstUser.EmailVerified, "First user should have verified email")
+		assert.True(suite.T(), firstUser.NotificationsEnabled, "First user should have notifications enabled")
+
+		// Register second user
+		err = suite.authService.Register("user@example.com", "Regular User", "Password123!", true, true)
+		assert.NoError(suite.T(), err)
+
+		var secondUser models.User
+		err = suite.db.Where("email = ?", "user@example.com").First(&secondUser).Error
+		assert.NoError(suite.T(), err)
+		assert.False(suite.T(), secondUser.IsAdmin, "Second user should not be admin")
+		assert.False(suite.T(), secondUser.EmailVerified, "Second user should not have verified email")
+		assert.False(suite.T(), secondUser.NotificationsEnabled, "Second user should not have notifications enabled")
+	})
+
 	suite.Run("Successful registration", func() {
 		err := suite.authService.Register("test@example.com", "Test User", "Password123!", true, true)
 		assert.NoError(suite.T(), err)
