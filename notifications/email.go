@@ -22,6 +22,13 @@ type Mailer interface {
 }
 
 func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password string, mailer Mailer) *MailService {
+	// If SMTP is not configured, return a service that will silently skip sending emails
+	if smtpHost == "" || username == "" || password == "" {
+		return &MailService{
+			FromEmail: fromEmail,
+		}
+	}
+
 	return &MailService{
 		FromEmail: fromEmail,
 		SMTPHost:  smtpHost,
@@ -33,8 +40,8 @@ func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password
 }
 
 func (m *MailService) SendEmail(to, subject, body string) error {
-	// Backward compatibility: skip sending if SMTPHost is empty
-	if m.SMTPHost == "" {
+	// Skip sending if SMTP is not configured
+	if m.Mailer == nil {
 		return nil
 	}
 
