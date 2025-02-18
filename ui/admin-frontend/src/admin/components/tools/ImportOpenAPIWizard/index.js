@@ -11,7 +11,7 @@ import {
   Link,
   Box
 } from "@mui/material";
-import { StyledButton } from "../../../styles/sharedStyles";
+import { StyledButton, StyledButtonLink } from "../../../styles/sharedStyles";
 
 import SelectProvider from "./components/SelectProvider";
 import ConfigureProvider from "./components/ConfigureProvider";
@@ -346,7 +346,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
         <Box>
-          <Link onClick={handleClose}>Cancel</Link>
+          <StyledButtonLink onClick={handleClose}>Cancel</StyledButtonLink>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {getCurrentStepIndex() > 0 && <Button onClick={handleBack}>Back</Button>}
