@@ -8,7 +8,10 @@ import {
 	Container,
 	IconButton,
 	ListItemSecondaryAction,
+	Box,
 } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import DoneIcon from '@mui/icons-material/Done';
 import axios from 'axios';
 import { useNotifications } from '../../context/NotificationContext';
@@ -66,7 +69,13 @@ const NotificationList = () => {
 						>
 							<ListItemText
 								primary={notification.Title}
-								secondary={notification.Content}
+								secondary={
+									<Box sx={{ '& img': { maxWidth: '100%' }, '& pre': { overflow: 'auto' } }}>
+										<ReactMarkdown remarkPlugins={[remarkGfm]}>
+											{notification.Content}
+										</ReactMarkdown>
+									</Box>
+								}
 							/>
 							{!notification.Read && (
 								<ListItemSecondaryAction>

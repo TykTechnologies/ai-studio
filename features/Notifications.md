@@ -181,7 +181,7 @@ The `Type` field in the Notification model allows for easy expansion of notifica
 
 2. **In-App UI**
    - **NotificationIcon** ([src/admin/components/notifications/NotificationIcon.js](../src/admin/components/notifications/NotificationIcon.js)) displays a badge with the unread count.
-   - **NotificationList** ([NotificationList.js](../src/admin/components/notifications/NotificationList.js)) shows all notifications.
+   - **NotificationList** ([NotificationList.js](../src/admin/components/notifications/NotificationList.js)) shows all notifications with markdown rendering support.
    - **NotificationContext** ([NotificationContext.js](../src/admin/components/notifications/NotificationContext.js)) manages fetching, state sharing, and marking notifications as read.
    - **NotificationsPage** ([NotificationsPage.js](../src/admin/pages/NotificationsPage.js)) offers a dedicated view for notifications.
 
