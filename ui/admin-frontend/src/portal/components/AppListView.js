@@ -5,11 +5,9 @@ import {
   Typography,
   Table,
   TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   IconButton,
   CircularProgress,
   Dialog,
@@ -17,9 +15,15 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Button,
   Box,
 } from "@mui/material";
+import {
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
+  StyledPaper,
+  StyledButton,
+} from "../../admin/styles/sharedStyles";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import pubClient from "../../admin/utils/pubClient";
@@ -111,62 +115,54 @@ const AppListView = () => {
         My Apps
       </Typography>
       {apps.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: "center" }}>
+        <StyledPaper sx={{ p: 4, textAlign: "center" }}>
           <Typography variant="h6" gutterBottom>
             Apps provide access to LLMs and Data sources via the AI Gateway
           </Typography>
           <Typography variant="body1" paragraph>
             Create your first app to get started.
           </Typography>
-          <Button
-            variant="contained"
-            color="primary"
+          <StyledButton
             startIcon={<AddIcon />}
             onClick={handleCreateApp}
           >
             Create App
-          </Button>
-        </Paper>
+          </StyledButton>
+        </StyledPaper>
       ) : (
-        <TableContainer component={Paper}>
+        <TableContainer component={StyledPaper}>
           <Table sx={{ minWidth: 650 }} aria-label="apps table">
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Data Sources</TableCell>
-                <TableCell>LLMs</TableCell>
-                <TableCell>Actions</TableCell>
+                <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Data Sources</StyledTableHeaderCell>
+                <StyledTableHeaderCell>LLMs</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {apps.map((app) => (
-                <TableRow
+                <StyledTableRow
                   key={app.id}
-                  sx={{
-                    "&:last-child td, &:last-child th": { border: 0 },
-                    "&:hover": {
-                      backgroundColor: "rgba(0, 0, 0, 0.04)",
-                      cursor: "pointer",
-                    },
-                  }}
                   onClick={() => handleRowClick(app.id)}
+                  sx={{ cursor: "pointer" }}
                 >
-                  <TableCell component="th" scope="row">
+                  <StyledTableCell component="th" scope="row">
                     {app.attributes.name}
-                  </TableCell>
-                  <TableCell>{app.attributes.description}</TableCell>
-                  <TableCell>{app.attributes.datasource_ids.length}</TableCell>
-                  <TableCell>{app.attributes.llm_ids.length}</TableCell>
-                  <TableCell>
+                  </StyledTableCell>
+                  <StyledTableCell>{app.attributes.description}</StyledTableCell>
+                  <StyledTableCell>{app.attributes.datasource_ids.length}</StyledTableCell>
+                  <StyledTableCell>{app.attributes.llm_ids.length}</StyledTableCell>
+                  <StyledTableCell>
                     <IconButton
                       aria-label="delete"
                       onClick={(e) => handleDeleteClick(e, app)}
                     >
                       <DeleteIcon />
                     </IconButton>
-                  </TableCell>
-                </TableRow>
+                  </StyledTableCell>
+                </StyledTableRow>
               ))}
             </TableBody>
           </Table>
@@ -187,10 +183,10 @@ const AppListView = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} autoFocus>
+          <StyledButton onClick={handleDeleteCancel}>Cancel</StyledButton>
+          <StyledButton onClick={handleDeleteConfirm} autoFocus>
             Delete
-          </Button>
+          </StyledButton>
         </DialogActions>
       </Dialog>
     </Container>

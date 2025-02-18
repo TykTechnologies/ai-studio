@@ -18,7 +18,9 @@ import {
   TableRow,
   Paper,
   Snackbar,
+  Link,
 } from "@mui/material";
+import { NavLink } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { Line } from "react-chartjs-2";
@@ -35,12 +37,16 @@ import {
 } from "chart.js";
 import "chartjs-adapter-date-fns";
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
   StyledButton,
+  StyledPaper,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
 } from "../../styles/sharedStyles";
 import DateRangePicker from "../common/DateRangePicker";
 import PaginationControls from "../common/PaginationControls";
@@ -388,13 +394,10 @@ const AppDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">App Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/apps")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/apps">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Apps
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <SectionTitle>App Token Usage and Cost</SectionTitle>
@@ -512,13 +515,13 @@ const AppDetails = () => {
               {!credential.attributes.active && (
                 <Grid item xs={12}>
                   <Box mt={2}>
-                    <Button
+                    <StyledButtonPrimaryOutlined
                       variant="contained"
                       color="primary"
                       onClick={handleApproveApp}
                     >
                       Approve this App
-                    </Button>
+                    </StyledButtonPrimaryOutlined>
                   </Box>
                 </Grid>
               )}
@@ -529,40 +532,40 @@ const AppDetails = () => {
         <Divider sx={{ my: 3 }} />
 
         <SectionTitle>Proxy Logs</SectionTitle>
-        <TableContainer component={Paper}>
+        <StyledPaper>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Timestamp
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Vendor
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Response Code
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Request
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Response
-                </TableCell>
+                </StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {proxyLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                <StyledTableRow key={log.id}>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {new Date(log.attributes.time_stamp).toLocaleString()}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {log.attributes.vendor}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {log.attributes.response_code}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     <pre>
                       <code>
                         <ExpandableMessage
@@ -570,8 +573,8 @@ const AppDetails = () => {
                         />
                       </code>
                     </pre>
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     <pre>
                       <code>
                         <ExpandableMessage
@@ -579,13 +582,11 @@ const AppDetails = () => {
                         />
                       </code>
                     </pre>
-                  </TableCell>
-                </TableRow>
+                  </StyledTableCell>
+                </StyledTableRow>
               ))}
             </TableBody>
           </Table>
-        </TableContainer>
-        <Box mt={2}>
           <PaginationControls
             page={page}
             pageSize={pageSize}
@@ -593,7 +594,7 @@ const AppDetails = () => {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />
-        </Box>
+        </StyledPaper>
 
         <Box
           mt={4}

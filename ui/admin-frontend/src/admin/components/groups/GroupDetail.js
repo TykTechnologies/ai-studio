@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -16,12 +16,12 @@ import {
   Snackbar,
   Alert,
   DialogActions,
+  Link
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -399,13 +399,10 @@ const GroupDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Group Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          color="inherit"
-          onClick={() => navigate("/admin/groups")}
-        >
+        <Link component={NavLink} to="/admin/groups">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Groups
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6">Name: {group.attributes.name}</Typography>
@@ -540,9 +537,9 @@ const GroupDetail = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddUserModal(false)}>Cancel</Button>
-          <Button onClick={handleAddUserConfirm} color="primary">
+          <StyledButton onClick={handleAddUserConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -577,9 +574,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -614,9 +611,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddDataCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddDataCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddDataCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -651,9 +648,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddToolCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddToolCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddToolCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 

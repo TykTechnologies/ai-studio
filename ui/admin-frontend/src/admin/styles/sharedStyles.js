@@ -42,23 +42,32 @@ export const ContentBox = styled(Box)(({ theme }) => ({
 }));
 
 export const StyledTableHeaderCell = styled(TableCell)(({ theme }) => ({
-  fontWeight: "bold",
+  backgroundColor: theme.palette.background.buttonSecondary,
+  fontFamily: 'Inter-Semibold',
+  color: theme.palette.text.primary,
+  borderBottom: `1px solid ${theme.palette.border.neutralDefault}`,
+  textAlign: "left",
 }));
 
 export const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  borderBottom: `1px solid ${theme.palette.border.neutralDefault}`,
+  color: theme.palette.text.primary,
   textAlign: "left",
 }));
 
 export const StyledTableRow = styled(TableRow)(({ theme }) => ({
   "&:nth-of-type(odd)": {
-    backgroundColor: theme.palette.custom.lightTeal,
+    backgroundColor: "transparent",
   },
-  "&:nth-of-type(even)": {
-    backgroundColor: "rgba(255, 255, 255, 0)",
+  "& td": {
+    borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
+  },
+  "&:last-child td": {
+    borderBottom: "none"
   },
   "&:hover": {
-    backgroundColor: theme.palette.custom.hoverTeal,
-  },
+    backgroundColor: theme.palette.background.secondaryExtraLight
+  }
 }));
 
 export const FieldLabel = styled(Typography)(({ theme }) => ({
@@ -71,15 +80,56 @@ export const FieldValue = styled(Typography)(({ theme }) => ({
 }));
 
 export const StyledButton = styled(Button)(({ theme }) => ({
+  position: 'relative',
   borderRadius: 20,
-  border: `1px solid ${theme.palette.custom.purpleExtraDark}`,
+  padding: '8px 16px',
   color: theme.palette.custom.white,
-  backgroundColor: theme.palette.custom.purpleDark,
+  backgroundColor: theme.palette.background.buttonPrimaryDefault,
   boxShadow: "none",
-  textTransform: "Capitalize",
+  textTransform: "capitalize",
+  "&::before": {
+    content: '""',
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 20,
+    padding: '1px',
+    background: `linear-gradient(163.33deg, ${theme.palette.primary.main} 46.22%, ${theme.palette.custom.purpleExtraDark} 161.35%)`,
+    WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+    WebkitMaskComposite: 'xor',
+    maskComposite: 'exclude',
+    pointerEvents: 'none'
+  },
   "&:hover": {
-    backgroundColor: theme.palette.custom.purpleExtraDark,
+    backgroundColor: theme.palette.background.buttonPrimaryDefaultHover,
     boxShadow: "none",
+    color: theme.palette.primary.main,
+  },
+}));
+
+export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
+  position: 'relative',
+  borderRadius: 20,
+  padding: '8px 16px',
+  color: theme.palette.text.defaultSubdued,
+  backgroundColor: theme.palette.background.paper,
+  boxShadow: "none",
+  textTransform: "capitalize",
+  "&::before": {
+    content: '""',
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 20,
+    padding: '1px',
+    background: `linear-gradient(163.33deg, ${theme.palette.primary.main} 46.22%, ${theme.palette.custom.purpleExtraDark} 161.35%)`,
+    WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+    WebkitMaskComposite: 'xor',
+    maskComposite: 'exclude',
+    pointerEvents: 'none'
+  },
+  "&:hover": {
+    backgroundColor: theme.palette.background.buttonPrimaryOutlineHover,
+    boxShadow: "none",
+    color: theme.palette.text.defaultSubdued,
   },
 }));
 
@@ -91,8 +141,8 @@ export const StyledDialog = styled(Dialog)(({ theme }) => ({
 }));
 
 export const StyledDialogTitle = styled(DialogTitle)(({ theme }) => ({
-  backgroundColor: theme.palette.custom.purpleLight,
-  color: theme.palette.text.light,
+  backgroundColor: theme.palette.background.default,
+  color: theme.palette.text.default,
   padding: theme.spacing(2),
 }));
 
@@ -125,15 +175,15 @@ export const StyledIconButton = styled(IconButton)(({ theme }) => ({
 export const StyledAccordion = styled(Accordion)(({ theme }) => ({
   marginTop: theme.spacing(3),
   boxShadow: "none",
+  border: `1px solid ${theme.palette.border.neutralDefault}`,
+  borderRadius: `${theme.shape.borderRadius * 3}px`,
   "&:before": {
     display: "none",
   },
   "& .MuiAccordionSummary-root": {
-    backgroundColor: theme.palette.custom.lightTeal,
+    backgroundColor: theme.palette.background.paper,
     borderRadius: `${theme.shape.borderRadius * 3}px`,
-    "&:hover": {
-      backgroundColor: theme.palette.custom.teal,
-    },
+    padding: "16px 24px",
     "&.Mui-expanded": {
       borderBottomLeftRadius: 0,
       borderBottomRightRadius: 0,
@@ -141,6 +191,7 @@ export const StyledAccordion = styled(Accordion)(({ theme }) => ({
   },
   "& .MuiAccordionSummary-content": {
     color: theme.palette.text.primary,
+    margin: 0,
   },
   "& .MuiAccordionSummary-expandIconWrapper": {
     color: theme.palette.text.primary,
@@ -149,7 +200,7 @@ export const StyledAccordion = styled(Accordion)(({ theme }) => ({
     backgroundColor: theme.palette.background.paper,
     borderBottomLeftRadius: `${theme.shape.borderRadius * 3}px`,
     borderBottomRightRadius: `${theme.shape.borderRadius * 3}px`,
-    borderTop: `1px solid ${theme.palette.divider}`,
+    padding: "24px",
   },
   "& .MuiAccordion-root": {
     transition: theme.transitions.create(["margin", "border-radius"]),

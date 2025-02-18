@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -8,6 +8,7 @@ import {
   Grid,
   Button,
   Divider,
+  Link
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -55,13 +56,10 @@ const FilterDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Filter Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/filters")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/filters">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Filters
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Grid container spacing={2}>

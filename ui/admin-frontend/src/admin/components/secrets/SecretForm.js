@@ -10,8 +10,9 @@ import {
   Snackbar,
   IconButton,
   InputAdornment,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
@@ -144,14 +145,10 @@ const SecretForm = () => {
         <Typography variant="h5">
           {id ? "Edit Secret" : "Add Secret"}
         </Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/secrets"
-          color="inherit"
-        >
-          Back to Secrets
-        </Button>
+        <Link component={NavLink} to="/admin/secrets">
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Back to Secrets
+          </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

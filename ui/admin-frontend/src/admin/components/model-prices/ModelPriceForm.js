@@ -15,8 +15,9 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
@@ -201,14 +202,10 @@ const ModelPriceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Model Price" : "Add Model Price"}
         </Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/model-prices"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/model-prices">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Model Prices
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

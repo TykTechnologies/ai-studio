@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -10,6 +10,7 @@ import {
   Divider,
   Tooltip,
   IconButton,
+  Link
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -168,13 +169,10 @@ const LLMSettingsDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Call Settings Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/llm-settings")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/llm-settings">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to LLM Call Settings
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Model Usage Statistics</SectionTitle>

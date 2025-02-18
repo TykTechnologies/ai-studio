@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -12,6 +12,7 @@ import {
   ListItemText,
   Divider,
   Chip,
+  Link
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
@@ -61,14 +62,10 @@ const DataCatalogDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Data Catalog Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/catalogs/data"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/catalogs/data">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Data Catalogs
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Catalog Information</SectionTitle>

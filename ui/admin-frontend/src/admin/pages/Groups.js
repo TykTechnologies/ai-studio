@@ -461,9 +461,9 @@ const Groups = () => {
           <Button onClick={() => setOpenAddCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -498,9 +498,9 @@ const Groups = () => {
           <Button onClick={() => setOpenAddDataCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddDataCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddDataCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -535,9 +535,9 @@ const Groups = () => {
           <Button onClick={() => setOpenAddToolCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddToolCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddToolCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -570,9 +570,9 @@ const Groups = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddUserModal(false)}>Cancel</Button>
-          <Button onClick={handleAddUserConfirm} color="primary">
+          <StyledButton onClick={handleAddUserConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 

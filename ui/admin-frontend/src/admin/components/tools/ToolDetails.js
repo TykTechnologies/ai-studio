@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -12,6 +12,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  Link
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -70,13 +71,10 @@ const ToolDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Tool Details</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/tools")}
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/tools">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Tools
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Tool Information</SectionTitle>

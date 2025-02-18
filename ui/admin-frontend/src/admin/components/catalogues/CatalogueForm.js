@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -18,6 +18,7 @@ import {
   Snackbar,
   Alert,
   CircularProgress,
+  Link
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -188,14 +189,10 @@ const CatalogueForm = () => {
         <Typography variant="h5">
           {id ? "Edit Catalog" : "Create New Catalog"}
         </Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/catalogs/llms"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/catalogs/llms">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Catalogs
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

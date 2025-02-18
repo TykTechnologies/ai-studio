@@ -26,8 +26,9 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
@@ -39,7 +40,7 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -334,14 +335,10 @@ const DatasourceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Datasource" : "Add Datasource"}
         </Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/datasources"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/datasources">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Datasources
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -749,13 +746,13 @@ const DatasourceForm = () => {
                 />
 
                 <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                  <Button
+                  <StyledButtonPrimaryOutlined
                     variant="contained"
                     startIcon={<CloudUploadIcon />}
                     onClick={() => fileInputRef.current.click()}
                   >
                     Upload Additional Datasource Documentation
-                  </Button>
+                  </StyledButtonPrimaryOutlined>
 
                   <Button
                     variant="contained"

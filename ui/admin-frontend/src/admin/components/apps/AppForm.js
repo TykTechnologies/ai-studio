@@ -18,8 +18,9 @@ import {
   Chip,
   Switch,
   FormControlLabel,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
@@ -229,14 +230,10 @@ const AppForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit App" : "Add App"}</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/apps"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/apps">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to Apps
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

@@ -9,7 +9,6 @@ import PortalDrawer from "../admin/components/layout/PortalDrawer";
 import { useNavigate } from "react-router-dom";
 import pubClient, { logout } from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
-import portalTheme from "../portal/theme/portalTheme";
 import { DRAWER_WIDTH } from "../constants/layout";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 
@@ -146,52 +145,42 @@ const MainLayout = () => {
     />
   );
 
-  // If we're in admin section, use the admin layout with TopNavigation
-  if (currentTab === "admin") {
-    return (
-      <ThemeProvider theme={adminTheme}>
+  return (
+    <ThemeProvider theme={adminTheme}>
+      {currentTab === "admin" ? (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           {topNav}
           <Box sx={{ mt: "64px" }}>
-            {" "}
-            {/* Add margin-top to account for TopNavigation */}
             <AdminLayout hideAppBar />
           </Box>
         </Box>
-      </ThemeProvider>
-    );
-  }
-
-  // Otherwise use the portal/chat layout
-  return (
-    <ThemeProvider theme={portalTheme}>
-      <Box sx={{ display: "flex" }}>
-        {topNav}
-
-        {currentTab === "chat" && showChat && (
-          <ChatDrawer chats={entitlements.chats} open />
-        )}
-        {currentTab === "portal" && showPortal && (
-          <PortalDrawer
-            catalogues={entitlements.catalogues}
-            dataCatalogues={entitlements.data_catalogues}
-            open
-          />
-        )}
-
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            p: 3,
-            marginTop: "64px",
-            width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
-            ml: "20px",
-          }}
-        >
-          <Outlet />
+      ) : (
+        <Box sx={{ display: "flex" }}>
+          {topNav}
+          {currentTab === "chat" && showChat && (
+            <ChatDrawer chats={entitlements.chats} open />
+          )}
+          {currentTab === "portal" && showPortal && (
+            <PortalDrawer
+              catalogues={entitlements.catalogues}
+              dataCatalogues={entitlements.data_catalogues}
+              open
+            />
+          )}
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              p: 3,
+              marginTop: "64px",
+              width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
+              ml: "20px",
+            }}
+          >
+            <Outlet />
+          </Box>
         </Box>
-      </Box>
+      )}
     </ThemeProvider>
   );
 };

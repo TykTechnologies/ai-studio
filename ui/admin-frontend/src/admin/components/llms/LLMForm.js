@@ -20,8 +20,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Chip,
+  Link
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, NavLink } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
@@ -226,14 +227,10 @@ const LLMForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit LLM" : "Add LLM"}</Typography>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          to="/admin/llms"
-          color="inherit"
-        >
+        <Link component={NavLink} to="/admin/llms">
+          <ArrowBackIcon sx={{ mr: 1 }} />
           Back to LLMs
-        </Button>
+        </Link>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -369,7 +366,6 @@ const LLMForm = () => {
                 />
                 <IconButton
                   onClick={handleAddModel}
-                  color="primary"
                   sx={{ ml: 1 }}
                 >
                   <AddIcon />
@@ -386,8 +382,6 @@ const LLMForm = () => {
                     key={index}
                     label={model}
                     onDelete={() => handleDeleteModel(model)}
-                    color="primary"
-                    variant="outlined"
                   />
                 ))}
               </Stack>
