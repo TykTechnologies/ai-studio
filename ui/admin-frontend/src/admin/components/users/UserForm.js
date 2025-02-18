@@ -22,7 +22,7 @@ import {
   IconButton,
   Link
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -34,6 +34,7 @@ import {
   StyledTableRow,
   StyledTableHeaderCell,
   StyledTableCell,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 
 const UserForm = () => {
@@ -297,10 +298,14 @@ const UserForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit User" : "Add User"}</Typography>
-        <Link component={NavLink} to="/admin/users">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          color="inherit"
+          to="/admin/users"
+        >
           Back to Users
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

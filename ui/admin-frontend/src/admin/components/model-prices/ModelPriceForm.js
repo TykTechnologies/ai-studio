@@ -17,11 +17,11 @@ import {
   InputLabel,
   Link
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -202,10 +202,14 @@ const ModelPriceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Model Price" : "Add Model Price"}
         </Typography>
-        <Link component={NavLink} to="/admin/model-prices">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/model-prices"
+          color="inherit"
+        >
           Back to Model Prices
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

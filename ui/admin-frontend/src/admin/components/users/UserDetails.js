@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, Link as RouterLink, NavLink } from "react-router-dom";
+import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -27,6 +27,7 @@ import {
   StyledButton,
   StyledTableHeaderCell,
   StyledTableCell,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
@@ -135,10 +136,13 @@ const UserDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">User Details</Typography>
-        <Link component={NavLink} to="/admin/users">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/users")}
+          color="inherit"
+        >
           Back to Users
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Grid container spacing={2} mb={4}>

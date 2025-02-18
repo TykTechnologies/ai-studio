@@ -196,22 +196,6 @@ const theme = createTheme({
         })
       }
     },
-    MuiLink: {
-      styleOverrides: {
-        root: ({ theme }) => ({
-          color: theme.palette.text.defaultSubdued,
-          textDecoration: 'none',
-          cursor: 'pointer',
-          fontFamily: 'Inter-Semibold',
-          display: 'flex',
-          alignItems: 'center',
-          '&:hover': {
-            color: theme.palette.text.defaultSubdued,
-            textDecoration: 'none'
-          }
-        })
-      }
-    },
     MuiButton: {
       styleOverrides: {
         root: ({ theme }) => ({

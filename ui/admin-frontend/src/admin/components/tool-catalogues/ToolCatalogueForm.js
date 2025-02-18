@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -13,12 +13,11 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
-  Link
+  InputLabel
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -236,10 +235,13 @@ const ToolCatalogueForm = () => {
         <Typography variant="h5">
           {id ? "Edit Tool Catalog" : "Create Tool Catalog"}
         </Typography>
-        <Link component={NavLink} to="/admin/catalogs/tools">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/catalogs/tools")}
+          color="inherit"
+        >
           Back to Tool Catalogs
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

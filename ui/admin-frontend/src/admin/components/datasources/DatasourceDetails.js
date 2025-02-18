@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -30,6 +30,7 @@ import {
   FieldValue,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import {
   getVectorStoreName,
@@ -132,10 +133,13 @@ const DatasourceDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Datasource Details</Typography>
-        <Link component={NavLink} to="/admin/datasources">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/datasources")}
+          color="inherit"
+        >
           Back to Datasources
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Basic Information</SectionTitle>

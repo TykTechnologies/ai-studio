@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -16,7 +16,6 @@ import {
   Snackbar,
   Alert,
   DialogActions,
-  Link
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -28,6 +27,7 @@ import {
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 
 const GroupDetail = () => {
@@ -399,10 +399,13 @@ const GroupDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Group Details</Typography>
-        <Link component={NavLink} to="/admin/groups">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          color="inherit"
+          onClick={() => navigate("/admin/groups")}
+        >
           Back to Groups
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6">Name: {group.attributes.name}</Typography>

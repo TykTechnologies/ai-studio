@@ -22,7 +22,7 @@ import {
   MenuItem,
   Link
 } from "@mui/material";
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -35,6 +35,7 @@ import {
   ContentBox,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import { styled } from "@mui/system";
 
@@ -561,10 +562,14 @@ const ToolForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit Tool" : "Add Tool"}</Typography>
-        <Link component={NavLink} to="/admin/tools">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/tools"
+          color="white"
+        >
           Back to Tools
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

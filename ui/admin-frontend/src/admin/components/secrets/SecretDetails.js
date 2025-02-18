@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, Link as RouterLink, NavLink } from "react-router-dom";
+import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -10,14 +10,13 @@ import {
   Box,
   Alert,
   Snackbar,
-  Link
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -81,10 +80,14 @@ const SecretDetails = () => {
       <TitleBox top="64px">
         <Typography variant="h5">Secret Details</Typography>
         <Box>
-          <Link component={NavLink} to="/admin/secrets">
-            <ArrowBackIcon sx={{ mr: 1 }} />
+          <StyledButtonLink
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate("/admin/secrets")}
+            color="inherit"
+            sx={{ mr: 2 }}
+          >
             Back to Secrets
-          </Link>
+          </StyledButtonLink>
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}

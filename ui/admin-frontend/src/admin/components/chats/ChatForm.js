@@ -30,7 +30,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { FormControlLabel, Switch } from "@mui/material";
 
-import { useNavigate, useParams, NavLink } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   StyledButtonPrimaryOutlined,
@@ -38,6 +38,7 @@ import {
   ContentBox,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 
 const ChatForm = () => {
@@ -379,10 +380,14 @@ const ChatForm = () => {
         <Typography variant="h5">
           {id ? "Edit Chat Room" : "Add Chat Room"}
         </Typography>
-        <Link component={NavLink} to="/admin/chats">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          component={Link}
+          to="/admin/chats"
+          color="inherit"
+        >
           Back to Chat Rooms
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

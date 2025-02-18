@@ -7,18 +7,24 @@ import {
   Box,
   Table,
   TableBody,
-  TableCell,
-  TableContainer,
   TableHead,
-  TableRow,
   Button,
   Stack,
   Paper,
+  TableRow
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
-import { StyledPaper, TitleBox, ContentBox } from "../../styles/sharedStyles";
+import {
+  StyledButtonLink,
+  TitleBox,
+  ContentBox,
+  StyledPaper,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
+} from "../../styles/sharedStyles";
 
 import TruncatedMessage from "./TruncatedMessage";
 
@@ -128,13 +134,13 @@ const UserMessageLog = () => {
         <Typography variant="h5" fontWeight="bold">
           Chat Log
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate(-1)}
           color="primary"
         >
           Back
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
@@ -151,33 +157,31 @@ const UserMessageLog = () => {
             <strong>Model:</strong> {llmSettings.attributes.model_name}
           </Typography>
         </Paper>
-        <TableContainer component={Paper}>
+        <StyledPaper>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>
-                  <Typography fontWeight="bold">Timestamp</Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography fontWeight="bold">Message</Typography>
-                </TableCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
+                  Timestamp
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
+                  Message
+                </StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {messages.map((message) => (
-                <TableRow key={message.id}>
-                  <TableCell style={{ verticalAlign: "top" }}>
+                <StyledTableRow key={message.id}>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {new Date(message.attributes.created_at).toLocaleString()}
-                  </TableCell>
-                  <TableCell style={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     <TruncatedMessage message={message.attributes.content} />
-                  </TableCell>
-                </TableRow>
+                  </StyledTableCell>
+                </StyledTableRow>
               ))}
             </TableBody>
           </Table>
-        </TableContainer>
-        <Box mt={2}>
           <PaginationControls
             page={page}
             pageSize={pageSize}
@@ -185,7 +189,7 @@ const UserMessageLog = () => {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />
-        </Box>
+        </StyledPaper>
       </ContentBox>
     </>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -9,8 +9,7 @@ import {
   Button,
   Divider,
   Tooltip,
-  IconButton,
-  Link
+  IconButton
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -30,7 +29,7 @@ import {
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../common/DateRangePicker";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -169,10 +168,13 @@ const LLMSettingsDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Call Settings Details</Typography>
-        <Link component={NavLink} to="/admin/llm-settings">
-          <ArrowBackIcon sx={{ mr: 1 }} />
+        <StyledButtonLink
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/admin/llm-settings")}
+          color="inherit"
+        >
           Back to LLM Call Settings
-        </Link>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Model Usage Statistics</SectionTitle>
