@@ -28,6 +28,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { getConfig } from "../../config"; // Add this import
+import { StyledButtonCritical } from "../../admin/styles/sharedStyles";
 
 import pubClient from "../../admin/utils/pubClient";
 
@@ -238,14 +239,14 @@ const AppDetailView = () => {
         </Grid>
 
         <Box mt={4}>
-          <Button
+          <StyledButtonCritical
             variant="contained"
             color="error"
             startIcon={<DeleteIcon />}
             onClick={handleDeleteClick}
           >
             Delete App
-          </Button>
+          </StyledButtonCritical>
         </Box>
       </Paper>
 
@@ -433,9 +434,9 @@ const AppDetailView = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
+          <StyledButtonCritical onClick={handleDeleteConfirm} color="error" autoFocus>
             Delete
-          </Button>
+          </StyledButtonCritical>
         </DialogActions>
       </Dialog>
     </Box>

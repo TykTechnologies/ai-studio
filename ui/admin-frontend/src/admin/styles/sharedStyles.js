@@ -46,13 +46,11 @@ export const StyledTableHeaderCell = styled(TableCell)(({ theme }) => ({
   fontFamily: 'Inter-Semibold',
   color: theme.palette.text.primary,
   borderBottom: `1px solid ${theme.palette.border.neutralDefault}`,
-  textAlign: "left",
 }));
 
 export const StyledTableCell = styled(TableCell)(({ theme }) => ({
   borderBottom: `1px solid ${theme.palette.border.neutralDefault}`,
   color: theme.palette.text.primary,
-  textAlign: "left",
 }));
 
 export const StyledTableRow = styled(TableRow)(({ theme }) => ({
@@ -87,6 +85,7 @@ export const StyledButton = styled(Button)(({ theme }) => ({
   backgroundColor: theme.palette.background.buttonPrimaryDefault,
   boxShadow: "none",
   textTransform: "capitalize",
+  fontFamily: 'Inter-Medium',
   "&::before": {
     content: '""',
     position: 'absolute',
@@ -114,6 +113,7 @@ export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
   boxShadow: "none",
   textTransform: "capitalize",
+  fontFamily: 'Inter-Medium',
   "&::before": {
     content: '""',
     position: 'absolute',
@@ -131,6 +131,40 @@ export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
     boxShadow: "none",
     color: theme.palette.text.defaultSubdued,
   },
+}));
+
+export const StyledButtonCritical = styled(Button)(({ theme }) => ({
+  position: 'relative',
+  borderRadius: 20,
+  padding: '8px 16px',
+  color: theme.palette.custom.white,
+  backgroundColor: theme.palette.background.buttonCritical,
+  border: `1px solid ${theme.palette.border.criticalDefault}`,
+  boxShadow: "none",
+  textTransform: "capitalize",
+  fontFamily: 'Inter-Medium',
+  "&:hover": {
+    backgroundColor: theme.palette.background.buttonCriticalHover,
+    boxShadow: "none",
+    color: theme.palette.custom.white,
+    border: `1px solid ${theme.palette.border.criticalHover}`
+  },
+}));
+
+export const StyledButtonLink = styled(Button)(({ theme }) => ({
+  color: theme.palette.text.defaultSubdued,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  fontFamily: 'Inter-Semibold',
+  display: 'flex',
+  alignItems: 'center',
+  border: 'none',
+  padding: '0 8px 0 0',
+  '&:hover': {
+    color: theme.palette.text.defaultSubdued,
+    backgroundColor: 'transparent',
+    border: 'none'
+  }
 }));
 
 export const StyledDialog = styled(Dialog)(({ theme }) => ({

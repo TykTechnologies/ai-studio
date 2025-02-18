@@ -31,8 +31,8 @@ const DetailModal = ({ open, handleClose, title, children }) => {
       >
         <Box
           sx={{
-            bgcolor: "black",
-            color: "white",
+            bgcolor: "background.paper",
+            color: "text.primary",
             p: 2,
           }}
         >
