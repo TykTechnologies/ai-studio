@@ -86,8 +86,7 @@ const GetStartedWidget = ({ openChatRoomWizard, onClose }) => (
       height: "100%",
       textAlign: "center",
       p: 4,
-      mb: 4,
-      backgroundColor: (theme) => theme.palette.custom.lightTeal,
+      m: 4,
       boxShadow: (theme) => theme.shadows[4],
       borderRadius: (theme) => theme.shape.borderRadius,
       position: "relative",
@@ -110,20 +109,13 @@ const GetStartedWidget = ({ openChatRoomWizard, onClose }) => (
       Chat rooms enable non-technical users to benefit from the full power of AI
       in your organisation, safely and securely.
     </Typography>
-    <Button
+    <StyledButton
       variant="contained"
-      sx={{
-        backgroundColor: (theme) => theme.palette.custom.purpleDark,
-        color: "white",
-        "&:hover": {
-          backgroundColor: (theme) => theme.palette.custom.purpleLight,
-        },
-      }}
       onClick={openChatRoomWizard}
       startIcon={<AddIcon />}
     >
       Create Chat Room
-    </Button>
+    </StyledButton>
   </Box>
 );
 

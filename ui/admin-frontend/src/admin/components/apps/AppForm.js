@@ -18,7 +18,7 @@ import {
   Chip,
   Switch,
   FormControlLabel,
-  Link
+  Link,
   InputAdornment,
 } from "@mui/material";
 import { useNavigate, useParams, NavLink } from "react-router-dom";
