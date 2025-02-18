@@ -184,6 +184,18 @@ const UserDetails = () => {
           <Grid item xs={9}>
             <FieldValue>{user.attributes.is_admin ? "Yes" : "No"}</FieldValue>
           </Grid>
+          {user.attributes.is_admin && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Notifications:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <FieldValue>
+                  {user.attributes.notifications_enabled ? "Enabled" : "Disabled"}
+                </FieldValue>
+              </Grid>
+            </>
+          )}
         </Grid>
         <Box
           mb={2}

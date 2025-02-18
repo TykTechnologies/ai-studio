@@ -4,32 +4,59 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
+
+// deriveKey takes any string and returns a 32-byte key suitable for AES-256
+func deriveKey(input string) []byte {
+	hash := sha256.Sum256([]byte(input))
+	return hash[:]
+}
 
 type Secret struct {
 	gorm.Model
 	ID      uint   `gorm:"primaryKey" json:"id" access:"secrets"`
 	VarName string `json:"name"`
 	Value   string `json:"value"`
+
+	// Transient field to control if we should return the reference format
+	preserveReference bool `gorm:"-" json:"-"`
+}
+
+// PreserveReference sets the secret to return in reference format
+func (s *Secret) PreserveReference() {
+	s.preserveReference = true
+}
+
+// GetValue returns either the decrypted value or the reference format
+func (s *Secret) GetValue() string {
+	if s.preserveReference {
+		return GetSecretReference(s.VarName)
+	}
+	return s.Value
 }
 
 var midsommarSecret = "TYK_AI_SECRET_KEY"
 
 func encrypt(keyString string, stringToEncrypt string) (encryptedString string, err error) {
-	// convert key to bytes
-	key, err := hex.DecodeString(keyString)
+	// Derive a proper 32-byte key from the input string
+	log.Printf("[DEBUG] Deriving key from input of length: %d", len(keyString))
+	key := deriveKey(keyString)
+	log.Printf("[DEBUG] Successfully derived key, length: %d", len(key))
+
 	plaintext := []byte(stringToEncrypt)
 
-	// Create a new Cipher Block from the key
+	// Create a new Cipher Block from the derived key
 	block, err := aes.NewCipher(key)
 	if err != nil {
+		log.Errorf("[DEBUG] Failed to create cipher block: %v", err)
 		return "", err
 	}
 
@@ -50,7 +77,7 @@ func encrypt(keyString string, stringToEncrypt string) (encryptedString string, 
 
 // decrypt from base64 to decrypted string
 func decrypt(keyString string, stringToDecrypt string) string {
-	key, _ := hex.DecodeString(keyString)
+	key := deriveKey(keyString)
 	ciphertext, _ := base64.URLEncoding.DecodeString(stringToDecrypt)
 
 	block, err := aes.NewCipher(key)
@@ -75,11 +102,16 @@ func decrypt(keyString string, stringToDecrypt string) string {
 }
 
 // GetSecretByID retrieves a Secret record from the database by ID.
-func GetSecretByID(db *gorm.DB, id uint) (*Secret, error) {
+func GetSecretByID(db *gorm.DB, id uint, preserveRef bool) (*Secret, error) {
 	var settings Secret
 	err := db.First(&settings, id).Error
 	if err != nil {
 		return nil, err
+	}
+
+	if preserveRef {
+		settings.PreserveReference()
+		return &settings, nil
 	}
 
 	key := os.Getenv(midsommarSecret)
@@ -88,12 +120,18 @@ func GetSecretByID(db *gorm.DB, id uint) (*Secret, error) {
 }
 
 // GetSecretByVarName retrieves a Secret record from the database by it's name.
-func GetSecretByVarName(db *gorm.DB, name string) (*Secret, error) {
+func GetSecretByVarName(db *gorm.DB, name string, preserveRef bool) (*Secret, error) {
 	var settings Secret
 	err := db.Where("var_name = (?)", name).First(&settings).Error
 	if err != nil {
 		return nil, err
 	}
+
+	if preserveRef {
+		settings.PreserveReference()
+		return &settings, nil
+	}
+
 	key := os.Getenv(midsommarSecret)
 	settings.Value = decrypt(key, settings.Value)
 	return &settings, nil
@@ -107,13 +145,20 @@ func DeleteSecretByID(db *gorm.DB, id uint) error {
 // CreateSecret creates a new Secret record in the database.
 func CreateSecret(db *gorm.DB, settings *Secret) error {
 	key := os.Getenv(midsommarSecret)
+	log.Debugf("[DEBUG] CreateSecret: Got key from env, length: %d", len(key))
+
 	var err error
 	settings.Value, err = encrypt(key, settings.Value)
 	if err != nil {
+		log.Errorf("[DEBUG] CreateSecret: Failed to encrypt value: %v", err)
 		return err
 	}
 
-	return db.Create(settings).Error
+	if err := db.Create(settings).Error; err != nil {
+		log.Errorf("[DEBUG] CreateSecret: Failed to create in DB: %v", err)
+		return err
+	}
+	return nil
 }
 
 // UpdateSecret updates an existing Secret record in the database.

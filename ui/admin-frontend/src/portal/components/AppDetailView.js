@@ -56,6 +56,16 @@ const AppDetailView = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
+  const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
+  const [budgetUsageData, setBudgetUsageData] = useState(null);
+  const [startDate, setStartDate] = useState(
+    new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
+  );
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
 
   const { id } = useParams();
   const navigate = useNavigate();
@@ -65,12 +75,20 @@ const AppDetailView = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [appResponse, llmsResponse] = await Promise.all([
+        const [appResponse, llmsResponse, usageResponse, budgetResponse] = await Promise.all([
           pubClient.get(`/common/apps/${id}`),
           pubClient.get("/common/accessible-llms"),
+          pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
+            params: { start_date: startDate, end_date: endDate, app_id: id },
+          }),
+          pubClient.get(`/analytics/budget-usage-for-app`, {
+            params: { app_id: id },
+          }),
         ]);
 
         const config = getConfig();
+        setTokenUsageAndCostData(usageResponse.data);
+        setBudgetUsageData(budgetResponse.data);
         setBaseUrl(config.PROXY_URL || `//${currentHost}:9090`);
 
         setApp(appResponse.data);
@@ -191,6 +209,21 @@ const AppDetailView = () => {
               {app.attributes.llm_ids.map((id) => (
                 <Chip key={id} label={`LLM ${id}`} />
               ))}
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Monthly Budget:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box>
+              <FieldValue>
+                {app.attributes.monthly_budget ? `$${app.attributes.monthly_budget}` : 'No budget limit'}
+              </FieldValue>
+              {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
+                </Typography>
+              )}
             </Box>
           </Grid>
         </Grid>

@@ -18,3 +18,5 @@ docs/site/resources
 .vscode
 .DS_Store
 __debug_bin*
+coverage.out
+coverage.html

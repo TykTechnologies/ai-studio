@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -20,15 +21,97 @@ func setupTestDBForApps(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestCreateAppWithNotifications(t *testing.T) {
+	t.Run("with SMTP configured", func(t *testing.T) {
+		db := setupTestDBForApps(t)
+		testMailer := notifications.NewTestMailer()
+		mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+		notificationService := NewNotificationService(db, mailService)
+		service := &Service{
+			DB:                  db,
+			NotificationService: notificationService,
+		}
+
+		// Create admin user with notifications enabled
+		admin := &models.User{
+			Email:                "admin@test.com",
+			Name:                 "Admin",
+			IsAdmin:              true,
+			NotificationsEnabled: true,
+			EmailVerified:        true,
+		}
+		err := admin.Create(db)
+		assert.NoError(t, err)
+
+		// Create app
+		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
+		assert.NoError(t, err)
+		assert.NotNil(t, app)
+
+		// Verify notification was sent
+		notifications := service.NotificationService.GetNotifications()
+		assert.Len(t, notifications, 1)
+		if len(notifications) > 0 {
+			assert.Equal(t, admin.ID, notifications[0].UserID)
+			assert.Contains(t, notifications[0].Title, "New App Created")
+		}
+
+		// Verify email was sent
+		sentEmails := testMailer.GetEmails()
+		assert.Len(t, sentEmails, 1)
+		if len(sentEmails) > 0 {
+			assert.Equal(t, "admin@test.com", sentEmails[0].To)
+		}
+	})
+
+	t.Run("without SMTP configured", func(t *testing.T) {
+		db := setupTestDBForApps(t)
+		// Create mail service without SMTP configuration
+		mailService := notifications.NewMailService("test@example.com", "", 0, "", "", nil)
+		service := NewService(db)
+		service.NotificationService = NewNotificationService(db, mailService)
+
+		// Create admin user with notifications enabled
+		admin := &models.User{
+			Email:                "admin@test.com",
+			Name:                 "Admin",
+			IsAdmin:              true,
+			NotificationsEnabled: true,
+			EmailVerified:        true,
+		}
+		err := admin.Create(db)
+		assert.NoError(t, err)
+
+		// Create app - should succeed even without SMTP
+		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
+		assert.NoError(t, err)
+		assert.NotNil(t, app)
+
+		// Verify notification was created but email wasn't sent
+		notifications := service.NotificationService.GetNotifications()
+		assert.Len(t, notifications, 1)
+		if len(notifications) > 0 {
+			assert.Equal(t, admin.ID, notifications[0].UserID)
+			assert.Contains(t, notifications[0].Title, "New App Created")
+		}
+	})
+}
+
 func TestCreateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, err := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID})
 	assert.NoError(t, err)
@@ -45,11 +128,17 @@ func TestCreateApp(t *testing.T) {
 
 func TestGetApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
 
@@ -72,16 +161,22 @@ func TestGetApp(t *testing.T) {
 
 func TestUpdateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
 
-	updatedApp, err := service.UpdateApp(app.ID, "Updated App", "Updated Description", []uint{ds1.ID}, []uint{llm2.ID})
+	updatedApp, err := service.UpdateApp(app.ID, "Updated App", "Updated Description", []uint{ds1.ID}, []uint{llm2.ID}, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, app.ID, updatedApp.ID)
 	assert.Equal(t, "Updated App", updatedApp.Name)
@@ -90,17 +185,23 @@ func TestUpdateApp(t *testing.T) {
 	assert.Len(t, updatedApp.LLMs, 1)
 
 	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid", true)
-	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID})
+	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID}, nil, nil)
 	assert.Error(t, err)
 }
 
 func TestAppCredentialActivation(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
 
@@ -117,11 +218,17 @@ func TestAppCredentialActivation(t *testing.T) {
 
 func TestAppDatasourceOperations(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
 
@@ -144,11 +251,17 @@ func TestAppDatasourceOperations(t *testing.T) {
 
 func TestAppLLMOperations(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{}, []uint{})
 	err := service.AddLLMToApp(app.ID, llm1.ID)
@@ -156,7 +269,7 @@ func TestAppLLMOperations(t *testing.T) {
 	err = service.AddDatasourceToApp(app.ID, ds1.ID)
 	assert.NoError(t, err)
 
-	newLLM, err := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", 85, "NewShort", "NewLong", "https://newlogo.com", models.OPENAI, true, nil, "", []string{})
+	newLLM, err := service.CreateLLM("NewLLM", "newkey", "https://newapi.com", 85, "NewShort", "NewLong", "https://newlogo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 	assert.NoError(t, err)
 
 	err = service.AddLLMToApp(app.ID, newLLM.ID)
@@ -185,11 +298,17 @@ func TestAppLLMOperations(t *testing.T) {
 
 func TestDeleteApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
 
@@ -202,10 +321,16 @@ func TestDeleteApp(t *testing.T) {
 
 func TestAppServiceErrorCases(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
 	// Create a test user and app
-	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true)
 	assert.NoError(t, err)
 
 	app, err := service.CreateApp("Test App", "Description", user.ID, nil, nil)
@@ -244,27 +369,33 @@ func TestAppServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test UpdateApp with non-existent datasource
-	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{9999}, []uint{})
+	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{9999}, []uint{}, nil, nil)
 	assert.Error(t, err)
 
 	// Test UpdateApp with non-existent LLM
-	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{}, []uint{9999})
+	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{}, []uint{9999}, nil, nil)
 	assert.Error(t, err)
 }
 
 func TestAppService_MultipleApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
 	// Create test users
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true)
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true)
 
 	// Create datasources and LLMs
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user1.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user2.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
-	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{})
-	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{})
+	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	// Create multiple apps
 	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, []uint{ds1.ID}, []uint{llm1.ID})
@@ -311,11 +442,17 @@ func TestAppService_MultipleApps(t *testing.T) {
 }
 func TestListApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
 	// Create test users
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true)
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true)
 
 	// Create multiple apps
 	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, nil, nil)
@@ -331,9 +468,15 @@ func TestListApps(t *testing.T) {
 
 func TestListAppsWithPagination(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true)
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
@@ -352,10 +495,16 @@ func TestListAppsWithPagination(t *testing.T) {
 
 func TestListAppsByUserID(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true)
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true)
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {
@@ -377,9 +526,15 @@ func TestListAppsByUserID(t *testing.T) {
 
 func TestSearchApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true)
 
 	// Create apps with different names and descriptions
 	_, _ = service.CreateApp("Test App", "This is a test app", user.ID, nil, nil)
@@ -404,9 +559,15 @@ func TestSearchApps(t *testing.T) {
 
 func TestCountApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true)
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
@@ -421,10 +582,16 @@ func TestCountApps(t *testing.T) {
 
 func TestCountAppsByUserID(t *testing.T) {
 	db := setupTestDBForApps(t)
-	service := NewService(db)
+	testMailer := notifications.NewTestMailer()
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
+	notificationService := NewNotificationService(db, mailService)
+	service := &Service{
+		DB:                  db,
+		NotificationService: notificationService,
+	}
 
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true)
+	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true)
+	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true)
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {

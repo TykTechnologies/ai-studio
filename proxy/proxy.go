@@ -16,16 +16,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
+	"github.com/gosimple/slug"
+	"github.com/tmc/langchaingo/schema"
+
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/auth"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
-	"github.com/gorilla/mux"
-	"github.com/gosimple/slug"
-	"github.com/tmc/langchaingo/schema"
 )
 
 const (
@@ -54,7 +56,7 @@ type SearchResults struct {
 }
 
 type Proxy struct {
-	service        services.ServiceInterface
+	service        *services.Service
 	server         *http.Server
 	llms           map[string]*models.LLM
 	datasources    map[string]*models.Datasource
@@ -63,19 +65,22 @@ type Proxy struct {
 	credValidator  *CredentialValidator
 	modelValidator *ModelValidator
 	filters        []*models.Filter
+	budgetService  *services.BudgetService
+	authService    *auth.AuthService
 }
 
 type Config struct {
 	Port int
 }
 
-func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
+func NewProxy(service *services.Service, config *Config, budgetService *services.BudgetService) *Proxy {
 	p := &Proxy{
-		service:     service,
-		llms:        make(map[string]*models.LLM),
-		datasources: make(map[string]*models.Datasource),
-		config:      config,
-		filters:     make([]*models.Filter, 0),
+		service:       service,
+		llms:          make(map[string]*models.LLM),
+		datasources:   make(map[string]*models.Datasource),
+		config:        config,
+		filters:       make([]*models.Filter, 0),
+		budgetService: budgetService,
 	}
 
 	val := NewCredentialValidator(service, p)
@@ -88,7 +93,7 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	val.RegisterValidator(strings.ToLower(string(models.MOCK_VENDOR)), MockValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 
-	modelVal := NewModelValidator(nil) // nil because allowed models will be set per-LLM
+	modelVal := NewModelValidator(nil) // nil because allowed models set per LLM
 	modelVal.RegisterExtractor(strings.ToLower(string(models.OPENAI)), OpenAIModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.ANTHROPIC)), AnthropicModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.GOOGLEAI)), GoogleAIModelExtractor)
@@ -98,7 +103,6 @@ func NewProxy(service services.ServiceInterface, config *Config) *Proxy {
 	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
 
 	p.modelValidator = modelVal
-
 	p.credValidator = val
 
 	return p
@@ -145,14 +149,17 @@ func (p *Proxy) loadResources() error {
 	newLLMs := make(map[string]*models.LLM)
 	for i := range llms {
 		nameSlug := slug.Make(llms[i].Name)
-		newLLMs[nameSlug] = &llms[i]
+		// must create a local copy
+		llm := llms[i]
+		newLLMs[nameSlug] = &llm
 		fmt.Println("Adding LLM: ", nameSlug)
 	}
 
 	newDatasources := make(map[string]*models.Datasource)
 	for i := range datasources {
-		nameSlug := slug.Make(datasources[i].Name)
-		newDatasources[nameSlug] = &datasources[i]
+		ds := datasources[i]
+		nameSlug := slug.Make(ds.Name)
+		newDatasources[nameSlug] = &ds
 	}
 
 	p.llms = newLLMs
@@ -165,7 +172,6 @@ func (p *Proxy) loadResources() error {
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 
-	// Apply the middleware directly to the routes instead of the whole router
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).
 		Methods("POST").
 		Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
@@ -176,7 +182,6 @@ func (p *Proxy) createHandler() http.Handler {
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	// Apply the other middleware to the whole router
 	return p.outboundRequestMiddleware(
 		p.credValidator.Middleware(r),
 	)
@@ -196,7 +201,7 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		r.Body.Close()
-		r.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 		for _, filter := range p.filters {
 			runner := scripting.NewScriptRunner(filter.Script)
@@ -217,7 +222,6 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 		Status:  status,
 		Message: message,
 	}
-
 	if err != nil {
 		response.Error = err.Error()
 	}
@@ -264,14 +268,41 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	p.mu.RUnlock()
 
 	if !ok {
-		errMsg := fmt.Sprintf("[rest] LLM not found: %s", llmSlug)
-		respondWithError(w, http.StatusNotFound, errMsg, nil)
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("[rest] LLM not found: %s", llmSlug), nil)
 		return
 	}
 
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err)
+		return
+	}
+
+	appObj := r.Context().Value("app")
+	if appObj == nil {
+		respondWithError(w, http.StatusInternalServerError, "app context not found", nil)
+		return
+	}
+	app, ok := appObj.(*models.App)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "app context invalid", nil)
+		return
+	}
+
+	// Check budget using cached values and get usage percentages for analytics
+	_, _, err = p.budgetService.CheckBudget(app, llm)
+	if err != nil {
+		errResp := ErrorResponse{
+			Status:  http.StatusForbidden,
+			Message: "Budget limit exceeded",
+			Error:   err.Error(),
+		}
+		errBody, _ := json.Marshal(errResp)
+
+		// Record the budget error in analytics
+		go p.analyzeResponse(llm, app, http.StatusForbidden, errBody, reqBody, r)
+
+		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err)
 		return
 	}
 
@@ -293,9 +324,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
 			req.Host = upstreamURL.Host
 
-			er := p.setVendorAuthHeader(req, llm)
-			if er != nil {
-				respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", er)
+			err := p.setVendorAuthHeader(req, llm)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", err)
 				return
 			}
 		},
@@ -307,30 +338,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	capture := newResponseCapture(w)
 	proxy.ServeHTTP(capture, r)
 
-	appObj := r.Context().Value("app")
-	if appObj == nil {
-		slog.Error("app context not found")
-		return
-	}
-
-	app, ok := appObj.(*models.App)
-	if !ok {
-		slog.Error("app context invalid")
-		return
-	}
-
-	go func(r *http.Request) {
-		responseBody := capture.buffer.Bytes()
-		statusCode := capture.statusCode
-
-		p.analyzeResponse(llm, app, statusCode, responseBody, reqBody, r)
-	}(r)
+	// Analyze response
+	go p.analyzeResponse(llm, app, capture.statusCode, capture.buffer.Bytes(), reqBody, r)
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
 	AnalyzeResponse(p.service, llm, app, statusCode, body, reqBody, r)
 }
 
+// analyzeCompletionResponse adds usage/cost analytics. Updated to store llm_id for budget queries.
 func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
 	cpt := 0.0
 	cpit := 0.0
@@ -341,7 +357,7 @@ func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, resp
 	}
 
 	tt := response.GetPromptTokens() + response.GetResponseTokens()
-	rec := &analytics.LLMChatRecord{
+	rec := &models.LLMChatRecord{
 		Vendor:         string(llm.Vendor),
 		PromptTokens:   response.GetPromptTokens(),
 		ResponseTokens: response.GetResponseTokens(),
@@ -352,6 +368,8 @@ func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, resp
 		AppID:          app.ID,
 		UserID:         app.UserID,
 		Cost:           cpt*float64(response.GetResponseTokens()) + cpit*float64(response.GetPromptTokens()),
+		// Must store LLMID for usage queries
+		LLMID: llm.ID,
 	}
 
 	analytics.RecordChatRecord(rec)
@@ -414,18 +432,14 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 func (p *Proxy) GetDatasource(name string) (*models.Datasource, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-
 	ds, ok := p.datasources[name]
-
 	return ds, ok
 }
 
 func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-
 	llm, ok := p.llms[name]
-
 	return llm, ok
 }
 
@@ -434,7 +448,6 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	if err != nil {
 		return err
 	}
-
 	for _, filter := range llm.Filters {
 		runner := scripting.NewScriptRunner(filter.Script)
 		err := runner.RunFilter(string(bodyBytes), p.service)
@@ -447,7 +460,6 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	if !ok {
 		return fmt.Errorf("vendor not found")
 	}
-
 	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
 }
 
@@ -470,6 +482,34 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	appObj := r.Context().Value("app")
+	if appObj == nil {
+		respondWithError(w, http.StatusInternalServerError, "app context not found", nil)
+		return
+	}
+	app, ok := appObj.(*models.App)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "app context invalid", nil)
+		return
+	}
+
+	// Check budget using cached values and get usage percentages for analytics
+	_, _, err = p.budgetService.CheckBudget(app, llm)
+	if err != nil {
+		errResp := ErrorResponse{
+			Status:  http.StatusForbidden,
+			Message: "Budget limit exceeded",
+			Error:   err.Error(),
+		}
+		errBody, _ := json.Marshal(errResp)
+
+		// Record the budget error in analytics
+		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, errBody, reqBody, nil, time.Now())
+
+		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err)
+		return
+	}
+
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err)
 		return
@@ -481,11 +521,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Construct the full upstream path by removing the prefix
 	upstreamPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
 	upstreamURL.Path = path.Join(upstreamURL.Path, upstreamPath)
-
-	// Preserve query parameters
 	upstreamURL.RawQuery = r.URL.RawQuery
 
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL.String(), r.Body)
@@ -493,7 +530,6 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to create upstream request", err)
 		return
 	}
-
 	upstreamReq.Header = r.Header.Clone()
 	upstreamReq.Host = upstreamURL.Host
 
@@ -515,16 +551,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		w.Header()[k] = v
 	}
 	w.WriteHeader(resp.StatusCode)
-
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
 
-	app, _ := r.Context().Value("app").(*models.App)
-
 	var fullResponse bytes.Buffer
 	var responses [][]byte
-
 	buffer := make([]byte, 1024)
 	isErr := false
 	for {
@@ -535,9 +567,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			responses = append(responses, chunk)
 			fullResponse.Write(chunk)
 
-			_, err := w.Write(chunk)
-			if err != nil {
-				log.Printf("Error writing to client: %v", err)
+			_, werr := w.Write(chunk)
+			if werr != nil {
+				log.Printf("Error writing to client: %v", werr)
 				isErr = true
 				break
 			}
@@ -556,24 +588,22 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses)
+		// Use current time for analytics to ensure unique timestamps
+		now := time.Now()
+		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, now)
 	}
 }
 
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte) {
-	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, reqBody, req, chunks)
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) {
+	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
 }
 
+// Helper to read body without consuming (unused here, but may be kept):
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
-	// Read the body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
-
-	// Restore the io.ReadCloser to its original state
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
-
-	// Return the body
 	return body, nil
 }

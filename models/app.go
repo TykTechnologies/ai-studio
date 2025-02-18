@@ -2,24 +2,29 @@ package models
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 type App struct {
 	gorm.Model
-	ID           uint   `json:"id" gorm:"primary_key"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	UserID       uint   `json:"user_id" gorm:"foreignKey:ID"`
-	CredentialID uint   `json:"credential_id"`
-	Credential   Credential
-	Datasources  []Datasource `json:"datasources" gorm:"many2many:app_datasources;"`
-	LLMs         []LLM        `json:"llms" gorm:"many2many:app_llms;"`
+	ID              uint   `json:"id" gorm:"primary_key"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	UserID          uint   `json:"user_id" gorm:"foreignKey:ID"`
+	CredentialID    uint   `json:"credential_id"`
+	Credential      Credential
+	MonthlyBudget   *float64     `json:"monthly_budget" gorm:"column:monthly_budget"`
+	BudgetStartDate *time.Time   `json:"budget_start_date" gorm:"column:budget_start_date"`
+	Datasources     []Datasource `json:"datasources" gorm:"many2many:app_datasources;"`
+	LLMs            []LLM        `json:"llms" gorm:"many2many:app_llms;"`
 }
 
 type Apps []App
 
+// Note: Everything is mostly unchanged from your existing code
+// NewApp creates a new App instance
 func NewApp() *App {
 	return &App{}
 }
@@ -95,47 +100,48 @@ func (a *App) DeactivateCredential(db *gorm.DB) error {
 	return credential.Deactivate(db)
 }
 
+// AddDatasource adds a datasource to the app
 func (a *App) AddDatasource(db *gorm.DB, datasource *Datasource) error {
 	return db.Model(a).Association("Datasources").Append(datasource)
 }
 
+// RemoveDatasource removes a datasource from the app
 func (a *App) RemoveDatasource(db *gorm.DB, datasource *Datasource) error {
 	return db.Model(a).Association("Datasources").Delete(datasource)
 }
 
+// AddLLM adds an LLM to the app
 func (a *App) AddLLM(db *gorm.DB, llm *LLM) error {
 	return db.Model(a).Association("LLMs").Append(llm)
 }
 
+// RemoveLLM removes an LLM from the app
 func (a *App) RemoveLLM(db *gorm.DB, llm *LLM) error {
 	return db.Model(a).Association("LLMs").Delete(llm)
 }
 
+// GetDatasources retrieves all datasources associated with the app
 func (a *App) GetDatasources(db *gorm.DB) error {
 	return db.Model(a).Association("Datasources").Find(&a.Datasources)
 }
 
+// GetLLMs retrieves LLMs associated with the app with pagination support
 func (a *App) GetLLMs(db *gorm.DB, pageSize, pageNumber int, all bool) ([]LLM, int64, int, error) {
 	var llms []LLM
 	var totalCount int64
 	var totalPages int
 
-	// Count total number of LLMs associated with this app
 	totalCount = db.Model(a).Association("LLMs").Count()
-
-	// Calculate total pages
 	totalPages = int(totalCount) / pageSize
 	if int(totalCount)%pageSize != 0 {
 		totalPages++
 	}
 
 	if all {
-		// Fetch all LLMs associated with this app
 		if err := db.Model(a).Association("LLMs").Find(&llms); err != nil {
 			return nil, 0, 0, err
 		}
 	} else {
-		// Apply pagination
 		offset := (pageNumber - 1) * pageSize
 		if err := db.Preload("LLMs", func(db *gorm.DB) *gorm.DB {
 			return db.Offset(offset).Limit(pageSize)
@@ -148,6 +154,7 @@ func (a *App) GetLLMs(db *gorm.DB, pageSize, pageNumber int, all bool) ([]LLM, i
 	return llms, totalCount, totalPages, nil
 }
 
+// List returns all apps
 func (a *App) List(db *gorm.DB) (Apps, error) {
 	var apps Apps
 	err := db.Preload("Credential").Find(&apps).Error

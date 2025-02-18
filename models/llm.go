@@ -1,35 +1,37 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Vendor string
 
 type LLM struct {
 	gorm.Model
-	ID           uint   `json:"id" gorm:"primary_key"`
-	Name         string `json:"name"`
-	APIKey       string `json:"api_key`
-	APIEndpoint  string `json:"api_endpoint"` // The endpoint to actually access the LLM with Midsommar
-	DefaultModel string `json:"default_model"`
-
+	ID               uint   `json:"id" gorm:"primary_key"`
+	Name             string `json:"name"`
+	APIKey           string `json:"api_key"`
+	APIEndpoint      string `json:"api_endpoint"`
+	DefaultModel     string `json:"default_model"`
 	PrivacyScore     int    `json:"privacy_score"`
 	ShortDescription string `json:"short_description"`
 	LongDescription  string `json:"long_description"`
+	LogoURL          string `json:"logo"`
+	Vendor           Vendor `json:"vendor"`
+	Active           bool   `json:"active"`
+	// Budget
+	MonthlyBudget   *float64   `json:"monthly_budget" gorm:"column:monthly_budget"`
+	BudgetStartDate *time.Time `json:"budget_start_date" gorm:"column:budget_start_date"`
 
-	LogoURL string `json:"logo"`
-	Vendor  Vendor `json:"vendor"`
-	Active  bool   `json:"active"`
-
-	Filters []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
-
-	// If empty, all models are allowed
-	AllowedModels []string `json:"allowed_models" gorm:"serializer:json"`
+	Filters       []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
+	AllowedModels []string  `json:"allowed_models" gorm:"serializer:json"`
 }
 
 const (
-	OPENAI    Vendor = "openai"
-	ANTHROPIC Vendor = "anthropic"
-	// BEDROCK     Vendor = "bedrock"
+	OPENAI      Vendor = "openai"
+	ANTHROPIC   Vendor = "anthropic"
 	VERTEX      Vendor = "vertex"
 	GOOGLEAI    Vendor = "google_ai"
 	HUGGINGFACE Vendor = "huggingface"
@@ -48,33 +50,25 @@ func (l *LLM) Get(db *gorm.DB, id uint) error {
 }
 
 func (l *LLM) Create(db *gorm.DB) error {
-	// Start a transaction
 	tx := db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
 		}
 	}()
-
 	if err := tx.Error; err != nil {
 		return err
 	}
-
-	// Create the LLM
 	if err := tx.Create(l).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
-
-	// If there are Filters, save the many-to-many relationship
 	if len(l.Filters) > 0 {
 		if err := tx.Model(l).Association("Filters").Replace(l.Filters); err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
-
-	// Commit the transaction
 	return tx.Commit().Error
 }
 
@@ -96,11 +90,9 @@ func (l *LLM) GetByName(db *gorm.DB, name string) error {
 func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&LLM{}).Preload("Filters")
-
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}
-
 	var totalPages int
 	if pageSize > 0 {
 		totalPages = int(totalCount) / pageSize
@@ -108,12 +100,10 @@ func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int6
 			totalPages++
 		}
 	}
-
 	if !all && pageSize > 0 {
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
 	}
-
 	err := query.Find(l).Error
 	return totalCount, totalPages, err
 }

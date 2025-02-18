@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -53,7 +52,7 @@ func main() {
 		log.Fatalf("Failed to drop tables: %v", err)
 	}
 
-	err = db.AutoMigrate(&analytics.LLMChatRecord{}, &analytics.LLMChatLogEntry{}, &analytics.ToolCallRecord{})
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.LLMChatLogEntry{}, &models.ToolCallRecord{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -80,7 +79,7 @@ func connectToDatabase(dbType, connStr string) (*gorm.DB, error) {
 }
 
 func dropTables(db *gorm.DB) error {
-	err := db.Migrator().DropTable(&analytics.LLMChatRecord{}, &analytics.LLMChatLogEntry{}, &analytics.ToolCallRecord{})
+	err := db.Migrator().DropTable(&models.LLMChatRecord{}, &models.LLMChatLogEntry{}, &models.ToolCallRecord{})
 	if err != nil {
 		return fmt.Errorf("failed to drop tables: %v", err)
 	}
@@ -109,7 +108,7 @@ func generateTestData(db *gorm.DB) {
 
 func createChatRecord(db *gorm.DB, date time.Time) {
 	vendor := randomChatVendor()
-	record := &analytics.LLMChatRecord{
+	record := &models.LLMChatRecord{
 		Name:           randomChatModelName(vendor),
 		Vendor:         vendor,
 		TotalTimeMS:    rand.Intn(10000) + 500,
@@ -130,7 +129,7 @@ func createChatRecord(db *gorm.DB, date time.Time) {
 
 func createChatLogEntry(db *gorm.DB, date time.Time) {
 	vendor := randomChatVendor()
-	entry := &analytics.LLMChatLogEntry{
+	entry := &models.LLMChatLogEntry{
 		Name:      randomChatModelName(vendor),
 		Vendor:    vendor,
 		TimeStamp: randomTimeOnDate(date),
@@ -143,7 +142,7 @@ func createChatLogEntry(db *gorm.DB, date time.Time) {
 }
 
 func createToolCallRecord(db *gorm.DB, date time.Time) {
-	record := &analytics.ToolCallRecord{
+	record := &models.ToolCallRecord{
 		ToolID:    uint(rand.Intn(20) + 1),
 		Name:      randomToolName(),
 		ExecTime:  rand.Intn(2000) + 50,
