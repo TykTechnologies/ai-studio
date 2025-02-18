@@ -102,7 +102,7 @@ func (a *ProviderAPI) configureProvider(c *gin.Context) {
 	case "tyk":
 		// Resolve any secret references in the token
 		config := req.Config
-		config.Token = secrets.GetValue(config.Token)
+		config.Token = secrets.GetValue(config.Token, false) // false to resolve actual value
 		newProvider = tyk.NewTykDashboardProvider(config)
 	case "direct":
 		// Direct provider doesn't need configuration

@@ -85,8 +85,8 @@ func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
 		return nil, err
 	}
 
-	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey)
-	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey)
+	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey, true) // preserve reference for API responses
+	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey, true)   // preserve reference for API responses
 	return datasource, nil
 }
 
@@ -123,8 +123,8 @@ func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
 	}
 
 	for i := range datasources {
-		datasources[i].DBConnAPIKey = secrets.GetValue(datasources[i].DBConnAPIKey)
-		datasources[i].EmbedAPIKey = secrets.GetValue(datasources[i].EmbedAPIKey)
+		datasources[i].DBConnAPIKey = secrets.GetValue(datasources[i].DBConnAPIKey, true) // preserve reference for API responses
+		datasources[i].EmbedAPIKey = secrets.GetValue(datasources[i].EmbedAPIKey, true)   // preserve reference for API responses
 	}
 
 	return datasources, nil

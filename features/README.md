@@ -30,3 +30,12 @@ This directory contains detailed specifications for Midsommar's core features. E
 - Integration with notification system
 - Analytics and reporting
 - UI components for budget management
+
+### [Secrets Management](Secrets.md)
+- Secure storage of sensitive data (passwords, tokens, API keys)
+- AES encryption for data at rest
+- Environment variable and secret references ($ENV/VAR_NAME, $SECRET/SECRET_NAME)
+- CRUD API endpoints with role-based access control
+- Integration with multiple services (credentials, tools, LLMs)
+- Admin UI for secret management
+- Secure deployment configuration

@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"time"
 
+	logrus "github.com/sirupsen/logrus"
+
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
@@ -39,6 +41,13 @@ func printWelcome() {
 
 func main() {
 	printWelcome()
+
+	// Set up debug logging
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+
 	appConf := config.Get()
 
 	err := licensing.IsLicensed()

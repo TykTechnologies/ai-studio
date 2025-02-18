@@ -33,6 +33,15 @@ func InitModels(db *gorm.DB) error {
 		GroupID     uint `gorm:"primaryKey"`
 		CatalogueID uint `gorm:"primaryKey"`
 	}{})
+	if err != nil {
+		return err
+	}
+
+	// Initialize user-group relationship table
+	err = db.Table("user_groups").AutoMigrate(&struct {
+		UserID  uint `gorm:"primaryKey"`
+		GroupID uint `gorm:"primaryKey"`
+	}{})
 
 	return err
 }
