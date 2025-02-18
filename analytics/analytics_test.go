@@ -399,3 +399,72 @@ func (m *mockService) AddUserToGroup(userID, groupID uint) error {
 // Ensure mockService implements both ServiceInterface and EmailSender
 var _ services.ServiceInterface = (*mockService)(nil)
 var _ models.EmailSender = (*mockService)(nil)
+
+func TestGetTotalCostPerVendorAndModel(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert test data for two different LLMs
+	now := time.Now()
+	records := []models.LLMChatRecord{
+		{
+			Name:            "Model1",
+			Vendor:          "vendor1",
+			Cost:            10.0,
+			Currency:        "USD",
+			TimeStamp:       now,
+			LLMID:           1,
+			InteractionType: models.ChatInteraction,
+		},
+		{
+			Name:            "Model2",
+			Vendor:          "vendor2",
+			Cost:            20.0,
+			Currency:        "USD",
+			TimeStamp:       now,
+			LLMID:           2,
+			InteractionType: models.ChatInteraction,
+		},
+		{
+			Name:            "Model1",
+			Vendor:          "vendor1",
+			Cost:            15.0,
+			Currency:        "USD",
+			TimeStamp:       now,
+			LLMID:           1,
+			InteractionType: models.ChatInteraction,
+		},
+	}
+
+	for _, record := range records {
+		err := db.Create(&record).Error
+		require.NoError(t, err)
+	}
+
+	startDate := now.AddDate(0, 0, -1)
+	endDate := now.AddDate(0, 0, 1)
+
+	// Test without llm_id filter
+	costs, err := GetTotalCostPerVendorAndModel(db, startDate, endDate, nil, nil)
+	require.NoError(t, err)
+	assert.Len(t, costs, 2)
+
+	// Verify total costs
+	for _, cost := range costs {
+		if cost.Vendor == "vendor1" && cost.Model == "Model1" {
+			assert.Equal(t, 25.0, cost.TotalCost) // 10.0 + 15.0
+		} else if cost.Vendor == "vendor2" && cost.Model == "Model2" {
+			assert.Equal(t, 20.0, cost.TotalCost)
+		}
+	}
+
+	// Test with llm_id filter
+	llmID := uint(1)
+	filteredCosts, err := GetTotalCostPerVendorAndModel(db, startDate, endDate, nil, &llmID)
+	require.NoError(t, err)
+	assert.Len(t, filteredCosts, 1)
+
+	// Verify filtered results
+	assert.Equal(t, "vendor1", filteredCosts[0].Vendor)
+	assert.Equal(t, "Model1", filteredCosts[0].Model)
+	assert.Equal(t, 25.0, filteredCosts[0].TotalCost)
+}
