@@ -149,6 +149,8 @@ func (a *API) updateApp(c *gin.Context) {
 		input.Data.Attributes.Description,
 		datasourceIDs,
 		llmIDs,
+		input.Data.Attributes.MonthlyBudget,
+		input.Data.Attributes.BudgetStartDate,
 	)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {

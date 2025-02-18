@@ -33,9 +33,11 @@ func TestLLMEndpoints(t *gotest.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -49,9 +51,11 @@ func TestLLMEndpoints(t *gotest.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -102,9 +106,11 @@ func TestLLMEndpoints(t *gotest.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -118,9 +124,11 @@ func TestLLMEndpoints(t *gotest.T) {
 				LogoURL          string   `json:"logo_url"`
 				Vendor           string   `json:"vendor"`
 				Active           bool     `json:"active"`
-				Filters          []int    `json:"filters"`
+				Filters          []uint   `json:"filters"`
 				DefaultModel     string   `json:"default_model"`
 				AllowedModels    []string `json:"allowed_models"`
+				MonthlyBudget    *float64 `json:"monthly_budget"`
+				BudgetStartDate  *string  `json:"budget_start_date"`
 			}{
 				Name:             "Updated Test LLM",
 				APIKey:           "updated-api-key",
@@ -153,7 +161,6 @@ func TestLLMEndpoints(t *gotest.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 	assert.NoError(t, err)
 	assert.Greater(t, len(listResponse["data"]), 0)
-	// assert.ElementsMatch(t, []string{"gpt-4.*", "gpt-3.5-turbo", "claude-.*"}, listResponse["data"][0].Attributes.AllowedModels) // ordering is not guaranteed
 
 	// Test Search LLMs
 	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/search?name=Updated", nil)
