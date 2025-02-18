@@ -174,6 +174,42 @@ func (a *API) handleForgotPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset email sent"})
 }
 
+// @Summary Validate reset token
+// @Description Validate a password reset token without attempting to reset the password. Use this endpoint
+// to check if a token is valid before showing the password reset form.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param token query string true "Reset token"
+// @Success 200 {object} TokenValidationResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /auth/validate-reset-token [get]
+func (a *API) handleValidateResetToken(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Reset token is required"}},
+		})
+		return
+	}
+
+	_, err := a.auth.ValidateResetToken(token)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid or expired reset token"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Token is valid"})
+}
+
 // @Summary Reset password
 // @Description Reset user's password using a token
 // @Tags auth
