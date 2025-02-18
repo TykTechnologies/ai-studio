@@ -40,7 +40,9 @@ func setupTestAPIForCommonTests(t *testing.T) (*API, *gorm.DB, *services.Service
 		TestMode:            true,
 	}
 
-	authService := auth.NewAuthService(&config, newMockMailer(), service)
+	mockMailer := newMockMailer()
+	notificationService := services.NewNotificationService(db, mockMailer)
+	authService := auth.NewAuthService(&config, mockMailer, service, notificationService)
 	api := NewAPI(service, true, authService, &config, nil, emptyFile)
 
 	return api, db, service
@@ -217,7 +219,14 @@ func TestCommon_TestGetUserChatHistoryRecords(t *testing.T) {
 // Helper functions for creating test data
 
 func createTestUser(t *testing.T, service *services.Service) *models.User {
-	user, err := service.CreateUser("test@example.com", "Test User", "password", false, true, true, true)
+	user, err := service.CreateUser("test@example.com", "Test User", "password", false, true, true, true, false)
+	assert.NoError(t, err)
+	return user
+}
+
+// Helper to create a test user with custom settings
+func createTestUserWithSettings(t *testing.T, service *services.Service, email, name string, isAdmin, showPortal, showChat, emailVerified, notificationsEnabled bool) *models.User {
+	user, err := service.CreateUser(email, name, "password", isAdmin, showPortal, showChat, emailVerified, notificationsEnabled)
 	assert.NoError(t, err)
 	return user
 }

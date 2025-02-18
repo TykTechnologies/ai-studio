@@ -110,7 +110,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	// Record the chat record with retries
 	for i := 0; i < 5; i++ {
 		analytics.RecordChatRecord(rec)
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) // Reduced from 500ms
 
 		// Verify the record was committed
 		if s, ok := service.(*services.Service); ok {
@@ -119,25 +119,25 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 				break
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond) // Reduced from 100ms
 	}
 
 	// Then analyze budget usage and send notifications if needed
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
 		// Wait for any pending operations to complete
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond) // Reduced from 1s
 
 		// Analyze budget usage with retries
 		for i := 0; i < 5; i++ {
 			s.Budget.AnalyzeBudgetUsage(app, llm)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond) // Reduced from 500ms
 
 			// Verify notifications were created
 			var count int64
 			if err := s.DB.Model(&models.Notification{}).Where("notification_id LIKE ?", fmt.Sprintf("budget_app_%d_%%", app.ID)).Count(&count).Error; err == nil && count > 0 {
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) // Reduced from 100ms
 		}
 	}
 }

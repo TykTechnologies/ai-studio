@@ -115,7 +115,7 @@ func main() {
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 	}
 
-	authService := auth.NewAuthService(config, mailService, service)
+	authService := auth.NewAuthService(config, mailService, service, notificationService)
 
 	// analytics
 	ctx, stopRec := context.WithCancel(context.Background())

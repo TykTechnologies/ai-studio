@@ -8,6 +8,15 @@ The notification system in Midsommar centralizes handling of notifications acros
 
 ## Features
 
+### User Notification Settings
+
+- **NotificationsEnabled**: A boolean flag in the User model that controls whether a user receives notifications
+  - Only available for admin users
+  - Automatically enabled for the first admin user
+  - Controls receipt of admin-level notifications (e.g., new app creations, budget alerts)
+  - Non-admin users cannot enable notifications
+  - Managed through the user settings UI
+
 ### Notification Storage
 
 - **Database Table**: `notifications` holds each notification, identified by a unique `notification_id` to prevent duplicates.  
@@ -23,7 +32,7 @@ The notification system in Midsommar centralizes handling of notifications acros
 
 - **Budget Alerts**  
   - Sent at 80% and 100% monthly budget usage.  
-  - For an app’s budget, both the owner and admins receive them. For an LLM’s budget, only admins do.  
+  - For an app's budget, both the owner and admins receive them. For an LLM's budget, only admins do.  
   - Type: `"budget_alert"`.  
 
 - **System Updates**  
@@ -58,6 +67,11 @@ type Notification struct {
     Read           bool
     SentAt         time.Time
 }
+
+type User struct {
+    // ... other fields ...
+    NotificationsEnabled bool // Permission to receive admin notifications
+}
 ~~~
 
 ### NotificationService
@@ -74,13 +88,17 @@ Key methods:
 
 - **`Send(*Notification)`**  
   - Prevents duplicates by checking the `NotificationID`.  
-  - Stores to DB; if an SMTP host is set, sends email to the user’s address.  
+  - Stores to DB; if an SMTP host is set, sends email to the user's address.  
 - **`GetUserNotifications(userID, limit, offset int)`**  
   - Retrieves a paginated list of notifications for the specified user.  
 - **`MarkAsRead(notificationID uint)`**  
   - Sets `read = true`.  
 - **`GetUnreadCount(userID uint)`**  
   - Returns how many notifications are currently unread.
+- **`SendAdminAppNotification(title, content string)`**
+  - Sends notifications to all admin users who have notifications enabled
+  - Also sends email to config.AdminEmail if it's not already one of the admin users' emails
+  - Used for app-related admin notifications (new apps, updates, etc.)
 
 ---
 
@@ -94,7 +112,7 @@ Key methods:
 
 **Notes**:
 - These endpoints are typically accessed via an authenticated user context.  
-- The client polling for unread counts is visible in the admin UI’s NotificationIcon.
+- The client polling for unread counts is visible in the admin UI's NotificationIcon.
 
 ---
 
@@ -109,7 +127,7 @@ Key methods:
 ### 2. **NotificationList**  
 - Displays all notifications.  
 - Unread items highlighted (e.g., different background).  
-- “Mark as read” button in each row.
+- "Mark as read" button in each row.
 
 ### 3. **NotificationsPage**  
 - Dedicated page for the user to review notifications in detail.
@@ -118,13 +136,18 @@ Key methods:
 - A React context that manages unread counts and marking items as read.  
 - Updates shared state across the app when notifications change.
 
+### 5. **User Settings**
+- Admin users can toggle notifications in their user settings
+- Non-admin users do not see the notifications toggle
+- Notifications setting is displayed in user details view for admin users
+
 ---
 
 ## Current Usage Locations
 
 1. **Budget Notifications**  
    - **Type**: `"budget_alert"`.  
-   - **Triggered**: Whenever an app’s or LLM’s usage crosses 80% or 100% of monthly budget.  
+   - **Triggered**: Whenever an app's or LLM's usage crosses 80% or 100% of monthly budget.  
    - **Recipients**:
      - For App budget: the app owner + all admins.  
      - For LLM budget: only admins.  
@@ -136,6 +159,10 @@ Key methods:
 3. **App-Specific Notifications**  
    - **Type** can vary, such as `"admin-app-notification"`.  
    - Informs owners about app status changes, configuration updates, or access changes.
+   - For admin notifications:
+     - Sent to all admin users who have notifications enabled
+     - Also sent to the configured admin email (from config.AdminEmail) only if it's not already one of the admin users' emails
+     - This ensures admin notifications reach the right recipients without duplication
 
 ### Email Templates
 
@@ -190,14 +217,14 @@ notificationService.Send(notification)
    - Push notifications (e.g., web push), Slack integration, or webhooks.  
 3. **UI Improvements**  
    - Categorizing or filtering notifications (budget vs. system vs. user-level).  
-   - Bulk “mark all as read”.  
+   - Bulk "mark all as read".  
    - Rich content or HTML formatting.
 
 ---
 
 ## Conclusion
 
-Midsommar’s **Notification System** provides:
+Midsommar's **Notification System** provides:
 
 - **Centralized Storage** in the `notifications` table,  
 - **Multi-Channel Delivery** (email, in-app UI),  

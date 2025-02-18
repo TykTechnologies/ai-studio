@@ -19,7 +19,7 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create a test user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true, true)
+	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true, true, false)
 	assert.NoError(t, err)
 
 	// Create a test chat

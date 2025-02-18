@@ -8,7 +8,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
-	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
@@ -17,7 +16,7 @@ func TestLLMEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Test Create LLM
@@ -169,7 +168,7 @@ func TestLLMPrivacyScoreEndpoints(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	authService := auth.NewAuthService(config, apitest.NewMockMailer(), service)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Create some test LLMs with different privacy scores
