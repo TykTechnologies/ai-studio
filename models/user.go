@@ -10,19 +10,20 @@ import (
 
 type User struct {
 	gorm.Model
-	ID                uint   `json:"id" gorm:"primaryKey"`
-	Email             string `json:"email"`
-	Name              string
-	Password          string `json:"password"`
-	SessionToken      string
-	ResetToken        string
-	ResetTokenExpiry  time.Time
-	EmailVerified     bool
-	VerificationToken string
-	IsAdmin           bool
-	ShowPortal        bool
-	ShowChat          bool
-	APIKey            string
+	ID                   uint   `json:"id" gorm:"primaryKey"`
+	Email                string `json:"email"`
+	Name                 string
+	Password             string `json:"password"`
+	SessionToken         string
+	ResetToken           string
+	ResetTokenExpiry     time.Time
+	EmailVerified        bool
+	VerificationToken    string
+	IsAdmin              bool
+	ShowPortal           bool
+	ShowChat             bool
+	APIKey               string
+	NotificationsEnabled bool `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
 }
 
 type Users []User

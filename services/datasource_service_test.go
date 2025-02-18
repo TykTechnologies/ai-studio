@@ -23,7 +23,7 @@ func TestCreateDatasource(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 
 	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 	assert.NoError(t, err)
@@ -37,7 +37,7 @@ func TestGetDatasourceByID(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	fetchedDatasource, err := service.GetDatasourceByID(datasource.ID)
@@ -50,7 +50,7 @@ func TestUpdateDatasource(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model", true, []string{"AI", "ML"}, 0)
@@ -64,7 +64,7 @@ func TestGetAllDatasources(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	allDatasources, _, _, err := service.GetAllDatasources(10, 1, true)
@@ -77,7 +77,7 @@ func TestSearchDatasources(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	searchedDatasources, err := service.SearchDatasources("Test")
@@ -90,7 +90,7 @@ func TestGetDatasourcesByTag(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	datasourcesByTag, err := service.GetDatasourcesByTag("AI")
@@ -103,7 +103,7 @@ func TestAddTagsToDatasource(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	err := service.AddTagsToDatasource(datasource.ID, []string{"NLP"})
@@ -116,7 +116,7 @@ func TestGetDatasourcesByPrivacyScoreRange(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	datasourcesByScore, err := service.GetDatasourcesByPrivacyScoreRange(70, 80)
@@ -129,7 +129,7 @@ func TestGetDatasourcesByUserID(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	datasourcesByUser, err := service.GetDatasourcesByUserID(user.ID)
@@ -142,7 +142,7 @@ func TestDeleteDatasource(t *testing.T) {
 	db := setupTestDBForDatasources(t)
 	service := NewService(db)
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
 	err := service.DeleteDatasource(datasource.ID)
@@ -157,7 +157,7 @@ func TestDatasourceService_MultipleDatasourcesScenario(t *testing.T) {
 	service := NewService(db)
 
 	// Create a user for testing
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true)
+	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, false)
 
 	// Create multiple datasources
 	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://ds1.com", 60, user.ID, []string{"AI", "ML"}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)

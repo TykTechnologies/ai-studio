@@ -12,9 +12,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
-	"github.com/go-mail/mail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/crypto/bcrypt"
@@ -22,23 +22,15 @@ import (
 	"gorm.io/gorm"
 )
 
-type mockMailer struct {
-	sentEmails []*mail.Message
-}
-
-func (m *mockMailer) DialAndSend(msg ...*mail.Message) error {
-	m.sentEmails = append(m.sentEmails, msg...)
-	return nil
-}
-
-func (m *mockMailer) Reset() {
-	m.sentEmails = make([]*mail.Message, 0)
-}
-
-func newMockMailer() *mockMailer {
-	return &mockMailer{
-		sentEmails: make([]*mail.Message, 0),
-	}
+func newMockMailer() *notifications.MailService {
+	return notifications.NewMailService(
+		"test@example.com",
+		"smtp.test.com", // non-empty host to use TestMailer
+		587,
+		"user",
+		"pass",
+		notifications.NewTestMailer(),
+	)
 }
 
 func setupTestDB(t *testing.T) *gorm.DB {
@@ -57,13 +49,14 @@ type AuthHandlersTestSuite struct {
 	authService *auth.AuthService
 	db          *gorm.DB
 	service     *services.Service
-	mockMailer  *mockMailer
+	mockMailer  *notifications.TestMailer
 }
 
 func (suite *AuthHandlersTestSuite) SetupTest() {
 	suite.db = setupTestDB(suite.T())
 	suite.service = services.NewService(suite.db)
-	suite.mockMailer = newMockMailer()
+	mockMailService := newMockMailer()
+	suite.mockMailer = mockMailService.Mailer.(*notifications.TestMailer)
 	config := &auth.Config{
 		DB:                  suite.db,
 		Service:             suite.service,
@@ -76,9 +69,9 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 		TestMode:            false,
-		SMTPHost:            "testhost",
 	}
-	suite.authService = auth.NewAuthService(config, suite.mockMailer, suite.service)
+	notificationService := services.NewNotificationService(suite.db, mockMailService)
+	suite.authService = auth.NewAuthService(config, mockMailService, suite.service, notificationService)
 	suite.api = &API{
 		service: suite.service,
 		auth:    suite.authService,
@@ -110,7 +103,7 @@ func generateRandomToken() (string, error) {
 
 func (suite *AuthHandlersTestSuite) TestLoginHandler() {
 	suite.Run("Successful Password Reset", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "reset@example.com", Password: "oldhashed"}
 		suite.db.Create(user)
 
@@ -161,7 +154,7 @@ func (suite *AuthHandlersTestSuite) TestLoginHandler() {
 	})
 
 	suite.Run("Invalid Credentials", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		loginInput := LoginInput{
 			Data: struct {
 				Type       string `json:"type"`
@@ -193,13 +186,12 @@ func (suite *AuthHandlersTestSuite) TestLoginHandler() {
 		if len(response.Errors) > 0 {
 			assert.Equal(suite.T(), "Unauthorized", response.Errors[0].Title)
 		}
-
 	})
 }
 
 func (suite *AuthHandlersTestSuite) TestRegisterHandler() {
 	suite.Run("Successful Registration", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		registerInput := RegisterInput{
 			Data: struct {
 				Type       string `json:"type"`
@@ -236,19 +228,15 @@ func (suite *AuthHandlersTestSuite) TestRegisterHandler() {
 		assert.NoError(suite.T(), err)
 		assert.Equal(suite.T(), "User registered successfully", response["message"])
 
-		assert.Equal(suite.T(), 1, len(suite.mockMailer.sentEmails))
-		if len(suite.mockMailer.sentEmails) != 1 {
-			for _, email := range suite.mockMailer.sentEmails {
-				fmt.Println(email.GetHeader("Subject")[0])
-			}
-		}
-		if len(suite.mockMailer.sentEmails) > 0 {
-			assert.Equal(suite.T(), "admin@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		emails := suite.mockMailer.GetEmails()
+		assert.Equal(suite.T(), 1, len(emails))
+		if len(emails) > 0 {
+			assert.Equal(suite.T(), "admin@example.com", emails[0].To)
 		}
 	})
 
 	suite.Run("Registration with Weak Password", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		registerInput := RegisterInput{
 			Data: struct {
 				Type       string `json:"type"`
@@ -289,7 +277,7 @@ func (suite *AuthHandlersTestSuite) TestRegisterHandler() {
 
 func (suite *AuthHandlersTestSuite) TestForgotPasswordHandler() {
 	suite.Run("Successful Forgot Password Request", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "forgetful@example.com", Password: "somehashedpassword"}
 		suite.db.Create(user)
 
@@ -317,15 +305,15 @@ func (suite *AuthHandlersTestSuite) TestForgotPasswordHandler() {
 		assert.NoError(suite.T(), err)
 		assert.Equal(suite.T(), "Password reset email sent", response["message"])
 
-		assert.Equal(suite.T(), 1, len(suite.mockMailer.sentEmails))
-		if len(suite.mockMailer.sentEmails) > 0 {
-			assert.Equal(suite.T(), "forgetful@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		emails := suite.mockMailer.GetEmails()
+		assert.Equal(suite.T(), 1, len(emails))
+		if len(emails) > 0 {
+			assert.Equal(suite.T(), "forgetful@example.com", emails[0].To)
 		}
-
 	})
 
 	suite.Run("Forgot Password for Non-existent User", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		forgotPasswordInput := ForgotPasswordInput{
 			Data: struct {
 				Type       string `json:"type"`
@@ -354,7 +342,7 @@ func (suite *AuthHandlersTestSuite) TestForgotPasswordHandler() {
 
 func (suite *AuthHandlersTestSuite) TestResetPasswordHandler() {
 	suite.Run("Successful Password Reset", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "reset@example.com", Password: "oldhashed"}
 		suite.db.Create(user)
 
@@ -392,7 +380,7 @@ func (suite *AuthHandlersTestSuite) TestResetPasswordHandler() {
 	})
 
 	suite.Run("Reset Password with Invalid Token", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		resetPasswordInput := ResetPasswordInput{
 			Data: struct {
 				Type       string `json:"type"`
@@ -425,7 +413,7 @@ func (suite *AuthHandlersTestSuite) TestResetPasswordHandler() {
 
 func (suite *AuthHandlersTestSuite) TestVerifyEmailHandler() {
 	suite.Run("Successful Email Verification", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "verify@example.com", VerificationToken: "validtoken", EmailVerified: false}
 		suite.db.Create(user)
 
@@ -442,7 +430,7 @@ func (suite *AuthHandlersTestSuite) TestVerifyEmailHandler() {
 	})
 
 	suite.Run("Email Verification with Invalid Token", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		w := performRequest(suite.api.router, "GET", "/auth/verify-email?token=invalidtoken", nil)
 		assert.Equal(suite.T(), http.StatusInternalServerError, w.Code)
 
@@ -455,7 +443,7 @@ func (suite *AuthHandlersTestSuite) TestVerifyEmailHandler() {
 
 func (suite *AuthHandlersTestSuite) TestResendVerificationHandler() {
 	suite.Run("Successful Resend Verification", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "resend@example.com", EmailVerified: false}
 		suite.db.Create(user)
 
@@ -483,14 +471,15 @@ func (suite *AuthHandlersTestSuite) TestResendVerificationHandler() {
 		assert.NoError(suite.T(), err)
 		assert.Equal(suite.T(), "Verification email resent", response["message"])
 
-		assert.Equal(suite.T(), 1, len(suite.mockMailer.sentEmails))
-		if len(suite.mockMailer.sentEmails) > 0 {
-			assert.Equal(suite.T(), "resend@example.com", suite.mockMailer.sentEmails[0].GetHeader("To")[0])
+		emails := suite.mockMailer.GetEmails()
+		assert.Equal(suite.T(), 1, len(emails))
+		if len(emails) > 0 {
+			assert.Equal(suite.T(), "resend@example.com", emails[0].To)
 		}
 	})
 
 	suite.Run("Resend Verification for Already Verified User", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "alreadyverified@example.com", EmailVerified: true}
 		suite.db.Create(user)
 
@@ -523,7 +512,7 @@ func (suite *AuthHandlersTestSuite) TestResendVerificationHandler() {
 
 func (suite *AuthHandlersTestSuite) TestLogoutHandler() {
 	suite.Run("Successful Logout", func() {
-		defer suite.mockMailer.Reset()
+		defer suite.mockMailer.ClearEmails()
 		user := &models.User{Email: "logout@example.com", SessionToken: "validtoken"}
 		suite.db.Create(user)
 

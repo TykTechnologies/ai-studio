@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -20,37 +20,40 @@ func setupAnalyticsTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&analytics.LLMChatRecord{})
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.LLM{})
 	require.NoError(t, err)
 
 	return db
 }
 
-func setupAnalyticsTestAPI(db *gorm.DB) *API {
+func setupAnalyticsTestAPI(db *gorm.DB) (*API, *gin.Engine) {
 	gin.SetMode(gin.TestMode)
-	return &API{service: &services.Service{DB: db}}
+	api := &API{service: services.NewService(db)}
+	router := gin.Default()
+	return api, router
 }
 
 func TestGetCostAnalysis(t *testing.T) {
 	db := setupAnalyticsTestDB(t)
-	api := setupAnalyticsTestAPI(db)
+	api, router := setupAnalyticsTestAPI(db)
+	router.GET("/analytics/cost-analysis", api.getCostAnalysis)
 
 	// Insert test data
 	now := time.Now()
-	testData := []analytics.LLMChatRecord{
+	testData := []models.LLMChatRecord{
 		{
 			Vendor:          "openai",
 			Cost:            10.0,
 			Currency:        "USD",
 			TimeStamp:       now,
-			InteractionType: analytics.ChatInteraction,
+			InteractionType: models.ChatInteraction,
 		},
 		{
 			Vendor:          "openai",
 			Cost:            20.0,
 			Currency:        "USD",
 			TimeStamp:       now,
-			InteractionType: analytics.ProxyInteraction,
+			InteractionType: models.ProxyInteraction,
 		},
 	}
 	for _, record := range testData {
@@ -64,12 +67,12 @@ func TestGetCostAnalysis(t *testing.T) {
 	}{
 		{
 			name:            "Filter Chat Interactions",
-			interactionType: string(analytics.ChatInteraction),
+			interactionType: string(models.ChatInteraction),
 			expectedCost:    10.0,
 		},
 		{
 			name:            "Filter Proxy Interactions",
-			interactionType: string(analytics.ProxyInteraction),
+			interactionType: string(models.ProxyInteraction),
 			expectedCost:    20.0,
 		},
 		{
@@ -95,11 +98,11 @@ func TestGetCostAnalysis(t *testing.T) {
 			req.URL.RawQuery = q.Encode()
 			c.Request = req
 
-			api.getCostAnalysis(c)
+			router.ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusOK, w.Code)
 
-			var response map[string]*analytics.ChartData
+			var response map[string]*models.ChartData
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			require.NoError(t, err)
 
@@ -115,26 +118,102 @@ func TestGetCostAnalysis(t *testing.T) {
 	}
 }
 
+func TestGetBudgetUsage(t *testing.T) {
+	db := setupAnalyticsTestDB(t)
+	api, router := setupAnalyticsTestAPI(db)
+	router.GET("/analytics/budget-usage", api.getBudgetUsage)
+
+	// Create test app with budget
+	budget := 100.0
+	app := &models.App{
+		Name:          "Test App",
+		MonthlyBudget: &budget,
+	}
+	db.Create(app)
+
+	// Create test LLM with budget
+	llmBudget := 200.0
+	llm := &models.LLM{
+		Name:          "Test LLM",
+		MonthlyBudget: &llmBudget,
+	}
+	db.Create(llm)
+
+	// Create test records
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	records := []models.LLMChatRecord{
+		{
+			AppID:     app.ID,
+			LLMID:     llm.ID,
+			Cost:      50.0,
+			TimeStamp: startOfMonth.Add(24 * time.Hour),
+		},
+	}
+	for _, record := range records {
+		db.Create(&record)
+	}
+
+	// Call getBudgetUsage
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/analytics/budget-usage", nil)
+
+	router.ServeHTTP(w, req)
+
+	// Verify successful response
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response []map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Should have 2 entries (1 app + 1 LLM)
+	assert.Len(t, response, 2)
+
+	// Find app and LLM entries
+	var appEntry, llmEntry map[string]interface{}
+	for _, entry := range response {
+		if entry["type"] == "App" {
+			appEntry = entry
+		} else if entry["type"] == "LLM" {
+			llmEntry = entry
+		}
+	}
+
+	// Verify app budget usage
+	assert.NotNil(t, appEntry)
+	assert.Equal(t, "Test App", appEntry["name"])
+	assert.Equal(t, 50.0, appEntry["currentUsage"])
+	assert.Equal(t, 50.0, appEntry["usagePercent"]) // 50/100 * 100
+
+	// Verify LLM budget usage
+	assert.NotNil(t, llmEntry)
+	assert.Equal(t, "Test LLM", llmEntry["name"])
+	assert.Equal(t, 50.0, llmEntry["currentUsage"])
+	assert.Equal(t, 25.0, llmEntry["usagePercent"]) // 50/200 * 100
+}
+
 func TestGetMostUsedLLMModels(t *testing.T) {
 	db := setupAnalyticsTestDB(t)
-	api := setupAnalyticsTestAPI(db)
+	api, router := setupAnalyticsTestAPI(db)
+	router.GET("/analytics/most-used-llm-models", api.getMostUsedLLMModels)
 
 	// Insert test data
 	now := time.Now()
-	testData := []analytics.LLMChatRecord{
+	testData := []models.LLMChatRecord{
 		{
 			Name:            "gpt-4",
-			InteractionType: analytics.ChatInteraction,
+			InteractionType: models.ChatInteraction,
 			TimeStamp:       now,
 		},
 		{
 			Name:            "gpt-4",
-			InteractionType: analytics.ProxyInteraction,
+			InteractionType: models.ProxyInteraction,
 			TimeStamp:       now,
 		},
 		{
 			Name:            "gpt-4",
-			InteractionType: analytics.ProxyInteraction,
+			InteractionType: models.ProxyInteraction,
 			TimeStamp:       now,
 		},
 	}
@@ -149,12 +228,12 @@ func TestGetMostUsedLLMModels(t *testing.T) {
 	}{
 		{
 			name:            "Filter Chat Interactions",
-			interactionType: string(analytics.ChatInteraction),
+			interactionType: string(models.ChatInteraction),
 			expectedCount:   1,
 		},
 		{
 			name:            "Filter Proxy Interactions",
-			interactionType: string(analytics.ProxyInteraction),
+			interactionType: string(models.ProxyInteraction),
 			expectedCount:   2,
 		},
 		{
@@ -179,11 +258,11 @@ func TestGetMostUsedLLMModels(t *testing.T) {
 			req.URL.RawQuery = q.Encode()
 			c.Request = req
 
-			api.getMostUsedLLMModels(c)
+			router.ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusOK, w.Code)
 
-			var response analytics.ChartData
+			var response models.ChartData
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			require.NoError(t, err)
 

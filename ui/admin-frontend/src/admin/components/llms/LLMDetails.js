@@ -11,6 +11,13 @@ import {
   Tooltip,
   Link,
   Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -29,8 +36,11 @@ import {
   Legend,
   TimeScale,
 } from "chart.js";
+import { Line } from "react-chartjs-2";
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../../components/common/DateRangePicker";
+import PaginationControls from "../common/PaginationControls";
+import usePagination from "../../hooks/usePagination";
 import {
   StyledPaper,
   TitleBox,
@@ -41,7 +51,75 @@ import {
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 import Chip from "@mui/material/Chip";
-import { useTheme } from "@mui/material/styles";
+import { useTheme, styled } from "@mui/material/styles";
+import { formatBudgetDisplay } from "../../utils/budgetFormatter";
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  "&.MuiTableCell-head": {
+    backgroundColor: theme.palette.custom.purpleLight,
+    color: theme.palette.common.white,
+  },
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  "&:nth-of-type(odd)": {
+    backgroundColor: theme.palette.custom.lightTeal,
+  },
+  "&:nth-of-type(even)": {
+    backgroundColor: theme.palette.common.white,
+  },
+  "&:hover": {
+    backgroundColor: theme.palette.custom.hoverTeal,
+  },
+  // Remove last border
+  "&:last-child td, &:last-child th": {
+    border: 0,
+  },
+}));
+
+const ExpandableMessage = ({ message, isCode = false }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const truncate = (str, n) => {
+    return str.length > n ? str.substr(0, n - 1) + "..." : str;
+  };
+
+  const formatMessage = (msg) => {
+    try {
+      const parsed = JSON.parse(msg);
+      return JSON.stringify(parsed, null, 2);
+    } catch (e) {
+      return msg;
+    }
+  };
+
+  const displayMessage = expanded
+    ? formatMessage(message)
+    : truncate(message, 150);
+
+  return (
+    <Box>
+      <Typography
+        component={isCode ? "code" : "pre"}
+        style={{
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          backgroundColor: isCode ? "#f5f5f5" : "transparent",
+          padding: isCode ? "8px" : "0",
+          borderRadius: isCode ? "4px" : "0",
+          fontFamily: isCode ? "monospace" : "inherit",
+        }}
+      >
+        {displayMessage}
+      </Typography>
+      {message.length > 150 && (
+        <Button onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Collapse" : "Expand"}
+        </Button>
+      )}
+    </Box>
+  );
+};
 
 ChartJS.register(
   CategoryScale,
@@ -65,6 +143,10 @@ const LLMDetails = () => {
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
   const [vendorUsageData, setVendorUsageData] = useState(null);
+  const [budgetUsageData, setBudgetUsageData] = useState(null);
+  const [vendorModelCostData, setVendorModelCostData] = useState([]);
+  const [proxyLogs, setProxyLogs] = useState([]);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -75,6 +157,15 @@ const LLMDetails = () => {
   );
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const {
+    page,
+    pageSize,
+    totalPages,
+    handlePageChange,
+    handlePageSizeChange,
+    updatePaginationData,
+  } = usePagination();
 
   const apiEndpointPlaceholder = "API Endpoint not set";
   const apiKeyPlaceholder = "API Key not set";
@@ -87,8 +178,39 @@ const LLMDetails = () => {
   useEffect(() => {
     if (llm) {
       fetchVendorUsage();
+      fetchProxyLogs();
+      fetchVendorModelCost();
+
+      // Initialize budget usage with 0 if no monthly budget
+      if (!llm.attributes.monthly_budget) {
+        setBudgetUsageData({
+          current_usage: 0,
+          percentage: 0,
+          start_date: llm.attributes.budget_start_date || startDate,
+        });
+      }
     }
-  }, [llm, startDate, endDate]);
+  }, [llm, startDate, endDate, page, pageSize]);
+
+  const fetchVendorModelCost = async () => {
+    try {
+      const response = await apiClient.get("/analytics/total-cost-per-vendor-and-model", {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          llm_id: id,
+          interaction_type: "ChatInteraction"
+        },
+      });
+      setVendorModelCostData(response.data);
+    } catch (error) {
+      console.error("Error fetching vendor model cost data", error);
+    }
+  };
+
+  const toggleTableExpansion = () => {
+    setIsTableExpanded(!isTableExpanded);
+  };
 
   const fetchLLMDetails = async () => {
     try {
@@ -103,16 +225,70 @@ const LLMDetails = () => {
 
   const fetchVendorUsage = async () => {
     try {
-      const response = await apiClient.get(`/analytics/vendor-usage`, {
+      const [usageResponse, budgetResponse] = await Promise.all([
+        apiClient.get(`/analytics/vendor-usage`, {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+            vendor: llm.attributes.vendor,
+          },
+        }),
+        apiClient.get(`/analytics/budget-usage`, {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+            llm_id: llm.id
+          },
+        })
+      ]);
+
+      setVendorUsageData(usageResponse.data);
+
+      // Find the budget usage data for this LLM
+      const llmBudgetData = budgetResponse.data.find(item =>
+        item.type === "LLM" && item.entity_id === llm.id
+      );
+
+      if (llmBudgetData) {
+        setBudgetUsageData({
+          current_usage: llmBudgetData.currentUsage,
+          percentage: llmBudgetData.usagePercent,
+          total_cost: llmBudgetData.totalCost,
+          start_date: llmBudgetData.budgetStartDate || llm.attributes.budget_start_date || startDate,
+        });
+      } else if (llm.attributes.monthly_budget) {
+        // Fallback to calculating from vendor usage if budget data is not found
+        const totalCost = usageResponse.data.cost?.reduce((sum, cost) => sum + cost, 0) || 0;
+        setBudgetUsageData({
+          current_usage: totalCost,
+          percentage: (totalCost / llm.attributes.monthly_budget) * 100,
+          total_cost: totalCost,
+          start_date: llm.attributes.budget_start_date || startDate,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching usage data", error);
+    }
+  };
+
+  const fetchProxyLogs = async () => {
+    try {
+      const response = await apiClient.get(`/analytics/proxy-logs-for-llm`, {
         params: {
           start_date: startDate,
           end_date: endDate,
-          vendor: llm.attributes.vendor,
+          llm_id: id,
+          page,
+          page_size: pageSize,
         },
       });
-      setVendorUsageData(response.data);
+      setProxyLogs(response.data.data);
+      updatePaginationData(
+        response.data.meta.total_count,
+        response.data.meta.total_pages,
+      );
     } catch (error) {
-      console.error("Error fetching vendor usage data", error);
+      console.error("Error fetching proxy logs", error);
     }
   };
 
@@ -128,7 +304,7 @@ const LLMDetails = () => {
     );
   };
 
-  const chartOptions = useMemo(() => ({
+  const tokenChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     scales: {
@@ -156,18 +332,63 @@ const LLMDetails = () => {
       },
       title: {
         display: true,
-        text: "Vendor Token Usage Over Time",
+        text: "Token Usage Over Time",
       },
     },
-  }), []); // Empty dependency array since options never change
+  }), []);
 
-  const chartData = useMemo(() => ({
+  const costChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Cost ($)",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "Cost Over Time",
+      },
+    },
+  }), []);
+
+  const tokenChartData = useMemo(() => ({
     labels: vendorUsageData?.labels || [],
     datasets: [
       {
         label: "Token Usage",
-        data: vendorUsageData?.data || [],
+        data: vendorUsageData?.data || [], // Backend uses 'data' for token usage
         borderColor: "rgb(75, 192, 192)",
+        tension: 0.1,
+      },
+    ],
+  }), [vendorUsageData]);
+
+  const costChartData = useMemo(() => ({
+    labels: vendorUsageData?.labels || [],
+    datasets: [
+      {
+        label: "Cost",
+        data: vendorUsageData?.cost || [], // Match the backend's JSON tag
+        borderColor: "rgb(255, 99, 132)",
         tension: 0.1,
       },
     ],
@@ -189,32 +410,35 @@ const LLMDetails = () => {
         </Button>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Vendor Usage Statistics</SectionTitle>
-        <Box height={300}>
-          {" "}
-          {/* Reduced height from 400 to 250 */}
-          <MemoizedLineChart options={chartOptions} data={chartData} />
+        <SectionTitle>Token Usage</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={tokenChartOptions} data={tokenChartData} />
         </Box>
-          <Box mt={2}>
-            <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-              onUpdate={fetchVendorUsage}
-              updateMode="immediate"
-            />
-          </Box>
+
+        <SectionTitle>Cost</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={costChartOptions} data={costChartData} />
+        </Box>
+        <Box mt={2}>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            onUpdate={fetchVendorUsage}
+            updateMode="immediate"
+          />
+        </Box>
 
         <Divider sx={{ my: 3 }} />
 
         <SectionTitle>LLM Description</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
+            <FieldLabel>Active:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>{llm.attributes.name}</FieldValue>
+            <FieldValue>{llm.attributes.active ? "Yes" : "No"}</FieldValue>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Short Description:</FieldLabel>
@@ -255,6 +479,19 @@ const LLMDetails = () => {
                 />
               </Tooltip>
             </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Monthly Budget:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {formatBudgetDisplay({
+                monthlyBudget: llm.attributes.monthly_budget,
+                currentUsage: budgetUsageData?.current_usage,
+                percentage: budgetUsageData?.percentage,
+                budgetStartDate: llm.attributes.budget_start_date || budgetUsageData?.start_date
+              })}
+            </FieldValue>
           </Grid>
         </Grid>
 
@@ -336,7 +573,7 @@ const LLMDetails = () => {
           </Grid>
           <Grid item xs={9}>
             {llm.attributes.allowed_models &&
-            llm.attributes.allowed_models.length > 0 ? (
+              llm.attributes.allowed_models.length > 0 ? (
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                 {llm.attributes.allowed_models.map((model, index) => (
                   <Chip
@@ -421,6 +658,150 @@ const LLMDetails = () => {
             </FieldValue>
           </Grid>
         </Grid>
+
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>Cost Breakdown</SectionTitle>
+        <StyledPaper elevation={3} style={{ padding: "20px", marginBottom: "20px" }}>
+          <Typography variant="h6" gutterBottom>
+            Total Cost per Vendor and Model
+          </Typography>
+          {vendorModelCostData.length > 0 ? (
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Vendor</TableCell>
+                      <TableCell>Model</TableCell>
+                      <TableCell align="right">Total Cost</TableCell>
+                      <TableCell>Currency</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {vendorModelCostData
+                      .slice(0, isTableExpanded ? undefined : 5)
+                      .map((row, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            <Box sx={{ display: "flex", alignItems: "center" }}>
+                              <img
+                                src={getVendorLogo(row.vendor)}
+                                alt={getVendorName(row.vendor)}
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  marginRight: 8,
+                                  objectFit: "contain",
+                                }}
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = process.env.PUBLIC_URL + "/images/placeholder-logo.png";
+                                }}
+                              />
+                              {getVendorName(row.vendor)}
+                            </Box>
+                          </TableCell>
+                          <TableCell>{row.model}</TableCell>
+                          <TableCell align="right">{row.totalCost.toFixed(2)}</TableCell>
+                          <TableCell>{row.currency}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {vendorModelCostData.length > 5 && (
+                <Box mt={2} textAlign="center">
+                  <Button onClick={toggleTableExpansion}>
+                    {isTableExpanded ? "Collapse" : "Expand"}
+                  </Button>
+                </Box>
+              )}
+            </>
+          ) : (
+            <Box
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              height="100%"
+              py={4}
+            >
+              <Typography variant="body1" color="text.secondary">
+                No vendor and model cost data available for the selected period.
+              </Typography>
+            </Box>
+          )}
+        </StyledPaper>
+
+        <Divider sx={{ my: 3 }} />
+
+        <SectionTitle>Proxy Logs</SectionTitle>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Timestamp
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Vendor
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Response Code
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Request
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                  Response
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {proxyLogs?.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    {new Date(log.attributes.time_stamp).toLocaleString()}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    {log.attributes.vendor}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    {log.attributes.response_code}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    <pre>
+                      <code>
+                        <ExpandableMessage
+                          message={log.attributes.request_body}
+                        />
+                      </code>
+                    </pre>
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "top" }}>
+                    <pre>
+                      <code>
+                        <ExpandableMessage
+                          message={log.attributes.response_body}
+                        />
+                      </code>
+                    </pre>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Box mt={2}>
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        </Box>
 
         <Box
           mt={4}
