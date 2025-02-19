@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -48,12 +49,29 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		}
 	}
 
-	// Send notification to admin users
-	if err := s.NotificationService.SendAdminAppNotification(
-		"New App Created",
-		"A new app '"+name+"' has been created.",
-	); err != nil {
-		// Ignore notification errors - they shouldn't fail app creation
+	// Get the user who created the app
+	user, err := s.GetUserByID(userID)
+	if err != nil {
+		// Log error but don't fail app creation
+		fmt.Printf("Error getting user for notification: %v\n", err)
+	} else {
+		// Send notification to admin users
+		data := struct {
+			AppName        string
+			AppDescription string
+			UserName       string
+			AppDetailsURL  string
+		}{
+			AppName:        app.Name,
+			AppDescription: app.Description,
+			UserName:       user.Name,
+			AppDetailsURL:  fmt.Sprintf("/admin/apps/%d", app.ID),
+		}
+		notificationID := fmt.Sprintf("new_app_%d_%d", app.ID, time.Now().UnixNano())
+		if err := s.NotificationService.Notify(notificationID, "New App Created on AI Portal", "admin-app-notification.tmpl", data, models.NotifyAdmins); err != nil {
+			// Ignore notification errors - they shouldn't fail app creation
+			fmt.Printf("Error sending admin notification: %v\n", err)
+		}
 	}
 
 	return app, nil

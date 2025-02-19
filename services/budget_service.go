@@ -1,12 +1,10 @@
 package services
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -408,12 +406,6 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		return err
 	}
 
-	var admins []models.User
-	if err := s.db.Where("is_admin = ?", true).Find(&admins).Error; err != nil {
-		fmt.Printf("Failed to find admins: %v\n", err)
-		return err
-	}
-
 	// Get currency from app's first LLM
 	var firstLLM models.LLM
 	var currency string
@@ -437,17 +429,8 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		threshold,
 	)
 
-	// Create owner notification ID
-	notificationID := fmt.Sprintf("%s_owner", baseNotificationID)
-
-	tmpl, err := template.ParseFiles(s.templatePath)
-	if err != nil {
-		fmt.Printf("Failed to parse template at path %s: %v\n", s.templatePath, err)
-		return fmt.Errorf("failed to parse template: %v", err)
-	}
-
-	// Prepare owner notification
-	ownerData := map[string]interface{}{
+	// Prepare data for notifications
+	data := map[string]interface{}{
 		"IsLLM":        false,
 		"IsAdmin":      false,
 		"Name":         app.Name,
@@ -457,47 +440,13 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		"Threshold":    threshold,
 	}
 
-	var ownerBuf bytes.Buffer
-	if err := tmpl.Execute(&ownerBuf, ownerData); err != nil {
-		return fmt.Errorf("failed to execute template: %v", err)
-	}
+	// Send notification to both owner and admins
+	data["IsAdmin"] = true
+	data["OwnerEmail"] = owner.Email
 
-	ownerNotification := &models.Notification{
-		NotificationID: notificationID,
-		Type:           "budget_alert",
-		Title:          fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold),
-		Content:        ownerBuf.String(),
-		UserID:         owner.ID,
-		Read:           false,
-		SentAt:         time.Now(),
-	}
-
-	if err := s.notificationSvc.Send(ownerNotification); err != nil {
-		fmt.Printf("Failed to send owner notification: %v\n", err)
-		return fmt.Errorf("failed to send owner notification: %v", err)
-	}
-
-	// Prepare admin notification
-	adminData := map[string]interface{}{
-		"IsLLM":        false,
-		"IsAdmin":      true,
-		"Name":         app.Name,
-		"OwnerEmail":   owner.Email,
-		"CurrentUsage": spent,
-		"Budget":       budget,
-		"Currency":     currency,
-		"Threshold":    threshold,
-	}
-
-	var adminBuf bytes.Buffer
-	if err := tmpl.Execute(&adminBuf, adminData); err != nil {
-		return fmt.Errorf("failed to execute template: %v", err)
-	}
-
-	// Send to admins using the new method
 	title := fmt.Sprintf("Budget Alert: App %s at %d%% Usage", app.Name, threshold)
-	if err := s.notificationSvc.SendAdminAppNotification(title, adminBuf.String()); err != nil {
-		return fmt.Errorf("failed to send admin notification: %v", err)
+	if err := s.notificationSvc.Notify(baseNotificationID, title, "budget_alert.tmpl", data, owner.ID|models.NotifyAdmins); err != nil {
+		return fmt.Errorf("failed to send notifications: %v", err)
 	}
 
 	return nil
@@ -509,10 +458,18 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		return err
 	}
 
-	var admins []models.User
-	if err := s.db.Where("is_admin = ?", true).Find(&admins).Error; err != nil {
-		return err
-	}
+	// Get start time for notification ID
+	now := time.Now()
+	start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
+
+	// Create base notification ID (used for budget check)
+	monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+	baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+		llm.ID,
+		monthOffset,
+		int(budget),
+		threshold,
+	)
 
 	var currency string
 	if llm.DefaultModel != "" {
@@ -520,12 +477,6 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		if err := modelPrice.GetByModelNameAndVendor(s.db, llm.DefaultModel, string(llm.Vendor)); err == nil {
 			currency = modelPrice.Currency
 		}
-	}
-
-	// Send to each admin
-	tmpl, err := template.ParseFiles(s.templatePath)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %v", err)
 	}
 
 	data := map[string]interface{}{
@@ -537,14 +488,9 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		"Threshold":    threshold,
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("failed to execute template: %v", err)
-	}
-
-	// Send to admins using the new method
+	// Send to admins
 	title := fmt.Sprintf("Budget Alert: LLM %s at %d%% Usage", llm.Name, threshold)
-	if err := s.notificationSvc.SendAdminAppNotification(title, buf.String()); err != nil {
+	if err := s.notificationSvc.Notify(baseNotificationID, title, "budget_alert.tmpl", data, models.NotifyAdmins); err != nil {
 		return fmt.Errorf("failed to send admin notification: %v", err)
 	}
 

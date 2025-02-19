@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
+// setupTestDBForApps is the same as the old version, minus any mailer setup.
 func setupTestDBForApps(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
@@ -22,11 +22,9 @@ func setupTestDBForApps(t *testing.T) *gorm.DB {
 }
 
 func TestCreateAppWithNotifications(t *testing.T) {
-	t.Run("with SMTP configured", func(t *testing.T) {
+	t.Run("with notifications enabled", func(t *testing.T) {
 		db := setupTestDBForApps(t)
-		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-		notificationService := NewNotificationService(db, mailService)
+		notificationService := NewTestNotificationService(db)
 		service := &Service{
 			DB:                  db,
 			NotificationService: notificationService,
@@ -49,59 +47,47 @@ func TestCreateAppWithNotifications(t *testing.T) {
 		assert.NotNil(t, app)
 
 		// Verify notification was sent
-		notifications := service.NotificationService.GetNotifications()
-		assert.Len(t, notifications, 1)
-		if len(notifications) > 0 {
-			assert.Equal(t, admin.ID, notifications[0].UserID)
-			assert.Contains(t, notifications[0].Title, "New App Created")
-		}
-
-		// Verify email was sent
-		sentEmails := testMailer.GetEmails()
-		assert.Len(t, sentEmails, 1)
-		if len(sentEmails) > 0 {
-			assert.Equal(t, "admin@test.com", sentEmails[0].To)
+		notifs := service.NotificationService.GetNotifications()
+		assert.Len(t, notifs, 1)
+		if len(notifs) > 0 {
+			assert.Equal(t, admin.ID, notifs[0].UserID)
+			assert.Contains(t, notifs[0].Title, "New App Created")
 		}
 	})
 
-	t.Run("without SMTP configured", func(t *testing.T) {
+	t.Run("with notifications disabled", func(t *testing.T) {
 		db := setupTestDBForApps(t)
-		// Create mail service without SMTP configuration
-		mailService := notifications.NewMailService("test@example.com", "", 0, "", "", nil)
-		service := NewService(db)
-		service.NotificationService = NewNotificationService(db, mailService)
+		notificationService := NewTestNotificationService(db)
+		service := &Service{
+			DB:                  db,
+			NotificationService: notificationService,
+		}
 
-		// Create admin user with notifications enabled
+		// Create admin user with notifications disabled
 		admin := &models.User{
 			Email:                "admin@test.com",
 			Name:                 "Admin",
 			IsAdmin:              true,
-			NotificationsEnabled: true,
+			NotificationsEnabled: false,
 			EmailVerified:        true,
 		}
 		err := admin.Create(db)
 		assert.NoError(t, err)
 
-		// Create app - should succeed even without SMTP
+		// Create app - should succeed even with notifications disabled
 		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, app)
 
-		// Verify notification was created but email wasn't sent
-		notifications := service.NotificationService.GetNotifications()
-		assert.Len(t, notifications, 1)
-		if len(notifications) > 0 {
-			assert.Equal(t, admin.ID, notifications[0].UserID)
-			assert.Contains(t, notifications[0].Title, "New App Created")
-		}
+		// Verify no notification was created
+		notifs := service.NotificationService.GetNotifications()
+		assert.Len(t, notifs, 0)
 	})
 }
 
 func TestCreateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -128,9 +114,7 @@ func TestCreateApp(t *testing.T) {
 
 func TestGetApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -161,9 +145,7 @@ func TestGetApp(t *testing.T) {
 
 func TestUpdateApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -191,9 +173,7 @@ func TestUpdateApp(t *testing.T) {
 
 func TestAppCredentialActivation(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -218,9 +198,7 @@ func TestAppCredentialActivation(t *testing.T) {
 
 func TestAppDatasourceOperations(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -251,9 +229,7 @@ func TestAppDatasourceOperations(t *testing.T) {
 
 func TestAppLLMOperations(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -298,9 +274,7 @@ func TestAppLLMOperations(t *testing.T) {
 
 func TestDeleteApp(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -321,9 +295,7 @@ func TestDeleteApp(t *testing.T) {
 
 func TestAppServiceErrorCases(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -379,9 +351,7 @@ func TestAppServiceErrorCases(t *testing.T) {
 
 func TestAppService_MultipleApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -440,11 +410,10 @@ func TestAppService_MultipleApps(t *testing.T) {
 	fetchedApp3, _ := service.GetAppByID(app3.ID)
 	assert.True(t, fetchedApp3.Credential.Active)
 }
+
 func TestListApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -468,9 +437,7 @@ func TestListApps(t *testing.T) {
 
 func TestListAppsWithPagination(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -495,9 +462,7 @@ func TestListAppsWithPagination(t *testing.T) {
 
 func TestListAppsByUserID(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -526,9 +491,7 @@ func TestListAppsByUserID(t *testing.T) {
 
 func TestSearchApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -542,26 +505,41 @@ func TestSearchApps(t *testing.T) {
 	_, _ = service.CreateApp("Development App", "This is a development app", user.ID, nil, nil)
 
 	// Test SearchApps
-	testApps, _, _, err := service.SearchApps("test", 1, 10, true)
+	testApps, totalCount, totalPages, err := service.SearchApps("test", 1, 10, true)
+	t.Logf("Search for 'test': found %d apps, totalCount=%d, totalPages=%d", len(testApps), totalCount, totalPages)
+	if len(testApps) > 0 {
+		t.Logf("First app name: %s", testApps[0].Name)
+	}
 	assert.NoError(t, err)
 	assert.Len(t, testApps, 1)
 	assert.Equal(t, "Test App", testApps[0].Name)
+	assert.Equal(t, int64(1), totalCount)
+	assert.Equal(t, 1, totalPages)
 
-	productionApps, _, _, err := service.SearchApps("production", 1, 10, true)
+	productionApps, totalCount, totalPages, err := service.SearchApps("production", 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, productionApps, 1)
 	assert.Equal(t, "Production App", productionApps[0].Name)
+	assert.Equal(t, int64(1), totalCount)
+	assert.Equal(t, 1, totalPages)
 
-	allApps, _, _, err := service.SearchApps("app", 1, 10, true)
+	allApps, totalCount, totalPages, err := service.SearchApps("app", 1, 10, true)
 	assert.NoError(t, err)
 	assert.Len(t, allApps, 3)
+	assert.Equal(t, int64(3), totalCount)
+	assert.Equal(t, 1, totalPages)
+
+	// Test search with no results
+	noApps, totalCount, totalPages, err := service.SearchApps("nonexistent", 1, 10, true)
+	assert.NoError(t, err)
+	assert.Len(t, noApps, 0)
+	assert.Equal(t, int64(0), totalCount)
+	assert.Equal(t, 1, totalPages)
 }
 
 func TestCountApps(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -582,9 +560,7 @@ func TestCountApps(t *testing.T) {
 
 func TestCountAppsByUserID(t *testing.T) {
 	db := setupTestDBForApps(t)
-	testMailer := notifications.NewTestMailer()
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 25, "user", "pass", testMailer)
-	notificationService := NewNotificationService(db, mailService)
+	notificationService := NewTestNotificationService(db)
 	service := &Service{
 		DB:                  db,
 		NotificationService: notificationService,
