@@ -22,7 +22,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Link
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -30,7 +29,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { FormControlLabel, Switch } from "@mui/material";
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   StyledButtonPrimaryOutlined,

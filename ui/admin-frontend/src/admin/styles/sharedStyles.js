@@ -42,7 +42,7 @@ export const ContentBox = styled(Box)(({ theme }) => ({
 }));
 
 export const StyledTableHeaderCell = styled(TableCell)(({ theme }) => ({
-  backgroundColor: theme.palette.background.buttonSecondary,
+  backgroundColor: theme.palette.background.neutralDefault,
   fontFamily: 'Inter-Semibold',
   color: theme.palette.text.primary,
   borderBottom: `1px solid ${theme.palette.border.neutralDefault}`,

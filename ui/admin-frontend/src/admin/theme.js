@@ -24,6 +24,7 @@ const theme = createTheme({
     background: {
       default: "#FFFFFF",
       defaultSubdued:'#E6E6EA', 
+      neutralDefault: '#F0F0F3',
       secondaryExtraLight: '#f8f8f9',
       paper: "#FFFFFF",
       surfaceDefaultBoldest: '#031E3D',
