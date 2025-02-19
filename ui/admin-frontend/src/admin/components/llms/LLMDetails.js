@@ -672,8 +672,8 @@ const LLMDetails = () => {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell>Vendor</TableCell>
                       <TableCell>Model</TableCell>
+                      <TableCell align="right">Total Tokens</TableCell>
                       <TableCell align="right">Total Cost</TableCell>
                       <TableCell>Currency</TableCell>
                     </TableRow>
@@ -683,26 +683,8 @@ const LLMDetails = () => {
                       .slice(0, isTableExpanded ? undefined : 5)
                       .map((row, index) => (
                         <TableRow key={index}>
-                          <TableCell>
-                            <Box sx={{ display: "flex", alignItems: "center" }}>
-                              <img
-                                src={getVendorLogo(row.vendor)}
-                                alt={getVendorName(row.vendor)}
-                                style={{
-                                  width: 24,
-                                  height: 24,
-                                  marginRight: 8,
-                                  objectFit: "contain",
-                                }}
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.src = process.env.PUBLIC_URL + "/images/placeholder-logo.png";
-                                }}
-                              />
-                              {getVendorName(row.vendor)}
-                            </Box>
-                          </TableCell>
                           <TableCell>{row.model}</TableCell>
+                          <TableCell align="right">{row.totalTokens.toLocaleString()}</TableCell>
                           <TableCell align="right">{row.totalCost.toFixed(2)}</TableCell>
                           <TableCell>{row.currency}</TableCell>
                         </TableRow>
