@@ -6,6 +6,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// NotifyAdmins is a flag used to indicate that a notification should be sent to all admin users
+const NotifyAdmins uint = 1 << 31 // Using the highest bit: 0x80000000
+
 type Notification struct {
 	gorm.Model
 	NotificationID string `gorm:"uniqueIndex"` // Unique ID to prevent duplicates

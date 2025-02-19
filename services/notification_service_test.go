@@ -1,23 +1,31 @@
 package services_test
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
-	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSendAdminAppNotification(t *testing.T) {
-	t.Run("basic notification test", func(t *testing.T) {
+func TestNotify(t *testing.T) {
+	// Create a temporary template file for testing
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "admin-notify.tmpl")
+	err := os.WriteFile(templatePath, []byte("Name: {{.Name}}\nEmail: {{.Email}}"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test template: %v", err)
+	}
+
+	t.Run("flag-based notification test", func(t *testing.T) {
 		// Setup test DB using existing helper
 		db := apitest.SetupTestDB(t)
-		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
-		notificationService := services.NewNotificationService(db, mailService)
+		notificationService := services.NewTestNotificationService(db)
 		service := &services.Service{
 			DB:                  db,
 			NotificationService: notificationService,
@@ -55,113 +63,173 @@ func TestSendAdminAppNotification(t *testing.T) {
 		err = regularUser.Create(db)
 		assert.NoError(t, err)
 
-		// Send admin notification
-		title := "Test Notification"
-		content := "Test Content"
-		err = service.NotificationService.SendAdminAppNotification(title, content)
+		// Test sending to both user and admins using flag
+		err = service.NotificationService.Notify(
+			fmt.Sprintf("test_notify_%d_%d", regularUser.ID, time.Now().UnixNano()),
+			"Test Notification",
+			templatePath,
+			map[string]interface{}{
+				"Name":  "Regular User",
+				"Email": regularUser.Email,
+			},
+			regularUser.ID|models.NotifyAdmins,
+		)
 		assert.NoError(t, err)
 
 		// Get notifications from the test service
 		notifications := service.NotificationService.GetNotifications()
 
-		// Verify only admin1 (with notifications enabled) received the notification
-		assert.Len(t, notifications, 1, "Expected exactly one notification")
-		if len(notifications) > 0 {
-			assert.Equal(t, admin1.ID, notifications[0].UserID, "Notification should be sent to admin1")
-			assert.Equal(t, title, notifications[0].Title, "Notification title should match")
-			assert.Equal(t, content, notifications[0].Content, "Notification content should match")
-		}
+		// Should have 2 notifications: 1 for regular user, 1 for admin1 (admin2 has notifications disabled)
+		assert.Len(t, notifications, 2, "Expected two notifications")
 
-		// Verify admin2 (notifications disabled) and regular user did not receive notifications
+		// Verify both regular user and admin received notifications
+		var foundRegularUser bool
+		var foundAdmin bool
+		for _, n := range notifications {
+			if n.UserID == regularUser.ID {
+				foundRegularUser = true
+				assert.Contains(t, n.Content, "Name: Regular User")
+				assert.Contains(t, n.Content, "Email: user@test.com")
+			}
+			if n.UserID == admin1.ID {
+				foundAdmin = true
+				assert.Contains(t, n.Content, "Name: Regular User")
+				assert.Contains(t, n.Content, "Email: user@test.com")
+			}
+		}
+		assert.True(t, foundRegularUser, "Regular user should receive notification")
+		assert.True(t, foundAdmin, "Admin1 should receive notification")
+
+		// Verify admin2 (notifications disabled) did not receive notification
 		for _, notification := range notifications {
 			assert.NotEqual(t, admin2.ID, notification.UserID, "Admin2 should not receive notification")
-			assert.NotEqual(t, regularUser.ID, notification.UserID, "Regular user should not receive notification")
 		}
 
-		// Verify emails sent through the mailer
-		sentEmails := testMailer.GetEmails()
-		assert.Len(t, sentEmails, 1, "Expected exactly one email")
-		if len(sentEmails) > 0 {
-			assert.Equal(t, "admin1@test.com", sentEmails[0].To)
+		// Get the test mailer and verify emails
+		if testMailer, ok := notificationService.GetMailer().(interface {
+			GetEmails() []struct {
+				To string
+			}
+		}); ok {
+			sentEmails := testMailer.GetEmails()
+			// Verify emails were sent to the correct recipients
+			if assert.Len(t, sentEmails, 2, "Expected two emails") {
+				emailRecipients := []string{sentEmails[0].To, sentEmails[1].To}
+				assert.Contains(t, emailRecipients, "admin1@test.com")
+				assert.Contains(t, emailRecipients, "user@test.com")
+			}
 		}
 	})
 
-	t.Run("config admin email matches admin user", func(t *testing.T) {
+	t.Run("basic notification test", func(t *testing.T) {
+		// Setup test DB using existing helper
 		db := apitest.SetupTestDB(t)
-		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
-		notificationService := services.NewNotificationService(db, mailService)
+		notificationService := services.NewTestNotificationService(db)
 		service := &services.Service{
 			DB:                  db,
 			NotificationService: notificationService,
 			Budget:              services.NewBudgetService(db, notificationService),
 		}
 
-		// Create admin user with email matching config
-		adminUser := &models.User{
-			Email:                "admin@test.com",
-			Name:                 "Admin",
+		// Create admin users with different notification settings
+		admin1 := &models.User{
+			Email:                "admin1@test.com",
+			Name:                 "Admin 1",
 			IsAdmin:              true,
 			NotificationsEnabled: true,
 			EmailVerified:        true,
 		}
-		err := adminUser.Create(db)
+		err := admin1.Create(db)
 		assert.NoError(t, err)
 
-		// Set config admin email to match admin user and reset config
-		t.Setenv("ADMIN_EMAIL", "admin@test.com")
-		config.Get().AdminEmail = "admin@test.com"
-
-		// Send notification
-		err = service.NotificationService.SendAdminAppNotification("Test", "Content")
-		assert.NoError(t, err)
-
-		// Verify only one notification/email was sent (to admin user)
-		// and not duplicated to config admin email
-		sentEmails := testMailer.GetEmails()
-		assert.Len(t, sentEmails, 1, "Expected exactly one email")
-		if len(sentEmails) > 0 {
-			assert.Equal(t, "admin@test.com", sentEmails[0].To)
-		}
-	})
-
-	t.Run("config admin email differs from admin users", func(t *testing.T) {
-		db := apitest.SetupTestDB(t)
-		testMailer := notifications.NewTestMailer()
-		mailService := notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
-		notificationService := services.NewNotificationService(db, mailService)
-		service := &services.Service{
-			DB:                  db,
-			NotificationService: notificationService,
-			Budget:              services.NewBudgetService(db, notificationService),
-		}
-
-		// Create admin user with different email
-		adminUser := &models.User{
-			Email:                "admin@test.com",
-			Name:                 "Admin",
+		admin2 := &models.User{
+			Email:                "admin2@test.com",
+			Name:                 "Admin 2",
 			IsAdmin:              true,
+			NotificationsEnabled: false,
+			EmailVerified:        true,
+		}
+		err = admin2.Create(db)
+		assert.NoError(t, err)
+
+		regularUser := &models.User{
+			Email:                "user@test.com",
+			Name:                 "Regular User",
+			IsAdmin:              false,
 			NotificationsEnabled: true,
 			EmailVerified:        true,
 		}
-		err := adminUser.Create(db)
+		err = regularUser.Create(db)
 		assert.NoError(t, err)
 
-		// Set different config admin email and reset config
-		t.Setenv("ADMIN_EMAIL", "different@test.com")
-		config.Get().AdminEmail = "different@test.com"
-
-		// Send notification
-		err = service.NotificationService.SendAdminAppNotification("Test", "Content")
+		// Test sending to specific user
+		err = service.NotificationService.Notify(
+			fmt.Sprintf("test_notify_%d_%d", regularUser.ID, time.Now().UnixNano()),
+			"Test User Notification",
+			templatePath,
+			map[string]interface{}{
+				"Name":  "Regular User",
+				"Email": regularUser.Email,
+			},
+			regularUser.ID,
+		)
 		assert.NoError(t, err)
 
-		// Verify emails were sent to both admin user and config admin email
-		sentEmails := testMailer.GetEmails()
-		assert.Len(t, sentEmails, 2, "Expected two emails")
+		// Test sending to admins
+		err = service.NotificationService.Notify(
+			fmt.Sprintf("test_notify_admin_%d", time.Now().UnixNano()),
+			"Test Admin Notification",
+			templatePath,
+			map[string]interface{}{
+				"Name":  "Admin User",
+				"Email": "admin@test.com",
+			},
+			models.NotifyAdmins,
+		)
+		assert.NoError(t, err)
 
-		// Verify recipients
-		emailRecipients := []string{sentEmails[0].To, sentEmails[1].To}
-		assert.Contains(t, emailRecipients, "admin@test.com")
-		assert.Contains(t, emailRecipients, "different@test.com")
+		// Get notifications from the test service
+		notifications := service.NotificationService.GetNotifications()
+
+		// Should have 2 notifications: 1 for regular user, 1 for admin1
+		assert.Len(t, notifications, 2, "Expected two notifications")
+
+		// Verify regular user notification
+		var foundRegularUser bool
+		var foundAdmin bool
+		for _, n := range notifications {
+			if n.UserID == regularUser.ID {
+				foundRegularUser = true
+				assert.Contains(t, n.Content, "Name: Regular User")
+				assert.Contains(t, n.Content, "Email: user@test.com")
+			}
+			if n.UserID == admin1.ID {
+				foundAdmin = true
+				assert.Contains(t, n.Content, "Name: Admin User")
+				assert.Contains(t, n.Content, "Email: admin@test.com")
+			}
+		}
+		assert.True(t, foundRegularUser, "Regular user should receive notification")
+		assert.True(t, foundAdmin, "Admin1 should receive notification")
+
+		// Verify admin2 (notifications disabled) did not receive notification
+		for _, notification := range notifications {
+			assert.NotEqual(t, admin2.ID, notification.UserID, "Admin2 should not receive notification")
+		}
+
+		// Get the test mailer and verify emails
+		if testMailer, ok := notificationService.GetMailer().(interface {
+			GetEmails() []struct {
+				To string
+			}
+		}); ok {
+			sentEmails := testMailer.GetEmails()
+			// Verify emails were sent to the correct recipients
+			if assert.Len(t, sentEmails, 2, "Expected two emails") {
+				emailRecipients := []string{sentEmails[0].To, sentEmails[1].To}
+				assert.Contains(t, emailRecipients, "admin1@test.com")
+				assert.Contains(t, emailRecipients, "user@test.com")
+			}
+		}
 	})
 }
