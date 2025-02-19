@@ -11,5 +11,6 @@ type BudgetUsage struct {
 	Spent           float64    `json:"spent"`
 	Usage           float64    `json:"usage"` // percentage
 	BudgetStartDate *time.Time `json:"budget_start_date"`
-	TotalCost       float64    `json:"total_cost"` // cost for the specified date range
+	TotalCost       float64    `json:"total_cost"`   // cost for the specified date range
+	TotalTokens     int64      `json:"total_tokens"` // total tokens for the specified date range
 }

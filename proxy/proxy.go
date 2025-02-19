@@ -20,7 +20,6 @@ import (
 	"github.com/gosimple/slug"
 	"github.com/tmc/langchaingo/schema"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
@@ -344,35 +343,6 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
 	AnalyzeResponse(p.service, llm, app, statusCode, body, reqBody, r)
-}
-
-// analyzeCompletionResponse adds usage/cost analytics. Updated to store llm_id for budget queries.
-func (p *Proxy) analyzeCompletionResponse(llm *models.LLM, app *models.App, response models.ITokenResponse) {
-	cpt := 0.0
-	cpit := 0.0
-	price, err := p.service.GetModelPriceByModelNameAndVendor(response.GetModel(), string(llm.Vendor))
-	if err == nil {
-		cpt = price.CPT
-		cpit = price.CPIT
-	}
-
-	tt := response.GetPromptTokens() + response.GetResponseTokens()
-	rec := &models.LLMChatRecord{
-		Vendor:         string(llm.Vendor),
-		PromptTokens:   response.GetPromptTokens(),
-		ResponseTokens: response.GetResponseTokens(),
-		TotalTokens:    tt,
-		TimeStamp:      time.Now(),
-		Choices:        response.GetChoiceCount(),
-		ToolCalls:      response.GetToolCount(),
-		AppID:          app.ID,
-		UserID:         app.UserID,
-		Cost:           cpt*float64(response.GetResponseTokens()) + cpit*float64(response.GetPromptTokens()),
-		// Must store LLMID for usage queries
-		LLMID: llm.ID,
-	}
-
-	analytics.RecordChatRecord(rec)
 }
 
 func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {

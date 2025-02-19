@@ -125,23 +125,25 @@ func TestGetBudgetUsage(t *testing.T) {
 
 	// Create test app with budget
 	budget := 100.0
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	app := &models.App{
-		Name:          "Test App",
-		MonthlyBudget: &budget,
+		Name:            "Test App",
+		MonthlyBudget:   &budget,
+		BudgetStartDate: &startOfMonth,
 	}
 	db.Create(app)
 
 	// Create test LLM with budget
 	llmBudget := 200.0
 	llm := &models.LLM{
-		Name:          "Test LLM",
-		MonthlyBudget: &llmBudget,
+		Name:            "Test LLM",
+		MonthlyBudget:   &llmBudget,
+		BudgetStartDate: &startOfMonth,
 	}
 	db.Create(llm)
 
 	// Create test records
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	records := []models.LLMChatRecord{
 		{
 			AppID:     app.ID,
@@ -173,9 +175,9 @@ func TestGetBudgetUsage(t *testing.T) {
 	// Find app and LLM entries
 	var appEntry, llmEntry map[string]interface{}
 	for _, entry := range response {
-		if entry["type"] == "App" {
+		if entry["entity_type"] == "App" {
 			appEntry = entry
-		} else if entry["type"] == "LLM" {
+		} else if entry["entity_type"] == "LLM" {
 			llmEntry = entry
 		}
 	}
@@ -183,14 +185,14 @@ func TestGetBudgetUsage(t *testing.T) {
 	// Verify app budget usage
 	assert.NotNil(t, appEntry)
 	assert.Equal(t, "Test App", appEntry["name"])
-	assert.Equal(t, 50.0, appEntry["currentUsage"])
-	assert.Equal(t, 50.0, appEntry["usagePercent"]) // 50/100 * 100
+	assert.Equal(t, 50.0, appEntry["spent"])
+	assert.Equal(t, 50.0, appEntry["usage"]) // 50/100 * 100
 
 	// Verify LLM budget usage
 	assert.NotNil(t, llmEntry)
 	assert.Equal(t, "Test LLM", llmEntry["name"])
-	assert.Equal(t, 50.0, llmEntry["currentUsage"])
-	assert.Equal(t, 25.0, llmEntry["usagePercent"]) // 50/200 * 100
+	assert.Equal(t, 50.0, llmEntry["spent"])
+	assert.Equal(t, 25.0, llmEntry["usage"]) // 50/200 * 100
 }
 
 func TestGetMostUsedLLMModels(t *testing.T) {
