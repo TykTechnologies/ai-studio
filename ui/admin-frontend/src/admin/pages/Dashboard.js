@@ -439,7 +439,7 @@ const Dashboard = () => {
 
   const StyledTableCell = styled(TableCell)(({ theme }) => ({
     "&.MuiTableCell-head": {
-      backgroundColor: theme.palette.background.buttonSecondary,
+      backgroundColor: theme.palette.background.neutralDefault,
       fontFamily: 'Inter-Semibold',
       color: theme.palette.text.primary,
       borderBottom: `1px solid ${theme.palette.border.neutralDefault}`

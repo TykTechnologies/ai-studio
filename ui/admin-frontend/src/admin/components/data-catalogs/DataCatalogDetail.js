@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -12,7 +12,6 @@ import {
   ListItemText,
   Divider,
   Chip,
-  Link
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";

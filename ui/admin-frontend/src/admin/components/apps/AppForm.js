@@ -18,10 +18,9 @@ import {
   Chip,
   Switch,
   FormControlLabel,
-  Link,
   InputAdornment,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
