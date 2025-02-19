@@ -998,13 +998,14 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 	for _, u := range usageList {
 		entry := map[string]interface{}{
 			"name":            u.Name,
-			"type":            u.EntityType,
-			"monthlyBudget":   u.Budget,
-			"currentUsage":    u.Spent,
-			"usagePercent":    u.Usage,
+			"entity_type":     u.EntityType,
+			"budget":          u.Budget,
+			"spent":           u.Spent,
+			"usage":           u.Usage,
 			"budgetStartDate": u.BudgetStartDate,
 			"totalCost":       u.TotalCost,
 			"entity_id":       u.EntityID,
+			"total_tokens":    u.TotalTokens,
 		}
 		response = append(response, entry)
 	}

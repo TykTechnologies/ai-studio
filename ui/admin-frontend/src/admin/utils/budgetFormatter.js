@@ -29,14 +29,17 @@ const formatBudgetPeriod = (startDate) => {
 };
 
 export const formatBudgetDisplay = (item) => {
-	if (!item.monthlyBudget && !item.attributes?.monthly_budget) {
+	const monthlyBudget = item.budget || item.monthlyBudget;
+	const budgetStartDate = item.budgetStartDate;
+	const spent = item.spent || item.currentUsage;
+
+
+	if (!monthlyBudget) {
 		return "not set";
 	}
 
-	const monthlyBudget = item.monthlyBudget || item.attributes?.monthly_budget;
-	const usagePercent = item.usagePercent || item.percentage || 0;
-	const currentUsage = item.currentUsage || item.current_usage || 0;
-	const budgetStartDate = item.budgetStartDate || item.start_date || item.attributes?.budget_start_date;
+	const usagePercent = (spent / monthlyBudget) * 100;
+	const currentUsage = spent;
 
 	const periodStart = calculateBudgetPeriodStart(budgetStartDate);
 	const period = formatBudgetPeriod(periodStart);
