@@ -2,8 +2,6 @@ package api
 
 import (
 	"errors"
-	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -495,12 +493,6 @@ func (a *API) createUserApp(c *gin.Context) {
 		return
 	}
 
-	// Send email notification to admin
-	if err := a.sendAdminAppNotification(app); err != nil {
-		// Log the error, but don't return it to the user
-		log.Printf("Failed to send admin notification: %v", err)
-	}
-
 	// Prepare the response
 	response := AppResponse{
 		Type: "app",
@@ -552,15 +544,6 @@ type CreateAppRequest struct {
 	Description   string `json:"description" binding:"required"`
 	DataSourceIDs []uint `json:"data_source_ids" binding:"required"`
 	LLMIDs        []uint `json:"llm_ids" binding:"required"`
-}
-
-func (a *API) sendAdminAppNotification(app *models.App) error {
-	title := "New App Created"
-	appDetailsURL := fmt.Sprintf("%s/admin/apps/%d", a.config.FrontendURL, app.ID)
-	content := fmt.Sprintf("A new app has been created:\n\nName: %s\nDescription: %s\nView app details: %s",
-		app.Name, app.Description, appDetailsURL)
-
-	return a.service.NotificationService.SendAdminAppNotification(title, content)
 }
 
 // getUserAccessibleDataSources godoc
