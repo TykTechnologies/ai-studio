@@ -170,9 +170,16 @@ func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all
 		return 0, 0, err
 	}
 
-	totalPages := int(totalCount) / pageSize
-	if int(totalCount)%pageSize != 0 {
-		totalPages++
+	totalPages := 0
+	if totalCount > 0 {
+		if all {
+			totalPages = 1
+		} else {
+			totalPages = int(totalCount) / pageSize
+			if int(totalCount)%pageSize != 0 {
+				totalPages++
+			}
+		}
 	}
 
 	if !all {
@@ -193,9 +200,12 @@ func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber i
 		return 0, 0, err
 	}
 
-	totalPages := int(totalCount) / pageSize
-	if int(totalCount)%pageSize != 0 {
-		totalPages++
+	totalPages := 1 // Always at least 1 page, even with no results
+	if !all && totalCount > 0 {
+		totalPages = int(totalCount) / pageSize
+		if int(totalCount)%pageSize != 0 {
+			totalPages++
+		}
 	}
 
 	if !all {
@@ -210,15 +220,19 @@ func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber i
 // Search returns apps matching the given search term with pagination
 func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber int, all bool) (int64, int, error) {
 	var totalCount int64
+	// Enable debug mode to log SQL queries
 	query := db.Model(&App{}).Where("name LIKE ? OR description LIKE ?", "%"+searchTerm+"%", "%"+searchTerm+"%")
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}
 
-	totalPages := int(totalCount) / pageSize
-	if int(totalCount)%pageSize != 0 {
-		totalPages++
+	totalPages := 1
+	if !all {
+		totalPages = int(totalCount) / pageSize
+		if int(totalCount)%pageSize != 0 {
+			totalPages++
+		}
 	}
 
 	if !all {

@@ -500,25 +500,13 @@ func (a *AuthService) sendVerificationEmail(user *models.User) error {
 }
 
 func (a *AuthService) notifyAdmin(user *models.User) error {
-	subject := "New User Registration"
-	body := fmt.Sprintf("A new user has registered:\nName: %s\nEmail: %s", user.Name, user.Email)
-	tmpl, err := template.ParseFiles("./templates/admin-notify.tmpl")
-	if err != nil {
-		slog.Error("Failed to parse admin notification template", "error", err)
-	} else {
-		var buf bytes.Buffer
-		err = tmpl.Execute(&buf, map[string]string{
-			"Name":  user.Name,
-			"Email": user.Email,
-		})
-		if err != nil {
-			slog.Error("Failed to execute admin notification template", "error", err)
-		} else {
-			body = buf.String()
-		}
+	data := map[string]interface{}{
+		"Name":  user.Name,
+		"Email": user.Email,
 	}
 
-	return a.NotificationService.SendAdminAppNotification(subject, body)
+	notificationID := fmt.Sprintf("new_user_%d_%d", user.ID, time.Now().UnixNano())
+	return a.NotificationService.Notify(notificationID, "New User Registration on AI Portal", "admin-notify.tmpl", data, models.NotifyAdmins)
 }
 
 func (a *AuthService) SendEmail(to, subject, body string) error {

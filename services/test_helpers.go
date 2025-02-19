@@ -10,5 +10,6 @@ type TestNotificationService = NotificationService
 
 // NewTestNotificationService creates a new test notification service
 func NewTestNotificationService(db *gorm.DB) *NotificationService {
-	return NewNotificationService(db, notifications.NewTestMailService())
+	testMailer := notifications.NewTestMailer()
+	return NewNotificationService(db, "test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
 }

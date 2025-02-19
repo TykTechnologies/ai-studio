@@ -13,7 +13,7 @@ type Service struct {
 
 func NewService(db *gorm.DB) *Service {
 	secrets.SetDBRef(db)
-	notificationService := NewNotificationService(db, nil) // We'll add mail service later if needed
+	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
 	budgetService := NewBudgetService(db, notificationService)
 	return &Service{
 		DB:                  db,
