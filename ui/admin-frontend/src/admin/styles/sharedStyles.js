@@ -77,7 +77,7 @@ export const FieldValue = styled(Typography)(({ theme }) => ({
   color: theme.palette.text.primary,
 }));
 
-export const StyledButton = styled(Button)(({ theme }) => ({
+export const PrimaryButton = styled(Button)(({ theme }) => ({
   position: 'relative',
   borderRadius: 20,
   padding: '8px 16px',
@@ -105,7 +105,7 @@ export const StyledButton = styled(Button)(({ theme }) => ({
   },
 }));
 
-export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
+export const PrimaryOutlineButton = styled(Button)(({ theme }) => ({
   position: 'relative',
   borderRadius: 20,
   padding: '8px 16px',
@@ -133,7 +133,7 @@ export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
   },
 }));
 
-export const StyledButtonCritical = styled(Button)(({ theme }) => ({
+export const DangerButton = styled(Button)(({ theme }) => ({
   position: 'relative',
   borderRadius: 20,
   padding: '8px 16px',
@@ -151,7 +151,7 @@ export const StyledButtonCritical = styled(Button)(({ theme }) => ({
   },
 }));
 
-export const StyledButtonLink = styled(Button)(({ theme }) => ({
+export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
   color: theme.palette.text.defaultSubdued,
   backgroundColor: 'transparent',
   cursor: 'pointer',
