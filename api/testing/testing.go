@@ -11,17 +11,11 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
-
-func NewMockMailer() *notifications.MailService {
-	testMailer := notifications.NewTestMailer()
-	return notifications.NewMailService("test@example.com", "localhost", 25, "testuser", "testpass", testMailer)
-}
 
 func SetupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -34,8 +28,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 }
 
 func SetupTestService(db *gorm.DB) *services.Service {
-	mailService := NewMockMailer()
-	notificationService := services.NewNotificationService(db, mailService)
+	notificationService := services.NewTestNotificationService(db)
 	return &services.Service{
 		DB:                  db,
 		NotificationService: notificationService,
@@ -44,14 +37,13 @@ func SetupTestService(db *gorm.DB) *services.Service {
 }
 
 func SetupTestNotificationService(db *gorm.DB) *services.NotificationService {
-	return services.NewNotificationService(db, NewMockMailer())
+	return services.NewTestNotificationService(db)
 }
 
 func SetupTestAuthService(db *gorm.DB, service *services.Service) *auth.AuthService {
 	config := SetupTestAuthConfig(db, service)
-	mockMailer := NewMockMailer()
 	notificationService := SetupTestNotificationService(db)
-	return auth.NewAuthService(config, mockMailer, service, notificationService)
+	return auth.NewAuthService(config, nil, service, notificationService)
 }
 
 func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {

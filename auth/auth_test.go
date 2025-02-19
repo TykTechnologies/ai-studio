@@ -44,8 +44,7 @@ type AuthServiceTestSuite struct {
 func (suite *AuthServiceTestSuite) SetupTest() {
 	suite.db = setupTestDB(suite.T())
 	suite.service = services.NewService(suite.db)
-	mockMailService := newMockMailService()
-	notificationService := services.NewNotificationService(suite.db, mockMailService)
+	notificationService := services.NewTestNotificationService(suite.db)
 	config := auth.Config{
 		DB:                  suite.db,
 		Service:             suite.service,
@@ -58,6 +57,7 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 	}
+	mockMailService := newMockMailService()
 	suite.authService = auth.NewAuthService(&config, mockMailService, suite.service, notificationService)
 }
 
