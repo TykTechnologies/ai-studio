@@ -40,9 +40,8 @@ func setupTestAPIForCommonTests(t *testing.T) (*API, *gorm.DB, *services.Service
 		TestMode:            true,
 	}
 
-	mockMailer := newMockMailer()
-	notificationService := services.NewNotificationService(db, mockMailer)
-	authService := auth.NewAuthService(&config, mockMailer, service, notificationService)
+	notificationService := services.NewTestNotificationService(db)
+	authService := auth.NewAuthService(&config, nil, service, notificationService)
 	api := NewAPI(service, true, authService, &config, nil, emptyFile)
 
 	return api, db, service

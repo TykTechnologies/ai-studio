@@ -105,7 +105,15 @@ func main() {
 	)
 
 	// Create notification service that will handle all notifications
-	notificationService := services.NewNotificationService(db, mailService)
+	notificationService := services.NewNotificationService(
+		db,
+		appConf.FromEmail,
+		appConf.SMTPServer,
+		appConf.SMTPPort,
+		appConf.SMTPUser,
+		appConf.SMTPPass,
+		mailer,
+	)
 
 	// Initialize auth config and service
 	config := &auth.Config{

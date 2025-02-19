@@ -1,11 +1,14 @@
 package services
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"gorm.io/gorm"
@@ -14,19 +17,97 @@ import (
 // NotificationService handles notification creation, storage, and delivery
 type NotificationService struct {
 	db          *gorm.DB
+	fromEmail   string
+	smtpHost    string
+	smtpPort    int
+	smtpUser    string
+	smtpPass    string
+	mailer      notifications.Mailer // Optional mailer for testing
 	mailService *notifications.MailService
 	// For testing purposes
 	notifications []models.Notification
 	mu            sync.RWMutex
 }
 
+// Notify creates and sends a notification using a template
+// userFlags can be a specific user ID, models.NotifyAdmins, or a combination using bitwise OR (|)
+func (s *NotificationService) Notify(notificationID string, title string, templatePath string, data interface{}, userFlags uint) error {
+	// Render the template
+	content, err := s.renderTemplate(templatePath, data)
+	if err != nil {
+		return fmt.Errorf("error rendering template: %v", err)
+	}
+
+	// Handle notifications based on flags
+	if userFlags&models.NotifyAdmins != 0 {
+		// Send to admin users
+		var adminIDs []uint
+		if err := s.db.Model(&models.User{}).
+			Where("is_admin = ? AND notifications_enabled = ?", true, true).
+			Pluck("id", &adminIDs).Error; err != nil {
+			return fmt.Errorf("error finding admin users: %v", err)
+		}
+
+		// Send to each admin
+		for _, adminID := range adminIDs {
+			notification := &models.Notification{
+				UserID:         adminID,
+				Title:          title,
+				Content:        content,
+				NotificationID: fmt.Sprintf("%s_admin_%d", notificationID, adminID),
+				SentAt:         time.Now(),
+			}
+			if err := s.Send(notification); err != nil {
+				// Log error but continue with other admins
+				fmt.Printf("Error sending notification to admin %d: %v\n", adminID, err)
+			}
+		}
+	}
+
+	// Send to specific user if a user ID is provided
+	userID := userFlags &^ models.NotifyAdmins // Clear the admin flag to get the user ID
+	if userID != 0 {
+		notification := &models.Notification{
+			UserID:         userID,
+			Title:          title,
+			Content:        content,
+			NotificationID: fmt.Sprintf("%s_owner", notificationID),
+			SentAt:         time.Now(),
+		}
+		if err := s.Send(notification); err != nil {
+			return fmt.Errorf("failed to send user notification: %v", err)
+		}
+	}
+
+	return nil
+}
+
 // NewNotificationService creates a new notification service
-func NewNotificationService(db *gorm.DB, mailService *notifications.MailService) *NotificationService {
-	return &NotificationService{
+func NewNotificationService(db *gorm.DB, fromEmail, smtpHost string, smtpPort int, smtpUser, smtpPass string, mailer notifications.Mailer) *NotificationService {
+	ns := &NotificationService{
 		db:            db,
-		mailService:   mailService,
+		fromEmail:     fromEmail,
+		smtpHost:      smtpHost,
+		smtpPort:      smtpPort,
+		smtpUser:      smtpUser,
+		smtpPass:      smtpPass,
+		mailer:        mailer,
 		notifications: make([]models.Notification, 0),
 	}
+
+	// Initialize mail service if mailer is provided
+	if mailer != nil {
+		ns.mailService = notifications.NewMailService(
+			fromEmail,
+			smtpHost,
+			smtpPort,
+			smtpUser,
+			smtpPass,
+			mailer,
+		)
+	}
+
+	return ns
 }
 
 // GetNotifications returns all stored notifications (for testing)
@@ -43,7 +124,7 @@ func (s *NotificationService) ClearNotifications() {
 	s.notifications = make([]models.Notification, 0)
 }
 
-// Send creates and sends a notification, preventing duplicates based on NotificationID
+// send creates and sends a notification, preventing duplicates based on NotificationID
 func (s *NotificationService) Send(notification *models.Notification) error {
 	// For testing purposes
 	s.mu.Lock()
@@ -66,12 +147,6 @@ func (s *NotificationService) Send(notification *models.Notification) error {
 		notification.SentAt = time.Now()
 	}
 
-	// Get user's email
-	var user models.User
-	if err := s.db.First(&user, notification.UserID).Error; err != nil {
-		return fmt.Errorf("error finding user: %v", err)
-	}
-
 	// Store notification in database
 	if err := s.db.Create(notification).Error; err != nil {
 		return fmt.Errorf("error creating notification: %v", err)
@@ -79,7 +154,14 @@ func (s *NotificationService) Send(notification *models.Notification) error {
 
 	// Send email if mail service is configured
 	if s.mailService != nil {
-		if err := s.mailService.SendEmail(user.Email, notification.Title, notification.Content); err != nil {
+		var email string
+		if err := s.db.Model(&models.User{}).
+			Where("id = ?", notification.UserID).
+			Pluck("email", &email).Error; err != nil {
+			return fmt.Errorf("error finding user email: %v", err)
+		}
+
+		if err := s.mailService.SendEmail(email, notification.Title, notification.Content); err != nil {
 			// Log error but don't fail the notification creation
 			fmt.Printf("Error sending email notification: %v\n", err)
 		}
@@ -131,51 +213,47 @@ func (s *NotificationService) GetUnreadCount(userID uint) (int64, error) {
 	return count, nil
 }
 
-// SendAdminAppNotification sends a notification to all admin users who have notifications enabled
-// and also sends an email to the admin email from config for backward compatibility
-func (s *NotificationService) SendAdminAppNotification(title, content string) error {
-	// Find all admin users with notifications enabled
-	var adminUsers []models.User
-	if err := s.db.Where("is_admin = ? AND notifications_enabled = ?", true, true).Find(&adminUsers).Error; err != nil {
-		return fmt.Errorf("error finding admin users: %v", err)
-	}
+// GetMailer returns the mailer for testing purposes
+func (s *NotificationService) GetMailer() notifications.Mailer {
+	return s.mailer
+}
 
-	// Send notifications to admin users
-	for _, admin := range adminUsers {
-		notification := &models.Notification{
-			UserID:         admin.ID,
-			Title:          title,
-			Content:        content,
-			NotificationID: fmt.Sprintf("admin_app_%d_%d", admin.ID, time.Now().UnixNano()),
-			SentAt:         time.Now(),
+// renderTemplate renders a template with the given data
+func (s *NotificationService) renderTemplate(templateName string, data interface{}) (string, error) {
+	// First try the full path if provided
+	tmpl, err := template.ParseFiles(templateName)
+	if err != nil {
+		// If that fails, try to find the templates directory by walking up
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("error getting working directory: %v", err)
 		}
-		if err := s.Send(notification); err != nil {
-			// Log error but continue with other admins
-			fmt.Printf("Error sending notification to admin %s: %v\n", admin.Email, err)
-		}
-	}
 
-	// For backward compatibility, also send email to admin email from config if set and not already included
-	if s.mailService != nil {
-		adminEmail := config.Get().AdminEmail
-		if adminEmail != "" {
-			// Check if adminEmail is not already in the list of admin users
-			alreadyIncluded := false
-			for _, admin := range adminUsers {
-				if admin.Email == adminEmail {
-					alreadyIncluded = true
-					break
+		// Walk up the directory tree until we find the templates directory
+		templatePath := filepath.Join("templates", templateName)
+		currentDir := wd
+		for {
+			tryPath := filepath.Join(currentDir, templatePath)
+			if _, err := os.Stat(tryPath); err == nil {
+				tmpl, err = template.ParseFiles(tryPath)
+				if err != nil {
+					return "", fmt.Errorf("error parsing template: %v", err)
 				}
+				break
 			}
-
-			if !alreadyIncluded {
-				if err := s.mailService.SendEmail(adminEmail, title, content); err != nil {
-					// Log error but don't fail the entire operation
-					fmt.Printf("Error sending email to admin email %s: %v\n", adminEmail, err)
-				}
+			parent := filepath.Dir(currentDir)
+			if parent == currentDir {
+				// We've reached the root directory
+				return "", fmt.Errorf("could not find template %s in templates directory", templateName)
 			}
+			currentDir = parent
 		}
 	}
 
-	return nil
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("error executing template: %v", err)
+	}
+
+	return buf.String(), nil
 }
