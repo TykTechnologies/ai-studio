@@ -595,10 +595,10 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 
 // VendorModelCost represents the total cost for a specific vendor and model
 type VendorModelCost struct {
-	Vendor    string  `json:"vendor"`
-	Model     string  `json:"model"`
-	TotalCost float64 `json:"totalCost"`
-	Currency  string  `json:"currency"`
+	Model       string  `json:"model"`
+	TotalCost   float64 `json:"totalCost"`
+	Currency    string  `json:"currency"`
+	TotalTokens int64   `json:"totalTokens"`
 }
 
 // GetTotalCostPerVendorAndModel returns the total cost per vendor and model
@@ -606,7 +606,7 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 	var results []VendorModelCost
 
 	query := db.Model(&models.LLMChatRecord{}).
-		Select("vendor, name as model, SUM(cost) as total_cost, currency").
+		Select("COALESCE(NULLIF(name, ''), 'Unknown') as model, SUM(total_tokens) as total_tokens, SUM(cost) as total_cost, currency").
 		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
 
 	if interactionType != nil {
@@ -617,8 +617,8 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 		query = query.Where("llm_id = ?", *llmID)
 	}
 
-	err := query.Group("vendor, name, currency").
-		Order("vendor, total_cost DESC").
+	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown'), currency").
+		Order("total_cost DESC, total_tokens DESC").
 		Find(&results).Error
 
 	if err != nil {
