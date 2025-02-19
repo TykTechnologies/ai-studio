@@ -697,14 +697,14 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	// Get LLM usage with proper handling of NULL and 0 values
 	llmQuery := db.Table("llm_chat_records").
 		Select(`
-        COALESCE(llm_chat_records.llm_id, 0) as llm_id,
-        COALESCE(llms.name, 'Unknown') as name,
-        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN cost ELSE 0 END) as monthly_usage,
-        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN cost ELSE 0 END) as total_cost,
-        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN total_tokens ELSE 0 END) as total_tokens,
-        MAX(llms.monthly_budget) as monthly_budget,
-        MAX(llms.budget_start_date) as budget_start_date
-    `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
+			COALESCE(llm_chat_records.llm_id, 0) AS llm_id,
+			COALESCE(llms.name, 'Unknown') AS name,
+			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
+			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
+			MAX(llms.monthly_budget) AS monthly_budget,
+			MAX(llms.budget_start_date) AS budget_start_date
+	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
 		Group("COALESCE(llm_chat_records.llm_id, 0)")
@@ -726,21 +726,20 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	var appStats []budgetStats
 
 	// Get App usage with proper handling of NULL and 0 values
-	if err :=
-		db.Table("llm_chat_records").
-			Select(`
-			COALESCE(llm_chat_records.app_id, 0) as llm_id,
-			COALESCE(apps.name, 'Unknown') as name,
-			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN cost ELSE 0 END) as monthly_usage,
-			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN cost ELSE 0 END) as total_cost,
-			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN total_tokens ELSE 0 END) as total_tokens,
-			MAX(apps.monthly_budget) as monthly_budget,
-			MAX(apps.budget_start_date) as budget_start_date
-	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
-			Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
-			Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-			Group("COALESCE(llm_chat_records.app_id, 0)").
-			Find(&appStats).Error; err != nil {
+	if err := db.Table("llm_chat_records").
+		Select(`
+        COALESCE(llm_chat_records.app_id, 0) AS llm_id,
+        COALESCE(apps.name, 'Unknown') AS name,
+        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
+        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
+        MAX(apps.monthly_budget) AS monthly_budget,
+        MAX(apps.budget_start_date) AS budget_start_date
+    `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
+		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
+		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
+		Group("COALESCE(llm_chat_records.app_id, 0)").
+		Find(&appStats).Error; err != nil {
 		return nil, err
 	}
 
