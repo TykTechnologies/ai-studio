@@ -7,9 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
-	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,9 +15,7 @@ func TestPagination_LLMPagination(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	mockMailer := apitest.NewMockMailer()
-	notificationService := services.NewNotificationService(db, mockMailer)
-	authService := auth.NewAuthService(config, mockMailer, service, notificationService)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Create test LLMs
@@ -107,9 +103,7 @@ func TestPagination_UserPagination(t *gotest.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
-	mockMailer := apitest.NewMockMailer()
-	notificationService := services.NewNotificationService(db, mockMailer)
-	authService := auth.NewAuthService(config, mockMailer, service, notificationService)
+	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
 
 	// Create test users

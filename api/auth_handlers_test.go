@@ -22,17 +22,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func newMockMailer() *notifications.MailService {
-	return notifications.NewMailService(
-		"test@example.com",
-		"smtp.test.com", // non-empty host to use TestMailer
-		587,
-		"user",
-		"pass",
-		notifications.NewTestMailer(),
-	)
-}
-
 func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
@@ -55,8 +44,7 @@ type AuthHandlersTestSuite struct {
 func (suite *AuthHandlersTestSuite) SetupTest() {
 	suite.db = setupTestDB(suite.T())
 	suite.service = services.NewService(suite.db)
-	mockMailService := newMockMailer()
-	suite.mockMailer = mockMailService.Mailer.(*notifications.TestMailer)
+	suite.mockMailer = notifications.NewTestMailer()
 	config := &auth.Config{
 		DB:                  suite.db,
 		Service:             suite.service,
@@ -70,8 +58,9 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		AdminEmail:          "admin@example.com",
 		TestMode:            false,
 	}
-	notificationService := services.NewNotificationService(suite.db, mockMailService)
-	suite.authService = auth.NewAuthService(config, mockMailService, suite.service, notificationService)
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 587, "user", "pass", suite.mockMailer)
+	notificationService := services.NewTestNotificationService(suite.db)
+	suite.authService = auth.NewAuthService(config, mailService, suite.service, notificationService)
 	suite.api = &API{
 		service: suite.service,
 		auth:    suite.authService,
