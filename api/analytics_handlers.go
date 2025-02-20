@@ -564,6 +564,7 @@ func (a *API) getModelUsage(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param vendor query string true "Vendor Name"
+// @Param llm_id query int false "LLM ID to filter by"
 // @Success 200 {object} analytics.ChartData
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
@@ -591,7 +592,23 @@ func (a *API) getVendorUsage(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor, nil)
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor, llmID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
