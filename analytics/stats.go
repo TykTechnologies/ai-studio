@@ -707,7 +707,7 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-		Group("COALESCE(llm_chat_records.llm_id, 0)")
+		Group("COALESCE(llm_chat_records.llm_id, 0), COALESCE(llms.name, 'Unknown')")
 
 	if llmID != nil {
 		llmQuery = llmQuery.Where("llms.id = ?", *llmID)
@@ -738,7 +738,7 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
     `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-		Group("COALESCE(llm_chat_records.app_id, 0)").
+		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Unknown')").
 		Find(&appStats).Error; err != nil {
 		return nil, err
 	}
