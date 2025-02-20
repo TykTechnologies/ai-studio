@@ -1,8 +1,9 @@
-package models
+package models_test
 
 import (
 	"testing"
 
+	. "github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -12,10 +13,58 @@ func setupPricesTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = db.AutoMigrate(&ModelPrice{})
+	err = db.AutoMigrate(&ModelPrice{}, &LLMChatRecord{})
 	assert.NoError(t, err)
 
 	return db
+}
+
+func TestModelPriceBasicCRUD(t *testing.T) {
+	db := setupPricesTestDB(t)
+
+	// Test Create
+	mp := &ModelPrice{
+		ModelName: "GPT-4",
+		Vendor:    "OpenAI",
+		CPT:       0.002,
+		CPIT:      0.003,
+		Currency:  "USD",
+	}
+	err := mp.Create(db)
+	assert.NoError(t, err)
+	assert.NotZero(t, mp.ID)
+
+	// Test Get
+	retrieved := &ModelPrice{}
+	err = retrieved.Get(db, mp.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, mp.ModelName, retrieved.ModelName)
+	assert.Equal(t, mp.Vendor, retrieved.Vendor)
+	assert.Equal(t, mp.CPT, retrieved.CPT)
+	assert.Equal(t, mp.CPIT, retrieved.CPIT)
+	assert.Equal(t, mp.Currency, retrieved.Currency)
+
+	// Test Update
+	mp.CPT = 0.004
+	mp.CPIT = 0.006
+	err = mp.Update(db)
+	assert.NoError(t, err)
+
+	// Verify update
+	updated := &ModelPrice{}
+	err = updated.Get(db, mp.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, 0.004, updated.CPT)
+	assert.Equal(t, 0.006, updated.CPIT)
+
+	// Test Delete
+	err = mp.Delete(db)
+	assert.NoError(t, err)
+
+	// Verify deletion
+	deleted := &ModelPrice{}
+	err = deleted.Get(db, mp.ID)
+	assert.Error(t, err)
 }
 
 func TestGetOrCreateByModelName(t *testing.T) {

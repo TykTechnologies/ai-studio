@@ -33,20 +33,87 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 	return modelPrice, nil
 }
 
-// UpdateModelPrice updates an existing model price
+// recalculateChatRecordCosts updates the cost for all chat records of a specific model
+func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit float64) error {
+	// Update all matching records with a single query
+	result := tx.Exec(`
+		UPDATE llm_chat_records 
+		SET cost = (prompt_tokens * ? + (total_tokens - prompt_tokens) * ?)
+		WHERE name = ? AND vendor = ?`,
+		cpit, cpt, modelName, vendor,
+	)
+	return result.Error
+}
+
+// UpdateModelPrice updates an existing model price without recalculating costs
 func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt, cpit float64, currency string) (*models.ModelPrice, error) {
-	modelPrice, err := s.GetModelPriceByID(id)
+	var modelPrice *models.ModelPrice
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		// Get existing model price
+		mp := &models.ModelPrice{}
+		if err = mp.Get(tx, id); err != nil {
+			return err
+		}
+
+		// Update model price fields
+		mp.ModelName = modelName
+		mp.Vendor = vendor
+		mp.CPT = cpt
+		mp.CPIT = cpit
+		mp.Currency = currency
+
+		// Save the updated model price
+		if err = mp.Update(tx); err != nil {
+			return err
+		}
+
+		modelPrice = mp
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	modelPrice.ModelName = modelName
-	modelPrice.Vendor = vendor
-	modelPrice.CPT = cpt
-	modelPrice.CPIT = cpit
-	modelPrice.Currency = currency
+	return modelPrice, nil
+}
 
-	if err := modelPrice.Update(s.DB); err != nil {
+// UpdateModelPriceAndRecalculate updates an existing model price and recalculates all associated chat record costs
+func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor string, cpt, cpit float64, currency string) (*models.ModelPrice, error) {
+	var modelPrice *models.ModelPrice
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		// Get existing model price
+		mp := &models.ModelPrice{}
+		if err = mp.Get(tx, id); err != nil {
+			return err
+		}
+
+		// Update model price fields
+		mp.ModelName = modelName
+		mp.Vendor = vendor
+		mp.CPT = cpt
+		mp.CPIT = cpit
+		mp.Currency = currency
+
+		// Save the updated model price
+		if err = mp.Update(tx); err != nil {
+			return err
+		}
+
+		// Recalculate costs for all associated chat records
+		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, cpt, cpit); err != nil {
+			return err
+		}
+
+		modelPrice = mp
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
 

@@ -612,7 +612,7 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("COALESCE(NULLIF(name, ''), 'Unknown') as model, SUM(total_tokens) as total_tokens, SUM(cost) as total_cost, currency").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp BETWEEN ? AND ? AND name IS NOT NULL AND total_tokens > 0", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -679,18 +679,25 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	var result []models.BudgetUsage
 
 	// Get current month's start and end dates for budget calculation
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
+	now := time.Now().UTC()
+
+	// Set start of month to beginning of day (00:00:00) UTC
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+	// Set end of month to end of the last day (23:59:59) UTC
+	lastDay := startOfMonth.AddDate(0, 1, -1)
+	endOfMonth := time.Date(lastDay.Year(), lastDay.Month(), lastDay.Day(), 23, 59, 59, 0, time.UTC)
 
 	// Use provided date range for total cost calculation, or default to current month
 	costStartDate := startOfMonth
 	costEndDate := endOfMonth
 	if startDate != nil {
-		costStartDate = *startDate
+		// Keep start date at beginning of day UTC
+		costStartDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
 	}
 	if endDate != nil {
-		costEndDate = *endDate
+		// Set end date to end of day (23:59:59) UTC
+		costEndDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, time.UTC)
 	}
 
 	// Get LLM usage statistics

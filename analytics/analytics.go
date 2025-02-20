@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"strconv"
@@ -53,7 +54,6 @@ func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
 	recordToolCall(tcEntry)
 }
 
-// Will create a Analytics ChatLog and ChatRecord entry for a given ContentMessage
 func RecordContentMessage(
 	mc *llms.MessageContent,
 	cr *llms.ContentResponse,
@@ -124,7 +124,12 @@ func RecordContentMessage(
 	}
 
 	rec.Choices = len(cr.Choices)
-	rec.Name = price.ModelName
+	// Use provided model name if available, fallback to price model name
+	if name != "" {
+		rec.Name = name
+	} else {
+		rec.Name = price.ModelName
+	}
 	rec.Vendor = string(vendor)
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
@@ -140,7 +145,6 @@ func RecordContentMessage(
 	rec.InteractionType = models.ChatInteraction
 	rec.LLMID = llmID
 
-	// LLM Response
 	chatLog := &models.LLMChatLogEntry{}
 	chatLog.Name = name
 	chatLog.Vendor = string(vendor)
@@ -155,7 +159,6 @@ func RecordContentMessage(
 	recordChatLogEntry(chatLog)
 }
 
-// records a tool call
 func recordToolCall(tc *models.ToolCallRecord) {
 	recMutex.RLock()
 	if !recStarted {
@@ -175,10 +178,10 @@ func RecordChatRecord(record *models.LLMChatRecord) {
 	recordChatRecord(record)
 }
 
-// Records a chat record
 func recordChatRecord(record *models.LLMChatRecord) {
 	recMutex.RLock()
 	if !recStarted {
+		log.Printf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 		recMutex.RUnlock()
 		return
 	}
@@ -186,12 +189,12 @@ func recordChatRecord(record *models.LLMChatRecord) {
 
 	select {
 	case chatRecordChan <- record:
+		log.Printf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 	default:
-		slog.Warn("chat record buffer full, dropping record")
+		log.Printf("Chat record buffer full, dropping record: model=%s, app_id=%d, llm_id=%d", record.Name, record.AppID, record.LLMID)
 	}
 }
 
-// Records a chat log entry
 func recordChatLogEntry(log *models.LLMChatLogEntry) {
 	recMutex.RLock()
 	if !recStarted {
@@ -232,7 +235,7 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 	initDB(db)
 
 	defaultBufferSize := 1000
-	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_ZIZE")
+	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_SIZE")
 	if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
 		if err != nil {
@@ -241,6 +244,8 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 			defaultBufferSize = bfr
 		}
 	}
+
+	slog.Info("starting analytics recording", "buffer_size", defaultBufferSize)
 
 	chatRecordChan = make(chan *models.LLMChatRecord, defaultBufferSize)
 	logEntryChan = make(chan *models.LLMChatLogEntry, defaultBufferSize)
@@ -253,7 +258,7 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 			case record := <-chatRecordChan:
 				err := db.Create(record).Error
 				if err != nil {
-					slog.Warn("error creating chat record", "error", err)
+					slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
 				}
 			case log := <-logEntryChan:
 				err := db.Create(log).Error
