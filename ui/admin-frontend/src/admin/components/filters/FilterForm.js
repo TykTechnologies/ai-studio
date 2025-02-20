@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
   Grid,
@@ -12,10 +11,10 @@ import {
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const FilterForm = () => {
@@ -123,14 +122,14 @@ const FilterForm = () => {
         <Typography variant="h5">
           {id ? "Edit Filter" : "Add Filter"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/filters"
           color="inherit"
         >
           Back to Filters
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -174,9 +173,9 @@ const FilterForm = () => {
             </Grid>
           </Grid>
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update Filter" : "Add Filter"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

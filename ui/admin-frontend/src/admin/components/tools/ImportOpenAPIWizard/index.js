@@ -8,10 +8,9 @@ import {
   Stepper,
   Step,
   StepLabel,
-  Link,
   Box
 } from "@mui/material";
-import { StyledButton, StyledButtonLink } from "../../../styles/sharedStyles";
+import { PrimaryButton, SecondaryLinkButton } from "../../../styles/sharedStyles";
 
 import SelectProvider from "./components/SelectProvider";
 import ConfigureProvider from "./components/ConfigureProvider";
@@ -346,17 +345,17 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
         <Box>
-          <StyledButtonLink onClick={handleClose}>Cancel</StyledButtonLink>
+          <SecondaryLinkButton onClick={handleClose}>Cancel</SecondaryLinkButton>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {getCurrentStepIndex() > 0 && <Button onClick={handleBack}>Back</Button>}
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             onClick={handleNext}
             disabled={providerLoading || toolLoading || loading}
           >
             {activeStep === STEPS.CONFIGURE_TOOL ? 'Create Tool' : 'Next'}
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </DialogActions>
     </Dialog>

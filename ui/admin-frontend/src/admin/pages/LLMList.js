@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,7 +25,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import InfoTooltip from "../components/common/InfoTooltip";
@@ -178,13 +177,13 @@ const LLMList = () => {
             <Typography variant="h5">LLMs</Typography>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddLLM}
           >
             Add LLM
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           {llms.length === 0 ? (

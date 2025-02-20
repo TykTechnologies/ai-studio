@@ -4,12 +4,9 @@ import apiClient from "../../utils/apiClient";
 import {
   Typography,
   CircularProgress,
-  Box,
   Table,
   TableBody,
   TableHead,
-  Button,
-  Stack,
   Paper,
   TableRow
 } from "@mui/material";
@@ -17,7 +14,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   StyledPaper,
@@ -134,13 +131,13 @@ const UserMessageLog = () => {
         <Typography variant="h5" fontWeight="bold">
           Chat Log
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate(-1)}
           color="primary"
         >
           Back
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Paper elevation={3} sx={{ p: 2, mb: 3 }}>

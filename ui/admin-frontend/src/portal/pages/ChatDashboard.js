@@ -20,7 +20,7 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
 import pubClient from "../../admin/utils/pubClient";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
@@ -169,12 +169,12 @@ const ChatDashboard = () => {
                       </Box>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
-                      <StyledButtonLink
+                      <SecondaryLinkButton
                         onClick={() => handleStartNewChat(chat.id)}
                         endIcon={<ArrowForwardIcon />}
                       >
                         Start Chat
-                      </StyledButtonLink>
+                      </SecondaryLinkButton>
                     </CardActions>
                   </Card>
                 </Grid>
@@ -201,7 +201,7 @@ const ChatDashboard = () => {
                   <StyledTableRow key={record.id}>
                     <StyledTableCell>{record.attributes.name}</StyledTableCell>
                     <StyledTableCell align="right">
-                      <StyledButtonLink
+                      <SecondaryLinkButton
                         onClick={() =>
                           handleContinueChat(
                             record.attributes.chat_id,
@@ -211,7 +211,7 @@ const ChatDashboard = () => {
                         endIcon={<ArrowForwardIcon />}
                       >
                         Continue
-                      </StyledButtonLink>
+                      </SecondaryLinkButton>
                     </StyledTableCell>
                   </StyledTableRow>
                 ))}

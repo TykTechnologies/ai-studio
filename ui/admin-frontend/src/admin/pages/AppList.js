@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,7 +25,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -170,13 +169,13 @@ const AppList = () => {
             <InfoTooltip title="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources." />
             <Typography variant="h5">Apps</Typography>
           </Box>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddApp}
           >
             Add App
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {apps.length === 0 ? (

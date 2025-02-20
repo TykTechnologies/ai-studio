@@ -23,10 +23,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const CatalogueForm = () => {
@@ -188,14 +188,14 @@ const CatalogueForm = () => {
         <Typography variant="h5">
           {id ? "Edit Catalog" : "Create New Catalog"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/llms"
           color="inherit"
         >
           Back to Catalogs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -257,9 +257,9 @@ const CatalogueForm = () => {
           </Box>
 
           <Box mt={3}>
-            <StyledButton type="submit" variant="contained" color="primary">
+            <PrimaryButton type="submit" variant="contained" color="primary">
               {id ? "Update Catalog" : "Create Catalog"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

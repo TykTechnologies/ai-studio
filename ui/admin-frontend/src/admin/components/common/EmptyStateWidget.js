@@ -1,7 +1,7 @@
 import React from "react";
 import { Paper, Typography, Box } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import { StyledButton } from "../../styles/sharedStyles";
+import { PrimaryButton } from "../../styles/sharedStyles";
 
 const EmptyStateWidget = ({
   title,
@@ -28,13 +28,13 @@ const EmptyStateWidget = ({
       {description}
     </Typography>
     <Box mt={2}>
-      <StyledButton
+      <PrimaryButton
         variant="contained"
         startIcon={buttonIcon}
         onClick={onButtonClick}
       >
         {buttonText}
-      </StyledButton>
+      </PrimaryButton>
     </Box>
   </Paper>
 );

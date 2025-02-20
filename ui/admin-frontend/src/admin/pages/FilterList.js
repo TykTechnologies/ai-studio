@@ -25,7 +25,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -152,13 +152,13 @@ const FilterList = () => {
             <Typography variant="h5">Filters</Typography>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddFilter}
           >
             Add Filter
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {filters.length === 0 ? (

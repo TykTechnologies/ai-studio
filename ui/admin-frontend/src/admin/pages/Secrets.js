@@ -10,7 +10,6 @@ import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -30,7 +29,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 
 const Secrets = () => {
@@ -190,13 +189,13 @@ const Secrets = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Secrets</Typography>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddSecret}
         >
           Add Secret
-        </StyledButton>
+        </PrimaryButton>
       </TitleBox>
       <ContentBox>
         {secrets.length === 0 ? (

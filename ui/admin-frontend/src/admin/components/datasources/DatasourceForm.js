@@ -17,7 +17,6 @@ import {
   InputAdornment,
   IconButton,
   Tooltip,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
   Chip,
@@ -39,12 +38,12 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import {
   getVendorData,
@@ -335,14 +334,14 @@ const DatasourceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Datasource" : "Add Datasource"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/datasources"
           color="inherit"
         >
           Back to Datasources
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -750,13 +749,13 @@ const DatasourceForm = () => {
                 />
 
                 <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                  <StyledButtonPrimaryOutlined
+                  <PrimaryOutlineButton
                     variant="contained"
                     startIcon={<CloudUploadIcon />}
                     onClick={() => fileInputRef.current.click()}
                   >
                     Upload Additional Datasource Documentation
-                  </StyledButtonPrimaryOutlined>
+                  </PrimaryOutlineButton>
 
                   <Button
                     variant="contained"
@@ -773,9 +772,9 @@ const DatasourceForm = () => {
           )}
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update Datasource" : "Add Datasource"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

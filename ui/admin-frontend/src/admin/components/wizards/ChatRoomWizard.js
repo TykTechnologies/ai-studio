@@ -1,8 +1,5 @@
 import React, { useState } from "react";
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
   Button,
   Stepper,
@@ -22,9 +19,9 @@ import {
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
-  StyledButton,
-  StyledButtonLink,
-  StyledButtonPrimaryOutlined
+  PrimaryButton,
+  SecondaryLinkButton,
+  PrimaryOutlineButton
 } from "../../styles/sharedStyles";
 
 import { getVendorCodes, getVendorName } from "../../utils/vendorLogos";
@@ -360,7 +357,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                   <Typography variant="h6" gutterBottom>
                     Chat Room Created Successfully!
                   </Typography>
-                  <StyledButtonPrimaryOutlined
+                  <PrimaryOutlineButton
                     variant="contained"
                     color="primary"
                     onClick={() => {
@@ -372,7 +369,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                     }}
                   >
                     Take me to this Chat Room
-                  </StyledButtonPrimaryOutlined>
+                  </PrimaryOutlineButton>
                 </Box>
               );
             default:
@@ -404,7 +401,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
       <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
         <Box>
           {activeStep !== steps.length - 1 && (
-            <StyledButtonLink onClick={onClose}>Cancel</StyledButtonLink>
+            <SecondaryLinkButton onClick={onClose}>Cancel</SecondaryLinkButton>
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -414,25 +411,25 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
             </Button>
           )}
           {activeStep === steps.length - 1 ? (
-            <StyledButton onClick={onClose} variant="contained" color="primary">
+            <PrimaryButton onClick={onClose} variant="contained" color="primary">
               Close
-            </StyledButton>
+            </PrimaryButton>
           ) : activeStep === steps.length - 2 ? (
-            <StyledButton
+            <PrimaryButton
               onClick={handleSubmit}
               variant="contained"
               color="primary"
             >
               Create Chat Room
-            </StyledButton>
+            </PrimaryButton>
           ) : (
-            <StyledButton
+            <PrimaryButton
               onClick={handleNext}
               variant="contained"
               color="primary"
             >
               Next
-            </StyledButton>
+            </PrimaryButton>
           )}
         </Box>
       </DialogActions>

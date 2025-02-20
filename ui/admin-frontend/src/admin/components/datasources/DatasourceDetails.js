@@ -6,13 +6,10 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   IconButton,
   Tooltip,
   Link,
-  Divider,
   Chip,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
 } from "@mui/material";
@@ -23,14 +20,14 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import {
   getVectorStoreName,
@@ -133,13 +130,13 @@ const DatasourceDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Datasource Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/datasources")}
           color="inherit"
         >
           Back to Datasources
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Basic Information</SectionTitle>
@@ -428,21 +425,21 @@ const DatasourceDetails = () => {
         >
           <Typography color="success.main">{copySuccess}</Typography>
           <Box display="flex" gap={2}>
-            <StyledButtonPrimaryOutlined
+            <PrimaryOutlineButton
               variant="contained"
               color="secondary"
               onClick={handleCloneDataSource}
               startIcon={<ContentCopyIcon />}
             >
               Clone This Data Source
-            </StyledButtonPrimaryOutlined>
-            <StyledButton
+            </PrimaryOutlineButton>
+            <PrimaryButton
               variant="contained"
               startIcon={<EditIcon />}
               onClick={() => navigate(`/admin/datasources/edit/${id}`)}
             >
               Edit Datasource
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

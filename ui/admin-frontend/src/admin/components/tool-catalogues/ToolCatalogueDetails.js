@@ -6,24 +6,21 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   Chip,
   List,
   ListItem,
   ListItemText,
   Divider,
-  Tooltip
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const SectionTitle = ({ children }) => (
@@ -63,13 +60,13 @@ const ToolCatalogueDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Tool Catalog Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
           Back to Tool Catalogs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Catalog Description</SectionTitle>
@@ -143,13 +140,13 @@ const ToolCatalogueDetails = () => {
           justifyContent="flex-end"
           alignItems="center"
         >
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/catalogs/tools/edit/${id}`)}
           >
             Edit Tool Catalog
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

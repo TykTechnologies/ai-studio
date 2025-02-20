@@ -5,7 +5,6 @@ import {
   Typography,
   CircularProgress,
   Box,
-  Button,
   Grid,
   List,
   ListItem,
@@ -15,12 +14,12 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const SectionTitle = ({ children }) => (
@@ -72,14 +71,14 @@ const CatalogueDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Catalog Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/llms"
           color="inherit"
         >
           Back to Catalogs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Catalog Information</SectionTitle>
@@ -126,13 +125,13 @@ const CatalogueDetails = () => {
         </List>
 
         <Box mt={4}>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/catalogs/llms/edit/${id}`)}
           >
             Edit Catalog
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

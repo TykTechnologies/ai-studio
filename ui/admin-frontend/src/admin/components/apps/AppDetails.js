@@ -13,11 +13,8 @@ import {
   Chip,
   Table,
   TableBody,
-  TableCell,
-  TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Snackbar,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
@@ -36,17 +33,17 @@ import {
 } from "chart.js";
 import "chartjs-adapter-date-fns";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
   StyledPaper,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import DateRangePicker from "../common/DateRangePicker";
 import PaginationControls from "../common/PaginationControls";
@@ -419,13 +416,13 @@ const AppDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">App Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/apps")}
           color="inherit"
         >
           Back to Apps
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>
@@ -561,13 +558,13 @@ const AppDetails = () => {
               {!credential.attributes.active && (
                 <Grid item xs={12}>
                   <Box mt={2}>
-                    <StyledButtonPrimaryOutlined
+                    <PrimaryOutlineButton
                       variant="contained"
                       color="primary"
                       onClick={handleApproveApp}
                     >
                       Approve this App
-                    </StyledButtonPrimaryOutlined>
+                    </PrimaryOutlineButton>
                   </Box>
                 </Grid>
               )}
@@ -648,13 +645,13 @@ const AppDetails = () => {
           justifyContent="space-between"
           alignItems="center"
         >
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/apps/edit/${id}`)}
           >
             Edit App
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
       <Snackbar

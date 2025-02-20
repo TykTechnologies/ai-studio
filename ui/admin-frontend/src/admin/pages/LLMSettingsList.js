@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,7 +25,7 @@ import {
   StyledTableHeaderCell,
   StyledTableCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -153,13 +152,13 @@ const LLMSettingsList = () => {
             <Typography variant="h5">LLM Call Settings</Typography>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddSetting}
           >
             Add LLM Call Setting
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {llmSettings.length === 0 ? (

@@ -17,7 +17,7 @@ import {
   CardContent,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
-import { StyledButton } from "../../admin/styles/sharedStyles";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
 const AppBuilder = () => {
   const [appName, setAppName] = useState("My New App");
@@ -155,13 +155,13 @@ const AppBuilder = () => {
         <Typography variant="body1" paragraph>
           Your app has been successfully submitted for approval.
         </Typography>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           color="primary"
           onClick={() => navigate("/portal/apps")}
         >
           View your Apps and Credentials
-        </StyledButton>
+        </PrimaryButton>
       </Container>
     );
   }
@@ -280,7 +280,7 @@ const AppBuilder = () => {
               compatible. Once your App has been approved, you will be able to
               start building your app using the credentials provided.
             </Alert>
-            <StyledButton
+            <PrimaryButton
               type="submit"
               variant="contained"
               color="primary"
@@ -288,7 +288,7 @@ const AppBuilder = () => {
               sx={{ mt: 2 }}
             >
               Create App
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </CardContent>
       </Card>

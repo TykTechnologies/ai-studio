@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   FormControl,
   InputLabel,
@@ -28,10 +27,10 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
 import {
@@ -248,14 +247,14 @@ const LLMForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit LLM" : "Add LLM"}</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llms"
           color="inherit"
         >
           Back to LLMs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -588,9 +587,9 @@ const LLMForm = () => {
           </StyledAccordion>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update LLM" : "Add LLM"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

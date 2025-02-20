@@ -6,7 +6,6 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   Divider,
   Tooltip,
   List,
@@ -17,12 +16,12 @@ import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const SectionTitle = ({ children }) => (
@@ -70,13 +69,13 @@ const ToolDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Tool Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/tools")}
           color="inherit"
         >
           Back to Tools
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Tool Information</SectionTitle>
@@ -176,13 +175,13 @@ const ToolDetails = () => {
         </Grid>
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/tools/edit/${id}`)}
           >
             Edit Tool
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>
