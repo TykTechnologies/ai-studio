@@ -201,3 +201,32 @@ func TestModelPriceEndpointsErrors(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, emptyResponse["data"], 0)
 }
+
+func TestGetOrCreateModelPriceByName(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Test getting non-existent model price (should create new)
+	w := performRequest(api.router, "GET", "/api/v1/model-prices/by-name?model_name=GPT-4", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]ModelPriceResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "GPT-4", response["data"].Attributes.ModelName)
+	assert.Equal(t, 0.0, response["data"].Attributes.CPT)
+	assert.Equal(t, 0.0, response["data"].Attributes.CPIT)
+	assert.Equal(t, "USD", response["data"].Attributes.Currency)
+
+	// Test getting existing model price
+	w = performRequest(api.router, "GET", "/api/v1/model-prices/by-name?model_name=GPT-4", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var existingResponse map[string]ModelPriceResponse
+	err = json.Unmarshal(w.Body.Bytes(), &existingResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, response["data"].ID, existingResponse["data"].ID) // Should return same model price
+
+	// Test with missing model name
+	w = performRequest(api.router, "GET", "/api/v1/model-prices/by-name", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}

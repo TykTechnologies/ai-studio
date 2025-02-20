@@ -91,6 +91,16 @@ func (s *Service) GetModelPriceByModelName(modelName string) (*models.ModelPrice
 	return modelPrice, nil
 }
 
+// GetOrCreateModelPriceByName retrieves a model price by its name, creating it with default values if it doesn't exist
+func (s *Service) GetOrCreateModelPriceByName(modelName string) (*models.ModelPrice, error) {
+	modelPrice := &models.ModelPrice{}
+	err := modelPrice.GetOrCreateByModelName(s.DB, modelName)
+	if err != nil {
+		return nil, err
+	}
+	return modelPrice, nil
+}
+
 // GetModelPriceByModelNameAndVendor retrieves a model price by its model name and vendor
 func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
 	modelPrice := &models.ModelPrice{}

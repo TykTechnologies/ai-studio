@@ -68,6 +68,20 @@ func (mp *ModelPrice) GetByModelName(db *gorm.DB, modelName string) error {
 	return db.Where("model_name = ?", modelName).First(mp).Error
 }
 
+// GetOrCreateByModelName retrieves a ModelPrice by its model name, or creates it if not found
+func (mp *ModelPrice) GetOrCreateByModelName(db *gorm.DB, modelName string) error {
+	err := mp.GetByModelName(db, modelName)
+	if err == gorm.ErrRecordNotFound {
+		// Initialize new model price with default values
+		mp.ModelName = modelName
+		mp.CPT = 0.0        // Default CPT
+		mp.CPIT = 0.0       // Default CPIT
+		mp.Currency = "USD" // Default currency
+		return mp.Create(db)
+	}
+	return err
+}
+
 // GetByModelNameAndVendor retrieves a ModelPrice by its model name and vendor
 func (mp *ModelPrice) GetByModelNameAndVendor(db *gorm.DB, modelName string, vendor string) error {
 	return db.Where("model_name = ? AND vendor = ?", modelName, vendor).First(mp).Error

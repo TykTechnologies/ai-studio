@@ -49,6 +49,7 @@ The **Midsommar Budget Control System** enables organizations to define and enfo
 2. **Usage Tracking**
    - Each request logs cost in `llm_chat_records`.
    - The Proxy calculates cost from `model_prices` and writes DB records.
+   - If a model price doesn't exist for a given model, it's automatically created with default values (0.0 CPT/CPIT in USD) to ensure tracking can continue.
 
 3. **Blocking Logic**
    - If usage meets or exceeds 100% of the assigned budget, respond with HTTP 403:
