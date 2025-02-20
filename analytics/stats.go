@@ -790,17 +790,17 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	// Get LLM usage with proper handling of NULL and 0 values
 	llmQuery := db.Table("llm_chat_records").
 		Select(`
-			MIN(llm_chat_records.llm_id) AS llm_id,
+			llm_chat_records.llm_id,
 			COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown') AS name,
 			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
 			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
 			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
-			MAX(llms.monthly_budget) AS monthly_budget,
-			MAX(llms.budget_start_date) AS budget_start_date
+			llms.monthly_budget,
+			llms.budget_start_date
 	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-		Group("COALESCE(NULLIF(llm_chat_records.vendor, ''), 'Unknown')")
+		Group("llm_chat_records.llm_id, COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown'), llms.monthly_budget, llms.budget_start_date")
 
 	if llmID != nil {
 		llmQuery = llmQuery.Where("llms.id = ?", *llmID)
@@ -826,12 +826,12 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
         SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
         SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
         SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
-        MAX(apps.monthly_budget) AS monthly_budget,
-        MAX(apps.budget_start_date) AS budget_start_date
+        apps.monthly_budget,
+        apps.budget_start_date
     `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Unknown')").
+		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Unknown'), apps.monthly_budget, apps.budget_start_date").
 		Find(&appStats).Error; err != nil {
 		return nil, err
 	}
