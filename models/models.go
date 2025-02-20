@@ -5,7 +5,22 @@ import (
 	"gorm.io/gorm"
 )
 
+func cleanupDuplicateModelPrices(db *gorm.DB) error {
+	// Delete duplicates keeping the oldest record for each model_name + vendor combination
+	return db.Exec(`
+		DELETE FROM model_prices 
+		WHERE id NOT IN (
+			SELECT MIN(id)
+			FROM (SELECT * FROM model_prices) as mp
+			GROUP BY model_name, vendor
+		)
+	`).Error
+}
+
 func InitModels(db *gorm.DB) error {
+	// First clean up any duplicate model prices before adding the unique constraint
+	cleanupDuplicateModelPrices(db)
+
 	err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done
