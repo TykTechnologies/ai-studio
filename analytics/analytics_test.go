@@ -76,7 +76,7 @@ func TestRecordContentMessage(t *testing.T) {
 
 	svc := services.NewService(db)
 
-	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, now, svc)
+	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, 1, now, svc)
 
 	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestName")
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestCostCalculation(t *testing.T) {
 			}
 
 			if tt.interactionType == models.ChatInteraction {
-				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, 1, now, mockService)
 			} else {
 				// For proxy interaction, we need to calculate the cost using the same price model
 				price, err := mockService.GetModelPriceByModelNameAndVendor("TestModel", string(models.OPENAI))
@@ -321,7 +321,7 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 		},
 	}
 
-	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, 1, now, mockService)
 
 	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestModel")
 	require.NoError(t, err)

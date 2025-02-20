@@ -59,7 +59,7 @@ func RecordContentMessage(
 	cr *llms.ContentResponse,
 	vendor models.Vendor,
 	name, chatID string,
-	timeMs int, userID, appID uint,
+	timeMs int, userID, appID, llmID uint,
 	t time.Time,
 	svc services.ServiceInterface,
 ) {
@@ -138,6 +138,7 @@ func RecordContentMessage(
 	rec.Cost = cpt*float64(responseTokens) + cpit*float64(promptTokens)
 	rec.Currency = price.Currency
 	rec.InteractionType = models.ChatInteraction
+	rec.LLMID = llmID
 
 	// LLM Response
 	chatLog := &models.LLMChatLogEntry{}
