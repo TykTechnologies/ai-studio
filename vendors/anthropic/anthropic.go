@@ -34,7 +34,9 @@ func (v *Anthropic) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	dat := choice.GenerationInfo
 	promptTokens = helpers.KeyValueOrZero(dat, "InputTokens")
 	responseTokens = helpers.KeyValueOrZero(dat, "OutputTokens")
-	totalTokens = promptTokens + responseTokens
+	cacheWriteTokens := helpers.KeyValueOrZero(dat, "CacheCreationInputTokens")
+	cacheReadTokens := helpers.KeyValueOrZero(dat, "CacheReadInputTokens")
+	totalTokens = promptTokens + responseTokens + cacheWriteTokens + cacheReadTokens
 
 	return totalTokens, promptTokens, responseTokens
 }
@@ -79,6 +81,8 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 		"llm_id":   llm.ID,
 	}).Debug("Analyzing streaming response")
 
+	var startMsg *responses.AnthropicStreamingChunkStart
+
 	asStr := string(resps)
 	parts := strings.Split(asStr, "\n")
 	logrus.WithField("parts_count", len(parts)).Debug("Split response into parts")
@@ -99,7 +103,7 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 		if ok {
 			switch tp {
 			case "message_start":
-				startMsg := &responses.AnthropicStreamingChunkStart{}
+				startMsg = &responses.AnthropicStreamingChunkStart{}
 				err := json.Unmarshal([]byte(body), startMsg)
 				if err != nil {
 					return nil, nil, nil, err
@@ -112,6 +116,8 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 
 				aggregate.PromptTokens = startMsg.Message.Usage.InputTokens
 				aggregate.Model = startMsg.Message.Model
+				aggregate.CacheWritePromptTokens = startMsg.Message.Usage.CacheCreationInputTokens
+				aggregate.CacheReadPromptTokens = startMsg.Message.Usage.CacheReadInputTokens
 
 			case "message_delta":
 				deltaMsg := &responses.AnthropicStreamingChunkDelta{}
@@ -122,6 +128,11 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 
 				logrus.WithField("output_tokens", deltaMsg.Usage.OutputTokens).Debug("Processing message_delta")
 
+				// For streaming, we need to add both the initial output token from message_start
+				// and the delta output tokens
+				if startMsg != nil && aggregate.CompletionTokens == 0 {
+					aggregate.CompletionTokens = startMsg.Message.Usage.OutputTokens
+				}
 				aggregate.CompletionTokens += deltaMsg.Usage.OutputTokens
 
 			case "content_block_start":

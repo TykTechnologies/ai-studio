@@ -46,6 +46,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import IconButton from "@mui/material/IconButton";
@@ -59,6 +60,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
+  Filler,
 );
 
 const NoDataMessage = ({ message }) => (
@@ -146,6 +148,7 @@ const Dashboard = () => {
   const [toolUsageData, setToolUsageData] = useState(null);
   const [userActivityData, setUserActivityData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState([]);
+  const [tokenUsageData, setTokenUsageData] = useState(null);
 
   const [llms, setLLMs] = useState([]);
   const [llmsLoading, setLLMsLoading] = useState(true);
@@ -200,6 +203,7 @@ const Dashboard = () => {
         toolUsageResponse,
         userActivityResponse,
         budgetUsageResponse,
+        tokenUsageResponse,
       ] = await Promise.all([
         apiClient.get("/analytics/chat-records-per-day", {
           params: {
@@ -242,6 +246,12 @@ const Dashboard = () => {
             end_date: endDate,
           },
         }),
+        apiClient.get("/analytics/usage", {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+          },
+        }),
       ]);
 
       setChatData(chatDataResponse.data);
@@ -250,6 +260,7 @@ const Dashboard = () => {
       setToolUsageData(toolUsageResponse.data);
       setUserActivityData(userActivityResponse.data);
       setBudgetUsageData(budgetUsageResponse.data || []);
+      setTokenUsageData(tokenUsageResponse.data);
     } catch (error) {
       console.error("Error fetching data:", error);
       if (error.response) {
@@ -270,6 +281,7 @@ const Dashboard = () => {
       setToolUsageData(null);
       setUserActivityData(null);
       setBudgetUsageData([]); // Ensure it's always an array
+      setTokenUsageData(null);
     } finally {
       setLLMsLoading(false);
       setChatsLoading(false);
@@ -607,6 +619,70 @@ const Dashboard = () => {
                     />
                   ) : (
                     <NoDataMessage message="No cost analysis data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
+              <Grid item xs={12}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Token Usage Over Time
+                  </Typography>
+                  {tokenUsageData ? (
+                    <MemoizedLineChart
+                      options={{
+                        ...chartOptions,
+                        plugins: {
+                          ...chartOptions.plugins,
+                          tooltip: {
+                            mode: 'index',
+                          },
+                        },
+                        scales: {
+                          x: {
+                            stacked: true,
+                          },
+                          y: {
+                            stacked: true,
+                            beginAtZero: true,
+                          },
+                        },
+                      }}
+                      data={{
+                        labels: tokenUsageData.labels,
+                        datasets: [
+                          {
+                            label: "Prompt Tokens",
+                            data: tokenUsageData.datasets[2].data,
+                            borderColor: "rgb(53, 162, 235)",
+                            backgroundColor: "rgba(53, 162, 235, 0.5)",
+                            fill: true,
+                          },
+                          {
+                            label: "Response Tokens",
+                            data: tokenUsageData.datasets[3].data,
+                            borderColor: "rgb(75, 192, 192)",
+                            backgroundColor: "rgba(75, 192, 192, 0.5)",
+                            fill: true,
+                          },
+                          {
+                            label: "Cache Write Tokens",
+                            data: tokenUsageData.datasets[4].data,
+                            borderColor: "rgb(255, 159, 64)",
+                            backgroundColor: "rgba(255, 159, 64, 0.5)",
+                            fill: true,
+                          },
+                          {
+                            label: "Cache Read Tokens",
+                            data: tokenUsageData.datasets[5].data,
+                            borderColor: "rgb(153, 102, 255)",
+                            backgroundColor: "rgba(153, 102, 255, 0.5)",
+                            fill: true,
+                          },
+                        ],
+                      }}
+                    />
+                  ) : (
+                    <NoDataMessage message="No token usage data available for the selected period." />
                   )}
                 </ChartPaper>
               </Grid>

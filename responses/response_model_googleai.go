@@ -20,9 +20,10 @@ type GoogleAIChatResponse struct {
 		} `json:"safetyRatings"`
 	} `json:"candidates"`
 	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		TotalTokenCount      int `json:"totalTokenCount"`
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+		TotalTokenCount         int `json:"totalTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount"`
 	} `json:"usageMetadata"`
 	Model string `json:"model"`
 }
@@ -80,7 +81,7 @@ type GoogleAIStreamChunk struct {
 // 	} `json:"promptFeedback"`
 // 	UsageMetadata struct {
 // 		PromptTokenCount        int `json:"promptTokenCount"`
-// 		CachedContentTokenCount int `json:"cachedContentTokenCount"`
+// 		CachedContentTokenCount int `json:"	ContentTokenCount"`
 // 		CandidatesTokenCount    int `json:"candidatesTokenCount"`
 // 		TotalTokenCount         int `json:"totalTokenCount"`
 // 	} `json:"usageMetadata"`
@@ -117,4 +118,12 @@ func (o *GoogleAIChatResponse) GetModel() string {
 
 func (o *GoogleAIChatResponse) SetModel(name string) {
 	o.Model = name
+}
+
+func (o *GoogleAIChatResponse) GetCacheWritePromptTokens() int {
+	return 0 // Google AI doesn't distinguish between write/read cache tokens
+}
+
+func (o *GoogleAIChatResponse) GetCacheReadPromptTokens() int {
+	return o.UsageMetadata.CachedContentTokenCount // All cache tokens are considered read tokens
 }

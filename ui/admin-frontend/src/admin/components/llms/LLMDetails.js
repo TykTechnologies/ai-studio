@@ -226,7 +226,7 @@ const LLMDetails = () => {
   const fetchVendorUsage = async () => {
     try {
       const [usageResponse, budgetResponse] = await Promise.all([
-        apiClient.get(`/analytics/vendor-usage`, {
+        apiClient.get(`/analytics/usage`, {
           params: {
             start_date: startDate,
             end_date: endDate,
@@ -318,6 +318,7 @@ const LLMDetails = () => {
           display: true,
           text: "Date",
         },
+        stacked: true,
       },
       y: {
         beginAtZero: true,
@@ -325,6 +326,7 @@ const LLMDetails = () => {
           display: true,
           text: "Token Usage",
         },
+        stacked: true,
       },
     },
     plugins: {
@@ -334,6 +336,9 @@ const LLMDetails = () => {
       title: {
         display: true,
         text: "Token Usage Over Time",
+      },
+      tooltip: {
+        mode: 'index',
       },
     },
   }), []);
@@ -375,10 +380,32 @@ const LLMDetails = () => {
     labels: vendorUsageData?.labels || [],
     datasets: [
       {
-        label: "Token Usage",
-        data: vendorUsageData?.data || [], // Backend uses 'data' for token usage
+        label: "Prompt Tokens",
+        data: vendorUsageData?.datasets[2]?.data || [],
+        borderColor: "rgb(53, 162, 235)",
+        backgroundColor: "rgba(53, 162, 235, 0.5)",
+        fill: true,
+      },
+      {
+        label: "Response Tokens",
+        data: vendorUsageData?.datasets[3]?.data || [],
         borderColor: "rgb(75, 192, 192)",
-        tension: 0.1,
+        backgroundColor: "rgba(75, 192, 192, 0.5)",
+        fill: true,
+      },
+      {
+        label: "Cache Write Tokens",
+        data: vendorUsageData?.datasets[4]?.data || [],
+        borderColor: "rgb(255, 159, 64)",
+        backgroundColor: "rgba(255, 159, 64, 0.5)",
+        fill: true,
+      },
+      {
+        label: "Cache Read Tokens",
+        data: vendorUsageData?.datasets[5]?.data || [],
+        borderColor: "rgb(153, 102, 255)",
+        backgroundColor: "rgba(153, 102, 255, 0.5)",
+        fill: true,
       },
     ],
   }), [vendorUsageData]);
@@ -387,8 +414,7 @@ const LLMDetails = () => {
     labels: vendorUsageData?.labels || [],
     datasets: [
       {
-        label: "Cost",
-        data: vendorUsageData?.cost || [], // Match the backend's JSON tag
+        ...vendorUsageData?.datasets[1] || { data: [] },
         borderColor: "rgb(255, 99, 132)",
         tension: 0.1,
       },
@@ -676,6 +702,10 @@ const LLMDetails = () => {
                       <TableCell>Model</TableCell>
                       <TableCell align="right">Total Tokens</TableCell>
                       <TableCell align="right">Total Cost</TableCell>
+                      <TableCell align="right">Cache Write Tokens</TableCell>
+                      <TableCell align="right">Cache Write Cost</TableCell>
+                      <TableCell align="right">Cache Read Tokens</TableCell>
+                      <TableCell align="right">Cache Read Cost</TableCell>
                       <TableCell>Currency</TableCell>
                     </TableRow>
                   </TableHead>
@@ -687,6 +717,10 @@ const LLMDetails = () => {
                           <TableCell>{row.model}</TableCell>
                           <TableCell align="right">{row.totalTokens.toLocaleString()}</TableCell>
                           <TableCell align="right">{row.totalCost.toFixed(2)}</TableCell>
+                          <TableCell align="right">{row.cacheWriteTokens?.toLocaleString() || 0}</TableCell>
+                          <TableCell align="right">{row.cacheWriteCost?.toFixed(2) || "0.00"}</TableCell>
+                          <TableCell align="right">{row.cacheReadTokens?.toLocaleString() || 0}</TableCell>
+                          <TableCell align="right">{row.cacheReadCost?.toFixed(2) || "0.00"}</TableCell>
                           <TableCell>{row.currency}</TableCell>
                         </TableRow>
                       ))}

@@ -123,6 +123,29 @@ func RecordContentMessage(
 		}
 	}
 
+	// Get cache token information from the response if available
+	if len(cr.Choices) > 0 && cr.Choices[0].GenerationInfo != nil {
+		// Log the keys in GenerationInfo for debugging
+		slog.Info("GenerationInfo keys", "keys", cr.Choices[0].GenerationInfo)
+
+		// Try int first, then float64
+		if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(int); ok {
+			rec.CacheWritePromptTokens = cacheWrite
+			slog.Info("Cache write tokens (int)", "value", rec.CacheWritePromptTokens)
+		} else if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(float64); ok {
+			rec.CacheWritePromptTokens = int(cacheWrite)
+			slog.Info("Cache write tokens (float64)", "value", rec.CacheWritePromptTokens)
+		}
+
+		if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(int); ok {
+			rec.CacheReadPromptTokens = cacheRead
+			slog.Info("Cache read tokens (int)", "value", rec.CacheReadPromptTokens)
+		} else if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(float64); ok {
+			rec.CacheReadPromptTokens = int(cacheRead)
+			slog.Info("Cache read tokens (float64)", "value", rec.CacheReadPromptTokens)
+		}
+	}
+
 	rec.Choices = len(cr.Choices)
 	// Use provided model name if available, fallback to price model name
 	if name != "" {
@@ -140,7 +163,11 @@ func RecordContentMessage(
 	rec.ToolCalls = toolCalls
 	rec.ChatID = chatID
 	rec.AppID = appID
-	rec.Cost = cpt*float64(responseTokens) + cpit*float64(promptTokens)
+	// Calculate cost including cache tokens
+	rec.Cost = cpt*float64(responseTokens) +
+		cpit*float64(promptTokens) +
+		price.CacheWritePT*float64(rec.CacheWritePromptTokens) +
+		price.CacheReadPT*float64(rec.CacheReadPromptTokens)
 	rec.Currency = price.Currency
 	rec.InteractionType = models.ChatInteraction
 	rec.LLMID = llmID
@@ -259,6 +286,8 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 				err := db.Create(record).Error
 				if err != nil {
 					slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
+				} else {
+					slog.Info("created chat record", record, record.TimeStamp)
 				}
 			case log := <-logEntryChan:
 				err := db.Create(log).Error

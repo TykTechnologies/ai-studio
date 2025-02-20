@@ -67,6 +67,8 @@ func (a *API) createModelPrice(c *gin.Context) {
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
 		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
@@ -160,6 +162,8 @@ func (a *API) updateModelPrice(c *gin.Context) {
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
 		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
@@ -280,17 +284,21 @@ func serializeModelPrice(mp *models.ModelPrice) ModelPriceResponse {
 		Type: "model-prices",
 		ID:   strconv.FormatUint(uint64(mp.ID), 10),
 		Attributes: struct {
-			ModelName string  `json:"model_name"`
-			Vendor    string  `json:"vendor"`
-			CPT       float64 `json:"cpt"`
-			CPIT      float64 `json:"cpit"`
-			Currency  string  `json:"currency"`
+			ModelName    string  `json:"model_name"`
+			Vendor       string  `json:"vendor"`
+			CPT          float64 `json:"cpt"`
+			CPIT         float64 `json:"cpit"`
+			CacheWritePT float64 `json:"cache_write_pt"`
+			CacheReadPT  float64 `json:"cache_read_pt"`
+			Currency     string  `json:"currency"`
 		}{
-			ModelName: mp.ModelName,
-			Vendor:    mp.Vendor,
-			CPT:       mp.CPT,
-			CPIT:      mp.CPIT,
-			Currency:  mp.Currency,
+			ModelName:    mp.ModelName,
+			Vendor:       mp.Vendor,
+			CPT:          mp.CPT,
+			CPIT:         mp.CPIT,
+			CacheWritePT: mp.CacheWritePT,
+			CacheReadPT:  mp.CacheReadPT,
+			Currency:     mp.Currency,
 		},
 	}
 }
@@ -354,6 +362,8 @@ func (a *API) updateModelPriceAndRecalculate(c *gin.Context) {
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
 		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
