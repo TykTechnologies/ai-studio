@@ -471,6 +471,7 @@ const Dashboard = () => {
             <TableRow>
               <StyledTableCell>Name</StyledTableCell>
               <StyledTableCell align="right">Total Cost</StyledTableCell>
+              <StyledTableCell align="right">Total Tokens</StyledTableCell>
               <StyledTableCell align="right">Budget</StyledTableCell>
             </TableRow>
           </TableHead>
@@ -478,12 +479,15 @@ const Dashboard = () => {
             {items.map((item, index) => (
               <StyledTableRow key={index}>
                 <StyledTableCell>
-                  <StyledLink to={`/admin/${(item.type || "").toLowerCase()}s/${item.entity_id || 0}`}>
+                  <StyledLink to={`/admin/${(item.entity_type || "").toLowerCase()}s/${item.entity_id || 0}`}>
                     {item.name}
                   </StyledLink>
                 </StyledTableCell>
                 <StyledTableCell align="right">
                   ${parseFloat(item.totalCost || 0).toFixed(2)}
+                </StyledTableCell>
+                <StyledTableCell align="right">
+                  {item.total_tokens ? item.total_tokens.toLocaleString() : '0'}
                 </StyledTableCell>
                 <StyledTableCell align="right">
                   {formatBudgetDisplay(item)}
@@ -603,11 +607,11 @@ const Dashboard = () => {
                 {Array.isArray(budgetUsageData) && budgetUsageData.length > 0 ? (
                   <>
                     {renderBudgetTable(
-                      budgetUsageData.filter(item => item.type === "LLM"),
+                      budgetUsageData.filter(item => item.entity_type === "LLM"),
                       "LLM Costs"
                     )}
                     {renderBudgetTable(
-                      budgetUsageData.filter(item => item.type === "App"),
+                      budgetUsageData.filter(item => item.entity_type === "App"),
                       "Application Costs"
                     )}
                   </>
