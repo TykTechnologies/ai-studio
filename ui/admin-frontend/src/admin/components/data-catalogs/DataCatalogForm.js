@@ -24,10 +24,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const DataCatalogForm = () => {
@@ -223,14 +223,14 @@ const DataCatalogForm = () => {
         <Typography variant="h5">
           {id ? "Edit Data Catalog" : "Create New Data Catalog"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/data"
           color="inherit"
         >
           Back to Data Catalogs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -358,9 +358,9 @@ const DataCatalogForm = () => {
             </Button>
           </Box>
           <Box mt={3}>
-            <StyledButton type="submit" variant="contained" color="primary">
+            <PrimaryButton type="submit" variant="contained" color="primary">
               {id ? "Update Data Catalog" : "Create Data Catalog"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

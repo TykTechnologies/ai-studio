@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,7 +25,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -186,13 +185,13 @@ const ChatList = () => {
             <Typography variant="h5">Chat Rooms</Typography>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddChat}
           >
             Add Chat Room
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {chats.length === 0 ? (

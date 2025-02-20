@@ -28,7 +28,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
@@ -205,13 +205,13 @@ const ModelPriceList = () => {
             <Typography variant="h5">Model Prices</Typography>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddPrice}
           >
             Add Model Price
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {modelPrices.length === 0 ? (
@@ -350,9 +350,9 @@ const ModelPriceList = () => {
           <Button onClick={handleCloseUpdatePriceModal}>
             Cancel
           </Button>
-          <StyledButton onClick={handleUpdatePrice} color="primary">
+          <PrimaryButton onClick={handleUpdatePrice} color="primary">
             Update
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
-import { TextField, Button, Typography, CircularProgress, Link } from "@mui/material";
+import { TextField, Typography, CircularProgress } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const GroupForm = () => {
@@ -72,13 +72,13 @@ const GroupForm = () => {
         <Typography variant="h5">
           {id ? "Edit Group" : "Create Group"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <form onSubmit={handleSubmit}>
@@ -95,7 +95,7 @@ const GroupForm = () => {
               {error}
             </Typography>
           )}
-          <StyledButton
+          <PrimaryButton
             type="submit"
             variant="contained"
             color="primary"
@@ -103,7 +103,7 @@ const GroupForm = () => {
             disabled={loading}
           >
             {id ? "Update Group" : "Create Group"}
-          </StyledButton>
+          </PrimaryButton>
         </form>
       </ContentBox>
     </>

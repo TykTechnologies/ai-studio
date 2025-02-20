@@ -6,7 +6,6 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   Divider,
   Tooltip,
   IconButton
@@ -29,12 +28,12 @@ import {
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../common/DateRangePicker";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 ChartJS.register(
@@ -168,13 +167,13 @@ const LLMSettingsDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Call Settings Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llm-settings")}
           color="inherit"
         >
           Back to LLM Call Settings
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Model Usage Statistics</SectionTitle>
@@ -304,13 +303,13 @@ const LLMSettingsDetails = () => {
         </Grid>
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/llm-settings/edit/${id}`)}
           >
             Edit LLM Call Settings
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

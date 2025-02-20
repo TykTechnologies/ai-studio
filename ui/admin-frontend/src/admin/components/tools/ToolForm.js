@@ -23,18 +23,17 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import { styled } from "@mui/system";
 
@@ -561,14 +560,14 @@ const ToolForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit Tool" : "Add Tool"}</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/tools"
           color="white"
         >
           Back to Tools
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -858,21 +857,21 @@ const ToolForm = () => {
                 onChange={handleFileUpload}
               />
 
-              <StyledButtonPrimaryOutlined
+              <PrimaryOutlineButton
                 variant="contained"
                 startIcon={<CloudUploadIcon />}
                 onClick={() => fileInputRef.current.click()}
                 sx={{ mt: 2 }}
               >
                 Upload Additional Tool Documentation
-              </StyledButtonPrimaryOutlined>
+              </PrimaryOutlineButton>
             </AccordionDetails>
           </StyledAccordion>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update Tool" : "Add Tool"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

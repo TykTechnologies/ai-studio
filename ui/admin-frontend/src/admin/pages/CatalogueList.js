@@ -34,7 +34,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -244,13 +244,13 @@ const CatalogueList = () => {
             <InfoTooltip title="Catalogs are collections of LLMs that can be assigned to groups." />
             <Typography variant="h5">Catalogs</Typography>
           </Box>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddCatalogue}
           >
             Add Catalog
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {catalogues.length === 0 ? (
@@ -366,13 +366,13 @@ const CatalogueList = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseModal}>Cancel</Button>
-          <StyledButton
+          <PrimaryButton
             onClick={modalType === "add" ? handleAddLLM : handleRemoveLLM}
             variant="contained"
             color="primary"
           >
             {modalType === "add" ? "Add" : "Remove"}
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </Dialog>
 

@@ -23,10 +23,10 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
@@ -419,14 +419,14 @@ const LLMSettingsForm = () => {
         <Typography variant="h5">
           {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llm-settings"
           color="inherit"
         >
           Back to LLM Call Settings
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -568,9 +568,9 @@ const LLMSettingsForm = () => {
           </Grid>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update LLM Call Settings" : "Add LLM Call Settings"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>
@@ -635,9 +635,9 @@ const LLMSettingsForm = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenPriceModal(false)}>Cancel</Button>
-          <StyledButton onClick={handleSaveModelPrice} color="primary">
+          <PrimaryButton onClick={handleSaveModelPrice} color="primary">
             Save
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 

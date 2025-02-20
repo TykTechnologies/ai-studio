@@ -23,11 +23,11 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 
 const GroupDetail = () => {
@@ -399,13 +399,13 @@ const GroupDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Group Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6">Name: {group.attributes.name}</Typography>
@@ -427,13 +427,13 @@ const GroupDetail = () => {
             </ListItem>
           ))}
         </List>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddUser}
         >
           Add User
-        </StyledButton>
+        </PrimaryButton>
 
         <Typography variant="h6" style={{ marginTop: "20px" }}>
           Catalogues in Group
@@ -452,13 +452,13 @@ const GroupDetail = () => {
             </ListItem>
           ))}
         </List>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddCatalogue}
         >
           Add Catalogue
-        </StyledButton>
+        </PrimaryButton>
 
         <Typography variant="h6" style={{ marginTop: "20px" }}>
           Data Catalogues in Group
@@ -477,13 +477,13 @@ const GroupDetail = () => {
             </ListItem>
           ))}
         </List>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddDataCatalogue}
         >
           Add Data Catalogue
-        </StyledButton>
+        </PrimaryButton>
 
         <Typography variant="h6" style={{ marginTop: "20px" }}>
           Tool Catalogues in Group
@@ -502,13 +502,13 @@ const GroupDetail = () => {
             </ListItem>
           ))}
         </List>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddToolCatalogue}
         >
           Add Tool Catalogue
-        </StyledButton>
+        </PrimaryButton>
       </ContentBox>
 
       <StyledDialog
@@ -540,9 +540,9 @@ const GroupDetail = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddUserModal(false)}>Cancel</Button>
-          <StyledButton onClick={handleAddUserConfirm} color="primary">
+          <PrimaryButton onClick={handleAddUserConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 
@@ -577,9 +577,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddCatalogueModal(false)}>
             Cancel
           </Button>
-          <StyledButton onClick={handleAddCatalogueConfirm} color="primary">
+          <PrimaryButton onClick={handleAddCatalogueConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 
@@ -614,9 +614,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddDataCatalogueModal(false)}>
             Cancel
           </Button>
-          <StyledButton onClick={handleAddDataCatalogueConfirm} color="primary">
+          <PrimaryButton onClick={handleAddDataCatalogueConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 
@@ -651,9 +651,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddToolCatalogueModal(false)}>
             Cancel
           </Button>
-          <StyledButton onClick={handleAddToolCatalogueConfirm} color="primary">
+          <PrimaryButton onClick={handleAddToolCatalogueConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 

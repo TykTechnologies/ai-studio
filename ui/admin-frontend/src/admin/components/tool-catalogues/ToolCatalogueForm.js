@@ -17,10 +17,10 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const ToolCatalogueForm = () => {
@@ -235,13 +235,13 @@ const ToolCatalogueForm = () => {
         <Typography variant="h5">
           {id ? "Edit Tool Catalog" : "Create Tool Catalog"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
           Back to Tool Catalogs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -349,7 +349,7 @@ const ToolCatalogueForm = () => {
             </Button>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             type="submit"
             variant="contained"
             color="primary"
@@ -362,7 +362,7 @@ const ToolCatalogueForm = () => {
             ) : (
               "Create Tool Catalog"
             )}
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
       <Snackbar

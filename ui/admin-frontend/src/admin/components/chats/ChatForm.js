@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   FormControl,
   InputLabel,
@@ -19,7 +18,6 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
 } from "@mui/material";
@@ -32,12 +30,12 @@ import { FormControlLabel, Switch } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 
 const ChatForm = () => {
@@ -379,14 +377,14 @@ const ChatForm = () => {
         <Typography variant="h5">
           {id ? "Edit Chat Room" : "Add Chat Room"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/chats"
           color="inherit"
         >
           Back to Chat Rooms
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -656,14 +654,14 @@ const ChatForm = () => {
               />
 
               {id && ( // Only show upload button if editing an existing chat
-                <StyledButtonPrimaryOutlined
+                <PrimaryOutlineButton
                   variant="contained"
                   startIcon={<CloudUploadIcon />}
                   onClick={() => fileInputRef.current.click()}
                   sx={{ mt: 2 }}
                 >
                   Upload Context File
-                </StyledButtonPrimaryOutlined>
+                </PrimaryOutlineButton>
               )}
 
               {!id && (
@@ -675,9 +673,9 @@ const ChatForm = () => {
           </StyledAccordion>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update Chat Room" : "Add Chat Room"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

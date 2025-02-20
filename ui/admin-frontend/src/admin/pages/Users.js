@@ -29,7 +29,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
   StyledDialogContent,
   StyledDialogTitle,
   StyledDialog,
@@ -253,14 +253,14 @@ const Users = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Users</Typography>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           component={Link}
           to="/admin/users/new"
         >
           Add user
-        </StyledButton>
+        </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <StyledPaper>
@@ -422,12 +422,12 @@ const Users = () => {
           </StyledDialogContent>
           <DialogActions>
             <Button onClick={handleCloseAddToGroupModal}>Cancel</Button>
-            <StyledButton
+            <PrimaryButton
               onClick={isAddingGroup ? handleAddNewGroup : handleAddUserToGroup}
               color="primary"
             >
               {isAddingGroup ? "Add Group" : "Add to Group"}
-            </StyledButton>
+            </PrimaryButton>
           </DialogActions>
         </StyledDialog>
 

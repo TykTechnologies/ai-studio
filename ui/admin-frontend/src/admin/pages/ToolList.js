@@ -28,8 +28,8 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
-  StyledButtonPrimaryOutlined,
+  PrimaryButton,
+  PrimaryOutlineButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -178,20 +178,20 @@ const ToolList = () => {
         </Box>
 
         <Stack direction="row" spacing={2}>
-          <StyledButtonPrimaryOutlined
+          <PrimaryOutlineButton
             variant="contained"
             startIcon={<DownloadIcon />}
             onClick={() => setImportWizardOpen(true)}
           >
             Import OpenAPI
-          </StyledButtonPrimaryOutlined>
-          <StyledButton
+          </PrimaryOutlineButton>
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddTool}
           >
             Add Tool
-          </StyledButton>
+          </PrimaryButton>
         </Stack>
       </TitleBox>
       <ContentBox>

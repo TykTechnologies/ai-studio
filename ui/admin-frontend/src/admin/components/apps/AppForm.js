@@ -2,13 +2,11 @@ import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
   Grid,
   Snackbar,
   Alert,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
   Select,
@@ -24,10 +22,10 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
 
@@ -246,14 +244,14 @@ const AppForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit App" : "Add App"}</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/apps"
           color="inherit"
         >
           Back to Apps
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -454,9 +452,9 @@ const AppForm = () => {
           )}
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
+            <PrimaryButton variant="contained" type="submit">
               {id ? "Update App" : "Add App"}
-            </StyledButton>
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

@@ -17,14 +17,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import { MemoizedLineChart } from "../common/MemoizedChart";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -47,15 +45,15 @@ import {
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 import Chip from "@mui/material/Chip";
-import { useTheme, styled } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 
 const ExpandableMessage = ({ message, isCode = false }) => {
@@ -382,13 +380,13 @@ const LLMDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}
           color="inherit"
         >
           Back to LLMs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>
@@ -789,13 +787,13 @@ const LLMDetails = () => {
           alignItems="center"
         >
           <Typography color="success.main">{copySuccess}</Typography>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/llms/edit/${id}`)}
           >
             Edit LLM
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

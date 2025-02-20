@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -27,7 +26,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -146,13 +145,13 @@ const DataCatalogList = () => {
             <InfoTooltip title="Data Catalogs are collections of data sources that can be assigned to groups." />
             <Typography variant="h5">Data Catalogs</Typography>
           </Box>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddDataCatalog}
           >
             Add Data Catalog
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {dataCatalogs.length === 0 ? (

@@ -6,7 +6,6 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   Chip,
   Divider,
 } from "@mui/material";
@@ -29,12 +28,12 @@ import {
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../common/DateRangePicker";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 ChartJS.register(
@@ -185,13 +184,13 @@ const ChatDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Chat Room Details</Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/chats")}
           color="inherit"
         >
           Back to Chat Rooms
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6" gutterBottom>
@@ -352,13 +351,13 @@ const ChatDetails = () => {
         )}
 
         <Box mt={4}>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/chats/edit/${id}`)}
           >
             Edit Chat Room
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

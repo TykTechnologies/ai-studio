@@ -7,7 +7,6 @@ import {
   Box,
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   IconButton,
@@ -26,7 +25,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import PaginationControls from "../components/common/PaginationControls";
@@ -136,13 +135,13 @@ const ToolCatalogueList = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Tool Catalogs</Typography>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddToolCatalogue}
         >
           Add Tool Catalog
-        </StyledButton>
+        </PrimaryButton>
       </TitleBox>
       <ContentBox>
         {toolCatalogues.length === 0 ? (

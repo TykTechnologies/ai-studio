@@ -26,7 +26,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
   StyledPaper,
 } from "../styles/sharedStyles";
 import {
@@ -200,13 +200,13 @@ const DatasourceList = () => {
             <Typography variant="h5">Vector Data Sources</Typography>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddDatasource}
           >
             Add Datasource
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
         <ContentBox>
           {datasources.length === 0 ? (

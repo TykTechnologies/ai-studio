@@ -28,7 +28,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
   StyledDialogContent,
   StyledDialogTitle,
   StyledDialog,
@@ -356,14 +356,14 @@ const Groups = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Groups</Typography>
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           component={Link}
           to="/admin/groups/new"
         >
           Add Group
-        </StyledButton>
+        </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <StyledPaper>
@@ -461,9 +461,9 @@ const Groups = () => {
           <Button onClick={() => setOpenAddCatalogueModal(false)}>
             Cancel
           </Button>
-          <StyledButton onClick={handleAddCatalogueConfirm} color="primary">
+          <PrimaryButton onClick={handleAddCatalogueConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 
@@ -498,9 +498,9 @@ const Groups = () => {
           <Button onClick={() => setOpenAddDataCatalogueModal(false)}>
             Cancel
           </Button>
-          <StyledButton onClick={handleAddDataCatalogueConfirm} color="primary">
+          <PrimaryButton onClick={handleAddDataCatalogueConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 
@@ -535,9 +535,9 @@ const Groups = () => {
           <Button onClick={() => setOpenAddToolCatalogueModal(false)}>
             Cancel
           </Button>
-          <StyledButton onClick={handleAddToolCatalogueConfirm} color="primary">
+          <PrimaryButton onClick={handleAddToolCatalogueConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 
@@ -570,9 +570,9 @@ const Groups = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddUserModal(false)}>Cancel</Button>
-          <StyledButton onClick={handleAddUserConfirm} color="primary">
+          <PrimaryButton onClick={handleAddUserConfirm} color="primary">
             Add
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 

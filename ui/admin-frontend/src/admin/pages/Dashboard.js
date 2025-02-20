@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import { formatBudgetDisplay } from "../utils/budgetFormatter";
 
@@ -7,9 +7,7 @@ import {
   Typography,
   Grid,
   Paper,
-  TextField,
   Box,
-  Button,
   Stack,
   Divider,
   Table,
@@ -22,7 +20,7 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import {
-  StyledButton,
+  PrimaryButton,
   StyledPaper,
   TitleBox,
 } from "../styles/sharedStyles";
@@ -47,7 +45,6 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import IconButton from "@mui/material/IconButton";
 
 ChartJS.register(
@@ -109,13 +106,13 @@ const GetStartedWidget = ({ openChatRoomWizard, onClose }) => (
       Chat rooms enable non-technical users to benefit from the full power of AI
       in your organisation, safely and securely.
     </Typography>
-    <StyledButton
+    <PrimaryButton
       variant="contained"
       onClick={openChatRoomWizard}
       startIcon={<AddIcon />}
     >
       Create Chat Room
-    </StyledButton>
+    </PrimaryButton>
   </Box>
 );
 

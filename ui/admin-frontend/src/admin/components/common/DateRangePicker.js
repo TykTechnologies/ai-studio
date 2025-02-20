@@ -1,6 +1,6 @@
 import React from "react";
-import { Box, Typography, TextField, Button } from "@mui/material";
-import { StyledButton } from "../../styles/sharedStyles";
+import { Box, Typography, TextField } from "@mui/material";
+import { PrimaryButton } from "../../styles/sharedStyles";
 
 const DateRangePicker = ({
   startDate,
@@ -53,13 +53,13 @@ const DateRangePicker = ({
         sx={{ width: "140px" }}
       />
       {updateMode === "manual" && (
-        <StyledButton
+        <PrimaryButton
           variant="contained"
           onClick={onUpdate}
           size="small"
         >
           Update
-        </StyledButton>
+        </PrimaryButton>
       )}
     </Box>
   );
