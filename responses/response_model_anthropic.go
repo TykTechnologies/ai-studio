@@ -57,8 +57,10 @@ type AnthropicResponse struct {
 	StopSequence string    `json:"stop_sequence"`
 	Type         string    `json:"type"`
 	Usage        struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens              int `json:"input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	} `json:"usage"`
 }
 
@@ -130,6 +132,14 @@ func (a *AnthropicResponse) GetModel() string {
 	return a.Model
 }
 
+func (a *AnthropicResponse) GetCacheWritePromptTokens() int {
+	return a.Usage.CacheCreationInputTokens
+}
+
+func (a *AnthropicResponse) GetCacheReadPromptTokens() int {
+	return a.Usage.CacheReadInputTokens
+}
+
 type DummyResponse struct {
 	Usage struct {
 		PromptTokens   int `json:"prompt_tokens"`
@@ -160,6 +170,14 @@ func (o *DummyResponse) GetModel() string {
 	}
 
 	return o.Model
+}
+
+func (o *DummyResponse) GetCacheWritePromptTokens() int {
+	return 0
+}
+
+func (o *DummyResponse) GetCacheReadPromptTokens() int {
+	return 0
 }
 
 type ProxyDummyResponse struct {
@@ -195,6 +213,14 @@ func (o *ProxyDummyResponse) GetModel() string {
 	return o.Model
 }
 
+func (o *ProxyDummyResponse) GetCacheWritePromptTokens() int {
+	return 0
+}
+
+func (o *ProxyDummyResponse) GetCacheReadPromptTokens() int {
+	return 0
+}
+
 type AnthropicStreamingChunkType struct {
 	Type string `json:"type"`
 }
@@ -221,8 +247,10 @@ type AnthropicStreamingChunkStart struct {
 		StopReason   any    `json:"stop_reason"`
 		StopSequence any    `json:"stop_sequence"`
 		Usage        struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			InputTokens              int `json:"input_tokens"`
+			OutputTokens             int `json:"output_tokens"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 		} `json:"usage"`
 	} `json:"message"`
 }
