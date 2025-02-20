@@ -9,7 +9,7 @@ import {
   Button,
   Divider,
   Tooltip,
-  IconButton,
+  IconButton
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -29,7 +29,7 @@ import {
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../common/DateRangePicker";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -168,13 +168,13 @@ const LLMSettingsDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Call Settings Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llm-settings")}
           color="inherit"
         >
           Back to LLM Call Settings
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Model Usage Statistics</SectionTitle>

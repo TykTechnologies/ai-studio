@@ -32,11 +32,12 @@ import { FormControlLabel, Switch } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 
 const ChatForm = () => {
@@ -378,14 +379,14 @@ const ChatForm = () => {
         <Typography variant="h5">
           {id ? "Edit Chat Room" : "Add Chat Room"}
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/chats"
           color="inherit"
         >
           Back to Chat Rooms
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -655,14 +656,14 @@ const ChatForm = () => {
               />
 
               {id && ( // Only show upload button if editing an existing chat
-                <Button
+                <StyledButtonPrimaryOutlined
                   variant="contained"
                   startIcon={<CloudUploadIcon />}
                   onClick={() => fileInputRef.current.click()}
                   sx={{ mt: 2 }}
                 >
                   Upload Context File
-                </Button>
+                </StyledButtonPrimaryOutlined>
               )}
 
               {!id && (

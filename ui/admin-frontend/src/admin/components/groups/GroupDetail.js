@@ -21,13 +21,13 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
   StyledButton,
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 
 const GroupDetail = () => {
@@ -399,13 +399,13 @@ const GroupDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Group Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
           Back to Groups
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6">Name: {group.attributes.name}</Typography>
@@ -540,9 +540,9 @@ const GroupDetail = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddUserModal(false)}>Cancel</Button>
-          <Button onClick={handleAddUserConfirm} color="primary">
+          <StyledButton onClick={handleAddUserConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -577,9 +577,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -614,9 +614,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddDataCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddDataCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddDataCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 
@@ -651,9 +651,9 @@ const GroupDetail = () => {
           <Button onClick={() => setOpenAddToolCatalogueModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddToolCatalogueConfirm} color="primary">
+          <StyledButton onClick={handleAddToolCatalogueConfirm} color="primary">
             Add
-          </Button>
+          </StyledButton>
         </DialogActions>
       </StyledDialog>
 

@@ -12,7 +12,7 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -55,13 +55,13 @@ const FilterDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Filter Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/filters")}
           color="inherit"
         >
           Back to Filters
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Grid container spacing={2}>

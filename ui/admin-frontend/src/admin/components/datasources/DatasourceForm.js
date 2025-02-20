@@ -39,11 +39,12 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import {
   getVendorData,
@@ -334,14 +335,14 @@ const DatasourceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Datasource" : "Add Datasource"}
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/datasources"
           color="inherit"
         >
           Back to Datasources
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -749,13 +750,13 @@ const DatasourceForm = () => {
                 />
 
                 <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                  <Button
+                  <StyledButtonPrimaryOutlined
                     variant="contained"
                     startIcon={<CloudUploadIcon />}
                     onClick={() => fileInputRef.current.click()}
                   >
                     Upload Additional Datasource Documentation
-                  </Button>
+                  </StyledButtonPrimaryOutlined>
 
                   <Button
                     variant="contained"

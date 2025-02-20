@@ -16,7 +16,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -80,14 +80,14 @@ const SecretDetails = () => {
       <TitleBox top="64px">
         <Typography variant="h5">Secret Details</Typography>
         <Box>
-          <Button
+          <StyledButtonLink
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate("/admin/secrets")}
             color="inherit"
             sx={{ mr: 2 }}
           >
             Back to Secrets
-          </Button>
+          </StyledButtonLink>
           <StyledButton
             variant="contained"
             startIcon={<EditIcon />}

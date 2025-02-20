@@ -201,7 +201,7 @@ export const SubListItem = styled(ListItemButton, {
       right: 0,
       height: '100%',
       background: depth === 1 
-        ? (hasSubItems && itemId === rootParentId 
+        ? (hasSubItems && rootParentId
             ? theme.palette.background.surfaceDefaultHover
             : theme.palette.background.surfaceDefaultSelected)
         : theme.palette.background.surfaceDefaultSelected,

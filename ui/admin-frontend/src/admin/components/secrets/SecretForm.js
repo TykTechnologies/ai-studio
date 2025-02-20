@@ -16,7 +16,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -144,14 +144,14 @@ const SecretForm = () => {
         <Typography variant="h5">
           {id ? "Edit Secret" : "Add Secret"}
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/secrets"
           color="inherit"
         >
           Back to Secrets
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

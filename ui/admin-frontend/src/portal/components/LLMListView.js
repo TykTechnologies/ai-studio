@@ -14,6 +14,7 @@ import {
 import pubClient from "../../admin/utils/pubClient";
 import DetailModal from "./DetailModal";
 import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
+import { StyledButton } from "../../admin/styles/sharedStyles";
 
 const defaultLogo = "/generic-llm-logo.png";
 
@@ -102,7 +103,7 @@ const LLMListView = () => {
                 <Typography gutterBottom variant="h6" component="div">
                   {llm.attributes.name}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.defaultSubdued">
                   {llm.attributes.short_description}
                 </Typography>
                 <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
@@ -121,7 +122,7 @@ const LLMListView = () => {
                         process.env.PUBLIC_URL + "/images/placeholder-logo.png";
                     }}
                   />
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.defaultSubdued">
                     {getVendorName(llm.attributes.vendor)}
                   </Typography>
                 </Box>
@@ -132,12 +133,12 @@ const LLMListView = () => {
                 <Button variant="outlined" onClick={() => handleOpenModal(llm)}>
                   More
                 </Button>
-                <Button
+                <StyledButton
                   variant="contained"
                   onClick={() => handleBuildApp(llm.id)}
                 >
                   Build App
-                </Button>
+                </StyledButton>
               </Box>
             </Card>
           </Grid>

@@ -29,6 +29,7 @@ import {
   StyledTableHeaderCell,
   StyledTableRow,
   StyledButton,
+  StyledButtonPrimaryOutlined,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -177,13 +178,13 @@ const ToolList = () => {
         </Box>
 
         <Stack direction="row" spacing={2}>
-          <StyledButton
+          <StyledButtonPrimaryOutlined
             variant="contained"
             startIcon={<DownloadIcon />}
             onClick={() => setImportWizardOpen(true)}
           >
             Import OpenAPI
-          </StyledButton>
+          </StyledButtonPrimaryOutlined>
           <StyledButton
             variant="contained"
             startIcon={<AddIcon />}

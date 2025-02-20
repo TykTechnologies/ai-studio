@@ -25,7 +25,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -227,14 +227,14 @@ const ModelPriceForm = () => {
         <Typography variant="h5">
           {id ? "Edit Model Price" : "Add Model Price"}
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/model-prices"
           color="inherit"
         >
           Back to Model Prices
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

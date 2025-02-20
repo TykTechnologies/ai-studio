@@ -366,13 +366,13 @@ const CatalogueList = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseModal}>Cancel</Button>
-          <Button
+          <StyledButton
             onClick={modalType === "add" ? handleAddLLM : handleRemoveLLM}
             variant="contained"
             color="primary"
           >
             {modalType === "add" ? "Add" : "Remove"}
-          </Button>
+          </StyledButton>
         </DialogActions>
       </Dialog>
 

@@ -48,34 +48,15 @@ import {
   FieldLabel,
   FieldValue,
   StyledButton,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 import Chip from "@mui/material/Chip";
 import { useTheme, styled } from "@mui/material/styles";
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  "&.MuiTableCell-head": {
-    backgroundColor: theme.palette.custom.purpleLight,
-    color: theme.palette.common.white,
-  },
-}));
-
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(odd)": {
-    backgroundColor: theme.palette.custom.lightTeal,
-  },
-  "&:nth-of-type(even)": {
-    backgroundColor: theme.palette.common.white,
-  },
-  "&:hover": {
-    backgroundColor: theme.palette.custom.hoverTeal,
-  },
-  // Remove last border
-  "&:last-child td, &:last-child th": {
-    border: 0,
-  },
-}));
 
 const ExpandableMessage = ({ message, isCode = false }) => {
   const [expanded, setExpanded] = useState(false);
@@ -428,13 +409,13 @@ const LLMDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">LLM Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}
           color="inherit"
         >
           Back to LLMs
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>
@@ -754,40 +735,40 @@ const LLMDetails = () => {
         <Divider sx={{ my: 3 }} />
 
         <SectionTitle>Proxy Logs</SectionTitle>
-        <TableContainer component={Paper}>
+        <StyledPaper>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Timestamp
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Vendor
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Response Code
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Request
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", verticalAlign: "top" }}>
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
                   Response
-                </TableCell>
+                </StyledTableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {proxyLogs?.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                <StyledTableRow key={log.id}>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {new Date(log.attributes.time_stamp).toLocaleString()}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {log.attributes.vendor}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {log.attributes.response_code}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     <pre>
                       <code>
                         <ExpandableMessage
@@ -795,8 +776,8 @@ const LLMDetails = () => {
                         />
                       </code>
                     </pre>
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "top" }}>
+                  </StyledTableCell>
+                  <StyledTableCell sx={{ verticalAlign: "top" }}>
                     <pre>
                       <code>
                         <ExpandableMessage
@@ -804,13 +785,11 @@ const LLMDetails = () => {
                         />
                       </code>
                     </pre>
-                  </TableCell>
-                </TableRow>
+                  </StyledTableCell>
+                </StyledTableRow>
               ))}
             </TableBody>
           </Table>
-        </TableContainer>
-        <Box mt={2}>
           <PaginationControls
             page={page}
             pageSize={pageSize}
@@ -818,7 +797,7 @@ const LLMDetails = () => {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />
-        </Box>
+        </StyledPaper>
 
         <Box
           mt={4}

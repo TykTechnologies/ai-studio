@@ -14,11 +14,15 @@ const PaginationControls = ({
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        mt: 2,
-        padding: "0 20px 20px 20px"
+        padding: "14px 0px 10px 10px",
+        borderTop: theme => `1px solid ${theme.palette.border.neutralDefault}`
       }}
     >
-      <Select value={pageSize} onChange={onPageSizeChange}>
+      <Select 
+        value={pageSize} 
+        onChange={onPageSizeChange}
+        className="MuiSelect-pagination"
+      >
         <MenuItem value={10}>10 per page</MenuItem>
         <MenuItem value={25}>25 per page</MenuItem>
         <MenuItem value={50}>50 per page</MenuItem>

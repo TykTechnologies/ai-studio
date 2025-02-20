@@ -23,7 +23,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -419,14 +419,14 @@ const LLMSettingsForm = () => {
         <Typography variant="h5">
           {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llm-settings"
           color="inherit"
         >
           Back to LLM Call Settings
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

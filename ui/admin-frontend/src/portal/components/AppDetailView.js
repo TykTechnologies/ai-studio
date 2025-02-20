@@ -19,7 +19,6 @@ import {
   CardContent,
   Tooltip,
 } from "@mui/material";
-
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -27,6 +26,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { getConfig } from "../../config"; // Add this import
+import { StyledButtonCritical, StyledButtonLink } from "../../admin/styles/sharedStyles";
 
 import pubClient from "../../admin/utils/pubClient";
 
@@ -158,7 +158,7 @@ const AppDetailView = () => {
   );
 
   return (
-    <Box>
+    <Box sx={{p: 4}}>
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box
           display="flex"
@@ -169,12 +169,12 @@ const AppDetailView = () => {
           <Typography variant="h5" sx={{ color: "black" }}>
             App Details
           </Typography>
-          <Button
+          <StyledButtonLink
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate("/portal/apps")}
           >
             Back to Apps
-          </Button>
+          </StyledButtonLink>
         </Box>
 
         <SectionTitle>App Information</SectionTitle>
@@ -272,14 +272,14 @@ const AppDetailView = () => {
         </Grid>
 
         <Box mt={4}>
-          <Button
+          <StyledButtonCritical
             variant="contained"
             color="error"
             startIcon={<DeleteIcon />}
             onClick={handleDeleteClick}
           >
             Delete App
-          </Button>
+          </StyledButtonCritical>
         </Box>
       </Paper>
 
@@ -467,9 +467,9 @@ const AppDetailView = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
+          <StyledButtonCritical onClick={handleDeleteConfirm} color="error" autoFocus>
             Delete
-          </Button>
+          </StyledButtonCritical>
         </DialogActions>
       </Dialog>
     </Box>

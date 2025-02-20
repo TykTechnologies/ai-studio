@@ -23,6 +23,8 @@ import {
   StyledDialogTitle,
   StyledDialogContent,
   StyledButton,
+  StyledButtonLink,
+  StyledButtonPrimaryOutlined
 } from "../../styles/sharedStyles";
 
 import { getVendorCodes, getVendorName } from "../../utils/vendorLogos";
@@ -358,7 +360,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                   <Typography variant="h6" gutterBottom>
                     Chat Room Created Successfully!
                   </Typography>
-                  <Button
+                  <StyledButtonPrimaryOutlined
                     variant="contained"
                     color="primary"
                     onClick={() => {
@@ -370,7 +372,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                     }}
                   >
                     Take me to this Chat Room
-                  </Button>
+                  </StyledButtonPrimaryOutlined>
                 </Box>
               );
             default:
@@ -399,36 +401,40 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
         </Typography>
         {renderStepContent(activeStep)}
       </StyledDialogContent>
-      <DialogActions>
-        {activeStep !== steps.length - 1 && (
-          <>
-            <Button onClick={onClose}>Cancel</Button>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+        <Box>
+          {activeStep !== steps.length - 1 && (
+            <StyledButtonLink onClick={onClose}>Cancel</StyledButtonLink>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {activeStep !== steps.length - 1 && (
             <Button disabled={activeStep === 0} onClick={handleBack}>
               Back
             </Button>
-          </>
-        )}
-        {activeStep === steps.length - 1 ? (
-          <StyledButton onClick={onClose} variant="contained" color="primary">
-            Close
-          </StyledButton>
-        ) : activeStep === steps.length - 2 ? (
-          <StyledButton
-            onClick={handleSubmit}
-            variant="contained"
-            color="primary"
-          >
-            Create Chat Room
-          </StyledButton>
-        ) : (
-          <StyledButton
-            onClick={handleNext}
-            variant="contained"
-            color="primary"
-          >
-            Next
-          </StyledButton>
-        )}
+          )}
+          {activeStep === steps.length - 1 ? (
+            <StyledButton onClick={onClose} variant="contained" color="primary">
+              Close
+            </StyledButton>
+          ) : activeStep === steps.length - 2 ? (
+            <StyledButton
+              onClick={handleSubmit}
+              variant="contained"
+              color="primary"
+            >
+              Create Chat Room
+            </StyledButton>
+          ) : (
+            <StyledButton
+              onClick={handleNext}
+              variant="contained"
+              color="primary"
+            >
+              Next
+            </StyledButton>
+          )}
+        </Box>
       </DialogActions>
     </StyledDialog>
   );

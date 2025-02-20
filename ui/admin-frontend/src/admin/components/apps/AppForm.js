@@ -24,7 +24,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -246,14 +246,14 @@ const AppForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit App" : "Add App"}</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/apps"
           color="inherit"
         >
           Back to Apps
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
