@@ -5,21 +5,41 @@ import (
 	"gorm.io/gorm"
 )
 
-func cleanupDuplicateModelPrices(db *gorm.DB) error {
-	// Delete duplicates keeping the oldest record for each model_name + vendor combination
+func fixLLMChatRecordIDs(db *gorm.DB) error {
+	// Update anthropic chat records
+	if err := db.Exec(`
+		UPDATE llm_chat_records 
+		SET llm_id = 1 
+		WHERE llm_id IS NULL 
+		AND vendor = 'anthropic' 
+		AND interaction_type = 'chat'
+	`).Error; err != nil {
+		return err
+	}
+
+	// Update anthropic proxy records
+	if err := db.Exec(`
+		UPDATE llm_chat_records 
+		SET llm_id = 5 
+		WHERE llm_id IS NULL 
+		AND vendor = 'anthropic' 
+		AND interaction_type = 'proxy'
+	`).Error; err != nil {
+		return err
+	}
+
+	// Update openai records
 	return db.Exec(`
-		DELETE FROM model_prices 
-		WHERE id NOT IN (
-			SELECT MIN(id)
-			FROM (SELECT * FROM model_prices) as mp
-			GROUP BY model_name, vendor
-		)
+		UPDATE llm_chat_records 
+		SET llm_id = 4 
+		WHERE llm_id IS NULL 
+		AND vendor = 'openai'
 	`).Error
 }
 
 func InitModels(db *gorm.DB) error {
-	// First clean up any duplicate model prices before adding the unique constraint
-	cleanupDuplicateModelPrices(db)
+	// Fix LLM chat record IDs
+	fixLLMChatRecordIDs(db)
 
 	err := db.AutoMigrate(
 		&User{},      //Done
