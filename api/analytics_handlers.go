@@ -52,7 +52,9 @@ func (a *API) getChatRecordsPerDay(c *gin.Context) {
 			})
 			return
 		}
-		endDate = &parsedDate
+		// Set end date to end of day (23:59:59)
+		endOfDay := time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		endDate = &endOfDay
 	}
 
 	chartData, err := analytics.GetChatRecordsPerDay(a.service.DB, startDate, endDate)
@@ -159,6 +161,9 @@ func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
+
+	// Set end date to end of day (23:59:59)
+	endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, endDate.Location())
 
 	return startDate, endDate, nil
 }
@@ -564,6 +569,7 @@ func (a *API) getModelUsage(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param vendor query string true "Vendor Name"
+// @Param llm_id query int false "LLM ID to filter by"
 // @Success 200 {object} analytics.ChartData
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
@@ -591,7 +597,23 @@ func (a *API) getVendorUsage(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor)
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor, llmID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
@@ -998,13 +1020,14 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 	for _, u := range usageList {
 		entry := map[string]interface{}{
 			"name":            u.Name,
-			"type":            u.EntityType,
-			"monthlyBudget":   u.Budget,
-			"currentUsage":    u.Spent,
-			"usagePercent":    u.Usage,
+			"entity_type":     u.EntityType,
+			"budget":          u.Budget,
+			"spent":           u.Spent,
+			"usage":           u.Usage,
 			"budgetStartDate": u.BudgetStartDate,
 			"totalCost":       u.TotalCost,
 			"entity_id":       u.EntityID,
+			"total_tokens":    u.TotalTokens,
 		}
 		response = append(response, entry)
 	}

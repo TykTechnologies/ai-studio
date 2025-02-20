@@ -6,8 +6,8 @@ type ModelPrice struct {
 	gorm.Model
 
 	ID        uint    `gorm:"primaryKey"`
-	ModelName string  `json:"model_name"`
-	Vendor    string  `json:"vendor"`
+	ModelName string  `gorm:"uniqueIndex:idx_model_vendor" json:"model_name"`
+	Vendor    string  `gorm:"uniqueIndex:idx_model_vendor" json:"vendor"`
 	CPT       float64 `json:"cpt"`
 	CPIT      float64 `json:"cpit"`
 	Currency  string  `json:"currency"`
@@ -66,6 +66,20 @@ func (mps *ModelPrices) GetByVendor(db *gorm.DB, vendor string) error {
 // GetByModelName retrieves a ModelPrice by its model name
 func (mp *ModelPrice) GetByModelName(db *gorm.DB, modelName string) error {
 	return db.Where("model_name = ?", modelName).First(mp).Error
+}
+
+// GetOrCreateByModelName retrieves a ModelPrice by its model name, or creates it if not found
+func (mp *ModelPrice) GetOrCreateByModelName(db *gorm.DB, modelName string) error {
+	err := mp.GetByModelName(db, modelName)
+	if err == gorm.ErrRecordNotFound {
+		// Initialize new model price with default values
+		mp.ModelName = modelName
+		mp.CPT = 0.0        // Default CPT
+		mp.CPIT = 0.0       // Default CPIT
+		mp.Currency = "USD" // Default currency
+		return mp.Create(db)
+	}
+	return err
 }
 
 // GetByModelNameAndVendor retrieves a ModelPrice by its model name and vendor

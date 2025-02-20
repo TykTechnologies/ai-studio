@@ -76,7 +76,7 @@ func TestRecordContentMessage(t *testing.T) {
 
 	svc := services.NewService(db)
 
-	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, now, svc)
+	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, 1, now, svc)
 
 	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestName")
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestCostCalculation(t *testing.T) {
 			}
 
 			if tt.interactionType == models.ChatInteraction {
-				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+				RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, 1, now, mockService)
 			} else {
 				// For proxy interaction, we need to calculate the cost using the same price model
 				price, err := mockService.GetModelPriceByModelNameAndVendor("TestModel", string(models.OPENAI))
@@ -321,7 +321,7 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 		},
 	}
 
-	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, now, mockService)
+	RecordContentMessage(mc, cr, models.OPENAI, "TestModel", "chat123", 100, 1, 1, 1, now, mockService)
 
 	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestModel")
 	require.NoError(t, err)
@@ -410,6 +410,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 			Name:            "Model1",
 			Vendor:          "vendor1",
 			Cost:            10.0,
+			TotalTokens:     1000,
 			Currency:        "USD",
 			TimeStamp:       now,
 			LLMID:           1,
@@ -419,6 +420,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 			Name:            "Model2",
 			Vendor:          "vendor2",
 			Cost:            20.0,
+			TotalTokens:     2000,
 			Currency:        "USD",
 			TimeStamp:       now,
 			LLMID:           2,
@@ -428,6 +430,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 			Name:            "Model1",
 			Vendor:          "vendor1",
 			Cost:            15.0,
+			TotalTokens:     1500,
 			Currency:        "USD",
 			TimeStamp:       now,
 			LLMID:           1,
@@ -450,10 +453,12 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 
 	// Verify total costs
 	for _, cost := range costs {
-		if cost.Vendor == "vendor1" && cost.Model == "Model1" {
-			assert.Equal(t, 25.0, cost.TotalCost) // 10.0 + 15.0
-		} else if cost.Vendor == "vendor2" && cost.Model == "Model2" {
+		if cost.Model == "Model1" {
+			assert.Equal(t, 25.0, cost.TotalCost)          // 10.0 + 15.0
+			assert.Equal(t, int64(2500), cost.TotalTokens) // 1000 + 1500
+		} else if cost.Model == "Model2" {
 			assert.Equal(t, 20.0, cost.TotalCost)
+			assert.Equal(t, int64(2000), cost.TotalTokens)
 		}
 	}
 
@@ -464,7 +469,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 	assert.Len(t, filteredCosts, 1)
 
 	// Verify filtered results
-	assert.Equal(t, "vendor1", filteredCosts[0].Vendor)
 	assert.Equal(t, "Model1", filteredCosts[0].Model)
 	assert.Equal(t, 25.0, filteredCosts[0].TotalCost)
+	assert.Equal(t, int64(2500), filteredCosts[0].TotalTokens)
 }

@@ -266,18 +266,21 @@ func TestAnalyzeCompletionResponse(t *testing.T) {
 	err = db.Create(price).Error
 	require.NoError(t, err)
 
-	// Create mock response
-	mockResp := &mockTokenResponse{
-		model:   "test-model",
-		prompt:  5,
-		resp:    10,
-		total:   15,
-		choices: 1,
-		tools:   0,
-	}
+	// Create test request and response
+	reqBody := []byte(`{"model": "test-model", "prompt": "Hello"}`)
+	req, _ := http.NewRequest("POST", "http://example.com/test", bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
 
-	// Test completion response analysis
-	proxy.analyzeCompletionResponse(llm, app, mockResp)
+	respBody := []byte(`{
+		"id": "mock-123",
+		"object": "chat.completion",
+		"model": "test-model",
+		"choices": [{"message": {"content": "Hello"}}],
+		"usage": {"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}
+	}`)
+
+	// Test response analysis
+	AnalyzeResponse(service, llm, app, http.StatusOK, respBody, reqBody, req)
 
 	// Wait for analytics to process the request
 	waitForAnalytics(t, db, 1)
