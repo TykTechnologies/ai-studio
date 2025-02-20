@@ -9,32 +9,11 @@ func fixLLMChatRecordIDs(db *gorm.DB) error {
 	// Update anthropic chat records
 	if err := db.Exec(`
 		UPDATE llm_chat_records 
-		SET llm_id = 1 
-		WHERE llm_id IS NULL 
-		AND vendor = 'anthropic' 
-		AND interaction_type = 'chat'
-	`).Error; err != nil {
-		return err
-	}
-
-	// Update anthropic proxy records
-	if err := db.Exec(`
-		UPDATE llm_chat_records 
 		SET llm_id = 5 
-		WHERE llm_id IS NULL 
-		AND vendor = 'anthropic' 
-		AND interaction_type = 'proxy'
+		WHERE interaction_type = 'proxy'
 	`).Error; err != nil {
 		return err
 	}
-
-	// Update openai records
-	return db.Exec(`
-		UPDATE llm_chat_records 
-		SET llm_id = 4 
-		WHERE llm_id IS NULL 
-		AND vendor = 'openai'
-	`).Error
 }
 
 func InitModels(db *gorm.DB) error {
