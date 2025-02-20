@@ -67,16 +67,30 @@ func TestRecordContentMessage(t *testing.T) {
 			{
 				Content: "Test content",
 				GenerationInfo: map[string]interface{}{
-					"PromptTokens":   10,
-					"ResponseTokens": 20,
+					"PromptTokens":             10,
+					"ResponseTokens":           20,
+					"CacheCreationInputTokens": 5,
+					"CacheReadInputTokens":     15,
 				},
 			},
 		},
 	}
 
-	svc := services.NewService(db)
+	// Create a mock service that returns a price
+	mockService := &mockService{
+		GetModelPriceByModelNameAndVendorFunc: func(modelName, vendor string) (*models.ModelPrice, error) {
+			return &models.ModelPrice{
+				ModelName:    modelName,
+				Vendor:       vendor,
+				CPT:          0.002,  // $0.002 per response token
+				CPIT:         0.001,  // $0.001 per prompt token
+				CacheWritePT: 0.0005, // $0.0005 per cache write token
+				CacheReadPT:  0.0001, // $0.0001 per cache read token
+			}, nil
+		},
+	}
 
-	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, 1, now, svc)
+	RecordContentMessage(mc, cr, models.OPENAI, "TestName", "chat123", 100, 1, 1, 1, now, mockService)
 
 	chatRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ?", "TestName")
 	require.NoError(t, err)
@@ -84,6 +98,8 @@ func TestRecordContentMessage(t *testing.T) {
 	assert.Equal(t, "openai", chatRecord.Vendor)
 	assert.Equal(t, 30, chatRecord.TotalTokens)
 	assert.Equal(t, models.ChatInteraction, chatRecord.InteractionType)
+	assert.Equal(t, 5, chatRecord.CacheWritePromptTokens)
+	assert.Equal(t, 15, chatRecord.CacheReadPromptTokens)
 
 	chatLog, err := waitForRecord[models.LLMChatLogEntry](db, "name = ?", "TestName")
 	require.NoError(t, err)
@@ -235,8 +251,10 @@ func TestCostCalculation(t *testing.T) {
 					{
 						Content: "Test content",
 						GenerationInfo: map[string]interface{}{
-							"PromptTokens":   10,
-							"ResponseTokens": 20,
+							"PromptTokens":             10,
+							"ResponseTokens":           20,
+							"CacheCreationInputTokens": 5,
+							"CacheReadInputTokens":     15,
 						},
 					},
 				},
@@ -246,10 +264,12 @@ func TestCostCalculation(t *testing.T) {
 			mockService := &mockService{
 				GetModelPriceByModelNameAndVendorFunc: func(modelName, vendor string) (*models.ModelPrice, error) {
 					return &models.ModelPrice{
-						ModelName: modelName,
-						Vendor:    vendor,
-						CPT:       0.002, // $0.002 per response token
-						CPIT:      0.001, // $0.001 per prompt token
+						ModelName:    modelName,
+						Vendor:       vendor,
+						CPT:          0.002,  // $0.002 per response token
+						CPIT:         0.001,  // $0.001 per prompt token
+						CacheWritePT: 0.0005, // $0.0005 per cache write token
+						CacheReadPT:  0.0001, // $0.0001 per cache read token
 					}, nil
 				},
 			}
@@ -271,7 +291,12 @@ func TestCostCalculation(t *testing.T) {
 					UserID:          1,
 					AppID:           1,
 					InteractionType: models.ProxyInteraction,
-					Cost:            price.CPT*float64(20) + price.CPIT*float64(10), // Same cost calculation as chat interaction
+					Cost: price.CPT*float64(20) + // Response tokens
+						price.CPIT*float64(10) + // Prompt tokens
+						price.CacheWritePT*float64(5) + // Cache write tokens
+						price.CacheReadPT*float64(15), // Cache read tokens
+					CacheWritePromptTokens: 5,
+					CacheReadPromptTokens:  15,
 				}
 				db.Create(rec)
 			}
@@ -280,9 +305,13 @@ func TestCostCalculation(t *testing.T) {
 			require.NoError(t, err)
 
 			// Check if the cost is calculated correctly
-			// Cost = (CPT * ResponseTokens) + (CPIT * PromptTokens)
-			// ResponseTokens = 20, PromptTokens = 10
-			expectedCost := (0.002 * float64(20)) + (0.001 * float64(10)) // (0.002 * 20) + (0.001 * 10) = 0.04 + 0.01 = 0.05
+			// Cost = (CPT * ResponseTokens) + (CPIT * PromptTokens) +
+			//        (CacheWritePT * CacheWritePromptTokens) + (CacheReadPT * CacheReadPromptTokens)
+			// ResponseTokens = 20, PromptTokens = 10, CacheWriteTokens = 5, CacheReadTokens = 15
+			expectedCost := (0.002 * float64(20)) + // Response tokens: 0.04
+				(0.001 * float64(10)) + // Prompt tokens: 0.01
+				(0.0005 * float64(5)) + // Cache write tokens: 0.0025
+				(0.0001 * float64(15)) // Cache read tokens: 0.0015
 			assert.InDelta(t, expectedCost, chatRecord.Cost, 0.0001)
 			assert.Equal(t, tt.interactionType, chatRecord.InteractionType)
 		})
@@ -307,8 +336,10 @@ func TestCostCalculationWithoutPrice(t *testing.T) {
 			{
 				Content: "Test content",
 				GenerationInfo: map[string]interface{}{
-					"PromptTokens":   10,
-					"ResponseTokens": 20,
+					"PromptTokens":             10,
+					"ResponseTokens":           20,
+					"CacheCreationInputTokens": 5,
+					"CacheReadInputTokens":     15,
 				},
 			},
 		},
@@ -399,6 +430,73 @@ func (m *mockService) AddUserToGroup(userID, groupID uint) error {
 // Ensure mockService implements both ServiceInterface and EmailSender
 var _ services.ServiceInterface = (*mockService)(nil)
 var _ models.EmailSender = (*mockService)(nil)
+
+func TestGetUsage(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert test data
+	now := time.Now()
+	startDate := now.AddDate(0, 0, -5)
+	endDate := now.AddDate(0, 0, 5)
+
+	records := []models.LLMChatRecord{
+		{
+			TimeStamp:              startDate,
+			TotalTokens:            100,
+			Cost:                   10.0,
+			PromptTokens:           30,
+			ResponseTokens:         70,
+			CacheWritePromptTokens: 20,
+			CacheReadPromptTokens:  10,
+		},
+		{
+			TimeStamp:              startDate,
+			TotalTokens:            200,
+			Cost:                   20.0,
+			PromptTokens:           60,
+			ResponseTokens:         140,
+			CacheWritePromptTokens: 40,
+			CacheReadPromptTokens:  20,
+		},
+	}
+
+	for _, record := range records {
+		err := db.Create(&record).Error
+		require.NoError(t, err)
+	}
+
+	// Test GetUsage
+	chartData, err := GetUsage(db, startDate, endDate, "", nil, nil, nil)
+	require.NoError(t, err)
+
+	// Verify the data
+	assert.Len(t, chartData.Labels, 1)   // One day of data
+	assert.Len(t, chartData.Datasets, 6) // Total tokens, Cost, Prompt tokens, Response tokens, Cache write tokens, Cache read tokens
+
+	// Verify total tokens
+	assert.Equal(t, "Total Tokens", chartData.Datasets[0].Label)
+	assert.Equal(t, float64(300), chartData.Datasets[0].Data[0]) // 100 + 200
+
+	// Verify cost
+	assert.Equal(t, "Cost", chartData.Datasets[1].Label)
+	assert.Equal(t, float64(30), chartData.Datasets[1].Data[0]) // 10 + 20
+
+	// Verify prompt tokens
+	assert.Equal(t, "Prompt Tokens", chartData.Datasets[2].Label)
+	assert.Equal(t, float64(90), chartData.Datasets[2].Data[0]) // 30 + 60
+
+	// Verify response tokens
+	assert.Equal(t, "Response Tokens", chartData.Datasets[3].Label)
+	assert.Equal(t, float64(210), chartData.Datasets[3].Data[0]) // 70 + 140
+
+	// Verify cache write tokens
+	assert.Equal(t, "Cache Write Tokens", chartData.Datasets[4].Label)
+	assert.Equal(t, float64(60), chartData.Datasets[4].Data[0]) // 20 + 40
+
+	// Verify cache read tokens
+	assert.Equal(t, "Cache Read Tokens", chartData.Datasets[5].Label)
+	assert.Equal(t, float64(30), chartData.Datasets[5].Data[0]) // 10 + 20
+}
 
 func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 	db := setupTestDB(t)

@@ -60,12 +60,16 @@ const ModelPriceForm = () => {
     vendor: "",
     cpit: 0,
     cpt: 0,
+    cache_write_pt: 0,
+    cache_read_pt: 0,
     currency: "USD",
   });
 
   const [displayPrice, setDisplayPrice] = useState({
     cpit_million: 0,
     cpt_million: 0,
+    cache_write_pt_million: 0,
+    cache_read_pt_million: 0,
   });
 
   const [errors, setErrors] = useState({});
@@ -91,6 +95,8 @@ const ModelPriceForm = () => {
       setDisplayPrice({
         cpit_million: response.data.data.attributes.cpit * 1000000,
         cpt_million: response.data.data.attributes.cpt * 1000000,
+        cache_write_pt_million: response.data.data.attributes.cache_write_pt * 1000000,
+        cache_read_pt_million: response.data.data.attributes.cache_read_pt * 1000000,
       });
     } catch (error) {
       console.error("Error fetching Model Price", error);
@@ -104,13 +110,15 @@ const ModelPriceForm = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === "cpit_million" || name === "cpt_million") {
+    if (name === "cpit_million" || name === "cpt_million" || name === "cache_write_pt_million" || name === "cache_read_pt_million") {
       setDisplayPrice((prev) => ({
         ...prev,
         [name]: parseFloat(value) || 0,
       }));
       // Update the actual price state with per-token values
-      const perTokenName = name === "cpit_million" ? "cpit" : "cpt";
+      const perTokenName = name === "cpit_million" ? "cpit" :
+        name === "cpt_million" ? "cpt" :
+          name === "cache_write_pt_million" ? "cache_write_pt" : "cache_read_pt";
       setPrice((prev) => ({
         ...prev,
         [perTokenName]: (parseFloat(value) || 0) / 1000000,
@@ -269,9 +277,14 @@ const ModelPriceForm = () => {
                 label="Cost per Million Input Tokens"
                 name="cpit_million"
                 type="number"
-                inputProps={{ step: 0.01, min: 0 }}
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
                 value={displayPrice.cpit_million}
-                onChange={handleChange}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
                 required
                 tooltip="The cost per million input tokens (e.g., 0.40 for $0.40 per million tokens)"
               />
@@ -282,11 +295,52 @@ const ModelPriceForm = () => {
                 label="Cost per Million Output Tokens"
                 name="cpt_million"
                 type="number"
-                inputProps={{ step: 0.01, min: 0 }}
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
                 value={displayPrice.cpt_million}
-                onChange={handleChange}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
                 required
                 tooltip="The cost per million output tokens (e.g., 0.40 for $0.40 per million tokens)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TooltipTextField
+                fullWidth
+                label="Cost per Million Cache Write Tokens"
+                name="cache_write_pt_million"
+                type="number"
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
+                value={displayPrice.cache_write_pt_million}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
+                required
+                tooltip="The cost per million tokens for writing to the cache (e.g., 0.20 for $0.20 per million tokens)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TooltipTextField
+                fullWidth
+                label="Cost per Million Cache Read Tokens"
+                name="cache_read_pt_million"
+                type="number"
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
+                value={displayPrice.cache_read_pt_million}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
+                required
+                tooltip="The cost per million tokens for reading from the cache (e.g., 0.10 for $0.10 per million tokens)"
               />
             </Grid>
             <Grid item xs={12}>
@@ -305,26 +359,53 @@ const ModelPriceForm = () => {
             </Grid>
           </Grid>
 
-          <Box mt={4} display="flex" gap={2}>
-            <StyledButton variant="contained" type="submit">
-              {id ? "Update Model Price" : "Add Model Price"}
-            </StyledButton>
-            {id && (
-              <Button
-                variant="text"
-                sx={{
-                  color: 'text.secondary',
-                  textDecoration: 'underline',
-                  '&:hover': {
-                    backgroundColor: 'transparent',
-                    textDecoration: 'underline'
-                  }
-                }}
-                onClick={() => setRecalculateDialogOpen(true)}
-              >
-                update and recalculate
-              </Button>
-            )}
+          <Box mt={4}>
+            <Box mb={2}>
+              {id && (
+                <Typography
+                  component="span"
+                  sx={{
+                    color: 'text.secondary',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      textDecoration: 'underline'
+                    }
+                  }}
+                  onClick={() => {
+                    apiClient.post("/analytics/recalculate-prices").then(() => {
+                      setSnackbar({
+                        open: true,
+                        message: "Price recalculation started",
+                        severity: "success",
+                      });
+                    });
+                  }}
+                >
+                  Recalculate Prices
+                </Typography>
+              )}
+            </Box>
+            <Box display="flex" gap={2}>
+              <StyledButton variant="contained" type="submit">
+                {id ? "Update Model Price" : "Add Model Price"}
+              </StyledButton>
+              {id && (
+                <Button
+                  variant="text"
+                  sx={{
+                    color: 'text.secondary',
+                    textDecoration: 'underline',
+                    '&:hover': {
+                      backgroundColor: 'transparent',
+                      textDecoration: 'underline'
+                    }
+                  }}
+                  onClick={() => setRecalculateDialogOpen(true)}
+                >
+                  update and recalculate
+                </Button>
+              )}
+            </Box>
           </Box>
 
           <Dialog

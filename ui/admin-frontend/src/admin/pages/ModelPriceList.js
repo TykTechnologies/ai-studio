@@ -55,6 +55,8 @@ const ModelPriceList = () => {
   const [updatedPrice, setUpdatedPrice] = useState(0);
   const [updatedOutputPrice, setUpdatedOutputPrice] = useState(0);
   const [updatedInputPrice, setUpdatedInputPrice] = useState(0);
+  const [updatedCacheWritePrice, setUpdatedCacheWritePrice] = useState(0);
+  const [updatedCacheReadPrice, setUpdatedCacheReadPrice] = useState(0);
 
   const {
     page,
@@ -149,6 +151,8 @@ const ModelPriceList = () => {
   const handleOpenUpdatePriceModal = () => {
     setUpdatedOutputPrice(selectedPrice.attributes.cpt * 1000000);
     setUpdatedInputPrice(selectedPrice.attributes.cpit * 1000000);
+    setUpdatedCacheWritePrice(selectedPrice.attributes.cache_write_pt * 1000000);
+    setUpdatedCacheReadPrice(selectedPrice.attributes.cache_read_pt * 1000000);
     setOpenUpdatePriceModal(true);
     handleMenuClose();
   };
@@ -166,6 +170,8 @@ const ModelPriceList = () => {
             ...selectedPrice.attributes,
             cpt: parseFloat(updatedOutputPrice) / 1000000,
             cpit: parseFloat(updatedInputPrice) / 1000000,
+            cache_write_pt: parseFloat(updatedCacheWritePrice) / 1000000,
+            cache_read_pt: parseFloat(updatedCacheReadPrice) / 1000000,
           },
         },
       });
@@ -241,6 +247,12 @@ const ModelPriceList = () => {
                     <StyledTableHeaderCell onClick={() => handleSort("cpt")}>
                       Cost per Million Output Tokens
                     </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("cache_write_pt")}>
+                      Cost per Million Cache Write Tokens
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell onClick={() => handleSort("cache_read_pt")}>
+                      Cost per Million Cache Read Tokens
+                    </StyledTableHeaderCell>
                     <StyledTableHeaderCell
                       onClick={() => handleSort("currency")}
                     >
@@ -276,6 +288,12 @@ const ModelPriceList = () => {
                       </StyledTableCell>
                       <StyledTableCell>
                         {`${(price.attributes.cpt * 1000000).toFixed(2)} ${price.attributes.currency}`}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {`${(price.attributes.cache_write_pt * 1000000).toFixed(2)} ${price.attributes.currency}`}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {`${(price.attributes.cache_read_pt * 1000000).toFixed(2)} ${price.attributes.currency}`}
                       </StyledTableCell>
                       <StyledTableCell>
                         {price.attributes.currency}
@@ -331,18 +349,36 @@ const ModelPriceList = () => {
             fullWidth
             label="Cost per Million Input Tokens"
             type="number"
-            inputProps={{ step: 0.01, min: 0 }}
+            inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
             value={updatedInputPrice}
-            onChange={(e) => setUpdatedInputPrice(e.target.value)}
+            onChange={(e) => setUpdatedInputPrice(e.target.value.replace(',', '.'))}
             margin="normal"
           />
           <TextField
             fullWidth
             label="Cost per Million Output Tokens"
             type="number"
-            inputProps={{ step: 0.01, min: 0 }}
+            inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
             value={updatedOutputPrice}
-            onChange={(e) => setUpdatedOutputPrice(e.target.value)}
+            onChange={(e) => setUpdatedOutputPrice(e.target.value.replace(',', '.'))}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Cost per Million Cache Write Tokens"
+            type="number"
+            inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
+            value={updatedCacheWritePrice}
+            onChange={(e) => setUpdatedCacheWritePrice(e.target.value.replace(',', '.'))}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Cost per Million Cache Read Tokens"
+            type="number"
+            inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
+            value={updatedCacheReadPrice}
+            onChange={(e) => setUpdatedCacheReadPrice(e.target.value.replace(',', '.'))}
             margin="normal"
           />
         </StyledDialogContent>

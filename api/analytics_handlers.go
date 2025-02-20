@@ -627,6 +627,83 @@ func (a *API) getVendorUsage(c *gin.Context) {
 	c.JSON(http.StatusOK, chartData)
 }
 
+// getUsage godoc
+// @Summary Get token usage and cost data with flexible filtering
+// @Description Get token usage and cost data filtered by vendor, LLM ID, app ID, and interaction type
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param vendor query string false "Vendor name to filter by"
+// @Param llm_id query int false "LLM ID to filter by"
+// @Param app_id query int false "App ID to filter by"
+// @Param interaction_type query string false "Interaction type to filter by (chat/proxy)"
+// @Success 200 {object} models.MultiAxisChartData
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/usage [get]
+func (a *API) getUsage(c *gin.Context) {
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	var appID *uint
+	if appIDStr := c.Query("app_id"); appIDStr != "" {
+		id, err := strconv.ParseUint(appIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid app_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		appID = &u
+	}
+
+	vendor := c.Query("vendor")
+	interactionType := getInteractionType(c)
+
+	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, vendor, llmID, appID, interactionType)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get usage data"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
+}
+
 // getTokenUsageAndCostForApp godoc
 // @Summary Get token usage and cost for a specific app
 // @Description Get the token usage and total cost for a specific app over time

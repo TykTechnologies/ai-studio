@@ -20,20 +20,22 @@ type LLMChatRecord struct {
 	Name   string
 	Vendor string
 	// Add LLMID so we can track usage for that specific LLM object:
-	LLMID           uint `gorm:"index"`
-	TotalTimeMS     int
-	PromptTokens    int
-	ResponseTokens  int
-	TotalTokens     int
-	TimeStamp       time.Time
-	UserID          uint
-	Choices         int
-	ToolCalls       int
-	ChatID          string
-	AppID           uint
-	Cost            float64
-	Currency        string
-	InteractionType InteractionType `gorm:"type:string;default:'chat'"`
+	LLMID                  uint `gorm:"index"`
+	TotalTimeMS            int
+	PromptTokens           int
+	ResponseTokens         int
+	TotalTokens            int
+	TimeStamp              time.Time
+	UserID                 uint
+	Choices                int
+	ToolCalls              int
+	ChatID                 string
+	AppID                  uint
+	Cost                   float64
+	Currency               string
+	InteractionType        InteractionType `gorm:"type:string;default:'chat'"`
+	CacheWritePromptTokens int
+	CacheReadPromptTokens  int
 }
 
 // LLMChatLogEntry for storing extra logs
