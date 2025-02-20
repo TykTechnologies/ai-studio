@@ -6,8 +6,8 @@ type ModelPrice struct {
 	gorm.Model
 
 	ID        uint    `gorm:"primaryKey"`
-	ModelName string  `json:"model_name"`
-	Vendor    string  `json:"vendor"`
+	ModelName string  `gorm:"uniqueIndex:idx_model_vendor" json:"model_name"`
+	Vendor    string  `gorm:"uniqueIndex:idx_model_vendor" json:"vendor"`
 	CPT       float64 `json:"cpt"`
 	CPIT      float64 `json:"cpit"`
 	Currency  string  `json:"currency"`

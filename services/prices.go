@@ -104,9 +104,16 @@ func (s *Service) GetOrCreateModelPriceByName(modelName string) (*models.ModelPr
 // GetModelPriceByModelNameAndVendor retrieves a model price by its model name and vendor
 func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
 	modelPrice := &models.ModelPrice{}
-	if err := modelPrice.GetByModelNameAndVendor(s.DB, modelName, vendor); err != nil {
-		if err.Error() == gorm.ErrRecordNotFound.Error() {
-			// not found, create it
+
+	// Use a transaction to ensure atomicity
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		// Try to find existing record
+		if err := modelPrice.GetByModelNameAndVendor(tx, modelName, vendor); err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+
+			// Not found, create new record
 			if modelName == "" {
 				modelName = fmt.Sprintf("%s_%s", vendor, "default")
 			}
@@ -115,15 +122,23 @@ func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*
 			modelPrice.CPT = 0.0
 			modelPrice.CPIT = 0.0
 			modelPrice.Currency = "USD"
-			if err := modelPrice.Create(s.DB); err != nil {
-				return nil, err
+
+			// Try to create, if we get a unique constraint error, it means another
+			// process created the record in the meantime, so try to get it again
+			if err := modelPrice.Create(tx); err != nil {
+				if err.Error() == "Error 1062: Duplicate entry" {
+					return modelPrice.GetByModelNameAndVendor(tx, modelName, vendor)
+				}
+				return err
 			}
-
-			return modelPrice, nil
 		}
+		return nil
+	})
 
+	if err != nil {
 		return nil, err
 	}
+
 	return modelPrice, nil
 }
 
