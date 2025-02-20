@@ -302,3 +302,39 @@ func serializeModelPrices(mps models.ModelPrices) []ModelPriceResponse {
 	}
 	return result
 }
+
+// @Summary Get or create a model price by name
+// @Description Get a model price by its name, creating it with default values if it doesn't exist
+// @Tags model-prices
+// @Accept json
+// @Produce json
+// @Param model_name query string true "Model name"
+// @Success 200 {object} ModelPriceResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /model-prices/by-name [get]
+// @Security BearerAuth
+func (a *API) getOrCreateModelPriceByName(c *gin.Context) {
+	modelName := c.Query("model_name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Model name is required"}},
+		})
+		return
+	}
+
+	modelPrice, err := a.service.GetOrCreateModelPriceByName(modelName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
+}
