@@ -11,17 +11,21 @@ import {
   Pagination,
   Table,
   TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Button,
-  Paper,
 } from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
 import pubClient from "../../admin/utils/pubClient";
+import {
+  StyledButtonLink,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
+  StyledPaper,
+} from "../../admin/styles/sharedStyles";
 
 const ChatDashboard = () => {
   const [chatHistory, setChatHistory] = useState([]);
@@ -113,7 +117,7 @@ const ChatDashboard = () => {
 
       {chatRooms.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
+          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: "light" }}>
             Start a new chat session
           </Typography>
           <Grid container spacing={2}>
@@ -140,7 +144,7 @@ const ChatDashboard = () => {
                             sx={{
                               mr: 1,
                               fontSize: 20,
-                              color: "text.secondary",
+                              color: "text.primary",
                             }}
                           />
                           <Typography variant="body1" component="div" noWrap>
@@ -150,7 +154,7 @@ const ChatDashboard = () => {
                         {chat.attributes.description && (
                           <Typography
                             variant="body2"
-                            color="text.secondary"
+                            color="text.defaultSubdued"
                             sx={{
                               display: "-webkit-box",
                               WebkitLineClamp: 2,
@@ -165,17 +169,12 @@ const ChatDashboard = () => {
                       </Box>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
-                      <Button
-                        size="small"
+                      <StyledButtonLink
                         onClick={() => handleStartNewChat(chat.id)}
                         endIcon={<ArrowForwardIcon />}
-                        sx={{
-                          color: "black",
-                          "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.04)" },
-                        }}
                       >
                         Start Chat
-                      </Button>
+                      </StyledButtonLink>
                     </CardActions>
                   </Card>
                 </Grid>
@@ -186,89 +185,51 @@ const ChatDashboard = () => {
 
       {chatHistory.length > 0 && (
         <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2, color: "black" }}>
+          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: "light" }}>
             Continue where you left off
           </Typography>
-          <TableContainer component={Paper}>
+          <TableContainer component={StyledPaper}>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell
-                    sx={{
-                      fontWeight: "bold",
-                      backgroundColor: "#f5f5f5",
-                      fontSize: "1rem",
-                      color: "rgba(0, 0, 0, 0.87)",
-                    }}
-                  >
-                    Conversation
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      fontWeight: "bold",
-                      backgroundColor: "#f5f5f5",
-                      fontSize: "1rem",
-                      color: "rgba(0, 0, 0, 0.87)",
-                    }}
-                    align="right"
-                  >
-                    Actions
-                  </TableCell>
+                  <StyledTableHeaderCell>Conversation</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {chatHistory.map((record) => (
-                  <TableRow
-                    key={record.id}
-                    sx={{
-                      "&:nth-of-type(odd)": { backgroundColor: "#E0F7F6" },
-                      "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.08)" },
-                    }}
-                  >
-                    <TableCell component="th" scope="row">
-                      {record.attributes.name}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "flex-end",
-                          gap: 1,
-                        }}
+                  <StyledTableRow key={record.id}>
+                    <StyledTableCell>{record.attributes.name}</StyledTableCell>
+                    <StyledTableCell align="right">
+                      <StyledButtonLink
+                        onClick={() =>
+                          handleContinueChat(
+                            record.attributes.chat_id,
+                            record.attributes.session_id,
+                          )
+                        }
+                        endIcon={<ArrowForwardIcon />}
                       >
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            handleContinueChat(
-                              record.attributes.chat_id,
-                              record.attributes.session_id,
-                            )
-                          }
-                          endIcon={<ArrowForwardIcon />}
-                          sx={{
-                            color: "black",
-                            "&:hover": {
-                              backgroundColor: "rgba(0, 0, 0, 0.04)",
-                            },
-                          }}
-                        >
-                          Continue
-                        </Button>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
+                        Continue
+                      </StyledButtonLink>
+                    </StyledTableCell>
+                  </StyledTableRow>
                 ))}
               </TableBody>
             </Table>
+            <Box sx={{ 
+              display: "flex", 
+              justifyContent: "center", 
+              p: 1,
+              borderTop: (theme) => `1px solid ${theme.palette.border.neutralDefault}`
+            }}>
+              <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={handlePageChange}
+              />
+            </Box>
           </TableContainer>
-          <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
-            <Pagination
-              count={totalPages}
-              page={currentPage}
-              onChange={handlePageChange}
-              color="primary"
-            />
-          </Box>
         </Box>
       )}
     </Container>

@@ -31,6 +31,9 @@ import {
   ContentBox,
   StyledButton,
   StyledTableRow,
+  StyledTableHeaderCell,
+  StyledTableCell,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 
 const UserForm = () => {
@@ -294,14 +297,14 @@ const UserForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit User" : "Add User"}</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           color="inherit"
           to="/admin/users"
         >
           Back to Users
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -423,22 +426,22 @@ const UserForm = () => {
             <Typography variant="h6" gutterBottom>
               User Groups
             </Typography>
-            <TableContainer>
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Group Name</TableCell>
+                    <StyledTableHeaderCell>Group Name</StyledTableHeaderCell>
                     {userGroups.length > 1 && (
-                      <TableCell align="right">Action</TableCell>
+                      <StyledTableHeaderCell align="right">Action</StyledTableHeaderCell>
                     )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {userGroups.map((group) => (
                     <StyledTableRow key={group.id}>
-                      <TableCell>{group.attributes.name}</TableCell>
+                      <StyledTableCell>{group.attributes.name}</StyledTableCell>
                       {userGroups.length > 1 && (
-                        <TableCell align="right">
+                        <StyledTableCell align="right">
                           <IconButton
                             edge="end"
                             aria-label="delete"
@@ -446,45 +449,41 @@ const UserForm = () => {
                           >
                             <DeleteIcon />
                           </IconButton>
-                        </TableCell>
+                        </StyledTableCell>
                       )}
                     </StyledTableRow>
                   ))}
-                  <TableRow>
-                    <TableCell colSpan={userGroups.length > 1 ? 2 : 1}>
-                      <Box display="flex" alignItems="center" mt={2}>
-                        <FormControl fullWidth>
-                          <InputLabel>Add to Group</InputLabel>
-                          <Select
-                            value={selectedGroup}
-                            onChange={(e) => setSelectedGroup(e.target.value)}
-                          >
-                            {groups
-                              .filter(
-                                (group) =>
-                                  !userGroups.some((ug) => ug.id === group.id),
-                              )
-                              .map((group) => (
-                                <MenuItem key={group.id} value={group.id}>
-                                  {group.attributes.name}
-                                </MenuItem>
-                              ))}
-                          </Select>
-                        </FormControl>
-                        <Button
-                          onClick={handleAddToGroup}
-                          startIcon={<AddIcon />}
-                          variant="contained"
-                          sx={{ ml: 2 }}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
                 </TableBody>
-              </Table>
-            </TableContainer>
+                </Table>
+            </StyledPaper>
+            <Box display="flex" alignItems="center" mt={3}>
+              <FormControl fullWidth>
+                <InputLabel>Add to Group</InputLabel>
+                <Select
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                >
+                  {groups
+                    .filter(
+                      (group) =>
+                        !userGroups.some((ug) => ug.id === group.id),
+                    )
+                    .map((group) => (
+                      <MenuItem key={group.id} value={group.id}>
+                        {group.attributes.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+              <Button
+                onClick={handleAddToGroup}
+                startIcon={<AddIcon />}
+                variant="contained"
+                sx={{ ml: 2 }}
+              >
+                Add
+              </Button>
+            </Box>
           </Box>
         )}
       </ContentBox>

@@ -29,7 +29,7 @@ import {
 import "chartjs-adapter-date-fns";
 import DateRangePicker from "../common/DateRangePicker";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -185,13 +185,13 @@ const ChatDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Chat Room Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/chats")}
           color="inherit"
         >
           Back to Chat Rooms
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Typography variant="h6" gutterBottom>

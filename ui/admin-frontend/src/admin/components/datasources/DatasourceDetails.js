@@ -23,13 +23,14 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledPaper,
+  StyledButtonPrimaryOutlined,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
   StyledButton,
   StyledAccordion,
+  StyledButtonLink
 } from "../../styles/sharedStyles";
 import {
   getVectorStoreName,
@@ -132,13 +133,13 @@ const DatasourceDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Datasource Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/datasources")}
           color="inherit"
         >
           Back to Datasources
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Basic Information</SectionTitle>
@@ -427,14 +428,14 @@ const DatasourceDetails = () => {
         >
           <Typography color="success.main">{copySuccess}</Typography>
           <Box display="flex" gap={2}>
-            <StyledButton
+            <StyledButtonPrimaryOutlined
               variant="contained"
               color="secondary"
               onClick={handleCloneDataSource}
               startIcon={<ContentCopyIcon />}
             >
               Clone This Data Source
-            </StyledButton>
+            </StyledButtonPrimaryOutlined>
             <StyledButton
               variant="contained"
               startIcon={<EditIcon />}

@@ -12,13 +12,13 @@ import {
   ListItem,
   ListItemText,
   Divider,
-  Tooltip,
+  Tooltip
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -63,13 +63,13 @@ const ToolCatalogueDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Tool Catalog Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
           Back to Tool Catalogs
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Catalog Description</SectionTitle>

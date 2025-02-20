@@ -16,7 +16,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -61,14 +61,14 @@ const DataCatalogDetail = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">Data Catalog Details</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/data"
           color="inherit"
         >
           Back to Data Catalogs
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Catalog Information</SectionTitle>

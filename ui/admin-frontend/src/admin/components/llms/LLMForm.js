@@ -28,7 +28,7 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -248,14 +248,14 @@ const LLMForm = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="h5">{id ? "Edit LLM" : "Add LLM"}</Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llms"
           color="inherit"
         >
           Back to LLMs
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -428,7 +428,6 @@ const LLMForm = () => {
                 />
                 <IconButton
                   onClick={handleAddModel}
-                  color="primary"
                   sx={{ ml: 1 }}
                 >
                   <AddIcon />
@@ -445,8 +444,6 @@ const LLMForm = () => {
                     key={index}
                     label={model}
                     onDelete={() => handleDeleteModel(model)}
-                    color="primary"
-                    variant="outlined"
                   />
                 ))}
               </Stack>

@@ -4,7 +4,7 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
+  Button,
   TableHead,
   TableRow,
   Typography,
@@ -383,9 +383,9 @@ const ModelPriceList = () => {
           />
         </StyledDialogContent>
         <DialogActions>
-          <StyledButton onClick={handleCloseUpdatePriceModal}>
+          <Button onClick={handleCloseUpdatePriceModal}>
             Cancel
-          </StyledButton>
+          </Button>
           <StyledButton onClick={handleUpdatePrice} color="primary">
             Update
           </StyledButton>

@@ -13,11 +13,11 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
+  InputLabel
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledPaper,
+  StyledButtonLink,
   TitleBox,
   ContentBox,
   StyledButton,
@@ -235,13 +235,13 @@ const ToolCatalogueForm = () => {
         <Typography variant="h5">
           {id ? "Edit Tool Catalog" : "Create Tool Catalog"}
         </Typography>
-        <Button
+        <StyledButtonLink
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
           Back to Tool Catalogs
-        </Button>
+        </StyledButtonLink>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
