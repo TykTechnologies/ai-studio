@@ -15,6 +15,11 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -135,7 +140,9 @@ const ModelPriceForm = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const handleSubmit = async (e) => {
+  const [recalculateDialogOpen, setRecalculateDialogOpen] = useState(false);
+
+  const handleSubmit = async (e, shouldRecalculate = false) => {
     e.preventDefault();
     if (!validateForm()) return;
 
@@ -148,7 +155,11 @@ const ModelPriceForm = () => {
 
     try {
       if (id) {
-        await apiClient.patch(`/model-prices/${id}`, priceData);
+        if (shouldRecalculate) {
+          await apiClient.patch(`/model-prices/${id}/recalculate`, priceData);
+        } else {
+          await apiClient.patch(`/model-prices/${id}`, priceData);
+        }
       } else {
         await apiClient.post("/model-prices", priceData);
       }
@@ -156,7 +167,9 @@ const ModelPriceForm = () => {
       setSnackbar({
         open: true,
         message: id
-          ? "Model Price updated successfully"
+          ? shouldRecalculate
+            ? "Model Price updated and historical costs recalculated successfully"
+            : "Model Price updated successfully"
           : "Model Price created successfully",
         severity: "success",
       });
@@ -170,6 +183,11 @@ const ModelPriceForm = () => {
         severity: "error",
       });
     }
+  };
+
+  const handleRecalculateConfirm = (e) => {
+    setRecalculateDialogOpen(false);
+    handleSubmit(e, true);
   };
 
   const renderVendorMenuItem = (vendorCode) => {
@@ -287,11 +305,45 @@ const ModelPriceForm = () => {
             </Grid>
           </Grid>
 
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
             <StyledButton variant="contained" type="submit">
               {id ? "Update Model Price" : "Add Model Price"}
             </StyledButton>
+            {id && (
+              <Button
+                variant="text"
+                sx={{
+                  color: 'text.secondary',
+                  textDecoration: 'underline',
+                  '&:hover': {
+                    backgroundColor: 'transparent',
+                    textDecoration: 'underline'
+                  }
+                }}
+                onClick={() => setRecalculateDialogOpen(true)}
+              >
+                update and recalculate
+              </Button>
+            )}
           </Box>
+
+          <Dialog
+            open={recalculateDialogOpen}
+            onClose={() => setRecalculateDialogOpen(false)}
+          >
+            <DialogTitle>confirm recalculation</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                this will update the model price and recalculate costs for all historical chat records using this model. this action should only be used if the previous price was incorrect and you want to fix historical records. if the price has changed due to vendor updates, use the standard "update model price" button instead.
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setRecalculateDialogOpen(false)}>cancel</Button>
+              <Button onClick={handleRecalculateConfirm} color="secondary">
+                confirm recalculation
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Box>
       </ContentBox>
 

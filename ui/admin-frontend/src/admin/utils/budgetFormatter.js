@@ -31,14 +31,14 @@ const formatBudgetPeriod = (startDate) => {
 export const formatBudgetDisplay = (item) => {
 	const monthlyBudget = item.budget || item.monthlyBudget;
 	const budgetStartDate = item.budgetStartDate;
-	const spent = item.spent || item.currentUsage;
+	const spent = item.spent || item.currentUsage || 0;
 
 
 	if (!monthlyBudget) {
 		return "not set";
 	}
 
-	const usagePercent = (spent / monthlyBudget) * 100;
+	const usagePercent = (spent / monthlyBudget) * 100 || 0;
 	const currentUsage = spent;
 
 	const periodStart = calculateBudgetPeriodStart(budgetStartDate);
