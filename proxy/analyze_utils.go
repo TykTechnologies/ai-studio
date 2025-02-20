@@ -74,30 +74,41 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 		model = response.GetModel()
 	}
 
-	cpt := 0.0
-	cpit := 0.0
+	// Get pricing information
+	var cpt, cpit, cacheWritePT, cacheReadPT float64
 	price, err := service.GetModelPriceByModelNameAndVendor(model, string(llm.Vendor))
 	if err == nil && price != nil { // Check price != nil to avoid nil dereference
 		cpt = price.CPT
 		cpit = price.CPIT
+		cacheWritePT = price.CacheWritePT
+		cacheReadPT = price.CacheReadPT
 	} else {
 		log.Printf("Price not found for model: %s, vendor: %s", model, llm.Vendor)
 	}
 
+	// Get cache token counts
+	cacheWriteTokens := response.GetCacheWritePromptTokens()
+	cacheReadTokens := response.GetCacheReadPromptTokens()
+
 	// Use actual timestamp for the record, not budget start dates
 	rec := &models.LLMChatRecord{
-		LLMID:           llm.ID,
-		Name:            model, // Set the model name from the response
-		Vendor:          string(llm.Vendor),
-		PromptTokens:    pt,
-		ResponseTokens:  rt,
-		TotalTokens:     pt + rt,
-		TimeStamp:       timestamp,
-		Choices:         choices,
-		ToolCalls:       tools,
-		AppID:           app.ID,
-		UserID:          app.UserID,
-		Cost:            (cpt * float64(rt)) + (cpit * float64(pt)),
+		LLMID:                  llm.ID,
+		Name:                   model, // Set the model name from the response
+		Vendor:                 string(llm.Vendor),
+		PromptTokens:           pt,
+		ResponseTokens:         rt,
+		CacheWritePromptTokens: cacheWriteTokens,
+		CacheReadPromptTokens:  cacheReadTokens,
+		TotalTokens:            pt + rt + cacheWriteTokens + cacheReadTokens,
+		TimeStamp:              timestamp,
+		Choices:                choices,
+		ToolCalls:              tools,
+		AppID:                  app.ID,
+		UserID:                 app.UserID,
+		Cost: (cpt * float64(rt)) +
+			(cpit * float64(pt)) +
+			(cacheWritePT * float64(cacheWriteTokens)) +
+			(cacheReadPT * float64(cacheReadTokens)),
 		InteractionType: models.ProxyInteraction,
 	}
 
@@ -105,8 +116,14 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	analytics.RecordChatRecord(rec)
 	time.Sleep(200 * time.Millisecond) // Initial sleep to allow processing
 
-	// Budget analysis unchanged for brevity, but similar logging could be added
+	// Budget analysis
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
 		s.Budget.AnalyzeBudgetUsage(app, llm)
+	} else if budgetService, ok := service.(interface {
+		GetBudgetService() *services.BudgetService
+	}); ok {
+		if bs := budgetService.GetBudgetService(); bs != nil {
+			bs.AnalyzeBudgetUsage(app, llm)
+		}
 	}
 }

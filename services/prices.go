@@ -8,13 +8,15 @@ import (
 )
 
 // CreateModelPrice creates a new model price
-func (s *Service) CreateModelPrice(modelName, vendor string, cpt, cpit float64, currency string) (*models.ModelPrice, error) {
+func (s *Service) CreateModelPrice(modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, currency string) (*models.ModelPrice, error) {
 	modelPrice := &models.ModelPrice{
-		ModelName: modelName,
-		Vendor:    vendor,
-		CPT:       cpt,
-		CPIT:      cpit,
-		Currency:  currency,
+		ModelName:    modelName,
+		Vendor:       vendor,
+		CPT:          cpt,
+		CPIT:         cpit,
+		CacheWritePT: cacheWritePT,
+		CacheReadPT:  cacheReadPT,
+		Currency:     currency,
 	}
 
 	if err := modelPrice.Create(s.DB); err != nil {
@@ -34,46 +36,36 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 }
 
 // recalculateChatRecordCosts updates the cost for all chat records of a specific model
-func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit float64) error {
+func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64) error {
 	// Update all matching records with a single query
 	result := tx.Exec(`
 		UPDATE llm_chat_records 
-		SET cost = (prompt_tokens * ? + (total_tokens - prompt_tokens) * ?)
+		SET cost = (prompt_tokens * ?) + 
+			(response_tokens * ?) + 
+			(COALESCE(cache_write_prompt_tokens, 0) * ?) + 
+			(COALESCE(cache_read_prompt_tokens, 0) * ?)
 		WHERE name = ? AND vendor = ?`,
-		cpit, cpt, modelName, vendor,
+		cpit, cpt, cacheWritePT, cacheReadPT, modelName, vendor,
 	)
 	return result.Error
 }
 
-// UpdateModelPrice updates an existing model price without recalculating costs
-func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt, cpit float64, currency string) (*models.ModelPrice, error) {
-	var modelPrice *models.ModelPrice
-
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
-		var err error
-		// Get existing model price
-		mp := &models.ModelPrice{}
-		if err = mp.Get(tx, id); err != nil {
-			return err
-		}
-
-		// Update model price fields
-		mp.ModelName = modelName
-		mp.Vendor = vendor
-		mp.CPT = cpt
-		mp.CPIT = cpit
-		mp.Currency = currency
-
-		// Save the updated model price
-		if err = mp.Update(tx); err != nil {
-			return err
-		}
-
-		modelPrice = mp
-		return nil
-	})
-
+// UpdateModelPrice updates an existing model price
+func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, currency string) (*models.ModelPrice, error) {
+	modelPrice, err := s.GetModelPriceByID(id)
 	if err != nil {
+		return nil, err
+	}
+
+	modelPrice.ModelName = modelName
+	modelPrice.Vendor = vendor
+	modelPrice.CPT = cpt
+	modelPrice.CPIT = cpit
+	modelPrice.CacheWritePT = cacheWritePT
+	modelPrice.CacheReadPT = cacheReadPT
+	modelPrice.Currency = currency
+
+	if err := modelPrice.Update(s.DB); err != nil {
 		return nil, err
 	}
 
@@ -81,7 +73,7 @@ func (s *Service) UpdateModelPrice(id uint, modelName, vendor string, cpt, cpit 
 }
 
 // UpdateModelPriceAndRecalculate updates an existing model price and recalculates all associated chat record costs
-func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor string, cpt, cpit float64, currency string) (*models.ModelPrice, error) {
+func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, currency string) (*models.ModelPrice, error) {
 	var modelPrice *models.ModelPrice
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -97,6 +89,8 @@ func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor stri
 		mp.Vendor = vendor
 		mp.CPT = cpt
 		mp.CPIT = cpit
+		mp.CacheWritePT = cacheWritePT
+		mp.CacheReadPT = cacheReadPT
 		mp.Currency = currency
 
 		// Save the updated model price
@@ -105,7 +99,7 @@ func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor stri
 		}
 
 		// Recalculate costs for all associated chat records
-		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, cpt, cpit); err != nil {
+		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, cpt, cpit, cacheWritePT, cacheReadPT); err != nil {
 			return err
 		}
 
@@ -168,7 +162,7 @@ func (s *Service) GetOrCreateModelPriceByName(modelName string) (*models.ModelPr
 	return modelPrice, nil
 }
 
-// GetModelPriceByModelNameAndVendor retrieves a model price by its model name and vendor
+// GetModelPriceByModelNameAndVendor implements ServiceInterface
 func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
 	modelPrice := &models.ModelPrice{}
 
@@ -188,6 +182,8 @@ func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*
 			modelPrice.Vendor = vendor
 			modelPrice.CPT = 0.0
 			modelPrice.CPIT = 0.0
+			modelPrice.CacheWritePT = 0.0
+			modelPrice.CacheReadPT = 0.0
 			modelPrice.Currency = "USD"
 
 			// Try to create, if we get a unique constraint error, it means another

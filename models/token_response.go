@@ -6,4 +6,6 @@ type ITokenResponse interface {
 	GetChoiceCount() int
 	GetToolCount() int
 	GetModel() string
+	GetCacheWritePromptTokens() int
+	GetCacheReadPromptTokens() int
 }

@@ -194,6 +194,14 @@ func (o *OpenAIResponse) GetModel() string {
 	return o.Model
 }
 
+func (o *OpenAIResponse) GetCacheWritePromptTokens() int {
+	return 0
+}
+
+func (o *OpenAIResponse) GetCacheReadPromptTokens() int {
+	return 0
+}
+
 type OpenAIStreamingResponse struct {
 	ID                string `json:"id"`
 	Object            string `json:"object"`
@@ -243,4 +251,12 @@ func (o *OpenAIStreamingResponse) GetToolCount() int {
 
 func (o *OpenAIStreamingResponse) GetModel() string {
 	return o.Model
+}
+
+func (o *OpenAIStreamingResponse) GetCacheWritePromptTokens() int {
+	return 0
+}
+
+func (o *OpenAIStreamingResponse) GetCacheReadPromptTokens() int {
+	return 0
 }

@@ -205,14 +205,14 @@ func GetMostUsedLLMModels(db *gorm.DB, startDate, endDate time.Time, interaction
 	}
 
 	query := db.Model(&models.LLMChatRecord{}).
-		Select("COALESCE(NULLIF(name, ''), 'Unknown') as name, COUNT(*) as count").
+		Select("COALESCE(NULLIF(vendor, ''), 'Unknown') as name, COUNT(*) as count").
 		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
 	}
 
-	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown')").
+	err := query.Group("COALESCE(NULLIF(vendor, ''), 'Unknown')").
 		Order("count DESC").
 		Limit(10).
 		Find(&results).Error
@@ -510,7 +510,7 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 		query = query.Where("llm_id = ?", *llmID)
 	}
 
-	err := query.Group("DATE(time_stamp)").
+	err := query.Debug().Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
 
@@ -541,21 +541,102 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 	}, nil
 }
 
-// MultiAxisChartData represents data for a chart with multiple y-axes
-type MultiAxisChartData struct {
-	Labels   []string  `json:"labels"`
-	Datasets []Dataset `json:"datasets"`
-}
+// GetUsage returns token usage and cost data based on provided filters
+func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, appID *uint, interactionType *models.InteractionType) (*models.MultiAxisChartData, error) {
+	var results []struct {
+		Date             string
+		Tokens           int64
+		Cost             float64
+		PromptTokens     int64
+		ResponseTokens   int64
+		CacheWriteTokens int64
+		CacheReadTokens  int64
+	}
 
-// Dataset represents a single dataset in a multi-axis chart
-type Dataset struct {
-	Label string    `json:"label"`
-	Data  []float64 `json:"data"`
-	Yaxis string    `json:"yAxisID"`
+	query := db.Model(&models.LLMChatRecord{}).
+		Select(`
+			DATE(time_stamp) as date, 
+			SUM(total_tokens) as tokens, 
+			SUM(cost) as cost,
+			COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+			COALESCE(SUM(response_tokens), 0) as response_tokens,
+			COALESCE(SUM(COALESCE(cache_write_prompt_tokens, 0)), 0) as cache_write_tokens,
+			COALESCE(SUM(COALESCE(cache_read_prompt_tokens, 0)), 0) as cache_read_tokens
+		`).
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if vendor != "" {
+		query = query.Where("vendor = ?", vendor)
+	}
+	if llmID != nil {
+		query = query.Where("llm_id = ?", *llmID)
+	}
+	if appID != nil {
+		query = query.Where("app_id = ?", *appID)
+	}
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("DATE(time_stamp)").
+		Order("date").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	chartData := &models.MultiAxisChartData{
+		Labels: make([]string, len(results)),
+		Datasets: []models.Dataset{
+			{
+				Label: "Total Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Cost",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y1",
+			},
+			{
+				Label: "Prompt Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Response Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Cache Write Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Cache Read Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+		},
+	}
+
+	for i, result := range results {
+		chartData.Labels[i] = result.Date
+		chartData.Datasets[0].Data[i] = float64(result.Tokens)
+		chartData.Datasets[1].Data[i] = result.Cost
+		chartData.Datasets[2].Data[i] = float64(result.PromptTokens)
+		chartData.Datasets[3].Data[i] = float64(result.ResponseTokens)
+		chartData.Datasets[4].Data[i] = float64(result.CacheWriteTokens)
+		chartData.Datasets[5].Data[i] = float64(result.CacheReadTokens)
+	}
+
+	return chartData, nil
 }
 
 // GetTokenUsageAndCostForApp returns the token usage and total cost for a specific app over time
-func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) (*MultiAxisChartData, error) {
+func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) (*models.MultiAxisChartData, error) {
 	var results []struct {
 		Date   string
 		Tokens int64
@@ -573,9 +654,9 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 		return nil, err
 	}
 
-	chartData := &MultiAxisChartData{
+	chartData := &models.MultiAxisChartData{
 		Labels: make([]string, len(results)),
-		Datasets: []Dataset{
+		Datasets: []models.Dataset{
 			{
 				Label: "Token Usage",
 				Data:  make([]float64, len(results)),
@@ -709,8 +790,8 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	// Get LLM usage with proper handling of NULL and 0 values
 	llmQuery := db.Table("llm_chat_records").
 		Select(`
-			COALESCE(llm_chat_records.llm_id, 0) AS llm_id,
-			COALESCE(llms.name, 'Unknown') AS name,
+			MIN(llm_chat_records.llm_id) AS llm_id,
+			COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown') AS name,
 			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
 			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
 			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
@@ -719,7 +800,7 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-		Group("COALESCE(llm_chat_records.llm_id, 0), COALESCE(llms.name, 'Unknown')")
+		Group("COALESCE(NULLIF(llm_chat_records.vendor, ''), 'Unknown')")
 
 	if llmID != nil {
 		llmQuery = llmQuery.Where("llms.id = ?", *llmID)
