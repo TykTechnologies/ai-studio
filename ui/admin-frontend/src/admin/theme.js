@@ -77,6 +77,11 @@ const theme = createTheme({
         h5: {
           fontWeight: "bold",
         },
+        h1: {
+          fontFamily: "Inter-Bold",
+          fontSize: "32px",
+          lineHeight: "36px",
+        },
       },
     },
     MuiTableRow: {

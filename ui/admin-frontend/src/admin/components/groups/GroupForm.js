@@ -69,7 +69,7 @@ const GroupForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
+        <Typography variant="h1">
           {id ? "Edit Group" : "Create Group"}
         </Typography>
         <SecondaryLinkButton

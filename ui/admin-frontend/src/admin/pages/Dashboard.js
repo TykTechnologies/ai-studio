@@ -507,7 +507,7 @@ const Dashboard = () => {
           )}
 
           <TitleBox top="64px">
-            <Typography variant="h4">Dashboard</Typography>
+            <Typography variant="h1">Dashboard</Typography>
             <Stack direction="row" spacing={2} alignItems="center">
               <Box display="flex" alignItems="center" gap={2}>
                 <DateRangePicker

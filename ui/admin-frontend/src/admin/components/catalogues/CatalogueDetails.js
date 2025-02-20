@@ -70,7 +70,7 @@ const CatalogueDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Catalog Details</Typography>
+        <Typography variant="h1">Catalog Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}

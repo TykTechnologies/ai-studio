@@ -398,7 +398,7 @@ const GroupDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Group Details</Typography>
+        <Typography variant="h1">Group Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           color="inherit"

@@ -243,7 +243,7 @@ const AppForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">{id ? "Edit App" : "Add App"}</Typography>
+        <Typography variant="h1">{id ? "Edit App" : "Add App"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
