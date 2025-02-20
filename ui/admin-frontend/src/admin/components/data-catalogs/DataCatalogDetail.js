@@ -59,7 +59,7 @@ const DataCatalogDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Data Catalog Details</Typography>
+        <Typography variant="h1">Data Catalog Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}

@@ -166,7 +166,7 @@ const LLMSettingsDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">LLM Call Settings Details</Typography>
+        <Typography variant="h1">LLM Call Settings Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llm-settings")}

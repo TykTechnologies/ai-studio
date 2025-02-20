@@ -246,7 +246,7 @@ const LLMForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">{id ? "Edit LLM" : "Add LLM"}</Typography>
+        <Typography variant="h1">{id ? "Edit LLM" : "Add LLM"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}

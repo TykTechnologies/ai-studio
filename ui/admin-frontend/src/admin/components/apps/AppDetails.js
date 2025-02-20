@@ -415,7 +415,7 @@ const AppDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">App Details</Typography>
+        <Typography variant="h1">App Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/apps")}

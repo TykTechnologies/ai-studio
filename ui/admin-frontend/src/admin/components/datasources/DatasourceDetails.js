@@ -129,7 +129,7 @@ const DatasourceDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Datasource Details</Typography>
+        <Typography variant="h1">Datasource Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/datasources")}

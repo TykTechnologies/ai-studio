@@ -379,7 +379,7 @@ const LLMDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">LLM Details</Typography>
+        <Typography variant="h1">LLM Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}

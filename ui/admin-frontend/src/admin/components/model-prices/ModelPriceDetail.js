@@ -52,7 +52,7 @@ const ModelPriceDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Model Price Details</Typography>
+        <Typography variant="h1">Model Price Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/model-prices")}

@@ -119,7 +119,7 @@ const FilterForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
+        <Typography variant="h1">
           {id ? "Edit Filter" : "Add Filter"}
         </Typography>
         <SecondaryLinkButton

@@ -53,7 +53,7 @@ const FilterDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Filter Details</Typography>
+        <Typography variant="h1">Filter Details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/filters")}

@@ -197,7 +197,7 @@ const ModelPriceForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
+        <Typography variant="h1">
           {id ? "Edit Model Price" : "Add Model Price"}
         </Typography>
         <SecondaryLinkButton
