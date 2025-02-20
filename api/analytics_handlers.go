@@ -52,7 +52,9 @@ func (a *API) getChatRecordsPerDay(c *gin.Context) {
 			})
 			return
 		}
-		endDate = &parsedDate
+		// Set end date to end of day (23:59:59)
+		endOfDay := time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		endDate = &endOfDay
 	}
 
 	chartData, err := analytics.GetChatRecordsPerDay(a.service.DB, startDate, endDate)
@@ -159,6 +161,9 @@ func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
+
+	// Set end date to end of day (23:59:59)
+	endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, endDate.Location())
 
 	return startDate, endDate, nil
 }
