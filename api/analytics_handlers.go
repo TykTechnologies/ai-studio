@@ -591,7 +591,7 @@ func (a *API) getVendorUsage(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor)
+	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {

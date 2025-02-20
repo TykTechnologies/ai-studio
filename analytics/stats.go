@@ -494,7 +494,7 @@ func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) 
 }
 
 // GetVendorUsage returns the usage statistics for a specific vendor over time
-func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string) (*ChartData, error) {
+func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID *uint) (*ChartData, error) {
 	var results []struct {
 		Date   string
 		Tokens int64
@@ -502,10 +502,15 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string) (*
 		Calls  int64
 	}
 
-	err := db.Model(&models.LLMChatRecord{}).
+	query := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, SUM(total_tokens) as tokens, SUM(cost) as cost, COUNT(*) as calls").
-		Where("time_stamp BETWEEN ? AND ? AND vendor = ?", startDate, endDate, vendor).
-		Group("DATE(time_stamp)").
+		Where("time_stamp BETWEEN ? AND ? AND vendor = ?", startDate, endDate, vendor)
+
+	if llmID != nil {
+		query = query.Where("llm_id = ?", *llmID)
+	}
+
+	err := query.Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
 

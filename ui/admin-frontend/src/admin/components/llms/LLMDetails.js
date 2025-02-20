@@ -231,6 +231,7 @@ const LLMDetails = () => {
             start_date: startDate,
             end_date: endDate,
             vendor: llm.attributes.vendor,
+            llm_id: llm.id,
           },
         }),
         apiClient.get(`/analytics/budget-usage`, {
