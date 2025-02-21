@@ -725,9 +725,9 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 		`).
 		Where("time_stamp BETWEEN ? AND ? AND name IS NOT NULL", startDate, endDate)
 
-	if interactionType != nil {
-		query = query.Where("interaction_type = ?", *interactionType)
-	}
+	// if interactionType != nil {
+	// 	query = query.Where("interaction_type = ?", *interactionType)
+	// }
 
 	if llmID != nil {
 		query = query.Where("llm_id = ?", *llmID)
