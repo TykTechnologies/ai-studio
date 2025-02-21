@@ -9,7 +9,9 @@ func fixLLMChatRecordIDs(db *gorm.DB) error {
 	// Update anthropic chat records
 	if err := db.Exec(`
 		UPDATE llm_chat_records
-		SET interaction_type = 'proxy' AND name = 'claude-3-5-sonnet-20241022' and currency = 'USD'
+		SET interaction_type = 'proxy',
+		    name = 'claude-3-5-sonnet-20241022',
+		    currency = 'USD'
 		WHERE llm_id = 5
 	`).Error; err != nil {
 		return err
