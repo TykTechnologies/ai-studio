@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -57,6 +58,8 @@ func TestAnalyzeResponse(t *testing.T) {
 	reqBody := []byte(`{"prompt": "Hello"}`)
 	req, _ := http.NewRequest("POST", "http://example.com/test", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), "model_name", "test-model")
+	req = req.WithContext(ctx)
 
 	// Test successful response
 	respBody := []byte(`{
@@ -140,6 +143,8 @@ func TestAnalyzeStreamingResponse(t *testing.T) {
 	reqBody := []byte(`{"prompt": "Hello"}`)
 	req, _ := http.NewRequest("POST", "http://example.com/test", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), "model_name", "test-model")
+	req = req.WithContext(ctx)
 
 	// Test streaming response with chunks in the same format as the mock server
 	chunks := [][]byte{
@@ -287,8 +292,13 @@ func TestAnalyzeCompletionResponseWithCache(t *testing.T) {
 		cacheRead:  2, // Cache read tokens
 	}
 
+	// Create request with model in context
+	req, _ := http.NewRequest("POST", "http://example.com/test", nil)
+	ctx := context.WithValue(req.Context(), "model_name", "test-model")
+	req = req.WithContext(ctx)
+
 	// Test response analysis
-	AnalyzeCompletionResponse(service, llm, app, mockResp, time.Now())
+	AnalyzeCompletionResponse(service, llm, app, mockResp, req, time.Now())
 
 	// Wait for analytics to process the request
 	waitForAnalytics(t, db, 1)
@@ -360,6 +370,8 @@ func TestAnalyzeCompletionResponse(t *testing.T) {
 	reqBody := []byte(`{"model": "test-model", "prompt": "Hello"}`)
 	req, _ := http.NewRequest("POST", "http://example.com/test", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), "model_name", "test-model")
+	req = req.WithContext(ctx)
 
 	respBody := []byte(`{
 		"id": "mock-123",

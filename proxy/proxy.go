@@ -21,6 +21,7 @@ import (
 	"github.com/gosimple/slug"
 	"github.com/tmc/langchaingo/schema"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
@@ -427,7 +428,24 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
-	AnalyzeResponse(p.service, llm, app, statusCode, body, reqBody, r)
+	llm, app, response, err := switches.AnalyzeResponse(llm, app, statusCode, body, r)
+	if err != nil {
+		log.Printf("failed to analyze response: %v", err)
+		return
+	}
+
+	l := &models.ProxyLog{
+		AppID:        app.ID,
+		UserID:       app.UserID,
+		TimeStamp:    time.Now(),
+		Vendor:       string(llm.Vendor),
+		RequestBody:  truncateString(string(reqBody), maxBodySize),
+		ResponseBody: truncateString(string(body), maxBodySize),
+		ResponseCode: statusCode,
+	}
+
+	analytics.RecordProxyLog(l)
+	AnalyzeCompletionResponse(p.service, llm, app, response, r, time.Now())
 }
 
 func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {
@@ -650,7 +668,24 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 }
 
 func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) {
-	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
+	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, code, fullResponse, req, chunks)
+	if err != nil {
+		log.Printf("failed to analyze response: %v", err)
+		return
+	}
+
+	l := &models.ProxyLog{
+		AppID:        app.ID,
+		UserID:       app.UserID,
+		TimeStamp:    timestamp,
+		Vendor:       string(llm.Vendor),
+		RequestBody:  truncateString(string(reqBody), maxBodySize),
+		ResponseBody: truncateString(string(fullResponse), maxBodySize),
+		ResponseCode: code,
+	}
+
+	analytics.RecordProxyLog(l)
+	AnalyzeCompletionResponse(p.service, llm, app, response, req, timestamp)
 }
 
 // Helper to read body without consuming (unused here, but may be kept):

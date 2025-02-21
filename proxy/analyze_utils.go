@@ -38,7 +38,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	}
 
 	analytics.RecordProxyLog(l)
-	AnalyzeCompletionResponse(service, llm, app, response, time.Now())
+	AnalyzeCompletionResponse(service, llm, app, response, r, time.Now())
 }
 
 func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time) {
@@ -59,19 +59,30 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 	}
 
 	analytics.RecordProxyLog(l)
-	AnalyzeCompletionResponse(service, llm, app, response, timestamp)
+	AnalyzeCompletionResponse(service, llm, app, response, r, timestamp)
 }
 
-func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, timestamp time.Time) {
+func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, r *http.Request, timestamp time.Time) {
 	var pt, rt, choices, tools int
-	var model string
+	// Get model from response, fallback to context if not available
+	model := ""
+	if response != nil {
+		model = response.GetModel()
+	}
+
+	if model == "" {
+		if modelFromCtx := r.Context().Value("model_name"); modelFromCtx != nil {
+			if modelStr, ok := modelFromCtx.(string); ok {
+				model = modelStr
+			}
+		}
+	}
 
 	if response != nil {
 		pt = response.GetPromptTokens()
 		rt = response.GetResponseTokens()
 		choices = response.GetChoiceCount()
 		tools = response.GetToolCount()
-		model = response.GetModel()
 	}
 
 	// Get pricing information
