@@ -15,9 +15,11 @@ import (
 type MockResponse struct {
 	Model string `json:"model"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		PromptTokens             int `json:"prompt_tokens"`
+		CompletionTokens         int `json:"completion_tokens"`
+		TotalTokens              int `json:"total_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	} `json:"usage"`
 }
 
@@ -39,6 +41,14 @@ func (o *MockResponse) GetToolCount() int {
 
 func (o *MockResponse) GetModel() string {
 	return o.Model
+}
+
+func (o *MockResponse) GetCacheWritePromptTokens() int {
+	return o.Usage.CacheCreationInputTokens
+}
+
+func (o *MockResponse) GetCacheReadPromptTokens() int {
+	return o.Usage.CacheReadInputTokens
 }
 
 type Mock struct{}
@@ -100,6 +110,8 @@ func (v *Mock) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, status
 	response.Usage.PromptTokens = 5
 	response.Usage.CompletionTokens = 10
 	response.Usage.TotalTokens = 15
+	response.Usage.CacheCreationInputTokens = 2
+	response.Usage.CacheReadInputTokens = 8
 
 	return llm, app, response, nil
 }

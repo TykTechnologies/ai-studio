@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"strconv"
@@ -53,13 +54,12 @@ func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
 	recordToolCall(tcEntry)
 }
 
-// Will create a Analytics ChatLog and ChatRecord entry for a given ContentMessage
 func RecordContentMessage(
 	mc *llms.MessageContent,
 	cr *llms.ContentResponse,
 	vendor models.Vendor,
 	name, chatID string,
-	timeMs int, userID, appID uint,
+	timeMs int, userID, appID, llmID uint,
 	t time.Time,
 	svc services.ServiceInterface,
 ) {
@@ -123,8 +123,36 @@ func RecordContentMessage(
 		}
 	}
 
+	// Get cache token information from the response if available
+	if len(cr.Choices) > 0 && cr.Choices[0].GenerationInfo != nil {
+		// Log the keys in GenerationInfo for debugging
+		slog.Info("GenerationInfo keys", "keys", cr.Choices[0].GenerationInfo)
+
+		// Try int first, then float64
+		if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(int); ok {
+			rec.CacheWritePromptTokens = cacheWrite
+			slog.Info("Cache write tokens (int)", "value", rec.CacheWritePromptTokens)
+		} else if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(float64); ok {
+			rec.CacheWritePromptTokens = int(cacheWrite)
+			slog.Info("Cache write tokens (float64)", "value", rec.CacheWritePromptTokens)
+		}
+
+		if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(int); ok {
+			rec.CacheReadPromptTokens = cacheRead
+			slog.Info("Cache read tokens (int)", "value", rec.CacheReadPromptTokens)
+		} else if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(float64); ok {
+			rec.CacheReadPromptTokens = int(cacheRead)
+			slog.Info("Cache read tokens (float64)", "value", rec.CacheReadPromptTokens)
+		}
+	}
+
 	rec.Choices = len(cr.Choices)
-	rec.Name = price.ModelName
+	// Use provided model name if available, fallback to price model name
+	if name != "" {
+		rec.Name = name
+	} else {
+		rec.Name = price.ModelName
+	}
 	rec.Vendor = string(vendor)
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
@@ -135,11 +163,15 @@ func RecordContentMessage(
 	rec.ToolCalls = toolCalls
 	rec.ChatID = chatID
 	rec.AppID = appID
-	rec.Cost = cpt*float64(responseTokens) + cpit*float64(promptTokens)
+	// Calculate cost including cache tokens
+	rec.Cost = cpt*float64(responseTokens) +
+		cpit*float64(promptTokens) +
+		price.CacheWritePT*float64(rec.CacheWritePromptTokens) +
+		price.CacheReadPT*float64(rec.CacheReadPromptTokens)
 	rec.Currency = price.Currency
 	rec.InteractionType = models.ChatInteraction
+	rec.LLMID = llmID
 
-	// LLM Response
 	chatLog := &models.LLMChatLogEntry{}
 	chatLog.Name = name
 	chatLog.Vendor = string(vendor)
@@ -154,7 +186,6 @@ func RecordContentMessage(
 	recordChatLogEntry(chatLog)
 }
 
-// records a tool call
 func recordToolCall(tc *models.ToolCallRecord) {
 	recMutex.RLock()
 	if !recStarted {
@@ -174,10 +205,10 @@ func RecordChatRecord(record *models.LLMChatRecord) {
 	recordChatRecord(record)
 }
 
-// Records a chat record
 func recordChatRecord(record *models.LLMChatRecord) {
 	recMutex.RLock()
 	if !recStarted {
+		log.Printf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 		recMutex.RUnlock()
 		return
 	}
@@ -185,12 +216,12 @@ func recordChatRecord(record *models.LLMChatRecord) {
 
 	select {
 	case chatRecordChan <- record:
+		log.Printf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 	default:
-		slog.Warn("chat record buffer full, dropping record")
+		log.Printf("Chat record buffer full, dropping record: model=%s, app_id=%d, llm_id=%d", record.Name, record.AppID, record.LLMID)
 	}
 }
 
-// Records a chat log entry
 func recordChatLogEntry(log *models.LLMChatLogEntry) {
 	recMutex.RLock()
 	if !recStarted {
@@ -231,7 +262,7 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 	initDB(db)
 
 	defaultBufferSize := 1000
-	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_ZIZE")
+	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_SIZE")
 	if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
 		if err != nil {
@@ -240,6 +271,8 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 			defaultBufferSize = bfr
 		}
 	}
+
+	slog.Info("starting analytics recording", "buffer_size", defaultBufferSize)
 
 	chatRecordChan = make(chan *models.LLMChatRecord, defaultBufferSize)
 	logEntryChan = make(chan *models.LLMChatLogEntry, defaultBufferSize)
@@ -252,7 +285,14 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 			case record := <-chatRecordChan:
 				err := db.Create(record).Error
 				if err != nil {
-					slog.Warn("error creating chat record", "error", err)
+					slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
+				} else {
+					slog.Info("created chat record",
+						"model", record.Name,
+						"app_id", record.AppID,
+						"llm_id", record.LLMID,
+						"cost", record.Cost,
+						"timestamp", record.TimeStamp)
 				}
 			case log := <-logEntryChan:
 				err := db.Create(log).Error

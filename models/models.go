@@ -5,7 +5,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// func fixLLMChatRecordIDs(db *gorm.DB) error {
+// 	// Update anthropic chat records
+// 	if err := db.Exec(`
+// 		UPDATE llm_chat_records
+// 		SET llm_id = 5
+// 		WHERE interaction_type = 'proxy'
+// 	`).Error; err != nil {
+// 		return err
+// 	}
+
+// 	return nil
+// }
+
 func InitModels(db *gorm.DB) error {
+	// Fix LLM chat record IDs
+	// fixLLMChatRecordIDs(db)
+
 	err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done

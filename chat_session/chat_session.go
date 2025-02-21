@@ -872,6 +872,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		0,
 		cs.userID,
 		0,
+		cs.chatRef.LLMID,
 		time.Now(),
 		cs.service,
 	)

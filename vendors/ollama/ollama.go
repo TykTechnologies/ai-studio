@@ -28,7 +28,9 @@ func New() models.LLMVendorProvider {
 func (v *Ollama) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	promptTokens := helpers.KeyValueOrZero(choice.GenerationInfo, "PromptTokens")
 	responseTokens := helpers.KeyValueOrZero(choice.GenerationInfo, "CompletionTokens")
-	totalTokens := promptTokens + responseTokens
+	cacheWriteTokens := helpers.KeyValueOrZero(choice.GenerationInfo, "CacheCreationInputTokens")
+	cacheReadTokens := helpers.KeyValueOrZero(choice.GenerationInfo, "CacheReadInputTokens")
+	totalTokens := promptTokens + responseTokens + cacheWriteTokens + cacheReadTokens
 
 	return totalTokens, promptTokens, responseTokens
 }

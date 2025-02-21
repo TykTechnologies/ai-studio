@@ -52,7 +52,9 @@ func (a *API) getChatRecordsPerDay(c *gin.Context) {
 			})
 			return
 		}
-		endDate = &parsedDate
+		// Set end date to end of day (23:59:59)
+		endOfDay := time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		endDate = &endOfDay
 	}
 
 	chartData, err := analytics.GetChatRecordsPerDay(a.service.DB, startDate, endDate)
@@ -159,6 +161,9 @@ func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
+
+	// Set end date to end of day (23:59:59)
+	endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, endDate.Location())
 
 	return startDate, endDate, nil
 }
@@ -564,6 +569,7 @@ func (a *API) getModelUsage(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param vendor query string true "Vendor Name"
+// @Param llm_id query int false "LLM ID to filter by"
 // @Success 200 {object} analytics.ChartData
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
@@ -591,13 +597,106 @@ func (a *API) getVendorUsage(c *gin.Context) {
 		return
 	}
 
-	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor)
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	chartData, err := analytics.GetVendorUsage(a.service.DB, startDate, endDate, vendor, llmID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: "Failed to get vendor usage"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
+}
+
+// getUsage godoc
+// @Summary Get token usage and cost data with flexible filtering
+// @Description Get token usage and cost data filtered by vendor, LLM ID, app ID, and interaction type
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param vendor query string false "Vendor name to filter by"
+// @Param llm_id query int false "LLM ID to filter by"
+// @Param app_id query int false "App ID to filter by"
+// @Param interaction_type query string false "Interaction type to filter by (chat/proxy)"
+// @Success 200 {object} models.MultiAxisChartData
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/usage [get]
+func (a *API) getUsage(c *gin.Context) {
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	var llmID *uint
+	if llmIDStr := c.Query("llm_id"); llmIDStr != "" {
+		id, err := strconv.ParseUint(llmIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		llmID = &u
+	}
+
+	var appID *uint
+	if appIDStr := c.Query("app_id"); appIDStr != "" {
+		id, err := strconv.ParseUint(appIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Invalid app_id"}},
+			})
+			return
+		}
+		u := uint(id)
+		appID = &u
+	}
+
+	vendor := c.Query("vendor")
+	interactionType := getInteractionType(c)
+
+	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, vendor, llmID, appID, interactionType)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get usage data"}},
 		})
 		return
 	}
@@ -994,19 +1093,21 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 		return
 	}
 
-	response := make([]map[string]interface{}, 0, len(usageList))
-	for _, u := range usageList {
-		entry := map[string]interface{}{
+	response := make([]map[string]interface{}, len(usageList))
+	for i, u := range usageList {
+		response[i] = map[string]interface{}{
 			"name":            u.Name,
-			"type":            u.EntityType,
-			"monthlyBudget":   u.Budget,
-			"currentUsage":    u.Spent,
-			"usagePercent":    u.Usage,
+			"entity_type":     u.EntityType,
+			"budget":          u.Budget,
+			"spent":           u.Spent,
+			"usage":           u.Usage,
 			"budgetStartDate": u.BudgetStartDate,
 			"totalCost":       u.TotalCost,
 			"entity_id":       u.EntityID,
+			"total_tokens":    u.TotalTokens,
+			"user_id":         u.UserID,
+			"user_email":      u.UserEmail,
 		}
-		response = append(response, entry)
 	}
 
 	c.JSON(http.StatusOK, response)

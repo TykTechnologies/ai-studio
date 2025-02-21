@@ -44,6 +44,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
 import IconButton from "@mui/material/IconButton";
 
@@ -56,6 +57,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
+  Filler,
 );
 
 const NoDataMessage = ({ message }) => (
@@ -135,6 +137,7 @@ const Dashboard = () => {
   const [toolUsageData, setToolUsageData] = useState(null);
   const [userActivityData, setUserActivityData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState([]);
+  const [tokenUsageData, setTokenUsageData] = useState(null);
 
   const [llms, setLLMs] = useState([]);
   const [llmsLoading, setLLMsLoading] = useState(true);
@@ -189,6 +192,7 @@ const Dashboard = () => {
         toolUsageResponse,
         userActivityResponse,
         budgetUsageResponse,
+        tokenUsageResponse,
       ] = await Promise.all([
         apiClient.get("/analytics/chat-records-per-day", {
           params: {
@@ -231,6 +235,12 @@ const Dashboard = () => {
             end_date: endDate,
           },
         }),
+        apiClient.get("/analytics/usage", {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+          },
+        }),
       ]);
 
       setChatData(chatDataResponse.data);
@@ -239,6 +249,7 @@ const Dashboard = () => {
       setToolUsageData(toolUsageResponse.data);
       setUserActivityData(userActivityResponse.data);
       setBudgetUsageData(budgetUsageResponse.data || []);
+      setTokenUsageData(tokenUsageResponse.data);
     } catch (error) {
       console.error("Error fetching data:", error);
       if (error.response) {
@@ -259,6 +270,7 @@ const Dashboard = () => {
       setToolUsageData(null);
       setUserActivityData(null);
       setBudgetUsageData([]); // Ensure it's always an array
+      setTokenUsageData(null);
     } finally {
       setLLMsLoading(false);
       setChatsLoading(false);
@@ -468,6 +480,7 @@ const Dashboard = () => {
             <TableRow>
               <StyledTableCell>Name</StyledTableCell>
               <StyledTableCell align="right">Total Cost</StyledTableCell>
+              <StyledTableCell align="right">Total Tokens</StyledTableCell>
               <StyledTableCell align="right">Budget</StyledTableCell>
             </TableRow>
           </TableHead>
@@ -475,12 +488,30 @@ const Dashboard = () => {
             {items.map((item, index) => (
               <StyledTableRow key={index}>
                 <StyledTableCell>
-                  <StyledLink to={`/admin/${(item.type || "").toLowerCase()}s/${item.entity_id || 0}`}>
-                    {item.name}
-                  </StyledLink>
+                  {item.entity_id === 0 ? (
+                    <Typography>{item.name}</Typography>
+                  ) : (
+                    <StyledLink to={`/admin/${(item.entity_type || "").toLowerCase()}s/${item.entity_id}`}>
+                      {item.name}
+                    </StyledLink>
+                  )}
+                  {item.name !== "Tyk AI Studio Chat" && item.user_email && (
+                    <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {item.user_id ? (
+                        <StyledLink to={`/admin/users/${item.user_id}`} sx={{ fontSize: 'inherit' }}>
+                          {item.user_email}
+                        </StyledLink>
+                      ) : (
+                        item.user_email
+                      )}
+                    </Typography>
+                  )}
                 </StyledTableCell>
                 <StyledTableCell align="right">
                   ${parseFloat(item.totalCost || 0).toFixed(2)}
+                </StyledTableCell>
+                <StyledTableCell align="right">
+                  {item.total_tokens ? item.total_tokens.toLocaleString() : '0'}
                 </StyledTableCell>
                 <StyledTableCell align="right">
                   {formatBudgetDisplay(item)}
@@ -595,16 +626,80 @@ const Dashboard = () => {
                   )}
                 </ChartPaper>
               </Grid>
+              <Grid item xs={12}>
+                <ChartPaper elevation={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Token Usage Over Time
+                  </Typography>
+                  {tokenUsageData ? (
+                    <MemoizedLineChart
+                      options={{
+                        ...chartOptions,
+                        plugins: {
+                          ...chartOptions.plugins,
+                          tooltip: {
+                            mode: 'index',
+                          },
+                        },
+                        scales: {
+                          x: {
+                            stacked: true,
+                          },
+                          y: {
+                            stacked: true,
+                            beginAtZero: true,
+                          },
+                        },
+                      }}
+                      data={{
+                        labels: tokenUsageData.labels,
+                        datasets: [
+                          {
+                            label: "Prompt Tokens",
+                            data: tokenUsageData.datasets[2].data,
+                            borderColor: "rgb(53, 162, 235)",
+                            backgroundColor: "rgba(53, 162, 235, 0.5)",
+                            fill: true,
+                          },
+                          {
+                            label: "Response Tokens",
+                            data: tokenUsageData.datasets[3].data,
+                            borderColor: "rgb(75, 192, 192)",
+                            backgroundColor: "rgba(75, 192, 192, 0.5)",
+                            fill: true,
+                          },
+                          {
+                            label: "Cache Write Tokens",
+                            data: tokenUsageData.datasets[4].data,
+                            borderColor: "rgb(255, 159, 64)",
+                            backgroundColor: "rgba(255, 159, 64, 0.5)",
+                            fill: true,
+                          },
+                          {
+                            label: "Cache Read Tokens",
+                            data: tokenUsageData.datasets[5].data,
+                            borderColor: "rgb(153, 102, 255)",
+                            backgroundColor: "rgba(153, 102, 255, 0.5)",
+                            fill: true,
+                          },
+                        ],
+                      }}
+                    />
+                  ) : (
+                    <NoDataMessage message="No token usage data available for the selected period." />
+                  )}
+                </ChartPaper>
+              </Grid>
 
               <Grid item xs={12}>
                 {Array.isArray(budgetUsageData) && budgetUsageData.length > 0 ? (
                   <>
                     {renderBudgetTable(
-                      budgetUsageData.filter(item => item.type === "LLM"),
+                      budgetUsageData.filter(item => item.entity_type === "LLM"),
                       "LLM Costs"
                     )}
                     {renderBudgetTable(
-                      budgetUsageData.filter(item => item.type === "App"),
+                      budgetUsageData.filter(item => item.entity_type === "App"),
                       "Application Costs"
                     )}
                   </>

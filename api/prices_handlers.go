@@ -67,6 +67,8 @@ func (a *API) createModelPrice(c *gin.Context) {
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
 		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
@@ -120,7 +122,7 @@ func (a *API) getModelPrice(c *gin.Context) {
 }
 
 // @Summary Update a model price
-// @Description Update an existing model price's information
+// @Description Update an existing model price's information without recalculating historical costs
 // @Tags model-prices
 // @Accept json
 // @Produce json
@@ -160,6 +162,8 @@ func (a *API) updateModelPrice(c *gin.Context) {
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
 		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
 	if err != nil {
@@ -280,17 +284,21 @@ func serializeModelPrice(mp *models.ModelPrice) ModelPriceResponse {
 		Type: "model-prices",
 		ID:   strconv.FormatUint(uint64(mp.ID), 10),
 		Attributes: struct {
-			ModelName string  `json:"model_name"`
-			Vendor    string  `json:"vendor"`
-			CPT       float64 `json:"cpt"`
-			CPIT      float64 `json:"cpit"`
-			Currency  string  `json:"currency"`
+			ModelName    string  `json:"model_name"`
+			Vendor       string  `json:"vendor"`
+			CPT          float64 `json:"cpt"`
+			CPIT         float64 `json:"cpit"`
+			CacheWritePT float64 `json:"cache_write_pt"`
+			CacheReadPT  float64 `json:"cache_read_pt"`
+			Currency     string  `json:"currency"`
 		}{
-			ModelName: mp.ModelName,
-			Vendor:    mp.Vendor,
-			CPT:       mp.CPT,
-			CPIT:      mp.CPIT,
-			Currency:  mp.Currency,
+			ModelName:    mp.ModelName,
+			Vendor:       mp.Vendor,
+			CPT:          mp.CPT,
+			CPIT:         mp.CPIT,
+			CacheWritePT: mp.CacheWritePT,
+			CacheReadPT:  mp.CacheReadPT,
+			Currency:     mp.Currency,
 		},
 	}
 }
@@ -301,4 +309,107 @@ func serializeModelPrices(mps models.ModelPrices) []ModelPriceResponse {
 		result[i] = serializeModelPrice(&mp)
 	}
 	return result
+}
+
+// @Summary Get or create a model price by name
+// @Description Get a model price by its name, creating it with default values if it doesn't exist
+// @Tags model-prices
+// @Accept json
+// @Produce json
+// @Param model_name query string true "Model name"
+// @Success 200 {object} ModelPriceResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /model-prices/by-name [get]
+// @Security BearerAuth
+// @Summary Update a model price and recalculate historical costs
+// @Description Update an existing model price's information and recalculate all historical chat record costs
+// @Tags model-prices
+// @Accept json
+// @Produce json
+// @Param id path int true "Model Price ID"
+// @Param modelPrice body ModelPriceInput true "Updated model price information"
+// @Success 200 {object} ModelPriceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /model-prices/{id}/recalculate [patch]
+// @Security BearerAuth
+func (a *API) updateModelPriceAndRecalculate(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid model price ID"}},
+		})
+		return
+	}
+
+	var input ModelPriceInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	modelPrice, err := a.service.UpdateModelPriceAndRecalculate(
+		uint(id),
+		input.Data.Attributes.ModelName,
+		input.Data.Attributes.Vendor,
+		input.Data.Attributes.CPT,
+		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
+		input.Data.Attributes.Currency,
+	)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "Model price not found"}},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
+}
+
+func (a *API) getOrCreateModelPriceByName(c *gin.Context) {
+	modelName := c.Query("model_name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Model name is required"}},
+		})
+		return
+	}
+
+	modelPrice, err := a.service.GetOrCreateModelPriceByName(modelName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
 }

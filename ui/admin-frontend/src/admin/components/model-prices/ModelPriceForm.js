@@ -14,6 +14,12 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  Button
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -54,12 +60,16 @@ const ModelPriceForm = () => {
     vendor: "",
     cpit: 0,
     cpt: 0,
+    cache_write_pt: 0,
+    cache_read_pt: 0,
     currency: "USD",
   });
 
   const [displayPrice, setDisplayPrice] = useState({
     cpit_million: 0,
     cpt_million: 0,
+    cache_write_pt_million: 0,
+    cache_read_pt_million: 0,
   });
 
   const [errors, setErrors] = useState({});
@@ -85,6 +95,8 @@ const ModelPriceForm = () => {
       setDisplayPrice({
         cpit_million: response.data.data.attributes.cpit * 1000000,
         cpt_million: response.data.data.attributes.cpt * 1000000,
+        cache_write_pt_million: response.data.data.attributes.cache_write_pt * 1000000,
+        cache_read_pt_million: response.data.data.attributes.cache_read_pt * 1000000,
       });
     } catch (error) {
       console.error("Error fetching Model Price", error);
@@ -98,13 +110,15 @@ const ModelPriceForm = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === "cpit_million" || name === "cpt_million") {
+    if (name === "cpit_million" || name === "cpt_million" || name === "cache_write_pt_million" || name === "cache_read_pt_million") {
       setDisplayPrice((prev) => ({
         ...prev,
         [name]: parseFloat(value) || 0,
       }));
       // Update the actual price state with per-token values
-      const perTokenName = name === "cpit_million" ? "cpit" : "cpt";
+      const perTokenName = name === "cpit_million" ? "cpit" :
+        name === "cpt_million" ? "cpt" :
+          name === "cache_write_pt_million" ? "cache_write_pt" : "cache_read_pt";
       setPrice((prev) => ({
         ...prev,
         [perTokenName]: (parseFloat(value) || 0) / 1000000,
@@ -134,7 +148,9 @@ const ModelPriceForm = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const handleSubmit = async (e) => {
+  const [recalculateDialogOpen, setRecalculateDialogOpen] = useState(false);
+
+  const handleSubmit = async (e, shouldRecalculate = false) => {
     e.preventDefault();
     if (!validateForm()) return;
 
@@ -147,7 +163,11 @@ const ModelPriceForm = () => {
 
     try {
       if (id) {
-        await apiClient.patch(`/model-prices/${id}`, priceData);
+        if (shouldRecalculate) {
+          await apiClient.patch(`/model-prices/${id}/recalculate`, priceData);
+        } else {
+          await apiClient.patch(`/model-prices/${id}`, priceData);
+        }
       } else {
         await apiClient.post("/model-prices", priceData);
       }
@@ -155,7 +175,9 @@ const ModelPriceForm = () => {
       setSnackbar({
         open: true,
         message: id
-          ? "Model Price updated successfully"
+          ? shouldRecalculate
+            ? "Model Price updated and historical costs recalculated successfully"
+            : "Model Price updated successfully"
           : "Model Price created successfully",
         severity: "success",
       });
@@ -169,6 +191,11 @@ const ModelPriceForm = () => {
         severity: "error",
       });
     }
+  };
+
+  const handleRecalculateConfirm = (e) => {
+    setRecalculateDialogOpen(false);
+    handleSubmit(e, true);
   };
 
   const renderVendorMenuItem = (vendorCode) => {
@@ -253,9 +280,14 @@ const ModelPriceForm = () => {
                 label="Cost per Million Input Tokens"
                 name="cpit_million"
                 type="number"
-                inputProps={{ step: 0.01, min: 0 }}
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
                 value={displayPrice.cpit_million}
-                onChange={handleChange}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
                 required
                 tooltip="The cost per million input tokens (e.g., 0.40 for $0.40 per million tokens)"
               />
@@ -266,11 +298,52 @@ const ModelPriceForm = () => {
                 label="Cost per Million Output Tokens"
                 name="cpt_million"
                 type="number"
-                inputProps={{ step: 0.01, min: 0 }}
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
                 value={displayPrice.cpt_million}
-                onChange={handleChange}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
                 required
                 tooltip="The cost per million output tokens (e.g., 0.40 for $0.40 per million tokens)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TooltipTextField
+                fullWidth
+                label="Cost per Million Cache Write Tokens"
+                name="cache_write_pt_million"
+                type="number"
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
+                value={displayPrice.cache_write_pt_million}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
+                required
+                tooltip="The cost per million tokens for writing to the cache (e.g., 0.20 for $0.20 per million tokens)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TooltipTextField
+                fullWidth
+                label="Cost per Million Cache Read Tokens"
+                name="cache_read_pt_million"
+                type="number"
+                inputProps={{ step: 0.01, min: 0, inputMode: "decimal" }}
+                value={displayPrice.cache_read_pt_million}
+                onChange={(e) => handleChange({
+                  target: {
+                    name: e.target.name,
+                    value: e.target.value.replace(',', '.')
+                  }
+                })}
+                required
+                tooltip="The cost per million tokens for reading from the cache (e.g., 0.10 for $0.10 per million tokens)"
               />
             </Grid>
             <Grid item xs={12}>
@@ -294,6 +367,24 @@ const ModelPriceForm = () => {
               {id ? "Update model price" : "Add model price"}
             </PrimaryButton>
           </Box>
+
+          <Dialog
+            open={recalculateDialogOpen}
+            onClose={() => setRecalculateDialogOpen(false)}
+          >
+            <DialogTitle>confirm recalculation</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                this will update the model price and recalculate costs for all historical chat records using this model. this action should only be used if the previous price was incorrect and you want to fix historical records. if the price has changed due to vendor updates, use the standard "update model price" button instead.
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setRecalculateDialogOpen(false)}>cancel</Button>
+              <Button onClick={handleRecalculateConfirm} color="secondary">
+                confirm recalculation
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Box>
       </ContentBox>
 

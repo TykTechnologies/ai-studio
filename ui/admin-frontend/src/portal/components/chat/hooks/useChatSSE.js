@@ -279,14 +279,44 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 				}
 			});
 
+			// Helper function to detect error type
+			const detectErrorType = (error) => {
+				if (!error) return 'connection';
+				const errorStr = error.toString().toLowerCase();
+
+				if (errorStr.includes('failed to create message') ||
+					errorStr.includes('llm') ||
+					errorStr.includes('model') ||
+					errorStr.includes('anthropic') ||
+					errorStr.includes('openai')) {
+					return 'llm_config';
+				}
+
+				if (errorStr.includes('connection') ||
+					errorStr.includes('network') ||
+					errorStr.includes('timeout')) {
+					return 'connection';
+				}
+
+				return 'other';
+			};
+
 			// Handle error events
 			eventSource.current.addEventListener('error', (event) => {
 				try {
 					console.log('SSE error message received:', event.data);
+					const errorType = detectErrorType(event.data);
+
+					// For LLM config errors, don't attempt reconnection
+					if (errorType === 'llm_config') {
+						reconnectAttempts.current = maxReconnectAttempts; // Prevent reconnection
+					}
+
 					onMessageReceived({
 						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: 'system',
 						content: `:::system Error: ${event.data}:::`,
+						errorType: errorType,
 						isComplete: true
 					});
 				} catch (error) {
@@ -317,11 +347,15 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 				isConnectedRef.current = false;
 				setIsLoading(false);
 
-				if (reconnectAttempts.current < maxReconnectAttempts) {
+				// Check if we have a recent LLM config error
+				const hasLLMError = error?.data && detectErrorType(error.data) === 'llm_config';
+
+				if (!hasLLMError && reconnectAttempts.current < maxReconnectAttempts) {
 					onMessageReceived({
 						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: "system",
 						payload: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
+						errorType: 'connection'
 					});
 
 					const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
@@ -335,15 +369,23 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 							eventSource.current.close();
 						}
 
-						setupEventSource();
+						// Only update URL if it's a connection error
+						if (!hasLLMError) {
+							setupEventSource();
+						}
 					}, delay);
 				} else {
+					const message = hasLLMError
+						? "LLM configuration error. Please check your settings."
+						: "Maximum reconnection attempts reached. Please refresh the page.";
+
 					onMessageReceived({
 						id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
 						type: "system",
-						payload: "Maximum reconnection attempts reached. Please refresh the page.",
+						payload: message,
+						errorType: hasLLMError ? 'llm_config' : 'connection'
 					});
-					setError("Maximum reconnection attempts reached. Please refresh the page.");
+					setError(message);
 				}
 			};
 

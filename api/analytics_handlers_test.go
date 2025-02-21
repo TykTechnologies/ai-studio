@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,7 @@ func setupAnalyticsTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.LLM{})
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.LLM{}, &models.User{})
 	require.NoError(t, err)
 
 	return db
@@ -125,23 +126,25 @@ func TestGetBudgetUsage(t *testing.T) {
 
 	// Create test app with budget
 	budget := 100.0
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	app := &models.App{
-		Name:          "Test App",
-		MonthlyBudget: &budget,
+		Name:            "Test App",
+		MonthlyBudget:   &budget,
+		BudgetStartDate: &startOfMonth,
 	}
 	db.Create(app)
 
 	// Create test LLM with budget
 	llmBudget := 200.0
 	llm := &models.LLM{
-		Name:          "Test LLM",
-		MonthlyBudget: &llmBudget,
+		Name:            "Test LLM",
+		MonthlyBudget:   &llmBudget,
+		BudgetStartDate: &startOfMonth,
 	}
 	db.Create(llm)
 
 	// Create test records
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	records := []models.LLMChatRecord{
 		{
 			AppID:     app.ID,
@@ -173,9 +176,9 @@ func TestGetBudgetUsage(t *testing.T) {
 	// Find app and LLM entries
 	var appEntry, llmEntry map[string]interface{}
 	for _, entry := range response {
-		if entry["type"] == "App" {
+		if entry["entity_type"] == "App" {
 			appEntry = entry
-		} else if entry["type"] == "LLM" {
+		} else if entry["entity_type"] == "LLM" {
 			llmEntry = entry
 		}
 	}
@@ -183,14 +186,110 @@ func TestGetBudgetUsage(t *testing.T) {
 	// Verify app budget usage
 	assert.NotNil(t, appEntry)
 	assert.Equal(t, "Test App", appEntry["name"])
-	assert.Equal(t, 50.0, appEntry["currentUsage"])
-	assert.Equal(t, 50.0, appEntry["usagePercent"]) // 50/100 * 100
+	assert.Equal(t, 50.0, appEntry["spent"])
+	assert.Equal(t, 50.0, appEntry["usage"]) // 50/100 * 100
 
 	// Verify LLM budget usage
 	assert.NotNil(t, llmEntry)
 	assert.Equal(t, "Test LLM", llmEntry["name"])
-	assert.Equal(t, 50.0, llmEntry["currentUsage"])
-	assert.Equal(t, 25.0, llmEntry["usagePercent"]) // 50/200 * 100
+	assert.Equal(t, 50.0, llmEntry["spent"])
+	assert.Equal(t, 25.0, llmEntry["usage"]) // 50/200 * 100
+}
+
+func TestGetVendorUsage(t *testing.T) {
+	db := setupAnalyticsTestDB(t)
+	api, router := setupAnalyticsTestAPI(db)
+	router.GET("/analytics/vendor-usage", api.getVendorUsage)
+
+	// Create test LLMs
+	llm1 := &models.LLM{ID: 1, Name: "LLM 1", Vendor: "anthropic"}
+	llm2 := &models.LLM{ID: 2, Name: "LLM 2", Vendor: "anthropic"}
+	db.Create(llm1)
+	db.Create(llm2)
+
+	// Insert test data
+	now := time.Now()
+	testData := []models.LLMChatRecord{
+		{
+			Vendor:      "anthropic",
+			LLMID:       llm1.ID,
+			TimeStamp:   now,
+			Cost:        10.0,
+			TotalTokens: 100,
+		},
+		{
+			Vendor:      "anthropic",
+			LLMID:       llm2.ID,
+			TimeStamp:   now,
+			Cost:        20.0,
+			TotalTokens: 200,
+		},
+	}
+	for _, record := range testData {
+		db.Create(&record)
+	}
+
+	tests := []struct {
+		name          string
+		llmID         string
+		expectedCost  float64
+		expectedCode  int
+		expectedError string
+	}{
+		{
+			name:         "Filter by LLM ID",
+			llmID:        "1",
+			expectedCost: 10.0,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "No LLM Filter",
+			expectedCost: 30.0,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:          "Invalid LLM ID",
+			llmID:         "invalid",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "Invalid llm_id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/analytics/vendor-usage", nil)
+			q := req.URL.Query()
+			q.Add("start_date", now.AddDate(0, 0, -1).Format("2006-01-02"))
+			q.Add("end_date", now.AddDate(0, 0, 1).Format("2006-01-02"))
+			q.Add("vendor", "anthropic")
+			if tt.llmID != "" {
+				q.Add("llm_id", tt.llmID)
+			}
+			req.URL.RawQuery = q.Encode()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedCode, w.Code)
+
+			if tt.expectedError != "" {
+				var errorResponse models.ErrorResponse
+				err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
+				require.NoError(t, err)
+				assert.Contains(t, errorResponse.Errors[0].Detail, tt.expectedError)
+			} else {
+				var response analytics.ChartData
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				require.NoError(t, err)
+
+				var totalCost float64
+				if len(response.Cost) > 0 {
+					totalCost = response.Cost[0]
+				}
+				assert.InDelta(t, tt.expectedCost, totalCost, 0.001)
+			}
+		})
+	}
 }
 
 func TestGetMostUsedLLMModels(t *testing.T) {

@@ -236,7 +236,7 @@ const AppDetails = () => {
   const fetchTokenUsageAndCost = async () => {
     try {
       const [usageResponse, budgetResponse] = await Promise.all([
-        apiClient.get(`/analytics/token-usage-and-cost-for-app`, {
+        apiClient.get(`/analytics/usage`, {
           params: { start_date: startDate, end_date: endDate, app_id: id },
         }),
         apiClient.get(`/analytics/budget-usage-for-app`, {
@@ -327,6 +327,7 @@ const AppDetails = () => {
           display: true,
           text: "Date",
         },
+        stacked: true,
       },
       y: {
         beginAtZero: true,
@@ -334,6 +335,7 @@ const AppDetails = () => {
           display: true,
           text: "Token Usage",
         },
+        stacked: true,
       },
     },
     plugins: {
@@ -343,6 +345,9 @@ const AppDetails = () => {
       title: {
         display: true,
         text: "Token Usage Over Time",
+      },
+      tooltip: {
+        mode: 'index',
       },
     },
   };
@@ -384,10 +389,32 @@ const AppDetails = () => {
     labels: tokenUsageAndCostData?.labels || [],
     datasets: [
       {
-        label: "Token Usage",
-        data: tokenUsageAndCostData?.datasets[0]?.data || [],
+        label: "Prompt Tokens",
+        data: tokenUsageAndCostData?.datasets[2]?.data || [],
+        borderColor: "rgb(53, 162, 235)",
+        backgroundColor: "rgba(53, 162, 235, 0.5)",
+        fill: true,
+      },
+      {
+        label: "Response Tokens",
+        data: tokenUsageAndCostData?.datasets[3]?.data || [],
         borderColor: "rgb(75, 192, 192)",
-        tension: 0.1,
+        backgroundColor: "rgba(75, 192, 192, 0.5)",
+        fill: true,
+      },
+      {
+        label: "Cache Write Tokens",
+        data: tokenUsageAndCostData?.datasets[4]?.data || [],
+        borderColor: "rgb(255, 159, 64)",
+        backgroundColor: "rgba(255, 159, 64, 0.5)",
+        fill: true,
+      },
+      {
+        label: "Cache Read Tokens",
+        data: tokenUsageAndCostData?.datasets[5]?.data || [],
+        borderColor: "rgb(153, 102, 255)",
+        backgroundColor: "rgba(153, 102, 255, 0.5)",
+        fill: true,
       },
     ],
   };
