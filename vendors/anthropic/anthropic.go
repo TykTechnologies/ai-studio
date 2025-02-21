@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/responses"
+	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/anthropic"
@@ -32,7 +34,9 @@ func (v *Anthropic) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	dat := choice.GenerationInfo
 	promptTokens = helpers.KeyValueOrZero(dat, "InputTokens")
 	responseTokens = helpers.KeyValueOrZero(dat, "OutputTokens")
-	totalTokens = promptTokens + responseTokens
+	cacheWriteTokens := helpers.KeyValueOrZero(dat, "CacheCreationInputTokens")
+	cacheReadTokens := helpers.KeyValueOrZero(dat, "CacheReadInputTokens")
+	totalTokens = promptTokens + responseTokens + cacheWriteTokens + cacheReadTokens
 
 	return totalTokens, promptTokens, responseTokens
 }
@@ -70,8 +74,18 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 		Choices: 1,
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"status":   statusCode,
+		"response": string(resps),
+		"app_id":   app.ID,
+		"llm_id":   llm.ID,
+	}).Debug("Analyzing streaming response")
+
+	var startMsg *responses.AnthropicStreamingChunkStart
+
 	asStr := string(resps)
 	parts := strings.Split(asStr, "\n")
+	logrus.WithField("parts_count", len(parts)).Debug("Split response into parts")
 	for _, part := range parts {
 		if part == "" || strings.Index(part, "event:") == 0 {
 			continue
@@ -89,14 +103,21 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 		if ok {
 			switch tp {
 			case "message_start":
-				startMsg := &responses.AnthropicStreamingChunkStart{}
+				startMsg = &responses.AnthropicStreamingChunkStart{}
 				err := json.Unmarshal([]byte(body), startMsg)
 				if err != nil {
 					return nil, nil, nil, err
 				}
 
+				logrus.WithFields(logrus.Fields{
+					"input_tokens": startMsg.Message.Usage.InputTokens,
+					"model":        startMsg.Message.Model,
+				}).Debug("Processing message_start")
+
 				aggregate.PromptTokens = startMsg.Message.Usage.InputTokens
 				aggregate.Model = startMsg.Message.Model
+				aggregate.CacheWritePromptTokens = startMsg.Message.Usage.CacheCreationInputTokens
+				aggregate.CacheReadPromptTokens = startMsg.Message.Usage.CacheReadInputTokens
 
 			case "message_delta":
 				deltaMsg := &responses.AnthropicStreamingChunkDelta{}
@@ -105,6 +126,13 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 					return nil, nil, nil, err
 				}
 
+				logrus.WithField("output_tokens", deltaMsg.Usage.OutputTokens).Debug("Processing message_delta")
+
+				// For streaming, we need to add both the initial output token from message_start
+				// and the delta output tokens
+				if startMsg != nil && aggregate.CompletionTokens == 0 {
+					aggregate.CompletionTokens = startMsg.Message.Usage.OutputTokens
+				}
 				aggregate.CompletionTokens += deltaMsg.Usage.OutputTokens
 
 			case "content_block_start":
@@ -120,6 +148,13 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 			}
 		}
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"prompt_tokens":   aggregate.PromptTokens,
+		"response_tokens": aggregate.CompletionTokens,
+		"model":           aggregate.Model,
+		"time":            time.Now(),
+	}).Debug("Returning aggregate response")
 
 	return llm, app, aggregate, nil
 }

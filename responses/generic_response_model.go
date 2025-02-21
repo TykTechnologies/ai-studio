@@ -1,11 +1,13 @@
 package responses
 
 type GenericResponse struct {
-	Model            string
-	Choices          int
-	ToolCalls        int
-	PromptTokens     int
-	CompletionTokens int
+	Model                  string
+	Choices                int
+	ToolCalls              int
+	PromptTokens           int
+	CompletionTokens       int
+	CacheWritePromptTokens int
+	CacheReadPromptTokens  int
 }
 
 func (o *GenericResponse) GetPromptTokens() int {
@@ -26,4 +28,12 @@ func (o *GenericResponse) GetToolCount() int {
 
 func (o *GenericResponse) GetModel() string {
 	return o.Model
+}
+
+func (o *GenericResponse) GetCacheWritePromptTokens() int {
+	return o.CacheWritePromptTokens
+}
+
+func (o *GenericResponse) GetCacheReadPromptTokens() int {
+	return o.CacheReadPromptTokens
 }

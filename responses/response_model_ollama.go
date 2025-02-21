@@ -35,3 +35,11 @@ func (o *OllamaGenerateResponse) GetToolCount() int {
 func (o *OllamaGenerateResponse) GetModel() string {
 	return o.Model
 }
+
+func (o *OllamaGenerateResponse) GetCacheWritePromptTokens() int {
+	return 0
+}
+
+func (o *OllamaGenerateResponse) GetCacheReadPromptTokens() int {
+	return 0
+}

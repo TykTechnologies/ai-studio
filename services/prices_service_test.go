@@ -5,23 +5,37 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
+func setupPricesTestDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	err = db.AutoMigrate(&models.ModelPrice{})
+	assert.NoError(t, err)
+
+	return db
+}
+
 func TestModelPriceService(t *testing.T) {
-	db := setupTestDB(t)
+	db := setupPricesTestDB(t)
 	service := &Service{DB: db}
 
 	t.Run("CreateModelPrice", func(t *testing.T) {
-		modelPrice, err := service.CreateModelPrice("GPT-4", "OpenAI", 0.0001, 0.00005, "USD")
+		modelPrice, err := service.CreateModelPrice("GPT-4", "OpenAI", 0.0001, 0.00005, 0.00002, 0.00001, "USD")
 		assert.NoError(t, err)
 		assert.NotNil(t, modelPrice)
 		assert.Equal(t, "GPT-4", modelPrice.ModelName)
 		assert.Equal(t, "OpenAI", modelPrice.Vendor)
 		assert.Equal(t, 0.0001, modelPrice.CPT)
+		assert.Equal(t, 0.00002, modelPrice.CacheWritePT)
+		assert.Equal(t, 0.00001, modelPrice.CacheReadPT)
 	})
 
 	t.Run("GetModelPriceByID", func(t *testing.T) {
-		createdModelPrice, _ := service.CreateModelPrice("GPT-3", "OpenAI", 0.00005, 0.00005, "USD")
+		createdModelPrice, _ := service.CreateModelPrice("GPT-3", "OpenAI", 0.00005, 0.00005, 0.00002, 0.00001, "USD")
 		modelPrice, err := service.GetModelPriceByID(createdModelPrice.ID)
 		assert.NoError(t, err)
 		assert.NotNil(t, modelPrice)
@@ -29,15 +43,15 @@ func TestModelPriceService(t *testing.T) {
 	})
 
 	t.Run("UpdateModelPrice", func(t *testing.T) {
-		createdModelPrice, _ := service.CreateModelPrice("BERT", "Google", 0.00002, 0.00005, "USD")
-		updatedModelPrice, err := service.UpdateModelPrice(createdModelPrice.ID, "BERT-Large", "Google", 0.00003, 0.00005, "USD")
+		createdModelPrice, _ := service.CreateModelPrice("BERT", "Google", 0.00002, 0.00005, 0.00002, 0.00001, "USD")
+		updatedModelPrice, err := service.UpdateModelPrice(createdModelPrice.ID, "BERT-Large", "Google", 0.00003, 0.00005, 0.00002, 0.00001, "USD")
 		assert.NoError(t, err)
 		assert.Equal(t, "BERT-Large", updatedModelPrice.ModelName)
 		assert.Equal(t, 0.00003, updatedModelPrice.CPT)
 	})
 
 	t.Run("DeleteModelPrice", func(t *testing.T) {
-		createdModelPrice, _ := service.CreateModelPrice("T5", "Google", 0.00001, 0.00005, "USD")
+		createdModelPrice, _ := service.CreateModelPrice("T5", "Google", 0.00001, 0.00005, 0.00002, 0.00001, "USD")
 		err := service.DeleteModelPrice(createdModelPrice.ID)
 		assert.NoError(t, err)
 		_, err = service.GetModelPriceByID(createdModelPrice.ID)
@@ -45,23 +59,23 @@ func TestModelPriceService(t *testing.T) {
 	})
 
 	t.Run("GetAllModelPrices", func(t *testing.T) {
-		service.CreateModelPrice("Model1", "Vendor1", 0.0001, 0.00005, "USD")
-		service.CreateModelPrice("Model2", "Vendor2", 0.0002, 0.00005, "USD")
+		service.CreateModelPrice("Model1", "Vendor1", 0.0001, 0.00005, 0.00002, 0.00001, "USD")
+		service.CreateModelPrice("Model2", "Vendor2", 0.0002, 0.00005, 0.00002, 0.00001, "USD")
 		modelPrices, _, _, err := service.GetAllModelPrices(10, 1, true)
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(modelPrices), 2)
 	})
 
 	t.Run("GetModelPricesByVendor", func(t *testing.T) {
-		service.CreateModelPrice("Model3", "Vendor3", 0.0003, 0.00005, "USD")
-		service.CreateModelPrice("Model4", "Vendor3", 0.0004, 0.00005, "USD")
+		service.CreateModelPrice("Model3", "Vendor3", 0.0003, 0.00005, 0.00002, 0.00001, "USD")
+		service.CreateModelPrice("Model4", "Vendor3", 0.0004, 0.00005, 0.00002, 0.00001, "USD")
 		modelPrices, err := service.GetModelPricesByVendor("Vendor3")
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(modelPrices))
 	})
 
 	t.Run("GetModelPriceByModelName", func(t *testing.T) {
-		service.CreateModelPrice("UniqueModel", "UniqueVendor", 0.0005, 0.00005, "USD")
+		service.CreateModelPrice("UniqueModel", "UniqueVendor", 0.0005, 0.00005, 0.00002, 0.00001, "USD")
 		modelPrice, err := service.GetModelPriceByModelName("UniqueModel")
 		assert.NoError(t, err)
 		assert.Equal(t, "UniqueModel", modelPrice.ModelName)
@@ -69,7 +83,7 @@ func TestModelPriceService(t *testing.T) {
 	})
 
 	t.Run("GetModelPriceByModelNameAndVendor", func(t *testing.T) {
-		service.CreateModelPrice("SpecificModel", "SpecificVendor", 0.0006, 0.00005, "USD")
+		service.CreateModelPrice("SpecificModel", "SpecificVendor", 0.0006, 0.00005, 0.00002, 0.00001, "USD")
 		modelPrice, err := service.GetModelPriceByModelNameAndVendor("SpecificModel", "SpecificVendor")
 		assert.NoError(t, err)
 		assert.Equal(t, "SpecificModel", modelPrice.ModelName)
@@ -78,8 +92,24 @@ func TestModelPriceService(t *testing.T) {
 
 	t.Run("CreateMultipleModelPrices", func(t *testing.T) {
 		modelPrices := models.ModelPrices{
-			{ModelName: "Bulk1", Vendor: "BulkVendor", CPT: 0.0007},
-			{ModelName: "Bulk2", Vendor: "BulkVendor", CPT: 0.0008},
+			{
+				ModelName:    "Bulk1",
+				Vendor:       "BulkVendor",
+				CPT:          0.0007,
+				CPIT:         0.00005,
+				CacheWritePT: 0.00002,
+				CacheReadPT:  0.00001,
+				Currency:     "USD",
+			},
+			{
+				ModelName:    "Bulk2",
+				Vendor:       "BulkVendor",
+				CPT:          0.0008,
+				CPIT:         0.00005,
+				CacheWritePT: 0.00002,
+				CacheReadPT:  0.00001,
+				Currency:     "USD",
+			},
 		}
 		err := service.CreateMultipleModelPrices(modelPrices)
 		assert.NoError(t, err)
@@ -90,8 +120,24 @@ func TestModelPriceService(t *testing.T) {
 
 	t.Run("UpdateMultipleModelPrices", func(t *testing.T) {
 		modelPrices := models.ModelPrices{
-			{ModelName: "UpdateBulk1", Vendor: "UpdateVendor", CPT: 0.0009},
-			{ModelName: "UpdateBulk2", Vendor: "UpdateVendor", CPT: 0.0010},
+			{
+				ModelName:    "UpdateBulk1",
+				Vendor:       "UpdateVendor",
+				CPT:          0.0009,
+				CPIT:         0.00005,
+				CacheWritePT: 0.00002,
+				CacheReadPT:  0.00001,
+				Currency:     "USD",
+			},
+			{
+				ModelName:    "UpdateBulk2",
+				Vendor:       "UpdateVendor",
+				CPT:          0.0010,
+				CPIT:         0.00005,
+				CacheWritePT: 0.00002,
+				CacheReadPT:  0.00001,
+				Currency:     "USD",
+			},
 		}
 		service.CreateMultipleModelPrices(modelPrices)
 
@@ -109,8 +155,24 @@ func TestModelPriceService(t *testing.T) {
 
 	t.Run("DeleteMultipleModelPrices", func(t *testing.T) {
 		modelPrices := models.ModelPrices{
-			{ModelName: "DeleteBulk1", Vendor: "DeleteVendor", CPT: 0.0013},
-			{ModelName: "DeleteBulk2", Vendor: "DeleteVendor", CPT: 0.0014},
+			{
+				ModelName:    "DeleteBulk1",
+				Vendor:       "DeleteVendor",
+				CPT:          0.0013,
+				CPIT:         0.00005,
+				CacheWritePT: 0.00002,
+				CacheReadPT:  0.00001,
+				Currency:     "USD",
+			},
+			{
+				ModelName:    "DeleteBulk2",
+				Vendor:       "DeleteVendor",
+				CPT:          0.0014,
+				CPIT:         0.00005,
+				CacheWritePT: 0.00002,
+				CacheReadPT:  0.00001,
+				Currency:     "USD",
+			},
 		}
 		service.CreateMultipleModelPrices(modelPrices)
 
@@ -121,9 +183,10 @@ func TestModelPriceService(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(remainingPrices))
 	})
+
 	t.Run("GetModelPriceByModelNameAndVendor", func(t *testing.T) {
 		// Test existing model price
-		service.CreateModelPrice("SpecificModel", "SpecificVendor", 0.0006, 0.00005, "USD")
+		service.CreateModelPrice("SpecificModel", "SpecificVendor", 0.0006, 0.00005, 0.00002, 0.00001, "USD")
 		modelPrice, err := service.GetModelPriceByModelNameAndVendor("SpecificModel", "SpecificVendor")
 		assert.NoError(t, err)
 		assert.Equal(t, "SpecificModel", modelPrice.ModelName)
@@ -137,6 +200,8 @@ func TestModelPriceService(t *testing.T) {
 		assert.Equal(t, "NewVendor", nonExistingModelPrice.Vendor)
 		assert.Equal(t, 0.0, nonExistingModelPrice.CPT)
 		assert.Equal(t, 0.0, nonExistingModelPrice.CPIT)
+		assert.Equal(t, 0.0, nonExistingModelPrice.CacheWritePT)
+		assert.Equal(t, 0.0, nonExistingModelPrice.CacheReadPT)
 		assert.Equal(t, "USD", nonExistingModelPrice.Currency)
 
 		// Verify the auto-created model price was actually persisted

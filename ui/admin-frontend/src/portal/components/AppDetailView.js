@@ -87,7 +87,7 @@ const AppDetailView = () => {
         const config = getConfig();
         setTokenUsageAndCostData(usageResponse.data);
         setBudgetUsageData(budgetResponse.data);
-        setBaseUrl(config.PROXY_URL || `//${currentHost}:9090`);
+        setBaseUrl(config.proxyURL || `//${currentHost}:9090`);
 
         setApp(appResponse.data);
         setAccessibleLLMs(llmsResponse.data);

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"crypto/rand"
 	"embed"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -24,6 +27,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
 )
+
+// bodyLogWriter captures the response body while still writing it to the client
+type bodyLogWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+// Write implements the io.Writer interface
+func (w *bodyLogWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
 
 // @title           Midsommar API
 // @version         1.0
@@ -68,9 +83,51 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		log.Printf("Failed to register Tyk provider: %v", err)
 	}
 
+	router := gin.Default()
+
+	// Add debug middleware only if DEBUG_HTTP=true
+	if os.Getenv("DEBUG_HTTP") == "true" {
+		router.Use(func(c *gin.Context) {
+			// Log request details
+			fmt.Printf("\n[DEBUG] %v | %v | Headers: %v\n", c.Request.Method, c.Request.URL.Path, c.Request.Header)
+
+			// If there's a request body, read and log it
+			if c.Request.Body != nil {
+				bodyBytes, _ := io.ReadAll(c.Request.Body)
+				// Restore the body for subsequent middleware/handlers
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+				// Try to pretty print if it's JSON
+				var prettyJSON bytes.Buffer
+				if err := json.Indent(&prettyJSON, bodyBytes, "", "  "); err == nil {
+					fmt.Printf("[DEBUG] Request Body:\n%s\n", prettyJSON.String())
+				} else {
+					fmt.Printf("[DEBUG] Request Body: %s\n", string(bodyBytes))
+				}
+			}
+
+			// Get the response body
+			blw := &bodyLogWriter{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
+			c.Writer = blw
+
+			c.Next()
+
+			// Log response status and body
+			fmt.Printf("[DEBUG] Response Status: %d\n", c.Writer.Status())
+
+			// Try to pretty print if it's JSON
+			var prettyJSON bytes.Buffer
+			if err := json.Indent(&prettyJSON, blw.body.Bytes(), "", "  "); err == nil {
+				fmt.Printf("[DEBUG] Response Body:\n%s\n", prettyJSON.String())
+			} else {
+				fmt.Printf("[DEBUG] Response Body: %s\n", blw.body.String())
+			}
+		})
+	}
+
 	api := &API{
 		service:     service,
-		router:      gin.Default(),
+		router:      router,
 		disableCORS: disableCORS,
 		auth:        authService,
 		config:      config,
@@ -472,9 +529,11 @@ func (a *API) setupRoutes() {
 	v1.POST("/model-prices", a.createModelPrice)
 	v1.GET("/model-prices/:id", a.getModelPrice)
 	v1.PATCH("/model-prices/:id", a.updateModelPrice)
+	v1.PATCH("/model-prices/:id/recalculate", a.updateModelPriceAndRecalculate)
 	v1.DELETE("/model-prices/:id", a.deleteModelPrice)
 	v1.GET("/model-prices", a.getAllModelPrices)
 	v1.GET("/model-prices/by-vendor", a.getModelPricesByVendor)
+	v1.GET("/model-prices/by-name", a.getOrCreateModelPriceByName)
 
 	// Vendor routes
 	v1.GET("/vendors/llm-drivers", a.getAvailableLLMDrivers)
@@ -506,6 +565,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/token-usage-per-user", a.getTokenUsagePerUser)
 	v1.GET("/analytics/token-usage-per-app", a.getTokenUsagePerApp)
 	v1.GET("/analytics/token-usage-for-app", a.getTokenUsageForApp)
+	v1.GET("/analytics/usage", a.getUsage)
 	v1.GET("/analytics/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
 	v1.GET("/analytics/chat-interactions-for-chat", a.getChatInteractionsForChat)
 	v1.GET("/analytics/model-usage", a.getModelUsage)

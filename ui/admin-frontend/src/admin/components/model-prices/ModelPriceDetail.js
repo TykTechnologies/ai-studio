@@ -100,6 +100,22 @@ const ModelPriceDetail = () => {
             </FieldValue>
           </Grid>
           <Grid item xs={4}>
+            <FieldLabel>Cost per Million Cache Write Tokens:</FieldLabel>
+          </Grid>
+          <Grid item xs={8}>
+            <FieldValue>
+              {`${(price.attributes.cache_write_pt * 1000000).toFixed(2)} ${price.attributes.currency}`}
+            </FieldValue>
+          </Grid>
+          <Grid item xs={4}>
+            <FieldLabel>Cost per Million Cache Read Tokens:</FieldLabel>
+          </Grid>
+          <Grid item xs={8}>
+            <FieldValue>
+              {`${(price.attributes.cache_read_pt * 1000000).toFixed(2)} ${price.attributes.currency}`}
+            </FieldValue>
+          </Grid>
+          <Grid item xs={4}>
             <FieldLabel>Currency:</FieldLabel>
           </Grid>
           <Grid item xs={8}>

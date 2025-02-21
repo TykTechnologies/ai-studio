@@ -471,7 +471,7 @@ func TestBudgetCheck(t *testing.T) {
 		assert.InDelta(t, 50.0, pastSpent, 0.1, "Past period spending should be 50.0")
 
 		// Set current time and budget start dates to Feb 15th (new period)
-		now = time.Date(2025, 2, 15, 10, 0, 0, 0, loc)
+		now = time.Date(2025, 2, 15, 23, 59, 59, 0, loc)
 		newPeriodStart := time.Date(2025, 2, 15, 0, 0, 0, 0, loc)
 		app.BudgetStartDate = &newPeriodStart
 		llm.BudgetStartDate = &newPeriodStart
@@ -480,27 +480,7 @@ func TestBudgetCheck(t *testing.T) {
 		err = db.Save(llm).Error
 		require.NoError(t, err)
 
-		// Create a record for current period
-		currentRecord := &models.LLMChatRecord{
-			LLMID:           llm.ID,
-			Vendor:          string(llm.Vendor),
-			PromptTokens:    5000,
-			ResponseTokens:  10000,
-			TotalTokens:     15000,
-			TimeStamp:       now,
-			AppID:           app.ID,
-			UserID:          app.UserID,
-			Cost:            25.0,
-			InteractionType: models.ProxyInteraction,
-		}
-		err = db.Create(currentRecord).Error
-		require.NoError(t, err)
-
-		// Wait for analytics to process the current record
-		waitForAnalytics(t, db, 1)
-		waitUntilIdle(t, db)
-
-		// First request in new period should succeed
+		// First request in new period should succeed (this will create a record)
 		resp, err := http.DefaultClient.Do(makeRequest(false))
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -511,8 +491,9 @@ func TestBudgetCheck(t *testing.T) {
 		record := waitForRecordWithCost(t, db)
 		require.NotNil(t, record)
 
-		// Verify spending for current period
-		currentSpent, err := budgetService.GetMonthlySpending(app.ID, budgetStart.AddDate(0, 1, 0), budgetStart.AddDate(0, 2, -1))
+		// Verify spending for current period (Feb 15 - Mar 14)
+		periodEnd := time.Date(2025, 3, 14, 23, 59, 59, 0, loc)
+		currentSpent, err := budgetService.GetMonthlySpending(app.ID, newPeriodStart, periodEnd)
 		require.NoError(t, err)
 		assert.InDelta(t, 25.0, currentSpent, 0.1, "Current period spending should be 25.0")
 	})

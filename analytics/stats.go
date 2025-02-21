@@ -14,6 +14,60 @@ type ChartData struct {
 	Cost   []float64 `json:"cost,omitempty"`
 }
 
+// Custom struct for scanning budget stats
+type budgetStats struct {
+	LLMID           uint
+	Name            string
+	MonthlyUsage    float64
+	TotalCost       float64
+	TotalTokens     int64
+	MonthlyBudget   *float64
+	BudgetStartDate string // Store as string and convert in toBudgetUsage
+	UserID          uint
+	UserEmail       string
+}
+
+// Convert string to *time.Time, handling empty strings and invalid formats
+func parseDateTime(dateStr string) *time.Time {
+	if dateStr == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02 15:04:05", dateStr)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+// Convert budgetStats to models.BudgetUsage
+func (bs budgetStats) toBudgetUsage(entityType string) models.BudgetUsage {
+	usage := float64(0)
+	if bs.MonthlyBudget != nil && *bs.MonthlyBudget > 0 {
+		usage = (bs.MonthlyUsage / *bs.MonthlyBudget) * 100
+	}
+
+	budgetStartDate := parseDateTime(bs.BudgetStartDate)
+
+	var userEmail *string
+	if bs.UserEmail != "" {
+		userEmail = &bs.UserEmail
+	}
+
+	return models.BudgetUsage{
+		EntityID:        bs.LLMID,
+		Name:            bs.Name,
+		EntityType:      entityType,
+		Budget:          bs.MonthlyBudget,
+		Spent:           bs.MonthlyUsage,
+		Usage:           usage,
+		TotalCost:       bs.TotalCost,
+		TotalTokens:     bs.TotalTokens,
+		BudgetStartDate: budgetStartDate,
+		UserID:          bs.UserID,
+		UserEmail:       userEmail,
+	}
+}
+
 // GetChatRecordsPerDay returns the total number of chat records per day for a given time period
 func GetChatRecordsPerDay(db *gorm.DB, startDate, endDate *time.Time) (*ChartData, error) {
 	var results []struct {
@@ -160,14 +214,14 @@ func GetMostUsedLLMModels(db *gorm.DB, startDate, endDate time.Time, interaction
 	}
 
 	query := db.Model(&models.LLMChatRecord{}).
-		Select("name, COUNT(*) as count").
+		Select("COALESCE(NULLIF(name, ''), 'Unknown') as name, COUNT(*) as count").
 		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
 	}
 
-	err := query.Group("name").
+	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown')").
 		Order("count DESC").
 		Limit(10).
 		Find(&results).Error
@@ -449,7 +503,7 @@ func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) 
 }
 
 // GetVendorUsage returns the usage statistics for a specific vendor over time
-func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string) (*ChartData, error) {
+func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID *uint) (*ChartData, error) {
 	var results []struct {
 		Date   string
 		Tokens int64
@@ -457,10 +511,15 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string) (*
 		Calls  int64
 	}
 
-	err := db.Model(&models.LLMChatRecord{}).
+	query := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, SUM(total_tokens) as tokens, SUM(cost) as cost, COUNT(*) as calls").
-		Where("time_stamp BETWEEN ? AND ? AND vendor = ?", startDate, endDate, vendor).
-		Group("DATE(time_stamp)").
+		Where("time_stamp BETWEEN ? AND ? AND vendor = ?", startDate, endDate, vendor)
+
+	if llmID != nil {
+		query = query.Where("llm_id = ?", *llmID)
+	}
+
+	err := query.Debug().Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
 
@@ -491,21 +550,102 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string) (*
 	}, nil
 }
 
-// MultiAxisChartData represents data for a chart with multiple y-axes
-type MultiAxisChartData struct {
-	Labels   []string  `json:"labels"`
-	Datasets []Dataset `json:"datasets"`
-}
+// GetUsage returns token usage and cost data based on provided filters
+func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, appID *uint, interactionType *models.InteractionType) (*models.MultiAxisChartData, error) {
+	var results []struct {
+		Date             string
+		Tokens           int64
+		Cost             float64
+		PromptTokens     int64
+		ResponseTokens   int64
+		CacheWriteTokens int64
+		CacheReadTokens  int64
+	}
 
-// Dataset represents a single dataset in a multi-axis chart
-type Dataset struct {
-	Label string    `json:"label"`
-	Data  []float64 `json:"data"`
-	Yaxis string    `json:"yAxisID"`
+	query := db.Model(&models.LLMChatRecord{}).
+		Select(`
+			DATE(time_stamp) as date, 
+			SUM(total_tokens) as tokens, 
+			SUM(cost) as cost,
+			COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+			COALESCE(SUM(response_tokens), 0) as response_tokens,
+			COALESCE(SUM(COALESCE(cache_write_prompt_tokens, 0)), 0) as cache_write_tokens,
+			COALESCE(SUM(COALESCE(cache_read_prompt_tokens, 0)), 0) as cache_read_tokens
+		`).
+		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+
+	if vendor != "" {
+		query = query.Where("vendor = ?", vendor)
+	}
+	if llmID != nil {
+		query = query.Where("llm_id = ?", *llmID)
+	}
+	if appID != nil {
+		query = query.Where("app_id = ?", *appID)
+	}
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
+
+	err := query.Group("DATE(time_stamp)").
+		Order("date").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	chartData := &models.MultiAxisChartData{
+		Labels: make([]string, len(results)),
+		Datasets: []models.Dataset{
+			{
+				Label: "Total Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Cost",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y1",
+			},
+			{
+				Label: "Prompt Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Response Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Cache Write Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+			{
+				Label: "Cache Read Tokens",
+				Data:  make([]float64, len(results)),
+				Yaxis: "y",
+			},
+		},
+	}
+
+	for i, result := range results {
+		chartData.Labels[i] = result.Date
+		chartData.Datasets[0].Data[i] = float64(result.Tokens)
+		chartData.Datasets[1].Data[i] = result.Cost
+		chartData.Datasets[2].Data[i] = float64(result.PromptTokens)
+		chartData.Datasets[3].Data[i] = float64(result.ResponseTokens)
+		chartData.Datasets[4].Data[i] = float64(result.CacheWriteTokens)
+		chartData.Datasets[5].Data[i] = float64(result.CacheReadTokens)
+	}
+
+	return chartData, nil
 }
 
 // GetTokenUsageAndCostForApp returns the token usage and total cost for a specific app over time
-func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) (*MultiAxisChartData, error) {
+func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) (*models.MultiAxisChartData, error) {
 	var results []struct {
 		Date   string
 		Tokens int64
@@ -523,9 +663,9 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 		return nil, err
 	}
 
-	chartData := &MultiAxisChartData{
+	chartData := &models.MultiAxisChartData{
 		Labels: make([]string, len(results)),
-		Datasets: []Dataset{
+		Datasets: []models.Dataset{
 			{
 				Label: "Token Usage",
 				Data:  make([]float64, len(results)),
@@ -550,19 +690,40 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 
 // VendorModelCost represents the total cost for a specific vendor and model
 type VendorModelCost struct {
-	Vendor    string  `json:"vendor"`
-	Model     string  `json:"model"`
-	TotalCost float64 `json:"totalCost"`
-	Currency  string  `json:"currency"`
+	Model            string  `json:"model"`
+	ModelPriceID     *uint   `json:"modelPriceId"`
+	TotalCost        float64 `json:"totalCost"`
+	PromptCost       float64 `json:"promptCost"`
+	ResponseCost     float64 `json:"responseCost"`
+	CacheWriteCost   float64 `json:"cacheWriteCost"`
+	CacheReadCost    float64 `json:"cacheReadCost"`
+	TotalTokens      int64   `json:"totalTokens"` // Total of all token types
+	PromptTokens     int64   `json:"promptTokens"`
+	ResponseTokens   int64   `json:"responseTokens"`
+	CacheWriteTokens int64   `json:"cacheWriteTokens"`
+	CacheReadTokens  int64   `json:"cacheReadTokens"`
 }
 
-// GetTotalCostPerVendorAndModel returns the total cost per vendor and model
+// GetTotalCostPerVendorAndModel returns the total cost per vendor and model with detailed breakdowns
 func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *models.InteractionType, llmID *uint) ([]VendorModelCost, error) {
 	var results []VendorModelCost
 
 	query := db.Model(&models.LLMChatRecord{}).
-		Select("vendor, name as model, SUM(cost) as total_cost, currency").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Select(`
+			COALESCE(NULLIF(name, ''), 'Unknown') as model,
+			(SELECT id FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1) as model_price_id,
+			SUM(cost) as total_cost,
+			SUM(COALESCE(prompt_tokens * (SELECT cpit FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as prompt_cost,
+			SUM(COALESCE(response_tokens * (SELECT cpt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as response_cost,
+			SUM(COALESCE(cache_write_prompt_tokens * (SELECT cache_write_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_write_cost,
+			SUM(COALESCE(cache_read_prompt_tokens * (SELECT cache_read_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_read_cost,
+			SUM(COALESCE(total_tokens, 0)) as total_tokens,
+			SUM(COALESCE(prompt_tokens, 0)) as prompt_tokens,
+			SUM(COALESCE(response_tokens, 0)) as response_tokens,
+			SUM(COALESCE(cache_write_prompt_tokens, 0)) as cache_write_tokens,
+			SUM(COALESCE(cache_read_prompt_tokens, 0)) as cache_read_tokens
+		`).
+		Where("time_stamp BETWEEN ? AND ? AND name IS NOT NULL", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -572,8 +733,8 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 		query = query.Where("llm_id = ?", *llmID)
 	}
 
-	err := query.Group("vendor, name, currency").
-		Order("vendor, total_cost DESC").
+	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown')").
+		Order("total_cost DESC").
 		Find(&results).Error
 
 	if err != nil {
@@ -598,122 +759,118 @@ func GetChatLogsForChatID(db *gorm.DB, chatID uint) ([]models.LLMChatLogEntry, e
 	return chatLogs, nil
 }
 
-// GetBudgetUsage returns the current budget usage for all LLMs and Apps, with optional date range for total cost
+func minTime(times ...time.Time) time.Time {
+	if len(times) == 0 {
+		panic("no times provided")
+	}
+	m := times[0]
+	for _, t := range times[1:] {
+		if t.Before(m) {
+			m = t
+		}
+	}
+	return m
+}
+
+func maxTime(times ...time.Time) time.Time {
+	if len(times) == 0 {
+		panic("no times provided")
+	}
+	m := times[0]
+	for _, t := range times[1:] {
+		if t.After(m) {
+			m = t
+		}
+	}
+	return m
+}
+
+// GetBudgetUsage returns usage statistics for all LLMs and Apps that have costs, with optional date range
 func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]models.BudgetUsage, error) {
 	var result []models.BudgetUsage
 
 	// Get current month's start and end dates for budget calculation
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
+	now := time.Now().UTC()
+
+	// Set start of month to beginning of day (00:00:00) UTC
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+	// Set end of month to end of the last day (23:59:59) UTC
+	lastDay := startOfMonth.AddDate(0, 1, -1)
+	endOfMonth := time.Date(lastDay.Year(), lastDay.Month(), lastDay.Day(), 23, 59, 59, 0, time.UTC)
 
 	// Use provided date range for total cost calculation, or default to current month
 	costStartDate := startOfMonth
 	costEndDate := endOfMonth
 	if startDate != nil {
-		costStartDate = *startDate
+		// Keep start date at beginning of day UTC
+		costStartDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
 	}
 	if endDate != nil {
-		costEndDate = *endDate
+		// Set end date to end of day (23:59:59) UTC
+		costEndDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, time.UTC)
 	}
 
-	// Get LLM budget usage
-	var llms []struct {
-		ID              uint
-		Name            string
-		MonthlyBudget   *float64
-		BudgetStartDate *time.Time
-	}
-	query := db.Table("llms").
-		Select("id, name, monthly_budget, budget_start_date").
-		Where("deleted_at IS NULL")
+	// Get LLM usage statistics
+	var llmStats []budgetStats
+
+	minDate := minTime(startOfMonth, endOfMonth, costStartDate, costEndDate)
+	maxDate := maxTime(startOfMonth, endOfMonth, costStartDate, costEndDate)
+
+	// Get LLM usage with proper handling of NULL and 0 values
+	llmQuery := db.Table("llm_chat_records").
+		Select(`
+			llm_chat_records.llm_id,
+			COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown') AS name,
+			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
+			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
+			llms.monthly_budget,
+			llms.budget_start_date
+	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
+		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
+		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
+		Group("llm_chat_records.llm_id, COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown'), llms.monthly_budget, llms.budget_start_date")
 
 	if llmID != nil {
-		query = query.Where("id = ?", *llmID)
+		llmQuery = llmQuery.Where("llms.id = ?", *llmID)
 	}
 
-	if err := query.Find(&llms).Error; err != nil {
+	if err := llmQuery.Debug().Find(&llmStats).Error; err != nil {
+		return nil, err
+	}
+	println("LEN:", len(llmStats))
+
+	for _, stat := range llmStats {
+		result = append(result, stat.toBudgetUsage("LLM"))
+	}
+
+	// Get App usage statistics
+	var appStats []budgetStats
+
+	// Get App usage with proper handling of NULL and 0 values
+	if err := db.Table("llm_chat_records").
+		Select(`
+        COALESCE(llm_chat_records.app_id, 0) AS llm_id,
+        COALESCE(apps.name, 'Tyk AI Studio Chat') AS name,
+        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
+        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
+        apps.monthly_budget,
+        apps.budget_start_date,
+        COALESCE(apps.user_id, 0) AS user_id,
+        COALESCE(users.email, CASE WHEN apps.id IS NOT NULL THEN 'Unknown User' ELSE NULL END) AS user_email
+    `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
+		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
+		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
+		Joins("LEFT JOIN users ON apps.user_id = users.id AND users.deleted_at IS NULL").
+		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Tyk AI Studio Chat'), apps.monthly_budget, apps.budget_start_date, COALESCE(apps.user_id, 0), user_email").
+		Find(&appStats).Error; err != nil {
 		return nil, err
 	}
 
-	for _, llm := range llms {
-		if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
-			var monthlyUsage, totalCost float64
-
-			// Get monthly budget usage
-			if err := db.Model(&models.LLMChatRecord{}).
-				Select("COALESCE(SUM(cost), 0)").
-				Where("llm_id = ? AND time_stamp BETWEEN ? AND ?", llm.ID, startOfMonth, endOfMonth).
-				Scan(&monthlyUsage).Error; err != nil {
-				return nil, err
-			}
-
-			// Get total cost for the specified date range
-			if err := db.Model(&models.LLMChatRecord{}).
-				Select("COALESCE(SUM(cost), 0)").
-				Where("llm_id = ? AND time_stamp BETWEEN ? AND ?", llm.ID, costStartDate, costEndDate).
-				Scan(&totalCost).Error; err != nil {
-				return nil, err
-			}
-
-			result = append(result, models.BudgetUsage{
-				EntityID:        llm.ID,
-				Name:            llm.Name,
-				EntityType:      "LLM",
-				Budget:          llm.MonthlyBudget,
-				Spent:           monthlyUsage,
-				Usage:           (monthlyUsage / *llm.MonthlyBudget) * 100,
-				TotalCost:       totalCost,
-				BudgetStartDate: llm.BudgetStartDate,
-			})
-		}
-	}
-
-	// Get App budget usage
-	var apps []struct {
-		ID              uint
-		Name            string
-		MonthlyBudget   *float64
-		BudgetStartDate *time.Time
-	}
-	if err := db.Table("apps").
-		Select("id, name, monthly_budget, budget_start_date").
-		Where("deleted_at IS NULL").
-		Find(&apps).Error; err != nil {
-		return nil, err
-	}
-
-	for _, app := range apps {
-		if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
-			var monthlyUsage, totalCost float64
-
-			// Get monthly budget usage
-			if err := db.Model(&models.LLMChatRecord{}).
-				Select("COALESCE(SUM(cost), 0)").
-				Where("app_id = ? AND time_stamp BETWEEN ? AND ?", app.ID, startOfMonth, endOfMonth).
-				Scan(&monthlyUsage).Error; err != nil {
-				return nil, err
-			}
-
-			// Get total cost for the specified date range
-			if err := db.Model(&models.LLMChatRecord{}).
-				Select("COALESCE(SUM(cost), 0)").
-				Where("app_id = ? AND time_stamp BETWEEN ? AND ?", app.ID, costStartDate, costEndDate).
-				Scan(&totalCost).Error; err != nil {
-				return nil, err
-			}
-
-			result = append(result, models.BudgetUsage{
-				EntityID:        app.ID,
-				Name:            app.Name,
-				EntityType:      "App",
-				Budget:          app.MonthlyBudget,
-				Spent:           monthlyUsage,
-				Usage:           (monthlyUsage / *app.MonthlyBudget) * 100,
-				TotalCost:       totalCost,
-				BudgetStartDate: app.BudgetStartDate,
-			})
-		}
+	for _, stat := range appStats {
+		result = append(result, stat.toBudgetUsage("App"))
 	}
 
 	return result, nil

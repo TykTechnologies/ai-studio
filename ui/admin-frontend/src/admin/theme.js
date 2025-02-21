@@ -237,52 +237,6 @@ const theme = createTheme({
         })
       }
     },
-    MuiListItemIcon: {
-      styleOverrides: {
-        root: {
-          '& [class^="fa-"]': {
-            fontSize: '1.25em',
-            width: '1em',
-            height: '1em',
-            display: 'inline-block',
-            verticalAlign: 'middle',
-            background: 'none !important',
-            '&::before': {
-              display: 'inline-block',
-              lineHeight: 1,
-              fontFamily: "'Font Awesome 6 Pro'",
-              fontStyle: 'normal',
-              fontWeight: 900,
-              fontVariant: 'normal',
-              textRendering: 'auto'
-            }
-          }
-        }
-      }
-    },
-    MuiSvgIcon: {
-      styleOverrides: {
-        root: {
-          '& .fa-solid, & .fa-regular, & .fa-light, & .fa-thin, & .fa-duotone': {
-            background: 'none !important',
-            WebkitMaskImage: 'none !important',
-            maskImage: 'none !important',
-            color: 'inherit'
-          }
-        }
-      }
-    },
-    // Global override for FontAwesome icons
-    MuiCssBaseline: {
-      styleOverrides: {
-        '.fa-solid, .fa-regular, .fa-light, .fa-thin, .fa-duotone': {
-          background: 'none !important',
-          WebkitMaskImage: 'none !important',
-          maskImage: 'none !important',
-          color: 'inherit'
-        }
-      }
-    },
     MuiCard: {
       styleOverrides: {
         root: {
