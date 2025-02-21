@@ -51,55 +51,71 @@ const ChatView = () => {
   const location = useLocation();
   const messageContainerRef = useRef(null);
   const navigate = useNavigate();
-
-  /**
-   * We no longer fetch messages from REST. Instead, once our
-   * SSE connection is open, the server will send a "history" type
-   * message that we use to populate 'messages'.
-   */
-
-  /**
-   * handleRealtimeChunks merges repeated system/error lines into the last system message
-   * if that last system message is also "system".
-   */
   const lastTypeRef = useRef(null);
 
-  // const reorderToolMessages = (messages) => {
-  //   console.log("Reordering tool messages", messages);
-  //   const result = [...messages];
+  // Process error messages to extract meaningful information
+  const processErrorMessage = (error) => {
+    // LLM Configuration errors
+    if (error.includes('failed to create message') ||
+      error.includes('anthropic') ||
+      error.includes('openai')) {
+      return {
+        type: 'llm_config',
+        title: 'LLM Configuration Error',
+        message: 'Unable to generate response due to LLM configuration',
+        details: error
+      };
+    }
 
-  //   for (let i = 0; i < result.length; i++) {
-  //     // Look for an AI message that contains "tool_use"
-  //     if (result[i]?.type === 'ai' && result[i]?.content.includes('tool_use')) {
-  //       // Check if the next two messages exist:
-  //       // - The second message should be a tool_result message.
-  //       // - The third message is the explanation (should not include "tool_use" or "tool_result").
-  //       if (
-  //         i + 2 < result.length &&
-  //         result[i + 1]?.type === 'ai' && result[i + 1]?.content.includes('tool_result') &&
-  //         result[i + 2]?.type === 'ai' &&
-  //         !result[i + 2]?.content.includes('tool_use') &&
-  //         !result[i + 2]?.content.includes('tool_result')
-  //       ) {
-  //         // Remove the explanation message from its current position.
-  //         const explanation = result.splice(i + 2, 1)[0];
-  //         // Insert the explanation message before the tool_use message.
-  //         result.splice(i, 0, explanation);
-  //         // Skip ahead by two positions since we've just processed this group.
-  //         i += 2;
-  //       }
-  //     }
-  //   }
+    // API errors (e.g., "API returned unexpected status code: 404: Not Found")
+    if (error.includes('API returned unexpected status code')) {
+      const statusMatch = error.match(/status code: (\d+)/);
+      const status = statusMatch ? statusMatch[1] : '';
+      return {
+        type: 'api',
+        title: 'API Error',
+        message: `Unable to generate response`,
+        details: status === '404' ? 'Service not found' :
+          status === '401' ? 'Authentication failed' :
+            status === '429' ? 'Rate limit exceeded' :
+              `API returned ${status}`
+      };
+    }
 
-  //   return result;
-  // };
+    // Connection errors
+    if (error.includes('Connection lost') || error.includes('Failed to connect')) {
+      return {
+        type: 'connection',
+        title: 'Connection Error',
+        message: 'Lost connection to the server',
+        details: error
+      };
+    }
 
+    // Authentication errors
+    if (error.includes('Unauthorized') || error.includes('Authentication failed')) {
+      return {
+        type: 'auth',
+        title: 'Authentication Error',
+        message: 'Please sign in again',
+        details: error
+      };
+    }
+
+    // Parse error message into parts
+    const errorParts = error.split(':');
+    return {
+      type: 'system',
+      title: errorParts.length > 1 ? errorParts[0].trim() : 'Error',
+      message: errorParts.length > 1 ? errorParts[1].trim() : error,
+      details: errorParts.length > 2 ? errorParts.slice(2).join(':').trim() : undefined
+    };
+  };
 
   const handleRealtimeChunks = useCallback((data) => {
     const currentType = data.type;
     const lastType = lastTypeRef.current;
 
-    // If the server sends the entire chat history
     if (data.type === 'history') {
       try {
         const parsed = JSON.parse(data.payload);
@@ -114,7 +130,6 @@ const ChatView = () => {
               }
               const parsedContent = JSON.parse(content);
 
-              // Keep the original text which may include context tags
               const messageText = parsedContent.text || parsedContent.content;
               const context = parsedContent.context;
 
@@ -136,7 +151,6 @@ const ChatView = () => {
                     isComplete: true
                   };
                 case 'system':
-                  // Ensure system messages have the :::system::: wrapper
                   const systemText = messageText.includes(':::system')
                     ? messageContent
                     : `:::system ${messageContent}:::`;
@@ -163,7 +177,6 @@ const ChatView = () => {
             }
           }).filter(msg => msg !== null);
 
-          // const reorderedMessages = reorderToolMessages(processedMessages);
           setMessages(processedMessages);
         }
       } catch (err) {
@@ -172,10 +185,8 @@ const ChatView = () => {
       return;
     }
 
-    // Update last message type
     lastTypeRef.current = currentType;
 
-    // Process AI messages and stream chunks
     if (currentType === 'stream_chunk' || currentType === 'message' || currentType === 'ai_message') {
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
@@ -199,9 +210,7 @@ const ChatView = () => {
           content = data.payload;
         }
 
-        // For streaming chunks, always append to the last AI message if it's not complete
         if (currentType === 'stream_chunk') {
-          // Decode escaped newlines from SSE data
           const decodedContent = content.replace(/\\n/g, '\n');
 
           if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
@@ -211,7 +220,6 @@ const ChatView = () => {
               isComplete: false
             };
           } else {
-            // Start a new streaming message
             newMessages.push({
               id: `temp_${Math.floor(Math.random() * 1_000_000_000)}`,
               type: 'ai',
@@ -220,7 +228,6 @@ const ChatView = () => {
             });
           }
         } else {
-          // For complete messages, either update the last message or create a new one
           if (lastMessage && lastMessage.type === 'ai' && !lastMessage.isComplete) {
             newMessages[newMessages.length - 1] = {
               ...lastMessage,
@@ -239,11 +246,9 @@ const ChatView = () => {
         return newMessages;
       });
     } else if (data.type === 'historical_user_message' || data.type === 'user_message') {
-      // Handle both historical and real-time user messages
       if (data.type === 'historical_user_message' || !data.isEdited) {
         console.log('Adding user message:', data);
         setMessages((prevMessages) => {
-          // If this is a response to a temp message, update its ID
           const lastMessage = prevMessages[prevMessages.length - 1];
           if (lastMessage && lastMessage.type === 'user' && lastMessage.id.startsWith('temp_')) {
             const updatedMessages = [...prevMessages];
@@ -253,7 +258,6 @@ const ChatView = () => {
             };
             return updatedMessages;
           }
-          // Otherwise add as a new message
           return [
             ...prevMessages,
             {
@@ -268,14 +272,14 @@ const ChatView = () => {
     } else if (data.type === 'error' || data.type === 'system' || data.type === 'tool') {
       let messageContent = data.payload;
 
-      // Skip "Currently using" tool status messages
       if (messageContent.includes('Currently using')) {
         console.log("Skipping 'Currently using' system message");
         return;
       }
 
       if (data.type === 'error') {
-        messageContent = `:::system Error: ${data.payload}:::`;
+        const errorInfo = processErrorMessage(data.payload);
+        messageContent = `:::system ${errorInfo.title}\n${errorInfo.message}${errorInfo.details ? `\n[Details: ${errorInfo.details}]` : ''}:::`;
       } else if (data.type === 'tool') {
         if (!data.payload.includes(':::system')) {
           messageContent = `:::system ${data.payload}:::`;
@@ -289,11 +293,10 @@ const ChatView = () => {
           type: 'system',
           content: messageContent,
           isComplete: true,
+          errorType: data.type === 'error' ? processErrorMessage(data.payload).type : undefined
         },
       ]);
     } else if (data.type === 'session_id') {
-      // This is the initial "session_id" from server
-      // We might store it or set tools/datasources
       if (data.tools) {
         setCurrentlyUsing(data.tools);
       }
@@ -318,7 +321,6 @@ const ChatView = () => {
   });
 
   useEffect(() => {
-    // Clear error states when connection is restored
     if (isConnected) {
       setError(null);
       setSSEError(null);
@@ -331,7 +333,6 @@ const ChatView = () => {
     }
   }, [error, sseError]);
 
-  // Automatic scrolling
   const scrollToBottom = useCallback(() => {
     if (messageContainerRef.current) {
       const scrollHeight = messageContainerRef.current.scrollHeight;
@@ -459,7 +460,6 @@ const ChatView = () => {
     fetchData();
   }, [chatId]);
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (closeConnection) {
@@ -643,11 +643,34 @@ const ChatView = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // Only show error if we have an error AND we're not connected
+  // Show error if we have an error, but don't block UI for LLM config errors
   if ((error || sseError) && !isConnected) {
+    const errorInfo = processErrorMessage(error || sseError);
+    const isLLMError = errorInfo.type === 'llm_config';
+
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
-        <Alert severity="error">{error || sseError}</Alert>
+        <Alert
+          severity={isLLMError ? "warning" : "error"}
+          sx={{
+            maxWidth: '600px',
+            '& .MuiAlert-message': {
+              width: '100%'
+            }
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+            {errorInfo.title}
+          </Typography>
+          <Typography variant="body1" sx={{ mb: errorInfo.details ? 1 : 0 }}>
+            {errorInfo.message}
+          </Typography>
+          {errorInfo.details && (
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85em' }}>
+              Details: {errorInfo.details}
+            </Typography>
+          )}
+        </Alert>
       </Box>
     );
   }
@@ -734,7 +757,6 @@ const ChatView = () => {
                 </Box>
               )}
               {messages.map((message, index) => {
-                // Only skip pure system messages when hidden
                 if (!showSystemMessages && message.type === 'system') {
                   return null;
                 }
@@ -770,14 +792,11 @@ const ChatView = () => {
                       showSystemMessages={showSystemMessages}
                       chatId={chatId}
                       onEditSuccess={(editedText, messageId) => {
-                        // Update the message content and remove all subsequent messages
                         setMessages(prevMessages => {
                           const messageIndex = prevMessages.findIndex(msg => msg.id === messageId);
                           if (messageIndex === -1) return prevMessages;
 
-                          // Keep messages up to and including the edited message
                           const updatedMessages = prevMessages.slice(0, messageIndex + 1);
-                          // Update the edited message
                           updatedMessages[messageIndex] = {
                             ...updatedMessages[messageIndex],
                             content: editedText
@@ -785,7 +804,6 @@ const ChatView = () => {
                           return updatedMessages;
                         });
 
-                        // Send the new message
                         sendMessage({
                           type: 'user_message',
                           payload: editedText,

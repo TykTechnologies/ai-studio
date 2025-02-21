@@ -59,16 +59,63 @@ const SystemBlock = ({ messages, groupId, isExpanded, toggleGroup }) => {
 	const hasMultipleMessages = messages.length > 1;
 	const isError = firstMsg.toLowerCase().includes('error:');
 
+	// Get error type from the first message if it's an error
+	const getErrorType = (msg) => {
+		if (!msg.toLowerCase().includes('error:')) return null;
+		if (msg.toLowerCase().includes('api error')) return 'api';
+		if (msg.toLowerCase().includes('connection error')) return 'connection';
+		if (msg.toLowerCase().includes('authentication error')) return 'auth';
+		return 'system';
+	};
+
+	const errorType = getErrorType(firstMsg);
+
+	// Get error styling based on type
+	const getErrorStyling = (type) => {
+		switch (type) {
+			case 'api':
+				return {
+					bg: '#FEF3F2',
+					border: '#FCA5A5',
+					color: '#B91C1C',
+					icon: '🌐'
+				};
+			case 'connection':
+				return {
+					bg: '#FEF9C3',
+					border: '#FDE047',
+					color: '#854D0E',
+					icon: '🔌'
+				};
+			case 'auth':
+				return {
+					bg: '#F3E8FF',
+					border: '#C084FC',
+					color: '#6B21A8',
+					icon: '🔒'
+				};
+			default:
+				return {
+					bg: '#FEE2E2',
+					border: '#FCA5A5',
+					color: '#DC2626',
+					icon: '⚠️'
+				};
+		}
+	};
+
+	const errorStyle = isError ? getErrorStyling(errorType) : null;
+
 	return (
 		<Box
 			sx={{
-				backgroundColor: '#E0F7F6',
-				border: '1px solid #e9ecef',
+				backgroundColor: isError ? errorStyle.bg : '#E0F7F6',
+				border: `1px solid ${isError ? errorStyle.border : '#e9ecef'}`,
 				borderRadius: '10px',
 				boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.1)',
 				padding: '12px 12px',
 				margin: '10px 0',
-				color: '#000000',
+				color: isError ? errorStyle.color : '#000000',
 				fontFamily: 'monospace',
 				cursor: hasMultipleMessages ? 'pointer' : 'default'
 			}}
@@ -82,21 +129,67 @@ const SystemBlock = ({ messages, groupId, isExpanded, toggleGroup }) => {
 			<Box
 				sx={{
 					display: 'flex',
-					alignItems: 'center',
-					gap: 1,
-					backgroundColor: isError ? '#FEE2E2' : 'transparent',
-					color: isError ? '#DC2626' : 'inherit',
-					padding: '4px 8px',
-					borderRadius: '4px'
+					flexDirection: 'column',
+					gap: 1
 				}}
 			>
-				<SmartToyOutlinedIcon
+				<Box
 					sx={{
-						fontSize: '1rem',
-						color: isError ? '#DC2626' : '#666'
+						display: 'flex',
+						alignItems: 'center',
+						gap: 1,
+						backgroundColor: 'transparent',
+						padding: '4px 8px',
+						borderRadius: '4px'
 					}}
-				/>
-				{firstMsg}
+				>
+					{isError ? (
+						<Typography
+							component="span"
+							sx={{
+								fontSize: '1.2rem',
+								lineHeight: 1
+							}}
+						>
+							{errorStyle.icon}
+						</Typography>
+					) : (
+						<SmartToyOutlinedIcon
+							sx={{
+								fontSize: '1rem',
+								color: '#666'
+							}}
+						/>
+					)}
+					{isError ? (
+						<Box>
+							<Typography
+								variant="subtitle2"
+								sx={{
+									fontWeight: 'bold',
+									color: errorStyle.color
+								}}
+							>
+								{firstMsg.split('\n')[0]} {/* Show title */}
+							</Typography>
+							{firstMsg.split('\n').slice(1).map((line, i) => (
+								<Typography
+									key={i}
+									variant="body2"
+									sx={{
+										mt: 0.5,
+										color: line.startsWith('[Details:') ? 'text.secondary' : 'inherit',
+										fontSize: line.startsWith('[Details:') ? '0.85em' : 'inherit'
+									}}
+								>
+									{line}
+								</Typography>
+							))}
+						</Box>
+					) : (
+						firstMsg
+					)}
+				</Box>
 			</Box>
 
 			{hasMultipleMessages && (
@@ -128,28 +221,64 @@ const SystemBlock = ({ messages, groupId, isExpanded, toggleGroup }) => {
 				<Box sx={{ mt: 1 }}>
 					{messages.slice(1).map((message, msgIndex) => {
 						const msgIsError = message.toLowerCase().includes('error:');
+						const msgErrorType = msgIsError ? getErrorType(message) : null;
+						const msgStyle = msgIsError ? getErrorStyling(msgErrorType) : null;
+
 						return (
 							<Box
 								key={msgIndex}
 								sx={{
 									display: 'flex',
-									alignItems: 'center',
+									alignItems: 'flex-start',
 									gap: 1,
-									backgroundColor: msgIsError ? '#FEE2E2' : 'transparent',
-									color: msgIsError ? '#DC2626' : 'inherit',
-									padding: '4px 8px',
+									backgroundColor: msgIsError ? msgStyle.bg : 'transparent',
+									color: msgIsError ? msgStyle.color : 'inherit',
+									padding: '8px',
 									borderRadius: '4px',
-									mt: 1
+									mt: 1,
+									border: msgIsError ? `1px solid ${msgStyle.border}` : 'none'
 								}}
 								onClick={(e) => e.stopPropagation()}
 							>
-								<SmartToyOutlinedIcon
-									sx={{
-										fontSize: '1rem',
-										color: msgIsError ? '#DC2626' : '#666'
-									}}
-								/>
-								{message}
+								{msgIsError ? (
+									<Typography
+										component="span"
+										sx={{
+											fontSize: '1.2rem',
+											lineHeight: 1
+										}}
+									>
+										{msgStyle.icon}
+									</Typography>
+								) : (
+									<SmartToyOutlinedIcon
+										sx={{
+											fontSize: '1rem',
+											color: '#666',
+											mt: '4px'
+										}}
+									/>
+								)}
+								<Box sx={{ flex: 1 }}>
+									{msgIsError ? (
+										message.split('\n').map((line, i) => (
+											<Typography
+												key={i}
+												variant={i === 0 ? 'subtitle2' : 'body2'}
+												sx={{
+													fontWeight: i === 0 ? 'bold' : 'normal',
+													mt: i > 0 ? 0.5 : 0,
+													color: line.startsWith('[Details:') ? 'text.secondary' : 'inherit',
+													fontSize: line.startsWith('[Details:') ? '0.85em' : 'inherit'
+												}}
+											>
+												{line}
+											</Typography>
+										))
+									) : (
+										message
+									)}
+								</Box>
 							</Box>
 						);
 					})}
