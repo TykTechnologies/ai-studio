@@ -65,21 +65,23 @@ func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	// Update model price with new rates using service
-	_, err = service.UpdateModelPriceAndRecalculate(mp.ID, mp.ModelName, mp.Vendor, 0.004, 0.006, 0.001, 0.0002, mp.Currency)
+	// Update model price with new rates and currency using service
+	_, err = service.UpdateModelPriceAndRecalculate(mp.ID, mp.ModelName, mp.Vendor, 0.004, 0.006, 0.001, 0.0002, "EUR")
 	assert.NoError(t, err)
 
-	// Verify costs were updated
+	// Verify costs and currency were updated
 	var updatedRecords []models.LLMChatRecord
 	err = service.DB.Where("name = ? AND vendor = ?", "GPT-4", "OpenAI").Find(&updatedRecords).Error
 	assert.NoError(t, err)
 	assert.Len(t, updatedRecords, 2)
 
-	// Check first record: (100 * 0.006) + (50 * 0.004) + (20 * 0.001) + (10 * 0.0002) = 0.822
+	// Check first record
 	assert.InDelta(t, 0.822, updatedRecords[0].Cost, 0.0001)
+	assert.Equal(t, "EUR", updatedRecords[0].Currency)
 
-	// Check second record: (200 * 0.006) + (100 * 0.004) + (40 * 0.001) + (20 * 0.0002) = 1.644
+	// Check second record
 	assert.InDelta(t, 1.644, updatedRecords[1].Cost, 0.0001)
+	assert.Equal(t, "EUR", updatedRecords[1].Currency)
 }
 
 func TestCreateModelPrice(t *testing.T) {

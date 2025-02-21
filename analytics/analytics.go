@@ -287,7 +287,12 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 				if err != nil {
 					slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
 				} else {
-					slog.Info("created chat record", record, record.TimeStamp)
+					slog.Info("created chat record",
+						"model", record.Name,
+						"app_id", record.AppID,
+						"llm_id", record.LLMID,
+						"cost", record.Cost,
+						"timestamp", record.TimeStamp)
 				}
 			case log := <-logEntryChan:
 				err := db.Create(log).Error

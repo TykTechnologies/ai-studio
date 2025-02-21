@@ -465,7 +465,7 @@ const Dashboard = () => {
       backgroundColor: "transparent"
     },
     "& td": {
-    borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
+      borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
     },
     "&:hover": {
       backgroundColor: theme.palette.background.secondaryExtraLight
@@ -491,9 +491,24 @@ const Dashboard = () => {
             {items.map((item, index) => (
               <StyledTableRow key={index}>
                 <StyledTableCell>
-                  <StyledLink to={`/admin/${(item.entity_type || "").toLowerCase()}s/${item.entity_id || 0}`}>
-                    {item.name}
-                  </StyledLink>
+                  {item.entity_id === 0 ? (
+                    <Typography>{item.name}</Typography>
+                  ) : (
+                    <StyledLink to={`/admin/${(item.entity_type || "").toLowerCase()}s/${item.entity_id}`}>
+                      {item.name}
+                    </StyledLink>
+                  )}
+                  {item.name !== "Tyk AI Studio Chat" && item.user_email && (
+                    <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {item.user_id ? (
+                        <StyledLink to={`/admin/users/${item.user_id}`} sx={{ fontSize: 'inherit' }}>
+                          {item.user_email}
+                        </StyledLink>
+                      ) : (
+                        item.user_email
+                      )}
+                    </Typography>
+                  )}
                 </StyledTableCell>
                 <StyledTableCell align="right">
                   ${parseFloat(item.totalCost || 0).toFixed(2)}

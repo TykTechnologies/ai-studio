@@ -35,17 +35,18 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 	return modelPrice, nil
 }
 
-// recalculateChatRecordCosts updates the cost for all chat records of a specific model
-func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64) error {
+// recalculateChatRecordCosts updates the cost and currency for all chat records of a specific model
+func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, currency string) error {
 	// Update all matching records with a single query
 	result := tx.Exec(`
 		UPDATE llm_chat_records 
 		SET cost = (prompt_tokens * ?) + 
 			(response_tokens * ?) + 
 			(COALESCE(cache_write_prompt_tokens, 0) * ?) + 
-			(COALESCE(cache_read_prompt_tokens, 0) * ?)
+			(COALESCE(cache_read_prompt_tokens, 0) * ?),
+			currency = ?
 		WHERE name = ? AND vendor = ?`,
-		cpit, cpt, cacheWritePT, cacheReadPT, modelName, vendor,
+		cpit, cpt, cacheWritePT, cacheReadPT, currency, modelName, vendor,
 	)
 	return result.Error
 }
@@ -98,8 +99,8 @@ func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor stri
 			return err
 		}
 
-		// Recalculate costs for all associated chat records
-		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, cpt, cpit, cacheWritePT, cacheReadPT); err != nil {
+		// Recalculate costs and currency for all associated chat records
+		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, cpt, cpit, cacheWritePT, cacheReadPT, currency); err != nil {
 			return err
 		}
 
