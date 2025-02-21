@@ -1,16 +1,56 @@
 package proxy
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
+
+// setupTestDB creates an in-memory SQLite database for testing
+func setupTestDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	err = db.AutoMigrate(&models.LLMChatRecord{})
+	require.NoError(t, err)
+
+	return db
+}
+
+// waitForRecord retries fetching a record until it exists or timeout is reached
+func waitForRecord[T any](db *gorm.DB, condition string, args ...interface{}) (*T, error) {
+	var record T
+	timeout := time.After(2 * time.Second)
+	tick := time.Tick(100 * time.Millisecond)
+
+	for {
+		select {
+		case <-timeout:
+			return nil, fmt.Errorf("timeout waiting for record")
+		case <-tick:
+			result := db.Where(condition, args...).First(&record)
+			if result.Error == nil {
+				return &record, nil
+			}
+			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				return nil, result.Error
+			}
+		}
+	}
+}
 
 type MockService struct {
 	mock.Mock
@@ -105,7 +145,7 @@ func TestAnalyzeCompletionResponse_Currency(t *testing.T) {
 
 			llm := &models.LLM{
 				ID:     1,
-				Vendor: models.VendorType("test-vendor"),
+				Vendor: "test-vendor",
 			}
 
 			app := &models.App{
@@ -113,14 +153,24 @@ func TestAnalyzeCompletionResponse_Currency(t *testing.T) {
 				UserID: 1,
 			}
 
-			var recordedCurrency string
-			analytics.RecordChatRecord = func(rec *models.LLMChatRecord) {
-				recordedCurrency = rec.Currency
-			}
+			// Setup test DB and start recording
+			db := setupTestDB(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			analytics.StartRecording(ctx, db)
 
-			AnalyzeCompletionResponse(mockService, llm, app, response, time.Now())
+			// Create request with model in context
+			req, _ := http.NewRequest("POST", "/test", nil)
+			ctx = context.WithValue(req.Context(), "model_name", "test-model")
+			req = req.WithContext(ctx)
 
-			assert.Equal(t, tt.expectedCurrency, recordedCurrency)
+			// Run the test
+			AnalyzeCompletionResponse(mockService, llm, app, response, req, time.Now())
+
+			// Wait for and verify the record
+			record, err := waitForRecord[models.LLMChatRecord](db, "currency = ?", tt.expectedCurrency)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCurrency, record.Currency)
 			mockService.AssertExpectations(t)
 		})
 	}
