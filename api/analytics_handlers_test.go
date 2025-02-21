@@ -21,7 +21,7 @@ func setupAnalyticsTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.LLM{})
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.LLM{}, &models.User{})
 	require.NoError(t, err)
 
 	return db

@@ -76,12 +76,14 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 
 	// Get pricing information
 	var cpt, cpit, cacheWritePT, cacheReadPT float64
+	var currency string = "USD" // Default currency if no price found
 	price, err := service.GetModelPriceByModelNameAndVendor(model, string(llm.Vendor))
 	if err == nil && price != nil { // Check price != nil to avoid nil dereference
 		cpt = price.CPT
 		cpit = price.CPIT
 		cacheWritePT = price.CacheWritePT
 		cacheReadPT = price.CacheReadPT
+		currency = price.Currency
 	} else {
 		log.Printf("Price not found for model: %s, vendor: %s", model, llm.Vendor)
 	}
@@ -109,6 +111,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 			(cpit * float64(pt)) +
 			(cacheWritePT * float64(cacheWriteTokens)) +
 			(cacheReadPT * float64(cacheReadTokens)),
+		Currency:        currency, // Set the currency (defaults to USD if no price found)
 		InteractionType: models.ProxyInteraction,
 	}
 

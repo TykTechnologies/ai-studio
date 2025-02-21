@@ -23,6 +23,8 @@ type budgetStats struct {
 	TotalTokens     int64
 	MonthlyBudget   *float64
 	BudgetStartDate string // Store as string and convert in toBudgetUsage
+	UserID          uint
+	UserEmail       string
 }
 
 // Convert string to *time.Time, handling empty strings and invalid formats
@@ -46,6 +48,11 @@ func (bs budgetStats) toBudgetUsage(entityType string) models.BudgetUsage {
 
 	budgetStartDate := parseDateTime(bs.BudgetStartDate)
 
+	var userEmail *string
+	if bs.UserEmail != "" {
+		userEmail = &bs.UserEmail
+	}
+
 	return models.BudgetUsage{
 		EntityID:        bs.LLMID,
 		Name:            bs.Name,
@@ -56,6 +63,8 @@ func (bs budgetStats) toBudgetUsage(entityType string) models.BudgetUsage {
 		TotalCost:       bs.TotalCost,
 		TotalTokens:     bs.TotalTokens,
 		BudgetStartDate: budgetStartDate,
+		UserID:          bs.UserID,
+		UserEmail:       userEmail,
 	}
 }
 
@@ -205,14 +214,14 @@ func GetMostUsedLLMModels(db *gorm.DB, startDate, endDate time.Time, interaction
 	}
 
 	query := db.Model(&models.LLMChatRecord{}).
-		Select("COALESCE(NULLIF(vendor, ''), 'Unknown') as name, COUNT(*) as count").
+		Select("COALESCE(NULLIF(name, ''), 'Unknown') as name, COUNT(*) as count").
 		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
 	}
 
-	err := query.Group("COALESCE(NULLIF(vendor, ''), 'Unknown')").
+	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown')").
 		Order("count DESC").
 		Limit(10).
 		Find(&results).Error
@@ -688,6 +697,7 @@ type VendorModelCost struct {
 	ResponseCost     float64 `json:"responseCost"`
 	CacheWriteCost   float64 `json:"cacheWriteCost"`
 	CacheReadCost    float64 `json:"cacheReadCost"`
+	TotalTokens      int64   `json:"totalTokens"` // Total of all token types
 	PromptTokens     int64   `json:"promptTokens"`
 	ResponseTokens   int64   `json:"responseTokens"`
 	CacheWriteTokens int64   `json:"cacheWriteTokens"`
@@ -707,6 +717,7 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 			SUM(COALESCE(response_tokens * (SELECT cpt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as response_cost,
 			SUM(COALESCE(cache_write_prompt_tokens * (SELECT cache_write_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_write_cost,
 			SUM(COALESCE(cache_read_prompt_tokens * (SELECT cache_read_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_read_cost,
+			SUM(COALESCE(total_tokens, 0)) as total_tokens,
 			SUM(COALESCE(prompt_tokens, 0)) as prompt_tokens,
 			SUM(COALESCE(response_tokens, 0)) as response_tokens,
 			SUM(COALESCE(cache_write_prompt_tokens, 0)) as cache_write_tokens,
@@ -841,16 +852,19 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	if err := db.Table("llm_chat_records").
 		Select(`
         COALESCE(llm_chat_records.app_id, 0) AS llm_id,
-        COALESCE(apps.name, 'Unknown') AS name,
+        COALESCE(apps.name, 'Tyk AI Studio Chat') AS name,
         SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
         SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
         SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
         apps.monthly_budget,
-        apps.budget_start_date
+        apps.budget_start_date,
+        COALESCE(apps.user_id, 0) AS user_id,
+        COALESCE(users.email, CASE WHEN apps.id IS NOT NULL THEN 'Unknown User' ELSE NULL END) AS user_email
     `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
 		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
-		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Unknown'), apps.monthly_budget, apps.budget_start_date").
+		Joins("LEFT JOIN users ON apps.user_id = users.id AND users.deleted_at IS NULL").
+		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Tyk AI Studio Chat'), apps.monthly_budget, apps.budget_start_date, COALESCE(apps.user_id, 0), user_email").
 		Find(&appStats).Error; err != nil {
 		return nil, err
 	}

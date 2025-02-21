@@ -1093,9 +1093,9 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 		return
 	}
 
-	response := make([]map[string]interface{}, 0, len(usageList))
-	for _, u := range usageList {
-		entry := map[string]interface{}{
+	response := make([]map[string]interface{}, len(usageList))
+	for i, u := range usageList {
+		response[i] = map[string]interface{}{
 			"name":            u.Name,
 			"entity_type":     u.EntityType,
 			"budget":          u.Budget,
@@ -1105,8 +1105,9 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 			"totalCost":       u.TotalCost,
 			"entity_id":       u.EntityID,
 			"total_tokens":    u.TotalTokens,
+			"user_id":         u.UserID,
+			"user_email":      u.UserEmail,
 		}
-		response = append(response, entry)
 	}
 
 	c.JSON(http.StatusOK, response)
