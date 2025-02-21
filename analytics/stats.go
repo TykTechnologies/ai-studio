@@ -681,19 +681,38 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 
 // VendorModelCost represents the total cost for a specific vendor and model
 type VendorModelCost struct {
-	Model       string  `json:"model"`
-	TotalCost   float64 `json:"totalCost"`
-	Currency    string  `json:"currency"`
-	TotalTokens int64   `json:"totalTokens"`
+	Model            string  `json:"model"`
+	ModelPriceID     *uint   `json:"modelPriceId"`
+	TotalCost        float64 `json:"totalCost"`
+	PromptCost       float64 `json:"promptCost"`
+	ResponseCost     float64 `json:"responseCost"`
+	CacheWriteCost   float64 `json:"cacheWriteCost"`
+	CacheReadCost    float64 `json:"cacheReadCost"`
+	PromptTokens     int64   `json:"promptTokens"`
+	ResponseTokens   int64   `json:"responseTokens"`
+	CacheWriteTokens int64   `json:"cacheWriteTokens"`
+	CacheReadTokens  int64   `json:"cacheReadTokens"`
 }
 
-// GetTotalCostPerVendorAndModel returns the total cost per vendor and model
+// GetTotalCostPerVendorAndModel returns the total cost per vendor and model with detailed breakdowns
 func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *models.InteractionType, llmID *uint) ([]VendorModelCost, error) {
 	var results []VendorModelCost
 
 	query := db.Model(&models.LLMChatRecord{}).
-		Select("COALESCE(NULLIF(name, ''), 'Unknown') as model, SUM(total_tokens) as total_tokens, SUM(cost) as total_cost, currency").
-		Where("time_stamp BETWEEN ? AND ? AND name IS NOT NULL AND total_tokens > 0", startDate, endDate)
+		Select(`
+			COALESCE(NULLIF(name, ''), 'Unknown') as model,
+			(SELECT id FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1) as model_price_id,
+			SUM(cost) as total_cost,
+			SUM(COALESCE(prompt_tokens * (SELECT cpit FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as prompt_cost,
+			SUM(COALESCE(response_tokens * (SELECT cpt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as response_cost,
+			SUM(COALESCE(cache_write_prompt_tokens * (SELECT cache_write_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_write_cost,
+			SUM(COALESCE(cache_read_prompt_tokens * (SELECT cache_read_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_read_cost,
+			SUM(COALESCE(prompt_tokens, 0)) as prompt_tokens,
+			SUM(COALESCE(response_tokens, 0)) as response_tokens,
+			SUM(COALESCE(cache_write_prompt_tokens, 0)) as cache_write_tokens,
+			SUM(COALESCE(cache_read_prompt_tokens, 0)) as cache_read_tokens
+		`).
+		Where("time_stamp BETWEEN ? AND ? AND name IS NOT NULL", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -703,8 +722,8 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 		query = query.Where("llm_id = ?", *llmID)
 	}
 
-	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown'), currency").
-		Order("total_cost DESC, total_tokens DESC").
+	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown')").
+		Order("total_cost DESC").
 		Find(&results).Error
 
 	if err != nil {

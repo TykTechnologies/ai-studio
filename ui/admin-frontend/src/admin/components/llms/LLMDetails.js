@@ -438,6 +438,104 @@ const LLMDetails = () => {
           />
         </Box>
 
+        <StyledPaper elevation={3} style={{ padding: "20px", marginTop: "20px", marginBottom: "20px" }}>
+          <Typography variant="h6" gutterBottom>
+            <Box
+              component="span"
+              onClick={() => navigate("/admin/model-prices")}
+              sx={{
+                cursor: 'pointer',
+                textDecoration: 'none',
+                color: 'inherit',
+                '&:hover': {
+                  textDecoration: 'underline'
+                }
+              }}
+            >
+              Cost per Model
+            </Box>
+          </Typography>
+          {vendorModelCostData.length > 0 ? (
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Model</TableCell>
+                      <TableCell align="right">Total Cost</TableCell>
+                      <TableCell align="right">Request Tokens</TableCell>
+                      <TableCell align="right">Response Tokens</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {vendorModelCostData
+                      .slice(0, isTableExpanded ? undefined : 5)
+                      .map((row, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            {row.modelPriceId ? (
+                              <Box
+                                component="span"
+                                onClick={() => navigate(`/admin/model-prices/${row.modelPriceId}`)}
+                                sx={{
+                                  cursor: 'pointer',
+                                  textDecoration: 'none',
+                                  color: 'inherit',
+                                  '&:hover': {
+                                    textDecoration: 'underline'
+                                  }
+                                }}
+                              >
+                                {row.model}
+                              </Box>
+                            ) : (
+                              row.model
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            <div style={{ marginBottom: '4px' }}>${row.totalCost.toFixed(2)}</div>
+                            <div style={{ fontSize: '0.85em', color: 'gray' }}>
+                              (Prompt: {row.promptCost.toFixed(2)}, CW: {row.cacheWriteCost.toFixed(2)}, CR: {row.cacheReadCost.toFixed(2)}, Resp: {row.responseCost.toFixed(2)})
+                            </div>
+                          </TableCell>
+                          <TableCell align="right">
+                            <div style={{ marginBottom: '4px' }}>{(row.promptTokens + row.cacheWriteTokens + row.cacheReadTokens).toLocaleString()}</div>
+                            <div style={{ fontSize: '0.85em', color: 'gray' }}>
+                              (Prompt: {row.promptTokens.toLocaleString()}, CW: {row.cacheWriteTokens.toLocaleString()}, CR: {row.cacheReadTokens.toLocaleString()})
+                            </div>
+                          </TableCell>
+                          <TableCell align="right">
+                            {row.responseTokens.toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {vendorModelCostData.length > 5 && (
+                <Box mt={2} textAlign="center">
+                  <Button onClick={toggleTableExpansion}>
+                    {isTableExpanded ? "Collapse" : "Expand"}
+                  </Button>
+                </Box>
+              )}
+            </>
+          ) : (
+            <Box
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              height="100%"
+              py={4}
+            >
+              <Typography variant="body1" color="text.secondary">
+                No vendor and model cost data available for the selected period.
+              </Typography>
+            </Box>
+          )}
+        </StyledPaper>
+
         <Divider sx={{ my: 3 }} />
 
         <SectionTitle>LLM Description</SectionTitle>
@@ -635,7 +733,8 @@ const LLMDetails = () => {
                   objectFit: "contain",
                 }}
               />
-              <Link
+              <Box
+                component="a"
                 href={llm.attributes.logo_url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -644,10 +743,15 @@ const LLMDetails = () => {
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
+                  textDecoration: "none",
+                  color: "inherit",
+                  "&:hover": {
+                    textDecoration: "underline"
+                  }
                 }}
               >
                 {llm.attributes.logo_url}
-              </Link>
+              </Box>
             </Box>
           </Grid>
           <Grid item xs={3}>
@@ -669,70 +773,6 @@ const LLMDetails = () => {
 
         <Divider sx={{ my: 3 }} />
 
-        <SectionTitle>Cost Breakdown</SectionTitle>
-        <StyledPaper elevation={3} style={{ padding: "20px", marginBottom: "20px" }}>
-          <Typography variant="h6" gutterBottom>
-            Total Cost per Vendor and Model
-          </Typography>
-          {vendorModelCostData.length > 0 ? (
-            <>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Model</TableCell>
-                      <TableCell align="right">Total Tokens</TableCell>
-                      <TableCell align="right">Total Cost</TableCell>
-                      <TableCell align="right">Cache Write Tokens</TableCell>
-                      <TableCell align="right">Cache Write Cost</TableCell>
-                      <TableCell align="right">Cache Read Tokens</TableCell>
-                      <TableCell align="right">Cache Read Cost</TableCell>
-                      <TableCell>Currency</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {vendorModelCostData
-                      .slice(0, isTableExpanded ? undefined : 5)
-                      .map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{row.model}</TableCell>
-                          <TableCell align="right">{row.totalTokens.toLocaleString()}</TableCell>
-                          <TableCell align="right">{row.totalCost.toFixed(2)}</TableCell>
-                          <TableCell align="right">{row.cacheWriteTokens?.toLocaleString() || 0}</TableCell>
-                          <TableCell align="right">{row.cacheWriteCost?.toFixed(2) || "0.00"}</TableCell>
-                          <TableCell align="right">{row.cacheReadTokens?.toLocaleString() || 0}</TableCell>
-                          <TableCell align="right">{row.cacheReadCost?.toFixed(2) || "0.00"}</TableCell>
-                          <TableCell>{row.currency}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              {vendorModelCostData.length > 5 && (
-                <Box mt={2} textAlign="center">
-                  <Button onClick={toggleTableExpansion}>
-                    {isTableExpanded ? "Collapse" : "Expand"}
-                  </Button>
-                </Box>
-              )}
-            </>
-          ) : (
-            <Box
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              height="100%"
-              py={4}
-            >
-              <Typography variant="body1" color="text.secondary">
-                No vendor and model cost data available for the selected period.
-              </Typography>
-            </Box>
-          )}
-        </StyledPaper>
-
-        <Divider sx={{ my: 3 }} />
 
         <SectionTitle>Proxy Logs</SectionTitle>
         <StyledPaper>
