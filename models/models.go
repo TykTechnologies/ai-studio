@@ -5,24 +5,24 @@ import (
 	"gorm.io/gorm"
 )
 
-func fixLLMChatRecordIDs(db *gorm.DB) error {
-	// Update anthropic chat records
-	if err := db.Exec(`
-		UPDATE llm_chat_records
-		SET interaction_type = 'proxy',
-		    name = 'claude-3-5-sonnet-20241022',
-		    currency = 'USD'
-		WHERE llm_id = 5
-	`).Error; err != nil {
-		return err
-	}
+// func fixLLMChatRecordIDs(db *gorm.DB) error {
+// 	// Update anthropic chat records
+// 	if err := db.Exec(`
+// 		UPDATE llm_chat_records
+// 		SET interaction_type = 'proxy',
+// 		    name = 'claude-3-5-sonnet-20241022',
+// 		    currency = 'USD'
+// 		WHERE llm_id = 5
+// 	`).Error; err != nil {
+// 		return err
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func InitModels(db *gorm.DB) error {
 	// Fix LLM chat record IDs
-	fixLLMChatRecordIDs(db)
+	// fixLLMChatRecordIDs(db)
 
 	err := db.AutoMigrate(
 		&User{},      //Done

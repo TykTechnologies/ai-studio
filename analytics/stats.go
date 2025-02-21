@@ -708,32 +708,34 @@ type VendorModelCost struct {
 func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *models.InteractionType, llmID *uint) ([]VendorModelCost, error) {
 	var results []VendorModelCost
 
-	query := db.Model(&models.LLMChatRecord{}).
+	query := db.Table("llm_chat_records").
+		Joins("LEFT JOIN model_prices ON model_prices.model_name = llm_chat_records.name AND model_prices.vendor = llm_chat_records.vendor").
 		Select(`
-			COALESCE(NULLIF(name, ''), 'Unknown') as model,
-			(SELECT id FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1) as model_price_id,
-			SUM(cost) as total_cost,
-			SUM(COALESCE(prompt_tokens * (SELECT cpit FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as prompt_cost,
-			SUM(COALESCE(response_tokens * (SELECT cpt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as response_cost,
-			SUM(COALESCE(cache_write_prompt_tokens * (SELECT cache_write_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_write_cost,
-			SUM(COALESCE(cache_read_prompt_tokens * (SELECT cache_read_pt FROM model_prices WHERE model_name = llm_chat_records.name AND vendor = llm_chat_records.vendor LIMIT 1), 0)) as cache_read_cost,
-			SUM(COALESCE(total_tokens, 0)) as total_tokens,
-			SUM(COALESCE(prompt_tokens, 0)) as prompt_tokens,
-			SUM(COALESCE(response_tokens, 0)) as response_tokens,
-			SUM(COALESCE(cache_write_prompt_tokens, 0)) as cache_write_tokens,
-			SUM(COALESCE(cache_read_prompt_tokens, 0)) as cache_read_tokens
+			COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown') as model,
+			model_prices.id as model_price_id,
+			llm_chat_records.vendor,
+			SUM(llm_chat_records.cost) as total_cost,
+			SUM(COALESCE(llm_chat_records.prompt_tokens * COALESCE(model_prices.cpit, 0), 0)) as prompt_cost,
+			SUM(COALESCE(llm_chat_records.response_tokens * COALESCE(model_prices.cpt, 0), 0)) as response_cost,
+			SUM(COALESCE(llm_chat_records.cache_write_prompt_tokens * COALESCE(model_prices.cache_write_pt, 0), 0)) as cache_write_cost,
+			SUM(COALESCE(llm_chat_records.cache_read_prompt_tokens * COALESCE(model_prices.cache_read_pt, 0), 0)) as cache_read_cost,
+			SUM(COALESCE(llm_chat_records.total_tokens, 0)) as total_tokens,
+			SUM(COALESCE(llm_chat_records.prompt_tokens, 0)) as prompt_tokens,
+			SUM(COALESCE(llm_chat_records.response_tokens, 0)) as response_tokens,
+			SUM(COALESCE(llm_chat_records.cache_write_prompt_tokens, 0)) as cache_write_tokens,
+			SUM(COALESCE(llm_chat_records.cache_read_prompt_tokens, 0)) as cache_read_tokens
 		`).
-		Where("time_stamp BETWEEN ? AND ? AND name IS NOT NULL", startDate, endDate)
+		Where("llm_chat_records.time_stamp BETWEEN ? AND ? AND llm_chat_records.name IS NOT NULL", startDate, endDate)
 
-	// if interactionType != nil {
-	// 	query = query.Where("interaction_type = ?", *interactionType)
-	// }
+	if interactionType != nil {
+		query = query.Where("interaction_type = ?", *interactionType)
+	}
 
 	if llmID != nil {
 		query = query.Where("llm_id = ?", *llmID)
 	}
 
-	err := query.Group("COALESCE(NULLIF(name, ''), 'Unknown')").
+	err := query.Group("COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown'), model_prices.id, llm_chat_records.vendor").
 		Order("total_cost DESC").
 		Find(&results).Error
 
