@@ -801,7 +801,7 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 		llmID = &u
 	}
 
-	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate, nil, llmID)
+	costs, err := analytics.GetTotalCostPerVendorAndModel(a.service.DB, startDate, endDate, getInteractionType(c), llmID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
