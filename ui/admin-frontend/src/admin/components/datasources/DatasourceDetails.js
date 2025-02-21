@@ -129,13 +129,13 @@ const DatasourceDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Datasource Details</Typography>
+        <Typography variant="headingXLarge">Data source details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/datasources")}
           color="inherit"
         >
-          Back to Datasources
+          Back to data sources
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -200,13 +200,13 @@ const DatasourceDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Privacy Score:</FieldLabel>
+            <FieldLabel>Privacy Level:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{datasource.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the datasource."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the datasource."
                 placement="top"
               >
                 <HelpOutlineIcon
@@ -431,14 +431,14 @@ const DatasourceDetails = () => {
               onClick={handleCloneDataSource}
               startIcon={<ContentCopyIcon />}
             >
-              Clone This Data Source
+              Clone this data source
             </PrimaryOutlineButton>
             <PrimaryButton
               variant="contained"
               startIcon={<EditIcon />}
               onClick={() => navigate(`/admin/datasources/edit/${id}`)}
             >
-              Edit Datasource
+              Edit data source
             </PrimaryButton>
           </Box>
         </Box>

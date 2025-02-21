@@ -416,8 +416,8 @@ const LLMSettingsForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">
-          {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit model call setting" : "Add model call setting"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -425,9 +425,12 @@ const LLMSettingsForm = () => {
           to="/admin/llm-settings"
           color="inherit"
         >
-          Back to LLM Call Settings
+          Back to call settings
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model call settings let you configure how Large Language Models handle prompts. These settings control parameters like response length, temperature (creativity level), and other options that shape the output when a prompt is sent to the LLM.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -569,7 +572,7 @@ const LLMSettingsForm = () => {
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update LLM Call Settings" : "Add LLM Call Settings"}
+              {id ? "Update call setting" : "Add call setting"}
             </PrimaryButton>
           </Box>
         </Box>

@@ -119,8 +119,8 @@ const FilterForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">
-          {id ? "Edit Filter" : "Add Filter"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit filter" : "Add filter"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -128,9 +128,12 @@ const FilterForm = () => {
           to="/admin/filters"
           color="inherit"
         >
-          Back to Filters
+          Back to filters
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -174,7 +177,7 @@ const FilterForm = () => {
           </Grid>
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update Filter" : "Add Filter"}
+              {id ? "Update filter" : "Add filter"}
             </PrimaryButton>
           </Box>
         </Box>

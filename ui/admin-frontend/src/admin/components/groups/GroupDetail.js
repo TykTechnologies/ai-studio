@@ -398,13 +398,13 @@ const GroupDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Group Details</Typography>
+        <Typography variant="headingXLarge">User group details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
-          Back to Groups
+          Back to user groups
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>

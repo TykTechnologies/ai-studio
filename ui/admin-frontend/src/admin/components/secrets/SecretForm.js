@@ -140,7 +140,7 @@ const SecretForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
+        <Typography variant="headingXLarge">
           {id ? "Edit Secret" : "Add Secret"}
         </Typography>
         <SecondaryLinkButton
@@ -149,7 +149,7 @@ const SecretForm = () => {
           to="/admin/secrets"
           color="inherit"
         >
-          Back to Secrets
+          Back to secrets
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -208,7 +208,7 @@ const SecretForm = () => {
                 type="submit"
                 disabled={!formData.var_name || !formData.value}
               >
-                {id ? "Update Secret" : "Add Secret"}
+                {id ? "Update secret" : "Add secret"}
               </PrimaryButton>
             </Grid>
           </Grid>

@@ -28,7 +28,6 @@ import {
   StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -141,18 +140,18 @@ const DataCatalogList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Data Catalogs are collections of data sources that can be assigned to groups." />
-            <Typography variant="h5">Data Catalogs</Typography>
-          </Box>
+          <Typography variant="headingXLarge">Data catalogs</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddDataCatalog}
           >
-            Add Data Catalog
+            Add catalog
           </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific user groups to manage access easily.</Typography>  
+        </Box>
         <ContentBox>
           {dataCatalogs.length === 0 ? (
             <EmptyStateWidget
@@ -242,10 +241,10 @@ const DataCatalogList = () => {
         onClose={handleMenuClose}
       >
         <MenuItem onClick={() => handleEdit(selectedCatalog?.id)}>
-          Edit Data Catalog
+          Edit data catalog
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedCatalog?.id)}>
-          Delete Data Catalog
+          Delete data catalog
         </MenuItem>
       </Menu>
 

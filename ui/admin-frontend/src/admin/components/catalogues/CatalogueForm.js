@@ -185,8 +185,8 @@ const CatalogueForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">
-          {id ? "Edit Catalog" : "Create New Catalog"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit LLM catalog" : "Add LLM catalog"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -194,9 +194,12 @@ const CatalogueForm = () => {
           to="/admin/catalogs/llms"
           color="inherit"
         >
-          Back to Catalogs
+          Back to catalogs
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
@@ -258,7 +261,7 @@ const CatalogueForm = () => {
 
           <Box mt={3}>
             <PrimaryButton type="submit" variant="contained" color="primary">
-              {id ? "Update Catalog" : "Create Catalog"}
+              {id ? "Update catalog" : "Create catalog"}
             </PrimaryButton>
           </Box>
         </Box>

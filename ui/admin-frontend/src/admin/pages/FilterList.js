@@ -27,7 +27,6 @@ import {
   StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -147,19 +146,18 @@ const FilterList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Filters are used to process and modify data before it is passed to the LLM." />
-            <Typography variant="h5">Filters</Typography>
-          </Box>
-
+          <Typography variant="headingXLarge">Filters</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddFilter}
           >
-            Add Filter
+            Add filter
           </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>  
+        </Box>
         <ContentBox>
           {filters.length === 0 ? (
             <EmptyStateWidget
@@ -221,10 +219,10 @@ const FilterList = () => {
         <MenuItem
           onClick={() => navigate(`/admin/filters/edit/${selectedFilter?.id}`)}
         >
-          Edit Filter
+          Edit filter
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedFilter?.id)}>
-          Delete Filter
+          Delete filter
         </MenuItem>
       </Menu>
 

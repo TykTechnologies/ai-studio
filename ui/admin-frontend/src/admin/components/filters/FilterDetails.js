@@ -53,13 +53,13 @@ const FilterDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Filter Details</Typography>
+        <Typography variant="headingXLarge">Filter details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/filters")}
           color="inherit"
         >
-          Back to Filters
+          Back to filters
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -101,7 +101,7 @@ const FilterDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/filters/edit/${id}`)}
           >
-            Edit Filter
+            Edit filter
           </PrimaryButton>
         </Box>
       </ContentBox>

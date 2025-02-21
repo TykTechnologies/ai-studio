@@ -355,16 +355,19 @@ const Groups = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Groups</Typography>
+        <Typography variant="headingXLarge">User groups</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           component={Link}
           to="/admin/groups/new"
         >
-          Add Group
+          Add group
         </PrimaryButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">User groups help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking user groups to specific catalogs ensures each team can only see and access the LLM provider and or data relevant to them.</Typography>  
+      </Box>
       <Box sx={{ p: 3 }}>
         <StyledPaper>
           <Table>
@@ -416,18 +419,18 @@ const Groups = () => {
       >
         {features.feature_portal && (
           <MenuItem onClick={handleAddCatalogue}>
-            Add Catalogue to Group
+            Add LLM catalogue to group
           </MenuItem>
         )}
         <MenuItem onClick={handleAddDataCatalogue}>
-          Add Data Catalogue to Group
+          Add data catalogue to group
         </MenuItem>
         <MenuItem onClick={handleAddToolCatalogue}>
-          Add Tool Catalogue to Group
+          Add tool catalogue to group
         </MenuItem>
-        <MenuItem onClick={handleAddUser}>Add User to Group</MenuItem>
-        <MenuItem onClick={handleEdit}>Edit Group</MenuItem>
-        <MenuItem onClick={handleDelete}>Delete Group</MenuItem>
+        <MenuItem onClick={handleAddUser}>Add user to group</MenuItem>
+        <MenuItem onClick={handleEdit}>Edit group</MenuItem>
+        <MenuItem onClick={handleDelete}>Delete group</MenuItem>
       </Menu>
 
       <StyledDialog

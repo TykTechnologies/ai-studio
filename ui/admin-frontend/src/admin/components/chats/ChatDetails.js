@@ -183,13 +183,13 @@ const ChatDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Chat Room Details</Typography>
+        <Typography variant="headingXLarge">Chat details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/chats")}
           color="inherit"
         >
-          Back to Chat Rooms
+          Back to chats
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -356,7 +356,7 @@ const ChatDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/chats/edit/${id}`)}
           >
-            Edit Chat Room
+            Edit chat
           </PrimaryButton>
         </Box>
       </ContentBox>

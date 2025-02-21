@@ -243,16 +243,19 @@ const AppForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">{id ? "Edit App" : "Add App"}</Typography>
+        <Typography variant="headingXLarge">{id ? "Edit app" : "Add app"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/apps"
           color="inherit"
         >
-          Back to Apps
+          Back to apps
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -453,7 +456,7 @@ const AppForm = () => {
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update App" : "Add App"}
+              {id ? "Update app" : "Add app"}
             </PrimaryButton>
           </Box>
         </Box>

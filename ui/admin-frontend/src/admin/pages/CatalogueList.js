@@ -36,7 +36,6 @@ import {
   StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -240,18 +239,18 @@ const CatalogueList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Catalogs are collections of LLMs that can be assigned to groups." />
-            <Typography variant="h5">Catalogs</Typography>
-          </Box>
+          <Typography variant="headingXLarge">LLM catalogs</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddCatalogue}
           >
-            Add Catalog
+            Add catalog
           </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific user groups to manage access easily.</Typography>  
+        </Box>
         <ContentBox>
           {catalogues.length === 0 ? (
             <EmptyStateWidget
@@ -322,16 +321,16 @@ const CatalogueList = () => {
         onClose={handleMenuClose}
       >
         <MenuItem onClick={(event) => handleEdit(event, selectedCatalogue?.id)}>
-          Edit Catalog
+          Edit catalog
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedCatalogue?.id)}>
-          Delete Catalog
+          Delete catalog
         </MenuItem>
         <MenuItem onClick={() => handleOpenModal("add")}>
-          Add LLM to Catalog
+          Add LLM to catalog
         </MenuItem>
         <MenuItem onClick={() => handleOpenModal("remove")}>
-          Remove LLM from Catalog
+          Remove LLM from catalog
         </MenuItem>
       </Menu>
 

@@ -220,8 +220,8 @@ const DataCatalogForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">
-          {id ? "Edit Data Catalog" : "Create New Data Catalog"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit data catalog" : "Add data catalog"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -229,9 +229,12 @@ const DataCatalogForm = () => {
           to="/admin/catalogs/data"
           color="inherit"
         >
-          Back to Data Catalogs
+          Back to catalogs
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
@@ -359,7 +362,7 @@ const DataCatalogForm = () => {
           </Box>
           <Box mt={3}>
             <PrimaryButton type="submit" variant="contained" color="primary">
-              {id ? "Update Data Catalog" : "Create Data Catalog"}
+              {id ? "Update catalog" : "Create catalog"}
             </PrimaryButton>
           </Box>
         </Box>

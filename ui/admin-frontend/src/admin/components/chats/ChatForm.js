@@ -374,8 +374,8 @@ const ChatForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Chat Room" : "Add Chat Room"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit chat" : "Add chat"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -383,9 +383,12 @@ const ChatForm = () => {
           to="/admin/chats"
           color="inherit"
         >
-          Back to Chat Rooms
+          Back to chats
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's group, ensuring relevant and secure interactions.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -674,7 +677,7 @@ const ChatForm = () => {
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update Chat Room" : "Add Chat Room"}
+              {id ? "Update chat" : "Add chat"}
             </PrimaryButton>
           </Box>
         </Box>

@@ -379,7 +379,7 @@ const LLMDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">LLM Details</Typography>
+        <Typography variant="headingXLarge">LLM provider details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}
@@ -444,13 +444,13 @@ const LLMDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Privacy Score:</FieldLabel>
+            <FieldLabel>Privacy Level:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{llm.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing."
                 placement="top"
               >
                 <HelpOutlineIcon

@@ -13,7 +13,7 @@ import { generateRandomId, saveSelectedPath } from './utils';
 const BaseDrawer = ({
   id = generateRandomId(),
   menuItems,
-  drawerWidth = 240,
+  drawerWidth = 250,
   minimizedWidth = 60,
   showToolbar = true,
   customStyles = {},
