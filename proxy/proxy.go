@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -112,13 +113,71 @@ func (p *Proxy) Start() error {
 		return fmt.Errorf("failed to load resources: %w", err)
 	}
 
+	handler := fixDoubleSlash(p.createHandler())
+
+	// Add debug logging for AI proxy requests
+	debugHTTPProxy := os.Getenv("DEBUG_HTTP_PROXY") == "true"
+	if debugHTTPProxy {
+		originalHandler := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Only log AI proxy requests (paths starting with /llm/)
+			if strings.HasPrefix(r.URL.Path, "/llm/") {
+				fmt.Printf("\n[DEBUG PROXY] Incoming Request to AI Proxy Server (:%d)\n", p.config.Port)
+				fmt.Printf("[DEBUG PROXY] Method: %v | Path: %v\n", r.Method, r.URL.Path)
+				fmt.Printf("[DEBUG PROXY] Headers: %v\n", r.Header)
+
+				// Copy request body for logging without consuming it
+				if r.Body != nil {
+					bodyBytes, _ := readBodyWithoutConsuming(r)
+					if bodyBytes != nil {
+						var prettyJSON bytes.Buffer
+						if err := json.Indent(&prettyJSON, bodyBytes, "", "  "); err == nil {
+							fmt.Printf("[DEBUG PROXY] Request Body:\n%s\n", prettyJSON.String())
+						} else {
+							fmt.Printf("[DEBUG PROXY] Request Body: %s\n", string(bodyBytes))
+						}
+					}
+				}
+
+				// Create a response wrapper just for logging
+				lrw := &loggingResponseWriter{
+					ResponseWriter: w,
+					statusCode:     http.StatusOK, // Default status
+				}
+
+				// Call the original handler
+				originalHandler.ServeHTTP(lrw, r)
+
+				// Log response details after the handler completes
+				fmt.Printf("[DEBUG PROXY] Response Status: %d\n", lrw.statusCode)
+				if lrw.statusCode == http.StatusMethodNotAllowed {
+					fmt.Printf("[DEBUG PROXY] 405 Method Not Allowed - Allowed Methods: %v\n", w.Header().Get("Allow"))
+				}
+			} else {
+				// For non-AI proxy requests, just pass through
+				originalHandler.ServeHTTP(w, r)
+			}
+		})
+	}
+
 	p.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", p.config.Port),
-		Handler: p.createHandler(),
+		Handler: handler,
 	}
 
 	log.Printf("Starting proxy server on port %d", p.config.Port)
 	return p.server.ListenAndServe()
+}
+
+// loggingResponseWriter wraps http.ResponseWriter to capture the status code without affecting the response
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (w *loggingResponseWriter) WriteHeader(code int) {
+	w.statusCode = code
+	w.ResponseWriter.WriteHeader(code)
 }
 
 func (p *Proxy) Stop(ctx context.Context) error {
@@ -168,8 +227,23 @@ func (p *Proxy) loadResources() error {
 	return nil
 }
 
+func fixDoubleSlash(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("GOT REQUEST!", r.URL.Path)
+		// Clean the path by replacing multiple slashes with a single slash
+		cleanPath := r.URL.Path
+		for strings.Contains(cleanPath, "//") {
+			cleanPath = strings.ReplaceAll(cleanPath, "//", "/")
+		}
+		r.URL.Path = cleanPath
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
+	// r.Use(fixDoubleSlash)
+	// r.StrictSlash(false)
 
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).
 		Methods("POST").
@@ -184,6 +258,17 @@ func (p *Proxy) createHandler() http.Handler {
 	return p.outboundRequestMiddleware(
 		p.credValidator.Middleware(r),
 	)
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
 func (p *Proxy) AddFilter(filter *models.Filter) {
