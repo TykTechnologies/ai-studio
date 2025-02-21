@@ -200,19 +200,18 @@ const ModelPriceList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Model Prices define the cost per token for different language models." />
-            <Typography variant="h5">Model Prices</Typography>
-          </Box>
-
+          <Typography variant="headingXLarge">Model prices</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddPrice}
           >
-            Add Model Price
+            Add model price
           </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>  
+        </Box>
         <ContentBox>
           {modelPrices.length === 0 ? (
             <EmptyStateWidget
@@ -308,16 +307,16 @@ const ModelPriceList = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={handleOpenUpdatePriceModal}>Update Price</MenuItem>
+        <MenuItem onClick={handleOpenUpdatePriceModal}>Update model price</MenuItem>
         <MenuItem
           onClick={() =>
             navigate(`/admin/model-prices/edit/${selectedPrice?.id}`)
           }
         >
-          Edit Price
+          Edit model price
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedPrice?.id)}>
-          Delete Price
+          Delete model price
         </MenuItem>
       </Menu>
 
@@ -325,7 +324,7 @@ const ModelPriceList = () => {
         open={openUpdatePriceModal}
         onClose={handleCloseUpdatePriceModal}
       >
-        <StyledDialogTitle>Update Model Price</StyledDialogTitle>
+        <StyledDialogTitle>Update model price</StyledDialogTitle>
         <StyledDialogContent>
           <TextField
             fullWidth

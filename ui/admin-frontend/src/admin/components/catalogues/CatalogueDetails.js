@@ -70,14 +70,14 @@ const CatalogueDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Catalog Details</Typography>
+        <Typography variant="headingXLarge">LLM catalog details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/llms"
           color="inherit"
         >
-          Back to Catalogs
+          Back to catalogs
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -130,7 +130,7 @@ const CatalogueDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/catalogs/llms/edit/${id}`)}
           >
-            Edit Catalog
+            Edit catalog
           </PrimaryButton>
         </Box>
       </ContentBox>

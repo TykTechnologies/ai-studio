@@ -166,13 +166,13 @@ const LLMSettingsDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">LLM Call Settings Details</Typography>
+        <Typography variant="headingXLarge">Model call setting details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llm-settings")}
           color="inherit"
         >
-          Back to LLM Call Settings
+          Back to call settings
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -308,7 +308,7 @@ const LLMSettingsDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/llm-settings/edit/${id}`)}
           >
-            Edit LLM Call Settings
+            Edit call setting
           </PrimaryButton>
         </Box>
       </ContentBox>

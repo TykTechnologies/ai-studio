@@ -65,7 +65,7 @@ const ConfigureTool = ({
 
       <TextField
         fullWidth
-        label="Privacy Score"
+        label="Privacy Level"
         type="number"
         value={toolConfig.privacy_score}
         onChange={handleChange('privacy_score')}

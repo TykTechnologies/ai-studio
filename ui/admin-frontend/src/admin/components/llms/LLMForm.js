@@ -15,7 +15,6 @@ import {
   FormControlLabel,
   InputAdornment,
   IconButton,
-  Tooltip,
   AccordionSummary,
   AccordionDetails,
   Chip,
@@ -24,7 +23,6 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   SecondaryLinkButton,
@@ -191,7 +189,7 @@ const LLMForm = () => {
     if (!llm.name.trim()) newErrors.name = "Name is required";
     if (!llm.vendor.trim()) newErrors.vendor = "Vendor is required";
     if (llm.privacy_score < 0 || llm.privacy_score > 100)
-      newErrors.privacy_score = "Privacy score must be between 0 and 100";
+      newErrors.privacy_score = "Privacy level must be between 0 and 100";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -246,7 +244,7 @@ const LLMForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">{id ? "Edit LLM" : "Add LLM"}</Typography>
+        <Typography variant="headingXLarge">{id ? "Edit LLM provider" : "Add LLM provider"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
@@ -256,7 +254,10 @@ const LLMForm = () => {
           Back to LLMs
         </SecondaryLinkButton>
       </TitleBox>
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI assistants in chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific user groups.</Typography>  
+      </Box>
+      <ContentBox sx={{ pt: 0 }}>
         <Box component="form" onSubmit={handleSubmit}>
           <SectionTitle>LLM Description</SectionTitle>
           <Grid container spacing={3}>
@@ -378,9 +379,14 @@ const LLMForm = () => {
               </Grid>
             </Grid>
             <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom>
+                Privacy levels
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLMs providers with lower privacy levels can’t access higher-level, data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
+              </Typography>
               <TextField
                 fullWidth
-                label="Privacy Score"
                 name="privacy_score"
                 type="number"
                 value={llm.privacy_score}
@@ -391,15 +397,6 @@ const LLMForm = () => {
                   min: 0,
                   max: 100,
                   step: 1,
-                }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing.">
-                        <HelpOutlineIcon color="action" />
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
                 }}
               />
             </Grid>
@@ -416,6 +413,7 @@ const LLMForm = () => {
                   fullWidth
                   label="Model Pattern"
                   value={newModel}
+                  autoComplete="off"
                   onChange={(e) => setNewModel(e.target.value)}
                   placeholder="Enter model pattern (e.g., gpt-4.*)"
                   onKeyPress={(e) => {

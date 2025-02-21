@@ -195,19 +195,18 @@ const DatasourceList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Vector data sources are used to store and retrieve data to enhance conversations with your models. These can be created using embedding providers that vectorise the content you wish to search, and make for an excellent way to enhance your chat room effectiveness for your users, or to better inform responses in your AI Applications" />
-            <Typography variant="h5">Vector Data Sources</Typography>
-          </Box>
-
+          <Typography variant="headingXLarge">Data sources</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddDatasource}
           >
-            Add Datasource
+            Add data source
           </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Data sources let you store and access information to enhance AI conversations using Retrieval Augmented Generation (RAG). By using embedding providers to convert content into searchable vectors, your AI can deliver more accurate, informed, and engaging responses.</Typography>  
+        </Box>  
         <ContentBox>
           {datasources.length === 0 ? (
             <EmptyStateWidget
@@ -237,7 +236,7 @@ const DatasourceList = () => {
                     <StyledTableHeaderCell
                       onClick={() => handleSort("privacy_score")}
                     >
-                      Privacy Score
+                      Privacy Level
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("active")}>
@@ -352,14 +351,14 @@ const DatasourceList = () => {
             navigate(`/admin/datasources/edit/${selectedDatasource?.id}`)
           }
         >
-          Edit Datasource
+          Edit data source
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedDatasource?.id)}>
-          Delete Datasource
+          Delete data source
         </MenuItem>
         <MenuItem onClick={() => handleToggleActive(selectedDatasource)}>
           {selectedDatasource?.attributes.active ? "Deactivate" : "Activate"}{" "}
-          Datasource
+          data source
         </MenuItem>
       </Menu>
 

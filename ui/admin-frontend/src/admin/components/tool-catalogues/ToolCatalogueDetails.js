@@ -59,13 +59,13 @@ const ToolCatalogueDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Tool Catalog Details</Typography>
+        <Typography variant="headingXLarge">Tool catalog details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
-          Back to Tool Catalogs
+          Back to catalogs
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -145,7 +145,7 @@ const ToolCatalogueDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/catalogs/tools/edit/${id}`)}
           >
-            Edit Tool Catalog
+            Edit catalog
           </PrimaryButton>
         </Box>
       </ContentBox>

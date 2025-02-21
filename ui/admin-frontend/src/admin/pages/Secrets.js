@@ -188,13 +188,13 @@ const Secrets = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Secrets</Typography>
+        <Typography variant="headingXLarge">Secrets</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddSecret}
         >
-          Add Secret
+          Add secret
         </PrimaryButton>
       </TitleBox>
       <ContentBox>
@@ -255,10 +255,10 @@ const Secrets = () => {
         <MenuItem
           onClick={() => navigate(`/admin/secrets/edit/${selectedSecret?.id}`)}
         >
-          Edit Secret
+          Edit secret
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedSecret?.id)}>
-          Delete Secret
+          Delete secret
         </MenuItem>
       </Menu>
 

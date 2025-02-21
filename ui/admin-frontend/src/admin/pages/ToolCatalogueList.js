@@ -134,15 +134,18 @@ const ToolCatalogueList = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Tool Catalogs</Typography>
+        <Typography variant="headingXLarge">Tool catalogs</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddToolCatalogue}
         >
-          Add Tool Catalog
+          Add catalog
         </PrimaryButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         {toolCatalogues.length === 0 ? (
           <EmptyStateWidget

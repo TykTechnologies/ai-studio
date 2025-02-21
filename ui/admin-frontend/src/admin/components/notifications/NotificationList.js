@@ -54,7 +54,7 @@ const NotificationList = () => {
 	return (
 		<Container maxWidth="md" sx={{ mt: 4 }}>
 			<Paper>
-				<Typography variant="h1" sx={{ p: 2 }}>
+				<Typography variant="headingXLarge" sx={{ p: 2 }}>
 					Notifications
 				</Typography>
 				<List>

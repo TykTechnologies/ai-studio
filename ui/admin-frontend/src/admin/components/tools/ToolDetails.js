@@ -68,13 +68,13 @@ const ToolDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Tool Details</Typography>
+        <Typography variant="headingXLarge">Tool details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/tools")}
           color="inherit"
         >
-          Back to Tools
+          Back to tools
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -93,13 +93,13 @@ const ToolDetails = () => {
             <FieldValue>{tool.attributes.description}</FieldValue>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Privacy Score:</FieldLabel>
+            <FieldLabel>Privacy Level:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{tool.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the tool."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the tool."
                 placement="top"
               >
                 <HelpOutlineIcon
@@ -180,7 +180,7 @@ const ToolDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/tools/edit/${id}`)}
           >
-            Edit Tool
+            Edit tool
           </PrimaryButton>
         </Box>
       </ContentBox>

@@ -415,13 +415,13 @@ const AppDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">App Details</Typography>
+        <Typography variant="headingXLarge">App details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/apps")}
           color="inherit"
         >
-          Back to Apps
+          Back to apps
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -650,7 +650,7 @@ const AppDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/apps/edit/${id}`)}
           >
-            Edit App
+            Edit app
           </PrimaryButton>
         </Box>
       </ContentBox>

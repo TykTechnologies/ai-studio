@@ -77,7 +77,7 @@ const SecretDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Secret Details</Typography>
+        <Typography variant="headingXLarge">Secret details</Typography>
         <Box>
           <SecondaryLinkButton
             startIcon={<ArrowBackIcon />}
@@ -85,14 +85,14 @@ const SecretDetails = () => {
             color="inherit"
             sx={{ mr: 2 }}
           >
-            Back to Secrets
+            Back to secrets
           </SecondaryLinkButton>
           <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/secrets/edit/${id}`)}
           >
-            Edit Secret
+            Edit secret
           </PrimaryButton>
         </Box>
       </TitleBox>

@@ -27,7 +27,6 @@ import {
   StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -180,19 +179,18 @@ const ChatList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to their group. They can be associated with one or more groups." />
-            <Typography variant="h5">Chat Rooms</Typography>
-          </Box>
-
+          <Typography variant="headingXLarge">Chats</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddChat}
           >
-            Add Chat Room
+            Add chat
           </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's group, ensuring relevant and secure interactions.</Typography>  
+        </Box>
         <ContentBox>
           {chats.length === 0 ? (
             <EmptyStateWidget
@@ -279,10 +277,10 @@ const ChatList = () => {
         <MenuItem
           onClick={() => navigate(`/admin/chats/edit/${selectedChat?.id}`)}
         >
-          Edit Chat Room
+          Edit chat
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedChat?.id)}>
-          Delete Chat Room
+          Delete chat
         </MenuItem>
       </Menu>
 

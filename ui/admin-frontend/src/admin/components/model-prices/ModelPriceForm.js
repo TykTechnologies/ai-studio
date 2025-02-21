@@ -197,8 +197,8 @@ const ModelPriceForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">
-          {id ? "Edit Model Price" : "Add Model Price"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit model price" : "Add model price"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -206,9 +206,12 @@ const ModelPriceForm = () => {
           to="/admin/model-prices"
           color="inherit"
         >
-          Back to Model Prices
+          Back to model prices
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -288,7 +291,7 @@ const ModelPriceForm = () => {
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update Model Price" : "Add Model Price"}
+              {id ? "Update model price" : "Add model price"}
             </PrimaryButton>
           </Box>
         </Box>

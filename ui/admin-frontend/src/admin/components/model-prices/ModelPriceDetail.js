@@ -52,13 +52,13 @@ const ModelPriceDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Model Price Details</Typography>
+        <Typography variant="headingXLarge">Model price details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/model-prices")}
           color="inherit"
         >
-          Back to Model Prices
+          Back to model prices
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -113,7 +113,7 @@ const ModelPriceDetail = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/model-prices/edit/${id}`)}
           >
-            Edit Model Price
+            Edit model price
           </PrimaryButton>
         </Box>
       </ContentBox>

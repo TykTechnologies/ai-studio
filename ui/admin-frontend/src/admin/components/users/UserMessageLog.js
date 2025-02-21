@@ -128,7 +128,7 @@ const UserMessageLog = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5" fontWeight="bold">
+        <Typography variant="headingXLarge" fontWeight="bold">
           Chat Log
         </Typography>
         <SecondaryLinkButton

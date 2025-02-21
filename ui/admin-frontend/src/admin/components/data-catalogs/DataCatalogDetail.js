@@ -59,14 +59,14 @@ const DataCatalogDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h1">Data Catalog Details</Typography>
+        <Typography variant="headingXLarge">Data catalog details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/data"
           color="inherit"
         >
-          Back to Data Catalogs
+          Back to catalogs
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -145,7 +145,7 @@ const DataCatalogDetail = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/catalogs/data/edit/${id}`)}
           >
-            Edit Data Catalog
+            Edit catalog
           </PrimaryButton>
         </Box>
       </ContentBox>

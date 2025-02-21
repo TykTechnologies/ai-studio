@@ -294,14 +294,14 @@ const UserForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">{id ? "Edit User" : "Add User"}</Typography>
+        <Typography variant="headingXLarge">{id ? "Edit user" : "Add user"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           color="inherit"
           to="/admin/users"
         >
-          Back to Users
+          Back to users
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -414,7 +414,7 @@ const UserForm = () => {
                 type="submit"
                 disabled={!isFormValid()}
               >
-                {id ? "Update User" : "Add User"}
+                {id ? "Update user" : "Add user"}
               </PrimaryButton>
             </Grid>
           </Grid>

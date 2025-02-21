@@ -252,7 +252,7 @@ const Users = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Users</Typography>
+        <Typography variant="headingXLarge">Users</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
@@ -366,15 +366,15 @@ const Users = () => {
         >
           {/* Only show Add to Group if not in gateway-only mode */}
           {!isGatewayOnlyMode() && (
-            <MenuItem onClick={handleAddToGroup}>Add to Group</MenuItem>
+            <MenuItem onClick={handleAddToGroup}>Add to group</MenuItem>
           )}
           <MenuItem
             onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
           >
-            Edit User
+            Edit user
           </MenuItem>
           <MenuItem onClick={() => handleDelete(selectedUser?.id)}>
-            Delete User
+            Delete user
           </MenuItem>
         </Menu>
 

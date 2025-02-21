@@ -84,7 +84,7 @@ export const PrimaryButton = styled(Button)(({ theme }) => ({
   color: theme.palette.custom.white,
   backgroundColor: theme.palette.background.buttonPrimaryDefault,
   boxShadow: "none",
-  textTransform: "capitalize",
+  textTransform: "none",
   fontFamily: 'Inter-Medium',
   "&::before": {
     content: '""',
@@ -112,7 +112,7 @@ export const PrimaryOutlineButton = styled(Button)(({ theme }) => ({
   color: theme.palette.text.defaultSubdued,
   backgroundColor: theme.palette.background.paper,
   boxShadow: "none",
-  textTransform: "capitalize",
+  textTransform: "none",
   fontFamily: 'Inter-Medium',
   "&::before": {
     content: '""',
@@ -141,7 +141,7 @@ export const DangerButton = styled(Button)(({ theme }) => ({
   backgroundColor: theme.palette.background.buttonCritical,
   border: `1px solid ${theme.palette.border.criticalDefault}`,
   boxShadow: "none",
-  textTransform: "capitalize",
+  textTransform: "none",
   fontFamily: 'Inter-Medium',
   "&:hover": {
     backgroundColor: theme.palette.background.buttonCriticalHover,
@@ -160,6 +160,7 @@ export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
   alignItems: 'center',
   border: 'none',
   padding: '0 8px 0 0',
+  textTransform: 'none',
   '&:hover': {
     color: theme.palette.text.defaultSubdued,
     backgroundColor: 'transparent',

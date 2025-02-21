@@ -232,17 +232,20 @@ const ToolCatalogueForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Tool Catalog" : "Create Tool Catalog"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit tool catalog" : "Add tool catalog"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
-          Back to Tool Catalogs
+          Back to catalogs
         </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
@@ -358,9 +361,9 @@ const ToolCatalogueForm = () => {
             {loading ? (
               <CircularProgress size={24} />
             ) : id ? (
-              "Update Tool Catalog"
+              "Update catalog"
             ) : (
-              "Create Tool Catalog"
+              "Create catalog"
             )}
           </PrimaryButton>
         </Box>

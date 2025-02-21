@@ -11,6 +11,16 @@ const theme = createTheme({
     body2: {
       fontSize: "0.89rem",
     },
+    bodyLargeDefault: {
+      fontSize: "14px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Regular",
+    },
+    headingXLarge: {
+      fontSize: "32px",
+      lineHeight: "36px",
+      fontFamily: "Inter-Bold",
+    }
   },
   palette: {
     mode: "light",
@@ -76,11 +86,6 @@ const theme = createTheme({
         }),
         h5: {
           fontWeight: "bold",
-        },
-        h1: {
-          fontFamily: "Inter-Bold",
-          fontSize: "32px",
-          lineHeight: "36px",
         },
       },
     },
@@ -211,7 +216,7 @@ const theme = createTheme({
           color: theme.palette.text.defaultSubdued,
           backgroundColor: theme.palette.background.buttonSecondary,
           boxShadow: "none",
-          textTransform: "capitalize",
+          textTransform: "none",
           border: `1px solid ${theme.palette.border.neutralDefault}`,
           "&:hover": {
             backgroundColor: theme.palette.background.defaultSubdued,
@@ -230,6 +235,52 @@ const theme = createTheme({
             backgroundColor: 'transparent',
           }
         })
+      }
+    },
+    MuiListItemIcon: {
+      styleOverrides: {
+        root: {
+          '& [class^="fa-"]': {
+            fontSize: '1.25em',
+            width: '1em',
+            height: '1em',
+            display: 'inline-block',
+            verticalAlign: 'middle',
+            background: 'none !important',
+            '&::before': {
+              display: 'inline-block',
+              lineHeight: 1,
+              fontFamily: "'Font Awesome 6 Pro'",
+              fontStyle: 'normal',
+              fontWeight: 900,
+              fontVariant: 'normal',
+              textRendering: 'auto'
+            }
+          }
+        }
+      }
+    },
+    MuiSvgIcon: {
+      styleOverrides: {
+        root: {
+          '& .fa-solid, & .fa-regular, & .fa-light, & .fa-thin, & .fa-duotone': {
+            background: 'none !important',
+            WebkitMaskImage: 'none !important',
+            maskImage: 'none !important',
+            color: 'inherit'
+          }
+        }
+      }
+    },
+    // Global override for FontAwesome icons
+    MuiCssBaseline: {
+      styleOverrides: {
+        '.fa-solid, .fa-regular, .fa-light, .fa-thin, .fa-duotone': {
+          background: 'none !important',
+          WebkitMaskImage: 'none !important',
+          maskImage: 'none !important',
+          color: 'inherit'
+        }
       }
     },
     MuiCard: {

@@ -133,13 +133,13 @@ const UserDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">User Details</Typography>
+        <Typography variant="headingXLarge">User details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/users")}
           color="inherit"
         >
-          Back to Users
+          Back to users
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -211,7 +211,7 @@ const UserDetails = () => {
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/users/edit/${id}`)}
           >
-            Edit User
+            Edit user
           </PrimaryButton>
         </Box>
         <Divider />
