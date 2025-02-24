@@ -20,68 +20,120 @@ func setupTestService(t *testing.T) *Service {
 }
 
 func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
-	service := setupTestService(t)
+	t.Run("basic cost recalculation", func(t *testing.T) {
+		service := setupTestService(t)
 
-	// Create initial model price
-	mp := &models.ModelPrice{
-		ModelName:    "GPT-4",
-		Vendor:       "OpenAI",
-		CPT:          0.002, // Initial cost per token
-		CPIT:         0.003, // Initial cost per input token
-		CacheWritePT: 0.0005,
-		CacheReadPT:  0.0001,
-		Currency:     "USD",
-	}
-	err := mp.Create(service.DB)
-	assert.NoError(t, err)
-
-	// Create some chat records
-	records := []models.LLMChatRecord{
-		{
-			Name:                   "GPT-4",
-			Vendor:                 "OpenAI",
-			PromptTokens:           100,
-			ResponseTokens:         50,
-			CacheWritePromptTokens: 20,
-			CacheReadPromptTokens:  10,
-			TotalTokens:            180,    // 100 + 50 + 20 + 10
-			Cost:                   0.3525, // (100 * 0.003) + (50 * 0.002) + (20 * 0.0005) + (10 * 0.0001)
-			Currency:               "USD",
-		},
-		{
-			Name:                   "GPT-4",
-			Vendor:                 "OpenAI",
-			PromptTokens:           200,
-			ResponseTokens:         100,
-			CacheWritePromptTokens: 40,
-			CacheReadPromptTokens:  20,
-			TotalTokens:            360,   // 200 + 100 + 40 + 20
-			Cost:                   0.805, // (200 * 0.003) + (100 * 0.002) + (40 * 0.0005) + (20 * 0.0001)
-			Currency:               "USD",
-		},
-	}
-	for _, record := range records {
-		err := service.DB.Create(&record).Error
+		// Create initial model price
+		mp := &models.ModelPrice{
+			ModelName:    "GPT-4",
+			Vendor:       "OpenAI",
+			CPT:          0.002, // Initial cost per token
+			CPIT:         0.003, // Initial cost per input token
+			CacheWritePT: 0.0005,
+			CacheReadPT:  0.0001,
+			Currency:     "USD",
+		}
+		err := mp.Create(service.DB)
 		assert.NoError(t, err)
-	}
 
-	// Update model price with new rates and currency using service
-	_, err = service.UpdateModelPriceAndRecalculate(mp.ID, mp.ModelName, mp.Vendor, 0.004, 0.006, 0.001, 0.0002, "EUR")
-	assert.NoError(t, err)
+		// Create some chat records
+		records := []models.LLMChatRecord{
+			{
+				Name:                   "GPT-4",
+				Vendor:                 "OpenAI",
+				PromptTokens:           100,
+				ResponseTokens:         50,
+				CacheWritePromptTokens: 20,
+				CacheReadPromptTokens:  10,
+				TotalTokens:            180,    // 100 + 50 + 20 + 10
+				Cost:                   0.3525, // (50 * 0.002) + (100 * 0.003) + (20 * 0.0005) + (10 * 0.0001)
+				Currency:               "USD",
+			},
+			{
+				Name:                   "GPT-4",
+				Vendor:                 "OpenAI",
+				PromptTokens:           200,
+				ResponseTokens:         100,
+				CacheWritePromptTokens: 40,
+				CacheReadPromptTokens:  20,
+				TotalTokens:            360,   // 200 + 100 + 40 + 20
+				Cost:                   0.805, // (100 * 0.002) + (200 * 0.003) + (40 * 0.0005) + (20 * 0.0001)
+				Currency:               "USD",
+			},
+		}
+		for _, record := range records {
+			err := service.DB.Create(&record).Error
+			assert.NoError(t, err)
+		}
 
-	// Verify costs and currency were updated
-	var updatedRecords []models.LLMChatRecord
-	err = service.DB.Where("name = ? AND vendor = ?", "GPT-4", "OpenAI").Find(&updatedRecords).Error
-	assert.NoError(t, err)
-	assert.Len(t, updatedRecords, 2)
+		// Update model price with new rates and currency using service
+		_, err = service.UpdateModelPriceAndRecalculate(mp.ID, mp.ModelName, mp.Vendor, 0.004, 0.006, 0.001, 0.0002, "EUR")
+		assert.NoError(t, err)
 
-	// Check first record
-	assert.InDelta(t, 0.822, updatedRecords[0].Cost, 0.0001)
-	assert.Equal(t, "EUR", updatedRecords[0].Currency)
+		// Verify costs and currency were updated
+		var updatedRecords []models.LLMChatRecord
+		err = service.DB.Where("name = ? AND vendor = ?", "GPT-4", "OpenAI").Find(&updatedRecords).Error
+		assert.NoError(t, err)
+		assert.Len(t, updatedRecords, 2)
 
-	// Check second record
-	assert.InDelta(t, 1.644, updatedRecords[1].Cost, 0.0001)
-	assert.Equal(t, "EUR", updatedRecords[1].Currency)
+		// Check first record: (50 * 0.004) + (100 * 0.006) + (20 * 0.001) + (10 * 0.0002) = 0.822
+		assert.InDelta(t, 0.822, updatedRecords[0].Cost, 0.0001)
+		assert.Equal(t, "EUR", updatedRecords[0].Currency)
+
+		// Check second record: (100 * 0.004) + (200 * 0.006) + (40 * 0.001) + (20 * 0.0002) = 1.644
+		assert.InDelta(t, 1.644, updatedRecords[1].Cost, 0.0001)
+		assert.Equal(t, "EUR", updatedRecords[1].Currency)
+	})
+
+	t.Run("cache-heavy cost recalculation", func(t *testing.T) {
+		service := setupTestService(t)
+
+		// Create initial model price with significant cache costs
+		mp := &models.ModelPrice{
+			ModelName:    "GPT-4-Cache",
+			Vendor:       "OpenAI",
+			CPT:          0.002,
+			CPIT:         0.003,
+			CacheWritePT: 0.001,  // Higher cache write cost
+			CacheReadPT:  0.0005, // Higher cache read cost
+			Currency:     "USD",
+		}
+		err := mp.Create(service.DB)
+		assert.NoError(t, err)
+
+		// Create chat records with significant cache usage
+		records := []models.LLMChatRecord{
+			{
+				Name:                   "GPT-4-Cache",
+				Vendor:                 "OpenAI",
+				PromptTokens:           50,
+				ResponseTokens:         25,
+				CacheWritePromptTokens: 100,    // More cache writes than direct tokens
+				CacheReadPromptTokens:  200,    // More cache reads than direct tokens
+				TotalTokens:            375,    // 50 + 25 + 100 + 200
+				Cost:                   0.3525, // (25 * 0.002) + (50 * 0.003) + (100 * 0.001) + (200 * 0.0005)
+				Currency:               "USD",
+			},
+		}
+		for _, record := range records {
+			err := service.DB.Create(&record).Error
+			assert.NoError(t, err)
+		}
+
+		// Update to new rates that heavily weight cache operations
+		_, err = service.UpdateModelPriceAndRecalculate(mp.ID, mp.ModelName, mp.Vendor, 0.004, 0.006, 0.002, 0.001, "EUR")
+		assert.NoError(t, err)
+
+		// Verify costs and currency were updated
+		var updatedRecords []models.LLMChatRecord
+		err = service.DB.Where("name = ? AND vendor = ?", "GPT-4-Cache", "OpenAI").Find(&updatedRecords).Error
+		assert.NoError(t, err)
+		assert.Len(t, updatedRecords, 1)
+
+		// Check record: (25 * 0.004) + (50 * 0.006) + (100 * 0.002) + (200 * 0.001) = 0.8
+		assert.InDelta(t, 0.8, updatedRecords[0].Cost, 0.0001)
+		assert.Equal(t, "EUR", updatedRecords[0].Currency)
+	})
 }
 
 func TestCreateModelPrice(t *testing.T) {

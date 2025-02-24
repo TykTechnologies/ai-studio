@@ -9,8 +9,10 @@ import (
 // 	// Update anthropic chat records
 // 	if err := db.Exec(`
 // 		UPDATE llm_chat_records
-// 		SET llm_id = 5
-// 		WHERE interaction_type = 'proxy'
+// 		SET interaction_type = 'proxy',
+// 		    name = 'claude-3-5-sonnet-20241022',
+// 		    currency = 'USD'
+// 		WHERE llm_id = 5
 // 	`).Error; err != nil {
 // 		return err
 // 	}
