@@ -79,6 +79,15 @@ const theme = createTheme({
     },
   },
   components: {
+    MuiSvgIcon: {
+      styleOverrides: {
+        root: {
+          width: '20px',
+          height: '20px',
+          fontSize: '20px',
+        },
+      },
+    },
     MuiTypography: {
       styleOverrides: {
         root: ({ theme }) => ({
