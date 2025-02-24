@@ -6,7 +6,7 @@ import { ReactComponent as LayerGroupIcon } from '../../../common/fontawesome/la
 import { ReactComponent as ShieldIcon } from '../../../common/fontawesome/shield.svg';
 import { ReactComponent as DisplayIcon } from '../../../common/fontawesome/display.svg';
 import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawesome/rectangle-history.svg';
-import { ReactComponent as CubeIcon } from '../../../common/fontawesome/cube.svg';
+import { ReactComponent as MessageLinesIcon } from '../../../common/fontawesome/message-lines.svg';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 
@@ -80,7 +80,7 @@ const Drawer = () => {
       ? [
           {
             text: 'Chat',
-            icon: <SvgIcon component={CubeIcon} inheritViewBox />,
+            icon: <SvgIcon component={MessageLinesIcon} inheritViewBox />,
             subItems: [
               { text: 'Chats', path: '/admin/chats' },
               { text: 'Model call settings', path: '/admin/llm-settings' },
