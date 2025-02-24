@@ -8,12 +8,12 @@ import adminTheme from '../../../theme';
 import { StyledDrawer, ToggleButton, MenuList } from './styles';
 import { useDrawerState } from './hooks';
 import MenuItem from './MenuItem';
-import { generateRandomId, saveSelectedPath } from './utils';
+import { generateRandomId } from './utils';
 
 const BaseDrawer = ({
   id = generateRandomId(),
   menuItems,
-  drawerWidth = 270,
+  drawerWidth = 260,
   minimizedWidth = 60,
   showToolbar = true,
   customStyles = {},

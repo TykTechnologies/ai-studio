@@ -9,6 +9,7 @@ import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawes
 import { ReactComponent as MessageLinesIcon } from '../../../common/fontawesome/message-lines.svg';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
+import { ReactComponent as Grid2PlusIcon } from '../../../common/fontawesome/grid-2-plus.svg';
 
 const Drawer = () => {
   const { features, loading } = useSystemFeatures();
@@ -62,7 +63,7 @@ const Drawer = () => {
       ? [
           {
             text: 'Apps & credentials',
-            icon: <SvgIcon component={DisplayIcon} inheritViewBox />,
+            icon: <SvgIcon component={Grid2PlusIcon} inheritViewBox />,
             subItems: [{ text: 'Apps', path: '/admin/apps' }],
           },
         ]
