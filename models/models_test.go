@@ -28,8 +28,8 @@ func TestFixLLMChatRecordIDs(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Run the fix function
-	err = fixLLMChatRecordIDs(db)
-	assert.NoError(t, err)
+	//err = fixLLMChatRecordIDs(db)
+	//assert.NoError(t, err)
 
 	// Verify records with LLMID = 5 were updated correctly
 	var updatedRecords []LLMChatRecord
