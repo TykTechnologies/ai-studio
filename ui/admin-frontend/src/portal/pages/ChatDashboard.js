@@ -112,7 +112,7 @@ const ChatDashboard = () => {
       }}
     >
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Chat Dashboard
+        Chat Overview
       </Typography>
 
       {chatRooms.length > 0 && (
