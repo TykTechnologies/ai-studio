@@ -37,7 +37,7 @@ const TopNavigation = ({
 
   if (showPortal) {
     tabs.push({
-      label: "Developer Portal",
+      label: "AI Portal",
       value: "portal",
       dataTestId: "portal-tab",
     });

@@ -363,9 +363,52 @@ const ModelPriceForm = () => {
           </Grid>
 
           <Box mt={4}>
-            <PrimaryButton variant="contained" type="submit">
-              {id ? "Update model price" : "Add model price"}
-            </PrimaryButton>
+            <Box mb={2}>
+              {id && (
+                <Typography
+                  component="span"
+                  sx={{
+                    color: 'text.secondary',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      textDecoration: 'underline'
+                    }
+                  }}
+                  onClick={() => {
+                    apiClient.post("/analytics/recalculate-prices").then(() => {
+                      setSnackbar({
+                        open: true,
+                        message: "Price recalculation started",
+                        severity: "success",
+                      });
+                    });
+                  }}
+                >
+                  Recalculate Prices
+                </Typography>
+              )}
+            </Box>
+            <Box display="flex" gap={2}>
+              <PrimaryButton variant="contained" type="submit">
+                {id ? "Update Model Price" : "Add Model Price"}
+              </PrimaryButton>
+              {id && (
+                <Button
+                  variant="text"
+                  sx={{
+                    color: 'text.secondary',
+                    textDecoration: 'underline',
+                    '&:hover': {
+                      backgroundColor: 'transparent',
+                      textDecoration: 'underline'
+                    }
+                  }}
+                  onClick={() => setRecalculateDialogOpen(true)}
+                >
+                  update and recalculate
+                </Button>
+              )}
+            </Box>
           </Box>
 
           <Dialog
