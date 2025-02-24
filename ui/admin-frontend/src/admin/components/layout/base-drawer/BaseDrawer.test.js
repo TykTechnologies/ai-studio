@@ -116,7 +116,7 @@ describe('BaseDrawer', () => {
   it('handles drawer toggle correctly', () => {
     renderWithProviders(<BaseDrawer menuItems={testMenuItems} />);
     const drawer = document.querySelector('.MuiDrawer-paper');
-    expect(drawer).toHaveStyle({ width: '240px' });
+    expect(drawer).toHaveStyle({ width: '260px' });
     
     const toggleButton = getToggleButton();
     expect(toggleButton).toBeInTheDocument();
