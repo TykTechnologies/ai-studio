@@ -71,7 +71,7 @@ const Drawer = () => {
     ...(features.feature_portal
       ? [
           {
-            text: 'Portal',
+            text: 'AI Portal',
             icon: <SvgIcon component={DisplayIcon} inheritViewBox />,
             subItems: [{ text: 'Apps', path: '/admin/apps' }],
           },
