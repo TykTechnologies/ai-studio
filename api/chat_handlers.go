@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -519,6 +520,10 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
 			ExtraContext        []FileStoreResponse `json:"extra_context"`
 			DefaultTools        []ToolResponse      `json:"default_tools"`
+			RecentHistory       []struct {
+				SessionID string `json:"session_id"`
+				Name      string `json:"name"`
+			} `json:"recent_history,omitempty"`
 		}{
 			Name:                chat.Name,
 			Description:         chat.Description,
@@ -551,4 +556,85 @@ func serializeFilters(f []*models.Filter) []FilterResponse {
 		arr[i] = *filter
 	}
 	return toFilterResponses(arr)
+}
+
+func serializeChatWithHistory(chat *models.Chat, userID uint, db *gorm.DB) (ChatResponse, error) {
+	extraContext, err := chat.GetExtraContext(db)
+	if err != nil {
+		return ChatResponse{}, fmt.Errorf("failed to get extra context: %w", err)
+	}
+
+	var defaultDSID int
+	if chat.DefaultDataSource != nil {
+		defaultDSID = int(*chat.DefaultDataSourceID)
+	}
+
+	recentHistory, err := models.GetRecentChatHistoryRecords(db, chat.ID, userID, 3)
+	if err != nil {
+		return ChatResponse{}, fmt.Errorf("failed to get recent history: %w", err)
+	}
+
+	history := make([]struct {
+		SessionID string `json:"session_id"`
+		Name      string `json:"name"`
+	}, len(recentHistory))
+
+	for i, record := range recentHistory {
+		history[i].SessionID = record.SessionID
+		history[i].Name = record.Name
+	}
+
+	return ChatResponse{
+		Type: "chats",
+		ID:   strconv.FormatUint(uint64(chat.ID), 10),
+		Attributes: struct {
+			Name                string              `json:"name"`
+			Description         string              `json:"description"`
+			LLMSettingsID       string              `json:"llm_settings_id"`
+			LLMID               string              `json:"llm_id"`
+			Groups              []GroupResponse     `json:"groups"`
+			Filters             []FilterResponse    `json:"filters"`
+			RagN                int                 `json:"rag_n"`
+			ToolSupport         bool                `json:"tool_support"`
+			SystemPrompt        string              `json:"system_prompt"`
+			DefaultDataSourceID int                 `json:"default_data_source_id"`
+			DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
+			ExtraContext        []FileStoreResponse `json:"extra_context"`
+			DefaultTools        []ToolResponse      `json:"default_tools"`
+			RecentHistory       []struct {
+				SessionID string `json:"session_id"`
+				Name      string `json:"name"`
+			} `json:"recent_history,omitempty"`
+		}{
+			Name:                chat.Name,
+			Description:         chat.Description,
+			LLMSettingsID:       strconv.FormatUint(uint64(chat.LLMSettingsID), 10),
+			LLMID:               strconv.FormatUint(uint64(chat.LLMID), 10),
+			Groups:              serializeGroups(chat.Groups),
+			Filters:             serializeFilters(chat.Filters),
+			RagN:                chat.RagResultsPerSource,
+			ToolSupport:         chat.SupportsTools,
+			SystemPrompt:        chat.SystemPrompt,
+			DefaultDataSourceID: defaultDSID,
+			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),
+			ExtraContext:        serializeFileStores(extraContext),
+			DefaultTools:        serializeToolsPointers(chat.DefaultTools, db),
+			RecentHistory:       history,
+		},
+	}, nil
+}
+
+func serializeChatsWithHistory(chats models.Chats, userID uint, db *gorm.DB) ([]ChatResponse, error) {
+	result := make([]ChatResponse, len(chats))
+
+	for i, chat := range chats {
+		response, err := serializeChatWithHistory(&chat, userID, db)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize chat %d: %w", chat.ID, err)
+		}
+
+		result[i] = response
+	}
+
+	return result, nil
 }

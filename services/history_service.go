@@ -95,6 +95,11 @@ func (s *Service) SearchChatHistoryRecords(userID uint, query string, pageSize i
 	return models.SearchChatHistoryRecords(s.DB, userID, query, pageSize, pageNumber, all)
 }
 
+// GetRecentChatHistoryRecords retrieves recent chat history records for a specific chat
+func (s *Service) GetRecentChatHistoryRecords(userID uint, chatID uint, limit int) ([]models.ChatHistoryRecord, error) {
+	return models.GetRecentChatHistoryRecords(s.DB, userID, chatID, limit)
+}
+
 // GetLatestChatHistoryRecord retrieves the most recent ChatHistoryRecord for a given UserID
 func (s *Service) GetLatestChatHistoryRecord(userID uint) (*models.ChatHistoryRecord, error) {
 	return models.GetLatestChatHistoryRecord(s.DB, userID)

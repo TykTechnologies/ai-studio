@@ -160,6 +160,25 @@ func SearchChatHistoryRecords(db *gorm.DB, userID uint, query string, pageSize i
 	return records, totalCount, totalPages, err
 }
 
+// GetRecentChatHistoryRecords returns the N most recent chat history records for a specific chat
+func GetRecentChatHistoryRecords(db *gorm.DB, userID uint, chatID uint, limit int) ([]ChatHistoryRecord, error) {
+	var records []ChatHistoryRecord
+
+	subQuery := db.Model(&CMessage{}).
+		Select("session").
+		Group("session").
+		Having("COUNT(*) > 1")
+
+	err := db.Model(&ChatHistoryRecord{}).
+		Where("user_id = ? AND chat_id = ?", userID, chatID).
+		Where("session_id IN (?)", subQuery).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&records).Error
+
+	return records, err
+}
+
 // GetLatestChatHistoryRecord retrieves the most recent ChatHistoryRecord for a given UserID
 func GetLatestChatHistoryRecord(db *gorm.DB, userID uint) (*ChatHistoryRecord, error) {
 	var record ChatHistoryRecord

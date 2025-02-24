@@ -37,7 +37,19 @@ const ChatDrawer = () => {
         subItems: userEntitlements?.chats?.map((chat) => ({
           id: `chat-${chat.id}`,
           text: chat.attributes.name,
-          path: `/chat/${chat.id}`
+          expandable: true,
+          subItems: [
+            ...(chat.attributes.recent_history || []).map(record => ({
+              id: `conversation-${record.session_id}`,
+              text: record.name,
+              path: `/chat/${chat.id}?continue_id=${record.session_id}`
+            })),
+            {
+              id: `see-all-${chat.id}`,
+              text: 'See all',
+              path: '/chat/dashboard'
+            }
+          ]
         }))
       }
     ];

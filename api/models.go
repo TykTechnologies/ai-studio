@@ -446,6 +446,10 @@ type ChatResponse struct {
 		DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
 		ExtraContext        []FileStoreResponse `json:"extra_context"`
 		DefaultTools        []ToolResponse      `json:"default_tools"`
+		RecentHistory       []struct {
+			SessionID string `json:"session_id"`
+			Name      string `json:"name"`
+		} `json:"recent_history,omitempty"`
 	} `json:"attributes"`
 }
 

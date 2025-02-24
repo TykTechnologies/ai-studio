@@ -363,6 +363,17 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
+	chats, err := serializeChatsWithHistory(entitlements.Chats, entitlements.User.ID, a.config.DB)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Convert service-level entitlements to API response
 	response := UserWithEntitlementsResponse{
 		Type: "user",
@@ -401,7 +412,7 @@ func (a *API) handleMe(c *gin.Context) {
 				Catalogues:     serializeCatalogues(entitlements.Catalogues),
 				DataCatalogues: serializeDataCatalogues(entitlements.DataCatalogues),
 				ToolCatalogues: serializeToolCatalogues(entitlements.ToolCatalogues, a.config.DB),
-				Chats:          serializeChats(entitlements.Chats, a.config.DB),
+				Chats:          chats,
 			},
 		},
 	}
