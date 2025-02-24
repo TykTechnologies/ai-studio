@@ -1,15 +1,13 @@
 import React from 'react';
 import {
-  Dashboard,
-  AddCircleOutline,
   Code,
-  Psychology,
-  Storage,
   Apps,
 } from '@mui/icons-material';
+import { SvgIcon } from '@mui/material';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
+import { ReactComponent as HouseIcon } from '../../../common/fontawesome/house.svg';
 
 const PortalDrawer = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -33,47 +31,35 @@ const PortalDrawer = () => {
     return [
       {
         id: 'dashboard',
-        text: 'Dashboard',
-        icon: <Dashboard />,
+        text: 'Overview',
+        icon: <SvgIcon component={HouseIcon} inheritViewBox />,
         path: '/portal/dashboard'
       },
       {
-        id: 'create-app',
-        text: 'Create App',
-        icon: <AddCircleOutline />,
-        path: '/portal/app/new'
-      },
-      {
-        id: 'resources',
-        text: 'Resources',
-        icon: <Code />,
-        subItems: [
-          {
-            id: 'llms',
-            text: 'LLMs',
-            subItems: userEntitlements?.catalogues?.map(catalogue => ({
-              id: `llm-${catalogue.id}`,
-              text: catalogue.attributes.name,
-              path: `/portal/llms/${catalogue.id}`
-            })) || []
-          },
-          {
-            id: 'databases',
-            text: 'Databases',
-            subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
-              id: `db-${catalogue.id}`,
-              text: catalogue.attributes.name,
-              path: `/portal/databases/${catalogue.id}`
-            })) || []
-          }
-        ]
-      },
-      {
         id: 'my-apps',
-        text: 'My Apps',
+        text: 'Apps',
         icon: <Apps />,
         path: '/portal/apps'
-      }
+      },
+      {
+        id: 'llms',
+        text: 'LLM providers catalogs',
+        icon: <Code />,
+        subItems: userEntitlements?.catalogues?.map(catalogue => ({
+          id: `llm-${catalogue.id}`,
+          text: catalogue.attributes.name,
+          path: `/portal/llms/${catalogue.id}`
+        })) || []
+      },
+      {
+        id: 'databases',
+        text: 'Data sources catalogs',
+        subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
+          id: `db-${catalogue.id}`,
+          text: catalogue.attributes.name,
+          path: `/portal/databases/${catalogue.id}`
+        })) || []
+      },
     ];
   };
 

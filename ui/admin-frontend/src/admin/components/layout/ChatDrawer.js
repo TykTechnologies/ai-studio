@@ -1,12 +1,12 @@
 import React from 'react';
 import {
   Chat,
-  Dashboard,
-  ChatBubbleOutline,
 } from '@mui/icons-material';
+import { SvgIcon } from '@mui/material';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
+import { ReactComponent as HouseIcon } from '../../../common/fontawesome/house.svg';
 
 const ChatDrawer = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -28,13 +28,13 @@ const ChatDrawer = () => {
     return [
       {
         id: 'dashboard',
-        text: 'Dashboard',
-        icon: <Dashboard />,
+        text: 'Overview',
+        icon: <SvgIcon component={HouseIcon} inheritViewBox />,
         path: '/chat/dashboard'
       },
       {
         id: 'chat-rooms',
-        text: 'Chat Rooms',
+        text: 'Chats',
         icon: <Chat />,
         subItems: userEntitlements?.chats?.map((chat) => ({
           id: `chat-${chat.id}`,

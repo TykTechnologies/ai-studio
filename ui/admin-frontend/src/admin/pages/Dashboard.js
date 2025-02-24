@@ -653,36 +653,36 @@ const Dashboard = () => {
                       }}
                       data={{
                         labels: tokenUsageData.labels,
-                        datasets: [
+                        datasets: tokenUsageData?.datasets ? [
                           {
                             label: "Prompt Tokens",
-                            data: tokenUsageData.datasets[2].data,
+                            data: tokenUsageData.datasets[2]?.data,
                             borderColor: "rgb(53, 162, 235)",
                             backgroundColor: "rgba(53, 162, 235, 0.5)",
                             fill: true,
                           },
                           {
                             label: "Response Tokens",
-                            data: tokenUsageData.datasets[3].data,
+                            data: tokenUsageData.datasets[3]?.data,
                             borderColor: "rgb(75, 192, 192)",
                             backgroundColor: "rgba(75, 192, 192, 0.5)",
                             fill: true,
                           },
                           {
                             label: "Cache Write Tokens",
-                            data: tokenUsageData.datasets[4].data,
+                            data: tokenUsageData.datasets[4]?.data,
                             borderColor: "rgb(255, 159, 64)",
                             backgroundColor: "rgba(255, 159, 64, 0.5)",
                             fill: true,
                           },
                           {
                             label: "Cache Read Tokens",
-                            data: tokenUsageData.datasets[5].data,
+                            data: tokenUsageData.datasets[5]?.data,
                             borderColor: "rgb(153, 102, 255)",
                             backgroundColor: "rgba(153, 102, 255, 0.5)",
                             fill: true,
                           },
-                        ],
+                        ] : [],
                       }}
                     />
                   ) : (
