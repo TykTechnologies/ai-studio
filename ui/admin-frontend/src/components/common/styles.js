@@ -30,7 +30,7 @@ export const Logo = styled('img')({
 export const TabsContainer = styled(Box)({
   display: "flex",
   alignItems: "flex-end",
-  marginLeft: "97px",
+  marginLeft: "117px",
   height: "100%",
   paddingBottom: 0,
 });
