@@ -1,13 +1,11 @@
 import React from 'react';
-import {
-  Code,
-  Apps,
-} from '@mui/icons-material';
 import { SvgIcon } from '@mui/material';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
 import { ReactComponent as HouseIcon } from '../../../common/fontawesome/house.svg';
+import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawesome/rectangle-history.svg';
+import { ReactComponent as Grid2PlusIcon } from '../../../common/fontawesome/grid-2-plus.svg';
 
 const PortalDrawer = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -38,13 +36,13 @@ const PortalDrawer = () => {
       {
         id: 'my-apps',
         text: 'Apps',
-        icon: <Apps />,
+        icon: <SvgIcon component={Grid2PlusIcon} inheritViewBox />,
         path: '/portal/apps'
       },
       {
         id: 'catalogs',
         text: 'Catalogs',
-        icon: <Code />,
+        icon: <SvgIcon component={RectangleHistoryIcon} inheritViewBox />,
         subItems: [
           {
             id: 'llms',
