@@ -6,6 +6,7 @@ import { ReactComponent as LayerGroupIcon } from '../../../common/fontawesome/la
 import { ReactComponent as ShieldIcon } from '../../../common/fontawesome/shield.svg';
 import { ReactComponent as DisplayIcon } from '../../../common/fontawesome/display.svg';
 import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawesome/rectangle-history.svg';
+import { ReactComponent as CubeIcon } from '../../../common/fontawesome/cube.svg';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 
@@ -32,7 +33,7 @@ const Drawer = () => {
       ],
     },
     {
-      text: 'Data management',
+      text: 'Context management',
       icon: <SvgIcon component={LayerGroupIcon} inheritViewBox />,
       subItems: [
         { text: 'Data sources', path: '/admin/datasources' },
@@ -69,7 +70,7 @@ const Drawer = () => {
     ...(features.feature_portal
       ? [
           {
-            text: 'Portal config',
+            text: 'Portal',
             icon: <SvgIcon component={DisplayIcon} inheritViewBox />,
             subItems: [{ text: 'Apps', path: '/admin/apps' }],
           },
@@ -78,8 +79,8 @@ const Drawer = () => {
     ...(features.feature_chat
       ? [
           {
-            text: 'Chat config',
-            //icon: <SvgIcon component={DisplayIcon} inheritViewBox />,
+            text: 'Chat',
+            icon: <SvgIcon component={CubeIcon} inheritViewBox />,
             subItems: [
               { text: 'Chats', path: '/admin/chats' },
               { text: 'Model call settings', path: '/admin/llm-settings' },
