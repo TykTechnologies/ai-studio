@@ -42,23 +42,29 @@ const PortalDrawer = () => {
         path: '/portal/apps'
       },
       {
-        id: 'llms',
-        text: 'LLM providers catalogs',
+        id: 'catalogs',
+        text: 'Catalogs',
         icon: <Code />,
-        subItems: userEntitlements?.catalogues?.map(catalogue => ({
-          id: `llm-${catalogue.id}`,
-          text: catalogue.attributes.name,
-          path: `/portal/llms/${catalogue.id}`
-        })) || []
-      },
-      {
-        id: 'databases',
-        text: 'Data sources catalogs',
-        subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
-          id: `db-${catalogue.id}`,
-          text: catalogue.attributes.name,
-          path: `/portal/databases/${catalogue.id}`
-        })) || []
+        subItems: [
+          {
+            id: 'llms',
+            text: 'LLM providers',
+            subItems: userEntitlements?.catalogues?.map(catalogue => ({
+              id: `llm-${catalogue.id}`,
+              text: catalogue.attributes.name,
+              path: `/portal/llms/${catalogue.id}`
+            })) || []
+          },
+          {
+            id: 'data-sources',
+            text: 'Data sources',
+            subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
+              id: `db-${catalogue.id}`,
+              text: catalogue.attributes.name,
+              path: `/portal/databases/${catalogue.id}`
+            })) || []
+          }
+        ]
       },
     ];
   };
