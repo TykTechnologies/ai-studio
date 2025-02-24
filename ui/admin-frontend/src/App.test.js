@@ -309,7 +309,7 @@ describe('App Component', () => {
 
     // Wait for portal tab to be selected
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Developer Portal' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: 'AI Portal' })).toHaveAttribute('aria-selected', 'true');
     });
 
     // Then check for either navigation or overview text
