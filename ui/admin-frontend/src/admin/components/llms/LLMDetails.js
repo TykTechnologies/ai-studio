@@ -177,8 +177,7 @@ const LLMDetails = () => {
         params: {
           start_date: startDate,
           end_date: endDate,
-          llm_id: id,
-          interaction_type: "ChatInteraction"
+          llm_id: id
         },
       });
       setVendorModelCostData(response.data);

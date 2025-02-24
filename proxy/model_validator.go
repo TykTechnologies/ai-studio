@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -136,7 +137,9 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		// Store validated model name in context
+		ctx := context.WithValue(r.Context(), "model_name", model)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
