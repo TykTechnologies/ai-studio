@@ -171,10 +171,8 @@ const MainLayout = () => {
             component="main"
             sx={{
               flexGrow: 1,
-              p: 3,
               marginTop: "64px",
               width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
-              ml: "20px",
             }}
           >
             <Outlet />

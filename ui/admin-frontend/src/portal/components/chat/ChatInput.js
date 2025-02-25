@@ -44,6 +44,15 @@ const ChatInput = ({
 				fullWidth
 				variant="outlined"
 				placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
+				sx={{
+					'& .MuiOutlinedInput-root': {
+						'& fieldset': {
+							border: '1px solid transparent',
+							borderImage: 'linear-gradient(163.33deg, #23E2C2 46.22%, #5900CB 161.35%)',
+							borderImageSlice: 1
+						}
+					}
+				}}
 				value={inputMessage}
 				onChange={(e) => setInputMessage(e.target.value)}
 				onKeyDown={handleKeyDown}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { useChatContext } from "../context/ChatContext";
 import {
   Typography,
-  Container,
   Grid,
   Card,
   CardContent,
@@ -14,7 +14,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Button
 } from "@mui/material";
+import DashboardInput from "../components/dashboard/DashboardInput";
 import { useNavigate, useLocation } from "react-router-dom";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
@@ -25,6 +27,8 @@ import {
   StyledTableHeaderCell,
   StyledTableRow,
   StyledPaper,
+  TitleBox,
+  ContentBox,
 } from "../../admin/styles/sharedStyles";
 
 const ChatDashboard = () => {
@@ -34,8 +38,39 @@ const ChatDashboard = () => {
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [user, setUser] = useState(null);
+  const [message, setMessage] = useState('');
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const { setPendingChatMessage } = useChatContext();
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (!message.trim() && uploadedFiles.length === 0) return;
+
+    // Store message in context with chatId
+    setPendingChatMessage(chatRooms[0].id.toString(), message, uploadedFiles);
+
+    // Clear input and files
+    setMessage('');
+    setUploadedFiles([]);
+
+    // Navigate to chat view to create new session
+    navigate(`/chat/${chatRooms[0].id}`);
+  };
+
+  const handleDrop = async (files) => {
+    setIsUploading(true);
+    try {
+      setUploadedFiles(prev => [...prev, ...files]);
+    } catch (error) {
+      console.error('Error handling files:', error);
+    }
+    setIsUploading(false);
+  };
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -45,6 +80,7 @@ const ChatDashboard = () => {
         pubClient.get("/common/me"),
       ]);
       setChatHistory(historyResponse.data.data);
+      setUser(chatRoomsResponse.data.data);
       setChatRooms(chatRoomsResponse.data.attributes.entitlements.chats || []);
       setTotalPages(
         parseInt(historyResponse.headers["x-total-pages"], 10) || 1,
@@ -85,42 +121,57 @@ const ChatDashboard = () => {
 
   if (loading) {
     return (
-      <Container sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
         <CircularProgress />
-      </Container>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <Container>
-        <Typography color="error" sx={{ textAlign: "center", mt: 4 }}>
+      <Box sx={{ textAlign: "center", mt: 4 }}>
+        <Typography color="error">
           {error}
         </Typography>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container
-      maxWidth={false} // Change this from "lg" to false
-      sx={{
-        px: 3,
-        py: 3,
-        boxSizing: "border-box",
-        width: "100%",
-      }}
-    >
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Chat Overview
-      </Typography>
-
-      {chatRooms.length > 0 && (
-        <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: "light" }}>
-            Start a new chat session
+    <>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">Chats</Typography>
+      </TitleBox>
+      <ContentBox>
+        <Box sx={{ p: 7 }}>
+          <Typography variant="headingXLarge">
+            Hi {user?.attributes?.name}, welcome!
           </Typography>
-          <Grid container spacing={2}>
+          <Typography variant="headingXLargSub" sx={{ mt: 2, mb: 4 }}>
+            How can I help you today?
+          </Typography>
+          {chatRooms.length > 0 && (
+            <Box sx={{ mt: 4, maxWidth: "800px" }}>
+              <DashboardInput
+                inputMessage={message}
+                setInputMessage={setMessage}
+                handleSendMessage={handleSendMessage}
+                uploadedFiles={uploadedFiles}
+                setUploadedFiles={setUploadedFiles}
+                onDrop={handleDrop}
+                isUploading={isUploading}
+                renderUploadIndicator={() => isUploading ? <CircularProgress size={20} /> : null}
+              />
+            </Box>
+          )}
+        </Box>
+
+        {chatRooms.length > 0 && (
+        <Box sx={{ p: 7, pt: 0 }}>
+          <Typography variant="headingLarge">
+            Explore chats
+          </Typography>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
             {chatRooms
               .sort((a, b) =>
                 a.attributes.name.localeCompare(b.attributes.name),
@@ -147,13 +198,13 @@ const ChatDashboard = () => {
                               color: "text.primary",
                             }}
                           />
-                          <Typography variant="body1" component="div" noWrap>
+                          <Typography variant="headingMedium" component="div" noWrap>
                             {chat.attributes.name}
                           </Typography>
                         </Box>
                         {chat.attributes.description && (
                           <Typography
-                            variant="body2"
+                            variant="bodyLargeDefault"
                             color="text.defaultSubdued"
                             sx={{
                               display: "-webkit-box",
@@ -161,6 +212,7 @@ const ChatDashboard = () => {
                               WebkitBoxOrient: "vertical",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
+                              mt: 3,
                             }}
                           >
                             {chat.attributes.description}
@@ -168,12 +220,17 @@ const ChatDashboard = () => {
                         )}
                       </Box>
                     </CardContent>
-                    <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
+                    <CardActions sx={{ 
+                      justifyContent: "flex-end", 
+                      p: 2,
+                      mt: 2,
+                      borderTop: (theme) => `1px solid ${theme.palette.border.neutralDefaultSubdued}`,
+                    }}>
                       <SecondaryLinkButton
                         onClick={() => handleStartNewChat(chat.id)}
                         endIcon={<ArrowForwardIcon />}
                       >
-                        Start Chat
+                        Start chat
                       </SecondaryLinkButton>
                     </CardActions>
                   </Card>
@@ -184,11 +241,11 @@ const ChatDashboard = () => {
       )}
 
       {chatHistory.length > 0 && (
-        <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: "light" }}>
+        <Box sx={{ pl: 7, pr: 7 }}>
+          <Typography variant="headingLarge">
             Continue where you left off
           </Typography>
-          <TableContainer component={StyledPaper}>
+          <TableContainer component={StyledPaper} sx={{ mt: 2 }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -231,8 +288,9 @@ const ChatDashboard = () => {
             </Box>
           </TableContainer>
         </Box>
-      )}
-    </Container>
+        )}
+      </ContentBox>
+    </>
   );
 };
 
