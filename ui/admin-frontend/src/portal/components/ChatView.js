@@ -436,9 +436,6 @@ const ChatView = () => {
           pubClient.get('/common/accessible-tools'),
         ]);
 
-        console.log('Databases:', databasesResponse.data);
-        console.log('Tools:', toolsResponse.data);
-
         const newDatabases = databasesResponse.data.map((db) => ({
           id: db.id.toString(),
           name: db.attributes.name,
@@ -598,7 +595,6 @@ const ChatView = () => {
       }
 
       if (response.status === 200 || response.status === 204) {
-        // Just update the isSelected state to false
         if (item.type === 'database') {
           setDatabases(prev => prev.map(db => 
             db.id === item.id ? { ...db, isSelected: false } : db
@@ -630,7 +626,6 @@ const ChatView = () => {
       }
 
       if (response.status === 200 || response.status === 201) {
-        // Update the isSelected state to true
         if (item.type === 'database') {
           setDatabases(prev => prev.map(db => 
             db.id === item.id ? { ...db, isSelected: true } : db

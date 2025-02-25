@@ -167,7 +167,7 @@ func (u *User) GetAccessibleToolCatalogues(db *gorm.DB) ([]ToolCatalogue, error)
 
 func (u *User) GetAccessibleDataSources(db *gorm.DB) ([]Datasource, error) {
 	var dataSources []Datasource
-	err := db.Debug().Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.datasource_id = datasources.id").
+	err := db.Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.datasource_id = datasources.id").
 		Joins("JOIN data_catalogues ON data_catalogues.id = data_catalogue_data_sources.data_catalogue_id").
 		Joins("JOIN group_datacatalogues ON group_datacatalogues.data_catalogue_id = data_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_datacatalogues.group_id").
