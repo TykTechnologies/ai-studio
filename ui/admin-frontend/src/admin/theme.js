@@ -20,7 +20,22 @@ const theme = createTheme({
       fontSize: "32px",
       lineHeight: "36px",
       fontFamily: "Inter-Bold",
-    }
+    },
+    headingXLargSub : {
+      fontSize: "28px", 
+      lineHeight: "36px",
+      fontFamily: "Inter-Bold",
+    },
+    headingLarge: {
+      fontSize: "20px",
+      lineHeight: "24px",
+      fontFamily: "Inter-Bold",
+    },
+    headingMedium: {
+      fontSize: "18px",
+      lineHeight: "24px",
+      fontFamily: "Inter-Bold",
+    },
   },
   palette: {
     mode: "light",
@@ -50,6 +65,7 @@ const theme = createTheme({
     border: {
       neutralDefault: '#D8D8DF',
       neutralHovered: '#9D9DAF',
+      neutralDefaultSubdued: '#F1F1F4',
       criticalDefault: '#AE2410',
       criticalHover: '#8B1D12'
     },
@@ -248,12 +264,12 @@ const theme = createTheme({
     },
     MuiCard: {
       styleOverrides: {
-        root: {
-          borderRadius: "16px",
-          boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.1)",
+        root: ({ theme }) => ({
+          borderRadius: "8px",
+          border: `1px solid ${theme.palette.border.neutralDefault}`,
           backgroundColor: "#ffffff",
-        },
-      },
+        })
+      }
     },
   },
 });
