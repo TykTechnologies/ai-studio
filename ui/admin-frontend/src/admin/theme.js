@@ -16,6 +16,16 @@ const theme = createTheme({
       lineHeight: "20px",
       fontFamily: "Inter-Regular",
     },
+    bodyLargeMedium: {
+      fontSize: "14px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Medium",
+    },
+    bodySmallDefault: {
+      fontSize: "12px",
+      lineHeight: "16px",
+      fontFamily: "Inter-Regular",
+    },
     headingXLarge: {
       fontSize: "32px",
       lineHeight: "36px",
@@ -24,7 +34,7 @@ const theme = createTheme({
     headingXLargSub : {
       fontSize: "28px", 
       lineHeight: "36px",
-      fontFamily: "Inter-Bold",
+      fontFamily: "Inter-SemiBold",
     },
     headingLarge: {
       fontSize: "20px",
@@ -55,6 +65,9 @@ const theme = createTheme({
       surfaceDefaultBoldest: '#031E3D',
       surfaceDefaultHover: '#B7F9E926',
       surfaceDefaultSelected: '#B7F9E973',
+      surfaceNeutralDisabled: '#FCFCFC',
+      surfaceBrandHovered: '#EBDFFE',
+      surfaceDefaultBubble: '#B7F9E9C2',
       buttonPrimaryDefault: '#343452',
       buttonPrimaryDefaultHover: '#181834',
       buttonPrimaryOutlineHover: '#EEFEFA',

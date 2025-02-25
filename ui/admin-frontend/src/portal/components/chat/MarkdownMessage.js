@@ -7,6 +7,15 @@ import { a11yDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import CodeCopyBtn from '../CopyCodeButton';
 
 const MarkdownMessage = ({ content }) => {
+	const inlineCodeStyle = {
+		padding: '2px 4px',
+		color: '#232629',
+		backgroundColor: 'rgb(240, 240, 240)',
+		borderRadius: '3px',
+		fontFamily: 'monospace',
+		fontSize: '0.9em',
+	};
+
 	const Pre = ({ children }) => (
 		<pre className="code-pre">
 			<CodeCopyBtn>{children}</CodeCopyBtn>
@@ -17,7 +26,7 @@ const MarkdownMessage = ({ content }) => {
 	return (
 		<ReactMarkdown
 			components={{
-				p: ({ node, ...props }) => <Typography {...props} />,
+				p: ({ node, ...props }) => <Typography component="div" {...props} />,
 				a: ({ node, ...props }) => (
 					<a target="_blank" rel="noopener noreferrer" {...props} />
 				),
@@ -28,7 +37,7 @@ const MarkdownMessage = ({ content }) => {
 
 					if (inline) {
 						return (
-							<code className="inline-code" {...props}>
+							<code style={inlineCodeStyle} {...props}>
 								{children}
 							</code>
 						);
