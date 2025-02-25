@@ -36,7 +36,11 @@ const ChatInput = ({
 		<Box
 			component="form"
 			onSubmit={handleSendMessage}
-			sx={{ p: 1, borderTop: 0, minHeight: '64px', position: 'relative' }}
+			sx={{
+				p: 1,
+				px: 6,
+				position: 'relative',
+			}}
 			{...getRootProps()}
 		>
 			<input {...getInputProps()} />
@@ -44,15 +48,6 @@ const ChatInput = ({
 				fullWidth
 				variant="outlined"
 				placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
-				sx={{
-					'& .MuiOutlinedInput-root': {
-						'& fieldset': {
-							border: '1px solid transparent',
-							borderImage: 'linear-gradient(163.33deg, #23E2C2 46.22%, #5900CB 161.35%)',
-							borderImageSlice: 1
-						}
-					}
-				}}
 				value={inputMessage}
 				onChange={(e) => setInputMessage(e.target.value)}
 				onKeyDown={handleKeyDown}
@@ -60,6 +55,26 @@ const ChatInput = ({
 				multiline
 				minRows={1}
 				maxRows={4}
+				sx={{
+					'& .MuiOutlinedInput-root': {
+						minHeight: '92px',
+						backgroundColor: 'background.paper',
+						position: 'relative',
+						'&:before': {
+							content: '""',
+							position: 'absolute',
+							inset: -1,
+							padding: '1px',
+							borderRadius: '8px',
+							background: 'linear-gradient(163.33deg, #23E2C2 46.22%, #5900CB 161.35%)',
+							WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+							WebkitMaskComposite: 'xor',
+						},
+						'& .MuiOutlinedInput-notchedOutline': {
+							border: 'none'
+						},
+					}
+				}}
 				InputProps={{
 					inputComponent: TextareaAutosize,
 					endAdornment: (
