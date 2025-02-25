@@ -893,7 +893,7 @@ const ChatView = () => {
             showTools={showTools}
             removeFromCurrentlyUsing={(item) => removeFromCurrentlyUsing(item, sessionId)}
             addToCurrentlyUsing={(item) => addToCurrentlyUsing(item, sessionId)}
-            initialCollapsed={messages.length === 0}
+            messages={messages}
           />
         </Grid>
       </Grid>

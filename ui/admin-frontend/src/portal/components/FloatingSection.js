@@ -1,9 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Typography, Checkbox, Collapse } from "@mui/material";
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 
-const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, initialCollapsed = false }) => {
-  const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
+const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages }) => {
+  const [isCollapsed, setIsCollapsed] = useState(messages?.length > 0);
+
+  useEffect(() => {
+    setIsCollapsed(messages?.length > 0);
+  }, [messages]);
 
   return (
     <Box
@@ -33,7 +37,7 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, initialColl
         />
       </Box>
 
-      <Collapse in={!isCollapsed}>
+      <Collapse in={isCollapsed}>
         <Box sx={{ p: 2, pt: 0 }}>
           {items.length > 0 ? (
             items.map((item) => (
