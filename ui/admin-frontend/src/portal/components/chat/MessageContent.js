@@ -581,7 +581,6 @@ const MessageContent = ({
 			>
 				<Box
 					sx={{
-						maxWidth: '85%',
 						width: 'fit-content',
 						...(messageType === 'user' && {
 							bgcolor: 'background.surfaceNeutralDisabled',
@@ -589,6 +588,7 @@ const MessageContent = ({
 							borderColor: 'border.neutralDefault',
 							borderRadius: '8px',
 							padding: '12px',
+							maxWidth: '85%',
 						}),
 						'&:hover .edit-button': {
 							opacity: 1,
