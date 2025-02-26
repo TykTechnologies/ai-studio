@@ -632,12 +632,12 @@ const MessageContent = ({
 							onClick={handleEditClick}
 							sx={{
 								position: 'absolute',
-								top: 0,
-								right: 0,
+								right: '5px',
+								bottom: '-5px',
+								zIndex: 100,
 								visibility: 'hidden',
 								opacity: 0,
-								zIndex: 100,
-								transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out'
+								transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
 							}}
 						>
 							<EditIcon fontSize="small" />
@@ -694,12 +694,12 @@ const MessageContent = ({
 						onClick={handleEditClick}
 						sx={{
 							position: 'absolute',
-							top: 0,
-							right: 0,
+							bottom: '-5px',
+							right: '5px',
+							zIndex: 100,
 							visibility: 'hidden',
 							opacity: 0,
-							zIndex: 100,
-							transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out'
+							transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
 						}}
 					>
 						<EditIcon fontSize="small" />
