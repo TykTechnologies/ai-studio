@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,7 +25,7 @@ import {
   StyledTableHeaderCell,
   StyledTableCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
@@ -148,19 +147,18 @@ const LLMSettingsList = () => {
     <Box sx={{ p: 0 }}>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="LLM Call Settings define the configuration parameters for Large Language Models when a prompt is sent to the LLM." />
-            <Typography variant="h5">LLM Call Settings</Typography>
-          </Box>
-
-          <StyledButton
+          <Typography variant="headingXLarge">Model call settings</Typography>
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddSetting}
           >
-            Add LLM Call Setting
-          </StyledButton>
+            Add call setting
+          </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Call Settings let you configure how Large Language Models handle prompts. These settings control parameters like response length, temperature (creativity level), and other options that shape the output when a prompt is sent to the LLM.</Typography>  
+        </Box>
         <ContentBox>
           {llmSettings.length === 0 ? (
             <EmptyStateWidget
@@ -230,10 +228,10 @@ const LLMSettingsList = () => {
             navigate(`/admin/llm-settings/edit/${selectedSetting?.id}`)
           }
         >
-          Edit Setting
+          Edit setting
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedSetting?.id)}>
-          Delete Setting
+          Delete setting
         </MenuItem>
       </Menu>
 

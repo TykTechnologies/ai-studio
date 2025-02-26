@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Alert,
   Typography,
@@ -16,10 +15,10 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const SecretForm = () => {
@@ -141,17 +140,17 @@ const SecretForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
+        <Typography variant="headingXLarge">
           {id ? "Edit Secret" : "Add Secret"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/secrets"
           color="inherit"
         >
-          Back to Secrets
-        </StyledButtonLink>
+          Back to secrets
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -204,13 +203,13 @@ const SecretForm = () => {
               </Box>
             </Grid>
             <Grid item xs={12}>
-              <StyledButton
+              <PrimaryButton
                 variant="contained"
                 type="submit"
                 disabled={!formData.var_name || !formData.value}
               >
-                {id ? "Update Secret" : "Add Secret"}
-              </StyledButton>
+                {id ? "Update secret" : "Add secret"}
+              </PrimaryButton>
             </Grid>
           </Grid>
         </Box>

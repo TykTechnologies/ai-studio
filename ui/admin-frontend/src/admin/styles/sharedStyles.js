@@ -77,14 +77,14 @@ export const FieldValue = styled(Typography)(({ theme }) => ({
   color: theme.palette.text.primary,
 }));
 
-export const StyledButton = styled(Button)(({ theme }) => ({
+export const PrimaryButton = styled(Button)(({ theme }) => ({
   position: 'relative',
   borderRadius: 20,
   padding: '8px 16px',
   color: theme.palette.custom.white,
   backgroundColor: theme.palette.background.buttonPrimaryDefault,
   boxShadow: "none",
-  textTransform: "capitalize",
+  textTransform: "none",
   fontFamily: 'Inter-Medium',
   "&::before": {
     content: '""',
@@ -105,14 +105,14 @@ export const StyledButton = styled(Button)(({ theme }) => ({
   },
 }));
 
-export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
+export const PrimaryOutlineButton = styled(Button)(({ theme }) => ({
   position: 'relative',
   borderRadius: 20,
   padding: '8px 16px',
   color: theme.palette.text.defaultSubdued,
   backgroundColor: theme.palette.background.paper,
   boxShadow: "none",
-  textTransform: "capitalize",
+  textTransform: "none",
   fontFamily: 'Inter-Medium',
   "&::before": {
     content: '""',
@@ -133,7 +133,7 @@ export const StyledButtonPrimaryOutlined = styled(Button)(({ theme }) => ({
   },
 }));
 
-export const StyledButtonCritical = styled(Button)(({ theme }) => ({
+export const DangerButton = styled(Button)(({ theme }) => ({
   position: 'relative',
   borderRadius: 20,
   padding: '8px 16px',
@@ -141,7 +141,7 @@ export const StyledButtonCritical = styled(Button)(({ theme }) => ({
   backgroundColor: theme.palette.background.buttonCritical,
   border: `1px solid ${theme.palette.border.criticalDefault}`,
   boxShadow: "none",
-  textTransform: "capitalize",
+  textTransform: "none",
   fontFamily: 'Inter-Medium',
   "&:hover": {
     backgroundColor: theme.palette.background.buttonCriticalHover,
@@ -151,7 +151,7 @@ export const StyledButtonCritical = styled(Button)(({ theme }) => ({
   },
 }));
 
-export const StyledButtonLink = styled(Button)(({ theme }) => ({
+export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
   color: theme.palette.text.defaultSubdued,
   backgroundColor: 'transparent',
   cursor: 'pointer',
@@ -160,6 +160,7 @@ export const StyledButtonLink = styled(Button)(({ theme }) => ({
   alignItems: 'center',
   border: 'none',
   padding: '0 8px 0 0',
+  textTransform: 'none',
   '&:hover': {
     color: theme.palette.text.defaultSubdued,
     backgroundColor: 'transparent',

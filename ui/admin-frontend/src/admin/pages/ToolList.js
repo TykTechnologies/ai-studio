@@ -28,10 +28,9 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
-  StyledButtonPrimaryOutlined,
+  PrimaryButton,
+  PrimaryOutlineButton,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -172,28 +171,27 @@ const ToolList = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Box display="flex" alignItems="center">
-          <InfoTooltip title="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request." />
-          <Typography variant="h5">Tools</Typography>
-        </Box>
-
+        <Typography variant="headingXLarge">Tools</Typography>
         <Stack direction="row" spacing={2}>
-          <StyledButtonPrimaryOutlined
+          <PrimaryOutlineButton
             variant="contained"
             startIcon={<DownloadIcon />}
             onClick={() => setImportWizardOpen(true)}
           >
             Import OpenAPI
-          </StyledButtonPrimaryOutlined>
-          <StyledButton
+          </PrimaryOutlineButton>
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddTool}
           >
-            Add Tool
-          </StyledButton>
+            Add tool
+          </PrimaryButton>
         </Stack>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools are external services that enhance the AI's capabilities by providing access to additional data and functions within chat rooms. Defined by the OpenAPI specification, you can specify which operations the LLM can use to fulfill user requests effectively.</Typography>  
+      </Box>
       <ContentBox>
         {tools.length === 0 ? (
           <EmptyStateWidget
@@ -215,7 +213,7 @@ const ToolList = () => {
                   <StyledTableHeaderCell
                     onClick={() => handleSort("privacy_score")}
                   >
-                    Privacy Score
+                    Privacy Level
                   </StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>
@@ -260,10 +258,10 @@ const ToolList = () => {
         <MenuItem
           onClick={() => navigate(`/admin/tools/edit/${selectedTool?.id}`)}
         >
-          Edit Tool
+          Edit tool
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedTool?.id)}>
-          Delete Tool
+          Delete tool
         </MenuItem>
       </Menu>
 

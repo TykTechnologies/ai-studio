@@ -7,7 +7,6 @@ import {
   Box,
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   IconButton,
@@ -26,7 +25,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import PaginationControls from "../components/common/PaginationControls";
@@ -135,15 +134,18 @@ const ToolCatalogueList = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Tool Catalogs</Typography>
-        <StyledButton
+        <Typography variant="headingXLarge">Tool catalogs</Typography>
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddToolCatalogue}
         >
-          Add Tool Catalog
-        </StyledButton>
+          Add catalog
+        </PrimaryButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         {toolCatalogues.length === 0 ? (
           <EmptyStateWidget

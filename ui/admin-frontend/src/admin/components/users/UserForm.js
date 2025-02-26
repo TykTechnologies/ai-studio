@@ -15,8 +15,6 @@ import {
   Snackbar,
   Table,
   TableBody,
-  TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   IconButton,
@@ -29,11 +27,11 @@ import {
   StyledPaper,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledTableRow,
   StyledTableHeaderCell,
   StyledTableCell,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 
 const UserForm = () => {
@@ -296,15 +294,15 @@ const UserForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">{id ? "Edit User" : "Add User"}</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">{id ? "Edit user" : "Add user"}</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           color="inherit"
           to="/admin/users"
         >
-          Back to Users
-        </StyledButtonLink>
+          Back to users
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -411,13 +409,13 @@ const UserForm = () => {
               </Grid>
             )}
             <Grid item xs={12}>
-              <StyledButton
+              <PrimaryButton
                 variant="contained"
                 type="submit"
                 disabled={!isFormValid()}
               >
-                {id ? "Update User" : "Add User"}
-              </StyledButton>
+                {id ? "Update user" : "Add user"}
+              </PrimaryButton>
             </Grid>
           </Grid>
         </Box>

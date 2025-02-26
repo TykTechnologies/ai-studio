@@ -23,10 +23,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const CatalogueForm = () => {
@@ -185,18 +185,21 @@ const CatalogueForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Catalog" : "Create New Catalog"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit LLM catalog" : "Add LLM catalog"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/llms"
           color="inherit"
         >
-          Back to Catalogs
-        </StyledButtonLink>
+          Back to catalogs
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
@@ -257,9 +260,9 @@ const CatalogueForm = () => {
           </Box>
 
           <Box mt={3}>
-            <StyledButton type="submit" variant="contained" color="primary">
-              {id ? "Update Catalog" : "Create Catalog"}
-            </StyledButton>
+            <PrimaryButton type="submit" variant="contained" color="primary">
+              {id ? "Update catalog" : "Create catalog"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

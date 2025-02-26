@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
   Grid,
@@ -12,10 +11,10 @@ import {
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const FilterForm = () => {
@@ -120,18 +119,21 @@ const FilterForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Filter" : "Add Filter"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit filter" : "Add filter"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/filters"
           color="inherit"
         >
-          Back to Filters
-        </StyledButtonLink>
+          Back to filters
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -174,9 +176,9 @@ const FilterForm = () => {
             </Grid>
           </Grid>
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
-              {id ? "Update Filter" : "Add Filter"}
-            </StyledButton>
+            <PrimaryButton variant="contained" type="submit">
+              {id ? "Update filter" : "Add filter"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

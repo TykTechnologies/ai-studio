@@ -6,19 +6,16 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
-  Divider,
-  Link
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 
@@ -55,14 +52,14 @@ const ModelPriceDetail = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Model Price Details</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">Model price details</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/model-prices")}
           color="inherit"
         >
-          Back to Model Prices
-        </StyledButtonLink>
+          Back to model prices
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Basic Information</SectionTitle>
@@ -127,13 +124,13 @@ const ModelPriceDetail = () => {
         </Grid>
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/model-prices/edit/${id}`)}
           >
-            Edit Model Price
-          </StyledButton>
+            Edit model price
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

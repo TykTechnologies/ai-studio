@@ -20,7 +20,7 @@ import {
   fetchVendors,
 } from "../../admin/utils/vendorUtils";
 import DetailModal from "./DetailModal";
-import { StyledButton } from "../../admin/styles/sharedStyles";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
 const defaultIcon = "/generic-datasource-icon.png";
 
@@ -133,12 +133,12 @@ const DataSourceListView = () => {
                 >
                   More
                 </Button>
-                <StyledButton
+                <PrimaryButton
                   variant="contained"
                   onClick={() => handleUseDataSource(dataSource.id)}
                 >
                   Get Access
-                </StyledButton>
+                </PrimaryButton>
               </Box>
             </Card>
           </Grid>

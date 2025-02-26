@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
-import { TextField, Button, Typography, CircularProgress, Link } from "@mui/material";
+import { TextField, Typography, CircularProgress, Box } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const GroupForm = () => {
@@ -69,17 +69,20 @@ const GroupForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Group" : "Create Group"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit user group" : "Add user group"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           color="inherit"
           onClick={() => navigate("/admin/groups")}
         >
-          Back to Groups
-        </StyledButtonLink>
+          Back to groups
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">User groups help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking user groups to specific catalogs ensures each team can only see and access the LLM provider and or data relevant to them.</Typography>  
+      </Box>
       <ContentBox>
         <form onSubmit={handleSubmit}>
           <TextField
@@ -95,15 +98,15 @@ const GroupForm = () => {
               {error}
             </Typography>
           )}
-          <StyledButton
+          <PrimaryButton
             type="submit"
             variant="contained"
             color="primary"
             style={{ marginTop: "20px" }}
             disabled={loading}
           >
-            {id ? "Update Group" : "Create Group"}
-          </StyledButton>
+            {id ? "Update group" : "Create group"}
+          </PrimaryButton>
         </form>
       </ContentBox>
     </>

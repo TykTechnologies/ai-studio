@@ -14,7 +14,7 @@ import {
 import pubClient from "../../admin/utils/pubClient";
 import DetailModal from "./DetailModal";
 import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
-import { StyledButton } from "../../admin/styles/sharedStyles";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
 const defaultLogo = "/generic-llm-logo.png";
 
@@ -133,12 +133,12 @@ const LLMListView = () => {
                 <Button variant="outlined" onClick={() => handleOpenModal(llm)}>
                   More
                 </Button>
-                <StyledButton
+                <PrimaryButton
                   variant="contained"
                   onClick={() => handleBuildApp(llm.id)}
                 >
                   Build App
-                </StyledButton>
+                </PrimaryButton>
               </Box>
             </Card>
           </Grid>

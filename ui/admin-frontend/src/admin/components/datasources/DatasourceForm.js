@@ -17,7 +17,6 @@ import {
   InputAdornment,
   IconButton,
   Tooltip,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
   Chip,
@@ -39,12 +38,12 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import {
   getVendorData,
@@ -272,7 +271,7 @@ const DatasourceForm = () => {
     if (!datasource.embed_vendor.trim())
       newErrors.embed_vendor = "Embedding Service Vendor is required";
     if (datasource.privacy_score < 0 || datasource.privacy_score > 100)
-      newErrors.privacy_score = "Privacy score must be between 0 and 100";
+      newErrors.privacy_score = "Privacy level must be between 0 and 100";
     if (!datasource.user_id) newErrors.user_id = "User is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -332,19 +331,22 @@ const DatasourceForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Datasource" : "Add Datasource"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit data source" : "Add data source"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/datasources"
           color="inherit"
         >
-          Back to Datasources
-        </StyledButtonLink>
+          Back to data sources
+        </SecondaryLinkButton>
       </TitleBox>
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Data sources let you store and access information to enhance AI conversations using Retrieval Augmented Generation (RAG). By using embedding providers to convert content into searchable vectors, your AI can deliver more accurate, informed, and engaging responses.</Typography>  
+      </Box> 
+      <ContentBox sx={{ pt: 0 }} >
         <Box component="form" onSubmit={handleSubmit}>
           <SectionTitle>Basic Information</SectionTitle>
           <Grid container spacing={3}>
@@ -486,9 +488,14 @@ const DatasourceForm = () => {
               )}
             </Grid>
             <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom>
+                Privacy levels
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLMs providers with lower privacy levels can’t access higher-level, data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
+              </Typography>
               <TextField
                 fullWidth
-                label="Privacy Score"
                 name="privacy_score"
                 type="number"
                 value={datasource.privacy_score}
@@ -499,15 +506,6 @@ const DatasourceForm = () => {
                   min: 0,
                   max: 100,
                   step: 1,
-                }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title="Privacy score must be between 0 and 100, where 0 is the lowest and 100 is the highest.">
-                        <HelpOutlineIcon color="action" />
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
                 }}
               />
             </Grid>
@@ -750,13 +748,13 @@ const DatasourceForm = () => {
                 />
 
                 <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                  <StyledButtonPrimaryOutlined
+                  <PrimaryOutlineButton
                     variant="contained"
                     startIcon={<CloudUploadIcon />}
                     onClick={() => fileInputRef.current.click()}
                   >
                     Upload Additional Datasource Documentation
-                  </StyledButtonPrimaryOutlined>
+                  </PrimaryOutlineButton>
 
                   <Button
                     variant="contained"
@@ -773,9 +771,9 @@ const DatasourceForm = () => {
           )}
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
-              {id ? "Update Datasource" : "Add Datasource"}
-            </StyledButton>
+            <PrimaryButton variant="contained" type="submit">
+              {id ? "Update data source" : "Add data source"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

@@ -6,18 +6,17 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   Divider,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const FilterDetails = () => {
@@ -54,14 +53,14 @@ const FilterDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Filter Details</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">Filter details</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/filters")}
           color="inherit"
         >
-          Back to Filters
-        </StyledButtonLink>
+          Back to filters
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Grid container spacing={2}>
@@ -97,13 +96,13 @@ const FilterDetails = () => {
         </Box>
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/filters/edit/${id}`)}
           >
-            Edit Filter
-          </StyledButton>
+            Edit filter
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>
