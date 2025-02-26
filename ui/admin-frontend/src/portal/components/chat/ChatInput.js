@@ -73,6 +73,7 @@ const ChatInput = ({
 						'& .MuiOutlinedInput-root': {
 							minHeight: '92px',
 							borderRadius: '8px',
+							fontSize: '1rem',
 							backgroundColor: 'background.paper',
 							position: 'relative',
 							'& .MuiOutlinedInput-notchedOutline': {
