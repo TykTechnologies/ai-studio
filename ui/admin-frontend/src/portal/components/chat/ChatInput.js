@@ -36,48 +36,78 @@ const ChatInput = ({
 		<Box
 			component="form"
 			onSubmit={handleSendMessage}
-			sx={{ p: 1, borderTop: 0, minHeight: '64px', position: 'relative' }}
+			sx={{
+				p: 1,
+				px: 6,
+				position: 'relative',
+			}}
 			{...getRootProps()}
 		>
 			<input {...getInputProps()} />
-			<TextField
-				fullWidth
-				variant="outlined"
-				placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
-				value={inputMessage}
-				onChange={(e) => setInputMessage(e.target.value)}
-				onKeyDown={handleKeyDown}
-				disabled={!isConnected}
-				multiline
-				minRows={1}
-				maxRows={4}
-				InputProps={{
-					inputComponent: TextareaAutosize,
-					endAdornment: (
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-							{uploadedFiles.length > 0 && (
-								<Chip
-									icon={<AttachFileIcon />}
-									label={uploadedFiles.length}
+			<Box sx={{ 
+				position: 'relative',
+				'&:before': {
+					content: '""',
+					position: 'absolute',
+					inset: -1,
+					padding: '1px',
+					borderRadius: '8px',
+					background: 'linear-gradient(163.33deg, #23E2C2 46.22%, #5900CB 161.35%)',
+					WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+					WebkitMaskComposite: 'xor',
+					pointerEvents: 'none', // This prevents interference with text selection
+				}
+			}}>
+				<TextField
+					fullWidth
+					variant="outlined"
+					placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
+					value={inputMessage}
+					onChange={(e) => setInputMessage(e.target.value)}
+					onKeyDown={handleKeyDown}
+					disabled={!isConnected}
+					multiline
+					minRows={1}
+					maxRows={4}
+					sx={{
+						'& .MuiOutlinedInput-root': {
+							minHeight: '92px',
+							borderRadius: '8px',
+							backgroundColor: 'background.paper',
+							position: 'relative',
+							'& .MuiOutlinedInput-notchedOutline': {
+								border: 'none'
+							},
+						}
+					}}
+					InputProps={{
+						inputComponent: TextareaAutosize,
+						endAdornment: (
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+								{uploadedFiles.length > 0 && (
+									<Chip
+										icon={<AttachFileIcon />}
+										label={uploadedFiles.length}
+										size="small"
+										onDelete={() => setUploadedFiles([])}
+									/>
+								)}
+								{renderUploadIndicator()}
+								<IconButton onClick={open} size="small">
+									<AttachFileIcon />
+								</IconButton>
+								<IconButton
+									onClick={handleSendMessage}
+									disabled={!isConnected || (!inputMessage.trim() && uploadedFiles.length === 0)}
 									size="small"
-									onDelete={() => setUploadedFiles([])}
-								/>
-							)}
-							{renderUploadIndicator()}
-							<IconButton onClick={open} size="small">
-								<AttachFileIcon />
-							</IconButton>
-							<IconButton
-								onClick={handleSendMessage}
-								disabled={!isConnected || (!inputMessage.trim() && uploadedFiles.length === 0)}
-								size="small"
-							>
-								<SendIcon />
-							</IconButton>
-						</Box>
-					),
-				}}
-			/>
+								>
+									<SendIcon />
+								</IconButton>
+							</Box>
+						),
+					}}
+				/>
+			</Box>
 			{isDragActive && (
 				<Box
 					sx={{

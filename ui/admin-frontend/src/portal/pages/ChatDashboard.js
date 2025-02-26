@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
   Typography,
-  Container,
   Grid,
   Card,
   CardContent,
@@ -14,17 +13,18 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Button
 } from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChatIcon from "@mui/icons-material/Chat";
 import pubClient from "../../admin/utils/pubClient";
 import {
-  SecondaryLinkButton,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
   StyledPaper,
+  TitleBox,
+  ContentBox,
 } from "../../admin/styles/sharedStyles";
 
 const ChatDashboard = () => {
@@ -34,6 +34,7 @@ const ChatDashboard = () => {
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [user, setUser] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -50,6 +51,7 @@ const ChatDashboard = () => {
         parseInt(historyResponse.headers["x-total-pages"], 10) || 1,
       );
       setLoading(false);
+      setUser(chatRoomsResponse.data.attributes.name);
     } catch (err) {
       console.error("Error fetching data:", err);
       setError("Failed to fetch data. Please try again later.");
@@ -85,42 +87,40 @@ const ChatDashboard = () => {
 
   if (loading) {
     return (
-      <Container sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
         <CircularProgress />
-      </Container>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <Container>
-        <Typography color="error" sx={{ textAlign: "center", mt: 4 }}>
+      <Box sx={{ textAlign: "center", mt: 4 }}>
+        <Typography color="error">
           {error}
         </Typography>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container
-      maxWidth={false} // Change this from "lg" to false
-      sx={{
-        px: 3,
-        py: 3,
-        boxSizing: "border-box",
-        width: "100%",
-      }}
-    >
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Chat Overview
-      </Typography>
-
-      {chatRooms.length > 0 && (
-        <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: "light" }}>
-            Start a new chat session
+    <>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">Chats</Typography>
+      </TitleBox>
+      <ContentBox>
+        <Box sx={{ p: 7 }}>
+          <Typography variant="headingXLarge">
+            Hi {user}, welcome!
           </Typography>
-          <Grid container spacing={2}>
+        </Box>
+
+        {chatRooms.length > 0 && (
+        <Box sx={{ p: 7, pt: 0 }}>
+          <Typography variant="headingLarge">
+            Explore chats
+          </Typography>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
             {chatRooms
               .sort((a, b) =>
                 a.attributes.name.localeCompare(b.attributes.name),
@@ -147,13 +147,13 @@ const ChatDashboard = () => {
                               color: "text.primary",
                             }}
                           />
-                          <Typography variant="body1" component="div" noWrap>
+                          <Typography variant="headingMedium" component="div" noWrap>
                             {chat.attributes.name}
                           </Typography>
                         </Box>
                         {chat.attributes.description && (
                           <Typography
-                            variant="body2"
+                            variant="bodyLargeDefault"
                             color="text.defaultSubdued"
                             sx={{
                               display: "-webkit-box",
@@ -161,6 +161,7 @@ const ChatDashboard = () => {
                               WebkitBoxOrient: "vertical",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
+                              mt: 3,
                             }}
                           >
                             {chat.attributes.description}
@@ -168,13 +169,17 @@ const ChatDashboard = () => {
                         )}
                       </Box>
                     </CardContent>
-                    <CardActions sx={{ justifyContent: "flex-end", p: 1 }}>
-                      <SecondaryLinkButton
+                    <CardActions sx={{ 
+                      justifyContent: "flex-end", 
+                      p: 2,
+                      mt: 2,
+                      borderTop: (theme) => `1px solid ${theme.palette.border.neutralDefaultSubdued}`,
+                    }}>
+                      <Button
                         onClick={() => handleStartNewChat(chat.id)}
-                        endIcon={<ArrowForwardIcon />}
                       >
-                        Start Chat
-                      </SecondaryLinkButton>
+                        Start chat
+                      </Button>
                     </CardActions>
                   </Card>
                 </Grid>
@@ -184,34 +189,27 @@ const ChatDashboard = () => {
       )}
 
       {chatHistory.length > 0 && (
-        <Box sx={{ mt: 4, mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: "light" }}>
+        <Box sx={{ pl: 7, pr: 7 }}>
+          <Typography variant="headingLarge">
             Continue where you left off
           </Typography>
-          <TableContainer component={StyledPaper}>
+          <TableContainer component={StyledPaper} sx={{ mt: 2 }}>
             <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableHeaderCell>Conversation</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
-                </TableRow>
-              </TableHead>
               <TableBody>
                 {chatHistory.map((record) => (
                   <StyledTableRow key={record.id}>
                     <StyledTableCell>{record.attributes.name}</StyledTableCell>
                     <StyledTableCell align="right">
-                      <SecondaryLinkButton
+                      <Button
                         onClick={() =>
                           handleContinueChat(
                             record.attributes.chat_id,
                             record.attributes.session_id,
                           )
                         }
-                        endIcon={<ArrowForwardIcon />}
                       >
                         Continue
-                      </SecondaryLinkButton>
+                      </Button>
                     </StyledTableCell>
                   </StyledTableRow>
                 ))}
@@ -231,8 +229,9 @@ const ChatDashboard = () => {
             </Box>
           </TableContainer>
         </Box>
-      )}
-    </Container>
+        )}
+      </ContentBox>
+    </>
   );
 };
 
