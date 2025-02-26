@@ -37,9 +37,9 @@ const ChatInput = ({
 			component="form"
 			onSubmit={handleSendMessage}
 			sx={{
-				p: 1,
-				px: 6,
+				mb: 2,
 				position: 'relative',
+				mx: '1px'
 			}}
 			{...getRootProps()}
 		>
@@ -68,7 +68,7 @@ const ChatInput = ({
 					disabled={!isConnected}
 					multiline
 					minRows={1}
-					maxRows={4}
+					maxRows={10}
 					sx={{
 						'& .MuiOutlinedInput-root': {
 							minHeight: '92px',
@@ -81,7 +81,6 @@ const ChatInput = ({
 						}
 					}}
 					InputProps={{
-						inputComponent: TextareaAutosize,
 						endAdornment: (
 							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 								{uploadedFiles.length > 0 && (

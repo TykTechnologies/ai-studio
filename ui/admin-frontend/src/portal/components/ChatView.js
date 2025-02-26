@@ -719,8 +719,7 @@ const ChatView = () => {
               flexDirection: 'column',
               overflow: 'hidden',
               height: '100%',
-              maxWidth: '70%',
-              width: '70%',
+              maxWidth: '740px',
               alignSelf: 'center',
             }}
           >
@@ -740,7 +739,6 @@ const ChatView = () => {
                   alignItems: 'flex-start',
                   justifyContent: 'start',
                   textAlign: 'start',
-                  px: 6,
                 }}
                 >
                   <Typography variant="headingXLarge" mb={2}>
@@ -799,7 +797,7 @@ const ChatView = () => {
                   }}
                 >
                 {messages.length > 1 && (
-                  <Box sx={{ px: 6, mt:2, textAlign: 'right' }}>
+                  <Box sx={{ mt:2, textAlign: 'right' }}>
                     <Typography
                       variant="caption"
                       component="div"
