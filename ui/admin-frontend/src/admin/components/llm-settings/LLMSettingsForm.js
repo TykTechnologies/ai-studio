@@ -23,10 +23,10 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
@@ -416,18 +416,21 @@ const LLMSettingsForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit LLM Call Settings" : "Add LLM Call Settings"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit model call setting" : "Add model call setting"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llm-settings"
           color="inherit"
         >
-          Back to LLM Call Settings
-        </StyledButtonLink>
+          Back to call settings
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model call settings let you configure how Large Language Models handle prompts. These settings control parameters like response length, temperature (creativity level), and other options that shape the output when a prompt is sent to the LLM.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -568,9 +571,9 @@ const LLMSettingsForm = () => {
           </Grid>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
-              {id ? "Update LLM Call Settings" : "Add LLM Call Settings"}
-            </StyledButton>
+            <PrimaryButton variant="contained" type="submit">
+              {id ? "Update call setting" : "Add call setting"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>
@@ -635,9 +638,9 @@ const LLMSettingsForm = () => {
         </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setOpenPriceModal(false)}>Cancel</Button>
-          <StyledButton onClick={handleSaveModelPrice} color="primary">
+          <PrimaryButton onClick={handleSaveModelPrice} color="primary">
             Save
-          </StyledButton>
+          </PrimaryButton>
         </DialogActions>
       </StyledDialog>
 

@@ -17,10 +17,10 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const ToolCatalogueForm = () => {
@@ -232,17 +232,20 @@ const ToolCatalogueForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Tool Catalog" : "Create Tool Catalog"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit tool catalog" : "Add tool catalog"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/catalogs/tools")}
           color="inherit"
         >
-          Back to Tool Catalogs
-        </StyledButtonLink>
+          Back to catalogs
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
@@ -349,7 +352,7 @@ const ToolCatalogueForm = () => {
             </Button>
           </Box>
 
-          <StyledButton
+          <PrimaryButton
             type="submit"
             variant="contained"
             color="primary"
@@ -358,11 +361,11 @@ const ToolCatalogueForm = () => {
             {loading ? (
               <CircularProgress size={24} />
             ) : id ? (
-              "Update Tool Catalog"
+              "Update catalog"
             ) : (
-              "Create Tool Catalog"
+              "Create catalog"
             )}
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
       <Snackbar

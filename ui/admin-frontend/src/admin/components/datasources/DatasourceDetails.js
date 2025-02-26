@@ -6,13 +6,10 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   IconButton,
   Tooltip,
   Link,
-  Divider,
   Chip,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
 } from "@mui/material";
@@ -23,14 +20,14 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import {
   getVectorStoreName,
@@ -132,14 +129,14 @@ const DatasourceDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Datasource Details</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">Data source details</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/datasources")}
           color="inherit"
         >
-          Back to Datasources
-        </StyledButtonLink>
+          Back to data sources
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Basic Information</SectionTitle>
@@ -203,13 +200,13 @@ const DatasourceDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Privacy Score:</FieldLabel>
+            <FieldLabel>Privacy Level:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{datasource.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the datasource."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the datasource."
                 placement="top"
               >
                 <HelpOutlineIcon
@@ -428,21 +425,21 @@ const DatasourceDetails = () => {
         >
           <Typography color="success.main">{copySuccess}</Typography>
           <Box display="flex" gap={2}>
-            <StyledButtonPrimaryOutlined
+            <PrimaryOutlineButton
               variant="contained"
               color="secondary"
               onClick={handleCloneDataSource}
               startIcon={<ContentCopyIcon />}
             >
-              Clone This Data Source
-            </StyledButtonPrimaryOutlined>
-            <StyledButton
+              Clone this data source
+            </PrimaryOutlineButton>
+            <PrimaryButton
               variant="contained"
               startIcon={<EditIcon />}
               onClick={() => navigate(`/admin/datasources/edit/${id}`)}
             >
-              Edit Datasource
-            </StyledButton>
+              Edit data source
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

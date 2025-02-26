@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import { formatBudgetDisplay } from "../utils/budgetFormatter";
 
@@ -7,9 +7,7 @@ import {
   Typography,
   Grid,
   Paper,
-  TextField,
   Box,
-  Button,
   Stack,
   Divider,
   Table,
@@ -22,7 +20,7 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import {
-  StyledButton,
+  PrimaryButton,
   StyledPaper,
   TitleBox,
 } from "../styles/sharedStyles";
@@ -48,7 +46,6 @@ import {
   Legend,
   Filler,
 } from "chart.js";
-import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import IconButton from "@mui/material/IconButton";
 
 ChartJS.register(
@@ -111,13 +108,13 @@ const GetStartedWidget = ({ openChatRoomWizard, onClose }) => (
       Chat rooms enable non-technical users to benefit from the full power of AI
       in your organisation, safely and securely.
     </Typography>
-    <StyledButton
+    <PrimaryButton
       variant="contained"
       onClick={openChatRoomWizard}
       startIcon={<AddIcon />}
     >
       Create Chat Room
-    </StyledButton>
+    </PrimaryButton>
   </Box>
 );
 
@@ -465,7 +462,7 @@ const Dashboard = () => {
       backgroundColor: "transparent"
     },
     "& td": {
-      borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
+    borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
     },
     "&:hover": {
       backgroundColor: theme.palette.background.secondaryExtraLight
@@ -541,7 +538,7 @@ const Dashboard = () => {
           )}
 
           <TitleBox top="64px">
-            <Typography variant="h4">Dashboard</Typography>
+            <Typography variant="headingXLarge">Analytics</Typography>
             <Stack direction="row" spacing={2} alignItems="center">
               <Box display="flex" alignItems="center" gap={2}>
                 <DateRangePicker
@@ -656,36 +653,36 @@ const Dashboard = () => {
                       }}
                       data={{
                         labels: tokenUsageData.labels,
-                        datasets: [
+                        datasets: tokenUsageData?.datasets ? [
                           {
                             label: "Prompt Tokens",
-                            data: tokenUsageData.datasets[2].data,
+                            data: tokenUsageData.datasets[2]?.data,
                             borderColor: "rgb(53, 162, 235)",
                             backgroundColor: "rgba(53, 162, 235, 0.5)",
                             fill: true,
                           },
                           {
                             label: "Response Tokens",
-                            data: tokenUsageData.datasets[3].data,
+                            data: tokenUsageData.datasets[3]?.data,
                             borderColor: "rgb(75, 192, 192)",
                             backgroundColor: "rgba(75, 192, 192, 0.5)",
                             fill: true,
                           },
                           {
                             label: "Cache Write Tokens",
-                            data: tokenUsageData.datasets[4].data,
+                            data: tokenUsageData.datasets[4]?.data,
                             borderColor: "rgb(255, 159, 64)",
                             backgroundColor: "rgba(255, 159, 64, 0.5)",
                             fill: true,
                           },
                           {
                             label: "Cache Read Tokens",
-                            data: tokenUsageData.datasets[5].data,
+                            data: tokenUsageData.datasets[5]?.data,
                             borderColor: "rgb(153, 102, 255)",
                             backgroundColor: "rgba(153, 102, 255, 0.5)",
                             fill: true,
                           },
-                        ],
+                        ] : [],
                       }}
                     />
                   ) : (

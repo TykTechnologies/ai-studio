@@ -1,15 +1,11 @@
 import React from 'react';
-import {
-  Dashboard,
-  AddCircleOutline,
-  Code,
-  Psychology,
-  Storage,
-  Apps,
-} from '@mui/icons-material';
+import { SvgIcon } from '@mui/material';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
+import { ReactComponent as HouseIcon } from '../../../common/fontawesome/house.svg';
+import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawesome/rectangle-history.svg';
+import { ReactComponent as Grid2PlusIcon } from '../../../common/fontawesome/grid-2-plus.svg';
 
 const PortalDrawer = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -33,24 +29,24 @@ const PortalDrawer = () => {
     return [
       {
         id: 'dashboard',
-        text: 'Dashboard',
-        icon: <Dashboard />,
+        text: 'Overview',
+        icon: <SvgIcon component={HouseIcon} inheritViewBox />,
         path: '/portal/dashboard'
       },
       {
-        id: 'create-app',
-        text: 'Create App',
-        icon: <AddCircleOutline />,
-        path: '/portal/app/new'
+        id: 'my-apps',
+        text: 'Apps',
+        icon: <SvgIcon component={Grid2PlusIcon} inheritViewBox />,
+        path: '/portal/apps'
       },
       {
-        id: 'resources',
-        text: 'Resources',
-        icon: <Code />,
+        id: 'catalogs',
+        text: 'Catalogs',
+        icon: <SvgIcon component={RectangleHistoryIcon} inheritViewBox />,
         subItems: [
           {
             id: 'llms',
-            text: 'LLMs',
+            text: 'LLM providers',
             subItems: userEntitlements?.catalogues?.map(catalogue => ({
               id: `llm-${catalogue.id}`,
               text: catalogue.attributes.name,
@@ -58,8 +54,8 @@ const PortalDrawer = () => {
             })) || []
           },
           {
-            id: 'databases',
-            text: 'Databases',
+            id: 'data-sources',
+            text: 'Data sources',
             subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
               id: `db-${catalogue.id}`,
               text: catalogue.attributes.name,
@@ -68,12 +64,6 @@ const PortalDrawer = () => {
           }
         ]
       },
-      {
-        id: 'my-apps',
-        text: 'My Apps',
-        icon: <Apps />,
-        path: '/portal/apps'
-      }
     ];
   };
 

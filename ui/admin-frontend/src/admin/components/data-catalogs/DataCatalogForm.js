@@ -24,10 +24,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const DataCatalogForm = () => {
@@ -220,18 +220,21 @@ const DataCatalogForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Data Catalog" : "Create New Data Catalog"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit data catalog" : "Add data catalog"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/catalogs/data"
           color="inherit"
         >
-          Back to Data Catalogs
-        </StyledButtonLink>
+          Back to catalogs
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific user groups to manage access easily.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
@@ -358,9 +361,9 @@ const DataCatalogForm = () => {
             </Button>
           </Box>
           <Box mt={3}>
-            <StyledButton type="submit" variant="contained" color="primary">
-              {id ? "Update Data Catalog" : "Create Data Catalog"}
-            </StyledButton>
+            <PrimaryButton type="submit" variant="contained" color="primary">
+              {id ? "Update catalog" : "Create catalog"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

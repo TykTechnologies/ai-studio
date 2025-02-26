@@ -6,7 +6,6 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Button,
   Divider,
   Tooltip,
   List,
@@ -17,12 +16,12 @@ import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const SectionTitle = ({ children }) => (
@@ -69,14 +68,14 @@ const ToolDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Tool Details</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">Tool details</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/tools")}
           color="inherit"
         >
-          Back to Tools
-        </StyledButtonLink>
+          Back to tools
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Tool Information</SectionTitle>
@@ -94,13 +93,13 @@ const ToolDetails = () => {
             <FieldValue>{tool.attributes.description}</FieldValue>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Privacy Score:</FieldLabel>
+            <FieldLabel>Privacy Level:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{tool.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the tool."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the tool."
                 placement="top"
               >
                 <HelpOutlineIcon
@@ -176,13 +175,13 @@ const ToolDetails = () => {
         </Grid>
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/tools/edit/${id}`)}
           >
-            Edit Tool
-          </StyledButton>
+            Edit tool
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

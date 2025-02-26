@@ -10,7 +10,6 @@ import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -30,7 +29,7 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 
 const Secrets = () => {
@@ -189,14 +188,14 @@ const Secrets = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Secrets</Typography>
-        <StyledButton
+        <Typography variant="headingXLarge">Secrets</Typography>
+        <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddSecret}
         >
-          Add Secret
-        </StyledButton>
+          Add secret
+        </PrimaryButton>
       </TitleBox>
       <ContentBox>
         {secrets.length === 0 ? (
@@ -256,10 +255,10 @@ const Secrets = () => {
         <MenuItem
           onClick={() => navigate(`/admin/secrets/edit/${selectedSecret?.id}`)}
         >
-          Edit Secret
+          Edit secret
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedSecret?.id)}>
-          Delete Secret
+          Delete secret
         </MenuItem>
       </Menu>
 

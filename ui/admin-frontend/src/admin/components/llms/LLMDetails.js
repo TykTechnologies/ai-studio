@@ -17,14 +17,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import { MemoizedLineChart } from "../common/MemoizedChart";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -47,15 +45,15 @@ import {
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 import Chip from "@mui/material/Chip";
-import { useTheme, styled } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 
 const ExpandableMessage = ({ message, isCode = false }) => {
@@ -407,14 +405,14 @@ const LLMDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">LLM Details</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">LLM provider details</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}
           color="inherit"
         >
           Back to LLMs
-        </StyledButtonLink>
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>
@@ -570,13 +568,13 @@ const LLMDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Privacy Score:</FieldLabel>
+            <FieldLabel>Privacy Level:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{llm.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing."
                 placement="top"
               >
                 <HelpOutlineIcon
@@ -845,13 +843,13 @@ const LLMDetails = () => {
           alignItems="center"
         >
           <Typography color="success.main">{copySuccess}</Typography>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/llms/edit/${id}`)}
           >
             Edit LLM
-          </StyledButton>
+          </PrimaryButton>
         </Box>
       </ContentBox>
     </>

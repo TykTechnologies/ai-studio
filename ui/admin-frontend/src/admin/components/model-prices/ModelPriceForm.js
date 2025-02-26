@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
   Grid,
@@ -20,15 +19,16 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  Button
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 import {
   getVendorName,
@@ -224,18 +224,21 @@ const ModelPriceForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Model Price" : "Add Model Price"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit model price" : "Add model price"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/model-prices"
           color="inherit"
         >
-          Back to Model Prices
-        </StyledButtonLink>
+          Back to model prices
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -386,9 +389,9 @@ const ModelPriceForm = () => {
               )}
             </Box>
             <Box display="flex" gap={2}>
-              <StyledButton variant="contained" type="submit">
+              <PrimaryButton variant="contained" type="submit">
                 {id ? "Update Model Price" : "Add Model Price"}
-              </StyledButton>
+              </PrimaryButton>
               {id && (
                 <Button
                   variant="text"

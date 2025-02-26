@@ -241,14 +241,10 @@ describe('App Component', () => {
 
     // Wait for either the navigation or the dashboard content to appear
     await waitFor(() => {
-      const dashboardIcon = screen.queryByTestId('DashboardIcon');
-      const navigationCalled = mockNavigate.mock.calls.some(
-        call => (call[0] === '/admin/dashboard' || call[0] === '/admin/dash') && call[1]?.replace === true
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/admin\/(dashboard|dash)$/),
+        expect.objectContaining({ replace: true })
       );
-      
-      if (!dashboardIcon && !navigationCalled) {
-        throw new Error('Neither dashboard content nor navigation detected');
-      }
     }, { timeout: 3000 });
   });
 
@@ -311,15 +307,20 @@ describe('App Component', () => {
 
     renderWithRouter(<App />, { route: '/' });
 
-    // Wait for either the navigation or the dashboard content to appear
+    // Wait for portal tab to be selected
     await waitFor(() => {
-      const dashboardIcon = screen.queryByTestId('DashboardIcon');
+      expect(screen.getByRole('tab', { name: 'AI Portal' })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    // Then check for either navigation or overview text
+    await waitFor(() => {
+      const overviewText = screen.queryByText('Overview');
       const navigationCalled = mockNavigate.mock.calls.some(
         call => call[0] === '/portal/dashboard' && call[1]?.replace === true
       );
       
-      if (!dashboardIcon && !navigationCalled) {
-        throw new Error('Neither dashboard content nor navigation detected');
+      if (!overviewText && !navigationCalled) {
+        throw new Error('Neither Overview text nor navigation to /portal/dashboard detected');
       }
     }, { timeout: 3000 });
   });
@@ -368,6 +369,9 @@ describe('App Component', () => {
     
     await waitFor(() => {
       expect(screen.getByText("Don't have an account?")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
       expect(screen.getByText('Forgot password?')).toBeInTheDocument();
     });
   });

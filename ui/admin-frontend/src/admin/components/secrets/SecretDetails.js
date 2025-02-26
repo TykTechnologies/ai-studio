@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
   CircularProgress,
   Grid,
-  Button,
   IconButton,
   Box,
   Alert,
@@ -16,12 +15,12 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
-  StyledButtonLink,
+  SecondaryLinkButton,
   TitleBox,
   ContentBox,
   FieldLabel,
   FieldValue,
-  StyledButton,
+  PrimaryButton,
 } from "../../styles/sharedStyles";
 
 const SecretDetails = () => {
@@ -78,23 +77,23 @@ const SecretDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">Secret Details</Typography>
+        <Typography variant="headingXLarge">Secret details</Typography>
         <Box>
-          <StyledButtonLink
+          <SecondaryLinkButton
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate("/admin/secrets")}
             color="inherit"
             sx={{ mr: 2 }}
           >
-            Back to Secrets
-          </StyledButtonLink>
-          <StyledButton
+            Back to secrets
+          </SecondaryLinkButton>
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/secrets/edit/${id}`)}
           >
-            Edit Secret
-          </StyledButton>
+            Edit secret
+          </PrimaryButton>
         </Box>
       </TitleBox>
       <ContentBox>

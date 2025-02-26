@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,10 +25,9 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -173,19 +171,18 @@ const LLMList = () => {
     <Box sx={{ p: 0 }}>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Large Language Models (LLMs) registered here can be used in chat rooms, and are available to developers in the Portal if set to Active. They must be part of a catalog in order to be usable by a group." />
-            <Typography variant="h5">LLMs</Typography>
-          </Box>
-
-          <StyledButton
+          <Typography variant="headingXLarge">LLM providers</Typography>
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddLLM}
           >
             Add LLM
-          </StyledButton>
+          </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific user groups.</Typography>  
+        </Box>
         <Box sx={{ p: 3 }}>
           {llms.length === 0 ? (
             <EmptyStateWidget
@@ -210,7 +207,7 @@ const LLMList = () => {
                     <StyledTableHeaderCell
                       onClick={() => handleSort("privacy_score")}
                     >
-                      Privacy Score
+                      Privacy Level
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("active")}>
                       Proxied

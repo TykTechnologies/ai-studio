@@ -4,7 +4,6 @@ import apiClient from "../utils/apiClient";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableRow,
   Typography,
@@ -26,9 +25,8 @@ import {
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
@@ -166,18 +164,18 @@ const AppList = () => {
     <>
       <>
         <TitleBox top="64px">
-          <Box display="flex" alignItems="center">
-            <InfoTooltip title="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources." />
-            <Typography variant="h5">Apps</Typography>
-          </Box>
-          <StyledButton
+          <Typography variant="headingXLarge">Apps</Typography>
+          <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddApp}
           >
-            Add App
-          </StyledButton>
+            Add app
+          </PrimaryButton>
         </TitleBox>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>  
+        </Box>
         <ContentBox>
           {apps.length === 0 ? (
             <EmptyStateWidget
@@ -245,10 +243,10 @@ const AppList = () => {
         <MenuItem
           onClick={() => navigate(`/admin/apps/edit/${selectedApp?.id}`)}
         >
-          Edit App
+          Edit app
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedApp?.id)}>
-          Delete App
+          Delete app
         </MenuItem>
       </Menu>
 

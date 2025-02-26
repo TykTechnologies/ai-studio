@@ -7,12 +7,10 @@ import {
   Box,
   Table,
   TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
   Grid,
-  Button,
   Link,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
@@ -24,17 +22,17 @@ import {
   FieldLabel,
   FieldValue,
   StyledTableRow,
-  StyledButton,
+  PrimaryButton,
   StyledTableHeaderCell,
   StyledTableCell,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
 import { Divider } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { IconButton, Tooltip, Snackbar } from "@mui/material";
+import { IconButton, Tooltip } from "@mui/material";
 
 const UserDetails = () => {
   const [user, setUser] = useState(null);
@@ -135,14 +133,14 @@ const UserDetails = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">User Details</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">User details</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/users")}
           color="inherit"
         >
-          Back to Users
-        </StyledButtonLink>
+          Back to users
+        </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
         <Grid container spacing={2} mb={4}>
@@ -208,13 +206,13 @@ const UserDetails = () => {
           alignItems="center"
         >
           <Typography variant="h5">Groups</Typography>
-          <StyledButton
+          <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
             onClick={() => navigate(`/admin/users/edit/${id}`)}
           >
-            Edit User
-          </StyledButton>
+            Edit user
+          </PrimaryButton>
         </Box>
         <Divider />
         <Box mt={4} mb={2}>

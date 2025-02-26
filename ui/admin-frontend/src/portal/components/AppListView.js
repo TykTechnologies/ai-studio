@@ -22,8 +22,8 @@ import {
   StyledTableHeaderCell,
   StyledTableRow,
   StyledPaper,
-  StyledButton,
-  StyledButtonCritical
+  PrimaryButton,
+  DangerButton
 } from "../../admin/styles/sharedStyles";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -123,12 +123,12 @@ const AppListView = () => {
           <Typography variant="body1" paragraph>
             Create your first app to get started.
           </Typography>
-          <StyledButton
+          <PrimaryButton
             startIcon={<AddIcon />}
             onClick={handleCreateApp}
           >
             Create App
-          </StyledButton>
+          </PrimaryButton>
         </StyledPaper>
       ) : (
         <TableContainer component={StyledPaper}>
@@ -185,9 +185,9 @@ const AppListView = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <StyledButtonCritical onClick={handleDeleteConfirm} autoFocus>
+          <DangerButton onClick={handleDeleteConfirm} autoFocus>
             Delete
-          </StyledButtonCritical>
+          </DangerButton>
         </DialogActions>
       </Dialog>
     </Container>

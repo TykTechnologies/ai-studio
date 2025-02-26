@@ -11,6 +11,16 @@ const theme = createTheme({
     body2: {
       fontSize: "0.89rem",
     },
+    bodyLargeDefault: {
+      fontSize: "14px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Regular",
+    },
+    headingXLarge: {
+      fontSize: "32px",
+      lineHeight: "36px",
+      fontFamily: "Inter-Bold",
+    }
   },
   palette: {
     mode: "light",
@@ -69,6 +79,15 @@ const theme = createTheme({
     },
   },
   components: {
+    MuiSvgIcon: {
+      styleOverrides: {
+        root: {
+          width: '20px',
+          height: '20px',
+          fontSize: '20px',
+        },
+      },
+    },
     MuiTypography: {
       styleOverrides: {
         root: ({ theme }) => ({
@@ -206,7 +225,7 @@ const theme = createTheme({
           color: theme.palette.text.defaultSubdued,
           backgroundColor: theme.palette.background.buttonSecondary,
           boxShadow: "none",
-          textTransform: "capitalize",
+          textTransform: "none",
           border: `1px solid ${theme.palette.border.neutralDefault}`,
           "&:hover": {
             backgroundColor: theme.palette.background.defaultSubdued,

@@ -23,18 +23,17 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import EditIcon from "@mui/icons-material/Edit";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import { styled } from "@mui/system";
 
@@ -376,7 +375,7 @@ const ToolForm = () => {
     if (!tool.description.trim())
       newErrors.description = "Description is required";
     if (tool.privacy_score < 0 || tool.privacy_score > 100)
-      newErrors.privacy_score = "Privacy score must be between 0 and 100";
+      newErrors.privacy_score = "Privacy level must be between 0 and 100";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -560,17 +559,20 @@ const ToolForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">{id ? "Edit Tool" : "Add Tool"}</Typography>
-        <StyledButtonLink
+        <Typography variant="headingXLarge">{id ? "Edit tool" : "Add tool"}</Typography>
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/tools"
           color="white"
         >
-          Back to Tools
-        </StyledButtonLink>
+          Back to tools
+        </SecondaryLinkButton>
       </TitleBox>
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools are external services that enhance the AI's capabilities by providing access to additional data and functions within chat rooms. Defined by the OpenAPI specification, you can specify which operations the LLM can use to fulfill user requests effectively.</Typography>  
+      </Box>
+      <ContentBox sx={{ pt: 0 }}>
         <Box component="form" onSubmit={handleSubmit}>
           <SectionTitle>Tool Information</SectionTitle>
           <Grid container spacing={3}>
@@ -603,9 +605,14 @@ const ToolForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom>
+                Privacy levels
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLMs providers with lower privacy levels can’t access higher-level, data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
+              </Typography>
               <TextField
                 fullWidth
-                label="Privacy Score"
                 name="privacy_score"
                 type="number"
                 value={tool.privacy_score}
@@ -616,15 +623,6 @@ const ToolForm = () => {
                   min: 0,
                   max: 100,
                   step: 1,
-                }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title="Privacy score is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the tool.">
-                        <HelpOutlineIcon color="action" />
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
                 }}
               />
             </Grid>
@@ -858,21 +856,21 @@ const ToolForm = () => {
                 onChange={handleFileUpload}
               />
 
-              <StyledButtonPrimaryOutlined
+              <PrimaryOutlineButton
                 variant="contained"
                 startIcon={<CloudUploadIcon />}
                 onClick={() => fileInputRef.current.click()}
                 sx={{ mt: 2 }}
               >
                 Upload Additional Tool Documentation
-              </StyledButtonPrimaryOutlined>
+              </PrimaryOutlineButton>
             </AccordionDetails>
           </StyledAccordion>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
-              {id ? "Update Tool" : "Add Tool"}
-            </StyledButton>
+            <PrimaryButton variant="contained" type="submit">
+              {id ? "Update tool" : "Add tool"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>

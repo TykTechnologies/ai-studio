@@ -88,7 +88,7 @@ export const ParentListItem = styled(ListItemButton, {
     background: 'transparent !important',
   },
   '& .MuiListItemText-root': {
-    marginLeft: '16px',
+    marginLeft: '10px',
     position: 'relative',
     zIndex: 2,
     '& .MuiTypography-root': {
@@ -133,7 +133,7 @@ export const SubListItem = styled(ListItemButton, {
   shouldForwardProp: prop => !['depth', 'rootParentId', 'itemId', 'open', 'hasSubItems'].includes(prop),
 })(({ theme, depth = 1, rootParentId, itemId, hasSubItems, open }) => ({
   padding: '8px 16px',
-  paddingLeft: depth === 1 ? '85px' : '95px',
+  paddingLeft: depth === 1 ? '80px' : '90px',
   height: '34px',
   position: 'relative',
   background: 'transparent !important',

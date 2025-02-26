@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   FormControl,
   InputLabel,
@@ -19,7 +18,6 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
 } from "@mui/material";
@@ -32,12 +30,12 @@ import { FormControlLabel, Switch } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
-  StyledButtonPrimaryOutlined,
+  PrimaryOutlineButton,
   TitleBox,
   ContentBox,
-  StyledButton,
+  PrimaryButton,
   StyledAccordion,
-  StyledButtonLink
+  SecondaryLinkButton
 } from "../../styles/sharedStyles";
 
 const ChatForm = () => {
@@ -376,18 +374,21 @@ const ChatForm = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="h5">
-          {id ? "Edit Chat Room" : "Add Chat Room"}
+        <Typography variant="headingXLarge">
+          {id ? "Edit chat" : "Add chat"}
         </Typography>
-        <StyledButtonLink
+        <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/chats"
           color="inherit"
         >
-          Back to Chat Rooms
-        </StyledButtonLink>
+          Back to chats
+        </SecondaryLinkButton>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's group, ensuring relevant and secure interactions.</Typography>  
+      </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
@@ -656,14 +657,14 @@ const ChatForm = () => {
               />
 
               {id && ( // Only show upload button if editing an existing chat
-                <StyledButtonPrimaryOutlined
+                <PrimaryOutlineButton
                   variant="contained"
                   startIcon={<CloudUploadIcon />}
                   onClick={() => fileInputRef.current.click()}
                   sx={{ mt: 2 }}
                 >
                   Upload Context File
-                </StyledButtonPrimaryOutlined>
+                </PrimaryOutlineButton>
               )}
 
               {!id && (
@@ -675,9 +676,9 @@ const ChatForm = () => {
           </StyledAccordion>
 
           <Box mt={4}>
-            <StyledButton variant="contained" type="submit">
-              {id ? "Update Chat Room" : "Add Chat Room"}
-            </StyledButton>
+            <PrimaryButton variant="contained" type="submit">
+              {id ? "Update chat" : "Add chat"}
+            </PrimaryButton>
           </Box>
         </Box>
       </ContentBox>
