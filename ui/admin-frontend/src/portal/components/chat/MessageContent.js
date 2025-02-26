@@ -661,8 +661,7 @@ const MessageContent = ({
 				justifyContent: messageType === 'user' ? 'flex-end' : 'flex-start'
 			}}
 		>
-			{messageType !== 'user' && <MessageAvatar messageType={messageType} userName={userName} />}
-			{messageType === 'user' && <MessageAvatar messageType={messageType} userName={userName} />}
+			<MessageAvatar messageType={messageType} userName={userName} />
 			<Box
 				sx={{
 					maxWidth: '70%',
