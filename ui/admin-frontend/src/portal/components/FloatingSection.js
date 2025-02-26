@@ -1,13 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Box, Typography, Checkbox, Collapse } from "@mui/material";
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 
 const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages }) => {
   const [isCollapsed, setIsCollapsed] = useState(messages?.length > 0);
+  const hasUserInteracted = useRef(false);
+  const prevMessagesLength = useRef(messages?.length || 0);
 
   useEffect(() => {
-    setIsCollapsed(messages?.length > 0);
+    const currentMessagesLength = messages?.length || 0;
+    
+    if (!hasUserInteracted.current && 
+        prevMessagesLength.current === 0 && 
+        currentMessagesLength > 0) {
+      setIsCollapsed(true);
+    }
+    
+    prevMessagesLength.current = currentMessagesLength;
   }, [messages]);
+
+  const handleToggle = () => {
+    hasUserInteracted.current = true;
+    setIsCollapsed(!isCollapsed);
+  };
 
   return (
     <Box
@@ -17,7 +32,7 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages })
       }}
     >
       <Box
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={handleToggle}
         sx={{
           display: 'flex',
           alignItems: 'center',
