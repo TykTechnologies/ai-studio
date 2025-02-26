@@ -710,10 +710,11 @@ const ChatView = () => {
         }}
       >
         <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
-          <Grid item xs={9} sx={{ height: '100%' }}>
+          <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* Messages container */}
             <Box
               sx={{
-                height: '100%',
+                flexGrow: 1,
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
@@ -758,7 +759,7 @@ const ChatView = () => {
                         </Typography>
                       )}
                     </Box>
-                    <Box sx={{ width: '100%' }}>
+                    <Box sx={{ width: '100%', mt: 2 }}>
                       <ChatInput
                         inputMessage={inputMessage}
                         setInputMessage={setInputMessage}
@@ -853,21 +854,37 @@ const ChatView = () => {
                         <KeyboardArrowDownIcon />
                       </IconButton>
                     )}
-                    <ChatInput
-                      inputMessage={inputMessage}
-                      setInputMessage={setInputMessage}
-                      handleSendMessage={handleSendMessage}
-                      isConnected={isConnected}
-                      uploadedFiles={uploadedFiles}
-                      setUploadedFiles={setUploadedFiles}
-                      onDrop={(files) => onDrop(files, sessionId)}
-                      isUploading={isUploading}
-                      renderUploadIndicator={renderUploadIndicator}
-                    />
                   </>
                 )}
               </Box>
             </Box>
+            
+            {/* Fixed input at bottom - only show when there are messages */}
+            {messages.length > 0 && (
+              <Box sx={{ 
+                width: '100%',
+                padding: 2,
+                paddingTop: 0,
+              }}>
+                <Box sx={{
+                  maxWidth: '740px',
+                  width: '100%',
+                  mx: 'auto', // Center with auto margins
+                }}>
+                  <ChatInput
+                    inputMessage={inputMessage}
+                    setInputMessage={setInputMessage}
+                    handleSendMessage={handleSendMessage}
+                    isConnected={isConnected}
+                    uploadedFiles={uploadedFiles}
+                    setUploadedFiles={setUploadedFiles}
+                    onDrop={(files) => onDrop(files, sessionId)}
+                    isUploading={isUploading}
+                    renderUploadIndicator={renderUploadIndicator}
+                  />
+                </Box>
+              </Box>
+            )}
           </Grid>
 
           <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }}>
