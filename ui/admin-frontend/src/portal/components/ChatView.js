@@ -719,11 +719,13 @@ const ChatView = () => {
               flexDirection: 'column',
               overflow: 'hidden',
               height: '100%',
+              maxWidth: '70%',
+              width: '70%',
+              alignSelf: 'center',
             }}
           >
             {messages.length === 0 ? (
               <Box sx={{
-                px: 8,
                 width: '100%',
                 display: 'flex',
                 flexDirection: 'column',
@@ -777,20 +779,27 @@ const ChatView = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     scrollBehavior: 'smooth',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: 'transparent transparent',
+                    
                     '&::-webkit-scrollbar': {
-                      width: '0.4em',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      boxShadow: 'inset 0 0 6px rgba(0,0,0,0.00)',
+                      width: '0.25rem',
                     },
                     '&::-webkit-scrollbar-thumb': {
-                      backgroundColor: 'rgba(0,0,0,.1)',
-                      outline: '1px solid slategrey',
+                      backgroundColor: 'transparent', 
+                      borderRadius: '4px',
+                    },
+                    
+                    '&.scrolling::-webkit-scrollbar-thumb, &:hover::-webkit-scrollbar-thumb': {
+                      backgroundColor: (theme) => theme.palette.border.neutralDefaultSubdued,
+                    },
+                    '&.scrolling, &:hover': {
+                      scrollbarColor: (theme) => `${theme.palette.border.neutralDefaultSubdued} transparent`,
                     },
                   }}
                 >
                 {messages.length > 1 && (
-                  <Box sx={{ p: 1, textAlign: 'right' }}>
+                  <Box sx={{ px: 6, mt:2, textAlign: 'right' }}>
                     <Typography
                       variant="caption"
                       component="div"

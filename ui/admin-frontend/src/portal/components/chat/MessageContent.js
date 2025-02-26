@@ -570,11 +570,14 @@ const MessageContent = ({
 					width: '100%',
 					position: 'relative',
 					px: 6,
-					py: 2,
+					py: 5,
 					display: 'flex',
-					alignItems: 'flex-start',
 					gap: 2,
-					justifyContent: messageType === 'user' ? 'flex-end' : 'flex-start'
+					...(messageType === 'user' && {
+						maxWidth: '70%',
+						alignSelf: 'end',
+						justifyContent: 'end'
+					})
 				}}
 			>
 				<MessageAvatar messageType={messageType} userName={userName} />
@@ -654,17 +657,20 @@ const MessageContent = ({
 				width: '100%',
 				position: 'relative',
 				px: 6,
-				py: 2,
+				py: 5,
 				display: 'flex',
 				alignItems: 'flex-start',
 				gap: 2,
-				justifyContent: messageType === 'user' ? 'flex-end' : 'flex-start'
+				...(messageType === 'user' && {
+					maxWidth: '70%',
+					alignSelf: 'end',
+					justifyContent: 'end'
+				})
 			}}
 		>
 			<MessageAvatar messageType={messageType} userName={userName} />
 			<Box
 				sx={{
-					maxWidth: '70%',
 					width: 'fit-content',
 					...(messageType === 'user' && {
 						bgcolor: 'background.surfaceNeutralDisabled',
@@ -673,6 +679,11 @@ const MessageContent = ({
 						borderRadius: '8px',
 						padding: '12px',
 					}),
+					...(messageType === 'ai' && {
+						borderBottom: '1px solid',
+						borderColor: 'border.neutralDefault',
+						pb: 2
+					  }),
 					'&:hover .edit-button': {
 						opacity: 1,
 						visibility: 'visible'
