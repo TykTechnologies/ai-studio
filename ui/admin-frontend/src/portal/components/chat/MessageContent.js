@@ -569,21 +569,19 @@ const MessageContent = ({
 				sx={{
 					width: '100%',
 					position: 'relative',
-					px: 6,
-					py: 5,
+					py: 3,
 					display: 'flex',
 					gap: 2,
 					...(messageType === 'user' && {
-						maxWidth: '70%',
+						maxWidth: '85%',
 						alignSelf: 'end',
 						justifyContent: 'end'
 					})
 				}}
 			>
-				<MessageAvatar messageType={messageType} userName={userName} />
 				<Box
 					sx={{
-						maxWidth: '70%',
+						maxWidth: '85%',
 						width: 'fit-content',
 						...(messageType === 'user' && {
 							bgcolor: 'background.surfaceNeutralDisabled',
@@ -634,12 +632,12 @@ const MessageContent = ({
 							onClick={handleEditClick}
 							sx={{
 								position: 'absolute',
-								top: 0,
-								right: 0,
+								right: '5px',
+								bottom: '-5px',
+								zIndex: 100,
 								visibility: 'hidden',
 								opacity: 0,
-								zIndex: 100,
-								transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out'
+								transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
 							}}
 						>
 							<EditIcon fontSize="small" />
@@ -656,8 +654,7 @@ const MessageContent = ({
 			sx={{
 				width: '100%',
 				position: 'relative',
-				px: 6,
-				py: 5,
+				py: 3,
 				display: 'flex',
 				alignItems: 'flex-start',
 				gap: 2,
@@ -668,7 +665,6 @@ const MessageContent = ({
 				})
 			}}
 		>
-			<MessageAvatar messageType={messageType} userName={userName} />
 			<Box
 				sx={{
 					width: 'fit-content',
@@ -698,12 +694,12 @@ const MessageContent = ({
 						onClick={handleEditClick}
 						sx={{
 							position: 'absolute',
-							top: 0,
-							right: 0,
+							bottom: '-5px',
+							right: '5px',
+							zIndex: 100,
 							visibility: 'hidden',
 							opacity: 0,
-							zIndex: 100,
-							transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out'
+							transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
 						}}
 					>
 						<EditIcon fontSize="small" />
