@@ -8,6 +8,24 @@ import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import MarkdownMessage from './MarkdownMessage';
 import pubClient from '../../../admin/utils/pubClient';
 
+const MessageAvatar = ({ messageType, userName }) => (
+  <Box
+    sx={{
+      width: 35,
+      height: 35,
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      bgcolor: messageType === 'user' ? 'background.surfaceBrandHovered' : 'background.surfaceDefaultBubble'
+    }}
+  >
+    <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+      {messageType === 'user' ? userName?.charAt(0).toUpperCase() || 'U' : 'AI'}
+    </Typography>
+  </Box>
+);
+
 const extractSystemBlocks = (content) => {
 	const segments = [];
 	let lastIndex = 0;
@@ -367,7 +385,8 @@ const MessageContent = ({
 	sessionId,
 	showSystemMessages,
 	onEditSuccess,
-	chatId
+	chatId,
+	userName
 }) => {
 	const [isEditing, setIsEditing] = useState(false);
 	const [editText, setEditText] = useState('');
@@ -454,38 +473,39 @@ const MessageContent = ({
 
 	if (canEdit && isEditing) {
 		return (
-			<Box>
-				<TextField
-					variant="outlined"
-					fullWidth
-					multiline
-					value={editText}
-					onChange={(e) => setEditText(e.target.value)}
-					sx={{ mb: 1 }}
-				/>
-				<Box sx={{ display: 'flex', gap: 1 }}>
-					<IconButton
-						onClick={handleSaveClick}
-						sx={{
-							color: '#666',
-							'&:hover': {
-								color: '#333'
-							}
-						}}
-					>
-						<SaveIcon />
-					</IconButton>
-					<IconButton
-						onClick={handleCancelClick}
-						sx={{
-							color: '#666',
-							'&:hover': {
-								color: '#333'
-							}
-						}}
-					>
-						<CancelIcon />
-					</IconButton>
+			<Box sx={{ px: 6, py: 2 }}>
+				<Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+					<TextField
+						variant="outlined"
+						fullWidth
+						multiline
+						value={editText}
+						onChange={(e) => setEditText(e.target.value)}
+					/>
+					<Box sx={{ display: 'flex', gap: 1 }}>
+						<IconButton
+							onClick={handleSaveClick}
+							sx={{
+								color: '#666',
+								'&:hover': {
+									color: '#333'
+								}
+							}}
+						>
+							<SaveIcon />
+						</IconButton>
+						<IconButton
+							onClick={handleCancelClick}
+							sx={{
+								color: '#666',
+								'&:hover': {
+									color: '#333'
+								}
+							}}
+						>
+							<CancelIcon />
+						</IconButton>
+					</Box>
 				</Box>
 			</Box>
 		);
@@ -545,10 +565,33 @@ const MessageContent = ({
 		}
 
 		return (
-			<Box sx={{ position: 'relative' }}>
+			<Box
+				sx={{
+					width: '100%',
+					position: 'relative',
+					px: 6,
+					py: 5,
+					display: 'flex',
+					gap: 2,
+					...(messageType === 'user' && {
+						maxWidth: '70%',
+						alignSelf: 'end',
+						justifyContent: 'end'
+					})
+				}}
+			>
+				<MessageAvatar messageType={messageType} userName={userName} />
 				<Box
 					sx={{
-						position: 'relative',
+						maxWidth: '70%',
+						width: 'fit-content',
+						...(messageType === 'user' && {
+							bgcolor: 'background.surfaceNeutralDisabled',
+							border: '1px solid',
+							borderColor: 'border.neutralDefault',
+							borderRadius: '8px',
+							padding: '12px',
+						}),
 						'&:hover .edit-button': {
 							opacity: 1,
 							visibility: 'visible'
@@ -611,32 +654,62 @@ const MessageContent = ({
 	return (
 		<Box
 			sx={{
+				width: '100%',
 				position: 'relative',
-				'&:hover .edit-button': {
-					opacity: 1,
-					visibility: 'visible'
-				}
+				px: 6,
+				py: 5,
+				display: 'flex',
+				alignItems: 'flex-start',
+				gap: 2,
+				...(messageType === 'user' && {
+					maxWidth: '70%',
+					alignSelf: 'end',
+					justifyContent: 'end'
+				})
 			}}
 		>
-			<MarkdownMessage content={content} />
-			{isUserMessage && (
-				<IconButton
-					className="edit-button"
-					size="small"
-					onClick={handleEditClick}
-					sx={{
-						position: 'absolute',
-						top: 0,
-						right: 0,
-						visibility: 'hidden',
-						opacity: 0,
-						zIndex: 100,
-						transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out'
-					}}
-				>
-					<EditIcon fontSize="small" />
-				</IconButton>
-			)}
+			<MessageAvatar messageType={messageType} userName={userName} />
+			<Box
+				sx={{
+					width: 'fit-content',
+					...(messageType === 'user' && {
+						bgcolor: 'background.surfaceNeutralDisabled',
+						border: '1px solid',
+						borderColor: 'border.neutralDefault',
+						borderRadius: '8px',
+						padding: '12px',
+					}),
+					...(messageType === 'ai' && {
+						borderBottom: '1px solid',
+						borderColor: 'border.neutralDefault',
+						pb: 2
+					  }),
+					'&:hover .edit-button': {
+						opacity: 1,
+						visibility: 'visible'
+					}
+				}}
+			>
+				<MarkdownMessage content={content} />
+				{isUserMessage && (
+					<IconButton
+						className="edit-button"
+						size="small"
+						onClick={handleEditClick}
+						sx={{
+							position: 'absolute',
+							top: 0,
+							right: 0,
+							visibility: 'hidden',
+							opacity: 0,
+							zIndex: 100,
+							transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out'
+						}}
+					>
+						<EditIcon fontSize="small" />
+					</IconButton>
+				)}
+			</Box>
 		</Box>
 	);
 };

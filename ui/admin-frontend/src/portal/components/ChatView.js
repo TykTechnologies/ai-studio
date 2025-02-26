@@ -11,6 +11,7 @@ import {
   Alert,
   IconButton,
 } from '@mui/material';
+import { TitleBox } from '../../admin/styles/sharedStyles';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import pubClient from '../../admin/utils/pubClient';
@@ -46,6 +47,9 @@ const ChatView = () => {
     message: '',
     severity: 'error',
   });
+  const [chatName, setChatName] = useState('');
+  const [chatDescription, setChatDescription] = useState('');
+  const [userName, setUserName] = useState('');
 
   const { chatId } = useParams();
   const location = useLocation();
@@ -168,7 +172,6 @@ const ChatView = () => {
                     isComplete: true
                   };
                 default:
-                  console.log('Unknown role:', parsedContent.role);
                   return null;
               }
             } catch (e) {
@@ -247,7 +250,6 @@ const ChatView = () => {
       });
     } else if (data.type === 'historical_user_message' || data.type === 'user_message') {
       if (data.type === 'historical_user_message' || !data.isEdited) {
-        console.log('Adding user message:', data);
         setMessages((prevMessages) => {
           const lastMessage = prevMessages[prevMessages.length - 1];
           if (lastMessage && lastMessage.type === 'user' && lastMessage.id.startsWith('temp_')) {
@@ -273,7 +275,6 @@ const ChatView = () => {
       let messageContent = data.payload;
 
       if (messageContent.includes('Currently using')) {
-        console.log("Skipping 'Currently using' system message");
         return;
       }
 
@@ -298,12 +299,17 @@ const ChatView = () => {
       ]);
     } else if (data.type === 'session_id') {
       if (data.tools) {
-        setCurrentlyUsing(data.tools);
+        setTools(prev => prev.map(tool => ({
+          ...tool,
+          isSelected: data.tools.some(t => t.id === tool.id)
+        })));
       }
       if (data.datasources) {
-        setCurrentlyUsing(prev => [...prev, ...data.datasources]);
+        setDatabases(prev => prev.map(db => ({
+          ...db,
+          isSelected: data.datasources.some(d => d.id === db.id)
+        })));
       }
-      console.log('Session ID received:', data.payload);
     }
   }, []);
 
@@ -400,24 +406,29 @@ const ChatView = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const cachedEntitlements = localStorage.getItem('userEntitlements');
+        const cachedUserData = localStorage.getItem('userData');
         let userEntitlements;
 
-        if (cachedEntitlements) {
-          const parsedData = JSON.parse(cachedEntitlements);
-          userEntitlements = parsedData.data;
+        if (cachedUserData) {
+          const parsedData = JSON.parse(cachedUserData);
+          userEntitlements = parsedData.entitlements;
+          setUserName(parsedData.name);
         } else {
-          const response = await pubClient.get('/me');
-          userEntitlements = response.data.attributes.entitlements;
+          const response = await pubClient.get('/common/me');
+          const userData = response.data.attributes;
+          userEntitlements = userData.entitlements;
+          setUserName(userData.name);
           localStorage.setItem(
-            'userEntitlements',
-            JSON.stringify({ data: userEntitlements, timestamp: Date.now() })
+            'userData',
+            JSON.stringify(userData)
           );
         }
 
         const currentChat = userEntitlements.chats.find((chat) => chat.id === chatId);
         if (currentChat) {
           setShowTools(currentChat.attributes.tool_support);
+          setChatName(currentChat.attributes.name);
+          setChatDescription(currentChat.attributes.description);
         }
 
         const [databasesResponse, toolsResponse] = await Promise.all([
@@ -431,6 +442,7 @@ const ChatView = () => {
           type: 'database',
           description: db.attributes.short_description,
           icon: db.attributes.icon,
+          isSelected: false
         }));
 
         const newTools = toolsResponse.data.map((tool) => ({
@@ -439,6 +451,7 @@ const ChatView = () => {
           type: 'tool',
           description: tool.attributes.description,
           toolType: tool.attributes.tool_type,
+          isSelected: false
         }));
 
         setDatabases(newDatabases);
@@ -582,13 +595,14 @@ const ChatView = () => {
       }
 
       if (response.status === 200 || response.status === 204) {
-        setCurrentlyUsing((prevItems) =>
-          prevItems.filter((i) => i.uniqueId !== item.uniqueId)
-        );
         if (item.type === 'database') {
-          setDatabases((prevDatabases) => [...prevDatabases, item]);
+          setDatabases(prev => prev.map(db => 
+            db.id === item.id ? { ...db, isSelected: false } : db
+          ));
         } else if (item.type === 'tool') {
-          setTools((prevTools) => [...prevTools, item]);
+          setTools(prev => prev.map(tool => 
+            tool.id === item.id ? { ...tool, isSelected: false } : tool
+          ));
         }
       }
     } catch (error) {
@@ -612,14 +626,14 @@ const ChatView = () => {
       }
 
       if (response.status === 200 || response.status === 201) {
-        const uniqueId = `${item.type}-${item.id}`;
-        setCurrentlyUsing((prevItems) => [...prevItems, { ...item, uniqueId }]);
         if (item.type === 'database') {
-          setDatabases((prevDatabases) =>
-            prevDatabases.filter((db) => db.id !== item.id)
-          );
+          setDatabases(prev => prev.map(db => 
+            db.id === item.id ? { ...db, isSelected: true } : db
+          ));
         } else if (item.type === 'tool') {
-          setTools((prevTools) => prevTools.filter((tool) => tool.id !== item.id));
+          setTools(prev => prev.map(tool => 
+            tool.id === item.id ? { ...tool, isSelected: true } : tool
+          ));
         }
       }
     } catch (error) {
@@ -684,23 +698,18 @@ const ChatView = () => {
   }
 
   return (
-    <Box
-      sx={{
-        height: '85vh',
-        display: 'flex',
-        flexDirection: 'column',
-        '& .inline-code': {
-          display: 'inline-block',
-          padding: '2px 4px',
-          color: '#232629',
-          backgroundColor: 'rgb(240, 240, 240)',
-          borderRadius: '3px',
-          fontFamily: 'monospace',
-          fontSize: '0.9em',
-        },
-      }}
+    <>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">{chatName}</Typography>
+      </TitleBox>
+      <Box
+        sx={{
+          height: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
     >
-      <Grid container sx={{ flexGrow: 1, overflow: 'hidden' }}>
+      <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
         <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <Paper
             elevation={0}
@@ -710,78 +719,117 @@ const ChatView = () => {
               flexDirection: 'column',
               overflow: 'hidden',
               height: '100%',
+              maxWidth: '70%',
+              width: '70%',
+              alignSelf: 'center',
             }}
           >
-            <Box
-              ref={messageContainerRef}
-              sx={{
-                flexGrow: 1,
-                overflowY: 'auto',
+            {messages.length === 0 ? (
+              <Box sx={{
+                width: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                scrollBehavior: 'smooth',
-                '&::-webkit-scrollbar': {
-                  width: '0.4em',
-                },
-                '&::-webkit-scrollbar-track': {
-                  boxShadow: 'inset 0 0 6px rgba(0,0,0,0.00)',
-                },
-                '&::-webkit-scrollbar-thumb': {
-                  backgroundColor: 'rgba(0,0,0,.1)',
-                  outline: '1px solid slategrey',
-                },
-              }}
-            >
-              {messages.length > 1 && (
-                <Box sx={{ p: 1, textAlign: 'right' }}>
-                  <Typography
-                    variant="caption"
-                    component="div"
-                    onClick={() => {
-                      const newValue = !showSystemMessages;
-                      setShowSystemMessages(newValue);
-                      localStorage.setItem('showSystemMessages', JSON.stringify(newValue));
-                    }}
-                    sx={{
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      color: showSystemMessages ? 'primary.main' : 'text.secondary',
-                      '&:hover': {
-                        color: 'primary.main',
-                      },
-                    }}
-                  >
-                    {showSystemMessages ? 'Hide' : 'Show'} System and Context Messages
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 1,
+              }}>
+                <Box sx={{ 
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  justifyContent: 'start',
+                  textAlign: 'start',
+                  px: 6,
+                }}
+                >
+                  <Typography variant="headingXLarge" mb={2}>
+                    Welcome to {chatName} chat
                   </Typography>
+                  <Typography variant="headingXLargSub" mb={3}>
+                    How can I help you today?
+                  </Typography>
+                  {chatDescription && (
+                    <Typography variant="bodyLargeDefault" color="text.defaultSubdued" mb={4} maxWidth="600px">
+                      {chatDescription}
+                    </Typography>
+                  )}
                 </Box>
-              )}
-              {messages.map((message, index) => {
+                <Box sx={{ width: '100%' }}>
+                  <ChatInput
+                    inputMessage={inputMessage}
+                    setInputMessage={setInputMessage}
+                    handleSendMessage={handleSendMessage}
+                    isConnected={isConnected}
+                    uploadedFiles={uploadedFiles}
+                    setUploadedFiles={setUploadedFiles}
+                    onDrop={(files) => onDrop(files, sessionId)}
+                    isUploading={isUploading}
+                    renderUploadIndicator={renderUploadIndicator}
+                  />
+                </Box>
+              </Box>
+            ) : (
+              <>
+                <Box
+                  ref={messageContainerRef}
+                  sx={{
+                    flexGrow: 1,
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    scrollBehavior: 'smooth',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: 'transparent transparent',
+                    
+                    '&::-webkit-scrollbar': {
+                      width: '0.25rem',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      backgroundColor: 'transparent', 
+                      borderRadius: '4px',
+                    },
+                    
+                    '&.scrolling::-webkit-scrollbar-thumb, &:hover::-webkit-scrollbar-thumb': {
+                      backgroundColor: (theme) => theme.palette.border.neutralDefaultSubdued,
+                    },
+                    '&.scrolling, &:hover': {
+                      scrollbarColor: (theme) => `${theme.palette.border.neutralDefaultSubdued} transparent`,
+                    },
+                  }}
+                >
+                {messages.length > 1 && (
+                  <Box sx={{ px: 6, mt:2, textAlign: 'right' }}>
+                    <Typography
+                      variant="caption"
+                      component="div"
+                      onClick={() => {
+                        const newValue = !showSystemMessages;
+                        setShowSystemMessages(newValue);
+                        localStorage.setItem('showSystemMessages', JSON.stringify(newValue));
+                      }}
+                      sx={{
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        color: showSystemMessages ? 'primary.main' : 'text.secondary',
+                        '&:hover': {
+                          color: 'primary.main',
+                        },
+                      }}
+                    >
+                      {showSystemMessages ? 'Hide' : 'Show'} System and Context Messages
+                    </Typography>
+                  </Box>
+                )}
+                {messages.map((message, index) => {
                 if (!showSystemMessages && message.type === 'system') {
                   return null;
                 }
+
                 return (
-                  <Box
-                    key={message.id || index}
-                    sx={{
-                      width: '100%',
-                      p: 2,
-                      borderTop: index > 0 ? '1px solid #e0e0e0' : 'none',
-                      borderBottom:
-                        index === messages.length - 1 ? '1px solid #e0e0e0' : 'none',
-                      opacity: message.isComplete === false ? 0.9 : 1,
-                    }}
-                  >
-                    {message.type !== 'system' && (
-                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                        {message.type === 'user'
-                          ? 'You:'
-                          : message.type === 'ai'
-                            ? 'Assistant:'
-                            : 'Tool:'}
-                      </Typography>
-                    )}
                     <MessageContent
+                      key={message.id || index}
                       content={message.content}
                       messageIndex={index}
                       expandedGroups={expandedGroups}
@@ -791,6 +839,7 @@ const ChatView = () => {
                       sessionId={sessionId}
                       showSystemMessages={showSystemMessages}
                       chatId={chatId}
+                      userName={userName}
                       onEditSuccess={(editedText, messageId) => {
                         setMessages(prevMessages => {
                           const messageIndex = prevMessages.findIndex(msg => msg.id === messageId);
@@ -811,38 +860,38 @@ const ChatView = () => {
                         });
                       }}
                     />
-                  </Box>
-                );
-              })}
-            </Box>
+                  );
+                })}
+              </Box>
 
-            {!autoScroll && (
-              <IconButton
-                onClick={scrollToBottom}
-                sx={{
-                  position: 'absolute',
-                  bottom: 70,
-                  right: 20,
-                  backgroundColor: 'background.paper',
-                  '&:hover': { backgroundColor: 'action.hover' },
-                }}
-              >
-                <KeyboardArrowDownIcon />
-              </IconButton>
+                {!autoScroll && (
+                  <IconButton
+                    onClick={scrollToBottom}
+                    sx={{
+                      position: 'absolute',
+                      bottom: 70,
+                      right: 20,
+                      backgroundColor: 'background.paper',
+                      '&:hover': { backgroundColor: 'action.hover' },
+                    }}
+                  >
+                    <KeyboardArrowDownIcon />
+                  </IconButton>
+                )}
+                <ChatInput
+                  inputMessage={inputMessage}
+                  setInputMessage={setInputMessage}
+                  handleSendMessage={handleSendMessage}
+                  isConnected={isConnected}
+                  uploadedFiles={uploadedFiles}
+                  setUploadedFiles={setUploadedFiles}
+                  onDrop={(files) => onDrop(files, sessionId)}
+                  isUploading={isUploading}
+                  renderUploadIndicator={renderUploadIndicator}
+                />
+              </>
             )}
           </Paper>
-
-          <ChatInput
-            inputMessage={inputMessage}
-            setInputMessage={setInputMessage}
-            handleSendMessage={handleSendMessage}
-            isConnected={isConnected}
-            uploadedFiles={uploadedFiles}
-            setUploadedFiles={setUploadedFiles}
-            onDrop={(files) => onDrop(files, sessionId)}
-            isUploading={isUploading}
-            renderUploadIndicator={renderUploadIndicator}
-          />
         </Grid>
 
         <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }}>
@@ -853,6 +902,7 @@ const ChatView = () => {
             showTools={showTools}
             removeFromCurrentlyUsing={(item) => removeFromCurrentlyUsing(item, sessionId)}
             addToCurrentlyUsing={(item) => addToCurrentlyUsing(item, sessionId)}
+            messages={messages}
           />
         </Grid>
       </Grid>
@@ -871,7 +921,8 @@ const ChatView = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+      </Box>
+    </>
   );
 };
 

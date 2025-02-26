@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import FloatingSection from '../FloatingSection';
 
 const ChatSidebar = ({
@@ -8,7 +8,8 @@ const ChatSidebar = ({
 	tools,
 	showTools,
 	removeFromCurrentlyUsing,
-	addToCurrentlyUsing
+	addToCurrentlyUsing,
+	messages
 }) => {
 	return (
 		<Box
@@ -16,23 +17,20 @@ const ChatSidebar = ({
 				display: 'flex',
 				flexDirection: 'column',
 				height: '100%',
-				gap: 1,
-				p: 1,
+				gap: 2,
+				p: 3,
 				overflowY: 'auto',
+				borderLeft: (theme) => `1px solid ${theme.palette.border.neutralDefaultSubdued}`,
 			}}
 		>
-			<FloatingSection
-				key="currentlyUsing"
-				title="Currently Using..."
-				items={currentlyUsing}
-				onRemove={removeFromCurrentlyUsing}
-				emptyText="Click + on tools and databases to use them in the chat"
-			/>
+			<Typography variant="bodyLargeMedium">Enhance AI's responses by adding extra context using available data sources and tools.</Typography>
 			<FloatingSection
 				key="databases"
-				title="Databases"
+				title="Data sources"
 				items={databases}
 				onAdd={addToCurrentlyUsing}
+				onRemove={removeFromCurrentlyUsing}
+				messages={messages}
 			/>
 			{showTools && (
 				<FloatingSection
@@ -40,6 +38,8 @@ const ChatSidebar = ({
 					title="Tools"
 					items={tools}
 					onAdd={addToCurrentlyUsing}
+					onRemove={removeFromCurrentlyUsing}
+					messages={messages}
 				/>
 			)}
 		</Box>
