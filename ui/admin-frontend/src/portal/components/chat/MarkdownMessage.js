@@ -13,7 +13,7 @@ const MarkdownMessage = ({ content }) => {
 		backgroundColor: 'rgb(240, 240, 240)',
 		borderRadius: '3px',
 		fontFamily: 'monospace',
-		fontSize: '0.9em',
+		fontSize: '1rem',
 	};
 
 	const Pre = ({ children }) => (
@@ -26,7 +26,7 @@ const MarkdownMessage = ({ content }) => {
 	return (
 		<ReactMarkdown
 			components={{
-				p: ({ node, ...props }) => <Typography component="div" {...props} />,
+				p: ({ node, ...props }) => <Typography sx={{ fontSize: '1rem' }} component="div" {...props} />,
 				a: ({ node, ...props }) => (
 					<a target="_blank" rel="noopener noreferrer" {...props} />
 				),

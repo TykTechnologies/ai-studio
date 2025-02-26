@@ -569,21 +569,19 @@ const MessageContent = ({
 				sx={{
 					width: '100%',
 					position: 'relative',
-					px: 6,
-					py: 5,
+					py: 3,
 					display: 'flex',
 					gap: 2,
 					...(messageType === 'user' && {
-						maxWidth: '70%',
+						maxWidth: '85%',
 						alignSelf: 'end',
 						justifyContent: 'end'
 					})
 				}}
 			>
-				<MessageAvatar messageType={messageType} userName={userName} />
 				<Box
 					sx={{
-						maxWidth: '70%',
+						maxWidth: '85%',
 						width: 'fit-content',
 						...(messageType === 'user' && {
 							bgcolor: 'background.surfaceNeutralDisabled',
@@ -656,8 +654,7 @@ const MessageContent = ({
 			sx={{
 				width: '100%',
 				position: 'relative',
-				px: 6,
-				py: 5,
+				py: 3,
 				display: 'flex',
 				alignItems: 'flex-start',
 				gap: 2,
@@ -668,7 +665,6 @@ const MessageContent = ({
 				})
 			}}
 		>
-			<MessageAvatar messageType={messageType} userName={userName} />
 			<Box
 				sx={{
 					width: 'fit-content',
