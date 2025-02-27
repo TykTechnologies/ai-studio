@@ -50,6 +50,12 @@ const MarkdownMessage = ({ content }) => {
 							language={language}
 							PreTag="div"
 							showLineNumbers={!inline && language !== 'text'} // Show line numbers except for plain text
+							customStyle={{
+								maxWidth: '100%',
+								overflowX: 'auto',
+								wordBreak: 'break-word',
+								whiteSpace: 'pre-wrap'
+							}}
 							{...props}
 						>
 							{String(children).replace(/\n$/, '')}
