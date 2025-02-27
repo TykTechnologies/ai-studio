@@ -215,6 +215,9 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 }
 
 func (a *API) setupRoutes() {
+	// Add global panic recovery middleware
+	a.router.Use(gin.Recovery())
+	
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
 	} else {
