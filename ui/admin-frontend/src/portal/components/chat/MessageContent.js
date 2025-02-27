@@ -582,6 +582,9 @@ const MessageContent = ({
 				<Box
 					sx={{
 						width: 'fit-content',
+						maxWidth: '100%', // Ensure it doesn't exceed parent width
+						overflowWrap: 'break-word', // Break long words
+						wordWrap: 'break-word', // For older browsers
 						...(messageType === 'user' && {
 							bgcolor: 'background.surfaceNeutralDisabled',
 							border: '1px solid',
@@ -665,27 +668,30 @@ const MessageContent = ({
 				})
 			}}
 		>
-			<Box
-				sx={{
-					width: 'fit-content',
-					...(messageType === 'user' && {
-						bgcolor: 'background.surfaceNeutralDisabled',
-						border: '1px solid',
-						borderColor: 'border.neutralDefault',
-						borderRadius: '8px',
-						padding: '12px',
-					}),
-					...(messageType === 'ai' && {
-						borderBottom: '1px solid',
-						borderColor: 'border.neutralDefault',
-						pb: 2
-					  }),
-					'&:hover .edit-button': {
-						opacity: 1,
-						visibility: 'visible'
-					}
-				}}
-			>
+<Box
+			sx={{
+				width: 'fit-content',
+				maxWidth: '100%', // Ensure it doesn't exceed parent width
+				overflowWrap: 'break-word', // Break long words
+				wordWrap: 'break-word', // For older browsers
+				...(messageType === 'user' && {
+					bgcolor: 'background.surfaceNeutralDisabled',
+					border: '1px solid',
+					borderColor: 'border.neutralDefault',
+					borderRadius: '8px',
+					padding: '12px',
+				}),
+				...(messageType === 'ai' && {
+					borderBottom: '1px solid',
+					borderColor: 'border.neutralDefault',
+					pb: 2
+				  }),
+				'&:hover .edit-button': {
+					opacity: 1,
+					visibility: 'visible'
+				}
+			}}
+		>
 				<MarkdownMessage content={content} />
 				{isUserMessage && (
 					<IconButton
