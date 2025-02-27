@@ -193,6 +193,12 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 
 	// Start keep-alive goroutine
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from panic in keep-alive goroutine: %v", r)
+			}
+		}()
+		
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -213,10 +219,20 @@ func sendSSEMessage(w http.ResponseWriter, event, data string) {
 	// Encode newlines in data to ensure proper SSE format
 	encodedData := strings.ReplaceAll(data, "\n", "\\n")
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, encodedData)
-	w.(http.Flusher).Flush()
+	
+	// Add a safe flush with error handling
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func handleSSEOutgoingMessages(w http.ResponseWriter, cs *chat_session.ChatSession, done <-chan bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic in SSE message handler: %v", r)
+		}
+	}()
+	
 	var currentMessage strings.Builder
 	var isStreaming bool
 	for {
