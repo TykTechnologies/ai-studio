@@ -4,6 +4,7 @@ import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import { useDropzone } from 'react-dropzone';
+import AgenticModeStatus from './AgenticModeStatus';
 
 const ChatInput = ({
 	inputMessage,
@@ -14,7 +15,9 @@ const ChatInput = ({
 	setUploadedFiles,
 	onDrop,
 	isUploading,
-	renderUploadIndicator
+	renderUploadIndicator,
+	isAgenticMode,
+	toggleAgenticMode
 }) => {
 	const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
 		onDrop,
@@ -44,7 +47,7 @@ const ChatInput = ({
 			{...getRootProps()}
 		>
 			<input {...getInputProps()} />
-			<Box sx={{ 
+			<Box sx={{
 				position: 'relative',
 				'&:before': {
 					content: '""',
@@ -93,6 +96,10 @@ const ChatInput = ({
 									/>
 								)}
 								{renderUploadIndicator()}
+								<AgenticModeStatus
+									isEnabled={isAgenticMode}
+									toggleAgenticMode={toggleAgenticMode}
+								/>
 								<IconButton onClick={open} size="small">
 									<AttachFileIcon />
 								</IconButton>
