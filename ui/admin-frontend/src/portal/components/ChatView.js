@@ -708,54 +708,169 @@ const ChatView = () => {
           display: 'flex',
           flexDirection: 'column',
         }}
-    >
-      <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
-        <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <Paper
-            elevation={0}
-            sx={{
-              flexGrow: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              height: '100%',
-              maxWidth: '70%',
-              width: '70%',
-              alignSelf: 'center',
-            }}
-          >
-            {messages.length === 0 ? (
-              <Box sx={{
-                width: '100%',
+      >
+        <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
+          <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* Messages container */}
+            <Box
+              sx={{
+                flexGrow: 1,
+                overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flex: 1,
+                width: '100%',
+              }}
+              ref={messageContainerRef}
+            >
+              <Box sx={{
+                maxWidth: '740px',
+                width: '100%',
+                mx: 'auto', // Center with auto margins
+                display: 'flex',
+                flexDirection: 'column',
+                flexGrow: 1,
               }}>
-                <Box sx={{ 
+                {messages.length === 0 ? (
+                  <Box sx={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: 1,
+                  }}>
+                    <Box sx={{ 
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      justifyContent: 'start',
+                      textAlign: 'start',
+                    }}>
+                      <Typography variant="headingXLarge" mb={2}>
+                        Welcome to {chatName} chat
+                      </Typography>
+                      <Typography variant="headingXLargSub" mb={3}>
+                        How can I help you today?
+                      </Typography>
+                      {chatDescription && (
+                        <Typography variant="bodyLargeDefault" color="text.defaultSubdued" mb={4} maxWidth="600px">
+                          {chatDescription}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ width: '100%', mt: 2 }}>
+                      <ChatInput
+                        inputMessage={inputMessage}
+                        setInputMessage={setInputMessage}
+                        handleSendMessage={handleSendMessage}
+                        isConnected={isConnected}
+                        uploadedFiles={uploadedFiles}
+                        setUploadedFiles={setUploadedFiles}
+                        onDrop={(files) => onDrop(files, sessionId)}
+                        isUploading={isUploading}
+                        renderUploadIndicator={renderUploadIndicator}
+                      />
+                    </Box>
+                  </Box>
+                ) : (
+                  <>
+                    {messages.length > 1 && (
+                      <Box sx={{ mt:2, textAlign: 'right' }}>
+                        <Typography
+                          variant="caption"
+                          component="div"
+                          onClick={() => {
+                            const newValue = !showSystemMessages;
+                            setShowSystemMessages(newValue);
+                            localStorage.setItem('showSystemMessages', JSON.stringify(newValue));
+                          }}
+                          sx={{
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            color: showSystemMessages ? 'primary.main' : 'text.secondary',
+                            '&:hover': {
+                              color: 'primary.main',
+                            },
+                          }}
+                        >
+                          {showSystemMessages ? 'Hide' : 'Show'} System and Context Messages
+                        </Typography>
+                      </Box>
+                    )}
+                    {messages.map((message, index) => {
+                      if (!showSystemMessages && message.type === 'system') {
+                        return null;
+                      }
+
+                      return (
+                        <MessageContent
+                          key={message.id || index}
+                          content={message.content}
+                          messageIndex={index}
+                          expandedGroups={expandedGroups}
+                          toggleGroup={toggleGroup}
+                          messageId={message.id}
+                          messageType={message.type}
+                          sessionId={sessionId}
+                          showSystemMessages={showSystemMessages}
+                          chatId={chatId}
+                          userName={userName}
+                          onEditSuccess={(editedText, messageId) => {
+                            setMessages(prevMessages => {
+                              const messageIndex = prevMessages.findIndex(msg => msg.id === messageId);
+                              if (messageIndex === -1) return prevMessages;
+
+                              const updatedMessages = prevMessages.slice(0, messageIndex + 1);
+                              updatedMessages[messageIndex] = {
+                                ...updatedMessages[messageIndex],
+                                content: editedText
+                              };
+                              return updatedMessages;
+                            });
+
+                            sendMessage({
+                              type: 'user_message',
+                              payload: editedText,
+                              file_refs: []
+                            });
+                          }}
+                        />
+                      );
+                    })}
+
+                    {!autoScroll && (
+                      <IconButton
+                        onClick={scrollToBottom}
+                        sx={{
+                          position: 'absolute',
+                          bottom: 70,
+                          right: 20,
+                          backgroundColor: 'background.paper',
+                          '&:hover': { backgroundColor: 'action.hover' },
+                        }}
+                      >
+                        <KeyboardArrowDownIcon />
+                      </IconButton>
+                    )}
+                  </>
+                )}
+              </Box>
+            </Box>
+            
+            {/* Fixed input at bottom - only show when there are messages */}
+            {messages.length > 0 && (
+              <Box sx={{ 
+                width: '100%',
+                padding: 2,
+                paddingTop: 0,
+              }}>
+                <Box sx={{
+                  maxWidth: '740px',
                   width: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  justifyContent: 'start',
-                  textAlign: 'start',
-                  px: 6,
-                }}
-                >
-                  <Typography variant="headingXLarge" mb={2}>
-                    Welcome to {chatName} chat
-                  </Typography>
-                  <Typography variant="headingXLargSub" mb={3}>
-                    How can I help you today?
-                  </Typography>
-                  {chatDescription && (
-                    <Typography variant="bodyLargeDefault" color="text.defaultSubdued" mb={4} maxWidth="600px">
-                      {chatDescription}
-                    </Typography>
-                  )}
-                </Box>
-                <Box sx={{ width: '100%' }}>
+                  mx: 'auto', // Center with auto margins
+                }}>
                   <ChatInput
                     inputMessage={inputMessage}
                     setInputMessage={setInputMessage}
@@ -769,158 +884,36 @@ const ChatView = () => {
                   />
                 </Box>
               </Box>
-            ) : (
-              <>
-                <Box
-                  ref={messageContainerRef}
-                  sx={{
-                    flexGrow: 1,
-                    overflowY: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    scrollBehavior: 'smooth',
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: 'transparent transparent',
-                    
-                    '&::-webkit-scrollbar': {
-                      width: '0.25rem',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      backgroundColor: 'transparent', 
-                      borderRadius: '4px',
-                    },
-                    
-                    '&.scrolling::-webkit-scrollbar-thumb, &:hover::-webkit-scrollbar-thumb': {
-                      backgroundColor: (theme) => theme.palette.border.neutralDefaultSubdued,
-                    },
-                    '&.scrolling, &:hover': {
-                      scrollbarColor: (theme) => `${theme.palette.border.neutralDefaultSubdued} transparent`,
-                    },
-                  }}
-                >
-                {messages.length > 1 && (
-                  <Box sx={{ px: 6, mt:2, textAlign: 'right' }}>
-                    <Typography
-                      variant="caption"
-                      component="div"
-                      onClick={() => {
-                        const newValue = !showSystemMessages;
-                        setShowSystemMessages(newValue);
-                        localStorage.setItem('showSystemMessages', JSON.stringify(newValue));
-                      }}
-                      sx={{
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        color: showSystemMessages ? 'primary.main' : 'text.secondary',
-                        '&:hover': {
-                          color: 'primary.main',
-                        },
-                      }}
-                    >
-                      {showSystemMessages ? 'Hide' : 'Show'} System and Context Messages
-                    </Typography>
-                  </Box>
-                )}
-                {messages.map((message, index) => {
-                if (!showSystemMessages && message.type === 'system') {
-                  return null;
-                }
-
-                return (
-                    <MessageContent
-                      key={message.id || index}
-                      content={message.content}
-                      messageIndex={index}
-                      expandedGroups={expandedGroups}
-                      toggleGroup={toggleGroup}
-                      messageId={message.id}
-                      messageType={message.type}
-                      sessionId={sessionId}
-                      showSystemMessages={showSystemMessages}
-                      chatId={chatId}
-                      userName={userName}
-                      onEditSuccess={(editedText, messageId) => {
-                        setMessages(prevMessages => {
-                          const messageIndex = prevMessages.findIndex(msg => msg.id === messageId);
-                          if (messageIndex === -1) return prevMessages;
-
-                          const updatedMessages = prevMessages.slice(0, messageIndex + 1);
-                          updatedMessages[messageIndex] = {
-                            ...updatedMessages[messageIndex],
-                            content: editedText
-                          };
-                          return updatedMessages;
-                        });
-
-                        sendMessage({
-                          type: 'user_message',
-                          payload: editedText,
-                          file_refs: []
-                        });
-                      }}
-                    />
-                  );
-                })}
-              </Box>
-
-                {!autoScroll && (
-                  <IconButton
-                    onClick={scrollToBottom}
-                    sx={{
-                      position: 'absolute',
-                      bottom: 70,
-                      right: 20,
-                      backgroundColor: 'background.paper',
-                      '&:hover': { backgroundColor: 'action.hover' },
-                    }}
-                  >
-                    <KeyboardArrowDownIcon />
-                  </IconButton>
-                )}
-                <ChatInput
-                  inputMessage={inputMessage}
-                  setInputMessage={setInputMessage}
-                  handleSendMessage={handleSendMessage}
-                  isConnected={isConnected}
-                  uploadedFiles={uploadedFiles}
-                  setUploadedFiles={setUploadedFiles}
-                  onDrop={(files) => onDrop(files, sessionId)}
-                  isUploading={isUploading}
-                  renderUploadIndicator={renderUploadIndicator}
-                />
-              </>
             )}
-          </Paper>
+          </Grid>
+
+          <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }}>
+            <ChatSidebar
+              currentlyUsing={currentlyUsing}
+              databases={databases}
+              tools={tools}
+              showTools={showTools}
+              removeFromCurrentlyUsing={(item) => removeFromCurrentlyUsing(item, sessionId)}
+              addToCurrentlyUsing={(item) => addToCurrentlyUsing(item, sessionId)}
+              messages={messages}
+            />
+          </Grid>
         </Grid>
 
-        <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }}>
-          <ChatSidebar
-            currentlyUsing={currentlyUsing}
-            databases={databases}
-            tools={tools}
-            showTools={showTools}
-            removeFromCurrentlyUsing={(item) => removeFromCurrentlyUsing(item, sessionId)}
-            addToCurrentlyUsing={(item) => addToCurrentlyUsing(item, sessionId)}
-            messages={messages}
-          />
-        </Grid>
-      </Grid>
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
           onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+          <Alert
+            onClose={handleCloseSnackbar}
+            severity={snackbar.severity}
+            sx={{ width: '100%' }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </Box>
     </>
   );

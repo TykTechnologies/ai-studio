@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -248,6 +249,9 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 		if err == nil {
 			// Found 100% threshold notification for this period
 			return appUsage, 100, fmt.Errorf("LLM monthly budget exceeded")
+		} else if err != gorm.ErrRecordNotFound {
+			// Log unexpected errors but don't block the request
+			log.Printf("Error checking for budget notifications: %v", err)
 		}
 	}
 
