@@ -13,7 +13,7 @@ const MarkdownMessage = ({ content }) => {
 		backgroundColor: 'rgb(240, 240, 240)',
 		borderRadius: '3px',
 		fontFamily: 'monospace',
-		fontSize: '0.9em',
+		fontSize: '1rem',
 	};
 
 	const Pre = ({ children }) => (
@@ -26,7 +26,7 @@ const MarkdownMessage = ({ content }) => {
 	return (
 		<ReactMarkdown
 			components={{
-				p: ({ node, ...props }) => <Typography component="div" {...props} />,
+				p: ({ node, ...props }) => <Typography sx={{ fontSize: '1rem' }} component="div" {...props} />,
 				a: ({ node, ...props }) => (
 					<a target="_blank" rel="noopener noreferrer" {...props} />
 				),
@@ -50,6 +50,12 @@ const MarkdownMessage = ({ content }) => {
 							language={language}
 							PreTag="div"
 							showLineNumbers={!inline && language !== 'text'} // Show line numbers except for plain text
+							customStyle={{
+								maxWidth: '100%',
+								overflowX: 'auto',
+								wordBreak: 'break-word',
+								whiteSpace: 'pre-wrap'
+							}}
 							{...props}
 						>
 							{String(children).replace(/\n$/, '')}
