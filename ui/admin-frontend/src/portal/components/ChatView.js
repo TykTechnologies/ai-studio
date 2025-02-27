@@ -20,6 +20,7 @@ import { useChatSSE } from './chat/hooks/useChatSSE';
 import MessageContent from './chat/MessageContent';
 import ChatInput from './chat/ChatInput';
 import ChatSidebar from './chat/ChatSidebar';
+import simulateAgenticMode from './chat/AgenticModeMockData';
 
 /**
  * Modified ChatView to use Server-Sent Events (SSE) instead of WebSocket.
@@ -50,6 +51,7 @@ const ChatView = () => {
   const [chatName, setChatName] = useState('');
   const [chatDescription, setChatDescription] = useState('');
   const [userName, setUserName] = useState('');
+  const [isAgenticMode, setIsAgenticMode] = useState(false);
 
   const { chatId } = useParams();
   const location = useLocation();
@@ -537,17 +539,17 @@ const ChatView = () => {
     [sessionId]
   );
 
+  const toggleAgenticMode = () => {
+    setIsAgenticMode(prev => !prev);
+  };
+
   const handleSendMessage = (e) => {
     e.preventDefault();
     if ((inputMessage.trim() || uploadedFiles.length > 0) && isConnected) {
       const messageContent = inputMessage.trim();
       const tempId = `temp_${Math.floor(Math.random() * 1_000_000_000)}`;
-      const message = {
-        type: 'user_message',
-        payload: messageContent,
-        file_refs: uploadedFiles.map((file) => file.name),
-      };
-      sendMessage(message);
+
+      // Add user message to the chat
       setMessages((prevMessages) => [
         ...prevMessages,
         {
@@ -557,6 +559,19 @@ const ChatView = () => {
           isComplete: true,
         },
       ]);
+
+      if (isAgenticMode) {
+        // Use the complex agentic mode simulation
+        simulateAgenticMode(setMessages);
+      } else {
+        // Normal mode - send to server
+        const message = {
+          type: 'user_message',
+          payload: messageContent,
+          file_refs: uploadedFiles.map((file) => file.name),
+        };
+        sendMessage(message);
+      }
 
       setInputMessage('');
       setUploadedFiles([]);
@@ -596,11 +611,11 @@ const ChatView = () => {
 
       if (response.status === 200 || response.status === 204) {
         if (item.type === 'database') {
-          setDatabases(prev => prev.map(db => 
+          setDatabases(prev => prev.map(db =>
             db.id === item.id ? { ...db, isSelected: false } : db
           ));
         } else if (item.type === 'tool') {
-          setTools(prev => prev.map(tool => 
+          setTools(prev => prev.map(tool =>
             tool.id === item.id ? { ...tool, isSelected: false } : tool
           ));
         }
@@ -627,11 +642,11 @@ const ChatView = () => {
 
       if (response.status === 200 || response.status === 201) {
         if (item.type === 'database') {
-          setDatabases(prev => prev.map(db => 
+          setDatabases(prev => prev.map(db =>
             db.id === item.id ? { ...db, isSelected: true } : db
           ));
         } else if (item.type === 'tool') {
-          setTools(prev => prev.map(tool => 
+          setTools(prev => prev.map(tool =>
             tool.id === item.id ? { ...tool, isSelected: true } : tool
           ));
         }
@@ -739,7 +754,7 @@ const ChatView = () => {
                     justifyContent: 'center',
                     flex: 1,
                   }}>
-                    <Box sx={{ 
+                    <Box sx={{
                       width: '100%',
                       display: 'flex',
                       flexDirection: 'column',
@@ -770,13 +785,15 @@ const ChatView = () => {
                         onDrop={(files) => onDrop(files, sessionId)}
                         isUploading={isUploading}
                         renderUploadIndicator={renderUploadIndicator}
+                        isAgenticMode={isAgenticMode}
+                        toggleAgenticMode={toggleAgenticMode}
                       />
                     </Box>
                   </Box>
                 ) : (
                   <>
                     {messages.length > 1 && (
-                      <Box sx={{ mt:2, textAlign: 'right' }}>
+                      <Box sx={{ mt: 2, textAlign: 'right' }}>
                         <Typography
                           variant="caption"
                           component="div"
@@ -858,10 +875,10 @@ const ChatView = () => {
                 )}
               </Box>
             </Box>
-            
+
             {/* Fixed input at bottom - only show when there are messages */}
             {messages.length > 0 && (
-              <Box sx={{ 
+              <Box sx={{
                 width: '100%',
                 padding: 2,
                 paddingTop: 0,
@@ -881,6 +898,8 @@ const ChatView = () => {
                     onDrop={(files) => onDrop(files, sessionId)}
                     isUploading={isUploading}
                     renderUploadIndicator={renderUploadIndicator}
+                    isAgenticMode={isAgenticMode}
+                    toggleAgenticMode={toggleAgenticMode}
                   />
                 </Box>
               </Box>
