@@ -200,7 +200,7 @@ func GetCostAnalysis(db *gorm.DB, startDate, endDate time.Time, interactionType 
 			}
 		}
 		chartDataMap[result.Currency].Labels = append(chartDataMap[result.Currency].Labels, result.Date)
-		chartDataMap[result.Currency].Data = append(chartDataMap[result.Currency].Data, result.Cost)
+		chartDataMap[result.Currency].Data = append(chartDataMap[result.Currency].Data, result.Cost/10000)
 	}
 
 	return chartDataMap, nil
@@ -418,7 +418,7 @@ func GetTokenUsageForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) 
 		tokenData.Labels[i] = result.Date
 		tokenData.Data[i] = float64(result.Tokens)
 		costData.Labels[i] = result.Date
-		costData.Data[i] = result.Cost
+		costData.Data[i] = result.Cost/10000
 	}
 
 	return &ChartData{
@@ -492,7 +492,7 @@ func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) 
 	for i, result := range results {
 		response.Labels[i] = result.Date
 		response.TokenUsage[i] = float64(result.Tokens)
-		response.Cost[i] = result.Cost
+		response.Cost[i] = result.Cost/10000
 	}
 
 	return &ChartData{
@@ -540,7 +540,7 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 	for i, result := range results {
 		response.Labels[i] = result.Date
 		response.TokenUsage[i] = float64(result.Tokens)
-		response.Cost[i] = result.Cost
+		response.Cost[i] = result.Cost/10000
 	}
 
 	return &ChartData{
@@ -634,7 +634,7 @@ func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, a
 	for i, result := range results {
 		chartData.Labels[i] = result.Date
 		chartData.Datasets[0].Data[i] = float64(result.Tokens)
-		chartData.Datasets[1].Data[i] = result.Cost
+		chartData.Datasets[1].Data[i] = result.Cost/10000
 		chartData.Datasets[2].Data[i] = float64(result.PromptTokens)
 		chartData.Datasets[3].Data[i] = float64(result.ResponseTokens)
 		chartData.Datasets[4].Data[i] = float64(result.CacheWriteTokens)
@@ -682,7 +682,7 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 	for i, result := range results {
 		chartData.Labels[i] = result.Date
 		chartData.Datasets[0].Data[i] = float64(result.Tokens)
-		chartData.Datasets[1].Data[i] = result.Cost
+		chartData.Datasets[1].Data[i] = result.Cost/10000
 	}
 
 	return chartData, nil
@@ -738,6 +738,15 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 	err := query.Group("COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown'), model_prices.id, llm_chat_records.vendor").
 		Order("total_cost DESC").
 		Find(&results).Error
+
+	// Apply division by 10000 after fetching results
+	for i := range results {
+		results[i].TotalCost = results[i].TotalCost / 10000
+		results[i].PromptCost = results[i].PromptCost / 10000
+		results[i].ResponseCost = results[i].ResponseCost / 10000
+		results[i].CacheWriteCost = results[i].CacheWriteCost / 10000
+		results[i].CacheReadCost = results[i].CacheReadCost / 10000
+	}
 
 	if err != nil {
 		return nil, err
@@ -844,6 +853,8 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	println("LEN:", len(llmStats))
 
 	for _, stat := range llmStats {
+		stat.MonthlyUsage = stat.MonthlyUsage / 10000
+		stat.TotalCost = stat.TotalCost / 10000
 		result = append(result, stat.toBudgetUsage("LLM"))
 	}
 
@@ -872,6 +883,8 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	}
 
 	for _, stat := range appStats {
+		stat.MonthlyUsage = stat.MonthlyUsage / 10000
+		stat.TotalCost = stat.TotalCost / 10000
 		result = append(result, stat.toBudgetUsage("App"))
 	}
 
