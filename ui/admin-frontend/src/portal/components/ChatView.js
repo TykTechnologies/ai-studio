@@ -20,7 +20,6 @@ import { useChatSSE } from './chat/hooks/useChatSSE';
 import MessageContent from './chat/MessageContent';
 import ChatInput from './chat/ChatInput';
 import ChatSidebar from './chat/ChatSidebar';
-import simulateAgenticMode from './chat/AgenticModeMockData';
 
 /**
  * Modified ChatView to use Server-Sent Events (SSE) instead of WebSocket.
@@ -51,7 +50,6 @@ const ChatView = () => {
   const [chatName, setChatName] = useState('');
   const [chatDescription, setChatDescription] = useState('');
   const [userName, setUserName] = useState('');
-  const [isAgenticMode, setIsAgenticMode] = useState(false);
 
   const { chatId } = useParams();
   const location = useLocation();
@@ -382,28 +380,9 @@ const ChatView = () => {
 
   const debouncedScrollToBottom = useCallback(debounce(scrollToBottom, 100), [scrollToBottom]);
 
-  useEffect(() => {
-    const messageContainer = messageContainerRef.current;
-    if (!messageContainer) return;
-
-    const resizeObserver = new ResizeObserver(() => {
-      try {
-        if (autoScroll) {
-          if (messageContainer.scrollHeight - messageContainer.clientHeight - messageContainer.scrollTop > 1) {
-            debouncedScrollToBottom();
-          }
-        }
-      } catch (error) {
-        console.error("ResizeObserver error:", error);
-      }
-    });
-    resizeObserver.observe(messageContainer);
-
-    return () => {
-      resizeObserver.unobserve(messageContainer);
-      debouncedScrollToBottom.cancel();
-    };
-  }, [autoScroll, debouncedScrollToBottom]);
+  // We've removed the ResizeObserver implementation and global error handler
+  // to simplify the auto-scrolling approach. Now we rely on the useEffect above
+  // that watches for message changes and scrolls to the bottom when needed.
 
   useEffect(() => {
     const fetchData = async () => {
@@ -431,6 +410,14 @@ const ChatView = () => {
           setShowTools(currentChat.attributes.tool_support);
           setChatName(currentChat.attributes.name);
           setChatDescription(currentChat.attributes.description);
+
+          // Store prompt templates from the chat response
+          if (currentChat.attributes.prompt_templates) {
+            localStorage.setItem(
+              `chat_${chatId}_templates`,
+              JSON.stringify(currentChat.attributes.prompt_templates)
+            );
+          }
         }
 
         const [databasesResponse, toolsResponse] = await Promise.all([
@@ -539,10 +526,6 @@ const ChatView = () => {
     [sessionId]
   );
 
-  const toggleAgenticMode = () => {
-    setIsAgenticMode(prev => !prev);
-  };
-
   const handleSendMessage = (e) => {
     e.preventDefault();
     if ((inputMessage.trim() || uploadedFiles.length > 0) && isConnected) {
@@ -560,18 +543,12 @@ const ChatView = () => {
         },
       ]);
 
-      if (isAgenticMode) {
-        // Use the complex agentic mode simulation
-        simulateAgenticMode(setMessages);
-      } else {
-        // Normal mode - send to server
-        const message = {
-          type: 'user_message',
-          payload: messageContent,
-          file_refs: uploadedFiles.map((file) => file.name),
-        };
-        sendMessage(message);
-      }
+      const message = {
+        type: 'user_message',
+        payload: messageContent,
+        file_refs: uploadedFiles.map((file) => file.name),
+      };
+      sendMessage(message);
 
       setInputMessage('');
       setUploadedFiles([]);
@@ -785,8 +762,8 @@ const ChatView = () => {
                         onDrop={(files) => onDrop(files, sessionId)}
                         isUploading={isUploading}
                         renderUploadIndicator={renderUploadIndicator}
-                        isAgenticMode={isAgenticMode}
-                        toggleAgenticMode={toggleAgenticMode}
+                        chatId={chatId}
+                        messages={messages}
                       />
                     </Box>
                   </Box>
@@ -898,8 +875,8 @@ const ChatView = () => {
                     onDrop={(files) => onDrop(files, sessionId)}
                     isUploading={isUploading}
                     renderUploadIndicator={renderUploadIndicator}
-                    isAgenticMode={isAgenticMode}
-                    toggleAgenticMode={toggleAgenticMode}
+                    chatId={chatId}
+                    messages={messages}
                   />
                 </Box>
               </Box>

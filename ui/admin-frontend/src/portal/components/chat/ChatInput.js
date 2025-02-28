@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Box, TextField, IconButton, Chip } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import { useDropzone } from 'react-dropzone';
-import AgenticModeStatus from './AgenticModeStatus';
+import PromptTemplateSelector from './PromptTemplateSelector';
 
 const ChatInput = ({
 	inputMessage,
@@ -16,9 +16,12 @@ const ChatInput = ({
 	onDrop,
 	isUploading,
 	renderUploadIndicator,
-	isAgenticMode,
-	toggleAgenticMode
+	chatId,
+	messages = []
 }) => {
+	// Use a ref for the input element to prevent unnecessary re-renders
+	const inputRef = useRef(null);
+
 	const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
 		onDrop,
 		noClick: true,
@@ -62,6 +65,7 @@ const ChatInput = ({
 				}
 			}}>
 				<TextField
+					ref={inputRef}
 					fullWidth
 					variant="outlined"
 					placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
@@ -82,11 +86,14 @@ const ChatInput = ({
 							'& .MuiOutlinedInput-notchedOutline': {
 								border: 'none'
 							},
+						},
+						'& textarea': {
+							minHeight: '60px',
 						}
 					}}
 					InputProps={{
 						endAdornment: (
-							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
 								{uploadedFiles.length > 0 && (
 									<Chip
 										icon={<AttachFileIcon />}
@@ -96,10 +103,6 @@ const ChatInput = ({
 									/>
 								)}
 								{renderUploadIndicator()}
-								<AgenticModeStatus
-									isEnabled={isAgenticMode}
-									toggleAgenticMode={toggleAgenticMode}
-								/>
 								<IconButton onClick={open} size="small">
 									<AttachFileIcon />
 								</IconButton>
@@ -115,6 +118,14 @@ const ChatInput = ({
 					}}
 				/>
 			</Box>
+			{messages.length === 0 && (
+				<PromptTemplateSelector
+					chatId={chatId}
+					onSelectTemplate={(template) => setInputMessage(template)}
+					disabled={!isConnected}
+					sx={{ mt: 2 }}
+				/>
+			)}
 			{isDragActive && (
 				<Box
 					sx={{

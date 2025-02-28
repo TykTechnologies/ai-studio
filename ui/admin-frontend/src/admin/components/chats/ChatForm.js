@@ -37,6 +37,7 @@ import {
   StyledAccordion,
   SecondaryLinkButton
 } from "../../styles/sharedStyles";
+import PromptTemplateManager from "./PromptTemplateManager";
 
 const ChatForm = () => {
   const [chat, setChat] = useState({
@@ -674,6 +675,37 @@ const ChatForm = () => {
               )}
             </AccordionDetails>
           </StyledAccordion>
+
+          {id && (
+            <StyledAccordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>Prompt Templates</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Create prompt templates that users can select when starting a new chat.
+                  These templates provide guidance and structure for different types of conversations.
+                </Typography>
+                
+                <PromptTemplateManager 
+                  chatId={id} 
+                  onError={(message) => 
+                    setSnackbar({
+                      open: true,
+                      message,
+                      severity: "error",
+                    })
+                  } 
+                />
+                
+                {!id && (
+                  <Typography variant="caption" color="text.secondary">
+                    You can add prompt templates after creating the chat room.
+                  </Typography>
+                )}
+              </AccordionDetails>
+            </StyledAccordion>
+          )}
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">

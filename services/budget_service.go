@@ -136,7 +136,7 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 	var totalSpent float64
 	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
-		Select("COALESCE(SUM(cost), 0)")
+		Select("COALESCE(CAST(SUM(COALESCE(cost, 0)) AS DECIMAL(20,10)), 0)")
 	fmt.Printf("App spending query: %v\n", query.Statement.SQL.String())
 	err := query.Scan(&totalSpent).Error
 
@@ -181,7 +181,7 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	var totalSpent float64
 	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
-		Select("COALESCE(SUM(cost), 0)")
+		Select("COALESCE(CAST(SUM(COALESCE(cost, 0)) AS DECIMAL(20,10)), 0)")
 	fmt.Printf("LLM spending query: %v\n", query.Statement.SQL.String())
 	err := query.Scan(&totalSpent).Error
 
