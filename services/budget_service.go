@@ -57,7 +57,9 @@ func (s *BudgetService) calculateBudgetPeriodStart(referenceDate *time.Time, now
 		}
 	}
 
-	return time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+	result := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+	log.Printf("Calculated budget period start: %v for reference %v, now %v", result, referenceDate, now)
+	return result
 }
 
 // NewBudgetService returns our unified budget service
@@ -128,21 +130,62 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 	if data, exists := s.usageCache[key]; exists {
 		if time.Since(data.cachedAt) < s.cacheDuration {
 			s.cacheMutex.RUnlock()
+			log.Printf("App %d spending from cache: %.2f", appID, data.spent)
 			return data.spent, nil
 		}
 	}
 	s.cacheMutex.RUnlock()
+	log.Printf("App %d spending cache miss, querying database", appID)
+
+	// Adjust end time to include full day
+	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
 
 	var totalSpent float64
+	var recordCount int64
+
+	// First get count of records for debugging
+	countQuery := s.db.Model(&models.LLMChatRecord{}).
+		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end)
+	if err := countQuery.Count(&recordCount).Error; err != nil {
+		log.Printf("Error counting records for app %d: %v", appID, err)
+	}
+
+	// Get raw sum before division
+	var rawSum float64
+	rawQuery := s.db.Model(&models.LLMChatRecord{}).
+		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
+		Select("COALESCE(CAST(SUM(cost) AS DECIMAL(20,4)), 0)")
+	if err := rawQuery.Scan(&rawSum).Error; err != nil {
+		log.Printf("Error getting raw sum for app %d: %v", appID, err)
+	}
+
+	// Get raw sum and perform division in application layer
 	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
-		Select("COALESCE(CAST(SUM(COALESCE(cost, 0)) AS DECIMAL(20,10)), 0)")
-	fmt.Printf("App spending query: %v\n", query.Statement.SQL.String())
-	err := query.Scan(&totalSpent).Error
+		Select("COALESCE(SUM(cost), 0)")
 
+	// Enhanced logging for query debugging
+	sql := query.Statement.SQL.String()
+	vars := query.Statement.Vars
+	log.Printf("App %d spending calculation:", appID)
+	log.Printf("- Records found: %d", recordCount)
+	log.Printf("- Raw sum before division: %.4f", rawSum)
+	log.Printf("- Query: %s with values: %v", sql, vars)
+
+	var rawTotal float64
+	err := query.Scan(&rawTotal).Error
 	if err != nil {
+		log.Printf("Error calculating app %d spending: %v", appID, err)
 		return 0, err
 	}
+
+	totalSpent = rawTotal / 10000.0
+
+	if err != nil {
+		log.Printf("Error calculating app %d spending: %v", appID, err)
+		return 0, err
+	}
+	log.Printf("App %d spending calculated: %.2f (start: %v, end: %v)", appID, totalSpent, start, end)
 
 	s.cacheMutex.Lock()
 	s.usageCache[key] = usageData{
@@ -173,21 +216,62 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	if data, exists := s.usageCache[key]; exists {
 		if time.Since(data.cachedAt) < s.cacheDuration {
 			s.cacheMutex.RUnlock()
+			log.Printf("LLM %d spending from cache: %.2f", llmID, data.spent)
 			return data.spent, nil
 		}
 	}
 	s.cacheMutex.RUnlock()
+	log.Printf("LLM %d spending cache miss, querying database", llmID)
+
+	// Adjust end time to include full day
+	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
 
 	var totalSpent float64
+	var recordCount int64
+
+	// First get count of records for debugging
+	countQuery := s.db.Model(&models.LLMChatRecord{}).
+		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end)
+	if err := countQuery.Count(&recordCount).Error; err != nil {
+		log.Printf("Error counting records for LLM %d: %v", llmID, err)
+	}
+
+	// Get raw sum before division
+	var rawSum float64
+	rawQuery := s.db.Model(&models.LLMChatRecord{}).
+		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
+		Select("COALESCE(CAST(SUM(cost) AS DECIMAL(20,4)), 0)")
+	if err := rawQuery.Scan(&rawSum).Error; err != nil {
+		log.Printf("Error getting raw sum for LLM %d: %v", llmID, err)
+	}
+
+	// Get raw sum and perform division in application layer
 	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
-		Select("COALESCE(CAST(SUM(COALESCE(cost, 0)) AS DECIMAL(20,10)), 0)")
-	fmt.Printf("LLM spending query: %v\n", query.Statement.SQL.String())
-	err := query.Scan(&totalSpent).Error
+		Select("COALESCE(SUM(cost), 0)")
 
+	// Enhanced logging for query debugging
+	sql := query.Statement.SQL.String()
+	vars := query.Statement.Vars
+	log.Printf("LLM %d spending calculation:", llmID)
+	log.Printf("- Records found: %d", recordCount)
+	log.Printf("- Raw sum before division: %.4f", rawSum)
+	log.Printf("- Query: %s with values: %v", sql, vars)
+
+	var rawTotal float64
+	err := query.Scan(&rawTotal).Error
 	if err != nil {
+		log.Printf("Error calculating LLM %d spending: %v", llmID, err)
 		return 0, err
 	}
+
+	totalSpent = rawTotal / 10000.0
+
+	if err != nil {
+		log.Printf("Error calculating LLM %d spending: %v", llmID, err)
+		return 0, err
+	}
+	log.Printf("LLM %d spending calculated: %.2f (start: %v, end: %v)", llmID, totalSpent, start, end)
 
 	s.cacheMutex.Lock()
 	s.usageCache[key] = usageData{
@@ -217,6 +301,8 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			100, // 100% threshold
 		)
 
+		log.Printf("Checking app notification: %s", baseNotificationID)
+
 		// Check for either owner or admin notifications
 		var notification models.Notification
 		err := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
@@ -240,6 +326,8 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			int(*llm.MonthlyBudget),
 			100, // 100% threshold
 		)
+
+		log.Printf("Checking LLM notification: %s", baseNotificationID)
 
 		// Check for admin notifications
 		var notification models.Notification
@@ -269,6 +357,8 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 		spent, err := s.GetMonthlySpending(app.ID, start, end)
 		if err == nil {
 			appUsage := (spent / *app.MonthlyBudget) * 100
+			log.Printf("App %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
+				app.ID, appUsage, spent, *app.MonthlyBudget)
 			budget := *app.MonthlyBudget
 			usage := &models.BudgetUsage{
 				EntityID:        app.ID,
@@ -305,19 +395,15 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 				fmt.Sprintf("%s_admin_%%", baseNotificationID100),
 				start).First(&existing100).Error
 
-			// Check each threshold independently
-			if appUsage >= 80 {
-				if err80 != nil { // No 80% notification exists
-					if err := s.NotifyBudgetUsage(usage, 80); err != nil {
-						fmt.Printf("Failed to send app budget notification: %v\n", err)
-					}
+			// Simplified threshold checks for immediate notification
+			if appUsage >= 80 && err80 != nil {
+				if err := s.NotifyBudgetUsage(usage, 80); err != nil {
+					log.Printf("Failed to send app budget notification (80%%): %v", err)
 				}
 			}
-			if appUsage >= 100 {
-				if err100 != nil { // No 100% notification exists
-					if err := s.NotifyBudgetUsage(usage, 100); err != nil {
-						fmt.Printf("Failed to send app budget notification: %v\n", err)
-					}
+			if appUsage >= 100 && err100 != nil {
+				if err := s.NotifyBudgetUsage(usage, 100); err != nil {
+					log.Printf("Failed to send app budget notification (100%%): %v", err)
 				}
 			}
 		}
@@ -329,6 +415,8 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 		spent, err := s.GetLLMMonthlySpending(llm.ID, start, end)
 		if err == nil {
 			llmUsage := (spent / *llm.MonthlyBudget) * 100
+			log.Printf("LLM %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
+				llm.ID, llmUsage, spent, *llm.MonthlyBudget)
 			budget := *llm.MonthlyBudget
 			usage := &models.BudgetUsage{
 				EntityID:        llm.ID,
@@ -363,19 +451,15 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 				fmt.Sprintf("%s_admin_%%", baseNotificationID100),
 				start).First(&existing100).Error
 
-			// Check each threshold independently
-			if llmUsage >= 80 {
-				if err80 != nil { // No 80% notification exists
-					if err := s.NotifyBudgetUsage(usage, 80); err != nil {
-						fmt.Printf("Failed to send llm budget notification: %v\n", err)
-					}
+			// Simplified threshold checks for immediate notification
+			if llmUsage >= 80 && err80 != nil {
+				if err := s.NotifyBudgetUsage(usage, 80); err != nil {
+					log.Printf("Failed to send LLM budget notification (80%%): %v", err)
 				}
 			}
-			if llmUsage >= 100 {
-				if err100 != nil { // No 100% notification exists
-					if err := s.NotifyBudgetUsage(usage, 100); err != nil {
-						fmt.Printf("Failed to send llm budget notification: %v\n", err)
-					}
+			if llmUsage >= 100 && err100 != nil {
+				if err := s.NotifyBudgetUsage(usage, 100); err != nil {
+					log.Printf("Failed to send LLM budget notification (100%%): %v", err)
 				}
 			}
 		}

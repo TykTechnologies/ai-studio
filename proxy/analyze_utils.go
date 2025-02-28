@@ -118,10 +118,10 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 		ToolCalls:              tools,
 		AppID:                  app.ID,
 		UserID:                 app.UserID,
-		Cost: (cpt * float64(rt)) +
+		Cost: ((cpt * float64(rt)) +
 			(cpit * float64(pt)) +
 			(cacheWritePT * float64(cacheWriteTokens)) +
-			(cacheReadPT * float64(cacheReadTokens)),
+			(cacheReadPT * float64(cacheReadTokens))) * 10000,
 		Currency:        currency, // Set the currency (defaults to USD if no price found)
 		InteractionType: models.ProxyInteraction,
 	}
