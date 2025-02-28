@@ -20,6 +20,20 @@ const createApiClient = () => {
     }
   );
 
+  // Override the post method to add logging
+  const originalPost = instance.post;
+  instance.post = async function(url, data, config) {
+    console.log(`API POST ${url}`, data);
+    try {
+      const response = await originalPost.call(this, url, data, config);
+      console.log(`API POST ${url} response:`, response);
+      return response;
+    } catch (error) {
+      console.error(`API POST ${url} error:`, error);
+      throw error;
+    }
+  };
+
   return instance;
 };
 

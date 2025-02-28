@@ -494,6 +494,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/chats/:id/extra-context", a.getChatExtraContext)
 	v1.PUT("/chats/:id/extra-context", a.setChatExtraContext)
 
+	// Prompt Template route
+	v1.PATCH("/chats/:id/prompt-templates", a.updateChatPromptTemplates)
+
 	// Tool routes
 	v1.POST("/tools", a.createTool)
 	v1.GET("/tools/:id", a.getTool)
