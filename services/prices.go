@@ -40,11 +40,13 @@ func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor stri
 	// Update all matching records with a single query
 	result := tx.Exec(`
 		UPDATE llm_chat_records 
-		SET cost = ((response_tokens * ?) + 
-			(prompt_tokens * ?) + 
-			(COALESCE(cache_write_prompt_tokens, 0) * ?) + 
-			(COALESCE(cache_read_prompt_tokens, 0) * ?)) * 10000,
-			currency = ?
+		SET cost = (
+			COALESCE(CAST(response_tokens AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0) + 
+			COALESCE(CAST(prompt_tokens AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0) + 
+			COALESCE(CAST(COALESCE(cache_write_prompt_tokens, 0) AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0) + 
+			COALESCE(CAST(COALESCE(cache_read_prompt_tokens, 0) AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0)
+		) * 10000,
+		currency = ?
 		WHERE name = ? AND vendor = ?`,
 		cpt, cpit, cacheWritePT, cacheReadPT, currency, modelName, vendor,
 	)
