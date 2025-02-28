@@ -41,10 +41,10 @@ func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor stri
 	result := tx.Exec(`
 		UPDATE llm_chat_records 
 		SET cost = (
-			COALESCE(CAST(response_tokens AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0) + 
-			COALESCE(CAST(prompt_tokens AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0) + 
-			COALESCE(CAST(COALESCE(cache_write_prompt_tokens, 0) AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0) + 
-			COALESCE(CAST(COALESCE(cache_read_prompt_tokens, 0) AS DECIMAL(20,10)) * CAST(? AS DECIMAL(20,10)), 0)
+			COALESCE(response_tokens::DECIMAL * ?::DECIMAL, 0) + 
+			COALESCE(prompt_tokens::DECIMAL * ?::DECIMAL, 0) + 
+			COALESCE(NULLIF(cache_write_prompt_tokens, 0)::DECIMAL * ?::DECIMAL, 0) + 
+			COALESCE(NULLIF(cache_read_prompt_tokens, 0)::DECIMAL * ?::DECIMAL, 0)
 		) * 10000,
 		currency = ?
 		WHERE name = ? AND vendor = ?`,
