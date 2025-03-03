@@ -58,6 +58,13 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages })
             items.map((item) => (
               <Box
                 key={`${title}-${item.uniqueId || item.id}`}
+                onClick={() => {
+                  if (item.isSelected) {
+                    onRemove(item);
+                  } else {
+                    onAdd(item);
+                  }
+                }}
                 sx={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -66,21 +73,24 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages })
                   mb: 1,
                   borderRadius: 1,
                   gap: 1,
+                  cursor: "pointer", 
                 }}
               >
                 <Checkbox
                   size="small"
                   checked={item.isSelected || false}
                   onChange={(e) => {
+                    e.stopPropagation();
                     if (e.target.checked) {
                       onAdd(item);
                     } else {
                       onRemove(item);
                     }
                   }}
+                  onClick={(e) => e.stopPropagation()}
                   sx={{ p: 0 }}
                 />
-                <Box sx={{ display: "flex", flexDirection: "column" }}>
+                <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
                   <Typography variant="bodyLargeMedium" sx={{ flexGrow: 1 }}>
                     {item.name}
                   </Typography>
