@@ -317,14 +317,19 @@ func TestBudgetCheck(t *testing.T) {
 		// Wait for analytics to complete and verify spending
 		waitForAnalytics(t, db, 2)
 		waitUntilIdle(t, db)
-		
+
 		// Clear cache and verify total spending is $50.00 (500000/10000)
 		// This comes from two previous requests at $25.00 each:
 		// Request 1: 250000 (stored value) = $25.00 after division
 		// Request 2: 250000 (stored value) = $25.00 after division
 		// Total: 500000 (stored value) = $50.00 after division
 		budgetService.ClearCache()
-		spent, err := budgetService.GetMonthlySpending(app.ID, startOfMonth, now)
+
+		// Use the current month for spending check (March 2025)
+		currentMonth := time.Date(2025, 3, 1, 0, 0, 0, 0, loc)
+		currentMonthEnd := time.Date(2025, 3, 31, 23, 59, 59, 0, loc)
+
+		spent, err := budgetService.GetMonthlySpending(app.ID, currentMonth, currentMonthEnd)
 		require.NoError(t, err)
 		assert.InDelta(t, 50.0, spent, 0.1, "Total spending should be $50.00 before budget check")
 
@@ -334,15 +339,18 @@ func TestBudgetCheck(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Verify 100% notification exists (spending reached budget limit)
-		monthOffset := int(startOfMonth.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		// Use the current month (March 2025) for notification pattern
+		currentMonthOffset := int(currentMonth.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		notificationPattern := fmt.Sprintf("budget_app_%d_%d_%d_%d_%%",
+			app.ID,
+			currentMonthOffset,
+			int(*app.MonthlyBudget),
+			100)
+
 		var notification models.Notification
 		err = db.Where("notification_id LIKE ? AND sent_at >= ?",
-			fmt.Sprintf("budget_app_%d_%d_%d_%d_%%",
-				app.ID,
-				monthOffset,
-				int(*app.MonthlyBudget),
-				100),
-			startOfMonth).First(&notification).Error
+			notificationPattern,
+			currentMonth).First(&notification).Error
 		require.NoError(t, err, "Failed to find budget notification")
 
 		// Third request should fail (would exceed $50.00 budget)
