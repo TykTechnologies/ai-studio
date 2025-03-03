@@ -37,7 +37,7 @@ func TestBudgetCheck(t *testing.T) {
 
 	// Use fixed time for deterministic testing in local timezone
 	loc := time.Now().Location()
-	now := time.Date(2025, 2, 16, 10, 42, 13, 0, loc)
+	now := time.Date(2025, 2, 28, 19, 47, 34, 0, loc)
 	startOfMonth := time.Date(2025, 2, 1, 0, 0, 0, 0, loc)
 
 	// Create test LLM with budget
@@ -156,8 +156,8 @@ func TestBudgetCheck(t *testing.T) {
 		Model:     gorm.Model{ID: 1},
 		ModelName: "test-model",
 		Vendor:    string(models.MOCK_VENDOR),
-		CPT:       0.002, // Cost per response token
-		CPIT:      0.001, // Cost per prompt token
+		CPT:       0.002, // Cost per response token (20 USD per million tokens)
+		CPIT:      0.001, // Cost per prompt token (10 USD per million tokens)
 		Currency:  "USD",
 	}
 	err = db.Create(modelPrice).Error
@@ -250,7 +250,10 @@ func TestBudgetCheck(t *testing.T) {
 	}
 
 	t.Run("Non-streaming request", func(t *testing.T) {
-		// First request should cost 25.0 (5000 * 0.001 + 10000 * 0.002)
+		// Cost calculation for first request:
+		// - Prompt tokens: 5000 * 0.001 = $5.00 (5000 tokens at $0.001 per token)
+		// - Response tokens: 10000 * 0.002 = $20.00 (10000 tokens at $0.002 per token)
+		// - Total cost: $25.00 (stored as 250000 = 25.00 * 10000)
 		resp, err := http.DefaultClient.Do(makeRequest(false))
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -260,26 +263,30 @@ func TestBudgetCheck(t *testing.T) {
 		waitUntilIdle(t, db)
 		record := waitForRecordWithCost(t, db)
 		require.NotNil(t, record)
+		assert.InDelta(t, 250000.0, record.Cost, 0.1, "Record cost should be 250000 (25.00 * 10000)")
 
 		// Wait for spending to be updated
-		waitForSpendingUpdate(t, budgetService, app.ID, llm.ID, startOfMonth, record.TimeStamp.Add(time.Second), record.Cost)
+		waitForSpendingUpdate(t, budgetService, app.ID, llm.ID, startOfMonth, record.TimeStamp.Add(time.Second), 25.0)
 
 		// Verify spending
 		waitUntilIdle(t, db)
 		spent, err := budgetService.GetMonthlySpending(app.ID, startOfMonth, now)
 		require.NoError(t, err)
-		assert.InDelta(t, 25.0, spent, 0.1, "App spending should be 25.0")
+		assert.InDelta(t, 25.0, spent, 0.1, "App spending should be $25.00")
 
 		llmSpent, err := budgetService.GetLLMMonthlySpending(llm.ID, startOfMonth, now)
 		require.NoError(t, err)
-		assert.InDelta(t, 25.0, llmSpent, 0.1, "LLM spending should be 25.0")
+		assert.InDelta(t, 25.0, llmSpent, 0.1, "LLM spending should be $25.00")
 	})
 
 	// Clear cache before next test
 	budgetService.ClearCache()
 
 	t.Run("Streaming request", func(t *testing.T) {
-		// Second request should also cost 25.0
+		// Second request should also cost $25.00:
+		// - Prompt tokens: 5000 * 0.001 = $5.00
+		// - Response tokens: 10000 * 0.002 = $20.00
+		// - Total cost: $25.00 (stored as 250000)
 		resp, err := http.DefaultClient.Do(makeRequest(true))
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -289,44 +296,59 @@ func TestBudgetCheck(t *testing.T) {
 		waitUntilIdle(t, db)
 		record := waitForRecordWithCost(t, db)
 		require.NotNil(t, record)
+		assert.InDelta(t, 250000.0, record.Cost, 0.1, "Record cost should be 250000 (25.00 * 10000)")
 
 		// Clear cache and wait for spending to be updated
 		budgetService.ClearCache()
+		// After two requests ($25.00 each), total should be $50.00
 		waitForSpendingUpdate(t, budgetService, app.ID, llm.ID, startOfMonth, record.TimeStamp.Add(time.Second), 50.0)
+
+		// Verify both app and LLM spending
+		spent, err := budgetService.GetMonthlySpending(app.ID, startOfMonth, record.TimeStamp.Add(time.Second))
+		require.NoError(t, err)
+		assert.InDelta(t, 50.0, spent, 0.1, "App spending should be $50.00 after two requests")
+
+		llmSpent, err := budgetService.GetLLMMonthlySpending(llm.ID, startOfMonth, record.TimeStamp.Add(time.Second))
+		require.NoError(t, err)
+		assert.InDelta(t, 50.0, llmSpent, 0.1, "LLM spending should be $50.00 after two requests")
 	})
 
 	t.Run("Budget exceeded", func(t *testing.T) {
-		// Wait for analytics and budget analysis to complete
+		// Wait for analytics to complete and verify spending
 		waitForAnalytics(t, db, 2)
 		waitUntilIdle(t, db)
-		time.Sleep(1 * time.Second) // Give more time for budget analysis and notifications
-
-		// Clear cache to ensure fresh data
+		
+		// Clear cache and verify total spending is $50.00 (500000/10000)
+		// This comes from two previous requests at $25.00 each:
+		// Request 1: 250000 (stored value) = $25.00 after division
+		// Request 2: 250000 (stored value) = $25.00 after division
+		// Total: 500000 (stored value) = $50.00 after division
 		budgetService.ClearCache()
+		spent, err := budgetService.GetMonthlySpending(app.ID, startOfMonth, now)
+		require.NoError(t, err)
+		assert.InDelta(t, 50.0, spent, 0.1, "Total spending should be $50.00 before budget check")
 
-		// Analyze budget usage again to ensure notifications are created
+		// Force budget analysis and wait for notifications
+		// App budget is $50.00, and we've spent $50.00, so this should trigger 100% notification
 		budgetService.AnalyzeBudgetUsage(app, llm)
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 
-		// Wait for notifications to be created
+		// Verify 100% notification exists (spending reached budget limit)
+		monthOffset := int(startOfMonth.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
 		var notification models.Notification
-		for i := 0; i < 10; i++ {
-			monthOffset := int(startOfMonth.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-			err := db.Where("notification_id LIKE ? AND sent_at >= ?",
-				fmt.Sprintf("budget_app_%d_%d_%d_%d_%%",
-					app.ID,
-					monthOffset,
-					int(*app.MonthlyBudget),
-					100),
-				startOfMonth).First(&notification).Error
-			if err == nil {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		err = db.Where("notification_id LIKE ? AND sent_at >= ?",
+			fmt.Sprintf("budget_app_%d_%d_%d_%d_%%",
+				app.ID,
+				monthOffset,
+				int(*app.MonthlyBudget),
+				100),
+			startOfMonth).First(&notification).Error
 		require.NoError(t, err, "Failed to find budget notification")
 
-		// Third request should fail (would exceed 50.0 budget)
+		// Third request should fail (would exceed $50.00 budget)
+		// Current spending: $50.00
+		// Budget limit: $50.00
+		// Next request would cost $25.00, bringing total to $75.00
 		resp, err := http.DefaultClient.Do(makeRequest(false))
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
@@ -413,6 +435,10 @@ func TestBudgetCheck(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create records for past period (Jan 15 - Feb 14)
+		// Cost calculation:
+		// - Prompt tokens: 5000 * 0.001 = $5.00 (5000 tokens at $0.001 per token)
+		// - Response tokens: 10000 * 0.002 = $20.00 (10000 tokens at $0.002 per token)
+		// - Total cost: $25.00 * 10000 = 250000 (stored value)
 		pastRecord1 := &models.LLMChatRecord{
 			LLMID:           llm.ID,
 			Vendor:          string(llm.Vendor),
@@ -422,7 +448,7 @@ func TestBudgetCheck(t *testing.T) {
 			TimeStamp:       time.Date(2025, 1, 20, 10, 0, 0, 0, loc),
 			AppID:           app.ID,
 			UserID:          app.UserID,
-			Cost:            25.0,
+			Cost:            25.00 * 10000, // Store as scaled integer (250000)
 			InteractionType: models.ProxyInteraction,
 		}
 		err = db.Create(pastRecord1).Error
@@ -437,7 +463,7 @@ func TestBudgetCheck(t *testing.T) {
 			TimeStamp:       time.Date(2025, 2, 1, 10, 0, 0, 0, loc),
 			AppID:           app.ID,
 			UserID:          app.UserID,
-			Cost:            25.0,
+			Cost:            25.00 * 10000, // Store as scaled integer (250000)
 			InteractionType: models.ProxyInteraction,
 		}
 		err = db.Create(pastRecord2).Error
@@ -465,10 +491,14 @@ func TestBudgetCheck(t *testing.T) {
 		waitForAnalytics(t, db, 2)
 		waitUntilIdle(t, db)
 
-		// Verify spending for past period
+		// Verify spending for past period (Jan 15 - Feb 14)
+		// Two records at $25.00 each = $50.00 total:
+		// Record 1: 250000 (stored value) = $25.00 after division
+		// Record 2: 250000 (stored value) = $25.00 after division
+		// Total: 500000 (stored value) = $50.00 after division
 		pastSpent, err := budgetService.GetMonthlySpending(app.ID, budgetStart, budgetStart.AddDate(0, 1, -1))
 		require.NoError(t, err)
-		assert.InDelta(t, 50.0, pastSpent, 0.1, "Past period spending should be 50.0")
+		assert.InDelta(t, 50.0, pastSpent, 0.1, "Past period spending should be $50.00 (500000/10000)")
 
 		// Set current time and budget start dates to Feb 15th (new period)
 		now = time.Date(2025, 2, 15, 23, 59, 59, 0, loc)
@@ -480,7 +510,11 @@ func TestBudgetCheck(t *testing.T) {
 		err = db.Save(llm).Error
 		require.NoError(t, err)
 
-		// First request in new period should succeed (this will create a record)
+		// First request in new period should succeed
+		// Cost calculation:
+		// - Prompt tokens: 5000 * 0.001 = $5.00
+		// - Response tokens: 10000 * 0.002 = $20.00
+		// - Total cost: $25.00 (stored as 250000)
 		resp, err := http.DefaultClient.Do(makeRequest(false))
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -490,11 +524,13 @@ func TestBudgetCheck(t *testing.T) {
 		waitUntilIdle(t, db)
 		record := waitForRecordWithCost(t, db)
 		require.NotNil(t, record)
+		assert.InDelta(t, 250000.0, record.Cost, 0.1, "Record cost should be 250000 (25.00 * 10000)")
 
 		// Verify spending for current period (Feb 15 - Mar 14)
+		// Only one request in this period costing $25.00
 		periodEnd := time.Date(2025, 3, 14, 23, 59, 59, 0, loc)
 		currentSpent, err := budgetService.GetMonthlySpending(app.ID, newPeriodStart, periodEnd)
 		require.NoError(t, err)
-		assert.InDelta(t, 25.0, currentSpent, 0.1, "Current period spending should be 25.0")
+		assert.InDelta(t, 25.0, currentSpent, 0.1, "Current period spending should be $25.00")
 	})
 }

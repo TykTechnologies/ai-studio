@@ -291,10 +291,10 @@ func TestCostCalculation(t *testing.T) {
 					UserID:          1,
 					AppID:           1,
 					InteractionType: models.ProxyInteraction,
-					Cost: price.CPT*float64(20) + // Response tokens
+					Cost: (price.CPT*float64(20) + // Response tokens
 						price.CPIT*float64(10) + // Prompt tokens
 						price.CacheWritePT*float64(5) + // Cache write tokens
-						price.CacheReadPT*float64(15), // Cache read tokens
+						price.CacheReadPT*float64(15)) * 10000, // Cache read tokens
 					CacheWritePromptTokens: 5,
 					CacheReadPromptTokens:  15,
 				}
@@ -312,7 +312,7 @@ func TestCostCalculation(t *testing.T) {
 				(0.001 * float64(10)) + // Prompt tokens: 0.01
 				(0.0005 * float64(5)) + // Cache write tokens: 0.0025
 				(0.0001 * float64(15)) // Cache read tokens: 0.0015
-			assert.InDelta(t, expectedCost, chatRecord.Cost, 0.0001)
+			assert.InDelta(t, expectedCost*10000, chatRecord.Cost, 0.0001)
 			assert.Equal(t, tt.interactionType, chatRecord.InteractionType)
 		})
 	}
@@ -443,7 +443,7 @@ func TestGetUsage(t *testing.T) {
 		{
 			TimeStamp:              startDate,
 			TotalTokens:            100,
-			Cost:                   10.0,
+			Cost:                   100000.0, // 10.0 * 10000
 			PromptTokens:           30,
 			ResponseTokens:         70,
 			CacheWritePromptTokens: 20,
@@ -452,7 +452,7 @@ func TestGetUsage(t *testing.T) {
 		{
 			TimeStamp:              startDate,
 			TotalTokens:            200,
-			Cost:                   20.0,
+			Cost:                   200000.0, // 20.0 * 10000
 			PromptTokens:           60,
 			ResponseTokens:         140,
 			CacheWritePromptTokens: 40,
@@ -479,7 +479,7 @@ func TestGetUsage(t *testing.T) {
 
 	// Verify cost
 	assert.Equal(t, "Cost", chartData.Datasets[1].Label)
-	assert.Equal(t, float64(30), chartData.Datasets[1].Data[0]) // 10 + 20
+	assert.Equal(t, float64(30), chartData.Datasets[1].Data[0]) // (100000 + 200000) / 10000
 
 	// Verify prompt tokens
 	assert.Equal(t, "Prompt Tokens", chartData.Datasets[2].Label)
@@ -507,7 +507,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 		{
 			Name:            "Model1",
 			Vendor:          "vendor1",
-			Cost:            10.0,
+			Cost:            100000.0, // 10.0 * 10000
 			TotalTokens:     1000,
 			Currency:        "USD",
 			TimeStamp:       now,
@@ -517,7 +517,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 		{
 			Name:            "Model2",
 			Vendor:          "vendor2",
-			Cost:            20.0,
+			Cost:            200000.0, // 20.0 * 10000
 			TotalTokens:     2000,
 			Currency:        "USD",
 			TimeStamp:       now,
@@ -527,7 +527,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 		{
 			Name:            "Model1",
 			Vendor:          "vendor1",
-			Cost:            15.0,
+			Cost:            150000.0, // 15.0 * 10000
 			TotalTokens:     1500,
 			Currency:        "USD",
 			TimeStamp:       now,
@@ -552,10 +552,10 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 	// Verify total costs
 	for _, cost := range costs {
 		if cost.Model == "Model1" {
-			assert.Equal(t, 25.0, cost.TotalCost)          // 10.0 + 15.0
+			assert.Equal(t, 25.0, cost.TotalCost)          // (100000.0 + 150000.0) / 10000
 			assert.Equal(t, int64(2500), cost.TotalTokens) // 1000 + 1500
 		} else if cost.Model == "Model2" {
-			assert.Equal(t, 20.0, cost.TotalCost)
+			assert.Equal(t, 20.0, cost.TotalCost)          // 200000.0 / 10000
 			assert.Equal(t, int64(2000), cost.TotalTokens)
 		}
 	}
@@ -568,6 +568,6 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 
 	// Verify filtered results
 	assert.Equal(t, "Model1", filteredCosts[0].Model)
-	assert.Equal(t, 25.0, filteredCosts[0].TotalCost)
+	assert.Equal(t, 25.0, filteredCosts[0].TotalCost)     // (100000.0 + 150000.0) / 10000
 	assert.Equal(t, int64(2500), filteredCosts[0].TotalTokens)
 }

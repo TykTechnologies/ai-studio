@@ -44,14 +44,14 @@ func TestGetCostAnalysis(t *testing.T) {
 	testData := []models.LLMChatRecord{
 		{
 			Vendor:          "openai",
-			Cost:            10.0,
+			Cost:            100000.0, // 10.0 * 10000
 			Currency:        "USD",
 			TimeStamp:       now,
 			InteractionType: models.ChatInteraction,
 		},
 		{
 			Vendor:          "openai",
-			Cost:            20.0,
+			Cost:            200000.0, // 20.0 * 10000
 			Currency:        "USD",
 			TimeStamp:       now,
 			InteractionType: models.ProxyInteraction,
@@ -149,7 +149,7 @@ func TestGetBudgetUsage(t *testing.T) {
 		{
 			AppID:     app.ID,
 			LLMID:     llm.ID,
-			Cost:      50.0,
+			Cost:      500000.0, // 50.0 * 10000
 			TimeStamp: startOfMonth.Add(24 * time.Hour),
 		},
 	}
@@ -214,14 +214,14 @@ func TestGetVendorUsage(t *testing.T) {
 			Vendor:      "anthropic",
 			LLMID:       llm1.ID,
 			TimeStamp:   now,
-			Cost:        10.0,
+			Cost:        100000.0, // 10.0 * 10000
 			TotalTokens: 100,
 		},
 		{
 			Vendor:      "anthropic",
 			LLMID:       llm2.ID,
 			TimeStamp:   now,
-			Cost:        20.0,
+			Cost:        200000.0, // 20.0 * 10000
 			TotalTokens: 200,
 		},
 	}

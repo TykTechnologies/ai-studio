@@ -1,32 +1,60 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"gorm.io/gorm"
 )
 
+type PromptTemplate struct {
+	ID     uint   `json:"id"`
+	Name   string `json:"name"`
+	Prompt string `json:"prompt"`
+}
+
 type Chat struct {
 	gorm.Model
-	ID                  uint         `gorm:"primaryKey" json:"id"`
-	Name                string       `json:"name"`
-	Description         string       `json:"description"`
-	Groups              []Group      `gorm:"many2many:chat_groups;"`
-	LLMSettingsID       uint         `json:"llm_settings_id"`
-	LLMSettings         *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
-	LLMID               uint         `json:"llm_id"`
-	LLM                 *LLM         `gorm:"foreignKey:LLMID" json:"llm"`
-	Filters             []*Filter    `gorm:"many2many:chat_filters;"`
-	RagResultsPerSource int          `json:"rag_results_per_source"`
-	SupportsTools       bool         `json:"supports_tools"`
-	SystemPrompt        string       `json:"system_prompt"`
-	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID;constraint:OnDelete:SET NULL" json:"default_data_source"`
-	DefaultDataSourceID *uint        `json:"default_data_source_id"`
-	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
-	DefaultTools        []*Tool      `gorm:"many2many:chat_tools;" json:"default_tools"`
+	ID                  uint              `gorm:"primaryKey" json:"id"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description"`
+	Groups              []Group           `gorm:"many2many:chat_groups;"`
+	LLMSettingsID       uint              `json:"llm_settings_id"`
+	LLMSettings         *LLMSettings      `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
+	LLMID               uint              `json:"llm_id"`
+	LLM                 *LLM              `gorm:"foreignKey:LLMID" json:"llm"`
+	Filters             []*Filter         `gorm:"many2many:chat_filters;"`
+	RagResultsPerSource int               `json:"rag_results_per_source"`
+	SupportsTools       bool              `json:"supports_tools"`
+	SystemPrompt        string            `json:"system_prompt"`
+	DefaultDataSource   *Datasource       `gorm:"foreignKey:DefaultDataSourceID;constraint:OnDelete:SET NULL" json:"default_data_source"`
+	DefaultDataSourceID *uint             `json:"default_data_source_id"`
+	ExtraContext        []FileStore       `gorm:"many2many:chat_filestores;" json:"extra_context"`
+	DefaultTools        []*Tool           `gorm:"many2many:chat_tools;" json:"default_tools"`
+	PromptTemplatesJSON string            `json:"-" gorm:"column:prompt_templates_json"`
 }
 
 type Chats []Chat
+
+// GetPromptTemplates deserializes the JSON templates
+func (c *Chat) GetPromptTemplates() ([]PromptTemplate, error) {
+	var templates []PromptTemplate
+	if c.PromptTemplatesJSON == "" {
+		return templates, nil
+	}
+	err := json.Unmarshal([]byte(c.PromptTemplatesJSON), &templates)
+	return templates, err
+}
+
+// SetPromptTemplates serializes templates to JSON
+func (c *Chat) SetPromptTemplates(templates []PromptTemplate) error {
+	jsonData, err := json.Marshal(templates)
+	if err != nil {
+		return err
+	}
+	c.PromptTemplatesJSON = string(jsonData)
+	return nil
+}
 
 // Create a new chat
 func (c *Chat) Create(db *gorm.DB) error {
@@ -83,7 +111,8 @@ func (c *Chat) Get(db *gorm.DB, id uint) error {
 		Preload("Filters").
 		Preload("DefaultTools").
 		Preload("ExtraContext").
-		Preload("DefaultDataSource").First(c, id).Error
+		Preload("DefaultDataSource").
+		First(c, id).Error
 
 	if err != nil {
 		return err
@@ -98,10 +127,11 @@ func (c *Chat) Update(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		// Update the chat's fields
 		if err := tx.Model(c).Updates(Chat{
-			Name:          c.Name,
-			Description:   c.Description,
-			LLMSettingsID: c.LLMSettingsID,
-			LLMID:         c.LLMID,
+			Name:               c.Name,
+			Description:        c.Description,
+			LLMSettingsID:      c.LLMSettingsID,
+			LLMID:              c.LLMID,
+			PromptTemplatesJSON: c.PromptTemplatesJSON,
 		}).Error; err != nil {
 			return err
 		}
@@ -194,4 +224,12 @@ func (cs *Chat) GetExtraContext(db *gorm.DB) ([]FileStore, error) {
 // SetFileStores replaces all existing FileStore associations with new ones
 func (cs *Chat) SetExtraContext(db *gorm.DB, fileStores []FileStore) error {
 	return db.Model(cs).Association("ExtraContext").Replace(&fileStores)
+}
+
+// UpdatePromptTemplates updates just the prompt templates for a chat
+func (c *Chat) UpdatePromptTemplates(db *gorm.DB, templates []PromptTemplate) error {
+	if err := c.SetPromptTemplates(templates); err != nil {
+		return err
+	}
+	return db.Model(c).Update("prompt_templates_json", c.PromptTemplatesJSON).Error
 }

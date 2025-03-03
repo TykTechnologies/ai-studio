@@ -237,7 +237,7 @@ const ModelPriceForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>
       </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -363,31 +363,6 @@ const ModelPriceForm = () => {
           </Grid>
 
           <Box mt={4}>
-            <Box mb={2}>
-              {id && (
-                <Typography
-                  component="span"
-                  sx={{
-                    color: 'text.secondary',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      textDecoration: 'underline'
-                    }
-                  }}
-                  onClick={() => {
-                    apiClient.post("/analytics/recalculate-prices").then(() => {
-                      setSnackbar({
-                        open: true,
-                        message: "Price recalculation started",
-                        severity: "success",
-                      });
-                    });
-                  }}
-                >
-                  Recalculate Prices
-                </Typography>
-              )}
-            </Box>
             <Box display="flex" gap={2}>
               <PrimaryButton variant="contained" type="submit">
                 {id ? "Update Model Price" : "Add Model Price"}

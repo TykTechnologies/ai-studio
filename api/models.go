@@ -433,19 +433,20 @@ type ChatResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name                string              `json:"name"`
-		Description         string              `json:"description"`
-		LLMSettingsID       string              `json:"llm_settings_id"`
-		LLMID               string              `json:"llm_id"`
-		Groups              []GroupResponse     `json:"groups"`
-		Filters             []FilterResponse    `json:"filters"`
-		RagN                int                 `json:"rag_n"`
-		ToolSupport         bool                `json:"tool_support"`
-		SystemPrompt        string              `json:"system_prompt"`
-		DefaultDataSourceID int                 `json:"default_data_source_id"`
-		DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
-		ExtraContext        []FileStoreResponse `json:"extra_context"`
-		DefaultTools        []ToolResponse      `json:"default_tools"`
+		Name                string                 `json:"name"`
+		Description         string                 `json:"description"`
+		LLMSettingsID       string                 `json:"llm_settings_id"`
+		LLMID               string                 `json:"llm_id"`
+		Groups              []GroupResponse        `json:"groups"`
+		Filters             []FilterResponse       `json:"filters"`
+		RagN                int                    `json:"rag_n"`
+		ToolSupport         bool                   `json:"tool_support"`
+		SystemPrompt        string                 `json:"system_prompt"`
+		DefaultDataSourceID int                    `json:"default_data_source_id"`
+		DefaultDataSource   DatasourceResponse     `json:"default_data_source"`
+		ExtraContext        []FileStoreResponse    `json:"extra_context"`
+		DefaultTools        []ToolResponse         `json:"default_tools"`
+		PromptTemplates     []PromptTemplateResponse `json:"prompt_templates"`
 	} `json:"attributes"`
 }
 
@@ -1006,4 +1007,29 @@ type DependencyInput struct {
 // @Description Dependency list response model
 type DependencyListResponse struct {
 	Data []ToolResponse `json:"data"`
+}
+
+// PromptTemplateInput represents the input for prompt template-related operations
+// @Description Prompt Template input model
+type PromptTemplateInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name   string `json:"name"`
+			Prompt string `json:"prompt"`
+			ChatID uint   `json:"chat_id"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// PromptTemplateResponse represents the response for prompt template-related operations
+// @Description Prompt Template response model
+type PromptTemplateResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name   string `json:"name"`
+		Prompt string `json:"prompt"`
+		ChatID uint   `json:"chat_id"`
+	} `json:"attributes"`
 }
