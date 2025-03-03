@@ -1054,9 +1054,9 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 		t := choice.ToolCalls[i]
 
 		// ignore empty tool calls
-		/* if t.ID == "" {
+		if t.ID == "" {
 			continue
-		} */
+		}
 
 		toolCall.Parts = append(toolCall.Parts, llms.ToolCall{
 			ID:   t.ID,

@@ -876,7 +876,6 @@ const ChatView = () => {
               </Box>
             </Box>
             
-            {/* Fixed input at bottom - only show when there are user messages */}
             {hasUserMessages && (
               <Box sx={{ 
                 width: '100%',
