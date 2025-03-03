@@ -1,11 +1,8 @@
 import React from 'react';
-import { SvgIcon } from '@mui/material';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
-import { ReactComponent as HouseIcon } from '../../../common/fontawesome/house.svg';
-import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawesome/rectangle-history.svg';
-import { ReactComponent as Grid2PlusIcon } from '../../../common/fontawesome/grid-2-plus.svg';
+import Icon from '../../../components/common/Icon';
 
 const PortalDrawer = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -30,19 +27,19 @@ const PortalDrawer = () => {
       {
         id: 'dashboard',
         text: 'Overview',
-        icon: <SvgIcon component={HouseIcon} inheritViewBox />,
+        icon: <Icon name="house" />,
         path: '/portal/dashboard'
       },
       {
         id: 'my-apps',
         text: 'Apps',
-        icon: <SvgIcon component={Grid2PlusIcon} inheritViewBox />,
+        icon: <Icon name="grid-2-plus" />,
         path: '/portal/apps'
       },
       {
         id: 'catalogs',
         text: 'Catalogs',
-        icon: <SvgIcon component={RectangleHistoryIcon} inheritViewBox />,
+        icon: <Icon name="rectangle-history" />,
         subItems: [
           {
             id: 'llms',
