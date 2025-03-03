@@ -397,28 +397,9 @@ const ChatView = () => {
 
   const debouncedScrollToBottom = useCallback(debounce(scrollToBottom, 100), [scrollToBottom]);
 
-  useEffect(() => {
-    const messageContainer = messageContainerRef.current;
-    if (!messageContainer) return;
-
-    const resizeObserver = new ResizeObserver(() => {
-      try {
-        if (autoScroll) {
-          if (messageContainer.scrollHeight - messageContainer.clientHeight - messageContainer.scrollTop > 1) {
-            debouncedScrollToBottom();
-          }
-        }
-      } catch (error) {
-        console.error("ResizeObserver error:", error);
-      }
-    });
-    resizeObserver.observe(messageContainer);
-
-    return () => {
-      resizeObserver.unobserve(messageContainer);
-      debouncedScrollToBottom.cancel();
-    };
-  }, [autoScroll, debouncedScrollToBottom]);
+  // We've removed the ResizeObserver implementation and global error handler
+  // to simplify the auto-scrolling approach. Now we rely on the useEffect above
+  // that watches for message changes and scrolls to the bottom when needed.
 
   useEffect(() => {
     const fetchData = async () => {
@@ -446,6 +427,14 @@ const ChatView = () => {
           setShowTools(currentChat.attributes.tool_support);
           setChatName(currentChat.attributes.name);
           setChatDescription(currentChat.attributes.description);
+
+          // Store prompt templates from the chat response
+          if (currentChat.attributes.prompt_templates) {
+            localStorage.setItem(
+              `chat_${chatId}_templates`,
+              JSON.stringify(currentChat.attributes.prompt_templates)
+            );
+          }
         }
 
         const [databasesResponse, toolsResponse] = await Promise.all([
@@ -559,12 +548,8 @@ const ChatView = () => {
     if ((inputMessage.trim() || uploadedFiles.length > 0) && isConnected) {
       const messageContent = inputMessage.trim();
       const tempId = `temp_${Math.floor(Math.random() * 1_000_000_000)}`;
-      const message = {
-        type: 'user_message',
-        payload: messageContent,
-        file_refs: uploadedFiles.map((file) => file.name),
-      };
-      sendMessage(message);
+
+      // Add user message to the chat
       setMessages((prevMessages) => [
         ...prevMessages,
         {
@@ -574,6 +559,13 @@ const ChatView = () => {
           isComplete: true,
         },
       ]);
+
+      const message = {
+        type: 'user_message',
+        payload: messageContent,
+        file_refs: uploadedFiles.map((file) => file.name),
+      };
+      sendMessage(message);
 
       setInputMessage('');
       setUploadedFiles([]);
@@ -613,11 +605,11 @@ const ChatView = () => {
 
       if (response.status === 200 || response.status === 204) {
         if (item.type === 'database') {
-          setDatabases(prev => prev.map(db => 
+          setDatabases(prev => prev.map(db =>
             db.id === item.id ? { ...db, isSelected: false } : db
           ));
         } else if (item.type === 'tool') {
-          setTools(prev => prev.map(tool => 
+          setTools(prev => prev.map(tool =>
             tool.id === item.id ? { ...tool, isSelected: false } : tool
           ));
         }
@@ -644,11 +636,11 @@ const ChatView = () => {
 
       if (response.status === 200 || response.status === 201) {
         if (item.type === 'database') {
-          setDatabases(prev => prev.map(db => 
+          setDatabases(prev => prev.map(db =>
             db.id === item.id ? { ...db, isSelected: true } : db
           ));
         } else if (item.type === 'tool') {
-          setTools(prev => prev.map(tool => 
+          setTools(prev => prev.map(tool =>
             tool.id === item.id ? { ...tool, isSelected: true } : tool
           ));
         }
@@ -756,7 +748,7 @@ const ChatView = () => {
                     justifyContent: 'center',
                     flex: 1,
                   }}>
-                    <Box sx={{ 
+                    <Box sx={{
                       width: '100%',
                       display: 'flex',
                       flexDirection: 'column',
@@ -787,13 +779,15 @@ const ChatView = () => {
                         onDrop={(files) => onDrop(files, sessionId)}
                         isUploading={isUploading}
                         renderUploadIndicator={renderUploadIndicator}
+                        chatId={chatId}
+                        messages={messages}
                       />
                     </Box>
                   </Box>
                 ) : (
                   <>
                     {messages.length > 1 && (
-                      <Box sx={{ mt:2, textAlign: 'right' }}>
+                      <Box sx={{ mt: 2, textAlign: 'right' }}>
                         <Typography
                           variant="caption"
                           component="div"
@@ -897,6 +891,8 @@ const ChatView = () => {
                     onDrop={(files) => onDrop(files, sessionId)}
                     isUploading={isUploading}
                     renderUploadIndicator={renderUploadIndicator}
+                    chatId={chatId}
+                    messages={messages}
                   />
                 </Box>
               </Box>

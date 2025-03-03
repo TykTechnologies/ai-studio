@@ -360,14 +360,41 @@ const Dashboard = () => {
 
   const costAnalysisChartData = useMemo(() => {
     if (!costData || Object.keys(costData).length === 0) return null;
-    return {
-      labels: Object.values(costData)[0].labels,
-      datasets: Object.entries(costData).map(([currency, chartData]) => ({
+
+    // Filter out empty currency keys and get valid currencies
+    const validCurrencyData = Object.entries(costData).filter(([currency]) => currency.trim() !== '');
+
+    if (validCurrencyData.length === 0) return null;
+
+    // Merge all date labels to ensure complete timeline
+    const allLabels = new Set();
+    validCurrencyData.forEach(([_, chartData]) => {
+      chartData.labels.forEach(label => allLabels.add(label));
+    });
+    const sortedLabels = Array.from(allLabels).sort();
+
+    // Create datasets with proper data alignment
+    const datasets = validCurrencyData.map(([currency, chartData]) => {
+      // Create a map of date to value for this currency
+      const dateValueMap = {};
+      chartData.labels.forEach((label, index) => {
+        dateValueMap[label] = chartData.data[index];
+      });
+
+      // Fill in data array using sorted labels
+      const data = sortedLabels.map(label => dateValueMap[label] || 0);
+
+      return {
         label: `Cost (${currency})`,
-        data: chartData.data,
+        data,
         borderColor: getRandomColor(currency),
         tension: 0.1,
-      })),
+      };
+    });
+
+    return {
+      labels: sortedLabels,
+      datasets,
     };
   }, [costData, getRandomColor]);
 
@@ -462,7 +489,7 @@ const Dashboard = () => {
       backgroundColor: "transparent"
     },
     "& td": {
-    borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
+      borderBottom: `1px solid ${theme.palette.border.neutralDefault}`
     },
     "&:hover": {
       backgroundColor: theme.palette.background.secondaryExtraLight

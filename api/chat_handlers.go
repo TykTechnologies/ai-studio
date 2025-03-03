@@ -9,17 +9,56 @@ import (
 	"gorm.io/gorm"
 )
 
-// @Summary Create a new chat
-// @Description Create a new chat with the provided information
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param chat body ChatInput true "Chat information"
-// @Success 201 {object} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats [post]
-// @Security BearerAuth
+// updateChatPromptTemplates updates the prompt templates for a chat
+func (a *API) updateChatPromptTemplates(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid chat ID"}},
+		})
+		return
+	}
+
+	var input struct {
+		Templates []models.PromptTemplate `json:"templates"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	chat := &models.Chat{}
+	if err := chat.Get(a.config.DB, uint(id)); err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat not found"}},
+		})
+		return
+	}
+
+	if err := chat.UpdatePromptTemplates(a.config.DB, input.Templates); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
+}
+
 func (a *API) createChat(c *gin.Context) {
 	var input ChatInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -58,17 +97,6 @@ func (a *API) createChat(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
 
-// @Summary Get a chat by ID
-// @Description Get details of a chat by its ID
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Success 200 {object} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Router /chats/{id} [get]
-// @Security BearerAuth
 func (a *API) getChat(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -110,19 +138,6 @@ func (a *API) getChat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
-// @Summary Update a chat
-// @Description Update an existing chat's information
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Param chat body ChatInput true "Updated chat information"
-// @Success 200 {object} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/{id} [patch]
-// @Security BearerAuth
 func (a *API) updateChat(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -173,17 +188,6 @@ func (a *API) updateChat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
 
-// @Summary Delete a chat
-// @Description Delete a chat by its ID
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Success 204 "No Content"
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/{id} [delete]
-// @Security BearerAuth
 func (a *API) deleteChat(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -210,15 +214,6 @@ func (a *API) deleteChat(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary List all chats
-// @Description Get a list of all chats
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Success 200 {array} ChatResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats [get]
-// @Security BearerAuth
 func (a *API) listChats(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 
@@ -238,17 +233,6 @@ func (a *API) listChats(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats, a.config.DB)})
 }
 
-// @Summary Get chats by group ID
-// @Description Get a list of chats associated with a specific group
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param group_id query int true "Group ID"
-// @Success 200 {array} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/by-group [get]
-// @Security BearerAuth
 func (a *API) getChatsByGroupID(c *gin.Context) {
 	groupID, err := strconv.ParseUint(c.Query("group_id"), 10, 32)
 	if err != nil {
@@ -275,19 +259,6 @@ func (a *API) getChatsByGroupID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeChats(chats, a.config.DB)})
 }
 
-// @Summary Add ExtraContext to Chat
-// @Description Add an ExtraContext to a specific Chat
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Param filestore_id path int true "FileStore ID"
-// @Success 200 {object} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/{id}/extra-context/{filestore_id} [post]
-// @Security BearerAuth
 func (a *API) addExtraContextToChat(c *gin.Context) {
 	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -336,19 +307,6 @@ func (a *API) addExtraContextToChat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
 
-// @Summary Remove ExtraContext from Chat
-// @Description Remove an ExtraContext from a specific Chat
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Param filestore_id path int true "FileStore ID"
-// @Success 200 {object} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/{id}/extra-context/{filestore_id} [delete]
-// @Security BearerAuth
 func (a *API) removeExtraContextFromChat(c *gin.Context) {
 	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -397,18 +355,6 @@ func (a *API) removeExtraContextFromChat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
 
-// @Summary Get Chat ExtraContext
-// @Description Get all ExtraContext associated with a specific Chat
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Success 200 {array} FileStoreResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/{id}/extra-context [get]
-// @Security BearerAuth
 func (a *API) getChatExtraContext(c *gin.Context) {
 	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -435,19 +381,6 @@ func (a *API) getChatExtraContext(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeFileStores(fileStores)})
 }
 
-// @Summary Set Chat ExtraContext
-// @Description Replace all ExtraContext associations for a specific Chat
-// @Tags chats
-// @Accept json
-// @Produce json
-// @Param id path int true "Chat ID"
-// @Param filestore_ids body []int true "Array of FileStore IDs"
-// @Success 200 {object} ChatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /chats/{id}/extra-context [put]
-// @Security BearerAuth
 func (a *API) setChatExtraContext(c *gin.Context) {
 	chatID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -502,23 +435,27 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 	if chat.DefaultDataSource != nil {
 		defaultDSID = int(*chat.DefaultDataSourceID)
 	}
+
+	templates, _ := chat.GetPromptTemplates()
+
 	return ChatResponse{
 		Type: "chats",
 		ID:   strconv.FormatUint(uint64(chat.ID), 10),
 		Attributes: struct {
-			Name                string              `json:"name"`
-			Description         string              `json:"description"`
-			LLMSettingsID       string              `json:"llm_settings_id"`
-			LLMID               string              `json:"llm_id"`
-			Groups              []GroupResponse     `json:"groups"`
-			Filters             []FilterResponse    `json:"filters"`
-			RagN                int                 `json:"rag_n"`
-			ToolSupport         bool                `json:"tool_support"`
-			SystemPrompt        string              `json:"system_prompt"`
-			DefaultDataSourceID int                 `json:"default_data_source_id"`
-			DefaultDataSource   DatasourceResponse  `json:"default_data_source"`
-			ExtraContext        []FileStoreResponse `json:"extra_context"`
-			DefaultTools        []ToolResponse      `json:"default_tools"`
+			Name                string                 `json:"name"`
+			Description         string                 `json:"description"`
+			LLMSettingsID       string                 `json:"llm_settings_id"`
+			LLMID               string                 `json:"llm_id"`
+			Groups              []GroupResponse        `json:"groups"`
+			Filters             []FilterResponse       `json:"filters"`
+			RagN                int                    `json:"rag_n"`
+			ToolSupport         bool                   `json:"tool_support"`
+			SystemPrompt        string                 `json:"system_prompt"`
+			DefaultDataSourceID int                    `json:"default_data_source_id"`
+			DefaultDataSource   DatasourceResponse     `json:"default_data_source"`
+			ExtraContext        []FileStoreResponse    `json:"extra_context"`
+			DefaultTools        []ToolResponse         `json:"default_tools"`
+			PromptTemplates     []PromptTemplateResponse `json:"prompt_templates"`
 		}{
 			Name:                chat.Name,
 			Description:         chat.Description,
@@ -533,6 +470,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),
 			ExtraContext:        serializeFileStores(extraContext),
 			DefaultTools:        serializeToolsPointers(chat.DefaultTools, db),
+			PromptTemplates:     serializePromptTemplates(templates),
 		},
 	}
 }
@@ -551,4 +489,24 @@ func serializeFilters(f []*models.Filter) []FilterResponse {
 		arr[i] = *filter
 	}
 	return toFilterResponses(arr)
+}
+
+func serializePromptTemplates(templates []models.PromptTemplate) []PromptTemplateResponse {
+	result := make([]PromptTemplateResponse, len(templates))
+	for i, template := range templates {
+		result[i] = PromptTemplateResponse{
+			Type: "prompt_templates",
+			ID:   strconv.FormatUint(uint64(template.ID), 10),
+			Attributes: struct {
+				Name   string `json:"name"`
+				Prompt string `json:"prompt"`
+				ChatID uint   `json:"chat_id"`
+			}{
+				Name:   template.Name,
+				Prompt: template.Prompt,
+				ChatID: 0, // ChatID is no longer needed since templates are part of the chat
+			},
+		}
+	}
+	return result
 }

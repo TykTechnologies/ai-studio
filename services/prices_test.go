@@ -46,7 +46,7 @@ func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
 				CacheWritePromptTokens: 20,
 				CacheReadPromptTokens:  10,
 				TotalTokens:            180,    // 100 + 50 + 20 + 10
-				Cost:                   0.3525, // (50 * 0.002) + (100 * 0.003) + (20 * 0.0005) + (10 * 0.0001)
+				Cost:                   3525, // ((50 * 0.002) + (100 * 0.003) + (20 * 0.0005) + (10 * 0.0001)) * 10000
 				Currency:               "USD",
 			},
 			{
@@ -57,7 +57,7 @@ func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
 				CacheWritePromptTokens: 40,
 				CacheReadPromptTokens:  20,
 				TotalTokens:            360,   // 200 + 100 + 40 + 20
-				Cost:                   0.805, // (100 * 0.002) + (200 * 0.003) + (40 * 0.0005) + (20 * 0.0001)
+				Cost:                   8050, // ((100 * 0.002) + (200 * 0.003) + (40 * 0.0005) + (20 * 0.0001)) * 10000
 				Currency:               "USD",
 			},
 		}
@@ -76,12 +76,12 @@ func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, updatedRecords, 2)
 
-		// Check first record: (50 * 0.004) + (100 * 0.006) + (20 * 0.001) + (10 * 0.0002) = 0.822
-		assert.InDelta(t, 0.822, updatedRecords[0].Cost, 0.0001)
+		// Check first record: ((50 * 0.004) + (100 * 0.006) + (20 * 0.001) + (10 * 0.0002)) * 10000 = 8220
+		assert.InDelta(t, 8220, updatedRecords[0].Cost, 1)
 		assert.Equal(t, "EUR", updatedRecords[0].Currency)
 
-		// Check second record: (100 * 0.004) + (200 * 0.006) + (40 * 0.001) + (20 * 0.0002) = 1.644
-		assert.InDelta(t, 1.644, updatedRecords[1].Cost, 0.0001)
+		// Check second record: ((100 * 0.004) + (200 * 0.006) + (40 * 0.001) + (20 * 0.0002)) * 10000 = 16440
+		assert.InDelta(t, 16440, updatedRecords[1].Cost, 1)
 		assert.Equal(t, "EUR", updatedRecords[1].Currency)
 	})
 
@@ -111,7 +111,7 @@ func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
 				CacheWritePromptTokens: 100,    // More cache writes than direct tokens
 				CacheReadPromptTokens:  200,    // More cache reads than direct tokens
 				TotalTokens:            375,    // 50 + 25 + 100 + 200
-				Cost:                   0.3525, // (25 * 0.002) + (50 * 0.003) + (100 * 0.001) + (200 * 0.0005)
+				Cost:                   3525, // ((25 * 0.002) + (50 * 0.003) + (100 * 0.001) + (200 * 0.0005)) * 10000
 				Currency:               "USD",
 			},
 		}
@@ -130,8 +130,8 @@ func TestUpdateModelPriceRecalculatesCosts(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, updatedRecords, 1)
 
-		// Check record: (25 * 0.004) + (50 * 0.006) + (100 * 0.002) + (200 * 0.001) = 0.8
-		assert.InDelta(t, 0.8, updatedRecords[0].Cost, 0.0001)
+		// Check record: ((25 * 0.004) + (50 * 0.006) + (100 * 0.002) + (200 * 0.001)) * 10000 = 8000
+		assert.InDelta(t, 8000, updatedRecords[0].Cost, 1)
 		assert.Equal(t, "EUR", updatedRecords[0].Currency)
 	})
 }
