@@ -2,7 +2,6 @@ import React from 'react';
 import { Box, TextField, IconButton, Chip } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import { useDropzone } from 'react-dropzone';
 
 const ChatInput = ({

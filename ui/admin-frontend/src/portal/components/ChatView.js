@@ -1,10 +1,9 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { debounce } from 'lodash';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Paper,
   CircularProgress,
   Grid,
   Snackbar,
@@ -56,6 +55,11 @@ const ChatView = () => {
   const messageContainerRef = useRef(null);
   const navigate = useNavigate();
   const lastTypeRef = useRef(null);
+  
+  const hasUserMessages = useMemo(() => 
+    messages.some(message => message.type === 'user'), 
+    [messages]
+  );
 
   // Process error messages to extract meaningful information
   const processErrorMessage = (error) => {
@@ -137,7 +141,8 @@ const ChatView = () => {
               const messageText = parsedContent.text || parsedContent.content;
               const context = parsedContent.context;
 
-              const messageContent = context ? `[CONTEXT]${context}[/CONTEXT]${messageText}` : messageText;
+              // Only include context if it's not empty
+              const messageContent = context && context.trim() ? `[CONTEXT]${context}[/CONTEXT]${messageText}` : messageText;
 
               switch (parsedContent.role) {
                 case 'human':
@@ -191,6 +196,10 @@ const ChatView = () => {
     lastTypeRef.current = currentType;
 
     if (currentType === 'stream_chunk' || currentType === 'message' || currentType === 'ai_message') {
+      if (!data.payload) {
+        return;
+      }
+      
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
         const lastMessage = newMessages[newMessages.length - 1];
@@ -249,6 +258,10 @@ const ChatView = () => {
         return newMessages;
       });
     } else if (data.type === 'historical_user_message' || data.type === 'user_message') {
+      if (!data.payload) {
+        return;
+      }
+      
       if (data.type === 'historical_user_message' || !data.isEdited) {
         setMessages((prevMessages) => {
           const lastMessage = prevMessages[prevMessages.length - 1];
@@ -274,6 +287,10 @@ const ChatView = () => {
     } else if (data.type === 'error' || data.type === 'system' || data.type === 'tool') {
       let messageContent = data.payload;
 
+      if (!messageContent) {
+        return;
+      }
+      
       if (messageContent.includes('Currently using')) {
         return;
       }
@@ -282,7 +299,7 @@ const ChatView = () => {
         const errorInfo = processErrorMessage(data.payload);
         messageContent = `:::system ${errorInfo.title}\n${errorInfo.message}${errorInfo.details ? `\n[Details: ${errorInfo.details}]` : ''}:::`;
       } else if (data.type === 'tool') {
-        if (!data.payload.includes(':::system')) {
+        if (!data.payload?.includes(':::system')) {
           messageContent = `:::system ${data.payload}:::`;
         }
       }
@@ -301,15 +318,15 @@ const ChatView = () => {
       if (data.tools) {
         setTools(prev => prev.map(tool => ({
           ...tool,
-          isSelected: data.tools.some(t => t.id === tool.id)
+          isSelected: data.tools.some(t => String(t.id) === tool.id)
         })));
       }
-      if (data.datasources) {
-        setDatabases(prev => prev.map(db => ({
-          ...db,
-          isSelected: data.datasources.some(d => d.id === db.id)
-        })));
-      }
+    if (data.datasources) {
+      setDatabases(prev => prev.map(db => ({
+        ...db,
+        isSelected: data.datasources.some(d => String(d.id) === db.id)
+      })));
+    }
     }
   }, []);
 
@@ -730,7 +747,7 @@ const ChatView = () => {
                 flexDirection: 'column',
                 flexGrow: 1,
               }}>
-                {messages.length === 0 ? (
+                {!hasUserMessages ? (
                   <Box sx={{
                     width: '100%',
                     display: 'flex',
@@ -859,8 +876,8 @@ const ChatView = () => {
               </Box>
             </Box>
             
-            {/* Fixed input at bottom - only show when there are messages */}
-            {messages.length > 0 && (
+            {/* Fixed input at bottom - only show when there are user messages */}
+            {hasUserMessages && (
               <Box sx={{ 
                 width: '100%',
                 padding: 2,
