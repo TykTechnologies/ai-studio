@@ -1,9 +1,3 @@
-/**
- * Reorders and merges tool messages in a chat history
- * @param {Array} messages - The chat messages to process
- * @param {Array} tools - Optional tools array (not used in current implementation)
- * @returns {Array} - The processed messages
- */
 export const reorderAndMergeToolMessages = (messages, tools) => {
   console.log("Reordering and merging tool messages");
   const result = [...messages];
@@ -78,29 +72,23 @@ export const reorderAndMergeToolMessages = (messages, tools) => {
   return result;
 };
 
-/**
- * Processes tool and datasource information from a session_id message
- * @param {Object} data - The session_id message data
- * @returns {Object} - The processed data with tool and datasource information
- */
 export const processToolsAndDatasources = (data) => {
-  const processedData = { ...data };
-  
+  // Modify the data object directly to match the original implementation
   if (data.tools && Array.isArray(data.tools)) {
-    processedData.tools = data.tools.map(tool => ({
-      ...tool,
-      type: 'tool',
-      uniqueId: `tool-${tool.id}`
-    }));
+    data.tools.forEach(tool => {
+      const uniqueId = `tool-${tool.id}`;
+      tool.type = 'tool';
+      tool.uniqueId = uniqueId;
+    });
   }
   
   if (data.datasources && Array.isArray(data.datasources)) {
-    processedData.datasources = data.datasources.map(ds => ({
-      ...ds,
-      type: 'database',
-      uniqueId: `database-${ds.id}`
-    }));
+    data.datasources.forEach(ds => {
+      const uniqueId = `database-${ds.id}`;
+      ds.type = 'database';
+      ds.uniqueId = uniqueId;
+    });
   }
   
-  return processedData;
+  return data;
 };
