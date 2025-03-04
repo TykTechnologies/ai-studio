@@ -1,10 +1,3 @@
-import { useState, useEffect } from 'react';
-
-/**
- * Parses a message from the server and converts it to the application's message format
- * @param {Object} msg - The message from the server
- * @returns {Object|null} - The parsed message or null if parsing failed
- */
 export const parseServerMessage = (msg) => {
   try {
     const content = msg.attributes?.content || msg.content;
@@ -69,11 +62,7 @@ export const parseServerMessage = (msg) => {
   }
 };
 
-/**
- * Detects the type of error from an error message
- * @param {string} error - The error message
- * @returns {string} - The error type: 'llm_config', 'connection', or 'other'
- */
+
 export const detectErrorType = (error) => {
   if (!error) return 'connection';
   const errorStr = error.toString().toLowerCase();
@@ -95,18 +84,8 @@ export const detectErrorType = (error) => {
   return 'other';
 };
 
-/**
- * Generates a temporary ID for system messages
- * @returns {string} - A temporary ID
- */
 export const generateTempId = () => `temp_${Math.floor(Math.random() * 1_000_000_000)}`;
 
-/**
- * Creates a system message
- * @param {string} content - The message content
- * @param {string} errorType - Optional error type
- * @returns {Object} - A system message object
- */
 export const createSystemMessage = (content, errorType = null) => {
   const messageContent = content.includes(':::system')
     ? content
