@@ -171,6 +171,9 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 			eventSource.current.addEventListener('session_id', (event) => {
 				try {
 					console.log('SSE session_id event received:', event.data);
+					if (!event.data) {
+						return;
+					}
 					const data = JSON.parse(event.data);
 					console.log('Processing session_id message:', data);
 					const newSessionId = data.payload;
@@ -241,6 +244,9 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 			eventSource.current.addEventListener('stream_chunk', (event) => {
 				try {
 					console.log('SSE stream_chunk received:', event.data);
+					if (!event.data) {
+						return;
+					}
 					onMessageReceived({
 						type: 'stream_chunk',
 						payload: event.data
@@ -254,6 +260,9 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 			eventSource.current.addEventListener('message', (event) => {
 				try {
 					console.log('SSE message received:', event.data);
+					if (!event.data) {
+						return;
+					}
 					const data = JSON.parse(event.data);
 					onMessageReceived(data);
 				} catch (error) {
@@ -265,6 +274,9 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 			eventSource.current.addEventListener('system', (event) => {
 				try {
 					console.log('SSE system message received:', event.data);
+					if (!event.data) {
+						return;
+					}
 					const messageContent = event.data.includes(':::system')
 						? event.data
 						: `:::system ${event.data}:::`;
@@ -305,6 +317,9 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 			eventSource.current.addEventListener('error', (event) => {
 				try {
 					console.log('SSE error message received:', event.data);
+					if (!event.data) {
+						return;
+					}
 					const errorType = detectErrorType(event.data);
 
 					// For LLM config errors, don't attempt reconnection
@@ -328,6 +343,9 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
 			eventSource.current.onmessage = (event) => {
 				try {
 					console.log('SSE generic message received:', event.data);
+					if (!event.data) {
+						return;
+					}
 					const data = JSON.parse(event.data);
 					onMessageReceived(data);
 				} catch (error) {
@@ -522,8 +540,10 @@ const reorderAndMergeToolMessages = (messages) => {
 				}
 
 				// Build the new system message
-				const systemMsg = `\n:::systemUsing function: \`${functionName}()\`::::::systemParameters: ${JSON.stringify(parameters)}::::::systemContent: Function \`${functionName}()\` returned: \`${byteCount}\` bytes:::\n
-[CONTEXT]${contentString}[/CONTEXT]\n`;
+				const systemMsg = contentString && contentString.trim() 
+					? `\n:::systemUsing function: \`${functionName}()\`::::::systemParameters: ${JSON.stringify(parameters)}::::::systemContent: Function \`${functionName}()\` returned: \`${byteCount}\` bytes:::\n
+[CONTEXT]${contentString}[/CONTEXT]\n`
+					: `\n:::systemUsing function: \`${functionName}()\`::::::systemParameters: ${JSON.stringify(parameters)}::::::systemContent: Function \`${functionName}()\` returned: \`${byteCount}\` bytes:::\n`;
 
 				// Append the system block to the current AI explanation.
 				current.content += systemMsg;

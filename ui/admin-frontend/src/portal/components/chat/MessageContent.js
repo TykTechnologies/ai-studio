@@ -53,7 +53,7 @@ const extractSystemBlocks = (content) => {
 		if (systemMatch) {
 			// System message - match[1] contains the content
 			segments.push({ type: 'system', text: match[1].trim() });
-		} else if (contextMatch) {
+		} else if (contextMatch && contextMatch.trim()) {
 			// Context block - match[2] contains the content
 			segments.push({ type: 'context', text: match[2].trim() });
 		}
@@ -307,6 +307,10 @@ const SystemBlock = ({ messages, groupId, isExpanded, toggleGroup }) => {
 };
 
 const ContextBlock = ({ content, groupId, isExpanded, toggleGroup }) => {
+	if (!content || content.trim() === '') {
+		return null;
+	}
+	
 	return (
 		<Box
 			sx={{
@@ -392,6 +396,7 @@ const MessageContent = ({
 	const [editText, setEditText] = useState('');
 
 	const stripContextWrapper = (text) => {
+		if (!text) return '';
 		const contextMatch = text.match(/\[CONTEXT\][\s\S]*?\[\/CONTEXT\]\s*([\s\S]*)/);
 		return contextMatch ? contextMatch[1].trim() : text;
 	};
@@ -514,19 +519,20 @@ const MessageContent = ({
 	const baseGroupId = `message-${messageIndex}`;
 
 	// Handle system/error message types or messages containing system/context blocks
-	if (messageType === 'system' || content.includes(':::system') || content.includes('[CONTEXT]')) {
+	if (messageType === 'system' || (content && (content.includes(':::system') || content.includes('[CONTEXT]')))) {
 		// If system messages are hidden and this is the first system message (not error), return null
-		if (!showSystemMessages && messageType === 'system' && messageIndex === 0 && !content.includes('Error:')) {
+		if (!showSystemMessages && messageType === 'system' && messageIndex === 0 && content && !content.includes('Error:')) {
 			return null;
 		}
 
 		const segments = messageType === 'system'
-			? [{ type: 'system', text: content.replace(/(?::{3}|%%%)system\s*/i, '').replace(/(?::{3}|%%%)/g, '').trim() }]
-			: extractSystemBlocks(content);
+			? [{ type: 'system', text: content?.replace(/(?::{3}|%%%)system\s*/i, '')?.replace(/(?::{3}|%%%)/g, '')?.trim() || '' }]
+			: extractSystemBlocks(content || '');
 
 		// If system messages are hidden, filter out context blocks and first system message
 		const visibleSegments = showSystemMessages
-			? segments
+			? segments.filter(segment => 
+				!(segment.type === 'context' && (!segment.text || segment.text.trim() === '')))
 			: segments.filter(segment => {
 				if (segment.type === 'context') return false;
 				if (segment.type === 'system' && messageIndex === 0 && !segment.text.includes('Error:')) return false;
