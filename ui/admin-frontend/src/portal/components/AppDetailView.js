@@ -49,6 +49,7 @@ const FieldValue = ({ children }) => (
 const AppDetailView = () => {
   const [app, setApp] = useState(null);
   const [accessibleLLMs, setAccessibleLLMs] = useState([]);
+  const [accessibleDatasources, setAccessibleDatasources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -73,9 +74,10 @@ const AppDetailView = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [appResponse, llmsResponse, usageResponse, budgetResponse] = await Promise.all([
+        const [appResponse, llmsResponse, datasourcesResponse, usageResponse, budgetResponse] = await Promise.all([
           pubClient.get(`/common/apps/${id}`),
           pubClient.get("/common/accessible-llms"),
+          pubClient.get("/common/accessible-datasources"),
           pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
             params: { start_date: startDate, end_date: endDate, app_id: id },
           }),
@@ -91,6 +93,7 @@ const AppDetailView = () => {
 
         setApp(appResponse.data);
         setAccessibleLLMs(llmsResponse.data);
+        setAccessibleDatasources(datasourcesResponse.data);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -155,6 +158,10 @@ const AppDetailView = () => {
 
   const appLLMs = accessibleLLMs.filter((llm) =>
     app.attributes.llm_ids.includes(Number(llm.id)),
+  );
+  
+  const appDatasources = accessibleDatasources.filter((datasource) =>
+    app.attributes.datasource_ids.includes(Number(datasource.id)),
   );
 
   return (
@@ -450,6 +457,72 @@ const AppDetailView = () => {
             </CardContent>
           </Card>
         ))}
+      </Paper>
+
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <SectionTitle>Data Source Access Details</SectionTitle>
+        {appDatasources.length > 0 ? (
+          appDatasources.map((datasource) => (
+            <Card key={datasource.id} sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6">{datasource.attributes.name}</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  {datasource.attributes.short_description || "No description available"}
+                </Typography>
+
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: "bold",
+                    mt: 2,
+                    mb: 1,
+                  }}
+                >
+                  Endpoint
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Use the following URL to search this datasource.
+                </Typography>
+
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <FieldLabel sx={{ minWidth: "100px" }}>Search API:</FieldLabel>
+                  <Box>
+                    <Tooltip title="Send a POST request with a JSON body containing 'query' and 'n' fields to search this datasource">
+                      <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                    </Tooltip>
+                  </Box>
+                  <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                    <Typography
+                      variant="body2"
+                      component="code"
+                      sx={{
+                        fontFamily: "monospace",
+                        bgcolor: "background.paper",
+                        p: 1,
+                        borderRadius: 1,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {generateEndpointUrl("/datasource/", datasource.attributes.name)}
+                    </Typography>
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(
+                          generateEndpointUrl("/datasource/", datasource.attributes.name)
+                        )
+                      }
+                      size="small"
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Typography variant="body1">No datasources associated with this app.</Typography>
+        )}
       </Paper>
 
       <Dialog
