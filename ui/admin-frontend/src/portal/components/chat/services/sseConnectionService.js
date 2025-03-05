@@ -70,14 +70,14 @@ export const setupSSEConnection = ({
       }
 
       // Handle tools and datasources
-      if (data.tools && Array.isArray(data.tools)) {
+      if (Array.isArray(data.tools)) {
         data.tools.forEach(tool => {
           const uniqueId = `tool-${tool.id}`;
           tool.type = 'tool';
           tool.uniqueId = uniqueId;
         });
       }
-      if (data.datasources && Array.isArray(data.datasources)) {
+      if (Array.isArray(data.datasources)) {
         data.datasources.forEach(ds => {
           const uniqueId = `database-${ds.id}`;
           ds.type = 'database';
