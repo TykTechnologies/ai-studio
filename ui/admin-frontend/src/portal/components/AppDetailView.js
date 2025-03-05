@@ -411,7 +411,7 @@ const AppDetailView = () => {
                   mb: 1,
                 }}
               >
-                Unified Endpoint
+                Open API Compatible Endpoint
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
                 The Unified Endpoint is an OpenAI-compatible endpoint that
