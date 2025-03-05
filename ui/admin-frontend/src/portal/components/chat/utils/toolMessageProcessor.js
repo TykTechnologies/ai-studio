@@ -3,13 +3,13 @@ export const reorderAndMergeToolMessages = (messages, tools) => {
   const result = [...messages];
 
   for (let i = 0; i < result.length; i++) {
-    if (result[i]?.type === 'ai' && result[i]?.content.includes('tool_use')) {
+    if (result[i]?.type === 'ai' && result[i]?.content?.includes('tool_use')) {
       if (
         i + 2 < result.length &&
-        result[i + 1]?.type === 'ai' && result[i + 1]?.content.includes('tool_result') &&
+        result[i + 1]?.type === 'ai' && result[i + 1]?.content?.includes('tool_result') &&
         result[i + 2]?.type === 'ai' &&
-        !result[i + 2]?.content.includes('tool_use') &&
-        !result[i + 2]?.content.includes('tool_result')
+        !result[i + 2]?.content?.includes('tool_use') &&
+        !result[i + 2]?.content?.includes('tool_result')
       ) {
         const explanation = result.splice(i + 2, 1)[0];
         result.splice(i, 0, explanation);
@@ -22,13 +22,14 @@ export const reorderAndMergeToolMessages = (messages, tools) => {
     const current = result[i];
     if (
       current?.type === 'ai' &&
+      current?.content &&
       !current.content.includes('tool_use') &&
       !current.content.includes('tool_result')
     ) {
       if (
         i + 2 < result.length &&
-        result[i + 1]?.type === 'ai' && result[i + 1].content.includes('tool_use') &&
-        result[i + 2]?.type === 'ai' && result[i + 2].content.includes('tool_result')
+        result[i + 1]?.type === 'ai' && result[i + 1]?.content?.includes('tool_use') &&
+        result[i + 2]?.type === 'ai' && result[i + 2]?.content?.includes('tool_result')
       ) {
         const toolUseRaw = result[i + 1].content.replace(/\/?tool_use\s*:?/ig, '').trim();
         let functionName = "unknown";
@@ -73,8 +74,11 @@ export const reorderAndMergeToolMessages = (messages, tools) => {
 };
 
 export const processToolsAndDatasources = (data) => {
-  // Modify the data object directly to match the original implementation
-  if (data.tools && Array.isArray(data.tools)) {
+  if (!data) {
+    return data;
+  }
+  
+  if (Array.isArray(data.tools)) {
     data.tools.forEach(tool => {
       const uniqueId = `tool-${tool.id}`;
       tool.type = 'tool';
@@ -82,7 +86,7 @@ export const processToolsAndDatasources = (data) => {
     });
   }
   
-  if (data.datasources && Array.isArray(data.datasources)) {
+  if (Array.isArray(data.datasources)) {
     data.datasources.forEach(ds => {
       const uniqueId = `database-${ds.id}`;
       ds.type = 'database';
