@@ -20,7 +20,6 @@ import ChatIcon from "@mui/icons-material/Chat";
 import pubClient from "../../admin/utils/pubClient";
 import {
   StyledTableCell,
-  StyledTableHeaderCell,
   StyledTableRow,
   StyledPaper,
   TitleBox,
