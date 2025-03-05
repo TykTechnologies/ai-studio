@@ -1,15 +1,7 @@
 import React from 'react';
-import { SvgIcon } from '@mui/material';
-import { ReactComponent as MonitorWaveformIcon } from '../../../common/fontawesome/monitor-waveform.svg';
-import { ReactComponent as MicrochipAiIcon } from '../../../common/fontawesome/microchip-ai.svg';
-import { ReactComponent as LayerGroupIcon } from '../../../common/fontawesome/layer-group.svg';
-import { ReactComponent as ShieldIcon } from '../../../common/fontawesome/shield.svg';
-import { ReactComponent as DisplayIcon } from '../../../common/fontawesome/display.svg';
-import { ReactComponent as RectangleHistoryIcon } from '../../../common/fontawesome/rectangle-history.svg';
-import { ReactComponent as MessageLinesIcon } from '../../../common/fontawesome/message-lines.svg';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
-import { ReactComponent as Grid2PlusIcon } from '../../../common/fontawesome/grid-2-plus.svg';
+import Icon from '../../../components/common/Icon';
 
 const Drawer = () => {
   const { features, loading } = useSystemFeatures();
@@ -22,12 +14,12 @@ const Drawer = () => {
     {
       id: 'dashboard',
       text: 'Analytics',
-      icon: <SvgIcon component={MonitorWaveformIcon} inheritViewBox />,
+      icon: <Icon name="monitor-waveform" />,
       path: '/admin/dash'
     },
     {
       text: 'LLM management',
-      icon: <SvgIcon component={MicrochipAiIcon} inheritViewBox />,
+      icon: <Icon name="microchip-ai" />,
       subItems: [
         { text: 'LLM providers', path: '/admin/llms' },
         { text: 'Model prices', path: '/admin/model-prices' },
@@ -35,7 +27,7 @@ const Drawer = () => {
     },
     {
       text: 'Context management',
-      icon: <SvgIcon component={LayerGroupIcon} inheritViewBox />,
+      icon: <Icon name="layer-group" />,
       subItems: [
         { text: 'Data sources', path: '/admin/datasources' },
         ...(features.feature_chat
@@ -45,7 +37,7 @@ const Drawer = () => {
     },
     {
       text: 'Governance',
-      icon: <SvgIcon component={ShieldIcon} inheritViewBox />,
+      icon: <Icon name="shield" />,
       subItems: [
         { id: 'users', text: 'Users', path: '/admin/users' },
         ...(!features.feature_gateway ||
@@ -63,7 +55,7 @@ const Drawer = () => {
       ? [
           {
             text: 'Apps & credentials',
-            icon: <SvgIcon component={Grid2PlusIcon} inheritViewBox />,
+            icon: <Icon name="grid-2-plus" />,
             subItems: [{ text: 'Apps', path: '/admin/apps' }],
           },
         ]
@@ -72,7 +64,7 @@ const Drawer = () => {
       ? [
           {
             text: 'AI Portal',
-            icon: <SvgIcon component={DisplayIcon} inheritViewBox />,
+            icon: <Icon name="display" />,
             subItems: [{ text: 'Apps', path: '/admin/apps' }],
           },
         ]
@@ -81,7 +73,7 @@ const Drawer = () => {
       ? [
           {
             text: 'Chat',
-            icon: <SvgIcon component={MessageLinesIcon} inheritViewBox />,
+            icon: <Icon name="message-lines" />,
             subItems: [
               { text: 'Chats', path: '/admin/chats' },
               { text: 'Model call settings', path: '/admin/llm-settings' },
@@ -93,7 +85,7 @@ const Drawer = () => {
       ? [
           {
             text: 'Catalogs',
-            icon: <SvgIcon component={RectangleHistoryIcon} inheritViewBox />,
+            icon: <Icon name="rectangle-history" />,
             subItems: [
               ...(features.feature_portal
                 ? [{ text: 'LLM providers', path: '/admin/catalogs/llms' }]
