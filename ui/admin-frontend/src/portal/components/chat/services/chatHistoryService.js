@@ -5,7 +5,7 @@ import { reorderAndMergeToolMessages } from '../utils/toolMessageProcessor';
 export const fetchChatHistory = async (sessionId) => {
   try {
     const response = await pubClient.get(`/common/sessions/${sessionId}/messages?limit=100`);
-    if (!response.data || !Array.isArray(response.data)) {
+    if (!Array.isArray(response.data)) {
       return [];
     }
 
