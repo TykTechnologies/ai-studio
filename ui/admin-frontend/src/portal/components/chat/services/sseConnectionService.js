@@ -42,7 +42,6 @@ export const setupSSEConnection = ({
     isConnectedRef.current = true;
     reconnectAttempts.current = 0;
     setError(null);
-    setIsLoading(false);
 
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -88,7 +87,6 @@ export const setupSSEConnection = ({
       onMessageReceived(data);
 
       if (continueId) {
-        setIsLoading(true);
         fetchChatHistory(continueId).then((messages) => {
           if (Array.isArray(messages)) {
             onMessageReceived({
