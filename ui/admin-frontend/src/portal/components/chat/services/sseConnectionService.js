@@ -102,8 +102,9 @@ export const setupSSEConnection = ({
               })))
             });
           }
-          setIsLoading(false);
-        }).catch(() => {
+        }).catch((error) => {
+          console.error("Error fetching chat history:", error);
+        }).finally(() => {
           setIsLoading(false);
         });
       } else {
