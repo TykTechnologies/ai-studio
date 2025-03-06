@@ -106,6 +106,8 @@ export const setupSSEConnection = ({
         }).catch(() => {
           setIsLoading(false);
         });
+      } else {
+        setIsLoading(false);
       }
     } catch (error) {
       console.error("Error parsing SSE message:", error);
