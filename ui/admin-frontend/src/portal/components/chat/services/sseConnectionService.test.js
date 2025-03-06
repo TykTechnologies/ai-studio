@@ -208,7 +208,7 @@ describe('setupSSEConnection', () => {
     expect(mockRefs.isConnectedRef.current).toBe(true);
     expect(mockRefs.reconnectAttempts.current).toBe(0);
     expect(mockCallbacks.setError).toHaveBeenCalledWith(null);
-    expect(mockCallbacks.setIsLoading).toHaveBeenCalledWith(false);
+    // Loading state is now managed in the session_id handler
   });
   
   test('should handle session_id event correctly', () => {
@@ -260,7 +260,10 @@ describe('setupSSEConnection', () => {
     }));
   });
   
-  test('should fetch chat history when continueId is provided', () => {
+  test('should fetch chat history when continueId is provided', async () => {
+    // Setup mock for fetchChatHistory to return a resolved promise
+    mockCallbacks.fetchChatHistory.mockResolvedValue([{ id: 'msg-1', type: 'user', content: 'test' }]);
+    
     // Call the function with continueId
     setupSSEConnection({
       ...defaultParams,
@@ -279,8 +282,32 @@ describe('setupSSEConnection', () => {
     });
     
     // Verify fetchChatHistory was called
-    expect(mockCallbacks.setIsLoading).toHaveBeenCalledWith(true);
     expect(mockCallbacks.fetchChatHistory).toHaveBeenCalledWith('session-456');
+    
+    // Wait for promises to resolve
+    await Promise.resolve();
+    
+    // Verify setIsLoading(false) is called after history is fetched
+    expect(mockCallbacks.setIsLoading).toHaveBeenCalledWith(false);
+  });
+  
+  test('should set isLoading to false for new chats', () => {
+    // Call the function without continueId
+    setupSSEConnection(defaultParams);
+    
+    // Create mock session_id event data
+    const sessionData = {
+      payload: 'session-789'
+    };
+    
+    // Simulate session_id event
+    mockRefs.eventSourceRef.current.dispatchEvent({
+      type: 'session_id',
+      data: JSON.stringify(sessionData)
+    });
+    
+    // Verify setIsLoading(false) is called for new chats
+    expect(mockCallbacks.setIsLoading).toHaveBeenCalledWith(false);
   });
   
   test('should handle stream_chunk event correctly', () => {
