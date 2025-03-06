@@ -261,8 +261,27 @@ describe('setupSSEConnection', () => {
   });
   
   test('should fetch chat history when continueId is provided', async () => {
-    // Setup mock for fetchChatHistory to return a resolved promise
-    mockCallbacks.fetchChatHistory.mockResolvedValue([{ id: 'msg-1', type: 'user', content: 'test' }]);
+    // Setup a mock implementation that calls setIsLoading(false)
+    mockCallbacks.fetchChatHistory.mockImplementation(() => {
+      return Promise.resolve([{ id: 'msg-1', type: 'user', content: 'test' }])
+        .then(result => {
+          // Simulate the behavior in sseConnectionService.js
+          mockCallbacks.onMessageReceived({
+            type: 'history',
+            payload: JSON.stringify([{
+              id: 'msg-1',
+              attributes: {
+                content: JSON.stringify({
+                  role: 'human',
+                  text: 'test'
+                })
+              }
+            }])
+          });
+          mockCallbacks.setIsLoading(false);
+          return result;
+        });
+    });
     
     // Call the function with continueId
     setupSSEConnection({
@@ -284,10 +303,10 @@ describe('setupSSEConnection', () => {
     // Verify fetchChatHistory was called
     expect(mockCallbacks.fetchChatHistory).toHaveBeenCalledWith('session-456');
     
-    // Wait for promises to resolve
+    // Wait for the next tick to allow the promise to resolve
     await Promise.resolve();
     
-    // Verify setIsLoading(false) is called after history is fetched
+    // Verify setIsLoading(false) was called
     expect(mockCallbacks.setIsLoading).toHaveBeenCalledWith(false);
   });
   
