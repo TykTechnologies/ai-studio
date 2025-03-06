@@ -603,4 +603,147 @@ describe('setupSSEConnection', () => {
     // Verify a new EventSource was created
     expect(mockRefs.eventSourceRef.current).not.toBe(existingEventSource);
   });
+
+  // New tests for the session reconnection fix
+
+  test('should update currentSessionId when session_id event is received', () => {
+    // Call the function
+    setupSSEConnection(defaultParams);
+    
+    // Create mock session_id event data
+    const sessionData = {
+      payload: 'session-789',
+      tools: []
+    };
+    
+    // Simulate session_id event
+    mockRefs.eventSourceRef.current.dispatchEvent({
+      type: 'session_id',
+      data: JSON.stringify(sessionData)
+    });
+    
+    // Verify setSessionId was called with the correct session ID
+    expect(mockCallbacks.setSessionId).toHaveBeenCalledWith('session-789');
+    
+    // Store the original EventSource
+    const originalEventSource = mockRefs.eventSourceRef.current;
+    
+    // Now simulate a connection error to trigger reconnection
+    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
+    
+    // Fast-forward timers to trigger reconnection
+    jest.advanceTimersByTime(100);
+    
+    // Verify that a new EventSource was created
+    expect(mockRefs.eventSourceRef.current).not.toBe(originalEventSource);
+    
+    // Verify that the new connection uses the session ID from the session_id event
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=session-789');
+  });
+  
+  test('should use current sessionId instead of original continueId for reconnection', () => {
+    // Call the function with an initial continueId
+    setupSSEConnection({
+      ...defaultParams,
+      continueId: 'original-session-123'
+    });
+    
+    // Verify initial connection uses the original continueId
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=original-session-123');
+    
+    // Create mock session_id event data with a different session ID
+    const sessionData = {
+      payload: 'new-session-456',
+      tools: []
+    };
+    
+    // Simulate session_id event
+    mockRefs.eventSourceRef.current.dispatchEvent({
+      type: 'session_id',
+      data: JSON.stringify(sessionData)
+    });
+    
+    // Store the original EventSource
+    const originalEventSource = mockRefs.eventSourceRef.current;
+    
+    // Now simulate a connection error to trigger reconnection
+    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
+    
+    // Fast-forward timers to trigger reconnection
+    jest.advanceTimersByTime(100);
+    
+    // Verify that a new EventSource was created
+    expect(mockRefs.eventSourceRef.current).not.toBe(originalEventSource);
+    
+    // Verify that the new connection uses the new session ID, not the original continueId
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=new-session-456');
+    expect(mockRefs.eventSourceRef.current.url).not.toContain('session_id=original-session-123');
+  });
+  
+  test('should maintain session continuity across multiple reconnections', () => {
+    // Call the function
+    setupSSEConnection(defaultParams);
+    
+    // Create mock session_id event data
+    const sessionData = {
+      payload: 'persistent-session-id',
+      tools: []
+    };
+    
+    // Simulate session_id event
+    mockRefs.eventSourceRef.current.dispatchEvent({
+      type: 'session_id',
+      data: JSON.stringify(sessionData)
+    });
+    
+    // Verify setSessionId was called with the correct session ID
+    expect(mockCallbacks.setSessionId).toHaveBeenCalledWith('persistent-session-id');
+    
+    // Simulate first connection error and reconnection
+    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error 1' });
+    jest.advanceTimersByTime(100);
+    
+    // Verify first reconnection uses the correct session ID
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=persistent-session-id');
+    
+    // Simulate second connection error and reconnection
+    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error 2' });
+    jest.advanceTimersByTime(200); // 100 * 2^1
+    
+    // Verify second reconnection still uses the correct session ID
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=persistent-session-id');
+    
+    // Simulate third connection error and reconnection
+    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error 3' });
+    jest.advanceTimersByTime(400); // 100 * 2^2
+    
+    // Verify third reconnection still uses the correct session ID
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=persistent-session-id');
+  });
+
+  test('should fallback to continueId if currentSessionId is not available', () => {
+    // Call the function with an initial continueId
+    setupSSEConnection({
+      ...defaultParams,
+      continueId: 'fallback-session-id'
+    });
+    
+    // Verify initial connection uses the continueId
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=fallback-session-id');
+    
+    // Store the original EventSource
+    const originalEventSource = mockRefs.eventSourceRef.current;
+    
+    // Simulate a connection error without receiving a session_id event first
+    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
+    
+    // Fast-forward timers to trigger reconnection
+    jest.advanceTimersByTime(100);
+    
+    // Verify that a new EventSource was created
+    expect(mockRefs.eventSourceRef.current).not.toBe(originalEventSource);
+    
+    // Verify that the new connection still uses the original continueId as fallback
+    expect(mockRefs.eventSourceRef.current.url).toContain('session_id=fallback-session-id');
+  });
 });
