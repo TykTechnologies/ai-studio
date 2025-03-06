@@ -42,7 +42,6 @@ export const setupSSEConnection = ({
     isConnectedRef.current = true;
     reconnectAttempts.current = 0;
     setError(null);
-    setIsLoading(false);
 
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -88,7 +87,6 @@ export const setupSSEConnection = ({
       onMessageReceived(data);
 
       if (continueId) {
-        setIsLoading(true);
         fetchChatHistory(continueId).then((messages) => {
           if (Array.isArray(messages)) {
             onMessageReceived({
@@ -104,10 +102,13 @@ export const setupSSEConnection = ({
               })))
             });
           }
-          setIsLoading(false);
-        }).catch(() => {
+        }).catch((error) => {
+          console.error("Error fetching chat history:", error);
+        }).finally(() => {
           setIsLoading(false);
         });
+      } else {
+        setIsLoading(false);
       }
     } catch (error) {
       console.error("Error parsing SSE message:", error);
