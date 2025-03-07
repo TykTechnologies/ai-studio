@@ -34,7 +34,7 @@ jobs:
           uses: actions/setup-node@v4
           with:
             node-version: "18.16"
-        - name: Install test dependecies
+        - name: Install test dependencies
           working-directory: tests/ui
           run: |
             npm ci      
