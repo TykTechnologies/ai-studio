@@ -618,7 +618,11 @@ func isToolCaller(name string) bool {
 }
 
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
-	pl := fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT]\n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	pl := payload
+	if len(docs) > 0 {
+		pl = fmt.Sprintf("[CONTEXT]\nContext for this message: \n%s\n[/CONTEXT]\n%s", cs.joinDocuments(docs, "\n\n"), payload)
+	}
+
 	return llms.HumanChatMessage{
 		Content: pl,
 	}
