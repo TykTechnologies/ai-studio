@@ -91,9 +91,17 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 		}
 	} else {
 		// it's OpenAI, so we can use the model from the request
-		r.Model = conf.DefaultModel
 		if r.Model != "" {
 			options = append(options, llms.WithModel(r.Model))
+		} else {
+			// use the default model from the config
+			if conf.DefaultModel == "" {
+				slog.Warn("no model specified in request or config, defaulting to gpt-3.5-turbo")
+				conf.DefaultModel = "gpt-3.5-turbo"
+			}
+
+			options = append(options, llms.WithModel(conf.DefaultModel))
+
 		}
 	}
 
