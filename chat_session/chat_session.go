@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -648,6 +649,58 @@ func handleEcho(prefix string, dat interface{}) {
 	}
 }
 
+func extractEmbeddedToolCalls(content string) (string, []llms.ToolCall) {
+	regex := regexp.MustCompile(`(?s)\s*tool_use\s*\n?(.*?)\s*/tool_use\s*`)
+
+	matches := regex.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return content, nil
+	}
+
+	var toolCalls []llms.ToolCall
+
+	for i, match := range matches {
+		if len(match) <= 1 {
+			continue
+		}
+
+		toolCallJSON := strings.TrimSpace(match[1])
+		slog.Info("Found embedded tool_use block",
+			"index", i,
+			"match_length", len(match[0]),
+			"tool_call_json", toolCallJSON)
+
+		var toolCallData struct {
+			Function struct {
+				Name      string          `json:"name"`
+				Arguments json.RawMessage `json:"arguments"`
+			} `json:"function"`
+			ToolCallID string `json:"tool_call_id"`
+			Type       string `json:"type"`
+		}
+
+		if err := json.Unmarshal([]byte(toolCallJSON), &toolCallData); err != nil {
+			slog.Error("Error unmarshaling embedded tool call", "index", i, "error", err)
+			continue
+		}
+
+		toolCall := llms.ToolCall{
+			ID:   toolCallData.ToolCallID,
+			Type: toolCallData.Type,
+			FunctionCall: &llms.FunctionCall{
+				Name:      toolCallData.Function.Name,
+				Arguments: string(toolCallData.Function.Arguments),
+			},
+		}
+
+		toolCalls = append(toolCalls, toolCall)
+	}
+
+	result := regex.ReplaceAllString(content, " ")
+
+	return result, toolCalls
+}
+
 func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	if config.Get().EchoConversation {
 		handleEcho("LLM", w.Response)
@@ -670,15 +723,25 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	}
 
 	content := ""
-	for _, reply := range resp.Choices {
-		if reply.Content != "" {
-			content = reply.Content
-			//cs.sendOutput(reply.Content)
+	for i := range resp.Choices {
+		// Check for embedded tool_use in content
+		if resp.Choices[i].Content != "" {
+			content = resp.Choices[i].Content
+
+			modifiedContent, extractedToolCalls := extractEmbeddedToolCalls(resp.Choices[i].Content)
+			if len(extractedToolCalls) > 0 {
+				resp.Choices[i].Content = modifiedContent
+				content = modifiedContent
+
+				resp.Choices[i].ToolCalls = append(resp.Choices[i].ToolCalls, extractedToolCalls...)
+			}
 		}
 
-		if len(reply.ToolCalls) > 0 {
-			_, err := cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
+		// Process tool calls (both explicit and extracted)
+		if len(resp.Choices[i].ToolCalls) > 0 {
+			_, err := cs.handleToolCalls(resp.Choices[i], &toolCallRequest, &toolCallResult)
 			if err != nil {
+				slog.Error("Error handling tool calls", "error", err)
 				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
 				continue
 			}
