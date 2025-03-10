@@ -730,36 +730,22 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 
 			modifiedContent, extractedToolCalls := extractEmbeddedToolCalls(resp.Choices[i].Content)
 			if len(extractedToolCalls) > 0 {
-				slog.Info("Found and extracted embedded tool calls", "count", len(extractedToolCalls))
-
-				// Update the content with the tool_use block removed
 				resp.Choices[i].Content = modifiedContent
 				content = modifiedContent
 
-				slog.Info("Updated content after extracting tool calls", "content", content)
-
-				// Add the extracted tool calls to the reply
 				resp.Choices[i].ToolCalls = append(resp.Choices[i].ToolCalls, extractedToolCalls...)
-
-				slog.Info("Added extracted tool calls to reply",
-					"choice_index", i,
-					"extracted_count", len(extractedToolCalls),
-					"total_count", len(resp.Choices[i].ToolCalls))
 			}
 		}
 
 		// Process tool calls (both explicit and extracted)
 		if len(resp.Choices[i].ToolCalls) > 0 {
-			slog.Info("Processing tool calls", "tool_calls_count", len(resp.Choices[i].ToolCalls))
-
-			toolCallSuccess, err := cs.handleToolCalls(resp.Choices[i], &toolCallRequest, &toolCallResult)
+			_, err := cs.handleToolCalls(resp.Choices[i], &toolCallRequest, &toolCallResult)
 			if err != nil {
 				slog.Error("Error handling tool calls", "error", err)
 				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
 				continue
 			}
 
-			slog.Info("Tool call processing completed", "success", toolCallSuccess)
 			toolCall = true
 		}
 	}
