@@ -17,9 +17,12 @@ export const setupSSEConnection = ({
   maxReconnectAttempts = 5,
   initialReconnectDelay = 500
 }) => {
+  let currentSessionId = continueId;
+
   const baseUrl = pubClient.defaults.baseURL;
   const token = localStorage.getItem('token');
   const params = new URLSearchParams();
+
   if (continueId) {
     params.append('session_id', continueId);
   }
@@ -27,17 +30,14 @@ export const setupSSEConnection = ({
     params.append('token', token);
   }
   const url = `${baseUrl}/common/chat/${chatId}${params.toString() ? `?${params.toString()}` : ''}`;
-  console.log('Setting up SSE connection to:', url);
 
   if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
-    console.log('Creating new EventSource');
     eventSourceRef.current = new EventSource(url, {
       withCredentials: true
     });
   }
 
   eventSourceRef.current.onopen = () => {
-    console.log('SSE connection established');
     setIsConnected(true);
     isConnectedRef.current = true;
     reconnectAttempts.current = 0;
@@ -52,18 +52,16 @@ export const setupSSEConnection = ({
   // Listen specifically for session_id events
   eventSourceRef.current.addEventListener('session_id', (event) => {
     try {
-      console.log('SSE session_id event received:', event.data);
       const data = JSON.parse(event.data);
-      console.log('Processing session_id message:', data);
       const newSessionId = data.payload;
-      console.log('Setting new sessionId:', newSessionId);
+      
+      currentSessionId = newSessionId;
+      
       setSessionId(newSessionId);
       // Update URL with new session ID
       const newUrl = `/chat/${chatId}?continue_id=${newSessionId}`;
-      console.log('Updating URL to:', newUrl);
       try {
         window.history.replaceState({}, "", newUrl);
-        console.log('URL updated successfully');
       } catch (err) {
         console.error('Failed to update URL:', err);
       }
@@ -124,7 +122,6 @@ export const setupSSEConnection = ({
   // Handle stream_chunk events
   eventSourceRef.current.addEventListener('stream_chunk', (event) => {
     try {
-      console.log('SSE stream_chunk received:', event.data);
       onMessageReceived({
         type: 'stream_chunk',
         payload: event.data
@@ -137,7 +134,6 @@ export const setupSSEConnection = ({
   // Handle message events
   eventSourceRef.current.addEventListener('message', (event) => {
     try {
-      console.log('SSE message received:', event.data);
       const data = JSON.parse(event.data);
       onMessageReceived(data);
     } catch (error) {
@@ -148,7 +144,6 @@ export const setupSSEConnection = ({
   // Handle system events
   eventSourceRef.current.addEventListener('system', (event) => {
     try {
-      console.log('SSE system message received:', event.data);
       const messageContent = event.data.includes(':::system')
         ? event.data
         : `:::system ${event.data}:::`;
@@ -166,7 +161,6 @@ export const setupSSEConnection = ({
   // Handle error events
   eventSourceRef.current.addEventListener('error', (event) => {
     try {
-      console.log('SSE error message received:', event.data);
       const errorType = detectErrorType(event.data);
 
       // For LLM config errors, don't attempt reconnection
@@ -189,7 +183,6 @@ export const setupSSEConnection = ({
   // Handle any other events
   eventSourceRef.current.onmessage = (event) => {
     try {
-      console.log('SSE generic message received:', event.data);
       const data = JSON.parse(event.data);
       onMessageReceived(data);
     } catch (error) {
@@ -209,6 +202,7 @@ export const setupSSEConnection = ({
     isConnectedRef.current = false;
     setIsLoading(false);
 
+    
     // Check if we have a recent LLM config error
     const hasLLMError = error?.data && detectErrorType(error.data) === 'llm_config';
 
@@ -221,11 +215,9 @@ export const setupSSEConnection = ({
       });
 
       const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
-      console.log(`Attempting to reconnect in ${delay / 1000} seconds... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
 
       setTimeout(() => {
         reconnectAttempts.current++;
-        console.log("Reconnecting SSE...");
 
         if (eventSourceRef.current) {
           eventSourceRef.current.close();
@@ -236,7 +228,7 @@ export const setupSSEConnection = ({
           setupSSEConnection({
             eventSourceRef,
             chatId,
-            continueId,
+            continueId: currentSessionId || continueId,
             onMessageReceived,
             setIsConnected,
             setSessionId,
