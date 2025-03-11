@@ -433,19 +433,19 @@ type ChatResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name                string                 `json:"name"`
-		Description         string                 `json:"description"`
-		LLMSettingsID       string                 `json:"llm_settings_id"`
-		LLMID               string                 `json:"llm_id"`
-		Groups              []GroupResponse        `json:"groups"`
-		Filters             []FilterResponse       `json:"filters"`
-		RagN                int                    `json:"rag_n"`
-		ToolSupport         bool                   `json:"tool_support"`
-		SystemPrompt        string                 `json:"system_prompt"`
-		DefaultDataSourceID int                    `json:"default_data_source_id"`
-		DefaultDataSource   DatasourceResponse     `json:"default_data_source"`
-		ExtraContext        []FileStoreResponse    `json:"extra_context"`
-		DefaultTools        []ToolResponse         `json:"default_tools"`
+		Name                string                   `json:"name"`
+		Description         string                   `json:"description"`
+		LLMSettingsID       string                   `json:"llm_settings_id"`
+		LLMID               string                   `json:"llm_id"`
+		Groups              []GroupResponse          `json:"groups"`
+		Filters             []FilterResponse         `json:"filters"`
+		RagN                int                      `json:"rag_n"`
+		ToolSupport         bool                     `json:"tool_support"`
+		SystemPrompt        string                   `json:"system_prompt"`
+		DefaultDataSourceID int                      `json:"default_data_source_id"`
+		DefaultDataSource   DatasourceResponse       `json:"default_data_source"`
+		ExtraContext        []FileStoreResponse      `json:"extra_context"`
+		DefaultTools        []ToolResponse           `json:"default_tools"`
 		PromptTemplates     []PromptTemplateResponse `json:"prompt_templates"`
 	} `json:"attributes"`
 }
@@ -889,7 +889,7 @@ type CMessageResponse struct {
 	ID         string `json:"id"`
 	Attributes struct {
 		Session   string    `json:"session"`
-		Content   string    `json:"content"`
+		Content   any       `json:"content"`
 		CreatedAt time.Time `json:"created_at"`
 		ChatID    uint      `json:"chat_id"`
 	} `json:"attributes"`

@@ -723,25 +723,15 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	}
 
 	content := ""
-	for i := range resp.Choices {
-		// Check for embedded tool_use in content
-		if resp.Choices[i].Content != "" {
-			content = resp.Choices[i].Content
-
-			modifiedContent, extractedToolCalls := extractEmbeddedToolCalls(resp.Choices[i].Content)
-			if len(extractedToolCalls) > 0 {
-				resp.Choices[i].Content = modifiedContent
-				content = modifiedContent
-
-				resp.Choices[i].ToolCalls = append(resp.Choices[i].ToolCalls, extractedToolCalls...)
-			}
+	for _, reply := range resp.Choices {
+		if reply.Content != "" {
+			content = reply.Content
+			//cs.sendOutput(reply.Content)
 		}
 
-		// Process tool calls (both explicit and extracted)
-		if len(resp.Choices[i].ToolCalls) > 0 {
-			_, err := cs.handleToolCalls(resp.Choices[i], &toolCallRequest, &toolCallResult)
+		if len(reply.ToolCalls) > 0 {
+			_, err := cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
 			if err != nil {
-				slog.Error("Error handling tool calls", "error", err)
 				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
 				continue
 			}
@@ -751,91 +741,6 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	}
 
 	ctx := context.Background()
-
-	if toolCall {
-		// Get final response from LLM with tool results
-		history, err := cs.getMessages()
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
-			return err
-		}
-
-		// First store the tool call with tool_use block
-		toolCallData := map[string]interface{}{
-			"tool_call_id": toolCallRequest.Parts[0].(llms.ToolCall).ID,
-			"type":         toolCallRequest.Parts[0].(llms.ToolCall).Type,
-			"function": map[string]interface{}{
-				"name":      toolCallRequest.Parts[0].(llms.ToolCall).FunctionCall.Name,
-				"arguments": json.RawMessage(toolCallRequest.Parts[0].(llms.ToolCall).FunctionCall.Arguments),
-			},
-		}
-		toolCallJSON, err := json.Marshal(toolCallData)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error marshaling tool call: %v", err))
-			return err
-		}
-
-		toolCallMessage := llms.MessageContent{
-			Role: llms.ChatMessageTypeAI,
-			Parts: []llms.ContentPart{
-				llms.TextContent{
-					Text: fmt.Sprintf("tool_use\n%s\n/tool_use", string(toolCallJSON)),
-				},
-			},
-		}
-		err = cs.chatHistory.AddMessage(ctx, toolCallMessage)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
-			return err
-		}
-
-		// Then store the tool result with tool_result block
-		for _, part := range toolCallResult.Parts {
-			if toolResp, ok := part.(llms.ToolCallResponse); ok {
-				toolResultData := map[string]interface{}{
-					"tool_call_id": toolResp.ToolCallID,
-					"content":      json.RawMessage(toolResp.Content),
-				}
-				toolResultJSON, err := json.Marshal(toolResultData)
-				if err != nil {
-					cs.sendError(fmt.Errorf("error marshaling tool result: %v", err))
-					return err
-				}
-
-				toolResultMessage := llms.MessageContent{
-					Role: llms.ChatMessageTypeTool,
-					Parts: []llms.ContentPart{
-						llms.TextContent{
-							Text: fmt.Sprintf("tool_result\n%s\n/tool_result", string(toolResultJSON)),
-						},
-					},
-				}
-				err = cs.chatHistory.AddMessage(ctx, toolResultMessage)
-				if err != nil {
-					cs.sendError(fmt.Errorf("error adding tool result to history: %v", err))
-					return err
-				}
-			}
-		}
-
-		// Get updated history with tool call and result
-		history, err = cs.getMessages()
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
-			return err
-		}
-
-		// Check token length and get LLM response based on updated history
-		history = cs.PreflightTokenLengthCheck(history)
-		resp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
-			return err
-		}
-
-		// Send the new LLM response to continue the conversation
-		cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: w.Opts}
-	}
 
 	if content != "" {
 		// For regular messages without tool calls
@@ -866,6 +771,45 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			// 	return fmt.Errorf("streaming channel is full")
 			// }
 		}
+	}
+
+	if toolCall {
+		// Get final response from LLM with tool results
+		history, err := cs.getMessages()
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
+			return err
+		}
+
+		err = cs.chatHistory.AddMessage(ctx, toolCallRequest)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
+
+		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
+
+		// Get updated history with tool call and result
+		history, err = cs.getMessages()
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
+			return err
+		}
+
+		// Check token length and get LLM response based on updated history
+		history = cs.PreflightTokenLengthCheck(history)
+		resp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
+			return err
+		}
+
+		// Send the new LLM response to continue the conversation
+		cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: w.Opts}
 	}
 
 	return nil
