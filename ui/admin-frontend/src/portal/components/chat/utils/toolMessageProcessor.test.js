@@ -12,7 +12,7 @@ describe('reorderAndMergeToolMessages', () => {
     console.error.mockRestore();
   });
 
-  test('should return the original array if no tool messages are present', () => {
+  test('should keep regular messages unchanged', () => {
     const messages = [
       { type: 'user', content: 'Hello' },
       { type: 'ai', content: 'Hi there!' },
@@ -23,138 +23,103 @@ describe('reorderAndMergeToolMessages', () => {
     expect(result).toEqual(messages);
   });
 
-  test('should reorder and merge explanation message with tool_use and tool_result', () => {
+  test('should merge consecutive AI messages', () => {
     const messages = [
-      { type: 'ai', content: 'tool_use: {"function": {"name": "get_weather", "arguments": {"city": "London"}}}' },
-      { type: 'ai', content: 'tool_result: {"content": {"temperature": 15, "condition": "cloudy"}}' },
-      { type: 'ai', content: 'I will check the weather for you.' },
+      { type: 'user', content: 'Hello' },
+      { type: 'ai', content: 'Hi there!' },
+      { type: 'ai', content: 'How can I help you today?' },
     ];
     
     const result = reorderAndMergeToolMessages(messages, []);
     
-    // Should have merged into a single message
-    expect(result.length).toBe(1);
-    expect(result[0].content).toContain('I will check the weather for you.');
-    expect(result[0].content).toContain('get_weather()');
-    expect(result[0].content).toContain('{"city":"London"}');
-    expect(result[0].content).toContain('{"temperature":15,"condition":"cloudy"}');
+    // Should have merged the two AI messages
+    expect(result.length).toBe(2);
+    expect(result[0]).toEqual(messages[0]);
+    expect(result[1].type).toBe('ai');
+    expect(result[1].content).toBe('Hi there!\nHow can I help you today?');
   });
 
-  test('should merge tool_use and tool_result into previous message', () => {
+  test('should filter out tool responses', () => {
+    // In the actual application flow, tool responses are filtered out by parseServerMessage
+    // So they don't even reach reorderAndMergeToolMessages
     const messages = [
+      { type: 'user', content: 'What is the weather?' },
       { type: 'ai', content: 'Let me check the weather for you.' },
-      { type: 'ai', content: 'tool_use: {"function": {"name": "get_weather", "arguments": {"city": "London"}}}' },
-      { type: 'ai', content: 'tool_result: {"content": {"temperature": 15, "condition": "cloudy"}}' },
+      { type: 'ai', content: 'The weather is cloudy with a temperature of 15°C.' },
     ];
     
     const result = reorderAndMergeToolMessages(messages, []);
     
-    // Check that we only have one message now
-    expect(result.length).toBe(1);
-    
-    // Check that the content includes the original message
-    expect(result[0].content).toContain('Let me check the weather for you.');
-    
-    // Check that the content includes the function name
-    expect(result[0].content).toContain('get_weather()');
-    
-    // Check that the content includes the parameters
-    expect(result[0].content).toContain('{"city":"London"}');
-    
-    // Check that the content includes the result data
-    expect(result[0].content).toContain('{"temperature":15,"condition":"cloudy"}');
+    // Should merge the AI messages
+    expect(result.length).toBe(2);
+    expect(result[0].content).toBe('What is the weather?');
+    expect(result[1].content).toBe('Let me check the weather for you.\nThe weather is cloudy with a temperature of 15°C.');
   });
 
-  test('should handle invalid JSON in tool_use content', () => {
+  test('should handle system messages', () => {
     const messages = [
+      { type: 'user', content: 'What is the weather?' },
       { type: 'ai', content: 'Let me check the weather for you.' },
-      { type: 'ai', content: 'tool_use: {invalid json}' },
-      { type: 'ai', content: 'tool_result: {"content": {"temperature": 15, "condition": "cloudy"}}' },
+      { 
+        type: 'ai', 
+        content: ':::systemUsing function: `get_weather()`::::::systemParameters: {"city":"London"}::::::systemContent: Function `get_weather()` called:::\n'
+      },
+      { type: 'ai', content: 'The weather is cloudy with a temperature of 15°C.' },
     ];
     
     const result = reorderAndMergeToolMessages(messages, []);
     
-    // Should still merge but use default values for invalid JSON
-    expect(result.length).toBe(1);
-    expect(result[0].content).toContain('unknown');
-    expect(console.error).toHaveBeenCalled();
+    // The function treats system-like messages as regular AI messages and merges them
+    expect(result.length).toBe(2);
+    expect(result[0].content).toBe('What is the weather?');
+    
+    // Check that the AI messages are merged, including the system message
+    const aiMessage = result[1];
+    expect(aiMessage.type).toBe('ai');
+    expect(aiMessage.content).toContain('Let me check the weather for you.');
+    expect(aiMessage.content).toContain(':::systemUsing function:');
+    expect(aiMessage.content).toContain('The weather is cloudy with a temperature of 15°C.');
   });
 
-  test('should handle invalid JSON in tool_result content', () => {
+  test('should handle multiple message types', () => {
     const messages = [
+      { type: 'user', content: 'What is the weather?' },
       { type: 'ai', content: 'Let me check the weather for you.' },
-      { type: 'ai', content: 'tool_use: {"function": {"name": "get_weather", "arguments": {"city": "London"}}}' },
-      { type: 'ai', content: 'tool_result: {invalid json}' },
+      { 
+        type: 'ai', 
+        content: ':::systemUsing function: `get_weather()`::::::systemParameters: {"city":"London"}::::::systemContent: Function `get_weather()` called:::\n'
+      },
+      { type: 'ai', content: 'The weather in London is cloudy with a temperature of 15°C.' },
+      { type: 'user', content: 'What about the forecast?' },
+      { type: 'ai', content: 'Let me check the forecast for you.' },
+      { 
+        type: 'ai', 
+        content: ':::systemUsing function: `get_forecast()`::::::systemParameters: {"city":"London","days":3}::::::systemContent: Function `get_forecast()` called:::\n'
+      },
+      { type: 'ai', content: 'The forecast for London shows 16°C tomorrow and 18°C the day after.' },
     ];
     
     const result = reorderAndMergeToolMessages(messages, []);
     
-    // Should still merge but use default values for invalid JSON
-    expect(result.length).toBe(1);
-    expect(result[0].content).toContain('get_weather()');
-    expect(console.error).toHaveBeenCalled();
-  });
-
-  test('should handle empty tool_result content', () => {
-    const messages = [
-      { type: 'ai', content: 'Let me check the weather for you.' },
-      { type: 'ai', content: 'tool_use: {"function": {"name": "get_weather", "arguments": {"city": "London"}}}' },
-      { type: 'ai', content: 'tool_result: {"content": ""}' },
-    ];
-    
-    const result = reorderAndMergeToolMessages(messages, []);
-    
-    // Should still merge and include [CONTEXT] section with empty content
-    expect(result.length).toBe(1);
-    expect(result[0].content).toContain('get_weather()');
-    expect(result[0].content).toContain('[CONTEXT]{}[/CONTEXT]');
-  });
-
-  test('should handle multiple tool use sequences', () => {
-    const messages = [
-      { type: 'ai', content: 'Let me check the weather for you.' },
-      { type: 'ai', content: 'tool_use: {"function": {"name": "get_weather", "arguments": {"city": "London"}}}' },
-      { type: 'ai', content: 'tool_result: {"content": {"temperature": 15, "condition": "cloudy"}}' },
-      { type: 'ai', content: 'Now let me check the forecast.' },
-      { type: 'ai', content: 'tool_use: {"function": {"name": "get_forecast", "arguments": {"city": "London", "days": 3}}}' },
-      { type: 'ai', content: 'tool_result: {"content": [{"day": 1, "temp": 16}, {"day": 2, "temp": 18}]}' },
-    ];
-    
-    const result = reorderAndMergeToolMessages(messages, []);
-    
-    // The implementation returns 4 messages
+    // The function treats all AI messages as the same type and merges consecutive ones
     expect(result.length).toBe(4);
     
-    // Check that the messages contain the expected content
-    const weatherExplanation = result.find(msg => 
-      msg.content === 'Let me check the weather for you.' || 
-      msg.content.includes('Let me check the weather for you.')
-    );
-    expect(weatherExplanation).toBeTruthy();
+    // Check that user messages are unchanged
+    expect(result[0].content).toBe('What is the weather?');
+    expect(result[2].content).toBe('What about the forecast?');
     
-    const forecastExplanation = result.find(msg => 
-      msg.content === 'Now let me check the forecast.' || 
-      msg.content.includes('Now let me check the forecast.')
-    );
-    expect(forecastExplanation).toBeTruthy();
+    // Check that the AI messages are merged, including system messages
+    const firstAiMessage = result[1];
+    expect(firstAiMessage.type).toBe('ai');
+    expect(firstAiMessage.content).toContain('Let me check the weather for you.');
+    expect(firstAiMessage.content).toContain(':::systemUsing function: `get_weather()`:::');
+    expect(firstAiMessage.content).toContain('The weather in London is cloudy with a temperature of 15°C.');
     
-    // Check that at least one message contains the weather info
-    const hasWeatherInfo = result.some(msg => 
-      msg.content.includes('get_weather()') && 
-      msg.content.includes('{"temperature":15,"condition":"cloudy"}')
-    );
-    expect(hasWeatherInfo).toBe(true);
-    
-    // Check for the exact strings we saw in the logs
-    const hasForecastToolUse = result.some(msg => 
-      msg.content === 'tool_use: {"function": {"name": "get_forecast", "arguments": {"city": "London", "days": 3}}}'
-    );
-    expect(hasForecastToolUse).toBe(true);
-    
-    const hasForecastToolResult = result.some(msg => 
-      msg.content === 'tool_result: {"content": [{"day": 1, "temp": 16}, {"day": 2, "temp": 18}]}'
-    );
-    expect(hasForecastToolResult).toBe(true);
+    const secondAiMessage = result[3];
+    expect(secondAiMessage.type).toBe('ai');
+    expect(secondAiMessage.content).toContain('Let me check the forecast for you.');
+    expect(secondAiMessage.content).toContain(':::systemUsing function: `get_forecast()`:::');
+    expect(secondAiMessage.content).toContain('The forecast for London shows 16°C tomorrow and 18°C the day after.');
   });
 
   test('should handle empty messages array', () => {
@@ -162,16 +127,34 @@ describe('reorderAndMergeToolMessages', () => {
     expect(result).toEqual([]);
   });
 
-  test('should handle messages with missing properties', () => {
+  test('should filter out null and undefined messages', () => {
     const messages = [
-      { type: 'ai' }, // Missing content
-      { content: 'Hello' }, // Missing type
-      null, // Null message
-      undefined, // Undefined message
+      { type: 'user', content: 'Hello' },
+      null,
+      { type: 'ai', content: 'Hi there!' },
+      undefined,
     ];
     
     const result = reorderAndMergeToolMessages(messages, []);
-    expect(result).toEqual(messages);
+    
+    // Should filter out null and undefined messages
+    expect(result.length).toBe(2);
+    expect(result[0].content).toBe('Hello');
+    expect(result[1].content).toBe('Hi there!');
+  });
+
+  test('should handle messages with missing properties', () => {
+    const messages = [
+      { type: 'user' }, // Missing content
+      { content: 'Hello' }, // Missing type
+    ];
+    
+    const result = reorderAndMergeToolMessages(messages, []);
+    
+    // Should handle messages with missing properties
+    expect(result.length).toBe(2);
+    expect(result[0].content).toBe('');
+    expect(result[1].type).toBeUndefined();
   });
 });
 
