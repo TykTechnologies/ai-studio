@@ -599,6 +599,11 @@ const MessageContent = ({
 							padding: '12px',
 							maxWidth: '85%',
 						}),
+						...(messageType === 'ai' && {
+							borderBottom: '1px solid',
+							borderColor: 'border.neutralDefault',
+							pb: 2
+						  }),
 						'&:hover .edit-button': {
 							opacity: 1,
 							visibility: 'visible'

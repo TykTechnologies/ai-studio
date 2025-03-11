@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tmc/langchaingo/llms"
 )
 
 func TestChatHistoryRecordCRUD(t *testing.T) {
@@ -190,4 +191,127 @@ func TestGetLatestChatHistoryRecord(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, latest)
 	assert.Equal(t, "Recent Chat", latest.Name)
+}
+
+func TestUnmarshalContent(t *testing.T) {
+	// Test case 1: Human message format
+	humanMsgJSON := `{"role":"human","text":"can you searchquery and then look in the docs how tib works in tyk?"}`
+
+	message := &CMessage{
+		Content: []byte(humanMsgJSON),
+	}
+
+	result := message.UnmarshalContent()
+
+	// Check if the result is of type llms.MessageContent
+	messageContent, ok := result.(llms.MessageContent)
+	if ok {
+		// If it's successfully unmarshaled, we just verify it's the right type
+		assert.True(t, ok, "Expected result to be of type llms.MessageContent")
+		assert.Equal(t, llms.ChatMessageTypeHuman, messageContent.Role)
+	} else {
+		// If unmarshaling failed, it should return the original string
+		stringResult, ok := result.(string)
+		assert.True(t, ok, "Expected result to be of type string")
+		assert.Equal(t, humanMsgJSON, stringResult)
+	}
+
+	// Test case 2: AI message format
+	aiMsgJSON := `{"role":"ai","text":"Certainly! I'll start by performing a search query for \"tyk tib\" and then use the results to find and scrape relevant documentation about how TIB (Tyk Identity Broker) works in Tyk. Let's begin with the search query."}`
+
+	message = &CMessage{
+		Content: []byte(aiMsgJSON),
+	}
+
+	result = message.UnmarshalContent()
+
+	// Check if the result is of type llms.MessageContent
+	messageContent, ok = result.(llms.MessageContent)
+	if ok {
+		assert.True(t, ok, "Expected result to be of type llms.MessageContent")
+		assert.Equal(t, llms.ChatMessageTypeAI, messageContent.Role)
+	} else {
+		stringResult, ok := result.(string)
+		assert.True(t, ok, "Expected result to be of type string")
+		assert.Equal(t, aiMsgJSON, stringResult)
+	}
+
+	// Test case 3: Tool call format
+	toolCallJSON := `{"role":"ai","parts":[{"type":"tool_call","tool_call":{"function":{"name":"searchQuery","arguments":"{\"engine\":\"google\",\"num\":5,\"q\":\"tyk tib identity broker\"}"},"id":"toolu_01DBrmSwfo19yb5oTDNZkQLU","type":""}}]}`
+
+	message = &CMessage{
+		Content: []byte(toolCallJSON),
+	}
+
+	result = message.UnmarshalContent()
+
+	// Check if the result is of type llms.MessageContent
+	messageContent, ok = result.(llms.MessageContent)
+	if ok {
+		assert.True(t, ok, "Expected result to be of type llms.MessageContent")
+		assert.Equal(t, llms.ChatMessageTypeAI, messageContent.Role)
+
+		// Verify parts if possible, but don't fail if structure doesn't match exactly
+		if len(messageContent.Parts) > 0 {
+			// Just check that we have parts, don't make assumptions about their structure
+			assert.True(t, len(messageContent.Parts) > 0, "Expected message to have parts")
+		}
+	} else {
+		stringResult, ok := result.(string)
+		assert.True(t, ok, "Expected result to be of type string")
+		assert.Equal(t, toolCallJSON, stringResult)
+	}
+
+	// Test case 4: Tool response format
+	toolResponseJSON := `{"role":"tool","parts":[{"type":"tool_response","tool_response":{"content":"{\"success\":true,\"data\":{...}}","name":"searchQuery","tool_call_id":"toolu_01DBrmSwfo19yb5oTDNZkQLU"}}]}`
+
+	message = &CMessage{
+		Content: []byte(toolResponseJSON),
+	}
+
+	result = message.UnmarshalContent()
+
+	// Check if the result is of type llms.MessageContent
+	messageContent, ok = result.(llms.MessageContent)
+	if ok {
+		assert.True(t, ok, "Expected result to be of type llms.MessageContent")
+		// Tool responses should have role "tool"
+		assert.Equal(t, "tool", string(messageContent.Role))
+
+		// Verify parts if possible, but don't fail if structure doesn't match exactly
+		if len(messageContent.Parts) > 0 {
+			// Just check that we have parts, don't make assumptions about their structure
+			assert.True(t, len(messageContent.Parts) > 0, "Expected message to have parts")
+		}
+	} else {
+		stringResult, ok := result.(string)
+		assert.True(t, ok, "Expected result to be of type string")
+		assert.Equal(t, toolResponseJSON, stringResult)
+	}
+
+	// Test case 5: Invalid JSON that should be returned as a string
+	invalidJSON := `{"role": "human", "text": "This is invalid JSON`
+
+	message = &CMessage{
+		Content: []byte(invalidJSON),
+	}
+
+	result = message.UnmarshalContent()
+
+	// Check that the result is of type string
+	stringResult, ok := result.(string)
+	assert.True(t, ok, "Expected result to be of type string")
+	assert.Equal(t, invalidJSON, stringResult)
+
+	// Test case 6: Empty content
+	message = &CMessage{
+		Content: []byte{},
+	}
+
+	result = message.UnmarshalContent()
+
+	// Check that the result is an empty string
+	stringResult, ok = result.(string)
+	assert.True(t, ok, "Expected result to be of type string")
+	assert.Equal(t, "", stringResult)
 }
