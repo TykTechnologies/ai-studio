@@ -1199,8 +1199,6 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 	// Try to parse as JSON to check if it's a final message
 	var msg llms.MessageContent
-	fmt.Println("---------------------------------")
-	fmt.Println("STREAMING CHUNK", string(chunk))
 	if err := json.Unmarshal(chunk, &msg); err != nil {
 		// Not JSON, send as stream chunk
 		select {
