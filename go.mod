@@ -166,5 +166,4 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-//replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20250131233632-4cdc6fe5fe92
-replace github.com/tmc/langchaingo => ../langchaingo
+replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20250131233632-4cdc6fe5fe92
