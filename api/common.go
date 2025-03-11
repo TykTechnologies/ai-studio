@@ -1147,12 +1147,12 @@ func (a *API) getLastCMessagesForSession(c *gin.Context) {
 			ID:   strconv.FormatUint(uint64(msg.ID), 10),
 			Attributes: struct {
 				Session   string    `json:"session"`
-				Content   string    `json:"content"`
+				Content   any       `json:"content"`
 				CreatedAt time.Time `json:"created_at"`
 				ChatID    uint      `json:"chat_id"`
 			}{
 				Session:   msg.Session,
-				Content:   string(msg.Content),
+				Content:   msg.UnmarshalContent(),
 				CreatedAt: msg.CreatedAt,
 				ChatID:    msg.ChatID,
 			},

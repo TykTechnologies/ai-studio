@@ -75,7 +75,7 @@ describe('parseServerMessage', () => {
     });
   });
   
-  test('should parse a tool message as AI message', () => {
+  test('should return null for tool messages (role: tool)', () => {
     const serverMessage = {
       id: '101',
       attributes: {
@@ -88,12 +88,8 @@ describe('parseServerMessage', () => {
     
     const result = parseServerMessage(serverMessage);
     
-    expect(result).toEqual({
-      id: '101',
-      type: 'ai',
-      content: 'Tool result',
-      isComplete: true
-    });
+    // Tool messages should be filtered out
+    expect(result).toBeNull();
   });
   
   test('should handle messages with context', () => {
@@ -191,7 +187,7 @@ describe('parseServerMessage', () => {
     });
   });
   
-  test('should return null for unknown role', () => {
+  test('should handle default role as AI message', () => {
     const serverMessage = {
       id: '606',
       attributes: {
@@ -204,7 +200,122 @@ describe('parseServerMessage', () => {
     
     const result = parseServerMessage(serverMessage);
     
+    // Default to AI message for unknown roles
+    expect(result).toEqual({
+      id: '606',
+      type: 'ai',
+      content: 'Unknown role message',
+      isComplete: true
+    });
+  });
+  
+  test('should detect and convert legacy format tool calls', () => {
+    const serverMessage = {
+      id: '707',
+      attributes: {
+        content: 'tool_use\n{"function": {"name": "get_weather", "arguments": {"city": "London"}}}\n/tool_use'
+      }
+    };
+    
+    const result = parseServerMessage(serverMessage);
+    
+    expect(result).toEqual({
+      id: '707',
+      type: 'ai',
+      content: ':::systemUsing function: `get_weather()`::::::systemParameters: {"city":"London"}::::::systemContent: Function `get_weather()` called:::\n',
+      isComplete: true
+    });
+  });
+  
+  test('should detect and convert new format tool calls', () => {
+    const serverMessage = {
+      id: '808',
+      attributes: {
+        content: JSON.stringify({
+          parts: [
+            {
+              type: 'tool_call',
+              tool_call: {
+                function: {
+                  name: 'get_weather',
+                  arguments: '{"city":"London"}'
+                }
+              }
+            }
+          ]
+        })
+      }
+    };
+    
+    const result = parseServerMessage(serverMessage);
+    
+    expect(result).toEqual({
+      id: '808',
+      type: 'ai',
+      content: ':::systemUsing function: `get_weather()`::::::systemParameters: {"city":"London"}::::::systemContent: Function `get_weather()` called:::\n',
+      isComplete: true
+    });
+  });
+  
+  test('should handle legacy format tool responses as AI messages', () => {
+    const serverMessage = {
+      id: '909',
+      attributes: {
+        content: 'tool_result: {"content": {"temperature": 15, "condition": "cloudy"}}'
+      }
+    };
+    
+    const result = parseServerMessage(serverMessage);
+    
+    // Legacy format tool responses are treated as regular AI messages
+    expect(result).toEqual({
+      id: '909',
+      type: 'ai',
+      content: 'tool_result: {"content": {"temperature": 15, "condition": "cloudy"}}',
+      isComplete: true
+    });
+  });
+  
+  test('should return null for new format tool responses', () => {
+    const serverMessage = {
+      id: '1010',
+      attributes: {
+        content: JSON.stringify({
+          parts: [
+            {
+              type: 'tool_response',
+              tool_response: {
+                content: '{"temperature": 15, "condition": "cloudy"}'
+              }
+            }
+          ]
+        })
+      }
+    };
+    
+    const result = parseServerMessage(serverMessage);
+    
+    // Tool responses should be filtered out
     expect(result).toBeNull();
+  });
+  
+  test('should handle errors gracefully', () => {
+    const serverMessage = {
+      id: '1111',
+      attributes: {
+        content: {} // Invalid content that will cause an error
+      }
+    };
+    
+    const result = parseServerMessage(serverMessage);
+    
+    // Should default to AI message with empty content
+    expect(result).toEqual({
+      id: '1111',
+      type: 'ai',
+      content: '',
+      isComplete: true
+    });
   });
 });
 
