@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -648,6 +649,58 @@ func handleEcho(prefix string, dat interface{}) {
 	}
 }
 
+func extractEmbeddedToolCalls(content string) (string, []llms.ToolCall) {
+	regex := regexp.MustCompile(`(?s)\s*tool_use\s*\n?(.*?)\s*/tool_use\s*`)
+
+	matches := regex.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return content, nil
+	}
+
+	var toolCalls []llms.ToolCall
+
+	for i, match := range matches {
+		if len(match) <= 1 {
+			continue
+		}
+
+		toolCallJSON := strings.TrimSpace(match[1])
+		slog.Info("Found embedded tool_use block",
+			"index", i,
+			"match_length", len(match[0]),
+			"tool_call_json", toolCallJSON)
+
+		var toolCallData struct {
+			Function struct {
+				Name      string          `json:"name"`
+				Arguments json.RawMessage `json:"arguments"`
+			} `json:"function"`
+			ToolCallID string `json:"tool_call_id"`
+			Type       string `json:"type"`
+		}
+
+		if err := json.Unmarshal([]byte(toolCallJSON), &toolCallData); err != nil {
+			slog.Error("Error unmarshaling embedded tool call", "index", i, "error", err)
+			continue
+		}
+
+		toolCall := llms.ToolCall{
+			ID:   toolCallData.ToolCallID,
+			Type: toolCallData.Type,
+			FunctionCall: &llms.FunctionCall{
+				Name:      toolCallData.Function.Name,
+				Arguments: string(toolCallData.Function.Arguments),
+			},
+		}
+
+		toolCalls = append(toolCalls, toolCall)
+	}
+
+	result := regex.ReplaceAllString(content, " ")
+
+	return result, toolCalls
+}
+
 func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	if config.Get().EchoConversation {
 		handleEcho("LLM", w.Response)
@@ -689,91 +742,6 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 
 	ctx := context.Background()
 
-	if toolCall {
-		// Get final response from LLM with tool results
-		history, err := cs.getMessages()
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
-			return err
-		}
-
-		// First store the tool call with tool_use block
-		toolCallData := map[string]interface{}{
-			"tool_call_id": toolCallRequest.Parts[0].(llms.ToolCall).ID,
-			"type":         toolCallRequest.Parts[0].(llms.ToolCall).Type,
-			"function": map[string]interface{}{
-				"name":      toolCallRequest.Parts[0].(llms.ToolCall).FunctionCall.Name,
-				"arguments": json.RawMessage(toolCallRequest.Parts[0].(llms.ToolCall).FunctionCall.Arguments),
-			},
-		}
-		toolCallJSON, err := json.Marshal(toolCallData)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error marshaling tool call: %v", err))
-			return err
-		}
-
-		toolCallMessage := llms.MessageContent{
-			Role: llms.ChatMessageTypeAI,
-			Parts: []llms.ContentPart{
-				llms.TextContent{
-					Text: fmt.Sprintf("tool_use\n%s\n/tool_use", string(toolCallJSON)),
-				},
-			},
-		}
-		err = cs.chatHistory.AddMessage(ctx, toolCallMessage)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
-			return err
-		}
-
-		// Then store the tool result with tool_result block
-		for _, part := range toolCallResult.Parts {
-			if toolResp, ok := part.(llms.ToolCallResponse); ok {
-				toolResultData := map[string]interface{}{
-					"tool_call_id": toolResp.ToolCallID,
-					"content":      json.RawMessage(toolResp.Content),
-				}
-				toolResultJSON, err := json.Marshal(toolResultData)
-				if err != nil {
-					cs.sendError(fmt.Errorf("error marshaling tool result: %v", err))
-					return err
-				}
-
-				toolResultMessage := llms.MessageContent{
-					Role: llms.ChatMessageTypeTool,
-					Parts: []llms.ContentPart{
-						llms.TextContent{
-							Text: fmt.Sprintf("tool_result\n%s\n/tool_result", string(toolResultJSON)),
-						},
-					},
-				}
-				err = cs.chatHistory.AddMessage(ctx, toolResultMessage)
-				if err != nil {
-					cs.sendError(fmt.Errorf("error adding tool result to history: %v", err))
-					return err
-				}
-			}
-		}
-
-		// Get updated history with tool call and result
-		history, err = cs.getMessages()
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
-			return err
-		}
-
-		// Check token length and get LLM response based on updated history
-		history = cs.PreflightTokenLengthCheck(history)
-		resp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
-			return err
-		}
-
-		// Send the new LLM response to continue the conversation
-		cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: w.Opts}
-	}
-
 	if content != "" {
 		// For regular messages without tool calls
 		err := cs.chatHistory.AddAIMessage(ctx, content)
@@ -803,6 +771,45 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			// 	return fmt.Errorf("streaming channel is full")
 			// }
 		}
+	}
+
+	if toolCall {
+		// Get final response from LLM with tool results
+		history, err := cs.getMessages()
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
+			return err
+		}
+
+		err = cs.chatHistory.AddMessage(ctx, toolCallRequest)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
+
+		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
+			return err
+		}
+
+		// Get updated history with tool call and result
+		history, err = cs.getMessages()
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
+			return err
+		}
+
+		// Check token length and get LLM response based on updated history
+		history = cs.PreflightTokenLengthCheck(history)
+		resp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
+		if err != nil {
+			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
+			return err
+		}
+
+		// Send the new LLM response to continue the conversation
+		cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: w.Opts}
 	}
 
 	return nil

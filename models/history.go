@@ -1,8 +1,10 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
+	"github.com/tmc/langchaingo/llms"
 	"gorm.io/gorm"
 )
 
@@ -57,6 +59,17 @@ func (chr *ChatHistoryRecord) GetByChatID(db *gorm.DB, chatID uint) error {
 
 func (chr *ChatHistoryRecord) UpdateName(db *gorm.DB, newName string) error {
 	return db.Model(chr).Update("name", newName).Error
+}
+
+func (cm *CMessage) UnmarshalContent() any {
+	var messageContent llms.MessageContent
+
+	err := json.Unmarshal(cm.Content, &messageContent)
+	if err == nil {
+		return messageContent
+	}
+
+	return string(cm.Content)
 }
 
 // ListByUserID retrieves all ChatHistoryRecords for a given UserID
