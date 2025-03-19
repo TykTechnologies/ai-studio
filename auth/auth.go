@@ -76,7 +76,7 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 		return err
 	}
 
-	expirationTime := time.Now().Add(1 * time.Hour)
+	expirationTime := time.Now().Add(6 * time.Hour)
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     a.Config.CookieName,
 		Value:    token,
