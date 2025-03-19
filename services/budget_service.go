@@ -98,13 +98,16 @@ func NewBudgetService(db *gorm.DB, notificationSvc *NotificationService) *Budget
 }
 
 func (s *BudgetService) cleanupCache() {
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(1 * time.Minute)  // Run cleanup every minute instead of every millisecond
+	defer ticker.Stop()  // Ensure the ticker is cleaned up if the function exits
+	
 	for range ticker.C {
 		s.cacheMutex.Lock()
 		now := time.Now()
 		for key, data := range s.usageCache {
 			if now.Sub(data.cachedAt) > s.cacheDuration {
 				delete(s.usageCache, key)
+				log.Printf("Cache entry expired for %s ID %d", key.entityType, key.entityID)
 			}
 		}
 		s.cacheMutex.Unlock()
@@ -130,9 +133,10 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 	if data, exists := s.usageCache[key]; exists {
 		if time.Since(data.cachedAt) < s.cacheDuration {
 			s.cacheMutex.RUnlock()
-			log.Printf("App %d spending from cache: %.2f", appID, data.spent)
+			log.Printf("App %d spending from cache: %.2f (cached %v ago)", appID, data.spent, time.Since(data.cachedAt))
 			return data.spent, nil
 		}
+		log.Printf("App %d cache expired (cached %v ago)", appID, time.Since(data.cachedAt))
 	}
 	s.cacheMutex.RUnlock()
 	log.Printf("App %d spending cache miss, querying database", appID)
@@ -216,9 +220,10 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	if data, exists := s.usageCache[key]; exists {
 		if time.Since(data.cachedAt) < s.cacheDuration {
 			s.cacheMutex.RUnlock()
-			log.Printf("LLM %d spending from cache: %.2f", llmID, data.spent)
+			log.Printf("LLM %d spending from cache: %.2f (cached %v ago)", llmID, data.spent, time.Since(data.cachedAt))
 			return data.spent, nil
 		}
+		log.Printf("LLM %d cache expired (cached %v ago)", llmID, time.Since(data.cachedAt))
 	}
 	s.cacheMutex.RUnlock()
 	log.Printf("LLM %d spending cache miss, querying database", llmID)

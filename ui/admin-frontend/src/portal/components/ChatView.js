@@ -36,7 +36,6 @@ const ChatView = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [showTools, setShowTools] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState({});
-  const [autoScroll, setAutoScroll] = useState(true);
   const [showSystemMessages, setShowSystemMessages] = useState(() => {
     const saved = localStorage.getItem('showSystemMessages');
     return saved !== null ? JSON.parse(saved) : false;
@@ -55,9 +54,9 @@ const ChatView = () => {
   const messageContainerRef = useRef(null);
   const navigate = useNavigate();
   const lastTypeRef = useRef(null);
-  
-  const hasUserMessages = useMemo(() => 
-    messages.some(message => message.type === 'user'), 
+
+  const hasUserMessages = useMemo(() =>
+    messages.some(message => message.type === 'user'),
     [messages]
   );
 
@@ -199,7 +198,7 @@ const ChatView = () => {
       if (!data.payload) {
         return;
       }
-      
+
       setMessages((prevMessages) => {
         const newMessages = [...prevMessages];
         const lastMessage = newMessages[newMessages.length - 1];
@@ -261,7 +260,7 @@ const ChatView = () => {
       if (!data.payload) {
         return;
       }
-      
+
       if (data.type === 'historical_user_message' || !data.isEdited) {
         setMessages((prevMessages) => {
           const lastMessage = prevMessages[prevMessages.length - 1];
@@ -290,7 +289,7 @@ const ChatView = () => {
       if (!messageContent) {
         return;
       }
-      
+
       if (messageContent.includes('Currently using')) {
         return;
       }
@@ -321,12 +320,12 @@ const ChatView = () => {
           isSelected: data.tools.some(t => String(t.id) === tool.id)
         })));
       }
-    if (data.datasources) {
-      setDatabases(prev => prev.map(db => ({
-        ...db,
-        isSelected: data.datasources.some(d => String(d.id) === db.id)
-      })));
-    }
+      if (data.datasources) {
+        setDatabases(prev => prev.map(db => ({
+          ...db,
+          isSelected: data.datasources.some(d => String(d.id) === db.id)
+        })));
+      }
     }
   }, []);
 
@@ -368,34 +367,7 @@ const ChatView = () => {
     }
   }, []);
 
-  useEffect(() => {
-    if (autoScroll) {
-      scrollToBottom();
-    }
-  }, [messages, autoScroll, scrollToBottom]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (messageContainerRef.current) {
-        const { scrollHeight, clientHeight, scrollTop } = messageContainerRef.current;
-        const isScrolledToBottom = scrollHeight - clientHeight <= scrollTop + 1;
-        setAutoScroll(isScrolledToBottom);
-      }
-    };
-
-    const messageContainer = messageContainerRef.current;
-    if (messageContainer) {
-      messageContainer.addEventListener('scroll', handleScroll);
-    }
-
-    return () => {
-      if (messageContainer) {
-        messageContainer.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, []);
-
-  const debouncedScrollToBottom = useCallback(debounce(scrollToBottom, 100), [scrollToBottom]);
+  // Removed auto-scrolling functionality
 
   // We've removed the ResizeObserver implementation and global error handler
   // to simplify the auto-scrolling approach. Now we rely on the useEffect above
@@ -493,7 +465,6 @@ const ChatView = () => {
       setUploadedFiles([]);
       setIsUploading(false);
       setExpandedGroups({});
-      setAutoScroll(true);
     };
   }, [chatId, closeConnection]);
 
@@ -851,27 +822,14 @@ const ChatView = () => {
                       );
                     })}
 
-                    {!autoScroll && (
-                      <IconButton
-                        onClick={scrollToBottom}
-                        sx={{
-                          position: 'absolute',
-                          bottom: 70,
-                          right: 20,
-                          backgroundColor: 'background.paper',
-                          '&:hover': { backgroundColor: 'action.hover' },
-                        }}
-                      >
-                        <KeyboardArrowDownIcon />
-                      </IconButton>
-                    )}
+                    {/* Removed scroll to bottom button */}
                   </>
                 )}
               </Box>
             </Box>
-            
+
             {hasUserMessages && (
-              <Box sx={{ 
+              <Box sx={{
                 width: '100%',
                 padding: 2,
                 paddingTop: 0,
