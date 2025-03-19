@@ -69,6 +69,32 @@ func TestUser_GetByEmail(t *testing.T) {
 	assert.Equal(t, user.ID, fetchedUser.ID)
 }
 
+func TestUser_GetBySSOKey(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a user with an SSO key
+	user := &User{
+		Email:  "sso-user@example.com",
+		SSOKey: "test-sso-key-123",
+	}
+	err := user.Create(db)
+	assert.NoError(t, err)
+
+	// Test fetching by SSO key
+	fetchedUser := NewUser()
+	err = fetchedUser.GetBySSOKey(db, "test-sso-key-123")
+	assert.NoError(t, err)
+	assert.Equal(t, user.ID, fetchedUser.ID)
+	assert.Equal(t, user.Email, fetchedUser.Email)
+	assert.Equal(t, user.SSOKey, fetchedUser.SSOKey)
+
+	// Test with non-existent SSO key
+	nonExistentUser := NewUser()
+	err = nonExistentUser.GetBySSOKey(db, "non-existent-sso-key")
+	assert.Error(t, err)
+	assert.Equal(t, "record not found", err.Error())
+}
+
 func TestUser_DoesPasswordMatch(t *testing.T) {
 	user := &User{Password: "hashed_password"}
 
