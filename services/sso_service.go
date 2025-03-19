@@ -324,9 +324,18 @@ func (s *SSOService) HandleSSO(emailAddress, displayName, groupID string, ssoOnl
 			isNewUser = true
 		}
 
-		if err := s.addUserToGroupWithTx(tx, existingUser.ID, groupID); err != nil {
-			slog.Error("Failed to add user to group", "email", emailAddress, "groupID", groupID, "error", err)
+		// Always add to default group (ID 1)
+		if err := s.addUserToGroupWithTx(tx, existingUser.ID, "1"); err != nil {
+			slog.Error("Failed to add user to default group", "email", emailAddress, "userID", existingUser.ID, "error", err)
 			return err
+		}
+
+		// Add to specified group if different from default
+		if groupID != "" && groupID != "1" {
+			if err := s.addUserToGroupWithTx(tx, existingUser.ID, groupID); err != nil {
+				slog.Error("Failed to add user to additional group", "email", emailAddress, "groupID", groupID, "error", err)
+				return err
+			}
 		}
 
 		user = existingUser
