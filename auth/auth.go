@@ -37,6 +37,8 @@ type Config struct {
 	AdminEmail             string
 	TestMode               bool
 	AllowedRegisterDomains []string
+	TIBAPISecret           string
+	TIBEnabled             bool
 }
 
 // Ensure AuthService implements models.EmailSender
@@ -60,23 +62,13 @@ func NewAuthService(config *Config, mailService *notifications.MailService, serv
 	}
 }
 
-func (a *AuthService) Login(c *gin.Context, email, password string) error {
-	user, err := a.Config.Service.AuthenticateUser(email, password)
-	if err != nil {
-		if errors.Is(err, services.EmailNotVerifiedError) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
-			return fmt.Errorf("unauthorized: %w", err)
-		}
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
+func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
 	token, err := a.generateToken()
 	if err != nil {
 		return err
 	}
 
-	expirationTime := time.Now().Add(1 * time.Hour)
+	expirationTime := time.Now().Add(6 * time.Hour) //TODO: get this from a config
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     a.Config.CookieName,
 		Value:    token,
@@ -95,6 +87,20 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 
 	c.Set("user", user)
 	return nil
+}
+
+func (a *AuthService) Login(c *gin.Context, email, password string) error {
+	user, err := a.Config.Service.AuthenticateUser(email, password)
+	if err != nil {
+		if errors.Is(err, services.EmailNotVerifiedError) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
+			return fmt.Errorf("unauthorized: %w", err)
+		}
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		return fmt.Errorf("unauthorized: %w", err)
+	}
+
+	return a.SetUserSession(c, user)
 }
 
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
@@ -197,16 +203,10 @@ func (a *AuthService) Logout(c *gin.Context) error {
 		return err
 	}
 
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     a.Config.CookieName,
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		Secure:   a.Config.CookieSecure,
-		HttpOnly: a.Config.CookieHTTPOnly,
-		SameSite: a.Config.CookieSameSite,
-		Path:     "/",
-		Domain:   a.Config.CookieDomain,
-	})
+	c.Writer.Header().Set("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"")
+	c.Writer.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	c.Writer.Header().Set("Pragma", "no-cache")
+	c.Writer.Header().Set("Expires", "0")
 
 	return nil
 }
