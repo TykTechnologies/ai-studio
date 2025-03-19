@@ -69,6 +69,7 @@ type API struct {
 	staticFiles         embed.FS
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
+	ssoService          *services.SSOService
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
@@ -134,6 +135,22 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		proxy:       proxy,
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
+	}
+
+	if config.TIBEnabled {
+		logLevel := "info"
+
+		if config.TestMode {
+			logLevel = "debug"
+		}
+
+		ssoConfig := &services.Config{
+			APISecret: config.TIBAPISecret,
+			LogLevel:  logLevel,
+		}
+		api.ssoService = services.NewSSOService(ssoConfig, router, config.DB, service.NotificationService)
+
+		api.ssoService.InitInternalTIB()
 	}
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
@@ -217,7 +234,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 func (a *API) setupRoutes() {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
-	
+
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
 	} else {
@@ -311,6 +328,19 @@ func (a *API) setupRoutes() {
 	public.POST("/auth/resend-verification", a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)
 	public.GET("/auth/features", a.handleFeatureSet)
+	public.GET("/auth/:id/:provider", a.handleTIBAuth)
+	public.POST("/auth/:id/:provider", a.handleTIBAuth)
+	public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+	public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+	public.GET("/sso", a.handleSSO)
+
+	// SSO API routes
+	apiGroup := public.Group("/api")
+	apiGroup.Use(a.SSOAuthMiddleware())
+	apiGroup.POST("/sso", a.handleNonceRequest)
+	apiGroup.POST("/portal/developers", a.createSSOUser)
+	apiGroup.GET("/portal/developers/ssokey/:id", a.getSSOUserBySSOKey)
+	apiGroup.PUT("/portal/developers/:id", a.updateSSOUser)
 
 	// routes for portal users
 	authed := public.Group("/common")

@@ -130,6 +130,8 @@ func main() {
 		AdminEmail:             appConf.AdminEmail,
 		TestMode:               os.Getenv("DEVMODE") != "",
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
+		TIBEnabled:             appConf.TIBEnabled,
+		TIBAPISecret:           appConf.TIBAPISecret,
 	}
 
 	authService := auth.NewAuthService(config, mailService, service, notificationService)

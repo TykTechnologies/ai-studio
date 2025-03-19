@@ -24,6 +24,7 @@ type User struct {
 	ShowChat             bool
 	APIKey               string
 	NotificationsEnabled bool `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
+	SSOKey               string
 }
 
 type Users []User
@@ -70,6 +71,10 @@ func (u *User) Delete(db *gorm.DB) error {
 
 func (u *User) GetByEmail(db *gorm.DB, email string) error {
 	return db.Where("email = ?", email).First(u).Error
+}
+
+func (u *User) GetBySSOKey(db *gorm.DB, ssoKey string) error {
+	return db.Where("sso_key = ?", ssoKey).First(u).Error
 }
 
 func (u *User) DoesPasswordMatch(password string) bool {
