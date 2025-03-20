@@ -59,8 +59,8 @@ jobs:
         name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version: '1.23.0'
+          cache: true
 
       -
         name: Setup Hugo
@@ -127,7 +127,7 @@ jobs:
         name: Run Go Tests
         id: ci-tests
         run: |
-          GOSUMDB=off go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
       -
         name: Upload coverage
