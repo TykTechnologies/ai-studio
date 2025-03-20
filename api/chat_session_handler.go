@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -75,7 +76,13 @@ func (h *ChatHub) UpdateSession(sessionID string, updateFunc func(*chat_session.
 	defer h.mutex.Unlock()
 	session, exists := h.sessions[sessionID]
 	if !exists {
-		return fmt.Errorf("session not found")
+		// Instead of returning an error, we'll try to load or create a new session
+		slog.Info("Session not found in memory cache, attempting to load or create", "session_id", sessionID)
+		
+		// We need to create a new session with the given ID
+		// Since we don't have direct access to the API instance here,
+		// we'll return a special error that can be handled by the caller
+		return fmt.Errorf("session_not_in_cache:%s", sessionID)
 	}
 	return updateFunc(session)
 }
@@ -353,13 +360,49 @@ func (a *API) handleSSEUserMessage(c *gin.Context) {
 	hub := getChatHub()
 	session, exists := hub.GetSession(sessionID)
 	if !exists {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Session not found", Detail: "Chat session does not exist"}},
-		})
-		return
+		// Try to load the existing session from the database
+		uObj, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Unauthorized", Detail: "User not found"}},
+			})
+			return
+		}
+		thisUser := uObj.(*models.User)
+		userID := uint(thisUser.ID)
+		
+		// Try to load the session from the database
+		loadedSession, err := a.loadExistingSession(sessionID, userID)
+		if err != nil {
+			slog.Error("Failed to load session from database", "session_id", sessionID, "error", err)
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Session not found", Detail: "Chat session does not exist and could not be loaded"}},
+			})
+			return
+		}
+		
+		// Start the session and add it to the hub
+		err = loadedSession.Start()
+		if err != nil {
+			slog.Error("Failed to start loaded session", "session_id", sessionID, "error", err)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Session error", Detail: "Failed to start chat session"}},
+			})
+			return
+		}
+		
+		hub.AddSession(sessionID, loadedSession)
+		session = loadedSession
+		slog.Info("Successfully loaded and started session from database", "session_id", sessionID)
 	}
 
 	if chatMessage.Type == "user_message" {
@@ -398,14 +441,79 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 		}
 		return nil
 	})
+	
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error adding datasource", Detail: err.Error()}},
-		})
-		return
+		// Check if this is our special error indicating session not in cache
+		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
+			// Try to load the existing session from the database
+			uObj, ok := c.Get("user")
+			if !ok {
+				c.JSON(http.StatusUnauthorized, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Unauthorized", Detail: "User not found"}},
+				})
+				return
+			}
+			thisUser := uObj.(*models.User)
+			userID := uint(thisUser.ID)
+			
+			// Try to load the session from the database
+			loadedSession, err := a.loadExistingSession(sessionID, userID)
+			if err != nil {
+				slog.Error("Failed to load session from database", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusNotFound, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session not found", Detail: "Chat session does not exist and could not be loaded"}},
+				})
+				return
+			}
+			
+			// Start the session and add it to the hub
+			err = loadedSession.Start()
+			if err != nil {
+				slog.Error("Failed to start loaded session", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session error", Detail: "Failed to start chat session"}},
+				})
+				return
+			}
+			
+			hub.AddSession(sessionID, loadedSession)
+			
+			// Now try the update again
+			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+				errInner := session.AddDatasource(input.DatasourceID)
+				if errInner != nil {
+					return errInner
+				}
+				return nil
+			})
+			
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Error adding datasource", Detail: err.Error()}},
+				})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Error adding datasource", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Datasource added successfully"})
@@ -429,14 +537,76 @@ func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 		session.RemoveDatasource(uint(datasourceID))
 		return nil
 	})
+	
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error removing datasource", Detail: err.Error()}},
-		})
-		return
+		// Check if this is our special error indicating session not in cache
+		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
+			// Try to load the existing session from the database
+			uObj, ok := c.Get("user")
+			if !ok {
+				c.JSON(http.StatusUnauthorized, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Unauthorized", Detail: "User not found"}},
+				})
+				return
+			}
+			thisUser := uObj.(*models.User)
+			userID := uint(thisUser.ID)
+			
+			// Try to load the session from the database
+			loadedSession, err := a.loadExistingSession(sessionID, userID)
+			if err != nil {
+				slog.Error("Failed to load session from database", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusNotFound, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session not found", Detail: "Chat session does not exist and could not be loaded"}},
+				})
+				return
+			}
+			
+			// Start the session and add it to the hub
+			err = loadedSession.Start()
+			if err != nil {
+				slog.Error("Failed to start loaded session", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session error", Detail: "Failed to start chat session"}},
+				})
+				return
+			}
+			
+			hub.AddSession(sessionID, loadedSession)
+			
+			// Now try the update again
+			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+				session.RemoveDatasource(uint(datasourceID))
+				return nil
+			})
+			
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Error removing datasource", Detail: err.Error()}},
+				})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Error removing datasource", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Datasource removed successfully"})
@@ -496,14 +666,78 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		}
 		return nil
 	})
+	
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error adding tool", Detail: err.Error()}},
-		})
-		return
+		// Check if this is our special error indicating session not in cache
+		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
+			// Try to load the existing session from the database
+			uObj, ok := c.Get("user")
+			if !ok {
+				c.JSON(http.StatusUnauthorized, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Unauthorized", Detail: "User not found"}},
+				})
+				return
+			}
+			thisUser := uObj.(*models.User)
+			userID := uint(thisUser.ID)
+			
+			// Try to load the session from the database
+			loadedSession, err := a.loadExistingSession(sessionID, userID)
+			if err != nil {
+				slog.Error("Failed to load session from database", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusNotFound, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session not found", Detail: "Chat session does not exist and could not be loaded"}},
+				})
+				return
+			}
+			
+			// Start the session and add it to the hub
+			err = loadedSession.Start()
+			if err != nil {
+				slog.Error("Failed to start loaded session", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session error", Detail: "Failed to start chat session"}},
+				})
+				return
+			}
+			
+			hub.AddSession(sessionID, loadedSession)
+			
+			// Now try the update again
+			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+				if e := session.AddTool(input.ToolID, *tool); e != nil {
+					return e
+				}
+				return nil
+			})
+			
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Error adding tool", Detail: err.Error()}},
+				})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Error adding tool", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Tool added successfully"})
@@ -528,14 +762,76 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 		session.RemoveTool(toolID)
 		return nil
 	})
+	
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error removing tool", Detail: err.Error()}},
-		})
-		return
+		// Check if this is our special error indicating session not in cache
+		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
+			// Try to load the existing session from the database
+			uObj, ok := c.Get("user")
+			if !ok {
+				c.JSON(http.StatusUnauthorized, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Unauthorized", Detail: "User not found"}},
+				})
+				return
+			}
+			thisUser := uObj.(*models.User)
+			userID := uint(thisUser.ID)
+			
+			// Try to load the session from the database
+			loadedSession, err := a.loadExistingSession(sessionID, userID)
+			if err != nil {
+				slog.Error("Failed to load session from database", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusNotFound, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session not found", Detail: "Chat session does not exist and could not be loaded"}},
+				})
+				return
+			}
+			
+			// Start the session and add it to the hub
+			err = loadedSession.Start()
+			if err != nil {
+				slog.Error("Failed to start loaded session", "session_id", sessionID, "error", err)
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Session error", Detail: "Failed to start chat session"}},
+				})
+				return
+			}
+			
+			hub.AddSession(sessionID, loadedSession)
+			
+			// Now try the update again
+			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
+				session.RemoveTool(toolID)
+				return nil
+			})
+			
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Errors: []struct {
+						Title  string `json:"title"`
+						Detail string `json:"detail"`
+					}{{Title: "Error removing tool", Detail: err.Error()}},
+				})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Error removing tool", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Tool removed successfully"})
@@ -547,13 +843,49 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 	hub := getChatHub()
 	session, exists := hub.GetSession(sessionID)
 	if !exists {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Session not found", Detail: "Chat session does not exist"}},
-		})
-		return
+		// Try to load the existing session from the database
+		uObj, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Unauthorized", Detail: "User not found"}},
+			})
+			return
+		}
+		thisUser := uObj.(*models.User)
+		userID := uint(thisUser.ID)
+		
+		// Try to load the session from the database
+		loadedSession, err := a.loadExistingSession(sessionID, userID)
+		if err != nil {
+			slog.Error("Failed to load session from database", "session_id", sessionID, "error", err)
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Session not found", Detail: "Chat session does not exist and could not be loaded"}},
+			})
+			return
+		}
+		
+		// Start the session and add it to the hub
+		err = loadedSession.Start()
+		if err != nil {
+			slog.Error("Failed to start loaded session", "session_id", sessionID, "error", err)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Session error", Detail: "Failed to start chat session"}},
+			})
+			return
+		}
+		
+		hub.AddSession(sessionID, loadedSession)
+		session = loadedSession
+		slog.Info("Successfully loaded and started session from database", "session_id", sessionID)
 	}
 
 	file, header, err := c.Request.FormFile("file")
