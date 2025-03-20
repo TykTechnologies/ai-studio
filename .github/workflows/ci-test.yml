@@ -6,6 +6,9 @@ on:
     branches:
       - master
 
+env:
+  GOPRIVATE: github.com/TykTechnologies/*
+
 jobs:
   golangci-lint:
     if: false
@@ -122,14 +125,7 @@ jobs:
         run: |
           cp .env.example .env
           cd docs/site && hugo && cd ../..
-      
-      - name: Clean Go Cache
-        run: |
-          go version
-          go clean -modcache
-          go clean -cache
-          go mod tidy
-          
+
       -
         name: Run Go Tests
         id: ci-tests
