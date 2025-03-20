@@ -59,8 +59,8 @@ jobs:
         name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.0'
-          cache: true
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       -
         name: Setup Hugo
@@ -128,7 +128,8 @@ jobs:
           go version
           go clean -modcache
           go clean -cache
-
+          go mod tidy
+          
       -
         name: Run Go Tests
         id: ci-tests
