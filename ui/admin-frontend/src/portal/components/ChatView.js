@@ -866,6 +866,7 @@ const ChatView = () => {
               removeFromCurrentlyUsing={(item) => removeFromCurrentlyUsing(item, sessionId)}
               addToCurrentlyUsing={(item) => addToCurrentlyUsing(item, sessionId)}
               messages={messages}
+              roomName={chatName}
             />
           </Grid>
         </Grid>
