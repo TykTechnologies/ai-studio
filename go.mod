@@ -5,7 +5,6 @@ go 1.23.0
 toolchain go1.23.1
 
 require (
-	github.com/TykTechnologies/tyk-identity-broker v1.5.1
 	github.com/d5/tengo/v2 v2.17.0
 	github.com/dslipak/pdf v0.0.2
 	github.com/gin-contrib/cors v1.7.2
@@ -16,7 +15,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/csrf v1.7.2
 	github.com/gorilla/mux v1.8.1
-	github.com/gorilla/sessions v1.2.1
 	github.com/gosimple/slug v1.14.0
 	github.com/joho/godotenv v1.5.1
 	github.com/liushuangls/go-anthropic/v2 v2.8.0
@@ -64,6 +62,7 @@ require (
 	github.com/TykTechnologies/murmur3 v0.0.0-20230310161213-aad17efd5632 // indirect
 	github.com/TykTechnologies/storage v1.2.0 // indirect
 	github.com/TykTechnologies/tyk v1.9.2-0.20230530103800-06c018df3563 // indirect
+	github.com/TykTechnologies/tyk-identity-broker v1.5.1 // indirect
 	github.com/amikos-tech/chroma-go v0.1.2 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -119,6 +118,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.4 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
+	github.com/gorilla/sessions v1.2.1 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.2 // indirect
 	github.com/huandu/xstrings v1.3.3 // indirect
