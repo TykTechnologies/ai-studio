@@ -7,7 +7,7 @@ on:
       - master
 
 env:
-  GOPRIVATE: github.com/TykTechnologies/*
+  GOPRIVATE: github.com/TykTechnologies
 
 jobs:
   golangci-lint:
