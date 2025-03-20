@@ -127,7 +127,7 @@ jobs:
         name: Run Go Tests
         id: ci-tests
         run: |
-          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+          GOSUMDB=off go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
       -
         name: Upload coverage
