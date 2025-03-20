@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  GOPRIVATE: github.com/TykTechnologies
+  
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
