@@ -122,6 +122,12 @@ jobs:
         run: |
           cp .env.example .env
           cd docs/site && hugo && cd ../..
+      
+      - name: Clean Go Cache
+        run: |
+          go version
+          go clean -modcache
+          go clean -cache
 
       -
         name: Run Go Tests
