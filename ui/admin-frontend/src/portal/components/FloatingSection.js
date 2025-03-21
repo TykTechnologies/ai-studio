@@ -2,20 +2,20 @@ import React, { useState, useEffect, useRef } from "react";
 import { Box, Typography, Checkbox, Collapse } from "@mui/material";
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 
-const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages }) => {
+const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages, roomName }) => {
   const [isCollapsed, setIsCollapsed] = useState(messages?.length > 0);
   const hasUserInteracted = useRef(false);
   const prevMessagesLength = useRef(messages?.length || 0);
 
   useEffect(() => {
     const currentMessagesLength = messages?.length || 0;
-    
-    if (!hasUserInteracted.current && 
-        prevMessagesLength.current === 0 && 
-        currentMessagesLength > 0) {
+
+    if (!hasUserInteracted.current &&
+      prevMessagesLength.current === 0 &&
+      currentMessagesLength > 0) {
       setIsCollapsed(true);
     }
-    
+
     prevMessagesLength.current = currentMessagesLength;
   }, [messages]);
 
@@ -41,10 +41,17 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages })
           cursor: 'pointer',
         }}
       >
-        <Typography variant="headingMedium">
-          {title}
-        </Typography>
-        <KeyboardArrowDownIcon 
+        <Box>
+          <Typography variant="headingMedium">
+            {title}
+          </Typography>
+          {roomName && (
+            <Typography variant="caption" color="text.secondary">
+              Room: {roomName}
+            </Typography>
+          )}
+        </Box>
+        <KeyboardArrowDownIcon
           sx={{
             transform: isCollapsed ? 'none' : 'rotate(180deg)',
             transition: 'transform 0.2s'
@@ -73,7 +80,7 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages })
                   mb: 1,
                   borderRadius: 1,
                   gap: 1,
-                  cursor: "pointer", 
+                  cursor: "pointer",
                 }}
               >
                 <Checkbox
@@ -94,8 +101,8 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages })
                   <Typography variant="bodyLargeMedium" sx={{ flexGrow: 1 }}>
                     {item.name}
                   </Typography>
-                  <Typography 
-                    variant="bodySmallDefault" 
+                  <Typography
+                    variant="bodySmallDefault"
                     color="text.defaultSubdued"
                     sx={{
                       overflow: 'hidden',
