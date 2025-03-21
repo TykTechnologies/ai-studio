@@ -16,5 +16,9 @@
     "@playwright/test": "^1.50.1",
     "@types/node": "^22.13.8",
     "tyk-test-automation-wrappers": "git+https://github.com/TykTechnologies/tyk-test-automation-wrappers.git#main"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.89.0"
   }
 }

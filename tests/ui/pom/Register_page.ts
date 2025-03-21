@@ -3,21 +3,21 @@ import { config } from '../config';
 
 export class RegisterPage {
     readonly page: Page;
-    readonly nameInput: Locator;
-    readonly emailInput: Locator;
-    readonly passwordInput: Locator;
-    readonly signUpForAIDeveloperPortalCheckbox: Locator;
-    readonly signUpForAIChatCheckbox: Locator;
-    readonly registerButton: Locator;
+    readonly NameInput: Locator;
+    readonly EmailInput: Locator;
+    readonly PasswordInput: Locator;
+    readonly SignUpForAIDeveloperPortalCheckbox: Locator;
+    readonly SignUpForAIChatCheckbox: Locator;
+    readonly RegisterButton: Locator;
 
     constructor(page: Page) {
         this.page = page;
-        this.nameInput = this.page.getByRole('textbox', { name: 'Name' });
-        this.emailInput = this.page.getByRole('textbox', { name: 'Email' });
-        this.passwordInput = this.page.getByRole('textbox', { name: 'Password' });
-        this.signUpForAIDeveloperPortalCheckbox = this.page.getByRole('checkbox', { name: 'Sign up for AI Developer' });
-        this.signUpForAIChatCheckbox = this.page.getByRole('checkbox', { name: 'Sign up for AI Chat' });
-        this.registerButton = this.page.getByRole('button', { name: 'Register' });
+        this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
+        this.EmailInput = this.page.getByRole('textbox', { name: 'Email' });
+        this.PasswordInput = this.page.getByRole('textbox', { name: 'Password' });
+        this.SignUpForAIDeveloperPortalCheckbox = this.page.getByRole('checkbox', { name: 'Sign up for AI Developer' });
+        this.SignUpForAIChatCheckbox = this.page.getByRole('checkbox', { name: 'Sign up for AI Chat' });
+        this.RegisterButton = this.page.getByRole('button', { name: 'Register' });
     }
 
     async goto() {
@@ -25,11 +25,10 @@ export class RegisterPage {
     }
 
     async register(name: string, email: string, password: string) {
-        await this.nameInput.fill(name);
-        await this.emailInput.fill(email);
-        await this.passwordInput.fill(password);
-        await this.registerButton.click();
-        await this.registerButton.click();
-
+        await this.NameInput.fill(name);
+        await this.EmailInput.fill(email);
+        await this.PasswordInput.fill(password);
+        await this.RegisterButton.click();
+        await this.RegisterButton.click();
     }
 }
