@@ -116,3 +116,4 @@ The resulting binary will be a full server that serves the UI and the API from t
 - `make stop-frontend`: Stops the frontend development server
 - `make start-backend`: Builds and starts the backend
 - `make stop-backend`: Stops the backend server
+
