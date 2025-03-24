@@ -1,5 +1,5 @@
 import { Locator, Page } from '@playwright/test';
-import { DrowDownWrapper } from '@wrappers/DropDownWrapper';
+import { DropDownWrapper } from '@wrappers/DropDownWrapper';
 import { TableWrapper } from '@wrappers/TableWrapper';
 
 interface ProviderParams {
@@ -24,7 +24,7 @@ export class AdminLLMProvidersPage {
     readonly ProviderNameInput: Locator;
     readonly ShortDescriptionInput: Locator;
     readonly LongDescriptionInput: Locator;
-    readonly ProviderTypeDropDown: DrowDownWrapper;
+    readonly ProviderTypeDropDown: DropDownWrapper;
     readonly DefaultModelInput: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly BudgetStartDateInput: Locator;
@@ -50,7 +50,7 @@ export class AdminLLMProvidersPage {
         this.ProviderNameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.ShortDescriptionInput = this.page.getByRole('textbox', { name: 'Short Description' });
         this.LongDescriptionInput = this.page.getByRole('textbox', { name: 'Long Description' });
-        this.ProviderTypeDropDown = new DrowDownWrapper('#mui-component-select-vendor', this.page);
+        this.ProviderTypeDropDown = new DropDownWrapper('#mui-component-select-vendor', this.page);
         this.DefaultModelInput = this.page.getByRole('textbox', { name: 'Default Model' });
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
