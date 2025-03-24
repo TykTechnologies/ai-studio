@@ -1,5 +1,5 @@
 import { Locator, Page, expect } from '@playwright/test';
-import { DrowDownWrapper } from '@wrappers/DropDownWrapper';
+import { DropDownWrapper } from '@wrappers/DropDownWrapper';
 import { TableWrapper } from '@wrappers/TableWrapper';
 import { PageTemplate } from './Page_template';
 
@@ -17,8 +17,8 @@ export class AdminAppsPage extends PageTemplate {
     readonly AddAppButton: Locator;
     readonly NameInput: Locator;
     readonly DescriptionInput: Locator;
-    readonly UserDropDown: DrowDownWrapper;
-    readonly LlmDropDown: DrowDownWrapper;
+    readonly UserDropDown: DropDownWrapper;
+    readonly LlmDropDown: DropDownWrapper;
     readonly MonthlyBudgetInput: Locator;
     readonly BudgetStartDateInput: Locator;
     readonly SaveButton: Locator;
@@ -33,8 +33,8 @@ export class AdminAppsPage extends PageTemplate {
         this.AddAppButton = this.page.locator('button:has-text("Add app")').first();
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
-        this.UserDropDown = new DrowDownWrapper('#mui-component-select-user_id', page);
-        this.LlmDropDown = new DrowDownWrapper('#mui-component-select-llm_ids', page);
+        this.UserDropDown = new DropDownWrapper('#mui-component-select-user_id', page);
+        this.LlmDropDown = new DropDownWrapper('#mui-component-select-llm_ids', page);
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
         this.SaveButton = this.page.getByRole('button', { name: 'Add app' });

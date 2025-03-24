@@ -20,7 +20,7 @@ services:
       - DATABASE_TYPE=postgres
       - TYK_AI_LICENSE=${TYK_AI_LICENSE}
       - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY}
-      - OPENAI_API_KEY=TO_BE_REPLACED
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
       - GOFLAGS=-buildvcs=false
     stdin_open: true

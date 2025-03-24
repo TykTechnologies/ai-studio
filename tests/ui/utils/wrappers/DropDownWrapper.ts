@@ -1,7 +1,7 @@
 import { Wrapper } from './Wrapper';
 import { Page } from '@playwright/test';
 
-export class DrowDownWrapper extends Wrapper {
+export class DropDownWrapper extends Wrapper {
 
     constructor(selector: string, page: Page) {
         super(selector, page);
