@@ -9,7 +9,8 @@ const ChatSidebar = ({
 	showTools,
 	removeFromCurrentlyUsing,
 	addToCurrentlyUsing,
-	messages
+	messages,
+	roomName
 }) => {
 	return (
 		<Box
@@ -31,6 +32,7 @@ const ChatSidebar = ({
 				onAdd={addToCurrentlyUsing}
 				onRemove={removeFromCurrentlyUsing}
 				messages={messages}
+				roomName={roomName}
 			/>
 			{showTools && (
 				<FloatingSection
@@ -40,6 +42,7 @@ const ChatSidebar = ({
 					onAdd={addToCurrentlyUsing}
 					onRemove={removeFromCurrentlyUsing}
 					messages={messages}
+					roomName={roomName}
 				/>
 			)}
 		</Box>
