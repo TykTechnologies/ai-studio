@@ -65,7 +65,6 @@ function App() {
           const response = await pubClient.get("/common/me");
           setIsAuthenticated(true);
           const attributes = response.data.attributes;
-          console.log("Attributes:", attributes.ui_options);
           setEntitlements({
             is_admin: attributes.is_admin,
             ui_options: attributes.ui_options,
