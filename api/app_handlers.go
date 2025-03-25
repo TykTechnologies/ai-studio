@@ -410,8 +410,9 @@ func serializeApp(app *models.App) AppResponse {
 // @Security BearerAuth
 func (a *API) listApps(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
 
-	apps, totalCount, totalPages, err := a.service.ListAppsWithPagination(pageSize, pageNumber, all)
+	apps, totalCount, totalPages, err := a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -453,8 +454,9 @@ func (a *API) searchApps(c *gin.Context) {
 	}
 
 	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
 
-	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all)
+	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
