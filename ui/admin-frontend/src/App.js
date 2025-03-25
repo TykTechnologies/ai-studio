@@ -9,16 +9,18 @@ import {
 import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 
 // Configurations and utilities
-import { getConfig, loadConfig } from "./config";
+import { loadConfig } from "./config";
 import { reinitializeApiClient } from "./admin/utils/apiClient";
 import { reinitializePubClient } from "./admin/utils/pubClient";
 import pubClient from "./admin/utils/pubClient";
 
 // Themes
 import portalTheme from "./portal/theme/portalTheme";
-import theme from "./admin/theme";
+
+// Components
 
 // Layouts
 import MainLayout from "./layouts/MainLayout";
@@ -63,6 +65,7 @@ function App() {
           const response = await pubClient.get("/common/me");
           setIsAuthenticated(true);
           const attributes = response.data.attributes;
+          console.log("Attributes:", attributes.ui_options);
           setEntitlements({
             is_admin: attributes.is_admin,
             ui_options: attributes.ui_options,
@@ -202,18 +205,23 @@ function App() {
               <Route
                 path="/"
                 element={
-                  <Navigate
-                    to={
-                      isAuthenticated
-                        ? entitlements?.is_admin === true
-                          ? "/admin/dash"
-                          : entitlements?.ui_options?.show_portal
-                            ? "/portal/dashboard"
-                            : "/chat/dashboard"
-                        : "/login"
-                    }
-                    replace
-                  />
+                  isAuthenticated ? (
+                    entitlements?.is_admin === true ? (
+                      <Navigate to="/admin/dash" replace />
+                    ) : entitlements?.ui_options?.show_portal ? (
+                      <Navigate to="/portal/dashboard" replace />
+                    ) : entitlements?.ui_options?.show_chat ? (
+                      <Navigate to="/chat/dashboard" replace />
+                    ) : (
+                      <Box sx={{ p: 7 }}>
+                        <Typography variant="headingXLarge">
+                          Welcome to Tyk AI Studio!
+                        </Typography>
+                      </Box>
+                    )
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
                 }
               />
             </Route>

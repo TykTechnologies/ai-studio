@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/gin-gonic/gin"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 )
@@ -168,4 +169,60 @@ func GenerateRandomString(length int) string {
 func IntToObjectId(id uint) *string {
 	strID := fmt.Sprintf("%d", id)
 	return &strID
+}
+
+// SendErrorResponse sends a standardized error response to the client
+// It handles different error types, particularly ErrorResponse
+func SendErrorResponse(c *gin.Context, err error) {
+	switch e := err.(type) {
+	case ErrorResponse:
+		c.JSON(e.StatusCode, gin.H{
+			"errors": []gin.H{{
+				"title":  e.Title,
+				"detail": e.Message,
+			}},
+		})
+	default:
+		// Unexpected error type
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"errors": []gin.H{{
+				"title":  "Internal Server Error",
+				"detail": err.Error(),
+			}},
+		})
+	}
+}
+
+// JSONMapAccessor provides convenient access to values in a JSONMap
+type JSONMapAccessor struct {
+	data map[string]interface{}
+}
+
+// NewJSONMapAccessor creates a new JSONMapAccessor
+func NewJSONMapAccessor(data map[string]interface{}) *JSONMapAccessor {
+	return &JSONMapAccessor{data: data}
+}
+
+// GetString retrieves a string value from the JSONMap
+func (a *JSONMapAccessor) GetString(key, defaultValue string) string {
+	if v, ok := a.data[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+
+		return fmt.Sprint(v)
+	}
+
+	return defaultValue
+}
+
+// GetSlice retrieves a []interface{} value from the JSONMap
+func (a *JSONMapAccessor) GetSlice(key string) []interface{} {
+	if v, ok := a.data[key]; ok {
+		if slice, ok := v.([]interface{}); ok {
+			return slice
+		}
+	}
+
+	return nil
 }

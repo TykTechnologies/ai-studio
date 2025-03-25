@@ -103,44 +103,49 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 	return a.SetUserSession(c, user)
 }
 
+func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
+	// Try to get auth from cookie first
+	cookie, err := c.Cookie(a.Config.CookieName)
+	if err == nil {
+		// Cookie exists, validate it
+		user := &models.User{}
+		if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
+			return user
+		}
+	}
+
+	// Try to get token from query parameter
+	token := c.Query("token")
+	if token != "" {
+		user, err := a.Config.Service.GetUserByAPIKey(token)
+		if err == nil && user.EmailVerified {
+			return user
+		}
+	}
+
+	// Try to get token from Authorization header
+	authHeader := c.Request.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 {
+			apiKey := parts[1]
+			user, err := a.Config.Service.GetUserByAPIKey(apiKey)
+			if err == nil && user.EmailVerified {
+				return user
+			}
+		}
+	}
+
+	return nil
+}
+
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Try to get auth from cookie first
-		cookie, err := c.Cookie(a.Config.CookieName)
-		if err == nil {
-			// Cookie exists, validate it
-			user := &models.User{}
-			if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
-				c.Set("user", user)
-				c.Next()
-				return
-			}
-		}
-
-		// Try to get token from query parameter
-		token := c.Query("token")
-		if token != "" {
-			user, err := a.Config.Service.GetUserByAPIKey(token)
-			if err == nil {
-				c.Set("user", user)
-				c.Next()
-				return
-			}
-		}
-
-		// Try to get token from Authorization header
-		authHeader := c.Request.Header.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 {
-				apiKey := parts[1]
-				user, err := a.Config.Service.GetUserByAPIKey(apiKey)
-				if err == nil {
-					c.Set("user", user)
-					c.Next()
-					return
-				}
-			}
+		user := a.GetAuthenticatedUser(c)
+		if user != nil {
+			c.Set("user", user)
+			c.Next()
+			return
 		}
 
 		// In test mode, allow the request to proceed
@@ -178,6 +183,35 @@ func (a *AuthService) AdminOnly() gin.HandlerFunc {
 	}
 }
 
+func (a *AuthService) SSOOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.Config.TestMode {
+			c.Next()
+			return
+		}
+
+		u, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		user, ok := u.(*models.User)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		if !user.AccessToSSOConfig {
+			slog.Error("user is not allowed", "user", user.Name)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
 	userInterface, exists := c.Get("user")
 	if !exists {
@@ -375,18 +409,18 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		return fmt.Errorf("failed to count users: %w", err)
 	}
 
-	user := &models.User{
-		Email:      email,
-		Name:       name,
-		Password:   string(hashedPassword),
-		ShowPortal: showPortal,
-		ShowChat:   showChat,
-	}
+	user := models.NewUser()
+	user.Email = email
+	user.Name = name
+	user.Password = string(hashedPassword)
+	user.ShowPortal = showPortal
+	user.ShowChat = showChat
 
 	if count == 0 {
 		user.IsAdmin = true
 		user.EmailVerified = true
 		user.NotificationsEnabled = true
+		user.AccessToSSOConfig = true
 	}
 
 	if err := user.Create(a.Config.DB); err != nil {

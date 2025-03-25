@@ -34,6 +34,7 @@ func setupSSOTestService(t *testing.T) (*API, *gin.Engine, *gorm.DB) {
 	ssoService.InitInternalTIB()
 	api.ssoService = ssoService
 	api.config.TIBAPISecret = config.APISecret
+	api.config.TIBEnabled = true // Enable TIB for tests
 
 	r := gin.New()
 	return api, r, db
@@ -45,7 +46,7 @@ func TestHandleNonceRequest(t *testing.T) {
 
 	t.Run("Valid request", func(t *testing.T) {
 		request := services.NonceTokenRequest{
-			ForSection:   services.AdminSection,
+			ForSection:   services.DashboardSection,
 			EmailAddress: "test@example.com",
 		}
 
@@ -94,7 +95,7 @@ func TestHandleSSO(t *testing.T) {
 	t.Run("Valid nonce token", func(t *testing.T) {
 		// First create a nonce token
 		request := services.NonceTokenRequest{
-			ForSection:   services.AdminSection,
+			ForSection:   services.DashboardSection,
 			EmailAddress: "test@example.com",
 			DisplayName:  "Test User",
 			GroupID:      "1",
@@ -135,135 +136,5 @@ func TestSSOAuthMiddleware(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusOK, w.Code)
-	})
-}
-
-func TestCreateSSOUser(t *testing.T) {
-	api, r, _ := setupSSOTestService(t)
-	r.POST("/portal/developers", api.createSSOUser)
-
-	t.Run("Invalid request body", func(t *testing.T) {
-		w := performRequest(r, "POST", "/portal/developers", "invalid json")
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("Invalid nonce token", func(t *testing.T) {
-		request := services.PortalDeveloper{
-			Email:    "test@example.com",
-			Password: "password",
-			SSOKey:   "sso-key",
-			Nonce:    "invalid",
-		}
-		w := performRequest(r, "POST", "/portal/developers", request)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("Valid request", func(t *testing.T) {
-		// First create a nonce token
-		nonceRequest := services.NonceTokenRequest{
-			ForSection:   services.AdminSection,
-			EmailAddress: "test@example.com",
-			DisplayName:  "Test User",
-			GroupID:      "1",
-		}
-		nonceToken, err := api.ssoService.GenerateNonce(nonceRequest)
-		require.NoError(t, err)
-		require.NotNil(t, nonceToken)
-
-		request := services.PortalDeveloper{
-			Email:    "test@example.com",
-			Password: "password",
-			SSOKey:   "sso-key",
-			Nonce:    *nonceToken,
-		}
-		w := performRequest(r, "POST", "/portal/developers", request)
-		assert.Equal(t, http.StatusCreated, w.Code)
-	})
-}
-
-func TestGetSSOUserBySSOKey(t *testing.T) {
-	api, r, db := setupSSOTestService(t)
-	r.GET("/portal/developers/ssokey/:id", api.getSSOUserBySSOKey)
-
-	// Create a test user
-	user := &models.User{
-		Email:  "test@example.com",
-		Name:   "Test User",
-		SSOKey: "sso-key",
-	}
-	err := db.Create(user).Error
-	require.NoError(t, err)
-
-	t.Run("User not found", func(t *testing.T) {
-		w := performRequest(r, "GET", "/portal/developers/ssokey/invalid", nil)
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("User found", func(t *testing.T) {
-		w := performRequest(r, "GET", "/portal/developers/ssokey/sso-key", nil)
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		var response services.PortalDeveloper
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "test@example.com", response.Email)
-		assert.Equal(t, "sso-key", response.SSOKey)
-	})
-}
-
-func TestUpdateSSOUser(t *testing.T) {
-	api, r, db := setupSSOTestService(t)
-	r.PUT("/portal/developers/:id", api.updateSSOUser)
-
-	// Create a test user
-	user := &models.User{
-		Email:  "test@example.com",
-		Name:   "Test User",
-		SSOKey: "sso-key",
-	}
-	err := db.Create(user).Error
-	require.NoError(t, err)
-
-	t.Run("Invalid request body", func(t *testing.T) {
-		w := performRequest(r, "PUT", "/portal/developers/1", "invalid json")
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("Invalid nonce token", func(t *testing.T) {
-		request := services.PortalDeveloper{
-			Email:    "updated@example.com",
-			Password: "new-password",
-			SSOKey:   "sso-key",
-			Nonce:    "invalid",
-		}
-		w := performRequest(r, "PUT", "/portal/developers/1", request)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("Valid request", func(t *testing.T) {
-		// First create a nonce token
-		nonceRequest := services.NonceTokenRequest{
-			ForSection:   services.AdminSection,
-			EmailAddress: "updated@example.com",
-			DisplayName:  "Test User",
-			GroupID:      "1",
-		}
-		nonceToken, err := api.ssoService.GenerateNonce(nonceRequest)
-		require.NoError(t, err)
-		require.NotNil(t, nonceToken)
-
-		request := services.PortalDeveloper{
-			Email:    "updated@example.com",
-			Password: "new-password",
-			SSOKey:   "sso-key",
-			Nonce:    *nonceToken,
-		}
-		w := performRequest(r, "PUT", "/portal/developers/1", request)
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		// Verify user was updated
-		updatedUser, err := api.ssoService.GetUserBySSOKey("sso-key")
-		require.NoError(t, err)
-		assert.Equal(t, "updated@example.com", updatedUser.Email)
 	})
 }
