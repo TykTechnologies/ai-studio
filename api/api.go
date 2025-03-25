@@ -328,19 +328,6 @@ func (a *API) setupRoutes() {
 	public.POST("/auth/resend-verification", a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)
 	public.GET("/auth/features", a.handleFeatureSet)
-	public.GET("/auth/:id/:provider", a.handleTIBAuth)
-	public.POST("/auth/:id/:provider", a.handleTIBAuth)
-	public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-	public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-	public.GET("/sso", a.handleSSO)
-
-	// SSO API routes
-	apiGroup := public.Group("/api")
-	apiGroup.Use(a.SSOAuthMiddleware())
-	apiGroup.POST("/sso", a.handleNonceRequest)
-	apiGroup.POST("/portal/developers", a.createSSOUser)
-	apiGroup.GET("/portal/developers/ssokey/:id", a.getSSOUserBySSOKey)
-	apiGroup.PUT("/portal/developers/:id", a.updateSSOUser)
 
 	// routes for portal users
 	authed := public.Group("/common")
@@ -626,6 +613,29 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/secrets/:id", a.updateSecret)
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
+
+	// SSO routes
+	if a.config.TIBEnabled {
+		public.GET("/auth/:id/:provider", a.handleTIBAuth)
+		public.POST("/auth/:id/:provider", a.handleTIBAuth)
+		public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+		public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+		public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+		public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+		public.GET("/sso", a.handleSSO)
+
+		apiGroup := public.Group("/api")
+		apiGroup.Use(a.SSOAuthMiddleware())
+		apiGroup.POST("/sso", a.handleNonceRequest)
+
+		profiles := v1.Group("/sso-profiles")
+		profiles.Use(a.auth.SSOOnly())
+		profiles.POST("", a.createProfile)
+		profiles.GET("", a.listProfiles)
+		profiles.GET("/:profile_id", a.getProfile)
+		profiles.PUT("/:profile_id", a.updateProfile)
+		profiles.DELETE("/:profile_id", a.deleteProfile)
+	}
 
 	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
 	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {

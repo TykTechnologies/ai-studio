@@ -3,6 +3,8 @@ package models
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,9 +24,10 @@ type User struct {
 	IsAdmin              bool
 	ShowPortal           bool
 	ShowChat             bool
+	AccessToSSOConfig    bool
 	APIKey               string
 	NotificationsEnabled bool `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
-	SSOKey               string
+	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
 }
 
 type Users []User
@@ -71,10 +74,6 @@ func (u *User) Delete(db *gorm.DB) error {
 
 func (u *User) GetByEmail(db *gorm.DB, email string) error {
 	return db.Where("email = ?", email).First(u).Error
-}
-
-func (u *User) GetBySSOKey(db *gorm.DB, ssoKey string) error {
-	return db.Where("sso_key = ?", ssoKey).First(u).Error
 }
 
 func (u *User) DoesPasswordMatch(password string) bool {
@@ -211,4 +210,26 @@ func (u *Users) CountActive(db *gorm.DB) (int64, error) {
 	var count int64
 	err := db.Model(&User{}).Where("deleted_at IS NULL").Count(&count).Error
 	return count, err
+}
+
+func (u *User) UpdateGroupMemberships(db *gorm.DB, groupIDs ...string) error {
+	var groupUintIDs []uint
+	for _, idStr := range groupIDs {
+		id, err := strconv.ParseUint(idStr, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid group ID: %s", idStr)
+		}
+		groupUintIDs = append(groupUintIDs, uint(id))
+	}
+
+	var groups []Group
+	if err := db.Where("id IN ?", groupUintIDs).Find(&groups).Error; err != nil {
+		return fmt.Errorf("failed to find groups: %w", err)
+	}
+
+	if err := db.Model(u).Association("Groups").Replace(groups); err != nil {
+		return fmt.Errorf("failed to update user group memberships: %w", err)
+	}
+
+	return nil
 }

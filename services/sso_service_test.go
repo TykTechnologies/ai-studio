@@ -66,7 +66,7 @@ func TestGenerateAndResolveNonce(t *testing.T) {
 
 	// Test data
 	request := NonceTokenRequest{
-		ForSection:   AdminSection,
+		ForSection:   DashboardSection,
 		EmailAddress: "test@example.com",
 		GroupID:      "1",
 		DisplayName:  "Test User",
@@ -153,7 +153,7 @@ func TestValidateNonceRequest(t *testing.T) {
 		{
 			name: "Valid admin section",
 			request: &NonceTokenRequest{
-				ForSection:   AdminSection,
+				ForSection:   DashboardSection,
 				EmailAddress: "test@example.com",
 			},
 			expectError: false,
@@ -161,7 +161,7 @@ func TestValidateNonceRequest(t *testing.T) {
 		{
 			name: "Valid user section",
 			request: &NonceTokenRequest{
-				ForSection:   UserSection,
+				ForSection:   DashboardSection,
 				EmailAddress: "test@example.com",
 			},
 			expectError: false,
@@ -201,78 +201,18 @@ func TestCreateUserWithTx(t *testing.T) {
 	ssoService := &SSOService{db: db}
 
 	// Test directly with the DB
-	user, err := ssoService.createUserWithTx(db, "test@example.com", "Test User", "password", "sso-key", true)
+	user, err := ssoService.createUserWithTx(db, "test@example.com", "Test User")
 
 	// Assertions
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.Equal(t, "test@example.com", user.Email)
 	assert.Equal(t, "Test User", user.Name)
-	assert.Equal(t, "sso-key", user.SSOKey)
-	assert.True(t, user.IsAdmin)
-	assert.True(t, user.ShowChat)
-	assert.True(t, user.ShowPortal)
+	assert.False(t, user.IsAdmin)
+	assert.False(t, user.ShowChat)
+	assert.False(t, user.ShowPortal)
 	assert.True(t, user.EmailVerified)
-	assert.True(t, user.NotificationsEnabled)
-}
-
-func TestAddUserToGroupWithTx(t *testing.T) {
-	// Setup
-	db := setupSSOTestDB(t)
-	ssoService := &SSOService{db: db}
-
-	// Create a test group
-	group := &models.Group{
-		Name: "Test Group",
-	}
-	err := db.Create(group).Error
-	require.NoError(t, err)
-
-	// Create a test user
-	user := &models.User{
-		Email: "test@example.com",
-		Name:  "Test User",
-	}
-	err = db.Create(user).Error
-	require.NoError(t, err)
-
-	t.Run("Empty group ID", func(t *testing.T) {
-		// Test directly with the DB
-		err := ssoService.addUserToGroupWithTx(db, user.ID, "")
-
-		// Assertions
-		assert.NoError(t, err)
-	})
-
-	t.Run("Invalid group ID", func(t *testing.T) {
-		// Test directly with the DB
-		err := ssoService.addUserToGroupWithTx(db, user.ID, "invalid")
-
-		// Assertions
-		assert.Error(t, err)
-		errResp, ok := err.(helpers.ErrorResponse)
-		assert.True(t, ok)
-		assert.Equal(t, http.StatusBadRequest, errResp.StatusCode)
-	})
-
-	t.Run("Valid group ID", func(t *testing.T) {
-		// Get the default group
-		defaultGroup := &models.Group{}
-		err := db.First(defaultGroup, 1).Error
-		require.NoError(t, err)
-
-		// Test directly with the DB
-		err = ssoService.addUserToGroupWithTx(db, user.ID, "1")
-
-		// Assertions
-		assert.NoError(t, err)
-
-		// Verify user is in group using direct SQL query
-		var count int64
-		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, defaultGroup.ID).Count(&count).Error
-		assert.NoError(t, err)
-		assert.Equal(t, int64(1), count)
-	})
+	assert.False(t, user.NotificationsEnabled)
 }
 
 func TestHandleSSO(t *testing.T) {
@@ -296,7 +236,7 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("New user with default group only", func(t *testing.T) {
 		// Test
-		user, err := ssoService.HandleSSO("test1@example.com", "Test User 1", "1", false, AdminSection)
+		user, err := ssoService.HandleSSO("test1@example.com", "Test User 1", "1", nil, false)
 
 		// Assertions
 		assert.NoError(t, err)
@@ -334,7 +274,7 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("New user with additional group", func(t *testing.T) {
 		// Test
-		user, err := ssoService.HandleSSO("test2@example.com", "Test User 2", "2", false, AdminSection)
+		user, err := ssoService.HandleSSO("test2@example.com", "Test User 2", "2", nil, false)
 
 		// Assertions
 		assert.NoError(t, err)
@@ -364,7 +304,7 @@ func TestHandleSSO(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test
-		user, err := ssoService.HandleSSO("existing@example.com", "Updated Name", "2", false, AdminSection)
+		user, err := ssoService.HandleSSO("existing@example.com", "Updated Name", "2", nil, false)
 
 		// Assertions
 		assert.NoError(t, err)
@@ -386,7 +326,7 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("SSO only for registered users", func(t *testing.T) {
 		// Test
-		user, err := ssoService.HandleSSO("unregistered@example.com", "Unregistered User", "1", true, AdminSection)
+		user, err := ssoService.HandleSSO("unregistered@example.com", "Unregistered User", "1", nil, true)
 
 		// Assertions
 		assert.Error(t, err)
@@ -395,60 +335,24 @@ func TestHandleSSO(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, http.StatusForbidden, errResp.StatusCode)
 	})
-}
 
-func TestCreateSSOUser(t *testing.T) {
-	// Setup
-	db := setupSSOTestDB(t)
-	ssoService := &SSOService{db: db}
+	t.Run("New user with multiple groups", func(t *testing.T) {
+		// Create another group
+		thirdGroup := &models.Group{
+			Name: "Third Group",
+		}
+		err = db.Create(thirdGroup).Error
+		require.NoError(t, err)
+		assert.Equal(t, uint(3), thirdGroup.ID)
 
-	// Get the default group
-	defaultGroup := &models.Group{}
-	err := db.First(defaultGroup, 1).Error
-	require.NoError(t, err)
-	assert.Equal(t, uint(1), defaultGroup.ID) // Default group should have ID 1
-
-	// Create additional group
-	additionalGroup := &models.Group{
-		Name: "Additional Group",
-	}
-	err = db.Create(additionalGroup).Error
-	require.NoError(t, err)
-	assert.Equal(t, uint(2), additionalGroup.ID)
-
-	t.Run("New user with default group only", func(t *testing.T) {
-		// Test
-		user, err := ssoService.CreateSSOUser("test1@example.com", "Test User 1", "password", "sso-key-1", "1")
+		// Test with multiple group IDs
+		user, err := ssoService.HandleSSO("multi-group@example.com", "Multi Group User", "", []string{"2", "3"}, false)
 
 		// Assertions
 		assert.NoError(t, err)
 		assert.NotNil(t, user)
-		assert.Equal(t, "test1@example.com", user.Email)
-		assert.Equal(t, "Test User 1", user.Name)
-		assert.Equal(t, "sso-key-1", user.SSOKey)
-
-		// Verify user is in default group only using direct SQL query
-		var count int64
-		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, defaultGroup.ID).Count(&count).Error
-		assert.NoError(t, err)
-		assert.Equal(t, int64(1), count)
-
-		// Verify user is not in any other group
-		err = db.Table("user_groups").Where("user_id = ? AND group_id != ?", user.ID, defaultGroup.ID).Count(&count).Error
-		assert.NoError(t, err)
-		assert.Equal(t, int64(0), count)
-	})
-
-	t.Run("New user with additional group", func(t *testing.T) {
-		// Test
-		user, err := ssoService.CreateSSOUser("test2@example.com", "Test User 2", "password", "sso-key-2", "2")
-
-		// Assertions
-		assert.NoError(t, err)
-		assert.NotNil(t, user)
-		assert.Equal(t, "test2@example.com", user.Email)
-		assert.Equal(t, "Test User 2", user.Name)
-		assert.Equal(t, "sso-key-2", user.SSOKey)
+		assert.Equal(t, "multi-group@example.com", user.Email)
+		assert.Equal(t, "Multi Group User", user.Name)
 
 		// Verify user is in default group
 		var count int64
@@ -456,106 +360,15 @@ func TestCreateSSOUser(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 
-		// Verify user is in additional group
+		// Verify user is in second group
 		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, additionalGroup.ID).Count(&count).Error
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
-	})
 
-	t.Run("Existing user", func(t *testing.T) {
-		// Test with an existing SSO key
-		user, err := ssoService.CreateSSOUser("updated@example.com", "Updated User", "password", "sso-key-1", "2")
-
-		// Assertions
-		assert.NoError(t, err)
-		assert.NotNil(t, user)
-		assert.Equal(t, "test1@example.com", user.Email) // Email should not be updated
-		assert.Equal(t, "Test User 1", user.Name)        // Name should not be updated
-		assert.Equal(t, "sso-key-1", user.SSOKey)
-	})
-}
-
-func TestUpdateSSOUser(t *testing.T) {
-	// Setup
-	db := setupSSOTestDB(t)
-	ssoService := &SSOService{db: db}
-
-	// Get the default group
-	defaultGroup := &models.Group{}
-	err := db.First(defaultGroup, 1).Error
-	require.NoError(t, err)
-	assert.Equal(t, uint(1), defaultGroup.ID) // Default group should have ID 1
-
-	// Create additional group
-	additionalGroup := &models.Group{
-		Name: "Additional Group",
-	}
-	err = db.Create(additionalGroup).Error
-	require.NoError(t, err)
-	assert.Equal(t, uint(2), additionalGroup.ID)
-
-	// Create a test user
-	user := &models.User{
-		Email:  "test@example.com",
-		Name:   "Test User",
-		SSOKey: "sso-key",
-	}
-	err = db.Create(user).Error
-	require.NoError(t, err)
-
-	// Add user to default group
-	err = db.Model(defaultGroup).Association("Users").Append(user)
-	require.NoError(t, err)
-
-	t.Run("Update email and group", func(t *testing.T) {
-		// Test
-		updatedUser, err := ssoService.UpdateSSOUser("sso-key", "updated@example.com", "", "2")
-
-		// Assertions
-		assert.NoError(t, err)
-		assert.NotNil(t, updatedUser)
-		assert.Equal(t, "updated@example.com", updatedUser.Email)
-		assert.Equal(t, "Test User", updatedUser.Name) // Name should not be updated
-		assert.Equal(t, "sso-key", updatedUser.SSOKey)
-
-		// Verify user is in the additional group
-		var count int64
-		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", updatedUser.ID, additionalGroup.ID).Count(&count).Error
+		// Verify user is in third group
+		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, thirdGroup.ID).Count(&count).Error
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
-
-		// The current implementation doesn't remove the user from the default group
-		// So we expect the user to be in both groups
-		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", updatedUser.ID, defaultGroup.ID).Count(&count).Error
-		assert.NoError(t, err)
-		assert.Equal(t, int64(1), count)
-	})
-
-	t.Run("Update password", func(t *testing.T) {
-		// Test
-		updatedUser, err := ssoService.UpdateSSOUser("sso-key", "updated@example.com", "new-password", "2")
-
-		// Assertions
-		assert.NoError(t, err)
-		assert.NotNil(t, updatedUser)
-		assert.Equal(t, "updated@example.com", updatedUser.Email)
-		assert.Equal(t, "Test User", updatedUser.Name) // Name should not be updated
-		assert.Equal(t, "sso-key", updatedUser.SSOKey)
-
-		// Verify password was updated (can't check directly, but we can check it's not empty)
-		assert.NotEmpty(t, updatedUser.Password)
-	})
-
-	t.Run("Non-existent user", func(t *testing.T) {
-		// Test
-		updatedUser, err := ssoService.UpdateSSOUser("non-existent-key", "updated@example.com", "", "2")
-
-		// Assertions
-		assert.Error(t, err)
-		assert.Nil(t, updatedUser)
-		errResp, ok := err.(helpers.ErrorResponse)
-		assert.True(t, ok)
-		assert.Equal(t, http.StatusNotFound, errResp.StatusCode)
 	})
 }
 
@@ -589,28 +402,12 @@ func TestNotifyUserCreation(t *testing.T) {
 	err = db.Create(user).Error
 	require.NoError(t, err)
 
-	t.Run("Notify admin creation", func(t *testing.T) {
+	t.Run("Notify user creation", func(t *testing.T) {
 		// Clear previous notifications
 		notificationSvc.ClearNotifications()
 
 		// Test
-		ssoService.notifyUserCreation(user, true)
-
-		// Get notifications
-		notifications := notificationSvc.GetNotifications()
-		if assert.Equal(t, 1, len(notifications), "Expected 1 notification") {
-			assert.Contains(t, notifications[0].NotificationID, "new_admin_2_")
-			assert.Equal(t, "New Admin Created via SSO", notifications[0].Title)
-			assert.Equal(t, uint(1), notifications[0].UserID) // Should notify super-admin (ID 1)
-		}
-	})
-
-	t.Run("Notify regular user creation", func(t *testing.T) {
-		// Clear previous notifications
-		notificationSvc.ClearNotifications()
-
-		// Test
-		ssoService.notifyUserCreation(user, false)
+		ssoService.notifyUserCreation(user)
 
 		// Get notifications
 		notifications := notificationSvc.GetNotifications()
@@ -628,48 +425,10 @@ func TestNotifyUserCreation(t *testing.T) {
 		ssoService.notificationSvc = nil
 
 		// Test
-		ssoService.notifyUserCreation(user, true)
+		ssoService.notifyUserCreation(user)
 
 		// Get notifications (should be empty)
 		notifications := notificationSvc.GetNotifications()
 		assert.Equal(t, 0, len(notifications))
-	})
-}
-
-func TestGetUserBySSOKey(t *testing.T) {
-	// Setup
-	db := setupSSOTestDB(t)
-	ssoService := &SSOService{db: db}
-
-	// Create a test user
-	user := &models.User{
-		Email:  "test@example.com",
-		Name:   "Test User",
-		SSOKey: "sso-key",
-	}
-	err := db.Create(user).Error
-	require.NoError(t, err)
-
-	t.Run("Existing user", func(t *testing.T) {
-		// Test
-		developer, err := ssoService.GetUserBySSOKey("sso-key")
-
-		// Assertions
-		assert.NoError(t, err)
-		assert.NotNil(t, developer)
-		assert.Equal(t, "test@example.com", developer.Email)
-		assert.Equal(t, "sso-key", developer.SSOKey)
-	})
-
-	t.Run("Non-existent user", func(t *testing.T) {
-		// Test
-		developer, err := ssoService.GetUserBySSOKey("non-existent-key")
-
-		// Assertions
-		assert.Error(t, err)
-		assert.Nil(t, developer)
-		errResp, ok := err.(helpers.ErrorResponse)
-		assert.True(t, ok)
-		assert.Equal(t, http.StatusNotFound, errResp.StatusCode)
 	})
 }
