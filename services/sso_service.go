@@ -261,8 +261,10 @@ func (s *SSOService) HandleSSO(emailAddress, displayName, groupID string, groups
 			isNewUser = true
 		}
 
-		if existingUser.Name != displayName {
+		if existingUser.Name != displayName || !existingUser.EmailVerified {
 			existingUser.Name = displayName
+			existingUser.EmailVerified = true
+
 			if err := existingUser.Update(tx); err != nil {
 				slog.Error("Failed to update user name", "email", emailAddress, "error", err)
 				return helpers.NewInternalServerError("Failed to update user name")

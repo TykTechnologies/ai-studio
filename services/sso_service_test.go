@@ -370,6 +370,79 @@ func TestHandleSSO(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 	})
+
+	t.Run("Existing user with name update and email verification", func(t *testing.T) {
+		// Create an existing user with EmailVerified = false
+		existingUserUnverified := &models.User{
+			Email:         "unverified@example.com",
+			Name:          "Unverified User",
+			EmailVerified: false,
+		}
+		err := db.Create(existingUserUnverified).Error
+		require.NoError(t, err)
+
+		// Test
+		user, err := ssoService.HandleSSO("unverified@example.com", "Updated Unverified User", "2", nil, false)
+
+		// Assertions
+		assert.NoError(t, err)
+		assert.NotNil(t, user)
+		assert.Equal(t, "unverified@example.com", user.Email)
+		assert.Equal(t, "Updated Unverified User", user.Name)
+		assert.Equal(t, existingUserUnverified.ID, user.ID)
+		assert.True(t, user.EmailVerified, "User should be marked as email verified after SSO")
+
+		// Verify in database that EmailVerified was updated
+		var updatedUser models.User
+		err = db.First(&updatedUser, existingUserUnverified.ID).Error
+		assert.NoError(t, err)
+		assert.True(t, updatedUser.EmailVerified, "EmailVerified should be true in the database")
+		assert.Equal(t, "Updated Unverified User", updatedUser.Name, "Name should be updated in the database")
+
+		// Verify user is in default group
+		var count int64
+		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, defaultGroup.ID).Count(&count).Error
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+
+		// Verify user is in additional group
+		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, additionalGroup.ID).Count(&count).Error
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+	})
+
+	t.Run("Existing user with no changes needed", func(t *testing.T) {
+		// Create an existing user with EmailVerified = true and same name that will be passed
+		existingUserVerified := &models.User{
+			Email:         "already-verified@example.com",
+			Name:          "Already Verified User",
+			EmailVerified: true,
+		}
+		err := db.Create(existingUserVerified).Error
+		require.NoError(t, err)
+
+		// Test with same name
+		user, err := ssoService.HandleSSO("already-verified@example.com", "Already Verified User", "2", nil, false)
+
+		// Assertions
+		assert.NoError(t, err)
+		assert.NotNil(t, user)
+		assert.Equal(t, "already-verified@example.com", user.Email)
+		assert.Equal(t, "Already Verified User", user.Name)
+		assert.Equal(t, existingUserVerified.ID, user.ID)
+		assert.True(t, user.EmailVerified, "User should remain email verified")
+
+		// Verify user is in default group
+		var count int64
+		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, defaultGroup.ID).Count(&count).Error
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+
+		// Verify user is in additional group
+		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, additionalGroup.ID).Count(&count).Error
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+	})
 }
 
 func TestNotifyUserCreation(t *testing.T) {
