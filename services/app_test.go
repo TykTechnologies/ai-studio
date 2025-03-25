@@ -451,13 +451,30 @@ func TestListAppsWithPagination(t *testing.T) {
 	}
 
 	// Test ListAppsWithPagination
-	apps, _, _, err := service.ListAppsWithPagination(1, 3, false)
+	apps, _, _, err := service.ListAppsWithPagination(1, 3, false, "id")
 	assert.NoError(t, err)
 	assert.Len(t, apps, 1)
 
-	apps, _, _, err = service.ListAppsWithPagination(2, 3, false)
+	apps, _, _, err = service.ListAppsWithPagination(2, 3, false, "id")
 	assert.NoError(t, err)
 	assert.Len(t, apps, 1)
+
+	// Test with different sort orders
+	appsAsc, _, _, err := service.ListAppsWithPagination(10, 1, true, "name")
+	assert.NoError(t, err)
+	assert.Len(t, appsAsc, 5)
+	// Check if sorted in ascending order by name
+	for i := 0; i < len(appsAsc)-1; i++ {
+		assert.LessOrEqual(t, appsAsc[i].Name, appsAsc[i+1].Name)
+	}
+
+	appsDesc, _, _, err := service.ListAppsWithPagination(10, 1, true, "-name")
+	assert.NoError(t, err)
+	assert.Len(t, appsDesc, 5)
+	// Check if sorted in descending order by name
+	for i := 0; i < len(appsDesc)-1; i++ {
+		assert.GreaterOrEqual(t, appsDesc[i].Name, appsDesc[i+1].Name)
+	}
 }
 
 func TestListAppsByUserID(t *testing.T) {
@@ -480,13 +497,30 @@ func TestListAppsByUserID(t *testing.T) {
 	}
 
 	// Test ListAppsByUserID
-	user1Apps, _, _, err := service.ListAppsByUserID(user1.ID, 1, 10, true)
+	user1Apps, _, _, err := service.ListAppsByUserID(user1.ID, 1, 10, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, user1Apps, 3)
 
-	user2Apps, _, _, err := service.ListAppsByUserID(user2.ID, 1, 10, true)
+	user2Apps, _, _, err := service.ListAppsByUserID(user2.ID, 1, 10, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, user2Apps, 2)
+
+	// Test with different sort orders
+	user1AppsAsc, _, _, err := service.ListAppsByUserID(user1.ID, 10, 1, true, "name")
+	assert.NoError(t, err)
+	assert.Len(t, user1AppsAsc, 3)
+	// Check if sorted in ascending order by name
+	for i := 0; i < len(user1AppsAsc)-1; i++ {
+		assert.LessOrEqual(t, user1AppsAsc[i].Name, user1AppsAsc[i+1].Name)
+	}
+
+	user1AppsDesc, _, _, err := service.ListAppsByUserID(user1.ID, 10, 1, true, "-name")
+	assert.NoError(t, err)
+	assert.Len(t, user1AppsDesc, 3)
+	// Check if sorted in descending order by name
+	for i := 0; i < len(user1AppsDesc)-1; i++ {
+		assert.GreaterOrEqual(t, user1AppsDesc[i].Name, user1AppsDesc[i+1].Name)
+	}
 }
 
 func TestSearchApps(t *testing.T) {
@@ -505,7 +539,7 @@ func TestSearchApps(t *testing.T) {
 	_, _ = service.CreateApp("Development App", "This is a development app", user.ID, nil, nil)
 
 	// Test SearchApps
-	testApps, totalCount, totalPages, err := service.SearchApps("test", 1, 10, true)
+	testApps, totalCount, totalPages, err := service.SearchApps("test", 1, 10, true, "id")
 	t.Logf("Search for 'test': found %d apps, totalCount=%d, totalPages=%d", len(testApps), totalCount, totalPages)
 	if len(testApps) > 0 {
 		t.Logf("First app name: %s", testApps[0].Name)
@@ -516,21 +550,38 @@ func TestSearchApps(t *testing.T) {
 	assert.Equal(t, int64(1), totalCount)
 	assert.Equal(t, 1, totalPages)
 
-	productionApps, totalCount, totalPages, err := service.SearchApps("production", 1, 10, true)
+	productionApps, totalCount, totalPages, err := service.SearchApps("production", 1, 10, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, productionApps, 1)
 	assert.Equal(t, "Production App", productionApps[0].Name)
 	assert.Equal(t, int64(1), totalCount)
 	assert.Equal(t, 1, totalPages)
 
-	allApps, totalCount, totalPages, err := service.SearchApps("app", 1, 10, true)
+	allApps, totalCount, totalPages, err := service.SearchApps("app", 1, 10, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, allApps, 3)
 	assert.Equal(t, int64(3), totalCount)
 	assert.Equal(t, 1, totalPages)
 
+	// Test search with different sort orders
+	allAppsAsc, _, _, err := service.SearchApps("app", 1, 10, true, "name")
+	assert.NoError(t, err)
+	assert.Len(t, allAppsAsc, 3)
+	// Check if sorted in ascending order by name
+	for i := 0; i < len(allAppsAsc)-1; i++ {
+		assert.LessOrEqual(t, allAppsAsc[i].Name, allAppsAsc[i+1].Name)
+	}
+
+	allAppsDesc, _, _, err := service.SearchApps("app", 1, 10, true, "-name")
+	assert.NoError(t, err)
+	assert.Len(t, allAppsDesc, 3)
+	// Check if sorted in descending order by name
+	for i := 0; i < len(allAppsDesc)-1; i++ {
+		assert.GreaterOrEqual(t, allAppsDesc[i].Name, allAppsDesc[i+1].Name)
+	}
+
 	// Test search with no results
-	noApps, totalCount, totalPages, err := service.SearchApps("nonexistent", 1, 10, true)
+	noApps, totalCount, totalPages, err := service.SearchApps("nonexistent", 1, 10, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, noApps, 0)
 	assert.Equal(t, int64(0), totalCount)

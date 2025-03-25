@@ -162,9 +162,20 @@ func (a *App) List(db *gorm.DB) (Apps, error) {
 }
 
 // ListWithPagination returns a paginated list of apps
-func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&App{})
+
+	// Handle sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC") // Default sort by ID ascending
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
@@ -192,9 +203,20 @@ func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all
 }
 
 // ListByUserID returns all apps for a specific user with pagination
-func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&App{}).Where("user_id = ?", userID)
+
+	// Handle sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC") // Default sort by ID ascending
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
@@ -218,10 +240,21 @@ func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber i
 }
 
 // Search returns apps matching the given search term with pagination
-func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64
 	// Enable debug mode to log SQL queries
 	query := db.Model(&App{}).Where("name LIKE ? OR description LIKE ?", "%"+searchTerm+"%", "%"+searchTerm+"%")
+
+	// Handle sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC") // Default sort by ID ascending
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err

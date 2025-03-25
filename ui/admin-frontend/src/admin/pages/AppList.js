@@ -43,7 +43,8 @@ const AppList = () => {
     message: "",
     severity: "success",
   });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("asc");
 
   const {
     page,
@@ -61,8 +62,7 @@ const AppList = () => {
         params: {
           page,
           page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
+          sort: `${sortOrder === "desc" ? "-" : ""}${sortField}`,
         },
       });
       setApps(response.data.data || []);
@@ -76,7 +76,7 @@ const AppList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [page, pageSize, sortField, sortOrder, updatePaginationData]);
 
   useEffect(() => {
     fetchApps();
@@ -88,7 +88,14 @@ const AppList = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get("/users");
+      // Request all users by setting all=true
+      const response = await apiClient.get("/users", {
+        params: {
+          all: true,
+          // Add a large page_size as a fallback in case 'all' is not working
+          page_size: 1000
+        }
+      });
       const userMap = {};
       response.data.data.forEach((user) => {
         userMap[user.id] = user.attributes.name;
@@ -140,14 +147,6 @@ const AppList = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
-  };
-
   const handleAddApp = () => {
     navigate("/admin/apps/new");
   };
@@ -174,7 +173,7 @@ const AppList = () => {
           </PrimaryButton>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>
         </Box>
         <ContentBox>
           {apps.length === 0 ? (
@@ -190,12 +189,41 @@ const AppList = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("id");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      ID {sortField === "id" && (sortOrder === "asc" ? "↑" : "↓")}
                     </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("user_id")}>
-                      User
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "name" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("name");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Name {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "description" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("description");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Description {sortField === "description" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "user_id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("user_id");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      User {sortField === "user_id" && (sortOrder === "asc" ? "↑" : "↓")}
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
@@ -207,6 +235,7 @@ const AppList = () => {
                       onClick={() => handleAppClick(app)}
                       sx={{ cursor: "pointer" }}
                     >
+                      <StyledTableCell>{app.id}</StyledTableCell>
                       <StyledTableCell>{app.attributes.name}</StyledTableCell>
                       <StyledTableCell>{app.attributes.description}</StyledTableCell>
                       <StyledTableCell>
