@@ -714,8 +714,9 @@ func (a *API) getUserApps(c *gin.Context) {
 	currentUser := user.(*models.User)
 
 	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
 
-	apps, totalCount, totalPages, err := a.service.ListAppsByUserID(currentUser.ID, pageSize, pageNumber, all)
+	apps, totalCount, totalPages, err := a.service.ListAppsByUserID(currentUser.ID, pageSize, pageNumber, all, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
