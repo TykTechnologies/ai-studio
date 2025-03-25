@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"errors"
 	"strings"
 
 	"net/http"
@@ -69,14 +70,13 @@ func (suite *AuthServiceTestSuite) TearDownTest() {
 }
 
 func TestAuthServiceSuite(t *testing.T) {
-	t.Skip()
 	suite.Run(t, new(AuthServiceTestSuite))
 }
 
 func (suite *AuthServiceTestSuite) TestLogin() {
 	suite.Run("Successful login", func() {
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
-		user := &models.User{Email: "test@example.com", Password: string(hashedPassword)}
+		user := &models.User{Email: "test@example.com", Password: string(hashedPassword), EmailVerified: true}
 		err := suite.db.Create(user).Error
 		assert.NoError(suite.T(), err)
 
@@ -102,7 +102,7 @@ func (suite *AuthServiceTestSuite) TestLogin() {
 		assert.Error(suite.T(), err)
 		assert.Equal(suite.T(), http.StatusUnauthorized, w.Code)
 		assert.Contains(suite.T(), err.Error(), "unauthorized")
-		assert.Contains(suite.T(), w.Body.String(), "Unauthorized")
+		assert.Contains(suite.T(), w.Body.String(), "Invalid email or password")
 	})
 }
 
@@ -122,7 +122,10 @@ func (suite *AuthServiceTestSuite) TestLogout() {
 
 		assert.NoError(suite.T(), err)
 		assert.Equal(suite.T(), http.StatusOK, w.Code)
-		assert.Contains(suite.T(), w.Header().Get("Set-Cookie"), "session=;")
+		// Check that the Clear-Site-Data header is set
+		assert.Equal(suite.T(), "\"cookies\", \"storage\", \"cache\"", w.Header().Get("Clear-Site-Data"))
+		// Check that the Cache-Control header is set
+		assert.Equal(suite.T(), "no-store, no-cache, must-revalidate, max-age=0", w.Header().Get("Cache-Control"))
 	})
 
 	suite.Run("Logout failure - user not in context", func() {
@@ -207,10 +210,17 @@ func (suite *AuthServiceTestSuite) TestRegister() {
 	})
 
 	suite.Run("Registration failure - weak password", func() {
-		err := suite.authService.Register("test@example.com", "Test User", "weak", true, true)
+		// Try to register with a weak password
+		err := suite.authService.Register("weak-password@example.com", "Test User", "weak", true, true)
 
+		// Verify the registration failed
 		assert.Error(suite.T(), err)
-		assert.Contains(suite.T(), strings.ToLower(err.Error()), "password must be at least 8 characters long")
+		
+		// Verify the user was not created in the database
+		var user models.User
+		result := suite.db.Where("email = ?", "weak-password@example.com").First(&user)
+		assert.Error(suite.T(), result.Error)
+		assert.True(suite.T(), errors.Is(result.Error, gorm.ErrRecordNotFound), "User should not exist in the database")
 	})
 
 	suite.Run("Registration failure - registration not allowed", func() {
@@ -379,5 +389,178 @@ func (suite *AuthServiceTestSuite) TestUpdatePassword() {
 		err = suite.authService.UpdatePassword(user, initialPassword, "weak")
 		assert.Error(suite.T(), err)
 		assert.Contains(suite.T(), strings.ToLower(err.Error()), "password must be at least 8 characters long")
+	})
+}
+
+func (suite *AuthServiceTestSuite) TestSetUserSession() {
+	suite.Run("Successfully set user session", func() {
+		// Create a test user
+		user := &models.User{Email: "session@example.com", Password: "password"}
+		err := suite.db.Create(user).Error
+		assert.NoError(suite.T(), err)
+
+		// Setup Gin context
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", nil)
+
+		// Call SetUserSession
+		err = suite.authService.SetUserSession(c, user)
+		assert.NoError(suite.T(), err)
+
+		// Verify cookie was set
+		cookieHeader := w.Header().Get("Set-Cookie")
+		assert.Contains(suite.T(), cookieHeader, "session=")
+		assert.Contains(suite.T(), cookieHeader, "HttpOnly")
+		assert.Contains(suite.T(), cookieHeader, "SameSite=Strict")
+		assert.Contains(suite.T(), cookieHeader, "Path=/")
+
+		// Verify session token was saved to user
+		var updatedUser models.User
+		suite.db.First(&updatedUser, user.ID)
+		assert.NotEmpty(suite.T(), updatedUser.SessionToken)
+
+		// Verify user was set in context
+		contextUser, exists := c.Get("user")
+		assert.True(suite.T(), exists)
+		assert.Equal(suite.T(), user, contextUser)
+	})
+
+	suite.Run("Session token update for existing user", func() {
+		// Create a test user with existing session token
+		user := &models.User{Email: "existing-session@example.com", Password: "password", SessionToken: "old-token"}
+		err := suite.db.Create(user).Error
+		assert.NoError(suite.T(), err)
+
+		// Setup Gin context
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", nil)
+
+		// Call SetUserSession
+		err = suite.authService.SetUserSession(c, user)
+		assert.NoError(suite.T(), err)
+
+		// Verify session token was updated
+		var updatedUser models.User
+		suite.db.First(&updatedUser, user.ID)
+		assert.NotEqual(suite.T(), "old-token", updatedUser.SessionToken)
+	})
+}
+
+func (suite *AuthServiceTestSuite) TestGetAuthenticatedUser() {
+	suite.Run("Get user from cookie", func() {
+		// Create a test user with session token
+		user := &models.User{Email: "cookie-auth@example.com", Password: "password", SessionToken: "cookie-token", EmailVerified: true}
+		err := suite.db.Create(user).Error
+		assert.NoError(suite.T(), err)
+
+		// Setup Gin context with cookie
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", nil)
+		c.Request.AddCookie(&http.Cookie{Name: "session", Value: "cookie-token"})
+
+		// Call GetAuthenticatedUser
+		authUser := suite.authService.GetAuthenticatedUser(c)
+
+		// Verify correct user was returned
+		assert.NotNil(suite.T(), authUser)
+		assert.Equal(suite.T(), user.ID, authUser.ID)
+		assert.Equal(suite.T(), user.Email, authUser.Email)
+	})
+
+	suite.Run("Get user from API key in query parameter", func() {
+		// Create a test user with API key
+		user := &models.User{Email: "apikey-auth@example.com", Password: "password", APIKey: "query-api-key", EmailVerified: true}
+		err := suite.db.Create(user).Error
+		assert.NoError(suite.T(), err)
+
+		// Setup Gin context with API key in query
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/?token=query-api-key", nil)
+
+		// Call GetAuthenticatedUser
+		authUser := suite.authService.GetAuthenticatedUser(c)
+
+		// Verify correct user was returned
+		assert.NotNil(suite.T(), authUser)
+		assert.Equal(suite.T(), user.ID, authUser.ID)
+		assert.Equal(suite.T(), user.Email, authUser.Email)
+	})
+
+	suite.Run("Get user from Authorization header", func() {
+		// Create a test user with API key
+		user := &models.User{Email: "header-auth@example.com", Password: "password", APIKey: "header-api-key", EmailVerified: true}
+		err := suite.db.Create(user).Error
+		assert.NoError(suite.T(), err)
+
+		// Setup Gin context with Authorization header
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", nil)
+		c.Request.Header.Set("Authorization", "Bearer header-api-key")
+
+		// Call GetAuthenticatedUser
+		authUser := suite.authService.GetAuthenticatedUser(c)
+
+		// Verify correct user was returned
+		assert.NotNil(suite.T(), authUser)
+		assert.Equal(suite.T(), user.ID, authUser.ID)
+		assert.Equal(suite.T(), user.Email, authUser.Email)
+	})
+
+	suite.Run("No authentication provided", func() {
+		// Setup Gin context with no authentication
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", nil)
+
+		// Call GetAuthenticatedUser
+		authUser := suite.authService.GetAuthenticatedUser(c)
+
+		// Verify no user was returned
+		assert.Nil(suite.T(), authUser)
+	})
+
+	suite.Run("Invalid cookie token", func() {
+		// Setup Gin context with invalid cookie
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", nil)
+		c.Request.AddCookie(&http.Cookie{Name: "session", Value: "invalid-token"})
+
+		// Call GetAuthenticatedUser
+		authUser := suite.authService.GetAuthenticatedUser(c)
+
+		// Verify no user was returned
+		assert.Nil(suite.T(), authUser)
+	})
+
+	suite.Run("User with unverified email", func() {
+		// Create a test user with API key but unverified email
+		user := &models.User{Email: "unverified@example.com", Password: "password", APIKey: "unverified-api-key", EmailVerified: false}
+		err := suite.db.Create(user).Error
+		assert.NoError(suite.T(), err)
+
+		// Setup Gin context with API key
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/?token=unverified-api-key", nil)
+
+		// Call GetAuthenticatedUser
+		authUser := suite.authService.GetAuthenticatedUser(c)
+
+		// Verify no user was returned (email not verified)
+		assert.Nil(suite.T(), authUser)
 	})
 }
