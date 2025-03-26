@@ -13,6 +13,7 @@ exclude_dir = [
     "tmp",
     "vendor",
     "ui/admin-frontend/node_modules",
+    "tests"
 ]
 delay = 1000
 kill_delay = "0s"
