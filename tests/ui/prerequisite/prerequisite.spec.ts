@@ -24,3 +24,17 @@ test('Add LLM provider', async ({ page, loginPage, adminLLMProvidersPage, adminM
   await adminLLMProvidersPage.Table.triggerActivateAction(1);
 });
 
+test('Add user', async ({ page, loginPage, adminMainPage, adminUsersPage }) => {
+  await loginPage.goto();
+  await loginPage.login(config.admin_email, config.admin_password);
+  await adminMainPage.navigateToUsers();
+  await adminUsersPage.AddUserButton.click();
+  await adminUsersPage.NameInput.fill('Test User');
+  await adminUsersPage.EmailInput.fill('dev@tyk.io');
+  await adminUsersPage.PasswordInput.fill(config.admin_password);
+  await adminUsersPage.EmailVerifiedCheckbox.check();
+  await adminUsersPage.SaveUserButton.click();
+  await adminUsersPage.Table.expectRowWithTextExists('Test User');
+});
+
+

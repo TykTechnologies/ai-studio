@@ -4,6 +4,9 @@ import { RegisterPage } from '../pom/Register_page';
 import { AdminLLMProvidersPage } from '@pom/Admin_LLM_providers_page';
 import { AdminMainPage } from '@pom/Admin_main_page';
 import { AdminAppsPage } from '@pom/Admin_apps_page';
+import { AdminUsersPage } from '@pom/Admin_users_page';
+import { AdminCataloguesPage } from '@pom/Admin_catalogues_page';
+import { AdminGroupsPage } from '@pom/Admin_groups_page';
 
 export const test = base.extend<{
     loginPage: LoginPage;
@@ -11,6 +14,9 @@ export const test = base.extend<{
     adminLLMProvidersPage: AdminLLMProvidersPage;
     adminMainPage: AdminMainPage;
     adminAppsPage: AdminAppsPage;
+    adminUsersPage: AdminUsersPage;
+    adminCataloguesPage: AdminCataloguesPage;
+    adminGroupsPage: AdminGroupsPage;
     }>({
     loginPage: async ({ page }, use) => {
         const loginPage = new LoginPage(page);
@@ -32,4 +38,16 @@ export const test = base.extend<{
         const adminAppsPage = new AdminAppsPage(page);
         await use(adminAppsPage);
     },
+    adminUsersPage: async ({ page }, use) => {
+        const adminUsersPage = new AdminUsersPage(page);
+        await use(adminUsersPage);
+    },
+    adminCataloguesPage: async ({ page }, use) => {
+        const adminCataloguesPage = new AdminCataloguesPage(page);
+        await use(adminCataloguesPage);
+    },
+    adminGroupsPage: async ({ page }, use) => {
+        const adminGroupsPage = new AdminGroupsPage(page);
+        await use(adminGroupsPage);
+    }
 });

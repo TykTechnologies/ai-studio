@@ -22,14 +22,17 @@ export class TableWrapper extends Wrapper {
         return await expect(this.element.locator(`tbody tr:has-text("${text}")`)).not.toBeVisible();
     }
 
-    async triggerEditAction(rowNumber: number) {
+    async triggerAction(rowNumber: number, action: string) {
         await this.element.locator(`tbody tr:nth-child(${rowNumber}) button`).click();
-        await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+        await this.page.getByRole('menuitem', { name: action }).click();
+    }
+
+    async triggerEditAction(rowNumber: number) {
+        await this.triggerAction(rowNumber, 'Edit');
     }
 
     async triggerDeleteAction(rowNumber: number) {
-        await this.element.locator(`tbody tr:nth-child(${rowNumber}) button`).click();
-        await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+        await this.triggerAction(rowNumber, 'Delete');
     }
 
     async deleteRowWithText(text: string) {
@@ -38,8 +41,7 @@ export class TableWrapper extends Wrapper {
     }
 
     async triggerActivateAction(rowNumber: number) {
-        await this.element.locator(`tbody tr:nth-child(${rowNumber}) button`).click();
-        await this.page.getByRole('menuitem', { name: 'Activate' }).click();
+        await this.triggerAction(rowNumber, 'Activate');
     }
 }
 
