@@ -1,32 +1,32 @@
 version: "3.8"
 services:
-  dev:
-    platform: linux/${TARGETARCH:-amd64}
-    build:
-      context: ../.
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ../.:/app
-      - /app/ui/admin-frontend/node_modules
-      - ../midsommar.db:/app/midsommar.db # Bind mount SQLite database file
-      - ../.env:/app/.env # Mount .env file
-    ports:
-      - "3000:3000" # Frontend
-      - "8080:8080" # Backend
-    environment:
-      - ALLOW_REGISTRATIONS=true
-      - CHOKIDAR_USEPOLLING=true
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
-      - DATABASE_TYPE=postgres
-      - TYK_AI_LICENSE=${TYK_AI_LICENSE}
-      - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
-      - GOFLAGS=-buildvcs=false
-    stdin_open: true
-    tty: true
-    depends_on:
-      - postgres
+  # dev:
+  #   platform: linux/${TARGETARCH:-amd64}
+  #   build:
+  #     context: ../.
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - ../.:/app
+  #     - /app/ui/admin-frontend/node_modules
+  #     - ../midsommar.db:/app/midsommar.db # Bind mount SQLite database file
+  #     - ../.env:/app/.env # Mount .env file
+  #   ports:
+  #     - "3000:3000" # Frontend
+  #     - "8081:8081" # Backend
+  #   environment:
+  #     - ALLOW_REGISTRATIONS=true
+  #     - CHOKIDAR_USEPOLLING=true
+  #     - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
+  #     - DATABASE_TYPE=postgres
+  #     - TYK_AI_LICENSE=${TYK_AI_LICENSE}
+  #     - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY}
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
+  #     - GOFLAGS=-buildvcs=false
+  #   stdin_open: true
+  #   tty: true
+  #   depends_on:
+  #     - postgres
   postgres:
     image: postgres:latest
     environment:
