@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -54,14 +53,8 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 	resp.Attributes.ProfileID = profile.ProfileID
 	resp.Attributes.SelectedProviderType = profile.SelectedProviderType
 
-	var urlFormat, callbackUrlFormat string
-	if callbackBaseURL != "" && !strings.HasSuffix(callbackBaseURL, "/") {
-		urlFormat = "%s/auth/%s/%s"
-		callbackUrlFormat = "%s/auth/%s/%s/callback"
-	} else {
-		urlFormat = "%sauth/%s/%s"
-		callbackUrlFormat = "%sauth/%s/%s/callback"
-	}
+	urlFormat := "%sauth/%s/%s"
+	callbackUrlFormat := "%sauth/%s/%s/callback"
 
 	resp.Attributes.LoginURL = fmt.Sprintf(urlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.CallbackURL = fmt.Sprintf(callbackUrlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
