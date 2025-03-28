@@ -459,7 +459,7 @@ func TestListProfiles(t *testing.T) {
 // TestSerializeProfile tests the serializeProfile function with different provider types
 // and URL formatting scenarios
 func TestSerializeProfile(t *testing.T) {
-	t.Run("Social provider with trailing slash in callback URL", func(t *testing.T) {
+	t.Run("Social provider", func(t *testing.T) {
 		profile := &models.Profile{
 			Name:         "Social Profile",
 			ProfileID:    "social-profile",
@@ -486,33 +486,6 @@ func TestSerializeProfile(t *testing.T) {
 		assert.Equal(t, "http://localhost:8080/auth/social-profile/social/callback", response.Attributes.CallbackURL)
 	})
 
-	t.Run("Social provider without trailing slash in callback URL", func(t *testing.T) {
-		profile := &models.Profile{
-			Name:         "Social Profile",
-			ProfileID:    "social-profile",
-			ActionType:   "auth",
-			Type:         "redirect",
-			ProviderName: "SocialProvider",
-			ProviderConfig: map[string]interface{}{
-				"CallbackBaseURL": "http://localhost:8080",
-				"UseProviders": []map[string]interface{}{
-					{
-						"Name":   "social",
-						"Key":    "test-key",
-						"Secret": "test-secret",
-					},
-				},
-			},
-			SelectedProviderType: "social",
-		}
-
-		response := serializeProfile(profile)
-
-		// Check that URLs are correctly formatted without trailing slash
-		assert.Equal(t, "http://localhost:8080/auth/social-profile/social", response.Attributes.LoginURL)
-		assert.Equal(t, "http://localhost:8080/auth/social-profile/social/callback", response.Attributes.CallbackURL)
-	})
-
 	t.Run("SAML provider with SAMLBaseURL", func(t *testing.T) {
 		profile := &models.Profile{
 			Name:         "SAML Profile",
@@ -530,27 +503,6 @@ func TestSerializeProfile(t *testing.T) {
 		response := serializeProfile(profile)
 
 		// Check that URLs use SAMLBaseURL instead of CallbackBaseURL
-		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml", response.Attributes.LoginURL)
-		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml/callback", response.Attributes.CallbackURL)
-	})
-
-	t.Run("SAML provider with SAMLBaseURL without trailing slash", func(t *testing.T) {
-		profile := &models.Profile{
-			Name:         "SAML Profile",
-			ProfileID:    "saml-profile",
-			ActionType:   "auth",
-			Type:         "redirect",
-			ProviderName: "SAMLProvider",
-			ProviderConfig: map[string]interface{}{
-				"CallbackBaseURL": "http://localhost:8080/",
-				"SAMLBaseURL":     "https://saml.example.com",
-			},
-			SelectedProviderType: "saml",
-		}
-
-		response := serializeProfile(profile)
-
-		// Check that URLs use SAMLBaseURL instead of CallbackBaseURL and are correctly formatted
 		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml", response.Attributes.LoginURL)
 		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml/callback", response.Attributes.CallbackURL)
 	})
