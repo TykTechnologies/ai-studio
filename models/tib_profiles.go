@@ -54,9 +54,20 @@ func (p *Profile) Delete(db *gorm.DB) error {
 	return db.Delete(p).Error
 }
 
-func (p *Profiles) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (p *Profiles) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&Profile{})
+
+	// Handle sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC") // Default sort by ID ascending
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err

@@ -8,7 +8,6 @@ import {
   TableCell,
   TableRow,
   Dialog,
-  Grid,
   DialogTitle,
   Accordion,
   DialogContent,
@@ -18,7 +17,7 @@ import { NavLink } from "react-router-dom";
 
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
-  borderRadius: theme.shape.borderRadius * 3,
+  borderRadius: 8,
   border: `1px solid rgba(0, 0, 0, 0.12)`,
   boxShadow: "none",
   overflow: "hidden",
@@ -148,6 +147,24 @@ export const DangerButton = styled(Button)(({ theme }) => ({
     boxShadow: "none",
     color: theme.palette.custom.white,
     border: `1px solid ${theme.palette.border.criticalHover}`
+  },
+}));
+
+export const DangerOutlineButton = styled(Button)(({ theme }) => ({
+  position: 'relative',
+  borderRadius: 20,
+  padding: '8px 16px',
+  color: theme.palette.background.buttonCritical,
+  backgroundColor: theme.palette.custom.white,
+  border: `1px solid ${theme.palette.background.buttonCritical}`,
+  boxShadow: "none",
+  textTransform: "none",
+  fontFamily: 'Inter-Medium',
+  "&:hover": {
+    backgroundColor: theme.palette.border.criticalDefaultSubdue,
+    boxShadow: "none",
+    color: theme.palette.background.buttonCriticalHover,
+    border: `1px solid ${theme.palette.background.buttonCriticalHover}`
   },
 }));
 

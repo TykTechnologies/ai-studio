@@ -1,12 +1,14 @@
 import React from 'react';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
+import useUserEntitlements from '../../hooks/useUserEntitlements';
 import Icon from '../../../components/common/Icon';
 
 const Drawer = () => {
-  const { features, loading } = useSystemFeatures();
+  const { features, loading: featuresLoading } = useSystemFeatures();
+  const { uiOptions, loading: entitlementsLoading } = useUserEntitlements();
 
-  if (loading) {
+  if (featuresLoading || entitlementsLoading) {
     return null;
   }
 
@@ -44,6 +46,9 @@ const Drawer = () => {
         features.feature_portal ||
         features.feature_chat
           ? [{ id: 'groups', text: 'User groups', path: '/admin/groups' }]
+          : []),
+        ...(uiOptions?.show_sso_config
+          ? [{ id: 'sso-profiles', text: 'SSO profiles', path: '/admin/sso-profiles' }]
           : []),
         { text: 'Filters & Middleware', path: '/admin/filters' },
         { text: 'Secrets', path: '/admin/secrets' },

@@ -444,13 +444,13 @@ func TestService_ListProfiles(t *testing.T) {
 	db := setupProfileTestDB(t)
 	service := &Service{DB: db}
 
-	// Create multiple profiles
+	// Create multiple profiles with different names and creation order
 	profiles := []*models.Profile{
-		{ProfileID: "profile-1", Name: "Profile 1", OrgID: "org-1", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
-		{ProfileID: "profile-2", Name: "Profile 2", OrgID: "org-1", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
-		{ProfileID: "profile-3", Name: "Profile 3", OrgID: "org-2", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
-		{ProfileID: "profile-4", Name: "Profile 4", OrgID: "org-2", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
-		{ProfileID: "profile-5", Name: "Profile 5", OrgID: "org-3", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
+		{ProfileID: "profile-1", Name: "C Profile", OrgID: "org-1", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
+		{ProfileID: "profile-2", Name: "A Profile", OrgID: "org-1", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
+		{ProfileID: "profile-3", Name: "E Profile", OrgID: "org-2", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
+		{ProfileID: "profile-4", Name: "B Profile", OrgID: "org-2", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
+		{ProfileID: "profile-5", Name: "D Profile", OrgID: "org-3", DefaultUserGroupID: "1", ProviderConfig: models.JSONMap{"UseProviders": []interface{}{map[string]interface{}{"Name": "social"}}}},
 	}
 
 	for _, p := range profiles {
@@ -461,27 +461,121 @@ func TestService_ListProfiles(t *testing.T) {
 	}
 
 	t.Run("List profiles with pagination", func(t *testing.T) {
-		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 1, false)
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 1, false, "")
 		assert.NoError(t, err)
 		assert.Equal(t, int64(5), totalCount)
 		assert.Equal(t, 3, totalPages)
 		assert.Len(t, fetchedProfiles, 2)
+		// Default sort is by ID ascending, so first two profiles should be returned
+		assert.Equal(t, uint(1), fetchedProfiles[0].ID)
+		assert.Equal(t, uint(2), fetchedProfiles[1].ID)
 	})
 
 	t.Run("List profiles with different page", func(t *testing.T) {
-		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 2, false)
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 2, false, "")
 		assert.NoError(t, err)
 		assert.Equal(t, int64(5), totalCount)
 		assert.Equal(t, 3, totalPages)
 		assert.Len(t, fetchedProfiles, 2)
+		// Default sort is by ID ascending, so profiles 3 and 4 should be returned
+		assert.Equal(t, uint(3), fetchedProfiles[0].ID)
+		assert.Equal(t, uint(4), fetchedProfiles[1].ID)
 	})
 
 	t.Run("List all profiles", func(t *testing.T) {
-		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 1, true)
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 1, true, "")
 		assert.NoError(t, err)
 		assert.Equal(t, int64(5), totalCount)
 		assert.Equal(t, 3, totalPages)
 		assert.Len(t, fetchedProfiles, 5)
+		// Default sort is by ID ascending, so all profiles should be returned in ID order
+		assert.Equal(t, uint(1), fetchedProfiles[0].ID)
+		assert.Equal(t, uint(2), fetchedProfiles[1].ID)
+		assert.Equal(t, uint(3), fetchedProfiles[2].ID)
+		assert.Equal(t, uint(4), fetchedProfiles[3].ID)
+		assert.Equal(t, uint(5), fetchedProfiles[4].ID)
+	})
+
+	t.Run("List profiles with sorting by name ascending", func(t *testing.T) {
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(5, 1, true, "name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, fetchedProfiles, 5)
+		// Profiles should be sorted by name in ascending order
+		assert.Equal(t, "A Profile", fetchedProfiles[0].Name)
+		assert.Equal(t, "B Profile", fetchedProfiles[1].Name)
+		assert.Equal(t, "C Profile", fetchedProfiles[2].Name)
+		assert.Equal(t, "D Profile", fetchedProfiles[3].Name)
+		assert.Equal(t, "E Profile", fetchedProfiles[4].Name)
+	})
+
+	t.Run("List profiles with sorting by name descending", func(t *testing.T) {
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(5, 1, true, "-name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, fetchedProfiles, 5)
+		// Profiles should be sorted by name in descending order
+		assert.Equal(t, "E Profile", fetchedProfiles[0].Name)
+		assert.Equal(t, "D Profile", fetchedProfiles[1].Name)
+		assert.Equal(t, "C Profile", fetchedProfiles[2].Name)
+		assert.Equal(t, "B Profile", fetchedProfiles[3].Name)
+		assert.Equal(t, "A Profile", fetchedProfiles[4].Name)
+	})
+
+	t.Run("List profiles with sorting by org_id ascending", func(t *testing.T) {
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(5, 1, true, "org_id")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, fetchedProfiles, 5)
+		// First two profiles should have org_id "org-1"
+		assert.Equal(t, "org-1", fetchedProfiles[0].OrgID)
+		assert.Equal(t, "org-1", fetchedProfiles[1].OrgID)
+		// Next two profiles should have org_id "org-2"
+		assert.Equal(t, "org-2", fetchedProfiles[2].OrgID)
+		assert.Equal(t, "org-2", fetchedProfiles[3].OrgID)
+		// Last profile should have org_id "org-3"
+		assert.Equal(t, "org-3", fetchedProfiles[4].OrgID)
+	})
+
+	t.Run("List profiles with sorting by org_id descending", func(t *testing.T) {
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(5, 1, true, "-org_id")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, fetchedProfiles, 5)
+		// First profile should have org_id "org-3"
+		assert.Equal(t, "org-3", fetchedProfiles[0].OrgID)
+		// Next two profiles should have org_id "org-2"
+		assert.Equal(t, "org-2", fetchedProfiles[1].OrgID)
+		assert.Equal(t, "org-2", fetchedProfiles[2].OrgID)
+		// Last two profiles should have org_id "org-1"
+		assert.Equal(t, "org-1", fetchedProfiles[3].OrgID)
+		assert.Equal(t, "org-1", fetchedProfiles[4].OrgID)
+	})
+
+	t.Run("List profiles with pagination and sorting", func(t *testing.T) {
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 1, false, "name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, 3, totalPages)
+		assert.Len(t, fetchedProfiles, 2)
+		// First two profiles by name should be returned
+		assert.Equal(t, "A Profile", fetchedProfiles[0].Name)
+		assert.Equal(t, "B Profile", fetchedProfiles[1].Name)
+	})
+
+	t.Run("List profiles with different page and sorting", func(t *testing.T) {
+		fetchedProfiles, totalCount, totalPages, err := service.ListProfiles(2, 2, false, "name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, 3, totalPages)
+		assert.Len(t, fetchedProfiles, 2)
+		// Next two profiles by name should be returned
+		assert.Equal(t, "C Profile", fetchedProfiles[0].Name)
+		assert.Equal(t, "D Profile", fetchedProfiles[1].Name)
 	})
 }
 
@@ -506,7 +600,7 @@ func TestService_GetProfileByName(t *testing.T) {
 	})
 
 	t.Run("Get non-existent profile by name", func(t *testing.T) {
-		fetchedProfile, err := service.GetProfileByName("Non-existent Profile")
+		fetchedProfile, err := service.GetProfileByName("non-existent-name")
 		assert.Error(t, err)
 		assert.Nil(t, fetchedProfile)
 		errResp, ok := err.(helpers.ErrorResponse)
