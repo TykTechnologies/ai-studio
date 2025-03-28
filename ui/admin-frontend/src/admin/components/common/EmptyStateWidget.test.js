@@ -3,6 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import EmptyStateWidget from './EmptyStateWidget';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
+// Mock the imported image
+jest.mock('./empty-state.png', () => 'mocked-empty-state.png');
+
 // Mock theme for testing
 const theme = createTheme({
   palette: {
@@ -94,7 +97,7 @@ describe('EmptyStateWidget', () => {
     
     const image = screen.getByAltText('Empty state illustration');
     expect(image).toBeInTheDocument();
-    expect(image).toHaveAttribute('src', '/empty-state.png');
+    expect(image).toHaveAttribute('src', 'mocked-empty-state.png');
   });
 
   test('applies correct styling to components', () => {
