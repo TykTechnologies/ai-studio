@@ -1,17 +1,31 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	provOpenID  = "openid-connect"
+	provLDAP    = "ldap"
+	provSAML    = "saml"
+	userProfile = "profile for users"
+)
+
 func serializeProfile(profile *models.Profile) ProfileResponse {
 	accessor := helpers.NewJSONMapAccessor(profile.ProviderConfig)
 	callbackBaseURL := accessor.GetString("CallbackBaseURL", "")
+
+	if profile.SelectedProviderType == provSAML {
+		callbackBaseURL = accessor.GetString("SAMLBaseURL", "")
+	}
+
 	failureRedirect := accessor.GetString("FailureRedirect", "")
 
 	resp := ProfileResponse{
@@ -39,8 +53,18 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 	resp.Attributes.SSOOnlyForRegisteredUsers = profile.SSOOnlyForRegisteredUsers
 	resp.Attributes.ProfileID = profile.ProfileID
 	resp.Attributes.SelectedProviderType = profile.SelectedProviderType
-	resp.Attributes.LoginURL = callbackBaseURL + "auth/" + profile.ProfileID + "/" + profile.SelectedProviderType
-	resp.Attributes.CallbackURL = callbackBaseURL + "auth/" + profile.ProfileID + "/" + profile.SelectedProviderType + "/callback"
+
+	var urlFormat, callbackUrlFormat string
+	if callbackBaseURL != "" && !strings.HasSuffix(callbackBaseURL, "/") {
+		urlFormat = "%s/auth/%s/%s"
+		callbackUrlFormat = "%s/auth/%s/%s/callback"
+	} else {
+		urlFormat = "%sauth/%s/%s"
+		callbackUrlFormat = "%sauth/%s/%s/callback"
+	}
+
+	resp.Attributes.LoginURL = fmt.Sprintf(urlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
+	resp.Attributes.CallbackURL = fmt.Sprintf(callbackUrlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.FailureRedirectURL = failureRedirect
 
 	return resp
@@ -57,10 +81,24 @@ func serializeProfileList(profile *models.Profile) ProfileListItem {
 		ID:   profile.Model.ID,
 	}
 
+	providerType := map[string]string{
+		provOpenID: "Open ID Connect",
+		provLDAP:   "LDAP",
+		provSAML:   "SAML",
+	}
+
 	resp.Attributes.Name = profile.Name
 	resp.Attributes.ProfileID = profile.ProfileID
-	resp.Attributes.ProfileType = profile.Type
-	resp.Attributes.ProviderType = profile.SelectedProviderType
+	resp.Attributes.ProfileType = userProfile
+
+	pt, ok := providerType[profile.SelectedProviderType]
+
+	if ok {
+		resp.Attributes.ProviderType = pt
+	} else {
+		resp.Attributes.ProviderType = "Social"
+	}
+
 	resp.Attributes.UpdatedBy = userEmail
 	resp.Attributes.UpdatedAt = profile.UpdatedAt
 
@@ -272,8 +310,9 @@ func (a *API) deleteProfile(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) listProfiles(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
 
-	profiles, totalCount, totalPages, err := a.service.ListProfiles(pageSize, pageNumber, all)
+	profiles, totalCount, totalPages, err := a.service.ListProfiles(pageSize, pageNumber, all, sort)
 	if err != nil {
 		helpers.SendErrorResponse(c, err)
 		return

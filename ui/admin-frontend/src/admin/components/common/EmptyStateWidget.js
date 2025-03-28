@@ -1,40 +1,53 @@
 import React from "react";
-import { Paper, Typography, Box } from "@mui/material";
-import { alpha } from "@mui/material/styles";
-import { PrimaryButton } from "../../styles/sharedStyles";
+import { Paper, Typography, Box, Link } from "@mui/material";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 const EmptyStateWidget = ({
   title,
   description,
-  buttonText,
-  buttonIcon,
-  onButtonClick,
+  learnMoreLink,
 }) => (
   <Paper
-    elevation={3}
     sx={{
-      p: 4,
+      p: 2,
       boxShadow: 0,
       textAlign: "center",
-      backgroundColor: (theme) =>
-        alpha(theme.palette.custom.emptyStateBackground, 0.1),
-      border: (theme) => `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+      border: (theme) => `1px solid ${theme.palette.border.neutralDefault}`,
     }}
   >
-    <Typography variant="h6" gutterBottom>
-      {title}
-    </Typography>
-    <Typography variant="body1" paragraph>
-      {description}
-    </Typography>
-    <Box mt={2}>
-      <PrimaryButton
-        variant="contained"
-        startIcon={buttonIcon}
-        onClick={onButtonClick}
-      >
-        {buttonText}
-      </PrimaryButton>
+    <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center', p: 2 }}>
+      <img
+        src="/empty-state.png"
+        alt="Empty state illustration"
+        style={{
+          maxWidth: "50%",
+        }}
+      />
+    </Box>
+    
+    <Box sx={{ mb: 1, px: 5, lineHeight: 3 }}>
+      <Typography variant="headingLarge" color="text.primary" gutterBottom>
+        {title}
+      </Typography>
+      <Typography variant="bodyLargeDefault" color="text.defaultSubdued" paragraph>
+        {description}
+      </Typography>
+      <Box mt={2} display="flex" justifyContent="center" alignItems="center">
+        <Link
+          variant="bodyLargeMedium"
+          color="text.linkDefault"
+          href={learnMoreLink || "#"}
+          onClick={(e) => !learnMoreLink && e.preventDefault()}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            textDecoration: "none"
+          }}
+        >
+          Learn more
+          <OpenInNewIcon sx={{ ml: 0.5, color: "inherit", width:"14px", height:"14px" }} />
+        </Link>
+      </Box>
     </Box>
   </Paper>
 );

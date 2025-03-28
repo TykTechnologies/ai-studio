@@ -430,4 +430,187 @@ func TestListProfiles(t *testing.T) {
 		data := response["data"].([]interface{})
 		assert.Equal(t, len(profiles), len(data))
 	})
+
+	t.Run("List profiles with sorting", func(t *testing.T) {
+		w := performRequest(r, "GET", "/api/v1/sso-profiles?sort=name", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		data := response["data"].([]interface{})
+		assert.Equal(t, len(profiles), len(data))
+	})
+
+	t.Run("List profiles with descending sorting", func(t *testing.T) {
+		w := performRequest(r, "GET", "/api/v1/sso-profiles?sort=-name", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		data := response["data"].([]interface{})
+		assert.Equal(t, len(profiles), len(data))
+	})
+}
+
+// TestSerializeProfile tests the serializeProfile function with different provider types
+// and URL formatting scenarios
+func TestSerializeProfile(t *testing.T) {
+	t.Run("Social provider with trailing slash in callback URL", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:         "Social Profile",
+			ProfileID:    "social-profile",
+			ActionType:   "auth",
+			Type:         "redirect",
+			ProviderName: "SocialProvider",
+			ProviderConfig: map[string]interface{}{
+				"CallbackBaseURL": "http://localhost:8080/",
+				"UseProviders": []map[string]interface{}{
+					{
+						"Name":   "social",
+						"Key":    "test-key",
+						"Secret": "test-secret",
+					},
+				},
+			},
+			SelectedProviderType: "social",
+		}
+
+		response := serializeProfile(profile)
+
+		// Check that URLs are correctly formatted with trailing slash
+		assert.Equal(t, "http://localhost:8080/auth/social-profile/social", response.Attributes.LoginURL)
+		assert.Equal(t, "http://localhost:8080/auth/social-profile/social/callback", response.Attributes.CallbackURL)
+	})
+
+	t.Run("Social provider without trailing slash in callback URL", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:         "Social Profile",
+			ProfileID:    "social-profile",
+			ActionType:   "auth",
+			Type:         "redirect",
+			ProviderName: "SocialProvider",
+			ProviderConfig: map[string]interface{}{
+				"CallbackBaseURL": "http://localhost:8080",
+				"UseProviders": []map[string]interface{}{
+					{
+						"Name":   "social",
+						"Key":    "test-key",
+						"Secret": "test-secret",
+					},
+				},
+			},
+			SelectedProviderType: "social",
+		}
+
+		response := serializeProfile(profile)
+
+		// Check that URLs are correctly formatted without trailing slash
+		assert.Equal(t, "http://localhost:8080/auth/social-profile/social", response.Attributes.LoginURL)
+		assert.Equal(t, "http://localhost:8080/auth/social-profile/social/callback", response.Attributes.CallbackURL)
+	})
+
+	t.Run("SAML provider with SAMLBaseURL", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:         "SAML Profile",
+			ProfileID:    "saml-profile",
+			ActionType:   "auth",
+			Type:         "redirect",
+			ProviderName: "SAMLProvider",
+			ProviderConfig: map[string]interface{}{
+				"CallbackBaseURL": "http://localhost:8080/",
+				"SAMLBaseURL":     "https://saml.example.com/",
+			},
+			SelectedProviderType: "saml",
+		}
+
+		response := serializeProfile(profile)
+
+		// Check that URLs use SAMLBaseURL instead of CallbackBaseURL
+		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml", response.Attributes.LoginURL)
+		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml/callback", response.Attributes.CallbackURL)
+	})
+
+	t.Run("SAML provider with SAMLBaseURL without trailing slash", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:         "SAML Profile",
+			ProfileID:    "saml-profile",
+			ActionType:   "auth",
+			Type:         "redirect",
+			ProviderName: "SAMLProvider",
+			ProviderConfig: map[string]interface{}{
+				"CallbackBaseURL": "http://localhost:8080/",
+				"SAMLBaseURL":     "https://saml.example.com",
+			},
+			SelectedProviderType: "saml",
+		}
+
+		response := serializeProfile(profile)
+
+		// Check that URLs use SAMLBaseURL instead of CallbackBaseURL and are correctly formatted
+		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml", response.Attributes.LoginURL)
+		assert.Equal(t, "https://saml.example.com/auth/saml-profile/saml/callback", response.Attributes.CallbackURL)
+	})
+}
+
+// TestSerializeProfileList tests the serializeProfileList function with different provider types
+func TestSerializeProfileList(t *testing.T) {
+	t.Run("Social provider", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:                 "Social Profile",
+			ProfileID:            "social-profile",
+			SelectedProviderType: "social",
+		}
+
+		response := serializeProfileList(profile)
+
+		// Check that provider type is correctly mapped
+		assert.Equal(t, "Social", response.Attributes.ProviderType)
+		assert.Equal(t, userProfile, response.Attributes.ProfileType)
+	})
+
+	t.Run("OpenID Connect provider", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:                 "OpenID Profile",
+			ProfileID:            "openid-profile",
+			SelectedProviderType: provOpenID,
+		}
+
+		response := serializeProfileList(profile)
+
+		// Check that provider type is correctly mapped
+		assert.Equal(t, "Open ID Connect", response.Attributes.ProviderType)
+		assert.Equal(t, userProfile, response.Attributes.ProfileType)
+	})
+
+	t.Run("LDAP provider", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:                 "LDAP Profile",
+			ProfileID:            "ldap-profile",
+			SelectedProviderType: provLDAP,
+		}
+
+		response := serializeProfileList(profile)
+
+		// Check that provider type is correctly mapped
+		assert.Equal(t, "LDAP", response.Attributes.ProviderType)
+		assert.Equal(t, userProfile, response.Attributes.ProfileType)
+	})
+
+	t.Run("SAML provider", func(t *testing.T) {
+		profile := &models.Profile{
+			Name:                 "SAML Profile",
+			ProfileID:            "saml-profile",
+			SelectedProviderType: provSAML,
+		}
+
+		response := serializeProfileList(profile)
+
+		// Check that provider type is correctly mapped
+		assert.Equal(t, "SAML", response.Attributes.ProviderType)
+		assert.Equal(t, userProfile, response.Attributes.ProfileType)
+	})
 }

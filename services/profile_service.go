@@ -16,11 +16,17 @@ const (
 	provOpenID = "openid-connect"
 	provLDAP   = "ldap"
 	provSocial = "social"
+	provSAML   = "saml"
 )
 
 func setProviderType(profile *models.Profile) error {
 	if profile.ProviderName == "ADProvider" {
 		profile.SelectedProviderType = provLDAP
+		return nil
+	}
+
+	if profile.ProviderName == "SAMLProvider" {
+		profile.SelectedProviderType = provSAML
 		return nil
 	}
 
@@ -44,7 +50,7 @@ func setProviderType(profile *models.Profile) error {
 		return nil
 	}
 
-	profile.SelectedProviderType = provSocial
+	profile.SelectedProviderType = providerName
 	return nil
 }
 
@@ -199,10 +205,10 @@ func (s *Service) DeleteProfile(profileID string) error {
 	return nil
 }
 
-func (s *Service) ListProfiles(pageSize int, pageNumber int, all bool) (models.Profiles, int64, int, error) {
+func (s *Service) ListProfiles(pageSize int, pageNumber int, all bool, sort string) (models.Profiles, int64, int, error) {
 	var profiles models.Profiles
 
-	totalCount, totalPages, err := profiles.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := profiles.GetAll(s.DB, pageSize, pageNumber, all, sort)
 	if err != nil {
 		slog.Error("Failed to list profiles", "error", err)
 		return nil, 0, 0, helpers.NewInternalServerError(fmt.Sprintf("error listing profiles: %v", err))

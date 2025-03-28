@@ -832,8 +832,9 @@ type UserWithEntitlementsResponse struct {
 		Name      string `json:"name"`
 		IsAdmin   bool   `json:"is_admin"`
 		UIOptions struct {
-			ShowChat   bool `json:"show_chat"`
-			ShowPortal bool `json:"show_portal"`
+			ShowChat      bool `json:"show_chat"`
+			ShowPortal    bool `json:"show_portal"`
+			ShowSSOConfig bool `json:"show_sso_config"`
 		} `json:"ui_options"`
 		Entitlements struct {
 			Catalogues     []CatalogueResponse     `json:"catalogues"`
@@ -1000,6 +1001,7 @@ type ProfileInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
+			ProfileID                 string                 `json:"profile_id"`
 			Name                      string                 `json:"name"`
 			OrgID                     string                 `json:"org_id"`
 			ActionType                string                 `json:"action_type"`
@@ -1018,7 +1020,6 @@ type ProfileInput struct {
 			UserGroupMapping          map[string]string      `json:"user_group_mapping"`
 			UserGroupSeparator        string                 `json:"user_group_separator"`
 			SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
-			ProfileID                 string                 `json:"profile_id"`
 		} `json:"attributes"`
 	} `json:"data"`
 }

@@ -195,7 +195,7 @@ function App() {
               <Route path="/chat/*" element={<ChatRoutes />} />
 
               {/* Admin Routes */}
-              <Route path="/admin/*" element={<AdminRoutes />} />
+              <Route path="/admin/*" element={<AdminRoutes uiOptions={entitlements?.ui_options} />} />
 
               {/* Common Routes */}
               <Route path="/notifications" element={<NotificationsPage />} />
