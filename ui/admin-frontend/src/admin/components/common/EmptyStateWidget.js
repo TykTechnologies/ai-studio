@@ -1,6 +1,8 @@
 import React from "react";
 import { Paper, Typography, Box, Link } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+// Import the image directly so it gets bundled with the JS
+import emptyStateImage from "./empty-state.png";
 
 const EmptyStateWidget = ({
   title,
@@ -17,7 +19,7 @@ const EmptyStateWidget = ({
   >
     <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center', p: 2 }}>
       <img
-        src="/empty-state.png"
+        src={emptyStateImage}
         alt="Empty state illustration"
         style={{
           maxWidth: "50%",
