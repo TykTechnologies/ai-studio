@@ -19,9 +19,7 @@ export const copyToClipboard = async (text, fieldName, onSuccess, onError) => {
     console.log(`Text${fieldName ? ` (${fieldName})` : ''} copied to clipboard`);
     
     // Call success callback if provided
-    if (onSuccess && typeof onSuccess === 'function') {
-      onSuccess(fieldName);
-    }
+    onSuccess?.(fieldName);
     
     return true;
   } catch (err) {
