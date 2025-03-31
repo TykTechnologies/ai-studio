@@ -103,12 +103,8 @@ const SSOProfileDetails = () => {
   }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      await fetchProfileData();
-      await fetchGroups();
-    };
-    
-    fetchData();
+    fetchProfileData();
+    fetchGroups();
   }, [fetchProfileData, fetchGroups]);
 
   const handleEditProfile = () => {
