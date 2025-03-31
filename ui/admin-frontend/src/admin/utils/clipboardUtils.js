@@ -29,9 +29,7 @@ export const copyToClipboard = async (text, fieldName, onSuccess, onError) => {
     console.error(`Failed to copy text${fieldName ? ` (${fieldName})` : ''}: `, err);
     
     // Call error callback if provided
-    if (onError && typeof onError === 'function') {
-      onError(fieldName, err);
-    }
+    onError?.(fieldName, err);
     
     return false;
   }
