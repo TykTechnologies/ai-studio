@@ -24,7 +24,7 @@ jobs:
         - name: Build Frontend
           run: |
             npm install
-            npm run build
+            CI='' npm run build
           working-directory: ui/admin-frontend
         - name: Start AI Portal
           env: 
