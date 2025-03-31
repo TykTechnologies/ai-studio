@@ -26,5 +26,12 @@ export class LoginPage {
         await this.EmailInput.fill(email);
         await this.PasswordInput.fill(password);
         await this.LoginButton.click();
+        await this.page.waitForTimeout(1000);
+        if (await this.EmailInput.isVisible()) {
+            console.log('Login failed. Retrying...');
+            await this.EmailInput.fill(email);
+            await this.PasswordInput.fill(password);
+            await this.LoginButton.click();
+        }
     }
 }

@@ -4,8 +4,13 @@ export class Wrapper {
     element: Locator;
     page: Page;
 
-    constructor(selector: string, page: Page) {
-        this.element = page.locator(selector);
+    constructor(selector: string | Locator, page: Page) {
+        if (typeof selector === 'string') {
+            this.element = page.locator(selector);
+        }
+        else {
+            this.element = selector;
+        }
         this.page = page;
     }
 

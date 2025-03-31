@@ -1,9 +1,9 @@
 import { Wrapper } from './Wrapper';
-import { Page } from '@playwright/test';
+import { Page, Locator } from '@playwright/test';
 
 export class DropDownWrapper extends Wrapper {
 
-    constructor(selector: string, page: Page) {
+    constructor(selector: string | Locator, page: Page) {
         super(selector, page);
     }
 
