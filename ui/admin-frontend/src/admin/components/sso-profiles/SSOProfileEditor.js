@@ -59,10 +59,6 @@ const SSOProfileEditor = () => {
     }
   }, [profileId]);
 
-  const handleEditorChange = (value) => {
-    setEditorContent(value);
-  };
-
   const handleSave = async () => {
     try {
       let profileToSave;
@@ -208,7 +204,7 @@ const SSOProfileEditor = () => {
               height="100%"
               defaultLanguage="json"
               value={editorContent}
-              onChange={handleEditorChange}
+              onChange={setEditorContent}
               theme="vs-dark"
               options={{
                 minimap: { 

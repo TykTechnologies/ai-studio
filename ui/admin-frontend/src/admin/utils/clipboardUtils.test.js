@@ -142,20 +142,60 @@ describe('clipboardUtils', () => {
       expect(mockConsoleError).toHaveBeenCalledWith('Failed to copy text: ', clipboardError);
       expect(result).toBe(false);
     });
-
-    test('should ignore invalid callback functions', async () => {
-      // Setup
-      mockWriteText.mockResolvedValue(undefined);
+    
+    test('should return false and log error with invalid success callback', async () => {
       const text = 'Test text';
+      const fieldName = 'API Key';
       const invalidCallback = 'not a function';
       
-      // Execute
-      const result = await copyToClipboard(text, null, invalidCallback, invalidCallback);
+      mockWriteText.mockResolvedValue(undefined);
       
-      // Verify
+      const result = await copyToClipboard(text, fieldName, invalidCallback);
+      
+      expect(result).toBe(false);
       expect(mockWriteText).toHaveBeenCalledWith(text);
-      expect(mockConsoleLog).toHaveBeenCalledWith('Text copied to clipboard');
+      expect(mockConsoleError).toHaveBeenCalled();
+      expect(mockConsoleError.mock.calls[0][0]).toContain('Failed to copy text (API Key)');
+    });
+    
+    test('should throw TypeError with invalid error callback', async () => {
+      const text = 'Test text';
+      const fieldName = 'API Key';
+      const invalidCallback = 'not a function';
+      
+      const clipboardError = new Error('Clipboard error');
+      mockWriteText.mockRejectedValue(clipboardError);
+      
+      await expect(
+        copyToClipboard(text, fieldName, null, invalidCallback)
+      ).rejects.toThrow(TypeError);
+      
+      expect(mockWriteText).toHaveBeenCalledWith(text);
+      expect(mockConsoleError).toHaveBeenCalledWith('Failed to copy text (API Key): ', clipboardError);
+    });
+    
+    test('should handle undefined callbacks gracefully', async () => {
+      const text = 'Test text';
+      const fieldName = 'API Key';
+      
+      mockWriteText.mockResolvedValue(undefined);
+      
+      let result = await copyToClipboard(text, fieldName, undefined);
+      
+      expect(mockWriteText).toHaveBeenCalledWith(text);
+      expect(mockConsoleLog).toHaveBeenCalledWith('Text (API Key) copied to clipboard');
       expect(result).toBe(true);
+      
+      jest.clearAllMocks();
+      
+      const clipboardError = new Error('Clipboard error');
+      mockWriteText.mockRejectedValue(clipboardError);
+      
+      result = await copyToClipboard(text, fieldName, null, undefined);
+      
+      expect(mockWriteText).toHaveBeenCalledWith(text);
+      expect(mockConsoleError).toHaveBeenCalledWith('Failed to copy text (API Key): ', clipboardError);
+      expect(result).toBe(false);
     });
   });
 });
