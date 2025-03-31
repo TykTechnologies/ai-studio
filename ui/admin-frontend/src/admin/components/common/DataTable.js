@@ -81,7 +81,7 @@ const DataTable = ({
           {data.map((item) => (
             <StyledTableRow
               key={item.id || item.key}
-              onClick={() => onRowClick && onRowClick(item)}
+              onClick={() => onRowClick?.(item)}
               sx={{ cursor: onRowClick ? "pointer" : "default" }}
             >
               {columns.map((column) => (
