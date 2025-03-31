@@ -23,6 +23,7 @@ jobs:
           uses: actions/checkout@v2
         - name: Build Frontend
           run: |
+            npm install
             npm run build
           working-directory: ui/admin-frontend
         - name: Start AI Portal
