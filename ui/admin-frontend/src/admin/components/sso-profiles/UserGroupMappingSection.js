@@ -15,7 +15,7 @@ import DataTable from "../common/DataTable";
 const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNameById }) => {
   // Prepare data for the user group mapping table
   const prepareUserGroupMappingData = () => {
-    if (!profileData || !profileData.UserGroupMapping) {
+    if (!profileData?.UserGroupMapping) {
       return [];
     }
 
