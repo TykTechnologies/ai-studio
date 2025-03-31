@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 export async function sendRequestToAnthropicLLMWithSDK(
     secret: string, 
-    customUrl: string = 'https://ai-gateway.tyk.technology/llm/rest/anthropic-gateway/', 
+    customUrl: string, 
     prompt: string,
     model: string = 'claude-3-opus-20240229',
     maxTokens: number = 1000

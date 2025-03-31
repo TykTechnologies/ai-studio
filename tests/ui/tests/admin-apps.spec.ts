@@ -1,7 +1,6 @@
 import { test } from '@fixtures';
 import { expect } from '@playwright/test';
 import { config } from '../config';
-import { generateRandomEmail } from '@utils';
 
 test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPage }) => {
   const app_name = 'My app 1';
@@ -9,7 +8,7 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
 
   await test.step('Crating new app', async () => {
     await loginPage.goto();
-    await loginPage.login(config.admin_email, config.admin_password);
+    await loginPage.login(config.admin_email, config.password);
     await adminMainPage.navigateToApps();
     await adminAppsPage.AddAppButton.click();
     await adminAppsPage.NameInput.fill(app_name);
@@ -36,8 +35,6 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
     expect(keyID).not.toBeNull();
     expect(secret).not.toBeNull();
   });
-
-
 
   await test.step('Delete app', async () => {
     await adminMainPage.navigateToApps();

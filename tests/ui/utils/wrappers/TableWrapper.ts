@@ -14,8 +14,22 @@ export class TableWrapper extends Wrapper {
         await this.element.locator(`tbody tr:has-text("${text}")`).click();
     }
 
+    async rowWithTextExists(text: string): Promise<boolean> {
+        return await this.element.locator(`tbody tr:has-text("${text}")`).isVisible();
+    }
+
+    async getRowNumberWithText(text: string): Promise<number> {
+        const allRows = await this.element.locator('tbody tr').all();
+        for (let i = 0; i < allRows.length; i++) {
+            if (await allRows[i].locator(`:text("${text}")`).isVisible()) {
+                return i + 1;
+            }
+        }
+        throw new Error(`Row with text "${text}" not found`);
+    }
+
     async expectRowWithTextExists(text: string): Promise<void> {
-        return await expect(this.element.locator(`tbody tr:has-text("${text}")`)).toBeVisible();
+        return await expect(this.element.locator(`tbody tr:has-text("${text}")`).first()).toBeVisible();
     }
 
     async expectRowWithTextNotExists(text: string): Promise<void> {

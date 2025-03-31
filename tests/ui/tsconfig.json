@@ -32,7 +32,7 @@
     "paths": {
       "@pom/*":["pom/*"],
       "@fixtures": ["utils/fixtures.ts"],
-      "@utils": ["utils/utils.ts"],
+      "@utils/*": ["utils/*"],
       "@wrappers/*": ["utils/wrappers/*"],
       "@config": ["config.ts"]
     },                                      /* Specify a set of entries that re-map imports to additional lookup locations. */
