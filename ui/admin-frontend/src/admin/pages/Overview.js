@@ -2,8 +2,7 @@ import React from 'react';
 import { Typography, Box, Stack, styled, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { TitleBox, ContentBox, PrimaryButton } from '../styles/sharedStyles';
-import useUserEntitlements from '../hooks/useUserEntitlements';
-import useSystemFeatures from '../hooks/useSystemFeatures';
+import useOverviewData from '../hooks/useOverviewData';
 import BasicCard from '../components/common/BasicCard';
 import IconBadge from '../components/common/IconBadge';
 
@@ -47,16 +46,11 @@ const SectionContainer = styled(Box)(({ theme }) => ({
 }));
 
 const Overview = () => {
-  const { userEntitlements, userName, loading: entitlementsLoading, error: entitlementsError } = useUserEntitlements();
-  const { features, loading: featuresLoading, error: featuresError } = useSystemFeatures();
+  const { userName, features, hasLLMs, loading, error } = useOverviewData();
   const navigate = useNavigate();
 
-  const hasLLMs = userEntitlements?.llms?.length > 0;
   const showChatCard = features?.feature_chat;
   const showAppsCard = features?.feature_gateway || features?.feature_portal;
-  
-  const loading = entitlementsLoading || featuresLoading;
-  const error = entitlementsError || featuresError;
 
   const handleNavigate = (path) => {
     navigate(path);

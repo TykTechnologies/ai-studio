@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import pubClient from "../utils/pubClient";
 
-const useSystemFeatures = () => {
+const useSystemFeatures = (skipInitialFetch = false) => {
   const [features, setFeatures] = useState({
     feature_portal: false,
     feature_chat: false,
@@ -10,23 +10,28 @@ const useSystemFeatures = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchFeatures = async () => {
-      try {
-        const response = await pubClient.get("/common/system");
-        setFeatures(response.data.features);
-      } catch (err) {
-        console.error("Error fetching system features:", err);
-        setError(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFeatures();
+  const fetchFeatures = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await pubClient.get("/common/system");
+      setFeatures(response.data.features);
+      return response.data.features;
+    } catch (err) {
+      console.error("Error fetching system features:", err);
+      setError(err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { features, loading, error };
+  useEffect(() => {
+    if (!skipInitialFetch) {
+      fetchFeatures();
+    }
+  }, [fetchFeatures, skipInitialFetch]);
+
+  return { features, loading, error, fetchFeatures };
 };
 
 export default useSystemFeatures;

@@ -4,16 +4,10 @@ import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import Overview from './Overview';
-import useUserEntitlements from '../hooks/useUserEntitlements';
-import useSystemFeatures from '../hooks/useSystemFeatures';
+import useOverviewData from '../hooks/useOverviewData';
 
-// Mock the hooks
-jest.mock('../hooks/useUserEntitlements', () => ({
-  __esModule: true,
-  default: jest.fn(),
-}));
-
-jest.mock('../hooks/useSystemFeatures', () => ({
+// Mock the coordinator hook
+jest.mock('../hooks/useOverviewData', () => ({
   __esModule: true,
   default: jest.fn(),
 }));
@@ -81,23 +75,19 @@ const mockTheme = createTheme({
 });
 
 // Wrap component with ThemeProvider and MemoryRouter for testing
-const renderWithProviders = (ui, { entitlements, features } = {}) => {
-  // Set up default mock values for the hooks
-  useUserEntitlements.mockReturnValue({
-    userEntitlements: entitlements?.userEntitlements || { llms: [] },
+const renderWithProviders = (ui, { entitlements, features, hasLLMs, loading, error } = {}) => {
+  // Set up default mock values for the coordinator hook
+  useOverviewData.mockReturnValue({
+    userEntitlements: entitlements?.userEntitlements || {},
     userName: entitlements?.userName || 'Test User',
-    loading: entitlements?.loading || false,
-    error: entitlements?.error || null,
-  });
-
-  useSystemFeatures.mockReturnValue({
     features: features?.features || {
       feature_chat: false,
       feature_gateway: false,
       feature_portal: false,
     },
-    loading: features?.loading || false,
-    error: features?.error || null,
+    hasLLMs: hasLLMs !== undefined ? hasLLMs : false,
+    loading: loading !== undefined ? loading : false,
+    error: error || null,
   });
 
   return render(
@@ -114,39 +104,18 @@ describe('Overview Component', () => {
     jest.clearAllMocks();
   });
 
-  test('renders loading state when entitlements are loading', () => {
+  test('renders loading state when data is loading', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { loading: true },
-      features: { loading: false },
+      loading: true
     });
     
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
-  test('renders loading state when features are loading', () => {
+  test('renders error state when there is an error', () => {
+    const errorMessage = 'Failed to load data';
     renderWithProviders(<Overview />, {
-      entitlements: { loading: false },
-      features: { loading: true },
-    });
-    
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
-  });
-
-  test('renders error state when there is an entitlements error', () => {
-    const errorMessage = 'Failed to load entitlements';
-    renderWithProviders(<Overview />, {
-      entitlements: { error: errorMessage },
-      features: { error: null },
-    });
-    
-    expect(screen.getByText(errorMessage)).toBeInTheDocument();
-  });
-
-  test('renders error state when there is a features error', () => {
-    const errorMessage = 'Failed to load features';
-    renderWithProviders(<Overview />, {
-      entitlements: { error: null },
-      features: { error: errorMessage },
+      error: errorMessage
     });
     
     expect(screen.getByText(errorMessage)).toBeInTheDocument();
@@ -162,9 +131,15 @@ describe('Overview Component', () => {
 
   test('renders welcome message with placeholder when user name is not available', () => {
     // Override the default mock for this specific test
-    useUserEntitlements.mockReturnValueOnce({
-      userEntitlements: { llms: [] },
+    useOverviewData.mockReturnValueOnce({
+      userEntitlements: {},
       userName: null,
+      features: {
+        feature_chat: false,
+        feature_gateway: false,
+        feature_portal: false,
+      },
+      hasLLMs: false,
       loading: false,
       error: null,
     });
@@ -234,8 +209,8 @@ describe('Overview Component', () => {
 
   test('enables Add Chats button when LLMs are available', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { userEntitlements: { llms: ['llm1', 'llm2'] } },
       features: { features: { feature_chat: true } },
+      hasLLMs: true
     });
     
     const addChatsButton = screen.getByText('Add Chats');
@@ -244,8 +219,8 @@ describe('Overview Component', () => {
 
   test('disables Add Chats button when no LLMs are available', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { userEntitlements: { llms: [] } },
       features: { features: { feature_chat: true } },
+      hasLLMs: false
     });
     
     const addChatsButton = screen.getByText('Add Chats');
@@ -254,8 +229,8 @@ describe('Overview Component', () => {
 
   test('enables Add Apps button when LLMs are available', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { userEntitlements: { llms: ['llm1', 'llm2'] } },
       features: { features: { feature_gateway: true } },
+      hasLLMs: true
     });
     
     const addAppsButton = screen.getByText('Add Apps');
@@ -264,8 +239,8 @@ describe('Overview Component', () => {
 
   test('disables Add Apps button when no LLMs are available', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { userEntitlements: { llms: [] } },
       features: { features: { feature_gateway: true } },
+      hasLLMs: false
     });
     
     const addAppsButton = screen.getByText('Add Apps');
@@ -302,8 +277,8 @@ describe('Overview Component', () => {
 
   test('navigates to correct route when Add Apps button is clicked', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { userEntitlements: { llms: ['llm1'] } },
       features: { features: { feature_gateway: true } },
+      hasLLMs: true
     });
     
     fireEvent.click(screen.getByText('Add Apps'));
@@ -312,8 +287,8 @@ describe('Overview Component', () => {
 
   test('navigates to correct route when Add Chats button is clicked', () => {
     renderWithProviders(<Overview />, {
-      entitlements: { userEntitlements: { llms: ['llm1'] } },
       features: { features: { feature_chat: true } },
+      hasLLMs: true
     });
     
     fireEvent.click(screen.getByText('Add Chats'));

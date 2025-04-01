@@ -206,7 +206,7 @@ function App() {
                     to={
                       isAuthenticated
                         ? entitlements?.is_admin === true
-                          ? "/admin/dash"
+                          ? "/admin"
                           : entitlements?.ui_options?.show_portal
                             ? "/portal/dashboard"
                             : "/chat/dashboard"
@@ -225,7 +225,7 @@ function App() {
                 <Navigate
                   to={
                     isAuthenticated
-                      ? "/admin/dash" // Just redirect to admin dash for unknown routes
+                      ? "/admin"
                       : "/login"
                   }
                   replace
