@@ -33,20 +33,19 @@ const useOverviewData = () => {
 
   const fetchAllData = useCallback(async () => {
     setLoading(true);
-    try {
-      // Fetch all data in parallel
-      await Promise.all([
-        fetchUserEntitlements(),
-        fetchFeatures(),
-        fetchLLMs()
-      ]);
-      setError(null);
-    } catch (error) {
-      console.error('Error fetching overview data:', error);
-      setError('Failed to load data');
-    } finally {
-      setLoading(false);
-    }
+    setError(null);
+    await Promise.all([
+      fetchUserEntitlements(),
+      fetchFeatures(),
+      fetchLLMs()
+    ])
+      .catch(error => {
+        console.error('Error fetching overview data:', error);
+        setError('Failed to load data');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [fetchUserEntitlements, fetchFeatures, fetchLLMs]);
 
   useEffect(() => {
