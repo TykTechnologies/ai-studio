@@ -12,6 +12,9 @@ const iconComponents = {
   'message-lines': lazy(() => import('../../common/fontawesome/message-lines.svg').then(module => ({ default: module.ReactComponent }))),
   'grid-2-plus': lazy(() => import('../../common/fontawesome/grid-2-plus.svg').then(module => ({ default: module.ReactComponent }))),
   'house': lazy(() => import('../../common/fontawesome/house.svg').then(module => ({ default: module.ReactComponent }))),
+  'users': lazy(() => import('../../common/fontawesome/users.svg').then(module => ({ default: module.ReactComponent }))),
+  'book-sparkles': lazy(() => import('../../common/fontawesome/book-sparkles.svg').then(module => ({ default: module.ReactComponent }))),
+  'screwdriver-wrench': lazy(() => import('../../common/fontawesome/screwdriver-wrench.svg').then(module => ({ default: module.ReactComponent }))),
 };
 
 const Icon = ({ name, ...svgProps }) => {
