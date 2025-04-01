@@ -52,10 +52,6 @@ const Overview = () => {
   const showChatCard = features?.feature_chat;
   const showAppsCard = features?.feature_gateway || features?.feature_portal;
 
-  const handleNavigate = (path) => {
-    navigate(path);
-  };
-
   if (loading) {
     return (
       <LoadingContainer>
@@ -111,7 +107,7 @@ const Overview = () => {
               <BasicCard
                 primaryAction={{ 
                   label: 'Add LLM provider', 
-                  onClick: () => handleNavigate('/admin/llms/new') 
+                  onClick: () => navigate('/admin/llms/new') 
                 }}
                 secondaryAction={{ 
                   label: 'Learn more', 
@@ -130,7 +126,7 @@ const Overview = () => {
               <BasicCard
                 primaryAction={{ 
                   label: 'Add Data source', 
-                  onClick: () => handleNavigate('/admin/datasources/new')
+                  onClick: () => navigate('/admin/datasources/new')
                 }}
                 secondaryAction={{ 
                   label: 'Learn more', 
@@ -149,7 +145,7 @@ const Overview = () => {
               <BasicCard
                 primaryAction={{ 
                   label: 'Add Tool', 
-                  onClick: () => handleNavigate('/admin/tools/new')
+                  onClick: () => navigate('/admin/tools/new')
                 }}
                 secondaryAction={{ 
                   label: 'Learn more', 
@@ -177,7 +173,7 @@ const Overview = () => {
               <BasicCard
                 primaryAction={{ 
                   label: 'Add user', 
-                  onClick: () => handleNavigate('/admin/users/new') 
+                  onClick: () => navigate('/admin/users/new') 
                 }}
                 secondaryAction={{ 
                   label: 'Learn more', 
@@ -225,7 +221,7 @@ const Overview = () => {
                 <BasicCard
                   primaryAction={{
                     label: 'Add Apps',
-                    onClick: () => handleNavigate('/admin/apps/new'),
+                    onClick: () => navigate('/admin/apps/new'),
                     disabled: !hasLLMs
                   }}
                   secondaryAction={{
@@ -247,7 +243,7 @@ const Overview = () => {
                 <BasicCard
                   primaryAction={{
                     label: 'Add Chats',
-                    onClick: () => handleNavigate('/admin/chats/new'),
+                    onClick: () => navigate('/admin/chats/new'),
                     disabled: !hasLLMs
                   }}
                   secondaryAction={{
