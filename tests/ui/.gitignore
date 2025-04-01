@@ -1,7 +1,38 @@
-
 # Playwright
 node_modules/
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# PostgreSQL data directory
+# Ignore all files in postgres_data directory by default
+/postgres_data/*
+
+# But keep these configuration files if they have custom configurations
+!/postgres_data/postgresql.conf
+!/postgres_data/pg_hba.conf
+!/postgres_data/pg_ident.conf
+
+# Explicitly ignore these files and directories
+/postgres_data/PG_VERSION
+/postgres_data/postgresql.auto.conf
+/postgres_data/postmaster.opts
+/postgres_data/postmaster.pid
+/postgres_data/base/
+/postgres_data/global/
+/postgres_data/pg_commit_ts/
+/postgres_data/pg_dynshmem/
+/postgres_data/pg_logical/
+/postgres_data/pg_multixact/
+/postgres_data/pg_notify/
+/postgres_data/pg_replslot/
+/postgres_data/pg_serial/
+/postgres_data/pg_snapshots/
+/postgres_data/pg_stat/
+/postgres_data/pg_stat_tmp/
+/postgres_data/pg_subtrans/
+/postgres_data/pg_tblspc/
+/postgres_data/pg_twophase/
+/postgres_data/pg_wal/
+/postgres_data/pg_xact/
