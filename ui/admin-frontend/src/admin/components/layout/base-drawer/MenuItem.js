@@ -28,7 +28,7 @@ const MenuItem = ({
   const isExpanded = expandedItems[itemId];
   const immediateParentId = parentId || itemId;
 
-  const isSelected = selectedPath === item.path || 
+  const isSelected = (item.exact ? selectedPath === item.path : selectedPath === item.path || selectedPath.startsWith(`${item.path}/`)) || 
     (hasSubItems && item.subItems?.some(subItem => {
       if (subItem.path === selectedPath) return true;
       if (subItem.subItems) {
@@ -101,7 +101,7 @@ const MenuItem = ({
       hasSubItems={hasSubItems}
       open={open}
       isFirstItem={depth === 0 && isFirstItem}
-      {...(item.path === '/admin/' ? { end: true } : {})}
+      {...(item.exact ? { end: true } : {})}
     >
       {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
       <ListItemText
@@ -121,6 +121,7 @@ MenuItem.propTypes = {
     path: PropTypes.string,
     icon: PropTypes.node,
     subItems: PropTypes.array,
+    exact: PropTypes.bool,
   }).isRequired,
   depth: PropTypes.number,
   parentId: PropTypes.string,

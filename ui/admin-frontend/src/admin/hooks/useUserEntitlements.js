@@ -7,6 +7,7 @@ const CACHE_EXPIRY = 10000;
 const useUserEntitlements = () => {
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [uiOptions, setUiOptions] = useState(null);
+  const [userName, setUserName] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -15,10 +16,11 @@ const useUserEntitlements = () => {
       try {
         const cachedData = localStorage.getItem(CACHE_KEY);
         if (cachedData) {
-          const { data, timestamp } = JSON.parse(cachedData);
+          const { data, userName, timestamp } = JSON.parse(cachedData);
           if (Date.now() - timestamp < CACHE_EXPIRY) {
             setUserEntitlements(data);
             setUiOptions(data.ui_options);
+            setUserName(userName);
             setLoading(false);
             return;
           }
@@ -27,14 +29,17 @@ const useUserEntitlements = () => {
         const response = await pubClient.get('/common/me');
         const newData = response.data.attributes.entitlements;
         const newUiOptions = response.data.attributes.ui_options;
+        const newUserName = response.data.attributes.name;
         
         setUserEntitlements(newData);
         setUiOptions(newUiOptions);
+        setUserName(newUserName);
         
         localStorage.setItem(
           CACHE_KEY,
           JSON.stringify({
             data: { ...newData, ui_options: newUiOptions },
+            userName: newUserName,
             timestamp: Date.now(),
           })
         );
@@ -52,6 +57,7 @@ const useUserEntitlements = () => {
   return {
     userEntitlements,
     uiOptions,
+    userName,
     loading,
     error,
   };

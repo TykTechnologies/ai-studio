@@ -8,7 +8,6 @@ import {
   TableCell,
   TableRow,
   Dialog,
-  Grid,
   DialogTitle,
   Accordion,
   DialogContent,
@@ -166,6 +165,24 @@ export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
     backgroundColor: 'transparent',
     border: 'none'
   }
+}));
+
+export const SecondaryOutlineButton = styled(Button)(({ theme }) => ({
+  position: 'relative',
+  borderRadius: 20,
+  padding: '8px 16px',
+  color: theme.palette.text.defaultSubdued,
+  backgroundColor: theme.palette.background.paper,
+  border: `1px solid ${theme.palette.border.neutralDefault}`,
+  boxShadow: "none",
+  textTransform: "none",
+  fontFamily: 'Inter-Medium',
+  "&:hover": {
+    backgroundColor: theme.palette.background.surfaceNeutralHover,
+    boxShadow: "none",
+    color: theme.palette.text.primary,
+    border: `1px solid ${theme.palette.border.neutralHovered}`,
+  },
 }));
 
 export const StyledDialog = styled(Dialog)(({ theme }) => ({
