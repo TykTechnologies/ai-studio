@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
 
-const CACHE_KEY = 'userEntitlements';
+const CACHE_KEY = 'tyk_ai_studio_admin_userEntitlements';
 const CACHE_EXPIRY = 10000;
 
 const useUserEntitlements = (skipInitialFetch = false) => {
