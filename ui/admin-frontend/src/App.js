@@ -10,6 +10,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import SuccessBanner from "./admin/components/common/SuccessBanner";
 
 // Configurations and utilities
 import { loadConfig } from "./config";
@@ -42,6 +43,11 @@ function App() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(true);
+
+  const handleCloseBanner = () => {
+    setShowSuccessBanner(false);
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -212,10 +218,17 @@ function App() {
                     ) : entitlements?.ui_options?.show_chat ? (
                       <Navigate to="/chat/dashboard" replace />
                     ) : (
-                      <Box sx={{ p: 7 }}>
+                      <Box sx={{ p: 7, display: "flex", flexDirection: "column", gap: 2 }}>
                         <Typography variant="headingXLarge">
                           Welcome to Tyk AI Studio!
                         </Typography>
+                        {showSuccessBanner && (
+                          <SuccessBanner
+                            title="Tyk AI studio account"
+                            message="You'll receive an email once your role is assigned and access is ready. If there's a delay, contact your organization admin"
+                            onClose={handleCloseBanner}
+                          />
+                        )}
                       </Box>
                     )
                   ) : (
