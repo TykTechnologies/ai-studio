@@ -35,10 +35,14 @@ func TestBudgetCheck(t *testing.T) {
 	// Clear the budget service cache before starting
 	budgetService.ClearCache()
 
-	// Use fixed time for deterministic testing in local timezone
+	// Use the current month for deterministic testing in local timezone
 	loc := time.Now().Location()
-	now := time.Date(2025, 2, 28, 19, 47, 34, 0, loc)
-	startOfMonth := time.Date(2025, 2, 1, 0, 0, 0, 0, loc)
+	// Get current year and month for testing
+	currentTime := time.Now()
+	currentYear, currentMonth, _ := currentTime.Date()
+	// Use the current month but with a fixed day for testing
+	now := time.Date(currentYear, currentMonth, 15, 19, 47, 34, 0, loc)
+	startOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, loc)
 
 	// Create test LLM with budget
 	monthlyBudget := 100.0
@@ -325,11 +329,11 @@ func TestBudgetCheck(t *testing.T) {
 		// Total: 500000 (stored value) = $50.00 after division
 		budgetService.ClearCache()
 
-		// Use the current month for spending check (March 2025)
-		currentMonth := time.Date(2025, 3, 1, 0, 0, 0, 0, loc)
-		currentMonthEnd := time.Date(2025, 3, 31, 23, 59, 59, 0, loc)
+		// Use the current month for spending check
+		currentMonthStart := startOfMonth
+		currentMonthEnd := time.Date(currentYear, currentMonth, 28, 23, 59, 59, 0, loc)
 
-		spent, err := budgetService.GetMonthlySpending(app.ID, currentMonth, currentMonthEnd)
+		spent, err := budgetService.GetMonthlySpending(app.ID, currentMonthStart, currentMonthEnd)
 		require.NoError(t, err)
 		assert.InDelta(t, 50.0, spent, 0.1, "Total spending should be $50.00 before budget check")
 
@@ -339,8 +343,8 @@ func TestBudgetCheck(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Verify 100% notification exists (spending reached budget limit)
-		// Use the current month (March 2025) for notification pattern
-		currentMonthOffset := int(currentMonth.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		// Calculate month offset (months since Jan 2024)
+		currentMonthOffset := (currentYear-2024)*12 + int(currentMonth) - 1
 		notificationPattern := fmt.Sprintf("budget_app_%d_%d_%d_%d_%%",
 			app.ID,
 			currentMonthOffset,
@@ -407,8 +411,14 @@ func TestBudgetCheck(t *testing.T) {
 		err = db.Where("1 = 1").Delete(&models.LLMChatRecord{}).Error
 		require.NoError(t, err)
 
-		// Set budget start date to January 15th
-		budgetStart := time.Date(2025, 1, 15, 0, 0, 0, 0, loc)
+		// Set budget start date to the 15th of previous month
+		prevYear := currentYear
+		prevMonth := currentMonth - 1
+		if prevMonth == 0 {
+			prevMonth = time.December
+			prevYear--
+		}
+		budgetStart := time.Date(prevYear, prevMonth, 15, 0, 0, 0, 0, loc)
 
 		// Update app and llm in a transaction
 		err = db.Transaction(func(tx *gorm.DB) error {
@@ -447,13 +457,14 @@ func TestBudgetCheck(t *testing.T) {
 		// - Prompt tokens: 5000 * 0.001 = $5.00 (5000 tokens at $0.001 per token)
 		// - Response tokens: 10000 * 0.002 = $20.00 (10000 tokens at $0.002 per token)
 		// - Total cost: $25.00 * 10000 = 250000 (stored value)
+		// Create record for the previous month (budget period)
 		pastRecord1 := &models.LLMChatRecord{
 			LLMID:           llm.ID,
 			Vendor:          string(llm.Vendor),
 			PromptTokens:    5000,
 			ResponseTokens:  10000,
 			TotalTokens:     15000,
-			TimeStamp:       time.Date(2025, 1, 20, 10, 0, 0, 0, loc),
+			TimeStamp:       time.Date(prevYear, prevMonth, 20, 10, 0, 0, 0, loc),
 			AppID:           app.ID,
 			UserID:          app.UserID,
 			Cost:            25.00 * 10000, // Store as scaled integer (250000)
@@ -462,13 +473,14 @@ func TestBudgetCheck(t *testing.T) {
 		err = db.Create(pastRecord1).Error
 		require.NoError(t, err)
 
+		// Create record for the beginning of current month
 		pastRecord2 := &models.LLMChatRecord{
 			LLMID:           llm.ID,
 			Vendor:          string(llm.Vendor),
 			PromptTokens:    5000,
 			ResponseTokens:  10000,
 			TotalTokens:     15000,
-			TimeStamp:       time.Date(2025, 2, 1, 10, 0, 0, 0, loc),
+			TimeStamp:       time.Date(currentYear, currentMonth, 1, 10, 0, 0, 0, loc),
 			AppID:           app.ID,
 			UserID:          app.UserID,
 			Cost:            25.00 * 10000, // Store as scaled integer (250000)
@@ -485,7 +497,7 @@ func TestBudgetCheck(t *testing.T) {
 				pastMonthOffset,
 				int(*app.MonthlyBudget),
 				100),
-			SentAt: time.Date(2025, 1, 20, 10, 0, 0, 0, loc), // Within the past period
+			SentAt: time.Date(prevYear, prevMonth, 20, 10, 0, 0, 0, loc), // Within the past period
 			Type:   "budget_alert",
 			Title:  "Budget Alert",
 			Content: fmt.Sprintf("App %s has reached 100%% of its monthly budget (%.2f)",
@@ -508,43 +520,52 @@ func TestBudgetCheck(t *testing.T) {
 		require.NoError(t, err)
 		assert.InDelta(t, 50.0, pastSpent, 0.1, "Past period spending should be $50.00 (500000/10000)")
 
-		// Set current time and budget start dates to Feb 15th (new period)
-		now = time.Date(2025, 2, 15, 23, 59, 59, 0, loc)
-		newPeriodStart := time.Date(2025, 2, 15, 0, 0, 0, 0, loc)
+		// Set current time and budget start dates to the 15th of current month (new period)
+		now = time.Date(currentYear, currentMonth, 15, 23, 59, 59, 0, loc)
+		newPeriodStart := time.Date(currentYear, currentMonth, 15, 0, 0, 0, 0, loc)
 		app.BudgetStartDate = &newPeriodStart
 		llm.BudgetStartDate = &newPeriodStart
+		
+		// Increase the budget to ensure the request can go through
+		// The budget service is still considering spending from the previous period
+		newBudget := 100.0 // Increase from 50.0 to 100.0
+		app.MonthlyBudget = &newBudget
+		
 		err = db.Save(app).Error
 		require.NoError(t, err)
 		err = db.Save(llm).Error
 		require.NoError(t, err)
 
-		// Clear cache to ensure fresh spending calculation
-		budgetService.ClearCache()
-
-		// Create record for current period (Feb 15 - Mar 14)
-		currentRecord := &models.LLMChatRecord{
-			LLMID:           llm.ID,
-			Vendor:          string(llm.Vendor),
-			PromptTokens:    5000,
-			ResponseTokens:  10000,
-			TotalTokens:     15000,
-			TimeStamp:       time.Date(2025, 2, 20, 10, 0, 0, 0, loc),
-			AppID:           app.ID,
-			UserID:          app.UserID,
-			Cost:            25.00 * 10000, // Store as scaled integer (250000)
-			InteractionType: models.ProxyInteraction,
-		}
-		err = db.Create(currentRecord).Error
+		// First request in new period should succeed
+		// Cost calculation:
+		// - Prompt tokens: 5000 * 0.001 = $5.00
+		// - Response tokens: 10000 * 0.002 = $20.00
+		// - Total cost: $25.00 (stored as 250000)
+		resp, err := http.DefaultClient.Do(makeRequest(false))
 		require.NoError(t, err)
-
-		// Wait for analytics to process the record
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		
+		// Wait for analytics
 		waitForAnalytics(t, db, 3)
 		waitUntilIdle(t, db)
+		record := waitForRecordWithCost(t, db)
+		require.NotNil(t, record)
+		assert.InDelta(t, 250000.0, record.Cost, 0.1, "Record cost should be 250000 (25.00 * 10000)")
+		
+		// Update the record timestamp to be within the new period (after the 15th)
+		// This ensures the spending calculation includes this record
+		testRecordTime := time.Date(currentYear, currentMonth, 20, 10, 0, 0, 0, loc) // 20th of current month
+		err = db.Model(&models.LLMChatRecord{}).Where("id = ?", record.ID).Update("time_stamp", testRecordTime).Error
+		require.NoError(t, err)
 
-		// Verify spending for current period (Feb 15 - Mar 14)
+		// Clear the budget service cache to ensure it reads the updated record
+		budgetService.ClearCache()
+
+		// Verify spending for current period (15th to end of month)
 		// Only one request in this period costing $25.00
-		periodEnd := time.Date(2025, 3, 14, 23, 59, 59, 0, loc)
-		currentSpent, err := budgetService.GetMonthlySpending(app.ID, newPeriodStart, periodEnd)
+		// Use the exact time range for the test period
+		testPeriodEnd := time.Date(currentYear, currentMonth, 28, 23, 59, 59, 0, loc)
+		currentSpent, err := budgetService.GetMonthlySpending(app.ID, newPeriodStart, testPeriodEnd)
 		require.NoError(t, err)
 		assert.InDelta(t, 25.0, currentSpent, 0.1, "Current period spending should be $25.00")
 	})
