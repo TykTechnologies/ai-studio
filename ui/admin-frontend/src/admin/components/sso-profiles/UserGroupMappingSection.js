@@ -37,7 +37,7 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
     },
     {
       field: "tykGroupName",
-      headerName: "Tyk AI studio user group",
+      headerName: "Tyk AI studio team",
       sortable: false,
       renderCell: (item) => item.tykGroupName || item.tykGroupId,
     },
@@ -46,9 +46,9 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
   return (
     <>
       <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
-        User group mapping is how you assign developers to teams after Single Sign-On. 
-        To get started add a new group below. If you don't specify a user group mapping, 
-        developers will be automatically assigned to the default team.
+        User group mapping is how you assign users to AI studio teams after Single Sign-On. 
+        If you don't specify a user group mapping, 
+        users will be automatically assigned to the default team.
       </Typography>
 
       {groupsError && (
