@@ -73,7 +73,7 @@ describe('UserGroupMappingSection', () => {
     );
 
     // Check if the description text is displayed
-    expect(screen.getByText(/User group mapping is how you assign developers to teams/)).toBeInTheDocument();
+    expect(screen.getByText(/User group mapping is how you assign users to AI studio teams/)).toBeInTheDocument();
 
     // Check if default user group is displayed
     expect(screen.getByText('Default user group')).toBeInTheDocument();
@@ -219,7 +219,7 @@ describe('UserGroupMappingSection', () => {
     expect(columns[0].field).toBe('providerGroupId');
     expect(columns[0].headerName).toBe('Identity Provider group ID');
     expect(columns[1].field).toBe('tykGroupName');
-    expect(columns[1].headerName).toBe('Tyk AI studio user group');
+    expect(columns[1].headerName).toBe('Tyk AI studio team');
   });
 
   test('uses tykGroupId as fallback when tykGroupName is not available', () => {
