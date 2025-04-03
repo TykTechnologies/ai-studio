@@ -12,10 +12,6 @@ interface GroupParams {
     name: string;
 }
 
-export class AdminCataloguesPage extends PageTemplate {
-   
-}
-
 export class AdminGroupsPage extends PageTemplate {
     readonly Table: GroupsTable;
     readonly AddGroupButton: Locator;

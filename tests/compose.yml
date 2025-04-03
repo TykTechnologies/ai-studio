@@ -8,7 +8,6 @@ services:
     volumes:
       - ../.:/app
       - /app/ui/admin-frontend/node_modules
-      # - ../midsommar.db:/app/midsommar.db # Bind mount SQLite database file
       - ../.env:/app/.env # Mount .env file
     ports:
       - "3000:3000" # Frontend
@@ -26,6 +25,7 @@ services:
       - GOFLAGS=-buildvcs=false
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEVMODE=true
+      - PROXY_URL=http://localhost:9090
     stdin_open: true
     tty: true
     depends_on:
@@ -45,5 +45,3 @@ services:
       timeout: 5s
       retries: 5
 
-volumes:
-  postgres_data:
