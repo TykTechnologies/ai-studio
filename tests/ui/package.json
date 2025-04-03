@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "prerequisite": "npx playwright test --project='prerequisite' --repeat-each=1",
     "test": "npx playwright test --project='chromium'",
     "gui": "npx playwright test --project='chromium' --ui",
     "upload_report_to_s3": "node ./node_modules/tyk-test-automation-wrappers/lib/utils/uploadReport.js"
