@@ -261,13 +261,9 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
 	// Create the handler chain, adding cloudflareHeadersMiddleware as the outermost wrapper
-	handler := p.cloudflareHeadersMiddleware(
+	return p.cloudflareHeadersMiddleware(
 		p.outboundRequestMiddleware(
-			p.credValidator.Middleware(r)
-		)
-	)
-	
-	return handler
+			p.credValidator.Middleware(r)))
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
