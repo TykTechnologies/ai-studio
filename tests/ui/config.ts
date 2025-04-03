@@ -1,6 +1,6 @@
 export const config = {
   admin_email: 'auto_test@tyk.io',
-  admin_password: 'Test#2025',
+  password: 'Test#2025',
   admin_name: 'Test Admin',
   user_email: 'user@tyk.io',
   user_password: 'Test#2025',
