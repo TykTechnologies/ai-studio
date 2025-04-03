@@ -1,6 +1,6 @@
 version: "3.8"
 services:
-  dev:
+  ai_studio:
     platform: linux/${TARGETARCH:-amd64}
     build:
       context: ../.
@@ -8,11 +8,12 @@ services:
     volumes:
       - ../.:/app
       - /app/ui/admin-frontend/node_modules
-      - ../midsommar.db:/app/midsommar.db # Bind mount SQLite database file
+      # - ../midsommar.db:/app/midsommar.db # Bind mount SQLite database file
       - ../.env:/app/.env # Mount .env file
     ports:
       - "3000:3000" # Frontend
-      - "8080:8080" # Backend
+      - "8081:8080"
+      - "9090:9090" # Backend
     environment:
       - ALLOW_REGISTRATIONS=true
       - CHOKIDAR_USEPOLLING=true
@@ -20,17 +21,29 @@ services:
       - DATABASE_TYPE=postgres
       - TYK_AI_LICENSE=${TYK_AI_LICENSE}
       - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY}
-      - OPENAI_API_KEY=TO_BE_REPLACED
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
       - GOFLAGS=-buildvcs=false
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEVMODE=true
     stdin_open: true
     tty: true
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
   postgres:
-    image: postgres:latest
+    image: postgres:17
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
