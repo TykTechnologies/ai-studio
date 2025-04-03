@@ -260,9 +260,14 @@ func (p *Proxy) createHandler() http.Handler {
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	return p.outboundRequestMiddleware(
-		p.credValidator.Middleware(r),
+	// Create the handler chain, adding cloudflareHeadersMiddleware as the outermost wrapper
+	handler := p.cloudflareHeadersMiddleware(
+		p.outboundRequestMiddleware(
+			p.credValidator.Middleware(r)
+		)
 	)
+	
+	return handler
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
@@ -303,6 +308,19 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// cloudflareHeadersMiddleware adds headers that help with Cloudflare proxying
+func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Add these headers before passing to the next handler
+        w.Header().Set("Connection", "keep-alive")
+        w.Header().Set("Keep-Alive", "timeout=300")
+        w.Header().Set("X-Accel-Buffering", "no")
+        
+        // Continue to the next handler
+        next.ServeHTTP(w, r)
+    })
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error) {
