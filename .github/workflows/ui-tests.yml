@@ -21,6 +21,15 @@ jobs:
       steps:
         - name: Checkout code
           uses: actions/checkout@v2
+        - name: Install Node.js 19.0.1
+          uses: actions/setup-node@v4
+          with:
+            node-version: "19.0.1"
+        - name: Build Frontend
+          run: |
+            npm install
+            CI='' npm run build
+          working-directory: ui/admin-frontend
         - name: Start AI Portal
           env: 
             TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
@@ -30,10 +39,6 @@ jobs:
             GO_BUILD_FLAGS: "-buildvcs=false"
           run: |
             docker compose -f tests/compose.yml up &
-        - name: Install Node.js 18.16
-          uses: actions/setup-node@v4
-          with:
-            node-version: "18.16"
         - name: Install test dependencies
           working-directory: tests/ui
           run: |
