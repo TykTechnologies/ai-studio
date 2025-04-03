@@ -23,6 +23,7 @@ services:
       - OPENAI_API_KEY=TO_BE_REPLACED
       - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
       - GOFLAGS=-buildvcs=false
+      - DEVMODE=true
     stdin_open: true
     tty: true
     depends_on:
