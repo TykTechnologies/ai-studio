@@ -145,6 +145,10 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 	c.Writer.Header().Set("X-Accel-Buffering", "no")  // Disable buffering in Nginx
 	c.Writer.Header().Set("Content-Encoding", "none") // Prevent compression
 
+	// Create a context with cancellation for this request
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	
 	// Create a channel for client disconnection
 	clientGone := c.Writer.CloseNotify()
 
@@ -211,9 +215,17 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 		for {
 			select {
 			case <-ticker.C:
-				sendSSEMessage(c.Writer, "ping", "")
-				c.Writer.Flush()
+				// Safely send ping message with additional checks
+				if c.Writer != nil {
+					sendSSEMessage(c.Writer, "ping", "")
+					// Safely flush with error handling
+					if flusher, ok := c.Writer.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				}
 			case <-clientGone:
+				return
+			case <-ctx.Done():
 				return
 			}
 		}
