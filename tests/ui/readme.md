@@ -37,11 +37,12 @@ The test environment can be started using Docker Compose, which will set up all 
 1. Make sure you have the required environment variables set in your `.env` file. At minimum, you need:
    ```
    TYK_AI_LICENSE=your_license_key
+   ANTHROPIC_AI_KEY=key
    ```
 
 2. Start the environment using Docker Compose (execute from repo top level):
    ```bash
-   docker compose --env-file .env -f tests/compose.yml up
+   make start-test-env
    ```
 
 3. Wait for the services to start. The UI will be available at http://localhost:3000.
@@ -49,18 +50,12 @@ The test environment can be started using Docker Compose, which will set up all 
 ## Running Tests
 
 The framework includes several npm scripts to run different types of tests:
-
-1. Run prerequisite tests (like registering an admin user):
-   ```bash
-   npm run prerequisite
-   ```
-
-2. Run all tests:
+1. Run all tests:
    ```bash
    npm run test
    ```
 
-3. Run tests with the Playwright UI:
+2. Run tests with the Playwright UI:
    ```bash
    npm run gui
    ```
@@ -105,11 +100,7 @@ tests/ui/
    - Located in `config.ts`
    - Contains test data and environment settings
 
-4. **Prerequisite Tests**
-   - Located in the `prerequisite/` directory
-   - Sets up the environment for other tests (e.g., registering an admin user)
-
-5. **Tests**
+4. **Tests**
    - Located in the `tests/` directory
    - Contains the actual test scenarios
 
