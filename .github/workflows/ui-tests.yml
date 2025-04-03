@@ -60,9 +60,6 @@ jobs:
               fi
               sleep 10
             done
-        - name: Execute prerequisites
-          working-directory: tests/ui
-          run: npm run prerequisite
         - name: Execute UI tests
           id: test_execution
           working-directory: tests/ui
