@@ -51,7 +51,7 @@ const Drawer = () => {
           ? [{ id: 'groups', text: 'User groups', path: '/admin/groups' }]
           : []),
         ...(uiOptions?.show_sso_config
-          ? [{ id: 'sso-profiles', text: 'SSO profiles', path: '/admin/sso-profiles' }]
+          ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
           : []),
         { id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' },
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },

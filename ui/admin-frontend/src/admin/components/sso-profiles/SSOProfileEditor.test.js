@@ -235,11 +235,11 @@ describe('SSOProfileEditor', () => {
     );
     
     // Check title
-    expect(screen.getByText('Create SSO Profile')).toBeInTheDocument();
+    expect(screen.getByText('New Profile')).toBeInTheDocument();
     
     // Check buttons
-    expect(screen.getByText('Save Profile')).toBeInTheDocument();
-    expect(screen.queryByText('Delete Profile')).not.toBeInTheDocument(); // Delete button should not be present in create mode
+    expect(screen.getByText('Save profile')).toBeInTheDocument();
+    expect(screen.queryByText('Delete profile')).not.toBeInTheDocument(); // Delete button should not be present in create mode
     
     // Check editor
     expect(screen.getByTestId('monaco-editor')).toBeInTheDocument();
@@ -268,11 +268,11 @@ describe('SSOProfileEditor', () => {
     expect(apiClient.get).toHaveBeenCalledWith(`/sso-profiles/${mockProfileId}`);
     
     // Check title
-    expect(screen.getByText('Edit SSO Profile')).toBeInTheDocument();
+    expect(screen.getByText('Edit Profile')).toBeInTheDocument();
     
     // Check buttons
-    expect(screen.getByText('Save Profile')).toBeInTheDocument();
-    expect(screen.getByText('Delete Profile')).toBeInTheDocument(); // Delete button should be present in edit mode
+    expect(screen.getByText('Save profile')).toBeInTheDocument();
+    expect(screen.getByText('Delete profile')).toBeInTheDocument(); // Delete button should be present in edit mode
     
     // Check editor content
     expect(screen.getByTestId('monaco-editor')).toBeInTheDocument();
@@ -304,7 +304,7 @@ describe('SSOProfileEditor', () => {
     );
     
     // Click save button
-    fireEvent.click(screen.getByText('Save Profile'));
+    fireEvent.click(screen.getByText('Save profile'));
     // Check if API was called correctly
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith('/sso-profiles', expect.any(Object));
@@ -337,7 +337,7 @@ describe('SSOProfileEditor', () => {
     });
     
     // Click save button
-    fireEvent.click(screen.getByText('Save Profile'));
+    fireEvent.click(screen.getByText('Save profile'));
     
     // Check if API was called correctly
     await waitFor(() => {
@@ -372,7 +372,7 @@ describe('SSOProfileEditor', () => {
     );
     
     // Click save button
-    fireEvent.click(screen.getByText('Save Profile'));
+    fireEvent.click(screen.getByText('Save profile'));
     
     // Check if error snackbar is shown
     await waitFor(() => {
@@ -396,11 +396,11 @@ describe('SSOProfileEditor', () => {
     });
     
     // Click delete button
-    fireEvent.click(screen.getByText('Delete Profile'));
+    fireEvent.click(screen.getByText('Delete profile'));
     
     // Check if warning dialog is shown
     expect(screen.getByTestId('warning-dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('warning-dialog-title')).toHaveTextContent('Delete SSO profile');
+    expect(screen.getByTestId('warning-dialog-title')).toHaveTextContent('Delete Identity provider profile');
   });
 
   test('handles delete confirmation', async () => {
@@ -419,7 +419,7 @@ describe('SSOProfileEditor', () => {
     });
     
     // Click delete button
-    fireEvent.click(screen.getByText('Delete Profile'));
+    fireEvent.click(screen.getByText('Delete profile'));
     
     // Click confirm in warning dialog
     fireEvent.click(screen.getByTestId('warning-dialog-confirm'));
@@ -456,7 +456,7 @@ describe('SSOProfileEditor', () => {
     });
     
     // Click delete button
-    fireEvent.click(screen.getByText('Delete Profile'));
+    fireEvent.click(screen.getByText('Delete profile'));
     
     // Click cancel in warning dialog
     fireEvent.click(screen.getByTestId('warning-dialog-cancel'));
@@ -487,14 +487,14 @@ describe('SSOProfileEditor', () => {
     });
     
     // Click delete button
-    fireEvent.click(screen.getByText('Delete Profile'));
+    fireEvent.click(screen.getByText('Delete profile'));
     
     // Click confirm in warning dialog
     fireEvent.click(screen.getByTestId('warning-dialog-confirm'));
     
     // Check if error snackbar is shown
     await waitFor(() => {
-      expect(screen.getByText('Failed to delete SSO profile')).toBeInTheDocument();
+      expect(screen.getByText('Failed to delete Identity provider profile')).toBeInTheDocument();
     });
   });
 
@@ -517,7 +517,7 @@ describe('SSOProfileEditor', () => {
     });
     
     // Check if error message is shown
-    expect(screen.getByText('Failed to load SSO profile')).toBeInTheDocument();
+    expect(screen.getByText('Failed to load Identity provider profile')).toBeInTheDocument();
   });
 
   test('handles snackbar close', async () => {
@@ -537,7 +537,7 @@ describe('SSOProfileEditor', () => {
     );
     
     // Click save button to trigger error
-    fireEvent.click(screen.getByText('Save Profile'));
+    fireEvent.click(screen.getByText('Save profile'));
     
     // Wait for snackbar to appear
     await waitFor(() => {
@@ -566,11 +566,11 @@ describe('SSOProfileEditor', () => {
     fireEvent.change(editorTextarea, { target: { value: '{ invalid json' } });
     
     // Click save button
-    fireEvent.click(screen.getByText('Save Profile'));
+    fireEvent.click(screen.getByText('Save profile'));
     
     // Check if error snackbar is shown
     await waitFor(() => {
-      expect(screen.getByText(/Failed to save SSO profile/i)).toBeInTheDocument();
+      expect(screen.getByText(/Failed to save Identity provider profile/i)).toBeInTheDocument();
     });
     
     // API should not be called with invalid JSON
@@ -585,7 +585,7 @@ describe('SSOProfileEditor', () => {
     );
     
     // Find the back button
-    const backButton = screen.getByText('back to SSO Profiles');
+    const backButton = screen.getByText('back to IdP profiles');
     
     // Check if it has the correct "to" prop
     expect(backButton).toBeInTheDocument();

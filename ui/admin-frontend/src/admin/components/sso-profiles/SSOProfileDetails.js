@@ -81,8 +81,8 @@ const SSOProfileDetails = () => {
       
       setError("");
     } catch (error) {
-      console.error("Error fetching SSO profile", error);
-      setError("Failed to load SSO profile");
+      console.error("Error fetching Identity provider profile", error);
+      setError("Failed to load Identity provider profile");
     } finally {
       setLoading(false);
     }
@@ -148,7 +148,7 @@ const SSOProfileDetails = () => {
             sx={{ mb: 1, px: 0 }}
             startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
           >
-            back to SSO Profiles
+            back to IdP profiles
           </SecondaryLinkButton>
           <Typography variant="headingXLarge">
             Profile - {profileData.Name || profileData.ID}
@@ -160,7 +160,7 @@ const SSOProfileDetails = () => {
             startIcon={<EditIcon />}
             onClick={handleEditProfile}
           >
-            Edit Profile
+            Edit profile
           </PrimaryButton>
         </Box>
       </TitleBox>

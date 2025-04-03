@@ -52,8 +52,8 @@ const SSOProfileEditor = () => {
       setEditorContent(JSON.stringify(uiProfile, null, 2));
       setError("");
     } catch (error) {
-      console.error("Error fetching SSO profile", error);
-      setError("Failed to load SSO profile");
+      console.error("Error fetching Identity provider profile", error);
+      setError("Failed to load Identity provider profile");
     } finally {
       setLoading(false);
     }
@@ -71,7 +71,7 @@ const SSOProfileEditor = () => {
         
         localStorage.setItem(SSO_NOTIFICATION_KEY, JSON.stringify({
           operation: "update",
-          message: "SSO profile updated successfully",
+          message: "Identity provider profile updated successfully",
           timestamp: Date.now()
         }));
         
@@ -81,7 +81,7 @@ const SSOProfileEditor = () => {
         
         localStorage.setItem(SSO_NOTIFICATION_KEY, JSON.stringify({
           operation: "create",
-          title: "Your SSO profile has been created!",
+          title: "Your Identity provider profile has been created!",
           message: "After users register with SSO, you'll need to assign them a role in their user details to control their access and permissions.",
           timestamp: Date.now()
         }));
@@ -89,10 +89,10 @@ const SSOProfileEditor = () => {
         navigate("/admin/sso-profiles");
       }
     } catch (error) {
-      console.error("Error saving SSO profile", error);
+      console.error("Error saving Identity provider profile", error);
       setSnackbar({
         open: true,
-        message: error.response?.data?.errors?.[0]?.detail || "Failed to save SSO profile",
+        message: error.response?.data?.errors?.[0]?.detail || "Failed to save Identity provider profile",
         severity: "error",
       });
     }
@@ -120,16 +120,16 @@ const SSOProfileEditor = () => {
       // Store notification data for the listing page
       localStorage.setItem(SSO_NOTIFICATION_KEY, JSON.stringify({
         operation: "delete",
-        message: "SSO profile deleted successfully",
+        message: "Identity provider profile deleted successfully",
         timestamp: Date.now()
       }));
       
       navigate("/admin/sso-profiles");
     } catch (error) {
-      console.error("Error deleting SSO profile", error);
+      console.error("Error deleting Identity provider profile", error);
       setSnackbar({
         open: true,
-        message: "Failed to delete SSO profile",
+        message: "Failed to delete Identity provider profile",
         severity: "error",
       });
     } finally {
@@ -170,10 +170,10 @@ const SSOProfileEditor = () => {
             sx={{ mb: 1, px: 0 }}
             startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
           >
-            back to SSO Profiles
+            back to IdP profiles
           </SecondaryLinkButton>
           <Typography variant="headingXLarge">
-            {isEditMode ? "Edit SSO Profile" : "Create SSO Profile"}
+            {isEditMode ? "Edit Profile" : "New Profile"}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
@@ -181,14 +181,14 @@ const SSOProfileEditor = () => {
             <DangerOutlineButton
               onClick={handleDeleteClick}
             >
-              Delete Profile
+              Delete profile
             </DangerOutlineButton>
           )}
           <PrimaryButton
             variant="contained"
             onClick={handleSave}
           >
-            Save Profile
+            Save profile
           </PrimaryButton>
         </Box>
       </TitleBox>
@@ -252,9 +252,9 @@ const SSOProfileEditor = () => {
 
       <WarningDialog
         open={warningDialogOpen}
-        title="Delete SSO profile"
-        message="This operation cannot be undone. If you remove this Single Sign-On profile, all users relying on it won't be able to sign in. Make sure they have another way to log in before proceeding."
-        buttonLabel="Delete SSO profile"
+        title="Delete Identity provider profile"
+        message="This operation cannot be undone. If you remove this Identity provider profile, all users relying on it won't be able to sign in. Make sure they have another way to log in before proceeding."
+        buttonLabel="Delete profile"
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
       />

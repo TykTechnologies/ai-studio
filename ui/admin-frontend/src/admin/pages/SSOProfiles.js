@@ -72,8 +72,8 @@ const SSOProfiles = () => {
       updatePaginationData(totalCount, totalPages);
       setError("");
     } catch (error) {
-      console.error("Error fetching SSO profiles", error);
-      setError("Failed to load SSO profiles");
+      console.error("Error fetching Identity provider profiles", error);
+      setError("Failed to load Identity provider profiles");
     } finally {
       setLoading(false);
     }
@@ -144,15 +144,15 @@ const SSOProfiles = () => {
       await apiClient.delete(`/sso-profiles/${profileToDelete.attributes.profile_id}`);
       setSnackbar({
         open: true,
-        message: "SSO profile deleted successfully",
+        message: "Identity provider profile deleted successfully",
         severity: "success",
       });
       fetchProfiles();
     } catch (error) {
-      console.error("Error deleting SSO profile", error);
+      console.error("Error deleting Identity provider profile", error);
       setSnackbar({
         open: true,
-        message: "Failed to delete SSO profile",
+        message: "Failed to delete Identity provider profile",
         severity: "error",
       });
     } finally {
@@ -239,18 +239,18 @@ const SSOProfiles = () => {
 
   const actions = [
     {
-      label: "Edit SSO profile",
+      label: "Edit IdP profile",
       onClick: (profile) => navigate(`/admin/sso-profiles/edit/${profile.attributes.profile_id}`),
     },
     {
-      label: "Delete SSO profile",
+      label: "Delete IdP profile",
       onClick: handleDeleteClick,
     },
   ];
 
   const emptyState = {
-    title: "No Single Sign-On profiles have been created yet.",
-    description: "Single Sign-On (SSO) is an authentication process in which a user is provided access to the portal applications by using only a single set of login credentials e.g. username and password.\nGet started with Single Sign-On by adding a profile. Configure settings and, if needed, map user groups to assign developers to teams.",
+    title: "No Identity provider profiles have been created yet.",
+    description: "Single Sign-On (SSO) is an authentication process in which a user is provided access to the AI studio applications by using only a single set of login credentials e.g. username and password.\nGet started with Single Sign-On by adding a profile. Configure settings and, if needed, map user groups to assign users to teams.",
     learnMoreLink: "",
   };
 
@@ -265,13 +265,13 @@ const SSOProfiles = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="headingXLarge">Single Sign-On Profiles</Typography>
+        <Typography variant="headingXLarge">Identity provider profiles</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddProfile}
         >
-          Add SSO Profile
+          Create profile
         </PrimaryButton>
       </TitleBox>
       <ContentBox>
@@ -326,9 +326,9 @@ const SSOProfiles = () => {
 
       <WarningDialog
         open={warningDialogOpen}
-        title="Delete SSO profile"
-        message="This operation cannot be undone. If you remove this Single Sign-On profile, all users relying on it won't be able to sign in. Make sure they have another way to log in before proceeding."
-        buttonLabel="Delete SSO profile"
+        title="Delete Identity provider profile"
+        message="This operation cannot be undone. If you remove this Identity provider profile, all users relying on it won't be able to sign in. Make sure they have another way to log in before proceeding."
+        buttonLabel="Delete profile"
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
       />

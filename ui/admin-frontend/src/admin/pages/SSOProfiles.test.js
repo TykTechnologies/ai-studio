@@ -153,14 +153,14 @@ describe('SSOProfiles', () => {
         await mockDelete(`/sso-profiles/${profileToDelete.attributes.profile_id}`);
         setSnackbar({
           open: true,
-          message: "SSO profile deleted successfully",
+          message: "Identity provider profile deleted successfully",
           severity: "success",
         });
         mockFetchProfiles();
       } catch (error) {
         setSnackbar({
           open: true,
-          message: "Failed to delete SSO profile",
+          message: "Failed to delete Identity provider profile",
           severity: "error",
         });
       } finally {
@@ -182,7 +182,7 @@ describe('SSOProfiles', () => {
     expect(mockDelete).toHaveBeenCalledWith('/sso-profiles/123');
     expect(setSnackbar).toHaveBeenCalledWith({
       open: true,
-      message: "Failed to delete SSO profile",
+      message: "Failed to delete Identity provider profile",
       severity: "error",
     });
     expect(mockFetchProfiles).not.toHaveBeenCalled();

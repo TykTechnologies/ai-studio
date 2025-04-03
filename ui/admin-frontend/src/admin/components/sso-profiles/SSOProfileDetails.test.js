@@ -244,7 +244,7 @@ describe('SSOProfileDetails', () => {
     );
     
     await waitFor(() => {
-      expect(screen.getByText('Failed to load SSO profile')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load Identity provider profile')).toBeInTheDocument();
     });
   });
 
@@ -286,7 +286,7 @@ describe('SSOProfileDetails', () => {
     });
     
     // Click the Edit Profile button
-    fireEvent.click(screen.getByText('Edit Profile'));
+    fireEvent.click(screen.getByText('Edit profile'));
     
     // Check if navigation occurred by verifying the Edit Page is shown
     await waitFor(() => {
@@ -376,7 +376,7 @@ describe('SSOProfileDetails', () => {
     });
     
     // Find the back button
-    const backButton = screen.getByText('back to SSO Profiles');
+    const backButton = screen.getByText('back to IdP profiles');
     expect(backButton).toBeInTheDocument();
     
     // Check if it has the correct "to" prop
