@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import { LoginPage } from '@pom/Login_page';
+import { LoginPage } from '../pom/Login_page';
 import { RegisterPage } from '../pom/Register_page';
 import { AdminLLMProvidersPage } from '@pom/Admin_LLM_providers_page';
 import { AdminMainPage } from '@pom/Admin_main_page';
