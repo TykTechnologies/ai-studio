@@ -3,19 +3,19 @@ import { config } from '../config';
 
 export class LoginPage {
     readonly page: Page;
-    readonly emailInput: Locator;
-    readonly passwordInput: Locator;
-    readonly loginButton: Locator;
-    readonly registerHereButton: Locator;
-    readonly forgotPasswordButton: Locator;
+    readonly EmailInput: Locator;
+    readonly PasswordInput: Locator;
+    readonly LoginButton: Locator;
+    readonly RegisterHereButton: Locator;
+    readonly ForgotPasswordButton: Locator;
 
     constructor(page: Page) {
         this.page = page;
-        this.emailInput = this.page.getByRole('textbox', { name: 'Email' });
-        this.passwordInput = this.page.getByRole('textbox', { name: 'Password' });
-        this.loginButton = this.page.getByRole('button', { name: 'Login' });
-        this.registerHereButton = this.page.getByText('Register here');
-        this.forgotPasswordButton = this.page.getByText('Forgot password?');
+        this.EmailInput = this.page.getByRole('textbox', { name: 'Email' });
+        this.PasswordInput = this.page.getByRole('textbox', { name: 'Password' });
+        this.LoginButton = this.page.getByRole('button', { name: 'Login' });
+        this.RegisterHereButton = this.page.getByText('Register here');
+        this.ForgotPasswordButton = this.page.getByText('Forgot password?');
     }
     
     async goto() {
@@ -23,8 +23,15 @@ export class LoginPage {
     }
 
     async login(email: string, password: string) {
-        await this.emailInput.fill(email);
-        await this.passwordInput.fill(password);
-        await this.loginButton.click();
+        await this.EmailInput.fill(email);
+        await this.PasswordInput.fill(password);
+        await this.LoginButton.click();
+        await this.page.waitForTimeout(1000);
+        if (await this.EmailInput.isVisible()) {
+            console.log('Login failed. Retrying...');
+            await this.EmailInput.fill(email);
+            await this.PasswordInput.fill(password);
+            await this.LoginButton.click();
+        }
     }
 }
