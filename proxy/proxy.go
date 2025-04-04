@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -162,8 +163,11 @@ func (p *Proxy) Start() error {
 	}
 
 	p.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", p.config.Port),
-		Handler: handler,
+		Addr:         fmt.Sprintf(":%d", p.config.Port),
+		Handler:      handler,
+		ReadTimeout:  300 * time.Second,
+		WriteTimeout: 600 * time.Second,
+		IdleTimeout:  300 * time.Second,
 	}
 
 	log.Printf("Starting proxy server on port %d", p.config.Port)
@@ -256,9 +260,10 @@ func (p *Proxy) createHandler() http.Handler {
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
-	return p.outboundRequestMiddleware(
-		p.credValidator.Middleware(r),
-	)
+	// Create the handler chain, adding cloudflareHeadersMiddleware as the outermost wrapper
+	return p.cloudflareHeadersMiddleware(
+		p.outboundRequestMiddleware(
+			p.credValidator.Middleware(r)))
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
@@ -299,6 +304,19 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// cloudflareHeadersMiddleware adds headers that help with Cloudflare proxying
+func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Add these headers before passing to the next handler
+        w.Header().Set("Connection", "keep-alive")
+        w.Header().Set("Keep-Alive", "timeout=300")
+        w.Header().Set("X-Accel-Buffering", "no")
+        
+        // Continue to the next handler
+        next.ServeHTTP(w, r)
+    })
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error) {
@@ -345,19 +363,38 @@ func respondWithOAIError(w http.ResponseWriter, status int, message string, err 
 }
 
 func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if duration > 1*time.Second {
+			log.Printf("SLOW REQUEST: handleLLMRequest took %v", duration)
+		}
+	}()
+
 	vars := mux.Vars(r)
 	llmSlug := vars["llmSlug"]
 
+	lockStart := time.Now()
 	p.mu.RLock()
 	llm, ok := p.llms[llmSlug]
 	p.mu.RUnlock()
+	lockDuration := time.Since(lockStart)
+	if lockDuration > 100*time.Millisecond {
+		log.Printf("SLOW LOCK: LLM lookup lock took %v", lockDuration)
+	}
 
 	if !ok {
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("[rest] LLM not found: %s", llmSlug), nil)
 		return
 	}
 
+	bodyReadStart := time.Now()
 	reqBody, err := helpers.CopyRequestBody(r)
+	bodyReadDuration := time.Since(bodyReadStart)
+	if bodyReadDuration > 100*time.Millisecond {
+		log.Printf("SLOW BODY READ: Request body read took %v", bodyReadDuration)
+	}
+	
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err)
 		return
@@ -375,7 +412,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check budget using cached values and get usage percentages for analytics
+	budgetCheckStart := time.Now()
 	_, _, err = p.budgetService.CheckBudget(app, llm)
+	budgetCheckDuration := time.Since(budgetCheckStart)
+	if budgetCheckDuration > 500*time.Millisecond {
+		log.Printf("SLOW BUDGET CHECK: took %v for app %d, llm %d",
+			budgetCheckDuration, app.ID, llm.ID)
+	}
 	if err != nil {
 		errResp := ErrorResponse{
 			Status:  http.StatusForbidden,
@@ -391,9 +434,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	screenStart := time.Now()
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err)
 		return
+	}
+	screenDuration := time.Since(screenStart)
+	if screenDuration > 200*time.Millisecond {
+		log.Printf("SLOW SCREENING: Vendor request screening took %v for llm %d",
+			screenDuration, llm.ID)
 	}
 
 	upstreamURL, err := url.Parse(llm.APIEndpoint)
@@ -418,10 +467,26 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		ModifyResponse: func(resp *http.Response) error {
 			return nil
 		},
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 300 * time.Second,
+			ExpectContinueTimeout: 30 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 90 * time.Second,
+			}).DialContext,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+		},
 	}
 
+	proxyStart := time.Now()
 	capture := newResponseCapture(w)
 	proxy.ServeHTTP(capture, r)
+	proxyDuration := time.Since(proxyStart)
+	if proxyDuration > 5*time.Second {
+		log.Printf("SLOW UPSTREAM: Upstream request took %v for llm %d",
+			proxyDuration, llm.ID)
+	}
 
 	// Analyze response
 	go p.analyzeResponse(llm, app, capture.statusCode, capture.buffer.Bytes(), reqBody, r)
@@ -537,19 +602,38 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 }
 
 func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if duration > 1*time.Second {
+			log.Printf("SLOW REQUEST: handleStreamingLLMRequest took %v", duration)
+		}
+	}()
+
 	vars := mux.Vars(r)
 	llmSlug := vars["llmSlug"]
 
+	lockStart := time.Now()
 	p.mu.RLock()
 	llm, ok := p.llms[llmSlug]
 	p.mu.RUnlock()
+	lockDuration := time.Since(lockStart)
+	if lockDuration > 100*time.Millisecond {
+		log.Printf("SLOW LOCK: Streaming LLM lookup lock took %v", lockDuration)
+	}
 
 	if !ok {
 		respondWithError(w, http.StatusNotFound, "[streaming] LLM not found", nil)
 		return
 	}
 
+	bodyReadStart := time.Now()
 	reqBody, err := helpers.CopyRequestBody(r)
+	bodyReadDuration := time.Since(bodyReadStart)
+	if bodyReadDuration > 100*time.Millisecond {
+		log.Printf("SLOW BODY READ: Streaming request body read took %v", bodyReadDuration)
+	}
+	
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err)
 		return
@@ -567,7 +651,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	// Check budget using cached values and get usage percentages for analytics
+	budgetCheckStart := time.Now()
 	_, _, err = p.budgetService.CheckBudget(app, llm)
+	budgetCheckDuration := time.Since(budgetCheckStart)
+	if budgetCheckDuration > 500*time.Millisecond {
+		log.Printf("SLOW BUDGET CHECK: took %v for app %d, llm %d in streaming request",
+			budgetCheckDuration, app.ID, llm.ID)
+	}
 	if err != nil {
 		errResp := ErrorResponse{
 			Status:  http.StatusForbidden,
@@ -583,9 +673,15 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	screenStart := time.Now()
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err)
 		return
+	}
+	screenDuration := time.Since(screenStart)
+	if screenDuration > 200*time.Millisecond {
+		log.Printf("SLOW SCREENING: Streaming vendor request screening took %v for llm %d",
+			screenDuration, llm.ID)
 	}
 
 	upstreamURL, err := url.Parse(llm.APIEndpoint)
@@ -611,14 +707,33 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header", err)
 		return
 	}
-
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 300 * time.Second,
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 300 * time.Second,
+			ExpectContinueTimeout: 30 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 90 * time.Second,
+			}).DialContext,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+		},
+	}
+	
+	upstreamStart := time.Now()
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to make upstream request", err)
 		return
 	}
 	defer resp.Body.Close()
+	
+	upstreamDuration := time.Since(upstreamStart)
+	if upstreamDuration > 1*time.Second {
+		log.Printf("SLOW UPSTREAM CONNECTION: Initial streaming connection took %v for llm %d",
+			upstreamDuration, llm.ID)
+	}
 
 	for k, v := range resp.Header {
 		w.Header()[k] = v
@@ -632,6 +747,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	var responses [][]byte
 	buffer := make([]byte, 1024)
 	isErr := false
+	streamStart := time.Now()
+	lastChunkTime := streamStart
 	for {
 		n, err := resp.Body.Read(buffer)
 		if n > 0 {
@@ -658,6 +775,21 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			isErr = true
 			break
 		}
+		
+		// Log if we're experiencing slow chunks
+		now := time.Now()
+		chunkDuration := now.Sub(lastChunkTime)
+		if chunkDuration > 2*time.Second {
+			log.Printf("SLOW CHUNK: Streaming chunk took %v for llm %d",
+				chunkDuration, llm.ID)
+		}
+		lastChunkTime = now
+	}
+	
+	totalStreamDuration := time.Since(streamStart)
+	if totalStreamDuration > 10*time.Second {
+		log.Printf("SLOW STREAMING: Total streaming took %v for llm %d",
+			totalStreamDuration, llm.ID)
 	}
 
 	if !isErr {
