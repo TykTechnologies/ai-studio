@@ -34,8 +34,8 @@ jobs:
           env: 
             TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
             TYK_AI_SECRET_KEY: ${{ secrets.TYK_AI_SECRET_KEY }}
-            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-            ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_AI_KEY }}
+            OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+            ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}
             GO_BUILD_FLAGS: "-buildvcs=false"
           run: |
             docker compose -f tests/compose.yml up &

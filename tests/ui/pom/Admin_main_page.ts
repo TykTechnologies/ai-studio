@@ -95,6 +95,9 @@ export class AdminMainPage {
 
     async navigateToApps() {
         await this.AiPortalButton.click();
+        if (!await this.AppsLink.isVisible()) {  
+            await this.AiPortalButton.click();
+        }
         await this.AppsLink.click();
     }
 

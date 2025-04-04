@@ -1,11 +1,12 @@
 import { test } from '@fixtures';
 import { expect } from '@playwright/test';
-import { config } from '../config';
+import { config } from '@config';
+import { generateRandomString } from '@utils/utils';
+
+const app_name = 'My app ' + generateRandomString(3);
+const app_description = 'Long Description';
 
 test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPage }) => {
-  const app_name = 'My app 1';
-  const app_description = 'Long Description';
-
   await test.step('Crating new app', async () => {
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
