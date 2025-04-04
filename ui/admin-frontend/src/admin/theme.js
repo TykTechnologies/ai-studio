@@ -272,6 +272,7 @@ const theme = createTheme({
           position: 'relative',
           borderRadius: 20,
           padding: '8px 16px',
+          minWidth: 'fit-content',
           color: theme.palette.text.defaultSubdued,
           backgroundColor: theme.palette.background.buttonSecondary,
           boxShadow: "none",

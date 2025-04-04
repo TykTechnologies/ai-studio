@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography, Box, Stack, styled, CircularProgress } from '@mui/material';
+import { Typography, Box, styled, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { TitleBox, ContentBox, PrimaryButton } from '../styles/sharedStyles';
 import useOverviewData from '../hooks/useOverviewData';
@@ -17,17 +17,15 @@ const DescriptionSection = styled(Box)(({ theme }) => ({
   padding: theme.spacing(3),
   marginBottom: theme.spacing(4),
   boxShadow: 'none',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-}));
-
-const DescriptionContent = styled(Box)(({ theme }) => ({
-  width: '50%',
+  width: '100%',
+  boxSizing: 'border-box',
+  overflowX: 'hidden',
 }));
 
 const CardText = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(1),
+  wordBreak: 'break-word',
+  maxWidth: '100%',
 }));
 
 const BoldText = styled('span')(({ theme }) => ({
@@ -43,6 +41,9 @@ const LoadingContainer = styled(Box)(({ theme }) => ({
 
 const SectionContainer = styled(Box)(({ theme }) => ({
   marginBottom: theme.spacing(4),
+  width: '100%',
+  boxSizing: 'border-box',
+  overflowX: 'hidden',
 }));
 
 const Overview = () => {
@@ -82,18 +83,32 @@ const Overview = () => {
       </TitleBox>
       <ContentBox>
         <DescriptionSection>
-          <DescriptionContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="headingxLarge" color="text.primary" gutterBottom>
-              Explore AI studio
-            </Typography>
-            <Typography variant="bodyXLargeDefault" color="text.defaultSubdued">
-              Empower your team with AI securely and effortlessly.
-              Control access, track costs, protect data, and enable fast
-              adoption with flexible, user-friendly AI platforms.
-            </Typography>
-          </DescriptionContent>
-          <Box sx={{ width: '50%' }}>
-            {/* Placeholder for the play demo section */}
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' }, 
+            gap: 3,
+            width: '100%',
+            boxSizing: 'border-box'
+          }}>
+            <Box sx={{ 
+              width: { xs: '100%', sm: '50%' }, 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 2,
+              boxSizing: 'border-box'
+            }}>
+              <Typography variant="headingxLarge" color="text.primary" gutterBottom>
+                Explore AI studio
+              </Typography>
+              <Typography variant="bodyXLargeDefault" color="text.defaultSubdued" sx={{ wordBreak: 'break-word' }}>
+                Empower your team with AI securely and effortlessly.
+                Control access, track costs, protect data, and enable fast
+                adoption with flexible, user-friendly AI platforms.
+              </Typography>
+            </Box>
+            <Box sx={{ width: { xs: '100%', sm: '50%' }, boxSizing: 'border-box' }}>
+              {/* Placeholder for the play demo section */}
+            </Box>
           </Box>
         </DescriptionSection>
 
@@ -102,8 +117,19 @@ const Overview = () => {
           <SectionTitle variant="headingMedium">
             Start building your AI infrastructure
           </SectionTitle>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: { xs: 'wrap', md: 'nowrap' }, mt: 2 }}>
-            <Box sx={{ width: { xs: '100%', md: '33.33%' }, mb: { xs: 3, md: 0 } }}>
+          <Box sx={{ 
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 3,
+              mt: 2,
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+            <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
               <BasicCard
                 primaryAction={{ 
                   label: 'Add LLM provider', 
@@ -114,7 +140,16 @@ const Overview = () => {
                   onClick: () => {} 
                 }}
               > 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                   <IconBadge iconName="microchip-ai" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                     Configure <BoldText>Large language Models providers</BoldText>, control usage and cost...
@@ -122,7 +157,11 @@ const Overview = () => {
                 </Box>
               </BasicCard>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '33.33%' }, mb: { xs: 3, md: 0 } }}>
+            <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
               <BasicCard
                 primaryAction={{ 
                   label: 'Add Data source', 
@@ -133,7 +172,16 @@ const Overview = () => {
                   onClick: () => {} 
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                   <IconBadge iconName="book-sparkles" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                     Enhance AI responses, add relevant context with <BoldText>Data sources</BoldText>
@@ -141,7 +189,11 @@ const Overview = () => {
                 </Box>
               </BasicCard>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '33.33%' } }}>
+            <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
               <BasicCard
                 primaryAction={{ 
                   label: 'Add Tool', 
@@ -152,7 +204,16 @@ const Overview = () => {
                   onClick: () => {} 
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                   <IconBadge iconName="screwdriver-wrench" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                     Integrate your systems with <BoldText>Tools</BoldText>, to boost AI capabilities
@@ -160,7 +221,7 @@ const Overview = () => {
                 </Box>
               </BasicCard>
             </Box>
-          </Stack>
+          </Box>
         </SectionContainer>
 
         {/* Govern AI section */}
@@ -168,8 +229,19 @@ const Overview = () => {
           <SectionTitle variant="headingMedium">
             Govern AI
           </SectionTitle>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: { xs: 'wrap', md: 'nowrap' }, mt: 2 }}>
-            <Box sx={{ width: { xs: '100%', md: '50%' }, mb: { xs: 3, md: 0 } }}>
+          <Box sx={{ 
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 3,
+              mt: 2,
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+            <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
               <BasicCard
                 primaryAction={{ 
                   label: 'Add user', 
@@ -180,7 +252,16 @@ const Overview = () => {
                   onClick: () => {} 
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                   <IconBadge iconName="users" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                     Invite users and control who access to what with <BoldText>RBAC and user groups</BoldText>
@@ -188,7 +269,11 @@ const Overview = () => {
                 </Box>
               </BasicCard>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '50%' } }}>
+            <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
               <BasicCard
                 primaryAction={{ 
                   label: 'Learn Filters', 
@@ -199,7 +284,16 @@ const Overview = () => {
                   onClick: () => {} 
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                   <IconBadge iconName="shield" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                     Keep data safe with <BoldText>filters and privacy levels</BoldText>, ensuring it's used only with approved LLM providers.
@@ -207,7 +301,7 @@ const Overview = () => {
                 </Box>
               </BasicCard>
             </Box>
-          </Stack>
+          </Box>
         </SectionContainer>
 
         {/* Provide AI platforms for your team section */}
@@ -215,9 +309,20 @@ const Overview = () => {
           <SectionTitle variant="headingMedium">
             Provide AI platforms for your team
           </SectionTitle>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: { xs: 'wrap', md: 'nowrap' }, mt: 2 }}>
+          <Box sx={{ 
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 3,
+              mt: 2,
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
             {showAppsCard && (
-              <Box sx={{ width: { xs: '100%', md: showChatCard ? '50%' : '100%' }, mb: { xs: 3, md: 0 } }}>
+              <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
                 <BasicCard
                   primaryAction={{
                     label: 'Add Apps',
@@ -229,7 +334,16 @@ const Overview = () => {
                     onClick: () => {}
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                     <IconBadge iconName="grid-2-plus" />
                     <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                       <BoldText>Apps</BoldText> enable your devs to use any tooling to directly interact with AI through the gateway
@@ -239,7 +353,11 @@ const Overview = () => {
               </Box>
             )}
             {showChatCard && (
-              <Box sx={{ width: { xs: '100%', md: showAppsCard ? '50%' : '100%' } }}>
+              <Box sx={{ 
+                flex: '1 0 400px',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
                 <BasicCard
                   primaryAction={{
                     label: 'Add Chats',
@@ -251,7 +369,16 @@ const Overview = () => {
                     onClick: () => {}
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'center' }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    height: '100%', 
+                    justifyContent: 'flex-start',
+                    flexDirection: 'row',
+                    flexWrap: 'nowrap',
+                    padding: 1
+                  }}>
                     <IconBadge iconName="message-lines" />
                     <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
                       <BoldText>Chats</BoldText> provide an easy-to-use interface for everyone to interact with multiple LLM providers, curated data, and tools
@@ -260,7 +387,7 @@ const Overview = () => {
                 </BasicCard>
               </Box>
             )}
-          </Stack>
+          </Box>
         </SectionContainer>
       </ContentBox>
     </>

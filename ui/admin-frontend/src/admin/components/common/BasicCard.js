@@ -3,7 +3,10 @@ import { Box, styled, Button } from '@mui/material';
 import { SecondaryOutlineButton } from '../../styles/sharedStyles';
 
 const CardContainer = styled(Box)(({ theme }) => ({
-  height: '214px',
+  height: 'auto',
+  minHeight: '214px',
+  minWidth: '400px',
+  width: '100%',
   border: `1px solid ${theme.palette.border.neutralDefault}`,
   borderRadius: '8px',
   display: 'flex',
@@ -11,6 +14,7 @@ const CardContainer = styled(Box)(({ theme }) => ({
   overflow: 'hidden',
   backgroundColor: theme.palette.background.paper,
   boxShadow: '4px 4px 8px 0px rgba(9, 9, 35, 0.08)',
+  boxSizing: 'border-box',
 }));
 
 const CardContent = styled(Box)(({ theme }) => ({
@@ -19,6 +23,9 @@ const CardContent = styled(Box)(({ theme }) => ({
   overflow: 'auto',
   display: 'flex',
   alignItems: 'center',
+  justifyContent: 'flex-start',
+  width: '100%',
+  boxSizing: 'border-box',
 }));
 
 const CardActions = styled(Box)(({ theme }) => ({
@@ -27,6 +34,9 @@ const CardActions = styled(Box)(({ theme }) => ({
   justifyContent: 'flex-end',
   gap: theme.spacing(1),
   borderTop: `1px solid ${theme.palette.border.neutralDefaultSubdued}`,
+  flexWrap: 'wrap',
+  width: '100%',
+  boxSizing: 'border-box',
 }));
 
 const ActionButton = styled(Button)(({ theme }) => ({
