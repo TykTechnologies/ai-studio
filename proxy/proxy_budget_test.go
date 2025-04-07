@@ -568,28 +568,21 @@ func TestBudgetCheck(t *testing.T) {
 		err = db.Save(llm).Error
 		require.NoError(t, err)
 
-		// Clear cache to ensure fresh spending calculation
-		budgetService.ClearCache()
-
-		// Create record for current period (Feb 15 - Mar 14)
-		currentRecord := &models.LLMChatRecord{
-			LLMID:           llm.ID,
-			Vendor:          string(llm.Vendor),
-			PromptTokens:    5000,
-			ResponseTokens:  10000,
-			TotalTokens:     15000,
-			TimeStamp:       time.Date(2025, 2, 20, 10, 0, 0, 0, loc),
-			AppID:           app.ID,
-			UserID:          app.UserID,
-			Cost:            25.00 * 10000, // Store as scaled integer (250000)
-			InteractionType: models.ProxyInteraction,
-		}
-		err = db.Create(currentRecord).Error
+		// First request in new period should succeed
+		// Cost calculation:
+		// - Prompt tokens: 5000 * 0.001 = $5.00
+		// - Response tokens: 10000 * 0.002 = $20.00
+		// - Total cost: $25.00 (stored as 250000)
+		resp, err := http.DefaultClient.Do(makeRequest(false))
 		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		// Wait for analytics to process the record
+		// Wait for analytics
 		waitForAnalytics(t, db, 3)
 		waitUntilIdle(t, db)
+		record := waitForRecordWithCost(t, db)
+		require.NotNil(t, record)
+		assert.InDelta(t, 250000.0, record.Cost, 0.1, "Record cost should be 250000 (25.00 * 10000)")
 
 		// Verify spending for current period (Feb 15 - Mar 14)
 		// Only one request in this period costing $25.00
