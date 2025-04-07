@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -98,19 +99,38 @@ func NewBudgetService(db *gorm.DB, notificationSvc *NotificationService) *Budget
 }
 
 func (s *BudgetService) cleanupCache() {
-	ticker := time.NewTicker(1 * time.Minute)  // Run cleanup every minute instead of every millisecond
+	ticker := time.NewTicker(5 * time.Minute)  // Less frequent cleanup (every 5 minutes)
 	defer ticker.Stop()  // Ensure the ticker is cleaned up if the function exits
 	
 	for range ticker.C {
-		s.cacheMutex.Lock()
-		now := time.Now()
-		for key, data := range s.usageCache {
-			if now.Sub(data.cachedAt) > s.cacheDuration {
-				delete(s.usageCache, key)
-				log.Printf("Cache entry expired for %s ID %d", key.entityType, key.entityID)
+		// Use a separate goroutine to avoid blocking the ticker
+		go func() {
+			// Create a list of keys to delete
+			var keysToDelete []usageKey
+			
+			// First identify expired keys with a read lock
+			s.cacheMutex.RLock()
+			now := time.Now()
+			for key, data := range s.usageCache {
+				if now.Sub(data.cachedAt) > s.cacheDuration {
+					keysToDelete = append(keysToDelete, key)
+				}
 			}
-		}
-		s.cacheMutex.Unlock()
+			s.cacheMutex.RUnlock()
+			
+			// Only lock for the actual deletion if we have keys to delete
+			if len(keysToDelete) > 0 {
+				s.cacheMutex.Lock()
+				for _, key := range keysToDelete {
+					// Double-check the key is still expired (it might have been updated)
+					if data, exists := s.usageCache[key]; exists && now.Sub(data.cachedAt) > s.cacheDuration {
+						delete(s.usageCache, key)
+					}
+				}
+				s.cacheMutex.Unlock()
+				log.Printf("Cleaned up %d expired cache entries", len(keysToDelete))
+			}
+		}()
 	}
 }
 
@@ -139,6 +159,7 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 		log.Printf("App %d cache expired (cached %v ago)", appID, time.Since(data.cachedAt))
 	}
 	s.cacheMutex.RUnlock()
+	
 	log.Printf("App %d spending cache miss, querying database", appID)
 
 	// Adjust end time to include full day
@@ -226,6 +247,7 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 		log.Printf("LLM %d cache expired (cached %v ago)", llmID, time.Since(data.cachedAt))
 	}
 	s.cacheMutex.RUnlock()
+	
 	log.Printf("LLM %d spending cache miss, querying database", llmID)
 
 	// Adjust end time to include full day
@@ -288,17 +310,61 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	return totalSpent, nil
 }
 
-// CheckBudget verifies if a request would exceed either App or LLM budget by checking for 100% threshold notifications.
+// CheckBudget verifies if a request would exceed either App or LLM budget by first checking the cache,
+// then falling back to checking for 100% threshold notifications.
 // Returns app usage percentage, llm usage percentage, and error if budget exceeded
 func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, float64, error) {
 	now := time.Now()
 	var appUsage, llmUsage float64
+	var appSpent, llmSpent float64
+	var appBudgetExceeded, llmBudgetExceeded bool
 
-	// Quick check for app budget
+	// Check for app budget
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
+		
+		// Check cache first for quick response
+		key := usageKey{
+			entityID:   app.ID,
+			entityType: "App",
+			startDate:  start,
+		}
+		
+		s.cacheMutex.RLock()
+		if data, exists := s.usageCache[key]; exists && time.Since(data.cachedAt) < s.cacheDuration {
+			appSpent = data.spent
+			s.cacheMutex.RUnlock()
+			log.Printf("App %d spending from cache: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
+			
+			// Calculate usage percentage
+			appUsage = (appSpent / *app.MonthlyBudget) * 100
+			
+			// Check if budget is exceeded
+			if appSpent >= *app.MonthlyBudget {
+				appBudgetExceeded = true
+				log.Printf("App %d budget exceeded from cache: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
+			}
+		} else {
+			s.cacheMutex.RUnlock()
+			// Cache miss or expired, get current spending from database
+			var err error
+			appSpent, err = s.GetMonthlySpending(app.ID, start, now)
+			if err != nil {
+				log.Printf("Error getting app spending: %v", err)
+			} else {
+				// Calculate usage percentage
+				appUsage = (appSpent / *app.MonthlyBudget) * 100
+				
+				// Check if budget is exceeded
+				if appSpent >= *app.MonthlyBudget {
+					appBudgetExceeded = true
+					log.Printf("App %d budget exceeded from DB: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
+				}
+			}
+		}
+		
+		// Check for existing notifications after calculating current spending
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		// Check for 100% threshold notification
 		baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
 			app.ID,
 			monthOffset,
@@ -310,21 +376,66 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 
 		// Check for either owner or admin notifications
 		var notification models.Notification
-		err := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := s.db.WithContext(ctx).Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
 			fmt.Sprintf("%s_owner", baseNotificationID),
 			fmt.Sprintf("%s_admin_%%", baseNotificationID),
 			start).First(&notification).Error
-		if err == nil {
-			// Found 100% threshold notification for this period
-			return 100, llmUsage, fmt.Errorf("app monthly budget exceeded")
+		
+		// If notification exists or budget is exceeded, mark as exceeded
+		if err == nil || appBudgetExceeded {
+			appBudgetExceeded = true
 		}
 	}
 
-	// Quick check for LLM budget
+	// Check for LLM budget
 	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
+		
+		// Check cache first for quick response
+		key := usageKey{
+			entityID:   llm.ID,
+			entityType: "LLM",
+			startDate:  start,
+		}
+		
+		s.cacheMutex.RLock()
+		if data, exists := s.usageCache[key]; exists && time.Since(data.cachedAt) < s.cacheDuration {
+			llmSpent = data.spent
+			s.cacheMutex.RUnlock()
+			log.Printf("LLM %d spending from cache: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
+			
+			// Calculate usage percentage
+			llmUsage = (llmSpent / *llm.MonthlyBudget) * 100
+			
+			// Check if budget is exceeded
+			if llmSpent >= *llm.MonthlyBudget {
+				llmBudgetExceeded = true
+				log.Printf("LLM %d budget exceeded from cache: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
+			}
+		} else {
+			s.cacheMutex.RUnlock()
+			// Cache miss or expired, get current spending from database
+			var err error
+			llmSpent, err = s.GetLLMMonthlySpending(llm.ID, start, now)
+			if err != nil {
+				log.Printf("Error getting LLM spending: %v", err)
+			} else {
+				// Calculate usage percentage
+				llmUsage = (llmSpent / *llm.MonthlyBudget) * 100
+				
+				// Check if budget is exceeded
+				if llmSpent >= *llm.MonthlyBudget {
+					llmBudgetExceeded = true
+					log.Printf("LLM %d budget exceeded from DB: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
+				}
+			}
+		}
+		
+		// Check for existing notifications after calculating current spending
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		// Check for 100% threshold notification
 		baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
 			llm.ID,
 			monthOffset,
@@ -336,16 +447,32 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 
 		// Check for admin notifications
 		var notification models.Notification
-		err := s.db.Where("notification_id LIKE ? AND sent_at >= ?",
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := s.db.WithContext(ctx).Where("notification_id LIKE ? AND sent_at >= ?",
 			fmt.Sprintf("%s_admin_%%", baseNotificationID),
 			start).First(&notification).Error
-		if err == nil {
-			// Found 100% threshold notification for this period
-			return appUsage, 100, fmt.Errorf("LLM monthly budget exceeded")
+		
+		// If notification exists or budget is exceeded, mark as exceeded
+		if err == nil || llmBudgetExceeded {
+			llmBudgetExceeded = true
 		} else if err != gorm.ErrRecordNotFound {
 			// Log unexpected errors but don't block the request
 			log.Printf("Error checking for budget notifications: %v", err)
 		}
+	}
+
+	// Always analyze budget usage to ensure notifications are created
+	s.AnalyzeBudgetUsage(app, llm)
+
+	// Return appropriate error if budget is exceeded
+	if appBudgetExceeded {
+		return 100, llmUsage, fmt.Errorf("app monthly budget exceeded")
+	}
+	
+	if llmBudgetExceeded {
+		return appUsage, 100, fmt.Errorf("LLM monthly budget exceeded")
 	}
 
 	return appUsage, llmUsage, nil
@@ -377,6 +504,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 
 			// Check for existing notifications in this period
 			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			
 			baseNotificationID80 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
 				app.ID,
 				monthOffset,
@@ -435,6 +563,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 
 			// Check for existing notifications in this period
 			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			
 			baseNotificationID80 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
 				llm.ID,
 				monthOffset,
@@ -467,6 +596,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 					log.Printf("Failed to send LLM budget notification (100%%): %v", err)
 				}
 			}
+			// No special case handling needed
 		}
 	}
 }
