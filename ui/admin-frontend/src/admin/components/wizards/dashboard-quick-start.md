@@ -411,3 +411,96 @@ The Tyk Dashboard onboarding wizard is a sophisticated implementation that guide
 - Error handling
 
 The code is well-structured with clear separation of concerns, making it maintainable and extensible. Each step in the wizard has its own set of components, hooks, and validation logic, while sharing common utilities and patterns.
+
+# Stepper Component Analysis
+
+The Stepper component is a multi-step form or wizard interface that guides users through a sequence of steps. Here's how it works:
+
+## Core Structure
+
+The Stepper is built using a context-based architecture with several key components:
+
+1. **Main Stepper Component (`index.js`)**: 
+   - Acts as the container and context provider
+   - Manages state for active step, errors, and validation
+   - Supports two orientations: vertical (default) and horizontal
+   - Filters children to identify steps and buttons
+
+2. **StepperContext**: 
+   - Shares state and functions between all Stepper components
+   - Provides access to active step, errors, navigation functions, and validation
+
+3. **Step Component**: 
+   - Simple wrapper for step content
+   - Has props for title, description, and ID
+   - Identified by `displayName: "StepperStep"`
+
+4. **StepList & StepItem**: 
+   - StepList renders all steps in a vertical or horizontal layout
+   - StepItem renders individual steps with proper styling based on state
+   - Shows visual indicators for active, completed, and error states
+
+5. **Navigation Components**:
+   - `Buttons`: Provides core navigation logic (next, previous, skip)
+   - `DefaultButtons`: Default UI implementation with customizable text
+   - Handles validation before proceeding to next step
+
+## Key Features
+
+1. **Step Validation**:
+   - Custom validation through `stepValidator` prop
+   - Error display when validation fails
+   - Prevents navigation to next step if validation fails
+
+2. **Visual Indicators**:
+   - Step numbers change appearance based on state (active, completed, error)
+   - Progress indicators between steps
+   - Error messages display when validation fails
+
+3. **Navigation**:
+   - Next/Continue button to advance
+   - Back button to return to previous step
+   - Optional skip functionality
+   - Finish button on the last step
+
+4. **Orientation Options**:
+   - Vertical layout (default): Steps stacked vertically with content beside each step
+   - Horizontal layout: Steps arranged horizontally at the top with content below
+
+5. **Customization**:
+   - Custom button text
+   - Custom step validation
+   - Custom error messages
+   - Custom button components
+
+## Usage Example
+
+```jsx
+<Stepper 
+  onFinish={() => console.log('Completed!')}
+  stepValidator={(stepId) => true} // Validate each step
+  orientation="vertical"
+>
+  <Stepper.Step id="step1" title="Step 1" description="First step">
+    <div>Step 1 content</div>
+  </Stepper.Step>
+  
+  <Stepper.Step id="step2" title="Step 2" description="Second step">
+    <div>Step 2 content</div>
+  </Stepper.Step>
+  
+  {/* Optional custom buttons */}
+  <Stepper.Buttons>
+    {({ goToNextStep, goToPreviousStep, isLastStep }) => (
+      <>
+        <button onClick={goToPreviousStep}>Back</button>
+        <button onClick={goToNextStep}>
+          {isLastStep ? 'Finish' : 'Next'}
+        </button>
+      </>
+    )}
+  </Stepper.Buttons>
+</Stepper>
+```
+
+The Stepper component uses React's Context API for state management and React's component composition pattern to create a flexible, customizable multi-step interface.
