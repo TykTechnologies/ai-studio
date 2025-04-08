@@ -730,12 +730,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		}
 
 		if len(reply.ToolCalls) > 0 {
-			_, err := cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
-			if err != nil {
-				cs.sendError(fmt.Errorf("error handling tool calls: %v", err))
-				continue
-			}
-
+			cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
 			toolCall = true
 		}
 	}
@@ -1054,13 +1049,22 @@ func interfaceToString(value interface{}) (string, error) {
 	}
 }
 
-func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) (bool, error) {
-	called := false
+func (cs *ChatSession) handleToolError(errMsg string, toolCallID string, functionName string, toolResult *llms.MessageContent) {
+	cs.sendStatus(errMsg)
 
+	toolResp := llms.ToolCallResponse{
+		ToolCallID: toolCallID,
+		Name:       functionName,
+		Content:    "ERROR: " + errMsg,
+	}
+
+	toolResult.Parts = append(toolResult.Parts, toolResp)
+}
+
+func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) {
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
 
-		// ignore empty tool calls
 		if t.ID == "" {
 			continue
 		}
@@ -1074,9 +1078,6 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			},
 		})
 
-		// tools are sent to the LLM  as a list of operation names
-		// This means that the tool name from the LLM will be the opp,
-		// not the tool name
 		toolDefIndex := ""
 		for i, tool := range cs.tools {
 			asList := strings.Split(tool.AvailableOperations, ",")
@@ -1093,10 +1094,11 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 		toolDef, ok := cs.tools[toolDefIndex]
 		if !ok {
-			return false, fmt.Errorf("tool not found: %s", t.FunctionCall.Name)
+			errMsg := fmt.Sprintf("tool not found: %s", t.FunctionCall.Name)
+			cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+			continue
 		}
 
-		// Call the tool
 		if toolDef.ToolType == models.ToolTypeREST {
 			opts := make([]universalclient.ClientOption, 0)
 			if toolDef.AuthKey != "" {
@@ -1112,13 +1114,17 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			uc, err := universalclient.NewClient([]byte(toolDef.OASSpec), "", opts...)
 			if err != nil {
-				return false, fmt.Errorf("error creating tool client: %v", err)
+				errMsg := fmt.Sprintf("error creating tool client: %v", err)
+				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+				continue
 			}
 
 			t0 := time.Now()
 			args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments), t.FunctionCall.Name, uc)
 			if err != nil {
-				return false, fmt.Errorf("error converting LLM args to universal client inputs: %v", err)
+				errMsg := fmt.Sprintf("error converting LLM args to universal client inputs: %v", err)
+				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+				continue
 			}
 
 			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
@@ -1133,7 +1139,10 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				if config.Get().EchoConversation {
 					slog.Info("[TOOL-CALL]", "[ERROR]", err)
 				}
-				return false, fmt.Errorf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
+
+				errMsg := fmt.Sprintf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
+				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+				continue
 			}
 
 			var asStr string
@@ -1143,7 +1152,9 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			case string:
 				asStr = resp.(string)
 			default:
-				return false, fmt.Errorf("response is not a compatible string (%T)", resp)
+				errMsg := fmt.Sprintf("response is not a compatible string (%T)", resp)
+				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+				continue
 			}
 
 			t1 := time.Now()
@@ -1155,20 +1166,20 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				fmt.Println("===============================================")
 			}
 
-			// filter content before sending to LLM
 			for i, _ := range toolDef.Filters {
 				filter := toolDef.Filters[i]
 				sr := scripting.NewScriptRunner(filter.Script)
 				cs.sendStatus(fmt.Sprintf("Running governance filter: `%s`", filter.Name))
 				filtered, err := sr.RunMiddleware(asStr, cs.service)
 				if err != nil {
-					return false, fmt.Errorf("error running governance filter: %v", err)
+					errMsg := fmt.Sprintf("error running governance filter: %v", err)
+					cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+					continue
 				}
 
 				asStr = filtered
 			}
 
-			// Create tool response
 			toolResp := llms.ToolCallResponse{
 				ToolCallID: t.ID,
 				Name:       t.FunctionCall.Name,
@@ -1184,7 +1195,6 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			}
 
 			toolResult.Parts = append(toolResult.Parts, toolResp)
-			called = true
 
 			analytics.RecordToolCall(
 				t.FunctionCall.Name,
@@ -1192,8 +1202,6 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				int(t1.Sub(t0).Milliseconds()), toolDef.ID)
 		}
 	}
-
-	return called, nil
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
