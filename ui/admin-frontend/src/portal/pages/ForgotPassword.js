@@ -1,74 +1,111 @@
 import React, { useState } from "react";
-import { Box, TextField, Button, Typography, Alert } from "@mui/material";
+import { Box, Typography, Alert } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 import apiClient from "../../admin/utils/pubClient";
+import AuthLayout from "./AuthLayout";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import {
+  StyledTextField,
+  FormLabel,
+  FormLink
+} from "../styles/authStyles";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     try {
-      const response = await apiClient.post("/auth/forgot-password", {
+      await apiClient.post("/auth/forgot-password", {
         data: {
           type: "forgot-password",
           attributes: { email },
         },
       });
-      setMessage(response.data.message);
+      setIsSuccess(true);
     } catch (err) {
       setError("Failed to send reset password email. Please try again.");
     }
   };
 
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-      }}
-    >
-      <Box sx={{ maxWidth: 400, width: "100%", p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          Forgot Password
+  if (isSuccess) {
+    return (
+      <AuthLayout>
+        <Typography variant="headingXLarge" component="h1" gutterBottom align="center" color="text.primary">
+          Password reset request sent
         </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-        {message && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            {message}
-          </Alert>
-        )}
-        <form onSubmit={handleSubmit}>
-          <TextField
+        
+        <Typography variant="bodyLargeMedium" align="center" color="text.primary" sx={{ mb: 4, mt: 2 }}>
+          Success! If we can find an account with that email address, we will send
+          you instructions on how to reset your password.
+        </Typography>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
+          <PrimaryButton
+            component={RouterLink}
+            to="/login"
+            variant="contained"
+          >
+            Go to Login
+          </PrimaryButton>
+        </Box>
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout>
+      <Typography variant="headingXLarge" component="h1" gutterBottom align="center" color="text.primary">
+        Password reset
+      </Typography>
+      
+      <Typography variant="bodyLargeMedium" align="center" color="text.primary" sx={{ m: 2}}>
+        We will send you a link you can use to reset your password securely
+      </Typography>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      
+      <form onSubmit={handleSubmit}>
+        <Box mb={3} mt={2}>
+          <FormLabel component="label" htmlFor="email">
+            Email address
+          </FormLabel>
+          <StyledTextField
+            id="email"
             fullWidth
-            label="Email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            margin="normal"
             required
-            autoComplete="off"
+            autoComplete="email"
+            autoFocus
+            variant="outlined"
           />
-          <Button
+        </Box>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
+          <PrimaryButton
             type="submit"
             variant="contained"
-            color="primary"
-            fullWidth
-            sx={{ mt: 2 }}
           >
-            Reset Password
-          </Button>
-        </form>
+            Reset password
+          </PrimaryButton>
+        </Box>
+      </form>
+      
+      <Box sx={{ textAlign: "center" }}>
+        <FormLink component={RouterLink} to="/login">
+          Return to Login
+        </FormLink>
       </Box>
-    </Box>
+    </AuthLayout>
   );
 };
 

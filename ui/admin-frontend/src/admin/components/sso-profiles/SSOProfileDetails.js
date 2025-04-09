@@ -31,7 +31,8 @@ const SSOProfileDetails = () => {
     loginUrl: "",
     callbackUrl: "",
     failureRedirectUrl: "",
-    selectedProviderType: ""
+    selectedProviderType: "",
+    useInLoginPage: false,
   });
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +77,8 @@ const SSOProfileDetails = () => {
         loginUrl: response.data.data.attributes.login_url || "",
         callbackUrl: response.data.data.attributes.callback_url || "",
         failureRedirectUrl: response.data.data.attributes.failure_redirect_url || "",
-        selectedProviderType: response.data.data.attributes.selected_provider_type || ""
+        selectedProviderType: response.data.data.attributes.selected_provider_type || "",
+        useInLoginPage: response.data.data.attributes.use_in_login_page || false,
       });
       
       setError("");

@@ -930,6 +930,7 @@ type FrontendConfig struct {
 	APIBaseURL        string `json:"apiBaseURL"`
 	ProxyURL          string `json:"proxyURL"`
 	DefaultSignUpMode string `json:"defaultSignUpMode"`
+	TIBEnabled        bool   `json:"tibEnabled"`
 }
 
 // FileStoreInput represents the input for filestore-related operations
@@ -1053,6 +1054,7 @@ type ProfileResponse struct {
 		LoginURL                  string                 `json:"login_url"`
 		CallbackURL               string                 `json:"callback_url"`
 		FailureRedirectURL        string                 `json:"failure_redirect_url"`
+		UseInLoginPage            bool                   `json:"use_in_login_page"`
 	} `json:"attributes"`
 }
 
