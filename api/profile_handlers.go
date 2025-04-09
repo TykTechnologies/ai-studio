@@ -368,8 +368,7 @@ func (a *API) setProfileUseInLoginPage(c *gin.Context) {
 // @Success 200 {object} ProfileResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/sso-profiles/login-page [get]
-// @Security BearerAuth
+// @Router /login-sso-profile [get]
 func (a *API) getLoginPageProfile(c *gin.Context) {
 	profile, err := a.service.GetLoginPageProfile()
 	if err != nil {
