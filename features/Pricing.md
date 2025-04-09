@@ -1,236 +1,122 @@
-# Pricing and Cost Management
+## Model Pricing System
 
-## Overview
-The pricing and cost management system in Midsommar provides a comprehensive solution for tracking, analyzing, and managing costs associated with Large Language Model (LLM) usage. The system supports per-token pricing for input/output operations, cache operations, and includes robust analytics and budgeting features.
+**1. Overview & Purpose**
 
-## Core Components
+The Model Pricing system provides the mechanism to define and manage the costs associated with using different Large Language Models (LLMs) within the Midsommar platform. Its primary purpose is to enable accurate cost calculation for LLM interactions, which is crucial for budgeting, analytics, and potential billing.
 
-### 1. Model Price Structure
-Each model price entry contains:
-- Model Name (unique per vendor)
-- Vendor Name
-- Cost per Output Token (CPT)
-- Cost per Input Token (CPIT)
-- Cache Write Price per Token
-- Cache Read Price per Token
-- Currency (default: USD)
+**Key Objectives:**
 
-### 2. Analytics and Usage Tracking
-The system tracks detailed usage metrics through `LLMChatRecord`:
-- Total tokens (input/output)
-- Cache operations (read/write tokens)
-- Response time
-- Number of choices/tool calls
-- Cost per interaction
-- User and App association
-- Interaction type (chat/proxy)
+*   **Cost Definition:** Allow administrators to define specific costs for various LLM models based on vendor, input tokens, output tokens, and cache usage.
+*   **Accurate Tracking:** Ensure that every LLM interaction processed by the **Proxy** has an associated cost calculated based on defined prices.
+*   **Data Source for Other Systems:** Provide the foundational cost data used by the **Budget Control System** for spending limits and the **Analytics** module for reporting.
+*   **Flexibility:** Handle cases where prices might not be explicitly defined by providing a fallback mechanism.
 
-### 3. Budget Management
-Budget tracking is implemented through `BudgetUsage`:
-- Entity-level budgets (LLM or App)
-- Budget start date
-- Current spending
-- Usage percentage
-- Total cost tracking
-- Token consumption monitoring
+**User Roles & Interactions:**
 
-### 4. Cost Analysis
-The system provides extensive cost analysis capabilities:
-- Per-day cost analysis by currency
-- Cost breakdown by vendor and model
-- Token usage statistics
-- User-specific cost tracking
-- Application-level cost monitoring
+*   **Administrator (via User Management):** Manages model prices (CRUD operations) via API endpoints or a potential UI. Can trigger recalculation of historical costs.
+*   **Proxy (`proxy/proxy.go`):** Consumes pricing data to calculate the cost of each LLM request/response cycle.
+*   **Analytics (`analytics` package):** Uses pricing data when recording LLM interactions (`llm_chat_records`) and generating cost-related reports.
+*   **Budget Service (`services/budget_service.go`):** Indirectly uses pricing data (specifically the currency) when formatting budget notifications.
 
-## Features
+**2. Architecture & Data Flow**
 
-### 1. Price Management
-- Create/Update/Delete price configurations
-- Bulk price management
-- Price retrieval by:
-  - ID
-  - Model name
-  - Vendor
-  - Model name and vendor combination
+**Core Components & Interactions:**
 
-### 2. Default Values
-When a new model price is created:
-- CPT: 0.0
-- CPIT: 0.0
-- Cache Write PT: 0.0
-- Cache Read PT: 0.0
-- Currency: "USD"
+*   **API Handlers (`api/prices_handlers.go`):** Expose REST endpoints for managing `ModelPrice` entities.
+    *   Handles requests for creating, reading, updating, and deleting prices.
+    *   Provides endpoints for specific operations like fetching by vendor (`/by-vendor`), getting or creating by name (`/by-name`), and updating with recalculation (`/{id}/recalculate`).
+    *   *Dependency:* Calls `PriceService` methods.
+*   **Price Service (`services/prices.go`):** Contains the business logic for price management.
+    *   Implements CRUD operations interacting with the database.
+    *   Includes `GetModelPriceByModelNameAndVendor`: Fetches a price, creating a default 0-cost entry if not found (ensures cost calculation doesn't fail).
+    *   Includes `UpdateModelPriceAndRecalculate`: Updates a price and triggers a recalculation of costs in `llm_chat_records`.
+    *   *Dependency:* Interacts with the **Database** (`models.ModelPrice`).
+*   **Database Model (`models/prices.go`):** Defines the `ModelPrice` struct and database interaction methods (using GORM).
+    *   `ModelPrice` struct: `ID`, `ModelName`, `Vendor`, `CPT` (Cost Per output Token), `CPIT` (Cost Per Input Token), `CacheWritePT` (Cost Per Token for cache writes), `CacheReadPT` (Cost Per Token for cache reads), `Currency`.
+    *   `idx_model_vendor`: Unique index ensuring only one price entry per model/vendor combination.
+    *   Includes `GetOrCreateByModelName` and `GetByModelNameAndVendor` methods for retrieving or creating default entries.
+*   **Proxy (`proxy/analyze_utils.go`):** Calculates the cost of LLM interactions.
+    *   *Dependency:* Calls `PriceService.GetModelPriceByModelNameAndVendor` after an LLM response is received.
+    *   Uses the fetched `CPT`, `CPIT`, `CacheWritePT`, `CacheReadPT` and token counts from the response to calculate the cost.
+    *   Stores the calculated cost (scaled by 10000) and currency in the `llm_chat_records` table via the **Analytics** module.
+*   **Analytics (`analytics/analytics.go`, `analytics/stats.go`):** Records and reports on costs.
+    *   `RecordContentMessage`: Calls `PriceService.GetModelPriceByModelNameAndVendor` to get price details before saving `LLMChatRecord`.
+    *   Reporting functions (e.g., `GetTotalCostPerVendorAndModel`): Join `llm_chat_records` with `model_prices` to provide detailed cost breakdowns.
+*   **Budget Service (`services/budget_service.go`):**
+    *   *Dependency:* Calls `ModelPrice.GetByModelNameAndVendor` to retrieve the currency associated with an LLM for notification formatting.
 
-### 3. Analytics Features
-#### Usage Statistics
-- Chat records per day
-- Tool calls per day
-- Unique users per day
-- Token usage per user/app
-- Model usage statistics
-- Vendor usage tracking
+**Data Flow (Management & Usage):**
 
-#### Cost Analysis
-- Daily cost breakdown
-- Currency-specific analysis
-- Interaction type filtering
-- Historical cost trends
-- Budget vs actual spending
+```mermaid
+graph TD
+    subgraph "Price Management"
+        AdminUI["Admin (UI/API Client)"] -- "1: CRUD Request" --> API[("/model-prices API", api/prices_handlers.go)];
+        API -- "2: Call Service Method" --> Service[("PriceService", services/prices.go)];
+        Service -- "3: DB Operation (CRUD)" --> DB[(Database - model_prices)];
+        Service -- "4: Recalculate (Optional)" --> Recalc[("recalculateChatRecordCosts", services/prices.go)];
+        Recalc -- "5: Update Costs" --> DB_Rec[(Database - llm_chat_records)];
+    end
 
-#### Chat/Proxy Logs
-- Detailed interaction logs
-- Response time tracking
-- Token usage breakdown
-- Cost per interaction
-- Cache operation metrics
+    subgraph "Cost Calculation (Proxy)"
+        LLMReq["LLM Request"] --> Proxy[("Proxy", proxy/analyze_utils.go)];
+        Proxy -- "6: LLM Response Received" --> VendorAPI["LLM Vendor API"];
+        VendorAPI -- "7: Response (Tokens)" --> Proxy;
+        Proxy -- "8: GetModelPriceByModelNameAndVendor" --> Service;
+        Service -- "9: Fetch/Create Price" --> DB;
+        DB -- "10: Return Price Info" --> Service;
+        Service -- "11: Return Price Info" --> Proxy;
+        Proxy -- "12: Calculate Cost" --> Proxy;
+        Proxy -- "13: Record Interaction (via Analytics)" --> AnalyticsRec[("Analytics", analytics/analytics.go)];
+        AnalyticsRec -- "14: Save Record (Cost, Tokens)" --> DB_Rec;
+    end
 
-### 4. API Endpoints
+    subgraph "Reporting & Budgeting"
+        AnalyticsRep[("Analytics Reports", analytics/stats.go)] -- "15: Read Costs/Prices" --> DB_Rec;
+        AnalyticsRep -- "16: Read Prices" --> DB;
+        BudgetSvc[("Budget Service", services/budget_service.go)] -- "17: Get Currency" --> DB;
+    end
 
-#### Price Management
-```
-POST    /model-prices              # Create price
-GET     /model-prices/{id}         # Get price by ID
-PATCH   /model-prices/{id}         # Update price
-DELETE  /model-prices/{id}         # Delete price
-GET     /model-prices              # List all prices
-GET     /model-prices/by-vendor    # Get prices by vendor
-GET     /model-prices/by-name      # Get/create price by name
+    style DB fill:#dae8fc,stroke:#6c8ebf
+    style DB_Rec fill:#dae8fc,stroke:#6c8ebf
 ```
 
-#### Analytics
-```
-GET     /analytics/cost            # Cost analysis
-GET     /analytics/usage           # Usage statistics
-GET     /analytics/budget          # Budget tracking
-GET     /analytics/logs            # Interaction logs
-```
+**Flow Explanation:**
 
-## User Interface
+1.  **Management:** An Admin uses the API (or a UI) to manage prices. API handlers call the `PriceService`. The service interacts with the `model_prices` table in the database. Updating a price can optionally trigger a recalculation of historical costs in `llm_chat_records`.
+2.  **Usage (Proxy):** The Proxy handles an LLM request. After receiving the response (with token counts) from the vendor, it calls the `PriceService` to get the relevant `ModelPrice` (fetching or creating a default if needed). It then calculates the cost using the price info and token counts. Finally, it records the interaction details, including the calculated cost, into the `llm_chat_records` table via the Analytics module.
+3.  **Consumption:** Analytics reporting functions read from `llm_chat_records` and `model_prices` to generate reports. The Budget Service reads `model_prices` to get currency information for notifications.
 
-### 1. Model Prices View
-- Table display of all model prices
-- Add/Edit/Delete operations
-- Pagination support
-- Vendor filtering
-- Price conversion display (per token/per million tokens)
+**3. Implementation Details**
 
-### 2. Analytics Dashboard
-- Cost trends visualization
-- Usage statistics charts
-- Budget tracking displays
-- Token consumption metrics
-- Interactive data filtering
+*   **Price Structure:** Costs are defined per token: `CPIT` (input/prompt), `CPT` (output/completion), `CacheWritePT` (writing to semantic cache), `CacheReadPT` (reading from semantic cache). A `Currency` (e.g., "USD") is also stored.
+*   **Cost Calculation Formula (in Proxy):**
+    `cost = (CPT * response_tokens) + (CPIT * prompt_tokens) + (CacheWritePT * cache_write_tokens) + (CacheReadPT * cache_read_tokens)`
+*   **Cost Storage:** The calculated cost is multiplied by 10000 and stored as an integer in `llm_chat_records.cost` to maintain precision. It's divided by 10000.0 when used in calculations or displayed.
+*   **Fallback Mechanism:** If `GetModelPriceByModelNameAndVendor` doesn't find an exact match for the model name and vendor, it creates a new `ModelPrice` entry in the database with 0.0 for all costs and "USD" as the currency. This prevents cost calculation failures but logs a message indicating the price was missing. The `GetOrCreateByModelName` model method provides similar fallback logic based only on model name.
+*   **Recalculation:** The `UpdateModelPriceAndRecalculate` service method and corresponding API endpoint (`PATCH /model-prices/{id}/recalculate`) allow updating a price and retrospectively applying it to all existing `llm_chat_records` for that model/vendor. This is done within a database transaction.
+*   **Uniqueness:** The database enforces uniqueness on the combination of `model_name` and `vendor`.
+*   **API Endpoints:**
+    *   `POST /model-prices`: Create a new price.
+    *   `GET /model-prices`: Get all prices (paginated).
+    *   `GET /model-prices/{id}`: Get a specific price by ID.
+    *   `PATCH /model-prices/{id}`: Update a price (no recalculation).
+    *   `DELETE /model-prices/{id}`: Delete a price.
+    *   `GET /model-prices/by-vendor?vendor=X`: Get prices for a specific vendor.
+    *   `GET /model-prices/by-name?model_name=Y`: Get or create a price by model name.
+    *   `PATCH /model-prices/{id}/recalculate`: Update a price and recalculate historical costs.
 
-### 3. Price Configuration Form
-- Model name input
-- Vendor selection
-- Cost input fields
-- Currency selection
-- Validation rules
+**4. Use Cases & Behavior**
 
-## Integration Points
+*   **Admin Defines Price:** An administrator uses the API (e.g., `POST /model-prices`) to add a new price for "gpt-4" from "openai" with specific CPT, CPIT, etc.
+*   **Proxy Calculates Cost:** A user interacts with an application. The request goes through the Proxy. The Proxy calls the LLM vendor, receives a response with token counts, calls `GetModelPriceByModelNameAndVendor` to get the "gpt-4" price, calculates the cost using the formula, and records it in `llm_chat_records`.
+*   **Missing Price Encountered:** The Proxy processes a request for a new model "llama-3" from "meta" for which no price exists. `GetModelPriceByModelNameAndVendor` creates a default 0-cost entry for "llama-3"/"meta". The cost is calculated as 0, and a log message is generated.
+*   **Admin Corrects Price & Recalculates:** The administrator notices the missing price, adds the correct price for "llama-3" using `POST /model-prices`. They then realize historical costs are wrong and use `PATCH /model-prices/{id}/recalculate` to update the price and fix the costs in `llm_chat_records`.
+*   **Analytics Report:** A user views an analytics dashboard which calls an API endpoint (e.g., `/analytics/costs-by-model`). This endpoint uses functions like `analytics.GetTotalCostPerVendorAndModel` which query `llm_chat_records` and join with `model_prices` to show aggregated costs.
 
-### 1. Core System Integration
-- AI Gateway cost tracking
-- Chat system integration
-- Proxy system cost logging
-- Cache system cost tracking
+**5. Potential Considerations & Future Enhancements**
 
-### 2. Analytics Integration
-- Real-time cost tracking
-- Usage statistics collection
-- Budget monitoring
-- Performance metrics
-
-### 3. External Systems
-- Billing system integration
-- Reporting system feeds
-- Monitoring system alerts
-- Audit logging
-
-## Security
-- Authentication required for all endpoints
-- Role-based access control
-- Admin-only price management
-- Secure API token handling
-
-## Related Files
-
-### Core Models and Logic
-- `models/prices.go` - Core price model definitions and methods
-- `models/prices_test.go` - Tests for price models
-- `models/analytics.go` - Analytics data models
-- `models/budget.go` - Budget tracking models
-
-### Services
-- `services/prices.go` - Price management service
-- `services/prices_service.go` - Price service implementation
-- `services/prices_service_test.go` - Price service tests
-- `services/budget_service.go` - Budget management service
-- `services/budget_service_test.go` - Budget service tests
-
-### API Handlers
-- `api/prices_handlers.go` - Price management API endpoints
-- `api/prices_handlers_test.go` - Tests for price endpoints
-- `api/analytics_handlers.go` - Analytics API endpoints
-- `api/analytics_handlers_test.go` - Tests for analytics endpoints
-
-### Analytics
-- `analytics/analytics.go` - Core analytics functionality
-- `analytics/analytics_test.go` - Analytics tests
-- `proxy/proxy_analytics_test.go` - Proxy analytics tests
-- `proxy/proxy_budget_test.go` - Proxy budget tests
-
-### Frontend Components
-- `ui/admin-frontend/src/admin/pages/ModelPriceList.js` - Price list page
-- `ui/admin-frontend/src/admin/components/model-prices/ModelPriceForm.js` - Price form component
-- `ui/admin-frontend/src/admin/utils/budgetFormatter.js` - Budget formatting utilities
-
-### Documentation
-- `docs/site/content/docs/model-prices.md` - User documentation
-- `features/Budgeting.md` - Budgeting feature specification
-
-### Templates
-- `templates/budget_alert.tmpl` - Budget alert email template
-
-## Database Schema
-```sql
--- Model Prices
-CREATE TABLE model_prices (
-    id SERIAL PRIMARY KEY,
-    model_name VARCHAR NOT NULL,
-    vendor VARCHAR NOT NULL,
-    cpt FLOAT NOT NULL,
-    cpit FLOAT NOT NULL,
-    cache_write_pt FLOAT NOT NULL,
-    cache_read_pt FLOAT NOT NULL,
-    currency VARCHAR NOT NULL,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    UNIQUE(model_name, vendor)
-);
-
--- Usage Records
-CREATE TABLE llm_chat_records (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR NOT NULL,
-    vendor VARCHAR NOT NULL,
-    llm_id INTEGER,
-    total_time_ms INTEGER,
-    prompt_tokens INTEGER,
-    response_tokens INTEGER,
-    total_tokens INTEGER,
-    time_stamp TIMESTAMP,
-    user_id INTEGER,
-    choices INTEGER,
-    tool_calls INTEGER,
-    chat_id VARCHAR,
-    app_id INTEGER,
-    cost FLOAT,
-    currency VARCHAR,
-    interaction_type VARCHAR,
-    cache_write_prompt_tokens INTEGER,
-    cache_read_prompt_tokens INTEGER,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
+*   **Currency Handling:** The system currently stores a currency string but assumes calculations and budgets operate consistently. Supporting multi-currency budgets or conversions would require significant changes in **Pricing**, **Budget Control**, and **Analytics**.
+*   **Time-Varying Prices:** Prices might change over time. The current recalculation applies the *new* price to *all* historical data. A more sophisticated system might store price validity periods (`valid_from`, `valid_to`) and calculate historical costs based on the price active at the time of the interaction.
+*   **User Interface:** While APIs exist, a dedicated UI for managing model prices would improve usability for administrators.
+*   **Default Price Management:** The automatic creation of 0-cost defaults is convenient but might hide missing configurations. A stricter mode or better reporting on missing prices could be beneficial.
+*   **Bulk Operations:** APIs for bulk creation/update/deletion of prices could be useful for managing large numbers of models. (Note: Basic bulk methods exist in `models/prices.go` but aren't fully exposed via dedicated API handlers in the provided snippets).
