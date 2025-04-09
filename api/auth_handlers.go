@@ -372,8 +372,9 @@ func (a *API) handleMe(c *gin.Context) {
 			Name      string `json:"name"`
 			IsAdmin   bool   `json:"is_admin"`
 			UIOptions struct {
-				ShowChat   bool `json:"show_chat"`
-				ShowPortal bool `json:"show_portal"`
+				ShowChat      bool `json:"show_chat"`
+				ShowPortal    bool `json:"show_portal"`
+				ShowSSOConfig bool `json:"show_sso_config"`
 			} `json:"ui_options"`
 			Entitlements struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
@@ -386,11 +387,13 @@ func (a *API) handleMe(c *gin.Context) {
 			Name:    entitlements.User.Name,
 			IsAdmin: entitlements.User.IsAdmin,
 			UIOptions: struct {
-				ShowChat   bool `json:"show_chat"`
-				ShowPortal bool `json:"show_portal"`
+				ShowChat      bool `json:"show_chat"`
+				ShowPortal    bool `json:"show_portal"`
+				ShowSSOConfig bool `json:"show_sso_config"`
 			}{
-				ShowChat:   entitlements.User.ShowChat,
-				ShowPortal: entitlements.User.ShowPortal,
+				ShowChat:      entitlements.User.ShowChat,
+				ShowPortal:    entitlements.User.ShowPortal,
+				ShowSSOConfig: entitlements.User.IsAdmin && entitlements.User.AccessToSSOConfig,
 			},
 			Entitlements: struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
