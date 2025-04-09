@@ -10,7 +10,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
-import WarningDialog from "../components/common/WarningDialog";
+import ConfirmationDialog from "../components/common/ConfirmationDialog";
 import SuccessBanner from "../components/common/SuccessBanner";
 import {
   TitleBox,
@@ -43,6 +43,8 @@ const SSOProfiles = () => {
   const [sortOrder, setSortOrder] = useState("desc");
   const [warningDialogOpen, setWarningDialogOpen] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [profileToSetDefault, setProfileToSetDefault] = useState(null);
 
   const {
     page,
@@ -135,6 +137,40 @@ const SSOProfiles = () => {
   const handleCancelDelete = () => {
     setWarningDialogOpen(false);
     setProfileToDelete(null);
+  };
+
+  const handleSetDefaultClick = (profile) => {
+    setProfileToSetDefault(profile);
+    setConfirmDialogOpen(true);
+  };
+
+  const handleConfirmSetDefault = async () => {
+    if (!profileToSetDefault) return;
+    
+    try {
+      await apiClient.post(`/sso-profiles/${profileToSetDefault.attributes.profile_id}/use-in-login-page`);
+      setSnackbar({
+        open: true,
+        message: "Default SSO login profile set successfully",
+        severity: "success",
+      });
+      fetchProfiles();
+    } catch (error) {
+      console.error("Error setting default SSO login profile", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to set default SSO login profile",
+        severity: "error",
+      });
+    } finally {
+      setConfirmDialogOpen(false);
+      setProfileToSetDefault(null);
+    }
+  };
+
+  const handleCancelSetDefault = () => {
+    setConfirmDialogOpen(false);
+    setProfileToSetDefault(null);
   };
 
   const handleConfirmDelete = async () => {
@@ -246,6 +282,10 @@ const SSOProfiles = () => {
       label: "Delete IdP profile",
       onClick: handleDeleteClick,
     },
+    {
+      label: "Set as default SSO login profile",
+      onClick: handleSetDefaultClick,
+    }
   ];
 
   const emptyState = {
@@ -324,13 +364,34 @@ const SSOProfiles = () => {
         </Alert>
       </Snackbar>
 
-      <WarningDialog
+      <ConfirmationDialog
         open={warningDialogOpen}
         title="Delete Identity provider profile"
         message="This operation cannot be undone. If you remove this Identity provider profile, all users relying on it won't be able to sign in. Make sure they have another way to log in before proceeding."
         buttonLabel="Delete profile"
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
+      />
+
+      <ConfirmationDialog
+        open={confirmDialogOpen}
+        title="Set as default SSO profile at login"
+        message="Only one profile can be set as default on the login page. Selecting this will replace the current default."
+        buttonLabel="Confirm"
+        onConfirm={handleConfirmSetDefault}
+        onCancel={handleCancelSetDefault}
+        iconName="triangle-exclamation"
+        iconColor="background.iconWarningDefault"
+        titleColor="text.warningDefault"
+        backgroundColor="background.surfaceWarningDefault"
+        borderColor="border.warningDefaultSubdued"
+        primaryButtonComponent="primary"
       />
     </>
   );

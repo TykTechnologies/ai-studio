@@ -59,6 +59,7 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 	resp.Attributes.LoginURL = fmt.Sprintf(urlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.CallbackURL = fmt.Sprintf(callbackUrlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.FailureRedirectURL = failureRedirect
+	resp.Attributes.UseInLoginPage = profile.UseInLoginPage
 
 	return resp
 }
@@ -330,4 +331,51 @@ func (a *API) listProfiles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Set profile use in login page
+// @Description Set a profile to be used in the login page
+// @Tags sso-profiles
+// @Accept json
+// @Produce json
+// @Param profile_id path string true "Profile ID"
+// @Success 200 "OK"
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/sso-profiles/{profile_id}/use-in-login-page [post]
+// @Security BearerAuth
+func (a *API) setProfileUseInLoginPage(c *gin.Context) {
+	id := c.Param("profile_id")
+	if id == "" {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid profile ID"))
+		return
+	}
+
+	if err := a.service.SetProfileUseInLoginPage(id); err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// @Summary Get the profile used in the login page
+// @Description Get the profile that has UseInLoginPage set to true
+// @Tags sso-profiles
+// @Accept json
+// @Produce json
+// @Success 200 {object} ProfileResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/sso-profiles/login-page [get]
+// @Security BearerAuth
+func (a *API) getLoginPageProfile(c *gin.Context) {
+	profile, err := a.service.GetLoginPageProfile()
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeProfile(profile)})
 }

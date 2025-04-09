@@ -26,12 +26,13 @@ This document provides a comprehensive overview of Midsommar's **Single Sign-On 
 ## Overview
 
 The **Midsommar SSO System** provides a framework for integrating external identity providers with the platform's authentication system. Its core objectives are:
-
 - **Multiple Provider Support:** Enable authentication via OpenID Connect, SAML, LDAP, and Social providers
 - **Profile Management:** Create, configure, and manage SSO profiles through a dedicated Monaco editor-based UI
 - **Group Mapping:** Map external identity provider groups to internal Midsommar groups with support for multiple group assignments
 - **Secure Authentication:** Enforce security best practices for authentication flows
 - **Admin Controls:** Restrict SSO configuration to administrators
+- **Seamless Integration:** Embedded Tyk Identity Broker eliminates the need for external identity management services
+- **Default Login Profile:** Configure a default SSO profile to appear directly on the login page for streamlined authentication
 - **Seamless Integration:** Embedded Tyk Identity Broker eliminates the need for external identity management services
 
 ---
@@ -166,14 +167,16 @@ if config.TIBEnabled {
 ---
 
 ## Authentication Flow
-
 1. **Initiation:**
-   - User navigates to the SSO login URL (`/auth/:id/:provider`)
+   - User can initiate SSO authentication in two ways:
+     - By clicking the "Log in with SSO" button on the login page (if a default profile is configured)
+     - By navigating directly to the SSO login URL (`/auth/:id/:provider`)
    - System identifies the requested profile and provider
 
 2. **Provider Authentication:**
    - User is redirected to the identity provider
    - Identity provider authenticates the user
+   - Provider redirects back to the callback URL (`/auth/:id/:provider/callback`)
    - Provider redirects back to the callback URL (`/auth/:id/:provider/callback`)
 
 3. **Callback Processing:**
@@ -269,6 +272,8 @@ This implementation ensures:
 | /api/v1/sso-profiles/:profile_id | GET | Get a specific SSO profile | Yes (Admin) |
 | /api/v1/sso-profiles/:profile_id | PUT | Update a specific SSO profile | Yes (Admin) |
 | /api/v1/sso-profiles/:profile_id | DELETE | Delete a specific SSO profile | Yes (Admin) |
+| /api/v1/sso-profiles/:profile_id/use-in-login-page | POST | Set a profile as the default for the login page | Yes (Admin) |
+| /login-sso-profile | GET | Get the profile configured as default for the login page | No |
 | /auth/:id/:provider | GET/POST | Initiate authentication with provider | No |
 | /auth/:id/:provider/callback | GET/POST | Handle provider callback | No |
 | /auth/:id/saml/metadata | GET/POST | Serve SAML metadata | No |
@@ -282,6 +287,8 @@ This implementation ensures:
 ### SSO Profiles Page
 - List view of all configured SSO profiles
 - Actions for creating, editing, and deleting profiles
+- Option to set a profile as the default for the login page via context menu
+- Confirmation dialog when setting a profile as default, explaining that only one profile can be the default
 - Empty state with guidance for when no profiles exist
 
 ### SSO Profile Editor
@@ -289,6 +296,11 @@ This implementation ensures:
 - Simple navigation with back button to return to profiles list
 - Supports both creation and editing of profiles in a single interface
 - Automatic conversion between snake_case (API) and CamelCase (UI) formats
+
+### Login Page Integration
+- Displays a "Log in with SSO" button when a default SSO profile is configured
+- Visual separator between traditional login form and SSO option
+- Direct access to the configured SSO provider without requiring navigation to a separate page
 
 ### Profile Details View
 - Organized sections for different aspects of the profile:
@@ -299,7 +311,16 @@ This implementation ensures:
 - Copy-to-clipboard functionality for URLs and configuration values
 
 ---
+## Configuration Requirements
 
+### Default Login Profile Configuration
+- Only one profile can be set as the default for the login page at a time
+- Setting a new default profile automatically removes the default status from any previously configured profile
+- The default profile is displayed on the login page with a "Log in with SSO" button
+- Administrators can set a profile as default through the SSO Profiles page in the admin interface
+- The default profile should be configured to provide a seamless authentication experience for users
+
+## Future Enhancements
 ## Future Enhancements
 
 1. **Wizard Interface for Profile Management**

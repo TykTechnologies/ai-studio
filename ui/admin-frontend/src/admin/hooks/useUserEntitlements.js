@@ -1,30 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
 
-const CACHE_KEY = 'userEntitlements';
+const ENTITLEMENTS_CACHE_KEY = 'tyk_ai_studio_admin_userEntitlements';
 const CACHE_EXPIRY = 10000;
 
-const useUserEntitlements = () => {
+const useUserEntitlements = (skipInitialFetch = false) => {
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [uiOptions, setUiOptions] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!skipInitialFetch);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchUserEntitlements = async () => {
-      try {
-        const cachedData = localStorage.getItem(CACHE_KEY);
-        if (cachedData) {
-          const { data, timestamp } = JSON.parse(cachedData);
-          if (Date.now() - timestamp < CACHE_EXPIRY) {
-            setUserEntitlements(data);
-            setUiOptions(data.ui_options);
-            setLoading(false);
-            return;
-          }
-        }
+  const fetchUserEntitlements = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    const cachedData = localStorage.getItem(ENTITLEMENTS_CACHE_KEY);
+    if (cachedData) {
+      const { data, timestamp } = JSON.parse(cachedData);
+      if (Date.now() - timestamp < CACHE_EXPIRY) {
+        setUserEntitlements(data);
+        setUiOptions(data.ui_options);
+        setLoading(false);
+        return data;
+      }
+    }
 
-        const response = await pubClient.get('/common/me');
+    return pubClient.get('/common/me')
+      .then(response => {
         const newData = response.data.attributes.entitlements;
         const newUiOptions = response.data.attributes.ui_options;
         
@@ -32,28 +34,37 @@ const useUserEntitlements = () => {
         setUiOptions(newUiOptions);
         
         localStorage.setItem(
-          CACHE_KEY,
+          ENTITLEMENTS_CACHE_KEY,
           JSON.stringify({
             data: { ...newData, ui_options: newUiOptions },
             timestamp: Date.now(),
           })
         );
-      } catch (error) {
+        
+        return newData;
+      })
+      .catch(error => {
         console.error('Failed to fetch user entitlements:', error);
         setError(error);
-      } finally {
+        throw error;
+      })
+      .finally(() => {
         setLoading(false);
-      }
-    };
-
-    fetchUserEntitlements();
+      });
   }, []);
+
+  useEffect(() => {
+    if (!skipInitialFetch) {
+      fetchUserEntitlements();
+    }
+  }, [fetchUserEntitlements, skipInitialFetch]);
 
   return {
     userEntitlements,
     uiOptions,
     loading,
     error,
+    fetchUserEntitlements
   };
 };
 

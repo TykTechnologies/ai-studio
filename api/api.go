@@ -623,6 +623,7 @@ func (a *API) setupRoutes() {
 		public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
 		public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
 		public.GET("/sso", a.handleSSO)
+		public.GET("/login-sso-profile", a.getLoginPageProfile)
 
 		apiGroup := public.Group("/api")
 		apiGroup.Use(a.SSOAuthMiddleware())
@@ -635,6 +636,7 @@ func (a *API) setupRoutes() {
 		profiles.GET("/:profile_id", a.getProfile)
 		profiles.PUT("/:profile_id", a.updateProfile)
 		profiles.DELETE("/:profile_id", a.deleteProfile)
+		profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
 	}
 
 	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
@@ -668,7 +670,6 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 }
 
 func (a *API) handleGetConfig(c *gin.Context) {
-	// Get the request protocol and host
 	scheme := "http"
 
 	host := c.Request.Host
@@ -681,7 +682,6 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
-	// Construct the base URL
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	suMode := "both"
@@ -693,6 +693,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		APIBaseURL:        apiBaseURL,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
+		TIBEnabled:        a.config.TIBEnabled,
 	}
 
 	c.JSON(http.StatusOK, config)
