@@ -26,7 +26,6 @@ jest.mock('../../admin/utils/pubClient', () => {
 // Mock window.location
 const originalLocation = window.location;
 beforeAll(() => {
-  delete window.location;
   window.location = {
     href: '',
     pathname: '/forgot-password'

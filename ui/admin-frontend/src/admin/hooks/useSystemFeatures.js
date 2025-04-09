@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import pubClient from "../utils/pubClient";
+import cacheService from "../utils/cacheService";
 
 const FEATURES_CACHE_KEY = 'tyk_ai_studio_admin_features';
-const CACHE_EXPIRY = 60000;
 
 const useSystemFeatures = (skipInitialFetch = false) => {
   const [features, setFeatures] = useState({
@@ -17,14 +17,11 @@ const useSystemFeatures = (skipInitialFetch = false) => {
     setLoading(true);
     setError(null);
     
-    const cachedData = localStorage.getItem(FEATURES_CACHE_KEY);
-    if (cachedData) {
-      const { data, timestamp } = JSON.parse(cachedData);
-      if (Date.now() - timestamp < CACHE_EXPIRY) {
-        setFeatures(data);
-        setLoading(false);
-        return data;
-      }
+    const cachedFeatures = cacheService.get(FEATURES_CACHE_KEY);
+    if (cachedFeatures) {
+      setFeatures(cachedFeatures);
+      setLoading(false);
+      return cachedFeatures;
     }
     
     return pubClient.get("/common/system")
@@ -32,14 +29,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
         const newData = response.data.features;
         
         setFeatures(newData);
-        
-        localStorage.setItem(
-          FEATURES_CACHE_KEY,
-          JSON.stringify({
-            data: newData,
-            timestamp: Date.now(),
-          })
-        );
+        cacheService.set(FEATURES_CACHE_KEY, newData);
         
         return newData;
       })
