@@ -1,7 +1,5 @@
 ## Budget Control System
 
-This document provides a detailed explanation of the Midsommar Budget Control System, designed for product managers, QAs, engineers, and administrators. It covers the feature's purpose, architecture, data flow, implementation details, API endpoints, dependencies on other system features, and potential considerations.
-
 **1. Overview & Purpose**
 
 The core goal of the Budget Control System is to enable organizations to set and enforce monthly spending limits on AI usage, specifically for:
