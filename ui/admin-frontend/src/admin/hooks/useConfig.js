@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
+import cacheService from '../utils/cacheService';
 
 const CONFIG_CACHE_KEY = 'tyk_ai_studio_admin_config';
-const CACHE_EXPIRY = 60000;
 
 const useConfig = (skipInitialFetch = false) => {
   const [config, setConfig] = useState(null);
@@ -13,14 +13,11 @@ const useConfig = (skipInitialFetch = false) => {
     setLoading(true);
     setError(null);
     
-    const cachedData = localStorage.getItem(CONFIG_CACHE_KEY);
-    if (cachedData) {
-      const { data, timestamp } = JSON.parse(cachedData);
-      if (Date.now() - timestamp < CACHE_EXPIRY) {
-        setConfig(data);
-        setLoading(false);
-        return data;
-      }
+    const cachedConfig = cacheService.get(CONFIG_CACHE_KEY);
+    if (cachedConfig) {
+      setConfig(cachedConfig);
+      setLoading(false);
+      return cachedConfig;
     }
 
     return pubClient.get('/auth/config')
@@ -28,14 +25,7 @@ const useConfig = (skipInitialFetch = false) => {
         const newData = response.data;
         
         setConfig(newData);
-        
-        localStorage.setItem(
-          CONFIG_CACHE_KEY,
-          JSON.stringify({
-            data: newData,
-            timestamp: Date.now(),
-          })
-        );
+        cacheService.set(CONFIG_CACHE_KEY, newData);
         
         return newData;
       })

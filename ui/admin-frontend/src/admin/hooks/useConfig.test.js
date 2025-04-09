@@ -20,23 +20,14 @@ jest.mock('../utils/pubClient', () => {
   };
 });
 
-// Mock localStorage
-const localStorageMock = (() => {
-  let store = {};
-  return {
-    getItem: jest.fn(key => store[key] || null),
-    setItem: jest.fn((key, value) => {
-      store[key] = value.toString();
-    }),
-    clear: jest.fn(() => {
-      store = {};
-    }),
-  };
-})();
-
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-});
+// Mock cacheService
+jest.mock('../utils/cacheService', () => ({
+  get: jest.fn(),
+  set: jest.fn(),
+  remove: jest.fn(),
+  clear: jest.fn(),
+  isExpired: jest.fn()
+}));
 
 // Mock console.error to prevent error output in tests
 const originalConsoleError = console.error;
@@ -85,15 +76,21 @@ describe('useConfig hook', () => {
   };
   
   let pubClient;
+  let cacheService;
   
   beforeEach(() => {
     jest.clearAllMocks();
-    localStorageMock.clear();
     pubClient = require('../utils/pubClient').default;
+    cacheService = require('../utils/cacheService');
     pubClient.get.mockReset();
+    cacheService.get.mockReset();
+    cacheService.set.mockReset();
   });
 
   test('should fetch config data and return it', async () => {
+    // Mock cache miss
+    cacheService.get.mockReturnValueOnce(null);
+    
     // Mock the pubClient.get to return the mockConfig
     pubClient.get.mockResolvedValueOnce({ data: mockConfig });
 
@@ -113,19 +110,13 @@ describe('useConfig hook', () => {
     expect(JSON.parse(screen.getByTestId('config').textContent)).toEqual(mockConfig);
     expect(pubClient.get).toHaveBeenCalledWith('/auth/config');
     
-    // Check localStorage was updated
-    expect(localStorageMock.setItem).toHaveBeenCalled();
-    const storedData = JSON.parse(localStorageMock.setItem.mock.calls[0][1]);
-    expect(storedData.data).toEqual(mockConfig);
+    // Check cache was updated
+    expect(cacheService.set).toHaveBeenCalledWith('tyk_ai_studio_admin_config', mockConfig);
   });
 
-  test('should use cached data if available and not expired', async () => {
+  test('should use cached data if available', async () => {
     // Set up cached data
-    const cachedData = {
-      data: mockConfig,
-      timestamp: Date.now() // Current time, so it's not expired
-    };
-    localStorageMock.getItem.mockReturnValueOnce(JSON.stringify(cachedData));
+    cacheService.get.mockReturnValueOnce(mockConfig);
     
     render(<TestComponent />);
 
@@ -138,20 +129,19 @@ describe('useConfig hook', () => {
     
     // API should not be called
     expect(pubClient.get).not.toHaveBeenCalled();
+    
+    // Cache should be checked
+    expect(cacheService.get).toHaveBeenCalledWith('tyk_ai_studio_admin_config');
   });
 
-  test('should fetch new data if cache is expired', async () => {
+  test('should fetch new data if cache is not available', async () => {
     const newConfig = {
       ...mockConfig,
       tibEnabled: false // Changed value
     };
 
-    // Set up expired cached data (more than 60 seconds old)
-    const cachedData = {
-      data: mockConfig,
-      timestamp: Date.now() - 70000 // 70 seconds ago
-    };
-    localStorageMock.getItem.mockReturnValueOnce(JSON.stringify(cachedData));
+    // Set up cache miss
+    cacheService.get.mockReturnValueOnce(null);
     
     // Mock API response with new data
     pubClient.get.mockResolvedValueOnce({ data: newConfig });
@@ -166,6 +156,7 @@ describe('useConfig hook', () => {
     // After fetch completes, should have new data
     expect(JSON.parse(screen.getByTestId('config').textContent)).toEqual(newConfig);
     expect(pubClient.get).toHaveBeenCalledWith('/auth/config');
+    expect(cacheService.set).toHaveBeenCalledWith('tyk_ai_studio_admin_config', newConfig);
   });
 
   test('should handle API errors', async () => {
@@ -216,6 +207,8 @@ describe('useConfig hook', () => {
   });
 
   test('should fetch data when fetchConfig is called manually', async () => {
+    // Set up cache miss
+    cacheService.get.mockReturnValueOnce(null);
     pubClient.get.mockResolvedValueOnce({ data: mockConfig });
 
     render(<TestComponent skipInitialFetch={true} />);
@@ -238,6 +231,7 @@ describe('useConfig hook', () => {
     expect(screen.getByTestId('loading').textContent).toBe('false');
     expect(JSON.parse(screen.getByTestId('config').textContent)).toEqual(mockConfig);
     expect(pubClient.get).toHaveBeenCalledWith('/auth/config');
+    expect(cacheService.set).toHaveBeenCalledWith('tyk_ai_studio_admin_config', mockConfig);
   });
   
   test('should handle error during manual fetch', async () => {

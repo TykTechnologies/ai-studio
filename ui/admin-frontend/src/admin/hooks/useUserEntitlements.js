@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
+import cacheService from '../utils/cacheService';
 
 const ENTITLEMENTS_CACHE_KEY = 'tyk_ai_studio_admin_userEntitlements';
-const CACHE_EXPIRY = 10000;
 
 const useUserEntitlements = (skipInitialFetch = false) => {
   const [userEntitlements, setUserEntitlements] = useState(null);
@@ -14,15 +14,12 @@ const useUserEntitlements = (skipInitialFetch = false) => {
     setLoading(true);
     setError(null);
     
-    const cachedData = localStorage.getItem(ENTITLEMENTS_CACHE_KEY);
+    const cachedData = cacheService.get(ENTITLEMENTS_CACHE_KEY);
     if (cachedData) {
-      const { data, timestamp } = JSON.parse(cachedData);
-      if (Date.now() - timestamp < CACHE_EXPIRY) {
-        setUserEntitlements(data);
-        setUiOptions(data.ui_options);
-        setLoading(false);
-        return data;
-      }
+      setUserEntitlements(cachedData);
+      setUiOptions(cachedData.ui_options);
+      setLoading(false);
+      return cachedData;
     }
 
     return pubClient.get('/common/me')
@@ -33,13 +30,8 @@ const useUserEntitlements = (skipInitialFetch = false) => {
         setUserEntitlements(newData);
         setUiOptions(newUiOptions);
         
-        localStorage.setItem(
-          ENTITLEMENTS_CACHE_KEY,
-          JSON.stringify({
-            data: { ...newData, ui_options: newUiOptions },
-            timestamp: Date.now(),
-          })
-        );
+        const dataToCache = { ...newData, ui_options: newUiOptions };
+        cacheService.set(ENTITLEMENTS_CACHE_KEY, dataToCache, 10000); // 10 seconds expiry
         
         return newData;
       })
