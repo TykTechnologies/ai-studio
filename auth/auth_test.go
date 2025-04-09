@@ -118,14 +118,24 @@ func (suite *AuthServiceTestSuite) TestLogout() {
 		c.Set("user", user)
 		c.Request, _ = http.NewRequest("POST", "/logout", nil)
 
+		// Add some test cookies to the request
+		c.Request.AddCookie(&http.Cookie{Name: "test_cookie1", Value: "value1"})
+		c.Request.AddCookie(&http.Cookie{Name: "test_cookie2", Value: "value2"})
+		c.Request.AddCookie(&http.Cookie{Name: suite.authService.Config.CookieName, Value: "session_value"})
+
 		err = suite.authService.Logout(c)
 
 		assert.NoError(suite.T(), err)
-		assert.Equal(suite.T(), http.StatusOK, w.Code)
-		// Check that the Clear-Site-Data header is set
-		assert.Equal(suite.T(), "\"cookies\", \"storage\", \"cache\"", w.Header().Get("Clear-Site-Data"))
-		// Check that the Cache-Control header is set
-		assert.Equal(suite.T(), "no-store, no-cache, must-revalidate, max-age=0", w.Header().Get("Cache-Control"))
+
+		// Check that all cookies are cleared
+		cookies := w.Result().Cookies()
+		assert.GreaterOrEqual(suite.T(), len(cookies), 3) // At least the 3 cookies we added
+
+		// Verify all cookies are expired
+		for _, cookie := range cookies {
+			assert.Equal(suite.T(), "", cookie.Value, "Cookie value should be empty")
+			assert.True(suite.T(), cookie.Expires.Before(time.Now()), "Cookie should be expired")
+		}
 	})
 
 	suite.Run("Logout failure - user not in context", func() {
@@ -215,7 +225,7 @@ func (suite *AuthServiceTestSuite) TestRegister() {
 
 		// Verify the registration failed
 		assert.Error(suite.T(), err)
-		
+
 		// Verify the user was not created in the database
 		var user models.User
 		result := suite.db.Where("email = ?", "weak-password@example.com").First(&user)
