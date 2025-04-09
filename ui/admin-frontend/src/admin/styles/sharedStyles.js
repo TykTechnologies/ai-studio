@@ -8,7 +8,6 @@ import {
   TableCell,
   TableRow,
   Dialog,
-  Grid,
   DialogTitle,
   Accordion,
   DialogContent,
@@ -18,7 +17,7 @@ import { NavLink } from "react-router-dom";
 
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
-  borderRadius: theme.shape.borderRadius * 3,
+  borderRadius: 8,
   border: `1px solid rgba(0, 0, 0, 0.12)`,
   boxShadow: "none",
   overflow: "hidden",
@@ -86,10 +85,12 @@ export const PrimaryButton = styled(Button)(({ theme }) => ({
   boxShadow: "none",
   textTransform: "none",
   fontFamily: 'Inter-Medium',
+  maxWidth: 'fit-content',
+  maxHeight: 'fit-content',
   "&::before": {
     content: '""',
     position: 'absolute',
-    inset: 0,
+    inset: -1,
     borderRadius: 20,
     padding: '1px',
     background: `linear-gradient(163.33deg, ${theme.palette.primary.main} 46.22%, ${theme.palette.custom.purpleExtraDark} 161.35%)`,
@@ -151,6 +152,24 @@ export const DangerButton = styled(Button)(({ theme }) => ({
   },
 }));
 
+export const DangerOutlineButton = styled(Button)(({ theme }) => ({
+  position: 'relative',
+  borderRadius: 20,
+  padding: '8px 16px',
+  color: theme.palette.background.buttonCritical,
+  backgroundColor: theme.palette.custom.white,
+  border: `1px solid ${theme.palette.background.buttonCritical}`,
+  boxShadow: "none",
+  textTransform: "none",
+  fontFamily: 'Inter-Medium',
+  "&:hover": {
+    backgroundColor: theme.palette.border.criticalDefaultSubdue,
+    boxShadow: "none",
+    color: theme.palette.background.buttonCriticalHover,
+    border: `1px solid ${theme.palette.background.buttonCriticalHover}`
+  },
+}));
+
 export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
   color: theme.palette.text.defaultSubdued,
   backgroundColor: 'transparent',
@@ -166,6 +185,24 @@ export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
     backgroundColor: 'transparent',
     border: 'none'
   }
+}));
+
+export const SecondaryOutlineButton = styled(Button)(({ theme }) => ({
+  position: 'relative',
+  borderRadius: 20,
+  padding: '8px 16px',
+  color: theme.palette.text.defaultSubdued,
+  backgroundColor: theme.palette.background.paper,
+  border: `1px solid ${theme.palette.border.neutralDefault}`,
+  boxShadow: "none",
+  textTransform: "none",
+  fontFamily: 'Inter-Medium',
+  "&:hover": {
+    backgroundColor: theme.palette.background.surfaceNeutralHover,
+    boxShadow: "none",
+    color: theme.palette.text.primary,
+    border: `1px solid ${theme.palette.border.neutralHovered}`,
+  },
 }));
 
 export const StyledDialog = styled(Dialog)(({ theme }) => ({

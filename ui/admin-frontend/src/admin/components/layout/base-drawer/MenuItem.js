@@ -28,11 +28,15 @@ const MenuItem = ({
   const isExpanded = expandedItems[itemId];
   const immediateParentId = parentId || itemId;
 
-  const isSelected = selectedPath === item.path || 
+  const isSelected = selectedPath === item.path ||
+    (item.path && selectedPath?.startsWith(item.path + '/')) ||
     (hasSubItems && item.subItems?.some(subItem => {
-      if (subItem.path === selectedPath) return true;
+      if (subItem.path === selectedPath || (subItem.path && selectedPath?.startsWith(subItem.path + '/'))) return true;
       if (subItem.subItems) {
-        return subItem.subItems.some(deepSubItem => deepSubItem.path === selectedPath);
+        return subItem.subItems.some(deepSubItem =>
+          deepSubItem.path === selectedPath ||
+          (deepSubItem.path && selectedPath?.startsWith(deepSubItem.path + '/'))
+        );
       }
       return false;
     }));
@@ -93,7 +97,7 @@ const MenuItem = ({
       to={item.path}
       depth={depth}
       onClick={() => onPathSelect(item.path)}
-      selected={selectedPath === item.path}
+      selected={selectedPath === item.path || (item.path && selectedPath?.startsWith(item.path + '/'))}
       disableRipple
       disableTouchRipple
       rootParentId={immediateParentId}
