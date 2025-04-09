@@ -80,6 +80,19 @@ const ProfileDetailsSection = ({ profileData, profileMetadata, handleCopyToClipb
           </Box>
         </Box>
       </Stack>
+
+      <Stack direction={{ xs: 'column', md: 'row' }} alignItems="end">
+        <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Typography variant="bodyLargeBold" color="text.primary">
+            Default profile for SSO at Login page
+          </Typography>
+        </Box>
+        <Box sx={{ width: { xs: '100%', md: '75%' } }}>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+            { profileMetadata.useInLoginPage ? "Yes" : "No" }
+          </Typography>
+        </Box>
+      </Stack>
     </Stack>
   );
 };

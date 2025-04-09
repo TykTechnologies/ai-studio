@@ -237,10 +237,18 @@ func (a *AuthService) Logout(c *gin.Context) error {
 		return err
 	}
 
-	c.Writer.Header().Set("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"")
-	c.Writer.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	c.Writer.Header().Set("Pragma", "no-cache")
-	c.Writer.Header().Set("Expires", "0")
+	for _, cookie := range c.Request.Cookies() {
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     cookie.Name,
+			Value:    "",
+			Expires:  time.Now().Add(-1 * time.Hour),
+			Path:     "/",
+			Domain:   a.Config.CookieDomain,
+			Secure:   a.Config.CookieSecure,
+			HttpOnly: a.Config.CookieHTTPOnly,
+			SameSite: a.Config.CookieSameSite,
+		})
+	}
 
 	return nil
 }

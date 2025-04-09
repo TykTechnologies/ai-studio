@@ -64,31 +64,44 @@ export const createEmptyProfile = () => ({
  */
 export const mapApiToUIProfile = (apiResponse) => {
   const attributes = apiResponse.data.attributes;
+  const profile = {};
   
-  return {
-    ID: attributes.profile_id || "",
-    Name: attributes.name || "",
-    OrgID: attributes.org_id || "",
-    ActionType: attributes.action_type || "",
-    MatchedPolicyID: attributes.matched_policy_id || "",
-    Type: attributes.type || "",
-    ProviderName: attributes.provider_name || "",
-    CustomEmailField: attributes.custom_email_field || "",
-    CustomUserIDField: attributes.custom_user_id_field || "",
-    ProviderConfig: attributes.provider_config || {},
-    ProviderConstraintsDomain: attributes.provider_constraints_domain || "",
-    ProviderConstraintsGroup: attributes.provider_constraints_group || "",
-    ReturnURL: attributes.return_url || "",
-    DefaultUserGroupID: attributes.default_user_group_id || "",
-    CustomUserGroupField: attributes.custom_user_group_field || "",
-    UserGroupMapping: attributes.user_group_mapping || {},
-    UserGroupSeparator: attributes.user_group_separator || "",
-    SSOOnlyForRegisteredUsers: attributes.sso_only_for_registered_users || false,
-    ProviderConstraints: {
-      Domain: attributes.provider_constraints_domain || "",
-      Group: attributes.provider_constraints_group || ""    
-    },
-  };
+  if (attributes.profile_id) profile.ID = attributes.profile_id;
+  if (attributes.name) profile.Name = attributes.name;
+  if (attributes.org_id) profile.OrgID = attributes.org_id;
+  if (attributes.action_type) profile.ActionType = attributes.action_type;
+  if (attributes.matched_policy_id) profile.MatchedPolicyID = attributes.matched_policy_id;
+  if (attributes.type) profile.Type = attributes.type;
+  if (attributes.provider_name) profile.ProviderName = attributes.provider_name;
+  if (attributes.custom_email_field) profile.CustomEmailField = attributes.custom_email_field;
+  if (attributes.custom_user_id_field) profile.CustomUserIDField = attributes.custom_user_id_field;
+  
+  if (attributes.provider_config && Object.keys(attributes.provider_config).length > 0) {
+    profile.ProviderConfig = attributes.provider_config;
+  }
+  
+  if (attributes.return_url) profile.ReturnURL = attributes.return_url;
+  if (attributes.default_user_group_id) profile.DefaultUserGroupID = attributes.default_user_group_id;
+  if (attributes.custom_user_group_field) profile.CustomUserGroupField = attributes.custom_user_group_field;
+  
+  if (attributes.user_group_mapping && Object.keys(attributes.user_group_mapping).length > 0) {
+    profile.UserGroupMapping = attributes.user_group_mapping;
+  }
+  
+  if (attributes.user_group_separator) profile.UserGroupSeparator = attributes.user_group_separator;
+  
+  profile.SSOOnlyForRegisteredUsers = attributes.sso_only_for_registered_users;
+  
+  const hasDomain = attributes.provider_constraints_domain;
+  const hasGroup = attributes.provider_constraints_group;
+  
+  if (hasDomain || hasGroup) {
+    profile.ProviderConstraints = {};
+    if (hasDomain) profile.ProviderConstraints.Domain = attributes.provider_constraints_domain;
+    if (hasGroup) profile.ProviderConstraints.Group = attributes.provider_constraints_group;
+  }
+  
+  return profile;
 };
 
 /**

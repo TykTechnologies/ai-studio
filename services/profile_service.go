@@ -147,6 +147,7 @@ func (s *Service) GetProfileByID(profileID string) (*models.Profile, error) {
 
 	return profile, nil
 }
+
 func (s *Service) UpdateProfile(profileID string, updatedProfile *models.Profile, userID uint) (*models.Profile, error) {
 	profile, err := s.GetProfileByID(profileID)
 	if err != nil {
@@ -227,6 +228,52 @@ func (s *Service) GetProfileByName(name string) (*models.Profile, error) {
 
 		slog.Error("Failed to get profile by name", "name", name, "error", err)
 		return nil, helpers.NewInternalServerError(fmt.Sprintf("error getting profile by name: %v", err))
+	}
+
+	return profile, nil
+}
+
+func (s *Service) SetProfileUseInLoginPage(profileID string) error {
+	profile, err := s.GetProfileByID(profileID)
+	if err != nil {
+		return err
+	}
+
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		slog.Error("Failed to begin transaction", "error", tx.Error)
+		return helpers.NewInternalServerError(fmt.Sprintf("error beginning transaction: %v", tx.Error))
+	}
+
+	if err := models.ResetUseInLoginPageForAll(tx); err != nil {
+		tx.Rollback()
+		slog.Error("Failed to reset use_in_login_page for all profiles", "error", err)
+		return helpers.NewInternalServerError(fmt.Sprintf("error resetting use_in_login_page for all profiles: %v", err))
+	}
+
+	if err := profile.UpdateUseInLoginPage(tx, true); err != nil {
+		tx.Rollback()
+		slog.Error("Failed to update use_in_login_page for profile", "profileID", profileID, "error", err)
+		return helpers.NewInternalServerError(fmt.Sprintf("error updating use_in_login_page for profile: %v", err))
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		slog.Error("Failed to commit transaction", "error", err)
+		return helpers.NewInternalServerError(fmt.Sprintf("error committing transaction: %v", err))
+	}
+
+	return nil
+}
+
+func (s *Service) GetLoginPageProfile() (*models.Profile, error) {
+	profile := models.NewProfile()
+	if err := profile.GetLoginPageProfile(s.DB); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, helpers.NewNotFoundError("no profile is set for use in login page")
+		}
+
+		slog.Error("Failed to get login page profile", "error", err)
+		return nil, helpers.NewInternalServerError(fmt.Sprintf("error getting login page profile: %v", err))
 	}
 
 	return profile, nil

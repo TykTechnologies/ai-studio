@@ -1,14 +1,12 @@
 import React from 'react';
 import BaseDrawer from './base-drawer';
-import useSystemFeatures from '../../hooks/useSystemFeatures';
-import useUserEntitlements from '../../hooks/useUserEntitlements';
+import useAdminData from '../../hooks/useAdminData';
 import Icon from '../../../components/common/Icon';
 
 const Drawer = () => {
-  const { features, loading: featuresLoading } = useSystemFeatures();
-  const { uiOptions, loading: entitlementsLoading } = useUserEntitlements();
+  const { features, uiOptions, config, loading, error } = useAdminData();
 
-  if (featuresLoading || entitlementsLoading) {
+  if (loading || error) {
     return null;
   }
 
@@ -50,7 +48,7 @@ const Drawer = () => {
         features.feature_chat
           ? [{ id: 'groups', text: 'User groups', path: '/admin/groups' }]
           : []),
-        ...(uiOptions?.show_sso_config
+        ...(uiOptions?.show_sso_config && config?.tibEnabled
           ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
           : []),
         { id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' },

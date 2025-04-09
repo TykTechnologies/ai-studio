@@ -608,3 +608,131 @@ func TestService_GetProfileByName(t *testing.T) {
 		assert.Equal(t, "Not Found", errResp.Title)
 	})
 }
+
+func TestService_SetProfileUseInLoginPage(t *testing.T) {
+	db := setupProfileTestDB(t)
+	service := &Service{DB: db}
+
+	// Create multiple profiles
+	profile1 := createTestProfileData()
+	profile1.UseInLoginPage = false
+	err := setProviderType(profile1)
+	assert.NoError(t, err)
+	err = profile1.Create(db)
+	assert.NoError(t, err)
+
+	profile2 := createTestProfileData()
+	profile2.ProfileID = "test-profile-id-2"
+	profile2.UseInLoginPage = true // This one starts with UseInLoginPage=true
+	err = setProviderType(profile2)
+	assert.NoError(t, err)
+	err = profile2.Create(db)
+	assert.NoError(t, err)
+
+	profile3 := createTestProfileData()
+	profile3.ProfileID = "test-profile-id-3"
+	profile3.UseInLoginPage = false
+	err = setProviderType(profile3)
+	assert.NoError(t, err)
+	err = profile3.Create(db)
+	assert.NoError(t, err)
+
+	// Verify initial state
+	var initialProfile models.Profile
+	err = db.Where("profile_id = ?", profile2.ProfileID).First(&initialProfile).Error
+	require.NoError(t, err)
+	assert.True(t, initialProfile.UseInLoginPage, "Second profile should have UseInLoginPage=true initially")
+
+	t.Run("Set profile use in login page", func(t *testing.T) {
+		// Set profile1 to be used in login page
+		err := service.SetProfileUseInLoginPage(profile1.ProfileID)
+		assert.NoError(t, err)
+
+		// Verify profile1 now has UseInLoginPage=true
+		var updatedProfile1 models.Profile
+		err = db.Where("profile_id = ?", profile1.ProfileID).First(&updatedProfile1).Error
+		require.NoError(t, err)
+		assert.True(t, updatedProfile1.UseInLoginPage, "First profile should have UseInLoginPage=true after update")
+
+		// Verify profile2 now has UseInLoginPage=false
+		var updatedProfile2 models.Profile
+		err = db.Where("profile_id = ?", profile2.ProfileID).First(&updatedProfile2).Error
+		require.NoError(t, err)
+		assert.False(t, updatedProfile2.UseInLoginPage, "Second profile should have UseInLoginPage=false after update")
+
+		// Verify profile3 still has UseInLoginPage=false
+		var updatedProfile3 models.Profile
+		err = db.Where("profile_id = ?", profile3.ProfileID).First(&updatedProfile3).Error
+		require.NoError(t, err)
+		assert.False(t, updatedProfile3.UseInLoginPage, "Third profile should have UseInLoginPage=false after update")
+	})
+
+	t.Run("Set profile use in login page for non-existent profile", func(t *testing.T) {
+		err := service.SetProfileUseInLoginPage("non-existent-id")
+		assert.Error(t, err)
+		errResp, ok := err.(helpers.ErrorResponse)
+		assert.True(t, ok)
+		assert.Equal(t, "Not Found", errResp.Title)
+	})
+}
+
+func TestService_GetLoginPageProfile(t *testing.T) {
+	db := setupProfileTestDB(t)
+	service := &Service{DB: db}
+
+	t.Run("No profile set for login page", func(t *testing.T) {
+		// When no profile is set for login page
+		profile, err := service.GetLoginPageProfile()
+		assert.Error(t, err)
+		assert.Nil(t, profile)
+
+		// Verify error type
+		errResp, ok := err.(helpers.ErrorResponse)
+		assert.True(t, ok)
+		assert.Equal(t, "Not Found", errResp.Title)
+		assert.Contains(t, errResp.Message, "no profile is set for use in login page")
+	})
+
+	t.Run("Profile set for login page", func(t *testing.T) {
+		// Create a profile and set it for login page
+		profile := createTestProfileData()
+		err := profile.Create(db)
+		require.NoError(t, err)
+
+		// Set the profile for login page
+		err = service.SetProfileUseInLoginPage(profile.ProfileID)
+		require.NoError(t, err)
+
+		// Get the login page profile
+		fetchedProfile, err := service.GetLoginPageProfile()
+		assert.NoError(t, err)
+		assert.NotNil(t, fetchedProfile)
+		assert.Equal(t, profile.ProfileID, fetchedProfile.ProfileID)
+		assert.True(t, fetchedProfile.UseInLoginPage)
+	})
+
+	t.Run("Database error", func(t *testing.T) {
+		// Create a new service with a closed DB connection to simulate a DB error
+		closedDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+		require.NoError(t, err)
+
+		sqlDB, err := closedDB.DB()
+		require.NoError(t, err)
+
+		err = sqlDB.Close()
+		require.NoError(t, err)
+
+		errorService := &Service{DB: closedDB}
+
+		// Attempt to get login page profile with a closed DB
+		profile, err := errorService.GetLoginPageProfile()
+		assert.Error(t, err)
+		assert.Nil(t, profile)
+
+		// Verify error type
+		errResp, ok := err.(helpers.ErrorResponse)
+		assert.True(t, ok)
+		assert.Equal(t, "Internal Server Error", errResp.Title)
+		assert.Contains(t, errResp.Message, "error getting login page profile")
+	})
+}
