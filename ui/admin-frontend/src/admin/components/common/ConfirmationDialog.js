@@ -8,30 +8,25 @@ import {
   Button,
   IconButton,
 } from "@mui/material";
-import { DangerButton } from "../../styles/sharedStyles";
+import { DangerButton, SecondaryOutlineButton } from "../../styles/sharedStyles";
 import Icon from '../../../components/common/Icon';
 import CloseIcon from "@mui/icons-material/Close";
 
-/**
- * A reusable warning dialog component for confirmation of destructive actions.
- * 
- * @param {Object} props - Component props
- * @param {string} props.title - The title of the warning dialog
- * @param {string} props.message - The message to display in the dialog
- * @param {string} props.buttonLabel - The label for the action button
- * @param {boolean} props.open - Whether the dialog is open
- * @param {Function} props.onConfirm - Callback when the action is confirmed
- * @param {Function} props.onCancel - Callback when the action is canceled
- * @param {Function} props.onClose - Optional callback when the dialog is closed (defaults to onCancel)
- */
-const WarningDialog = ({
+const ConfirmationDialog = ({
   title,
   message,
+  confirmText = "Are you sure?",
   buttonLabel,
   open,
   onConfirm,
   onCancel,
   onClose,
+  iconName,
+  iconColor,
+  titleColor,
+  backgroundColor,
+  borderColor,
+  primaryButtonComponent = "primary",
 }) => {
   return (
     <Dialog
@@ -39,25 +34,25 @@ const WarningDialog = ({
       onClose={onClose || onCancel}
       PaperProps={{
         sx: {
-          bgcolor: "background.surfaceCriticalDefault",
+          bgcolor: backgroundColor,
           border: "2px solid",
-          borderColor: "border.criticalDefaultSubdue",
+          borderColor: borderColor,
           borderRadius: 2,
           maxWidth: 620,
         },
       }}
     >
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, p: 2 }}>
-        <Icon name="hexagon-exclamation" color="error" sx={{ width: 16, height: 16, mt: 0.3 }}/>
+        <Icon name={iconName} sx={{ width: 16, height: 16, mt: 0.3, color: iconColor }}/>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1, px: 1, py: 0 }}>
-            <Typography variant="headingMedium" color="text.criticalDefault">
+            <Typography variant="headingMedium" color={titleColor}>
             {title}
             </Typography>
             <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
                 {message}
             </Typography>
             <Typography sx={{mt: 2}} variant="bodyMediumDefault" color="text.defaultSubdued">
-                Are you sure?
+                {confirmText}
             </Typography>
         </DialogContent>
         <IconButton onClick={onClose || onCancel} size="small" sx={{ p: 0 }}>
@@ -75,14 +70,20 @@ const WarningDialog = ({
             mt: 2,
             mb: 1,
         }}>
-            <Button onClick={onCancel}>Cancel</Button>
-            <DangerButton onClick={onConfirm}>
-            {buttonLabel}
-            </DangerButton>
+            <SecondaryOutlineButton onClick={onCancel}>Cancel</SecondaryOutlineButton>
+            {primaryButtonComponent === "danger" ? (
+              <DangerButton onClick={onConfirm}>
+                {buttonLabel}
+              </DangerButton>
+            ) : (
+              <Button onClick={onConfirm} variant="contained">
+                {buttonLabel}
+              </Button>
+            )}
         </DialogActions>
       </Box>
     </Dialog>
   );
 };
 
-export default WarningDialog;
+export default ConfirmationDialog;

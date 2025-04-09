@@ -566,3 +566,123 @@ func TestSerializeProfileList(t *testing.T) {
 		assert.Equal(t, userProfile, response.Attributes.ProfileType)
 	})
 }
+
+func TestSetProfileUseInLoginPage(t *testing.T) {
+	api, r, db := setupProfileTestService(t)
+	r.POST("/api/v1/sso-profiles/:profile_id/use-in-login-page", api.setProfileUseInLoginPage)
+
+	// Create multiple test profiles
+	profile1 := createTestProfile(t, db)
+	profile1.UseInLoginPage = false
+	err := db.Save(profile1).Error
+	require.NoError(t, err)
+
+	profile2 := createTestProfile(t, db)
+	profile2.ProfileID = "test-profile-2"
+	profile2.UseInLoginPage = true // This one starts with UseInLoginPage=true
+	err = db.Save(profile2).Error
+	require.NoError(t, err)
+
+	t.Run("Set profile use in login page", func(t *testing.T) {
+		w := performRequest(r, "POST", "/api/v1/sso-profiles/"+profile1.ProfileID+"/use-in-login-page", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		// Verify profile1 now has UseInLoginPage=true
+		var updatedProfile1 models.Profile
+		err := db.Where("profile_id = ?", profile1.ProfileID).First(&updatedProfile1).Error
+		require.NoError(t, err)
+		assert.True(t, updatedProfile1.UseInLoginPage, "First profile should have UseInLoginPage=true after update")
+
+		// Verify profile2 now has UseInLoginPage=false
+		var updatedProfile2 models.Profile
+		err = db.Where("profile_id = ?", profile2.ProfileID).First(&updatedProfile2).Error
+		require.NoError(t, err)
+		assert.False(t, updatedProfile2.UseInLoginPage, "Second profile should have UseInLoginPage=false after update")
+	})
+
+	t.Run("Set profile use in login page for non-existent profile", func(t *testing.T) {
+		w := performRequest(r, "POST", "/api/v1/sso-profiles/non-existent/use-in-login-page", nil)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		errors := response["errors"].([]interface{})
+		assert.NotEmpty(t, errors)
+
+		errorObj := errors[0].(map[string]interface{})
+		assert.Equal(t, "Not Found", errorObj["title"])
+	})
+
+	t.Run("Invalid profile ID", func(t *testing.T) {
+		w := performRequest(r, "POST", "/api/v1/sso-profiles//use-in-login-page", nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		errors := response["errors"].([]interface{})
+		assert.NotEmpty(t, errors)
+
+		errorObj := errors[0].(map[string]interface{})
+		assert.Equal(t, "Bad Request", errorObj["title"])
+		assert.Contains(t, errorObj["detail"], "Invalid profile ID")
+	})
+}
+
+func TestGetLoginPageProfile(t *testing.T) {
+	api, r, db := setupProfileTestService(t)
+	r.GET("/api/v1/sso-profiles/login-page", api.getLoginPageProfile)
+
+	t.Run("No profile set for login page", func(t *testing.T) {
+		// When no profile is set for login page
+		w := performRequest(r, "GET", "/api/v1/sso-profiles/login-page", nil)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+
+		// Check that we get a 404 status code
+		assert.Equal(t, http.StatusNotFound, w.Code)
+
+		// Parse the error response
+		var errorResponse struct {
+			Errors []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			} `json:"errors"`
+		}
+
+		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
+		require.NoError(t, err)
+
+		require.Len(t, errorResponse.Errors, 1, "Expected one error in the response")
+		assert.Equal(t, "Not Found", errorResponse.Errors[0].Title)
+		assert.Contains(t, errorResponse.Errors[0].Detail, "no profile is set for use in login page")
+		// We'll update the assertions once we see the actual response structure
+	})
+
+	t.Run("Profile set for login page", func(t *testing.T) {
+		// Create a profile and set it for login page
+		profile := createTestProfile(t, db)
+
+		// Set the profile for login page
+		err := db.Model(&models.Profile{}).Where("profile_id = ?", profile.ProfileID).Update("use_in_login_page", true).Error
+		require.NoError(t, err)
+
+		// Get the login page profile
+		w := performRequest(r, "GET", "/api/v1/sso-profiles/login-page", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		profileData := response["data"].(map[string]interface{})
+		profileAttrs := profileData["attributes"].(map[string]interface{})
+		assert.Equal(t, "sso-profiles", profileData["type"])
+		assert.Equal(t, float64(profile.Model.ID), profileData["id"])
+		assert.Equal(t, profile.Name, profileAttrs["name"])
+		assert.Equal(t, profile.ProfileID, profileAttrs["profile_id"])
+		assert.Equal(t, true, profileAttrs["use_in_login_page"])
+	})
+}

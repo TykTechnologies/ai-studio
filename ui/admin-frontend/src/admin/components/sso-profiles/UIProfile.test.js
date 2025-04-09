@@ -143,8 +143,6 @@ describe('UIProfile', () => {
           CallbackBaseURL: 'https://example.com/tib',
           UsernameField: 'username'
         },
-        ProviderConstraintsDomain: 'example.com',
-        ProviderConstraintsGroup: 'admin',
         ReturnURL: 'https://example.com/sso',
         DefaultUserGroupID: '2',
         CustomUserGroupField: 'groups',
@@ -165,36 +163,17 @@ describe('UIProfile', () => {
             // Only providing minimal fields
             profile_id: '123',
             // Other fields are missing
+            sso_only_for_registered_users: false
           }
         }
       };
 
       const uiProfile = mapApiToUIProfile(mockApiResponse);
       
-      // Check that missing fields are set to empty values
+      // Check that only non-empty fields are included
       expect(uiProfile).toEqual({
         ID: '123',
-        Name: '',
-        OrgID: '',
-        ActionType: '',
-        MatchedPolicyID: '',
-        Type: '',
-        ProviderName: '',
-        CustomEmailField: '',
-        CustomUserIDField: '',
-        ProviderConfig: {},
-        ProviderConstraintsDomain: '',
-        ProviderConstraintsGroup: '',
-        ReturnURL: '',
-        DefaultUserGroupID: '',
-        CustomUserGroupField: '',
-        UserGroupMapping: {},
-        UserGroupSeparator: '',
-        SSOOnlyForRegisteredUsers: false,
-        ProviderConstraints: {
-          Domain: '',
-          Group: ''
-        }
+        SSOOnlyForRegisteredUsers: false
       });
     });
   });

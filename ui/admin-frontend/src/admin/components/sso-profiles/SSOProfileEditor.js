@@ -9,7 +9,7 @@ import {
   Snackbar,
   Paper,
 } from "@mui/material";
-import WarningDialog from "../../components/common/WarningDialog";
+import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import apiClient from "../../utils/apiClient";
 import { createEmptyProfile, mapApiToUIProfile, mapUIProfileToApi } from "./UIProfile";
@@ -250,13 +250,19 @@ const SSOProfileEditor = () => {
         </Alert>
       </Snackbar>
 
-      <WarningDialog
+      <ConfirmationDialog
         open={warningDialogOpen}
         title="Delete Identity provider profile"
         message="This operation cannot be undone. If you remove this Identity provider profile, all users relying on it won't be able to sign in. Make sure they have another way to log in before proceeding."
         buttonLabel="Delete profile"
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
       />
     </Box>
   );

@@ -19,7 +19,7 @@ import { reinitializePubClient } from "./admin/utils/pubClient";
 import pubClient from "./admin/utils/pubClient";
 
 // Themes
-import portalTheme from "./portal/theme/portalTheme";
+import adminTheme from "./admin/theme";
 
 // Components
 
@@ -129,7 +129,7 @@ function App() {
   return (
     <Router>
       <NotificationProvider>
-        <ThemeProvider theme={portalTheme}>
+        <ThemeProvider theme={adminTheme}>
           <CssBaseline />
           <Routes>
             {/* Public Routes */}

@@ -30,6 +30,7 @@ type Profile struct {
 	SelectedProviderType      string `json:"-"`
 	UserID                    uint   `json:"-"`
 	User                      User   `json:"-"`
+	UseInLoginPage            bool   `json:"-"`
 }
 
 type Profiles []Profile
@@ -91,6 +92,14 @@ func (p *Profile) GetByName(db *gorm.DB, name string) error {
 	return db.Where("name = ?", name).First(p).Error
 }
 
+func ResetUseInLoginPageForAll(db *gorm.DB) error {
+	return db.Model(&Profile{}).Where("use_in_login_page = ?", true).Update("use_in_login_page", false).Error
+}
+
+func (p *Profile) UpdateUseInLoginPage(db *gorm.DB, value bool) error {
+	return db.Model(p).Update("use_in_login_page", value).Error
+}
+
 // MapToTapProfile fills a tap.Profile with data from the local Profile
 func (p *Profile) MapToTapProfile(tapProfile *tap.Profile) {
 	tapProfile.ID = p.ProfileID
@@ -114,4 +123,8 @@ func (p *Profile) MapToTapProfile(tapProfile *tap.Profile) {
 	tapProfile.UserGroupMapping = p.UserGroupMapping
 	tapProfile.UserGroupSeparator = p.UserGroupSeparator
 	tapProfile.SSOOnlyForRegisteredUsers = p.SSOOnlyForRegisteredUsers
+}
+
+func (p *Profile) GetLoginPageProfile(db *gorm.DB) error {
+	return db.Where("use_in_login_page = ?", true).First(p).Error
 }

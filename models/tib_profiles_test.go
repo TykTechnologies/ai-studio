@@ -301,3 +301,111 @@ func TestProfile_MapToTapProfile(t *testing.T) {
 	assert.Equal(t, profile.UserGroupSeparator, tapProfile.UserGroupSeparator)
 	assert.Equal(t, profile.SSOOnlyForRegisteredUsers, tapProfile.SSOOnlyForRegisteredUsers)
 }
+
+func TestResetUseInLoginPageForAll(t *testing.T) {
+	db := setupProfileTestDB(t)
+
+	// Create test profiles with one having UseInLoginPage=true
+	profile1 := createTestTIBProfile()
+	profile1.UseInLoginPage = true
+	err := profile1.Create(db)
+	require.NoError(t, err)
+
+	profile2 := createTestTIBProfile()
+	profile2.ProfileID = "test-profile-id-2"
+	profile2.UseInLoginPage = false
+	err = profile2.Create(db)
+	require.NoError(t, err)
+
+	// Verify initial state
+	var initialProfile Profile
+	err = db.Where("profile_id = ?", profile1.ProfileID).First(&initialProfile).Error
+	require.NoError(t, err)
+	assert.True(t, initialProfile.UseInLoginPage, "First profile should have UseInLoginPage=true initially")
+
+	// Call the function to reset all profiles
+	err = ResetUseInLoginPageForAll(db)
+	require.NoError(t, err, "ResetUseInLoginPageForAll should not return an error")
+
+	// Verify all profiles have UseInLoginPage=false
+	var count int64
+	err = db.Model(&Profile{}).Where("use_in_login_page = ?", true).Count(&count).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count, "All profiles should have UseInLoginPage=false after reset")
+
+	// Verify specific profile
+	var updatedProfile Profile
+	err = db.Where("profile_id = ?", profile1.ProfileID).First(&updatedProfile).Error
+	require.NoError(t, err)
+	assert.False(t, updatedProfile.UseInLoginPage, "First profile should have UseInLoginPage=false after reset")
+}
+
+func TestUpdateUseInLoginPage(t *testing.T) {
+	db := setupProfileTestDB(t)
+
+	// Create test profile with UseInLoginPage=false
+	profile := createTestTIBProfile()
+	profile.UseInLoginPage = false
+	err := profile.Create(db)
+	require.NoError(t, err)
+
+	// Test setting UseInLoginPage to true
+	t.Run("Set UseInLoginPage to true", func(t *testing.T) {
+		err := profile.UpdateUseInLoginPage(db, true)
+		require.NoError(t, err, "UpdateUseInLoginPage should not return an error")
+
+		// Verify the profile was updated
+		var updatedProfile Profile
+		err = db.Where("profile_id = ?", profile.ProfileID).First(&updatedProfile).Error
+		require.NoError(t, err)
+		assert.True(t, updatedProfile.UseInLoginPage, "Profile should have UseInLoginPage=true after update")
+	})
+
+	// Test setting UseInLoginPage to false
+	t.Run("Set UseInLoginPage to false", func(t *testing.T) {
+		err := profile.UpdateUseInLoginPage(db, false)
+		require.NoError(t, err, "UpdateUseInLoginPage should not return an error")
+
+		// Verify the profile was updated
+		var updatedProfile Profile
+		err = db.Where("profile_id = ?", profile.ProfileID).First(&updatedProfile).Error
+		require.NoError(t, err)
+		assert.False(t, updatedProfile.UseInLoginPage, "Profile should have UseInLoginPage=false after update")
+	})
+}
+
+func TestProfile_GetLoginPageProfile(t *testing.T) {
+	db := setupProfileTestDB(t)
+
+	// Create test profiles with one having UseInLoginPage=true
+	profile1 := createTestTIBProfile()
+	profile1.UseInLoginPage = true
+	err := profile1.Create(db)
+	require.NoError(t, err)
+
+	profile2 := createTestTIBProfile()
+	profile2.ProfileID = "test-profile-id-2"
+	profile2.UseInLoginPage = false
+	err = profile2.Create(db)
+	require.NoError(t, err)
+
+	t.Run("Successfully get profile with UseInLoginPage=true", func(t *testing.T) {
+		fetchedProfile := NewProfile()
+		err := fetchedProfile.GetLoginPageProfile(db)
+		require.NoError(t, err)
+		assert.Equal(t, profile1.ProfileID, fetchedProfile.ProfileID)
+		assert.True(t, fetchedProfile.UseInLoginPage)
+	})
+
+	t.Run("No profile with UseInLoginPage=true", func(t *testing.T) {
+		// Reset all profiles to have UseInLoginPage=false
+		err := ResetUseInLoginPageForAll(db)
+		require.NoError(t, err)
+
+		// Try to fetch a profile with UseInLoginPage=true
+		fetchedProfile := NewProfile()
+		err = fetchedProfile.GetLoginPageProfile(db)
+		assert.Error(t, err)
+		assert.Equal(t, gorm.ErrRecordNotFound, err)
+	})
+}

@@ -69,9 +69,9 @@ jest.mock('../../styles/sharedStyles', () => ({
   )
 }));
 
-// Mock WarningDialog
-jest.mock('../../components/common/WarningDialog', () => {
-  return function MockWarningDialog({ open, onConfirm, onCancel, title, message, buttonLabel }) {
+// Mock ConfirmationDialog
+jest.mock('../../components/common/ConfirmationDialog', () => {
+  return function MockConfirmationDialog({ open, onConfirm, onCancel, title, message, buttonLabel }) {
     if (!open) return null;
     return (
       <div data-testid="warning-dialog">
