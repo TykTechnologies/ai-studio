@@ -233,7 +233,9 @@ func (a *AuthService) Logout(c *gin.Context) error {
 	}
 
 	user.SessionToken = ""
-	user.Update(a.Config.DB)
+	if err := user.Update(a.Config.DB); err != nil {
+		return err
+	}
 
 	for _, cookie := range c.Request.Cookies() {
 		http.SetCookie(c.Writer, &http.Cookie{
