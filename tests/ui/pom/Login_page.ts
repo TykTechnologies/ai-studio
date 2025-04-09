@@ -11,10 +11,10 @@ export class LoginPage {
 
     constructor(page: Page) {
         this.page = page;
-        this.emailInput = this.page.getByRole('textbox', { name: 'Email' });
-        this.passwordInput = this.page.getByRole('textbox', { name: 'Password' });
-        this.loginButton = this.page.getByRole('button', { name: 'Login' });
-        this.registerHereButton = this.page.getByText('Register here');
+        this.emailInput = this.page.getByLabel('Email address');
+        this.passwordInput = this.page.getByLabel('Password');
+        this.loginButton = this.page.getByRole('button', { name: 'Log in' });
+        this.registerHereButton = this.page.getByText('Sign up');
         this.forgotPasswordButton = this.page.getByText('Forgot password?');
     }
     

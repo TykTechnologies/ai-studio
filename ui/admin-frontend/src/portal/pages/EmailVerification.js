@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Box, Typography, Alert, CircularProgress } from "@mui/material";
-import apiClient from "../../admin/utils/apiClient";
+import apiClient from "../../../admin/utils/apiClient";
 
 const EmailVerification = () => {
   const [status, setStatus] = useState("verifying");
