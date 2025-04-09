@@ -33,7 +33,7 @@ const Login = () => {
           }
         }
       } catch (err) {
-        console.log("No profile set as default for SSO at login");
+        console.error("Error fetching SSO config:", err);
       }
     };
     
