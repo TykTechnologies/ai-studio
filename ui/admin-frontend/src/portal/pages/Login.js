@@ -28,7 +28,7 @@ const Login = () => {
         
         if (tibEnabled) {
           const profileResponse = await pubClient.get("/login-sso-profile");
-          if (profileResponse.data && profileResponse.data.data) {
+          if (profileResponse.data?.data) {
             setSSOProfile(profileResponse.data.data);
           }
         }
