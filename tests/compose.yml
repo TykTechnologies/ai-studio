@@ -26,6 +26,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEVMODE=true
       - PROXY_URL=http://localhost:9090
+
     stdin_open: true
     tty: true
     depends_on:

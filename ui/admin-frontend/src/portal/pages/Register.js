@@ -1,20 +1,27 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Box,
-  TextField,
-  Button,
-  Typography,
   Alert,
+  Typography,
   FormHelperText,
-  FormControlLabel,
-  Checkbox,
   FormGroup,
 } from "@mui/material";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import apiClient from "../../admin/utils/pubClient";
 import { getConfig } from "../../config";
+import AuthLayout from "./AuthLayout";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import {
+  StyledTextField,
+  FormLabel,
+  FormLink,
+  FormText,
+  StyledCheckbox
+} from "../styles/authStyles";
+
 
 const Register = () => {
   const [name, setName] = useState("");
@@ -24,7 +31,7 @@ const Register = () => {
   const [withChat, setWithChat] = useState(false);
   const [error, setError] = useState(null);
   const [passwordFocused, setPasswordFocused] = useState(false);
-  const [signupMode, setSignupMode] = useState("both"); // Default value
+  const [signupMode, setSignupMode] = useState("both");
   const [passwordCriteria, setPasswordCriteria] = useState({
     length: false,
     number: false,
@@ -34,12 +41,10 @@ const Register = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Get the signup mode from config
-    const config = getConfig();
+    const config = getConfig() || {};
     const mode = config.DEFAULT_SIGNUP_MODE || "both";
     setSignupMode(mode);
 
-    // Set default values based on mode
     switch (mode) {
       case "portal":
         setWithPortal(true);
@@ -54,7 +59,6 @@ const Register = () => {
         setWithChat(true);
         break;
       default:
-        // Use "both" as fallback
         break;
     }
   }, []);
@@ -79,7 +83,6 @@ const Register = () => {
       return;
     }
 
-    // Validate that at least one option is selected when mode is "both"
     if (signupMode === "both" && !withPortal && !withChat) {
       setError("Please select at least one option (Portal or Chat)");
       return;
@@ -130,12 +133,21 @@ const Register = () => {
   const renderPasswordCriteria = () => (
     <Box sx={{ mt: 1 }}>
       {Object.entries(passwordCriteria).map(([criterion, isMet]) => (
-        <FormHelperText key={criterion} error={!isMet}>
+        <FormHelperText
+          key={criterion}
+          error={!isMet}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            color: isMet ? 'success.main' : 'error.main',
+            ml: 0
+          }}
+        >
           {isMet ? (
-            <CheckCircleOutlineIcon color="success" fontSize="small" />
+            <CheckCircleOutlineIcon color="success" fontSize="small" sx={{ mr: 1 }} />
           ) : (
-            <CancelOutlinedIcon color="error" fontSize="small" />
-          )}{" "}
+            <CancelOutlinedIcon color="error" fontSize="small" sx={{ mr: 1 }} />
+          )}
           {criterion === "length"
             ? "At least 8 characters"
             : criterion === "number"
@@ -149,93 +161,103 @@ const Register = () => {
   );
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-      }}
-    >
-      <Box sx={{ maxWidth: 400, width: "100%", p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          Register
-        </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-        <form onSubmit={handleSubmit}>
-          <TextField
+    <AuthLayout>
+      <Typography variant="headingXLarge" component="h1" gutterBottom align="center" color="text.primary">
+        Create an account
+      </Typography>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      
+      <form onSubmit={handleSubmit}>
+        <Box mb={2} mt={2}>
+          <FormLabel component="label" htmlFor="name">
+            Name
+          </FormLabel>
+          <StyledTextField
+            id="name"
             fullWidth
-            label="Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            margin="normal"
             required
-            autoComplete="off"
+            autoComplete="name"
+            autoFocus
+            variant="outlined"
           />
-          <TextField
+        </Box>
+        
+        <Box mb={2}>
+          <FormLabel component="label" htmlFor="email">
+            Email address
+          </FormLabel>
+          <StyledTextField
+            id="email"
             fullWidth
-            label="Email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            margin="normal"
             required
-            autoComplete="off"
+            autoComplete="email"
+            variant="outlined"
           />
-          <TextField
+        </Box>
+        
+        <Box mb={3}>
+          <FormLabel component="label" htmlFor="password">
+            Password
+          </FormLabel>
+          <StyledTextField
+            id="password"
             fullWidth
-            label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onFocus={() => setPasswordFocused(true)}
             onBlur={() => setPasswordFocused(false)}
-            margin="normal"
             required
+            autoComplete="new-password"
+            variant="outlined"
           />
           {passwordFocused && renderPasswordCriteria()}
-
-          {/* Only show checkboxes if mode is "both" */}
-          {signupMode === "both" && (
-            <FormGroup sx={{ mt: 2 }}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={withPortal}
-                    onChange={(e) => setWithPortal(e.target.checked)}
-                  />
-                }
-                label="Sign up for AI Developer Portal"
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={withChat}
-                    onChange={(e) => setWithChat(e.target.checked)}
-                  />
-                }
-                label="Sign up for AI Chat"
-              />
-            </FormGroup>
-          )}
-
-          <Button
+        </Box>
+        
+        {signupMode === "both" && (
+          <FormGroup sx={{ mt: 2, mb: 3 }}>
+            <StyledCheckbox
+              checked={withPortal}
+              onChange={(checked) => setWithPortal(checked)}
+              label="Sign up for AI Portal"
+            />
+            <StyledCheckbox
+              checked={withChat}
+              onChange={(checked) => setWithChat(checked)}
+              label="Sign up for AI Chats"
+            />
+          </FormGroup>
+        )}
+        
+        <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
+          <PrimaryButton
             type="submit"
             variant="contained"
-            color="primary"
-            fullWidth
-            sx={{ mt: 2 }}
           >
-            Register
-          </Button>
-        </form>
+            Sign up
+          </PrimaryButton>
+        </Box>
+      </form>
+      
+      <Box sx={{ textAlign: "center" }}>
+        <FormText>
+          Already a member?
+          <FormLink component={RouterLink} to="/login" ml={1}>
+            Log in
+          </FormLink>
+        </FormText>
       </Box>
-    </Box>
+    </AuthLayout>
   );
 };
 

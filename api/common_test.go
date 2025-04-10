@@ -218,14 +218,14 @@ func TestCommon_TestGetUserChatHistoryRecords(t *testing.T) {
 // Helper functions for creating test data
 
 func createTestUser(t *testing.T, service *services.Service) *models.User {
-	user, err := service.CreateUser("test@example.com", "Test User", "password", false, true, true, true, false)
+	user, err := service.CreateUser("test@example.com", "Test User", "password", false, true, true, true, false, false)
 	assert.NoError(t, err)
 	return user
 }
 
 // Helper to create a test user with custom settings
 func createTestUserWithSettings(t *testing.T, service *services.Service, email, name string, isAdmin, showPortal, showChat, emailVerified, notificationsEnabled bool) *models.User {
-	user, err := service.CreateUser(email, name, "password", isAdmin, showPortal, showChat, emailVerified, notificationsEnabled)
+	user, err := service.CreateUser(email, name, "password", isAdmin, showPortal, showChat, emailVerified, notificationsEnabled, isAdmin && notificationsEnabled)
 	assert.NoError(t, err)
 	return user
 }

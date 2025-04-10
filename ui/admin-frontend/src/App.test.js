@@ -87,7 +87,8 @@ jest.mock('./admin/hooks/useSystemFeatures', () => {
     default: () => ({
       features: mockFeatures,
       loading: false,
-      error: null
+      error: null,
+      fetchFeatures: jest.fn().mockResolvedValue(mockFeatures)
     })
   };
 });
@@ -173,7 +174,7 @@ describe('App Component', () => {
     
     await waitFor(() => {
       // Look for the heading specifically to avoid multiple matches
-      expect(screen.getByRole('heading', { level: 1, name: 'Login' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Log in to your account' })).toBeInTheDocument();
     });
   });
 
