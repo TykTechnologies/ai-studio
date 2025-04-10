@@ -2,17 +2,22 @@
 
 /* === Global Variables === */
 :root {
-  --vp-nav-logo-height: 60px !important; /* Increase logo height */
+  --vp-nav-logo-height: 60px !important;
+  /* Increase logo height */
 }
 
 /* === End Global Variables === */
 
 :root {
   /* Brand colors - purple theme */
-  --purple-primary: #7C3AED; /* Main purple */
-  --purple-dark: #6D28D9; /* Darker purple for gradient */
-  --purple-darker: #5B21B6; /* Even darker purple */
-  --purple-light: #8B5CF6; /* Lighter purple */
+  --purple-primary: #7C3AED;
+  /* Main purple */
+  --purple-dark: #6D28D9;
+  /* Darker purple for gradient */
+  --purple-darker: #5B21B6;
+  /* Even darker purple */
+  --purple-light: #8B5CF6;
+  /* Lighter purple */
   --text-white: #FFFFFF;
   --text-gray-100: #F3F4F6;
   --text-gray-200: #E5E7EB;
@@ -21,12 +26,12 @@
   --bg-white: #FFFFFF;
   --bg-gray-50: #F9FAFB;
   --bg-gray-100: #F3F4F6;
-  
+
   /* Theme variables */
   --vp-c-brand: var(--purple-primary);
   --vp-c-brand-light: var(--purple-light);
   --vp-c-brand-dark: var(--purple-dark);
-  
+
   /* Override button colors */
   --vp-button-brand-bg: var(--purple-primary);
   --vp-button-brand-hover-bg: var(--purple-dark);
@@ -35,9 +40,12 @@
 
 /* === Global Background Adjustments === */
 :root {
-  --vp-c-bg: #FFFFFF !important; /* Attempt to force default background white */
-  --vp-c-bg-alt: #F9FAFB !important; /* Set alt background to the desired gray */
-  --vp-c-bg-soft: #F9FAFB !important; /* May need to adjust this too */
+  --vp-c-bg: #FFFFFF !important;
+  /* Attempt to force default background white */
+  --vp-c-bg-alt: #F9FAFB !important;
+  /* Set alt background to the desired gray */
+  --vp-c-bg-soft: #F9FAFB !important;
+  /* May need to adjust this too */
 }
 
 /* Fallback for body background */
@@ -55,9 +63,12 @@ body {
 
 /* Navbar styles */
 .VPNav {
-  background: linear-gradient(to right, #5B21B6, #8437FA) !important; /* Ensure gradient applies initially */
-  border-bottom: 1px solid transparent !important; /* Keep border transparent initially */
-  transition: background-color 0.3s, border-color 0.3s; /* Smooth transition */
+  background: linear-gradient(to right, #5B21B6, #8437FA) !important;
+  /* Ensure gradient applies initially */
+  border-bottom: 1px solid transparent !important;
+  /* Keep border transparent initially */
+  transition: background-color 0.3s, border-color 0.3s;
+  /* Smooth transition */
 }
 
 /* Hide the text part of the site title when logo is present */
@@ -72,20 +83,25 @@ body {
 .VPNavBar .title {
   font-size: 18px;
   font-weight: 600;
-  color: #FFFFFF !important; /* Force white */
+  color: #FFFFFF !important;
+  /* Force white */
 }
 
 /* Style the text within the navigation links */
 .VPNavBarMenuLink span {
-  font-size: 18px; /* Resetting size after fixing selector */
+  font-size: 18px;
+  /* Resetting size after fixing selector */
   font-weight: 600;
-  color: #FFFFFF !important; /* Force white */
-  opacity: 1; /* Full opacity */
+  color: #FFFFFF !important;
+  /* Force white */
+  opacity: 1;
+  /* Full opacity */
 }
 
 .VPNavBar .VPButton,
 .VPNavBar .VPSocialLink svg {
-  color: #FFFFFF; /* Brighter white */
+  color: #FFFFFF;
+  /* Brighter white */
 }
 
 .VPNavBar .VPButton:hover {
@@ -103,7 +119,14 @@ body {
 }
 
 .VPNavBarSearch .DocSearch-Button-Placeholder {
-  color: rgba(255, 255, 255, 0.8); /* Slightly more visible */
+  color: rgba(255, 255, 255, 0.8);
+  /* Slightly more visible */
+}
+
+/* Change color of search keyboard shortcut keys to white */
+.mac .DocSearch-Button .DocSearch-Button-Key:first-child:after,
+.DocSearch-Button .DocSearch-Button-Key+.DocSearch-Button-Key {
+  color: #FFFFFF !important;
 }
 
 /* Ensure appearance toggle is hidden */
@@ -119,18 +142,24 @@ body {
 
 /* Hero section with updated purple gradient */
 .VPHero {
-  background: linear-gradient(to right, #5B21B6, #8437FA); /* Updated gradient */
-  padding: 48px 0 64px; /* Remove side padding */
+  background: linear-gradient(to right, #5B21B6, #8437FA);
+  /* Updated gradient */
+  padding: 48px 0 64px;
+  /* Remove side padding */
   text-align: left;
-  width: 100%; /* Ensure full width */
-  max-width: 100%; /* Override any potential max-width */
+  width: 100%;
+  /* Ensure full width */
+  max-width: 100%;
+  /* Override any potential max-width */
   box-sizing: border-box;
 }
 
 .VPHero .container {
   max-width: 1200px;
-  margin: 0 auto; /* Center container within full-width hero */
-  padding: 0 24px; /* Add padding to container instead */
+  margin: 0 auto;
+  /* Center container within full-width hero */
+  padding: 0 24px;
+  /* Add padding to container instead */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -153,7 +182,8 @@ body {
   line-height: 1.1;
   margin-bottom: 12px;
   letter-spacing: -0.5px;
-  color: #FFFFFF !important; /* Force white */
+  color: #FFFFFF !important;
+  /* Force white */
 }
 
 .VPHero .text {
@@ -161,7 +191,8 @@ body {
   font-weight: 500;
   line-height: 1.3;
   margin-bottom: 12px;
-  color: #FFFFFF !important; /* Force white */
+  color: #FFFFFF !important;
+  /* Force white */
 }
 
 .VPHero .tagline {
@@ -169,7 +200,8 @@ body {
   font-weight: 400;
   margin-bottom: 32px;
   opacity: 1;
-  color: #FFFFFF !important; /* Force white */
+  color: #FFFFFF !important;
+  /* Force white */
 }
 
 .VPHero .actions {
@@ -199,13 +231,16 @@ body {
 
 /* Style the main hero title */
 .VPHero .name.clip {
-  color: #FFFFFF !important; /* Force white */
-  -webkit-text-fill-color: #FFFFFF !important; /* Override theme gradient/color */
+  color: #FFFFFF !important;
+  /* Force white */
+  -webkit-text-fill-color: #FFFFFF !important;
+  /* Override theme gradient/color */
 }
 
 /* Style the hero tagline */
 .VPHero .tagline {
-  color: #FFFFFF !important; /* Force white */
+  color: #FFFFFF !important;
+  /* Force white */
 }
 
 /* === Adjustments for Hero Image Size and Spacing === */
@@ -216,24 +251,28 @@ body {
 }
 
 .VPHero .image-container {
-  max-width: 500px; /* Limit width on small screens */
+  max-width: 500px;
+  /* Limit width on small screens */
   margin-left: auto;
   margin-right: auto;
 }
 
 .VPHero .VPImage {
-  max-width: 100%; /* Ensure image scales */
+  max-width: 100%;
+  /* Ensure image scales */
   height: auto;
 }
 
 /* Desktop (larger screens): Increase image width and add padding */
 @media (min-width: 960px) {
   .VPHero .image {
-    padding-left: 48px; /* Add space between text and image */
+    padding-left: 48px;
+    /* Add space between text and image */
   }
 
   .VPHero .image-container {
-    max-width: 600px; /* Make image container wider */
+    max-width: 600px;
+    /* Make image container wider */
   }
 }
 
@@ -243,19 +282,27 @@ body {
 
 /* Ensure navbar keeps updated gradient when scrolled (MOBILE/TABLET < 960px) */
 .VPNavBar.home:not(.top) {
-  background: linear-gradient(to right, #5B21B6, #8437FA) !important; /* Updated gradient */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important; /* Subtle separator */
-  box-shadow: none !important; /* Remove default shadow if any */
-  background-color: transparent !important; /* Override bg-color */
+  background: linear-gradient(to right, #5B21B6, #8437FA) !important;
+  /* Updated gradient */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  /* Subtle separator */
+  box-shadow: none !important;
+  /* Remove default shadow if any */
+  background-color: transparent !important;
+  /* Override bg-color */
 }
 
 /* Ensure navbar keeps updated gradient when scrolled (DESKTOP >= 960px) */
 @media (min-width: 960px) {
   .VPNavBar.home:not(.top):not(.has-sidebar) {
-    background: linear-gradient(to right, #5B21B6, #8437FA) !important; /* Updated gradient */
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important; /* Subtle separator */
-    box-shadow: none !important; /* Remove default shadow if any */
-    background-color: transparent !important; /* Explicitly override bg-color from theme rule */
+    background: linear-gradient(to right, #5B21B6, #8437FA) !important;
+    /* Updated gradient */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    /* Subtle separator */
+    box-shadow: none !important;
+    /* Remove default shadow if any */
+    background-color: transparent !important;
+    /* Explicitly override bg-color from theme rule */
   }
 }
 
@@ -265,32 +312,40 @@ body {
 
 /* Common styles for both hero buttons */
 .VPHero .VPButton {
-  border-radius: 999px !important; /* Fully rounded */
-  padding: 0 18px !important; /* Adjust horizontal padding */
+  border-radius: 999px !important;
+  /* Fully rounded */
+  padding: 0 18px !important;
+  /* Adjust horizontal padding */
   /* Ensure consistent height - theme default is likely okay */
 }
 
 .VPHero .VPButton.brand {
   background-color: #1EEDBA !important;
   border-color: #1EEDBA !important;
-  color: #000000 !important; /* Black text for contrast */
+  color: #000000 !important;
+  /* Black text for contrast */
   /* Inherits border-radius and padding from common rule */
 }
 
 .VPHero .VPButton.brand:hover {
-  background-color: #18c3a3 !important; /* Slightly darker on hover */
+  background-color: #18c3a3 !important;
+  /* Slightly darker on hover */
   border-color: #18c3a3 !important;
 }
 
 .VPHero .VPButton.alt {
   /* Inherits border-radius and padding */
-  color: #FFFFFF !important; /* Ensure white text */
-  border-color: #FFFFFF !important; /* Match text color or use a transparent/subtle border */
-  background-color: transparent !important; /* Ensure no background */
+  color: #FFFFFF !important;
+  /* Ensure white text */
+  border-color: #FFFFFF !important;
+  /* Match text color or use a transparent/subtle border */
+  background-color: transparent !important;
+  /* Ensure no background */
 }
 
 .VPHero .VPButton.alt:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important; /* Subtle white background on hover */
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  /* Subtle white background on hover */
   border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
@@ -300,23 +355,25 @@ body {
 
 /* Ensure navbar keeps updated gradient when scrolled (DESKTOP >= 960px) */
 @media (min-width: 960px) {
-  /* Ensure inner content body is transparent INITIALLY (>= 960px) */
-  .VPNavBar:not(.home).top .content-body[data-v-921c8890] {
-    background-color: transparent !important;
-  }
 
   /* Existing rules for scrolled state */
   .VPNavBar:not(.home):not(.top) {
-    background: linear-gradient(to right, #5B21B6, #8437FA) !important; /* Apply gradient */
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important; /* Subtle separator */
-    box-shadow: none !important; /* Remove default shadow if any */
-    background-color: transparent !important; /* Override theme bg-color */
+    background: linear-gradient(to right, #5B21B6, #8437FA) !important;
+    /* Apply gradient */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    /* Subtle separator */
+    box-shadow: none !important;
+    /* Remove default shadow if any */
+    background-color: transparent !important;
+    /* Override theme bg-color for the bar itself */
   }
 
-  /* Also ensure the inner content body doesn't get a white background */
-  .VPNavBar:not(.home):not(.top) .content-body[data-v-921c8890] {
-      background-color: transparent !important;
+
+  /* Override the variable itself for the :not(.home.top) state */
+  .VPNavBar:not(.home.top) {
+    --vp-nav-bg-color: transparent !important;
   }
+
 }
 
 /* === End Navbar Scroll Behavior === */
@@ -333,16 +390,20 @@ body {
   border: none !important;
   border-radius: 0 !important;
   background-color: transparent !important;
-  display: block; /* Keep display block */
-  height: 100%; /* Keep height 100% */
+  display: block;
+  /* Keep display block */
+  height: 100%;
+  /* Keep height 100% */
 }
 
 /* Remove background/border/padding from the main feature item container */
 .VPHomeFeatures .item {
   background-color: transparent !important;
   border: none !important;
-  border-radius: 0 !important; /* Remove rounded corners */
-  padding: 0 !important; /* Remove default padding */
+  border-radius: 0 !important;
+  /* Remove rounded corners */
+  padding: 0 !important;
+  /* Remove default padding */
   box-shadow: none !important;
 }
 
@@ -350,37 +411,47 @@ body {
 .VPHomeFeatures .VPFeature .box {
   background-color: transparent !important;
   border: none !important;
-  padding: 20px !important; /* Add some padding back for spacing */
+  padding: 20px !important;
+  /* Add some padding back for spacing */
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   text-align: center !important;
-  height: 100%; /* Ensure box takes full height of item */
+  height: 100%;
+  /* Ensure box takes full height of item */
 }
 
 /* Enlarge icon */
 .VPHomeFeatures .VPFeature .icon {
-  font-size: 48px !important; /* Increased size */
-  margin-bottom: 16px !important; /* Space below icon */
+  font-size: 48px !important;
+  /* Increased size */
+  margin-bottom: 16px !important;
+  /* Space below icon */
   /* Remove any default background/border the icon might have */
   background-color: transparent !important;
   border: none !important;
-  height: auto !important; /* Adjust height if needed */
+  height: auto !important;
+  /* Adjust height if needed */
   width: auto !important;
-  line-height: 1 !important; /* Ensure icon is centered vertically */
+  line-height: 1 !important;
+  /* Ensure icon is centered vertically */
 }
 
 /* Ensure title and details are centered and have some top margin */
 .VPHomeFeatures .VPFeature .title {
   margin-top: 0 !important;
-  font-size: 1.1em !important; /* Adjust title size if needed */
+  font-size: 1.1em !important;
+  /* Adjust title size if needed */
   font-weight: 600 !important;
 }
 
 .VPHomeFeatures .VPFeature .details {
-  margin-top: 8px !important; /* Space below title */
-  font-size: 0.95em !important; /* Adjust details size if needed */
-  max-width: 250px; /* Limit width for better readability */
+  margin-top: 8px !important;
+  /* Space below title */
+  font-size: 0.95em !important;
+  /* Adjust details size if needed */
+  max-width: 250px;
+  /* Limit width for better readability */
   line-height: 1.5 !important;
 }
 
@@ -396,44 +467,61 @@ body {
 
 /* Increase H2 size and remove top border on home page content */
 .VPHome .vp-doc h2 {
-  font-size: 32px !important; /* Increased size */
-  font-weight: 600 !important; /* Slightly less bold if needed */
+  font-size: 32px !important;
+  /* Increased size */
+  font-weight: 600 !important;
+  /* Slightly less bold if needed */
   line-height: 1.3 !important;
   letter-spacing: -0.02em;
-  border-top: none !important; /* Remove default border */
-  padding-top: 0 !important; /* Remove default padding */
-  margin-top: 64px !important; /* Adjust top margin */
-  margin-bottom: 24px !important; /* Adjust bottom margin */
+  border-top: none !important;
+  /* Remove default border */
+  padding-top: 0 !important;
+  /* Remove default padding */
+  margin-top: 64px !important;
+  /* Adjust top margin */
+  margin-bottom: 24px !important;
+  /* Adjust bottom margin */
 }
 
 /* Style the feature detail sections */
 .VPHome .vp-doc .feature-detail {
   display: flex !important;
-  flex-wrap: wrap; /* Allow wrapping on smaller screens if needed */
+  flex-wrap: wrap;
+  /* Allow wrapping on smaller screens if needed */
   align-items: center !important;
-  gap: 40px !important; /* Space between text and image */
-  margin-top: 48px !important; /* Space between feature sections */
+  gap: 40px !important;
+  /* Space between text and image */
+  margin-top: 48px !important;
+  /* Space between feature sections */
   margin-bottom: 48px !important;
 }
 
 .VPHome .vp-doc .feature-detail .text-content,
 .VPHome .vp-doc .feature-detail .image-content {
-  flex: 1 1 45%; /* Allow flex grow/shrink, base width ~45% */
-  min-width: 300px; /* Minimum width before wrapping */
+  flex: 1 1 45%;
+  /* Allow flex grow/shrink, base width ~45% */
+  min-width: 300px;
+  /* Minimum width before wrapping */
 }
 
 /* Style the text content block */
 .VPHome .vp-doc .feature-detail .text-content h4 {
-  margin-top: 0 !important; /* Remove default top margin for h4 inside */
-  font-size: 22px !important; /* Adjust h4 size if needed */
+  margin-top: 0 !important;
+  /* Remove default top margin for h4 inside */
+  font-size: 22px !important;
+  /* Adjust h4 size if needed */
   margin-bottom: 16px !important;
 }
+
 .VPHome .vp-doc .feature-detail .text-content ul {
-  padding-left: 20px !important; /* Indent list */
+  padding-left: 20px !important;
+  /* Indent list */
   margin-top: 0 !important;
 }
+
 .VPHome .vp-doc .feature-detail .text-content p:first-of-type {
-    margin-top: 0 !important; /* Remove top margin from paragraph after h4 */
+  margin-top: 0 !important;
+  /* Remove top margin from paragraph after h4 */
 }
 
 /* Style the image content block */
@@ -441,8 +529,10 @@ body {
   display: block !important;
   max-width: 100% !important;
   height: auto !important;
-  border-radius: 8px; /* Optional: rounded corners for images */
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Optional: subtle shadow */
+  border-radius: 8px;
+  /* Optional: rounded corners for images */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  /* Optional: subtle shadow */
 }
 
 /* Alternate image position: Image Left on even sections */
@@ -457,53 +547,67 @@ body {
   background-color: #F9FAFB !important;
   padding-top: 64px !important;
   padding-bottom: 64px !important;
-  margin-top: 64px !important; /* Add space above this section */
-  margin-bottom: 64px !important; /* Add space below this section */
+  margin-top: 64px !important;
+  /* Add space above this section */
+  margin-bottom: 64px !important;
+  /* Add space below this section */
   /* Make background span full width */
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  padding-left: calc(50vw - 50% + var(--vp-layout-gutter-width, 24px)); /* Adjust padding to align content */
+  padding-left: calc(50vw - 50% + var(--vp-layout-gutter-width, 24px));
+  /* Adjust padding to align content */
   padding-right: calc(50vw - 50% + var(--vp-layout-gutter-width, 24px));
   box-sizing: border-box;
 }
 
 /* Constrain the direct content (like the first h2) within the section */
-.VPHome .ai-studio-section > .vp-doc > h2:first-of-type,
-.VPHome .ai-studio-section > .vp-doc > p:first-of-type {
-    max-width: var(--vp-layout-max-width, 1152px);
-    margin-left: auto;
-    margin-right: auto;
+.VPHome .ai-studio-section>.vp-doc>h2:first-of-type,
+.VPHome .ai-studio-section>.vp-doc>p:first-of-type {
+  max-width: var(--vp-layout-max-width, 1152px);
+  margin-left: auto;
+  margin-right: auto;
 }
-.VPHome .ai-studio-section > .vp-doc > h2:first-of-type {
-    margin-top: 0 !important; /* Reset top margin for first h2 */
+
+.VPHome .ai-studio-section>.vp-doc>h2:first-of-type {
+  margin-top: 0 !important;
+  /* Reset top margin for first h2 */
 }
 
 /* Style the feature-detail sections *within* the gray area */
 .VPHome .ai-studio-section .feature-detail {
-    background-color: transparent !important; /* Reverted to transparent */
-    padding: 0 !important; /* Removed padding */
-    border-radius: 0 !important; /* Removed border-radius */
-    box-shadow: none !important; /* Removed shadow */
-    max-width: var(--vp-layout-max-width, 1152px); /* Constrain card width */
-    margin-left: auto !important; /* Center card */
-    margin-right: auto !important;
-    margin-top: 48px !important;
-    margin-bottom: 48px !important;
+  background-color: transparent !important;
+  /* Reverted to transparent */
+  padding: 0 !important;
+  /* Removed padding */
+  border-radius: 0 !important;
+  /* Removed border-radius */
+  box-shadow: none !important;
+  /* Removed shadow */
+  max-width: var(--vp-layout-max-width, 1152px);
+  /* Constrain card width */
+  margin-left: auto !important;
+  /* Center card */
+  margin-right: auto !important;
+  margin-top: 48px !important;
+  margin-bottom: 48px !important;
 }
 
 /* === End AI Studio Section Background === */
 
 /* === Accelerate Adoption Section === */
 .accelerate-adoption-section {
-  background-color: var(--purple-dark) !important; /* Purple background */
-  color: #FFFFFF !important; /* White text */
+  background-color: var(--purple-dark) !important;
+  /* Purple background */
+  color: #FFFFFF !important;
+  /* White text */
   padding-top: 64px !important;
   padding-bottom: 64px !important;
   margin-top: 64px !important;
   /* Full width background */
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  padding-left: var(--vp-layout-gutter-width, 24px); /* Use gutter for side padding */
+  padding-left: var(--vp-layout-gutter-width, 24px);
+  /* Use gutter for side padding */
   padding-right: var(--vp-layout-gutter-width, 24px);
   box-sizing: border-box;
 }
@@ -513,21 +617,25 @@ body {
   max-width: var(--vp-layout-max-width, 1152px);
   margin-left: auto;
   margin-right: auto;
-  text-align: center; /* Center align heading and intro text */
+  text-align: center;
+  /* Center align heading and intro text */
 }
 
 .accelerate-adoption-section h3 {
   color: #FFFFFF !important;
-  font-size: 2.5em !important; /* Match AI Studio header */
+  font-size: 2.5em !important;
+  /* Match AI Studio header */
   font-weight: 600 !important;
   margin-bottom: 16px !important;
 }
 
 .accelerate-adoption-section .product-features-intro {
-  color: rgba(255, 255, 255, 0.9) !important; /* Slightly off-white */
+  color: rgba(255, 255, 255, 0.9) !important;
+  /* Slightly off-white */
   font-size: 1.1em !important;
   margin-bottom: 40px !important;
-  max-width: 700px; /* Constrain intro text width */
+  max-width: 700px;
+  /* Constrain intro text width */
   margin-left: auto;
   margin-right: auto;
 }
@@ -540,35 +648,44 @@ body {
   display: grid !important;
   /* Aim for 3 columns: Adjust minmax for desired minimum item width */
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
-  gap: 32px !important; /* Gap between grid items */
-  text-align: left; /* Align text left within list items */
+  gap: 32px !important;
+  /* Gap between grid items */
+  text-align: left;
+  /* Align text left within list items */
 }
 
 .accelerate-adoption-section .product-li {
-  color: rgba(255, 255, 255, 0.85) !important; /* Text color for list items */
+  color: rgba(255, 255, 255, 0.85) !important;
+  /* Text color for list items */
   line-height: 1.6 !important;
 }
 
-.accelerate-adoption-section .product-li + .product-li {
+.accelerate-adoption-section .product-li+.product-li {
   margin-top: 0 !important;
 }
 
 .accelerate-adoption-section .product-li .bold-txt {
   font-weight: 600 !important;
-  color: #FFFFFF !important; /* Ensure bold part is fully white */
-  display: block; /* Make span a block to push text below */
-  margin-bottom: 6px; /* Space after bold text */
+  color: #FFFFFF !important;
+  /* Ensure bold part is fully white */
+  display: block;
+  /* Make span a block to push text below */
+  margin-bottom: 6px;
+  /* Space after bold text */
 }
 
 /* === End Accelerate Adoption Section === */
 
 /* === Real-World Applications Section === */
 .real-world-apps-section {
-  background-color: #F9FAFB !important; /* Light Gray Background */
-  color: var(--vp-c-text-1) !important; /* Default text color */
+  background-color: #F9FAFB !important;
+  /* Light Gray Background */
+  color: var(--vp-c-text-1) !important;
+  /* Default text color */
   padding-top: 64px !important;
   padding-bottom: 64px !important;
-  margin-top: 0 !important; /* Remove top margin if directly after purple */
+  margin-top: 0 !important;
+  /* Remove top margin if directly after purple */
   /* Full width background */
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
@@ -585,14 +702,17 @@ body {
 }
 
 .real-world-apps-section h3 {
-  color: var(--vp-c-text-1) !important; /* Default heading color */
-  font-size: 2.5em !important; /* Match other sections */
+  color: var(--vp-c-text-1) !important;
+  /* Default heading color */
+  font-size: 2.5em !important;
+  /* Match other sections */
   font-weight: 600 !important;
   margin-bottom: 16px !important;
 }
 
 .real-world-apps-section .product-features-intro {
-  color: var(--vp-c-text-2) !important; /* Slightly lighter default text */
+  color: var(--vp-c-text-2) !important;
+  /* Slightly lighter default text */
   font-size: 1.1em !important;
   margin-bottom: 40px !important;
   max-width: 700px;
@@ -615,7 +735,7 @@ body {
   line-height: 1.6 !important;
 }
 
-.real-world-apps-section .product-li + .product-li {
+.real-world-apps-section .product-li+.product-li {
   margin-top: 0 !important;
 }
 
@@ -630,19 +750,25 @@ body {
 
 /* === Pre-empt Chaos Section === */
 .pre-empt-chaos-section {
-  background-color: var(--purple-dark) !important; /* Purple Background */
-  color: #FFFFFF !important; /* White text */
+  background-color: var(--purple-dark) !important;
+  /* Purple Background */
+  color: #FFFFFF !important;
+  /* White text */
   padding-top: 64px !important;
-  padding-bottom: 80px !important; /* Extra bottom padding for button */
-  margin-top: 0 !important; /* Should follow gray section */
-  margin-bottom: 0 !important; /* End of page content */
+  padding-bottom: 80px !important;
+  /* Extra bottom padding for button */
+  margin-top: 0 !important;
+  /* Should follow gray section */
+  margin-bottom: 0 !important;
+  /* End of page content */
   /* Full width background */
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
   padding-left: var(--vp-layout-gutter-width, 24px);
   padding-right: var(--vp-layout-gutter-width, 24px);
   box-sizing: border-box;
-  text-align: center; /* Center all content */
+  text-align: center;
+  /* Center all content */
 }
 
 .pre-empt-chaos-section .container {
@@ -653,7 +779,8 @@ body {
 
 .pre-empt-chaos-section h3 {
   color: #FFFFFF !important;
-  font-size: 2.5em !important; /* Match other sections */
+  font-size: 2.5em !important;
+  /* Match other sections */
   font-weight: 600 !important;
   margin-bottom: 16px !important;
 }
@@ -661,17 +788,22 @@ body {
 .pre-empt-chaos-section p {
   color: rgba(255, 255, 255, 0.9) !important;
   font-size: 1.1em !important;
-  margin-bottom: 40px !important; /* Space before button */
-  max-width: 700px; /* Constrain text width */
+  margin-bottom: 40px !important;
+  /* Space before button */
+  max-width: 700px;
+  /* Constrain text width */
   margin-left: auto;
   margin-right: auto;
 }
 
 .pre-empt-chaos-section .cta-button {
   display: inline-block !important;
-  border: 1px solid #1EEDBA !important; /* Changed border-color */
-  background-color: #1EEDBA !important; /* Changed background-color */
-  color: #000000 !important; /* Changed text color */
+  border: 1px solid #1EEDBA !important;
+  /* Changed border-color */
+  background-color: #1EEDBA !important;
+  /* Changed background-color */
+  color: #000000 !important;
+  /* Changed text color */
   border-radius: 28px !important;
   padding: 14px 48px !important;
   font-size: 1.25em !important;
@@ -681,9 +813,11 @@ body {
 }
 
 .pre-empt-chaos-section .cta-button:hover {
-  background-color: #18c3a3 !important; /* Slightly darker green */
+  background-color: #18c3a3 !important;
+  /* Slightly darker green */
   border-color: #18c3a3 !important;
-  color: #FFFFFF !important; /* Ensure text stays white */
+  color: #FFFFFF !important;
+  /* Ensure text stays white */
 }
 
 /* === End Pre-empt Chaos Section === */
@@ -747,7 +881,8 @@ body {
   max-width: none;
   margin-left: 0;
   margin-right: 0;
-  padding-left: 24px; /* Maintain some padding */
+  padding-left: 24px;
+  /* Maintain some padding */
   padding-right: 24px;
 }
 
@@ -847,13 +982,15 @@ html.dark {
 }
 
 html.dark {
-  --docsearch-muted-color: #ced5e0; /* Lighter gray */
+  --docsearch-muted-color: #ced5e0;
+  /* Lighter gray */
 }
 
 html.dark .VPNav {
-    /* Gradient takes precedence over dark mode bg */
-    background: linear-gradient(to right, #5B21B6, #8437FA); /* Updated gradient */
-    border-bottom: 1px solid transparent;
+  /* Gradient takes precedence over dark mode bg */
+  background: linear-gradient(to right, #5B21B6, #8437FA);
+  /* Updated gradient */
+  border-bottom: 1px solid transparent;
 }
 
 html.dark .VPFeatures .item {
@@ -868,13 +1005,16 @@ html.dark .VPFeatures .icon {
 /* === Header Scroll Behavior === */
 
 html.is-scrolled .VPNav {
-  background-color: var(--vp-nav-bg-color); /* Revert to theme default or white */
-  border-bottom-color: var(--vp-c-divider); /* Use theme border */
+  background-color: var(--vp-nav-bg-color);
+  /* Revert to theme default or white */
+  border-bottom-color: var(--vp-c-divider);
+  /* Use theme border */
 }
 
 html.is-scrolled .VPNavBar .title,
 html.is-scrolled .VPNavBarMenuLink .text {
-  color: var(--vp-c-text-1) !important; /* Revert to default text color, ensure it overrides */
+  color: var(--vp-c-text-1) !important;
+  /* Revert to default text color, ensure it overrides */
 }
 
 html.is-scrolled .VPNavBar .VPButton,
@@ -916,6 +1056,7 @@ html.is-scrolled .VPNavBarSearch .DocSearch-Button-Placeholder {
 /* Remove bottom margin from Home page on larger screens */
 @media (min-width: 768px) {
   .VPHome {
-    margin-bottom: 0 !important; /* Override default/inline styles */
+    margin-bottom: 0 !important;
+    /* Override default/inline styles */
   }
 }
