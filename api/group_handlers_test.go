@@ -81,6 +81,7 @@ func TestGroupEndpoints(t *testing.T) {
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -93,14 +94,16 @@ func TestGroupEndpoints(t *testing.T) {
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 			}{
-				Email:         "groupuser@example.com",
-				Name:          "Group User",
-				Password:      "password123",
-				IsAdmin:       false,
-				ShowChat:      false,
-				ShowPortal:    false,
-				EmailVerified: false,
+				Email:             "groupuser@example.com",
+				Name:              "Group User",
+				Password:          "password123",
+				IsAdmin:           false,
+				ShowChat:          false,
+				ShowPortal:        false,
+				EmailVerified:     false,
+				AccessToSSOConfig: false,
 			},
 		},
 	}
