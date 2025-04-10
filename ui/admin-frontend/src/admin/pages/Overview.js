@@ -5,6 +5,7 @@ import { TitleBox, ContentBox, PrimaryButton } from '../styles/sharedStyles';
 import useOverviewData from '../hooks/useOverviewData';
 import BasicCard from '../components/common/BasicCard';
 import IconBadge from '../components/common/IconBadge';
+import { createDocsLinkHandler } from '../utils/docsLinkUtils';
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
@@ -47,7 +48,7 @@ const SectionContainer = styled(Box)(({ theme }) => ({
 }));
 
 const Overview = () => {
-  const { userName, features, hasLLMs, loading, error } = useOverviewData();
+  const { userName, features, hasLLMs, getDocsLink, loading, error } = useOverviewData();
   const navigate = useNavigate();
 
   const showChatCard = features?.feature_chat;
@@ -135,9 +136,9 @@ const Overview = () => {
                   label: 'Add LLM provider', 
                   onClick: () => navigate('/admin/llms/new') 
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'llm_providers')
                 }}
               > 
                 <Box sx={{ 
@@ -167,9 +168,9 @@ const Overview = () => {
                   label: 'Add Data source', 
                   onClick: () => navigate('/admin/datasources/new')
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'data_sources')
                 }}
               >
                 <Box sx={{ 
@@ -199,9 +200,9 @@ const Overview = () => {
                   label: 'Add Tool', 
                   onClick: () => navigate('/admin/tools/new')
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'tools')
                 }}
               >
                 <Box sx={{ 
@@ -247,9 +248,9 @@ const Overview = () => {
                   label: 'Add user', 
                   onClick: () => navigate('/admin/users/new') 
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'rbac_user_groups')
                 }}
               >
                 <Box sx={{ 
@@ -277,11 +278,11 @@ const Overview = () => {
               <BasicCard
                 primaryAction={{ 
                   label: 'Learn Filters', 
-                  onClick: () => {} 
+                  onClick: createDocsLinkHandler(getDocsLink, 'filters')
                 }}
-                secondaryAction={{ 
-                  label: 'Learn Privacy Levels', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn Privacy Levels',
+                  onClick: createDocsLinkHandler(getDocsLink, 'privacy_levels')
                 }}
               >
                 <Box sx={{ 
@@ -331,7 +332,7 @@ const Overview = () => {
                   }}
                   secondaryAction={{
                     label: 'Learn more',
-                    onClick: () => {}
+                    onClick: createDocsLinkHandler(getDocsLink, 'apps')
                   }}
                 >
                   <Box sx={{ 
@@ -366,7 +367,7 @@ const Overview = () => {
                   }}
                   secondaryAction={{
                     label: 'Learn more',
-                    onClick: () => {}
+                    onClick: createDocsLinkHandler(getDocsLink, 'chats')
                   }}
                 >
                   <Box sx={{ 
