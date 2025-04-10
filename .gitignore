@@ -16,6 +16,7 @@ licensing/keys
 docs/site/public/*
 docs/site/resources
 docs/site/.vitepress/cache/
+docs/site/.vitepress/dist/
 .vscode
 .DS_Store
 __debug_bin*
