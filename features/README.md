@@ -56,23 +56,14 @@ Each feature specification below provides detailed documentation on the individu
 
 ## Available Specifications
 
-### [User Management & RBAC](UserManagement.md)
-- Authentication and authorization system
-- Role-based access control (RBAC)
-- User registration and email verification
-- Group-based membership model
-- Admin capabilities and permissions
-- API key authentication
-- Security features and best practices
-
-### [Notifications](Notifications.md)
-- Centralized notification management system
-- Multi-channel delivery (in-app and email)
-- Notification types and delivery methods
-- Integration with other services (Budget, Auth)
-- Deduplication and tracking
-- UI components and frontend architecture
-- Testing strategy and future enhancements
+### [Analytics System](Analytics.md)
+- Comprehensive usage tracking and cost calculation
+- Data aggregation for LLM interactions and tool calls
+- Budget monitoring and consumption tracking
+- Proxy logging for debugging and auditing
+- API exposure for analytics data retrieval
+- Asynchronous processing for performance
+- Dashboard visualization for administrators and developers
 
 ### [Budget Control](Budgeting.md)
 - Monthly spending caps for apps and LLMs
@@ -83,14 +74,23 @@ Each feature specification below provides detailed documentation on the individu
 - Analytics and reporting
 - UI components for budget management
 
-### [Secrets Management](Secrets.md)
-- Secure storage of sensitive data (passwords, tokens, API keys)
-- AES encryption for data at rest
-- Environment variable and secret references ($ENV/VAR_NAME, $SECRET/SECRET_NAME)
-- CRUD API endpoints with role-based access control
-- Integration with multiple services (credentials, tools, LLMs)
-- Admin UI for secret management
-- Secure deployment configuration
+### [Chat Session System](Chat.md)
+- Stateful conversation management with LLMs
+- Real-time streaming responses via Server-Sent Events
+- Dynamic tool and datasource integration
+- Persistence of chat history and metadata
+- Integration with user management and access control
+- Customizable chat behavior through configurations
+- Responsive and interactive chat UI
+
+### [Datasource & RAG System](Datastore.md)
+- Vector store abstraction for multiple providers
+- File management for source documents
+- Embedding generation for document chunks
+- Data ingestion pipeline for vector databases
+- Retrieval Augmented Generation (RAG) capabilities
+- Integration with chat sessions for context enhancement
+- Admin UI for datasource configuration and management
 
 ### [Filters](Filters.md)
 - Custom logic to intercept and modify LLM requests
@@ -111,6 +111,16 @@ Each feature specification below provides detailed documentation on the individu
 - Activation control for LLM providers
 - Admin UI for configuration
 
+### [LLM Proxy System](Proxy.md)
+- Centralized gateway for LLM provider interactions
+- Authentication and authorization enforcement
+- Model access control based on configurations
+- Policy enforcement through filters
+- Budget limit enforcement
+- Vendor abstraction for multiple LLM providers
+- Analytics and observability for all LLM interactions
+- Streaming support for real-time responses
+
 ### [Model Pricing System](Pricing.md)
 - Cost definition for various LLM models
 - Accurate tracking of token usage and costs
@@ -119,6 +129,33 @@ Each feature specification below provides detailed documentation on the individu
 - Fallback mechanism for undefined prices
 - Historical cost recalculation
 - Currency management
+
+### [Notifications](Notifications.md)
+- Centralized notification management system
+- Multi-channel delivery (in-app and email)
+- Notification types and delivery methods
+- Integration with other services (Budget, Auth)
+- Deduplication and tracking
+- UI components and frontend architecture
+- Testing strategy and future enhancements
+
+### [Secrets Management](Secrets.md)
+- Secure storage of sensitive data (passwords, tokens, API keys)
+- AES encryption for data at rest
+- Environment variable and secret references ($ENV/VAR_NAME, $SECRET/SECRET_NAME)
+- CRUD API endpoints with role-based access control
+- Integration with multiple services (credentials, tools, LLMs)
+- Admin UI for secret management
+- Secure deployment configuration
+
+### [Single Sign-On (SSO) Support](SSOSupport.md)
+- Multiple identity provider integration (OpenID Connect, SAML, LDAP)
+- Profile management with Monaco editor-based UI
+- Group mapping between external and internal systems
+- Embedded Tyk Identity Broker integration
+- Secure authentication flows
+- Default login profile configuration
+- Admin controls for SSO configuration
 
 ### [Tool System](Tools.md)
 - External service integration via OpenAPI specifications
@@ -129,3 +166,21 @@ Each feature specification below provides detailed documentation on the individu
 - Organization through tool catalogues
 - Documentation integration with file stores
 - Filter integration for request validation
+
+### [Universal LLM Client System](UniversalLLMClient.md)
+- OpenAI API compatibility layer for non-OpenAI models
+- Request translation between different vendor formats
+- Response translation to standardized format
+- Centralized configuration using LLM management
+- Policy enforcement consistent with direct proxy
+- Analytics integration for usage tracking
+- Vendor abstraction through common interfaces
+
+### [User Management & RBAC](UserManagement.md)
+- Authentication and authorization system
+- Role-based access control (RBAC)
+- User registration and email verification
+- Group-based membership model
+- Admin capabilities and permissions
+- API key authentication
+- Security features and best practices
