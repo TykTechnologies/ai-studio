@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems) => {
   const getInitialState = () => {
@@ -26,6 +27,13 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems) =>
   const [open, setOpen] = useState(initialState.open);
   const [expandedItems, setExpandedItems] = useState(initialState.expanded);
   const [selectedPath, setSelectedPath] = useState(initialState.selectedPath);
+  const location = useLocation();
+  
+  // Update selectedPath when location changes
+  useEffect(() => {
+    const path = location.pathname;
+    setSelectedPath(path);
+  }, [location.pathname]);
 
   useEffect(() => {
     try {

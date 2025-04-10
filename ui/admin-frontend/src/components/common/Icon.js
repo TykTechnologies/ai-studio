@@ -15,6 +15,9 @@ const iconComponents = {
   'users': lazy(() => import('../../common/fontawesome/users.svg').then(module => ({ default: module.ReactComponent }))),
   'book-sparkles': lazy(() => import('../../common/fontawesome/book-sparkles.svg').then(module => ({ default: module.ReactComponent }))),
   'screwdriver-wrench': lazy(() => import('../../common/fontawesome/screwdriver-wrench.svg').then(module => ({ default: module.ReactComponent }))),
+  'hexagon-exclamation': lazy(() => import('../../common/fontawesome/hexagon-exclamation.svg').then(module => ({ default: module.ReactComponent }))),
+  'hexagon-check': lazy(() => import('../../common/fontawesome/hexagon-check.svg').then(module => ({ default: module.ReactComponent }))),
+  'triangle-exclamation': lazy(() => import('../../common/fontawesome/triangle-exclamation.svg').then(module => ({ default: module.ReactComponent }))),
 };
 
 const Icon = ({ name, ...svgProps }) => {

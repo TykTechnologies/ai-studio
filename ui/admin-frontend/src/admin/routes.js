@@ -60,7 +60,11 @@ import SecretForm from "./components/secrets/SecretForm";
 import Dashboard from "./pages/Dashboard";
 import Overview from "./pages/Overview";
 
-const adminRoutes = (
+import SSOProfiles from "./pages/SSOProfiles";
+import SSOProfileEditor from "./components/sso-profiles/SSOProfileEditor";
+import SSOProfileDetails from "./components/sso-profiles/SSOProfileDetails";
+
+const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
     <Route path="dash" element={<Dashboard />} />
@@ -136,4 +140,15 @@ const adminRoutes = (
   </>
 );
 
-export default adminRoutes;
+// SSO profile routes that will be conditionally rendered based on uiOptions.show_sso_config
+const ssoRoutes = (
+  <>
+    <Route path="sso-profiles" element={<SSOProfiles />} />
+    <Route path="sso-profiles/new" element={<SSOProfileEditor />} />
+    <Route path="sso-profiles/edit/:profileId" element={<SSOProfileEditor />} />
+    <Route path="sso-profiles/:profileId" element={<SSOProfileDetails />} />
+  </>
+);
+
+export { mainAdminRoutes, ssoRoutes };
+export default mainAdminRoutes;

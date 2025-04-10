@@ -36,6 +36,21 @@ const theme = createTheme({
       lineHeight: "20px",
       fontFamily: "Inter-Medium",
     },
+    bodyLargeBold: {
+      fontSize: "14px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Bold",
+    },
+    bodyMediumDefault: {
+      fontSize: "13.2px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Regular",
+    },
+    bodyMediumSemiBold: {
+      fontSize: "13.2px",
+      lineHeight: "20px",
+      fontFamily: "Inter-SemiBold",
+    },
     bodySmallDefault: {
       fontSize: "12px",
       lineHeight: "16px",
@@ -66,6 +81,11 @@ const theme = createTheme({
       lineHeight: "24px",
       fontFamily: "Inter-Bold",
     },
+    headingSmall: {
+      fontSize: "14px",
+      lineHeight: "20px", 
+      fontFamily: "Inter-SemiBold", 
+    }
   },
   palette: {
     mode: "light",
@@ -89,6 +109,11 @@ const theme = createTheme({
       surfaceNeutralHover: '#F8F8F9',
       surfaceBrandHovered: '#EBDFFE',
       surfaceDefaultBubble: '#B7F9E9C2',
+      surfaceCriticalDefault: '#FCEFEC',
+      surfaceWarningDefault: '#FFFBF2',
+      surfaceSuccessDefault: '#EEF8F1',
+      iconSuccessDefault: '#2BA84A',
+      iconWarningDefault: '#FFC453',
       buttonPrimaryDefault: '#343452',
       buttonPrimaryDefaultHover: '#181834',
       buttonPrimaryOutlineHover: '#EEFEFA',
@@ -101,7 +126,10 @@ const theme = createTheme({
       neutralHovered: '#9D9DAF',
       neutralDefaultSubdued: '#F1F1F4',
       criticalDefault: '#AE2410',
-      criticalHover: '#8B1D12'
+      criticalDefaultSubdue: '#F9DDD8',
+      criticalHover: '#8B1D12',
+      successDefaultSubdued: '#DDF1E2 ',
+      warningDefaultSubdued: '#FFF5E3',
     },
     gray: {
       ligh: "#F5F5F5",
@@ -125,7 +153,11 @@ const theme = createTheme({
       light: "#FFFFFF",
       dark: "#023056",
       default: "#03031C",
-      defaultSubdued: '#414160'
+      defaultSubdued: '#414160',
+      linkDefault: "#00A6ED",
+      criticalDefault: "#3E0E18",
+      successDefault: "#0E3129",
+      warningDefault: "#473717",
     },
   },
   components: {

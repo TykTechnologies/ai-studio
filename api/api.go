@@ -69,6 +69,7 @@ type API struct {
 	staticFiles         embed.FS
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
+	ssoService          *services.SSOService
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
@@ -134,6 +135,22 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		proxy:       proxy,
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
+	}
+
+	if config.TIBEnabled {
+		logLevel := "info"
+
+		if config.TestMode {
+			logLevel = "debug"
+		}
+
+		ssoConfig := &services.Config{
+			APISecret: config.TIBAPISecret,
+			LogLevel:  logLevel,
+		}
+		api.ssoService = services.NewSSOService(ssoConfig, router, config.DB, service.NotificationService)
+
+		api.ssoService.InitInternalTIB()
 	}
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
@@ -217,7 +234,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 func (a *API) setupRoutes() {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
-	
+
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
 	} else {
@@ -597,6 +614,31 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
+	// SSO routes
+	if a.config.TIBEnabled {
+		public.GET("/auth/:id/:provider", a.handleTIBAuth)
+		public.POST("/auth/:id/:provider", a.handleTIBAuth)
+		public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+		public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+		public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+		public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+		public.GET("/sso", a.handleSSO)
+		public.GET("/login-sso-profile", a.getLoginPageProfile)
+
+		apiGroup := public.Group("/api")
+		apiGroup.Use(a.SSOAuthMiddleware())
+		apiGroup.POST("/sso", a.handleNonceRequest)
+
+		profiles := v1.Group("/sso-profiles")
+		profiles.Use(a.auth.SSOOnly())
+		profiles.POST("", a.createProfile)
+		profiles.GET("", a.listProfiles)
+		profiles.GET("/:profile_id", a.getProfile)
+		profiles.PUT("/:profile_id", a.updateProfile)
+		profiles.DELETE("/:profile_id", a.deleteProfile)
+		profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
+	}
+
 	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
 	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
 		a.setupChatRoutesFunc(authed)
@@ -628,7 +670,6 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 }
 
 func (a *API) handleGetConfig(c *gin.Context) {
-	// Get the request protocol and host
 	scheme := "http"
 
 	host := c.Request.Host
@@ -641,7 +682,6 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
-	// Construct the base URL
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	suMode := "both"
@@ -653,6 +693,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		APIBaseURL:        apiBaseURL,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
+		TIBEnabled:        a.config.TIBEnabled,
 	}
 
 	c.JSON(http.StatusOK, config)
