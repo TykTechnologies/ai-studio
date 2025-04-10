@@ -5,7 +5,13 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import Overview from './Overview';
 import useOverviewData from '../hooks/useOverviewData';
+import { createDocsLinkHandler } from '../utils/docsLinkUtils';
 
+// Mock the createDocsLinkHandler utility
+jest.mock('../utils/docsLinkUtils', () => ({
+  __esModule: true,
+  createDocsLinkHandler: jest.fn(),
+}));
 // Mock the coordinator hook
 jest.mock('../hooks/useOverviewData', () => ({
   __esModule: true,
@@ -75,8 +81,10 @@ const mockTheme = createTheme({
 });
 
 // Wrap component with ThemeProvider and MemoryRouter for testing
-const renderWithProviders = (ui, { entitlements, features, hasLLMs, loading, error } = {}) => {
+const renderWithProviders = (ui, { entitlements, features, hasLLMs, loading, error, getDocsLink } = {}) => {
   // Set up default mock values for the coordinator hook
+  const mockGetDocsLink = getDocsLink || jest.fn().mockReturnValue('https://docs.example.com/mock-link');
+  
   useOverviewData.mockReturnValue({
     userEntitlements: entitlements?.userEntitlements || {},
     userName: entitlements?.userName || 'Test User',
@@ -88,6 +96,18 @@ const renderWithProviders = (ui, { entitlements, features, hasLLMs, loading, err
     hasLLMs: hasLLMs !== undefined ? hasLLMs : false,
     loading: loading !== undefined ? loading : false,
     error: error || null,
+    getDocsLink: mockGetDocsLink,
+  });
+  
+  // Set up default mock for createDocsLinkHandler
+  createDocsLinkHandler.mockImplementation((getDocsLinkFn, key) => {
+    return jest.fn(() => {
+      const link = getDocsLinkFn(key);
+      if (link) {
+        // In tests, we just return the link instead of opening it
+        return link;
+      }
+    });
   });
 
   return render(
@@ -309,5 +329,59 @@ describe('Overview Component', () => {
     expect(iconBadges[2]).toHaveAttribute('data-icon-name', 'screwdriver-wrench');
     expect(iconBadges[3]).toHaveAttribute('data-icon-name', 'users');
     expect(iconBadges[4]).toHaveAttribute('data-icon-name', 'shield');
+  });
+  
+  describe('Documentation Links', () => {
+    test('creates documentation link handlers for all "Learn more" buttons', () => {
+      renderWithProviders(<Overview />);
+      
+      // Check that createDocsLinkHandler was called for each documentation link
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'llm_providers');
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'data_sources');
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'tools');
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'rbac_user_groups');
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'filters');
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'privacy_levels');
+      
+      // These are conditionally rendered, so we need to enable the features
+      renderWithProviders(<Overview />, {
+        features: { features: { feature_gateway: true, feature_portal: true, feature_chat: true } }
+      });
+      
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'apps');
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(expect.any(Function), 'chats');
+    });
+    
+    test('passes the correct getDocsLink function to createDocsLinkHandler', () => {
+      const mockGetDocsLink = jest.fn().mockImplementation(key => {
+        const links = {
+          'llm_providers': 'https://docs.example.com/llm',
+          'data_sources': 'https://docs.example.com/data',
+          'tools': 'https://docs.example.com/tools'
+        };
+        return links[key] || null;
+      });
+      
+      renderWithProviders(<Overview />, { getDocsLink: mockGetDocsLink });
+      
+      // Verify createDocsLinkHandler was called with the correct function
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(mockGetDocsLink, expect.any(String));
+      
+      // Reset the mock to verify it's called with the right key
+      createDocsLinkHandler.mockClear();
+      
+      // Render again and check specific key
+      renderWithProviders(<Overview />, { getDocsLink: mockGetDocsLink });
+      
+      expect(createDocsLinkHandler).toHaveBeenCalledWith(mockGetDocsLink, 'llm_providers');
+      
+      // Verify the mock function was called with the right key
+      const firstCall = createDocsLinkHandler.mock.calls[0];
+      const getDocsLinkFn = firstCall[0];
+      const key = firstCall[1];
+      
+      getDocsLinkFn(key);
+      expect(mockGetDocsLink).toHaveBeenCalledWith('llm_providers');
+    });
   });
 });

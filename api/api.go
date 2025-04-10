@@ -694,6 +694,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
 		TIBEnabled:        a.config.TIBEnabled,
+		DocsLinks:         config.Get().DocsLinks,
 	}
 
 	c.JSON(http.StatusOK, config)
