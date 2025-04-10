@@ -40,6 +40,7 @@ func (a *API) createUser(c *gin.Context) {
 		input.Data.Attributes.ShowPortal,
 		input.Data.Attributes.EmailVerified,
 		input.Data.Attributes.NotificationsEnabled,
+		input.Data.Attributes.AccessToSSOConfig,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -135,6 +136,7 @@ func (a *API) updateUser(c *gin.Context) {
 		input.Data.Attributes.ShowPortal,
 		input.Data.Attributes.EmailVerified,
 		input.Data.Attributes.NotificationsEnabled,
+		input.Data.Attributes.AccessToSSOConfig,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -254,6 +256,7 @@ func serializeUser(user *models.User) UserResponse {
 			EmailVerified        bool   `json:"email_verified"`
 			APIKey               string `json:"api_key"`
 			NotificationsEnabled bool   `json:"notifications_enabled"`
+			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 		}{
 			Email:                user.Email,
 			Name:                 user.Name,
@@ -263,6 +266,7 @@ func serializeUser(user *models.User) UserResponse {
 			EmailVerified:        user.EmailVerified,
 			APIKey:               user.APIKey,
 			NotificationsEnabled: user.NotificationsEnabled,
+			AccessToSSOConfig:    user.AccessToSSOConfig,
 		},
 	}
 }
