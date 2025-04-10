@@ -1,18 +1,19 @@
 package mcpserver
 
 import (
-	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
-	"github.com/MegaGrindStone/go-mcp"
+	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"gorm.io/gorm"
 )
 
-// ToolHandler implements the mcp.ToolServer interface
+// ToolHandler handles tool operations for MCP servers
 type ToolHandler struct {
 	db          *gorm.DB
 	mcpServerID uint
@@ -35,77 +36,51 @@ func NewToolHandler(db *gorm.DB, mcpServerID uint, tools []models.Tool) *ToolHan
 	}
 }
 
-// ListTools returns a list of available tools
-func (h *ToolHandler) ListTools(ctx context.Context, _ mcp.ListToolsParams, _ mcp.ProgressReporter) (mcp.ListToolsResult, error) {
-	result := mcp.ListToolsResult{
-		Tools: []mcp.Tool{},
-	}
+// HandleToolRequest handles a tool request from the MCP protocol
+func (h *ToolHandler) HandleToolRequest(req *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+	log.Printf("Handling tool request for %s", req.Name)
 
-	for _, tool := range h.tools {
-		// Get operations from the model
-		operations := tool.GetOperations()
-
-		// Skip tools with no operations
-		if len(operations) == 0 {
-			continue
-		}
-
-		for _, op := range operations {
-			// Just log info, we'll use a simplified schema
-			log.Printf("Adding tool operation: %s_%s", tool.Name, op)
-
-			// For now, we'll use a simplified schema since we don't have GetOperationSpecBytes
-			schemaMap := map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"parameters": map[string]interface{}{
-						"type": "object",
-					},
-					"body": map[string]interface{}{
-						"type": "object",
-					},
-				},
-			}
-
-			// Convert schema map to JSON
-			schemaBytes, err := json.Marshal(schemaMap)
-			if err != nil {
-				log.Printf("Failed to marshal schema for operation %s: %v", op, err)
-				continue
-			}
-
-			// Add the tool
-			mcpTool := mcp.Tool{
-				Name:        fmt.Sprintf("%s_%s", tool.Name, op),
-				Description: fmt.Sprintf("%s - %s", tool.Description, op),
-				InputSchema: schemaBytes,
-			}
-			result.Tools = append(result.Tools, mcpTool)
-		}
-	}
-
-	return result, nil
-}
-
-// CallTool executes a tool operation
-func (h *ToolHandler) CallTool(ctx context.Context, params mcp.CallToolParams, _ mcp.ProgressReporter) (mcp.CallToolResult, error) {
 	// Parse the tool name to get the original tool and operation
-	var toolName, opName string
-	fmt.Sscanf(params.Name, "%s_%s", &toolName, &opName)
+	// Format is typically "Tool Name_operationName"
+	// We need to handle space in tool names, so find the last underscore
+	reqName := req.Name
+	lastUnderscoreIndex := strings.LastIndex(reqName, "_")
+	if lastUnderscoreIndex == -1 {
+		// No underscore found, assume the whole string is the tool name
+		return &protocol.CallToolResult{
+			IsError: true,
+			Content: []protocol.Content{
+				&protocol.TextContent{
+					Type: "text",
+					Text: fmt.Sprintf("Invalid tool name format (no operation): %s", reqName),
+				},
+			},
+		}, nil
+	}
+
+	// Extract tool name and operation
+	toolName := reqName[:lastUnderscoreIndex]
+	opName := reqName[lastUnderscoreIndex+1:]
+
+	log.Printf("Parsed tool name: '%s', operation: '%s'", toolName, opName)
 
 	// Find the tool
 	tool, ok := h.toolMap[toolName]
 	if !ok {
-		return mcp.CallToolResult{
+		// Return error response with proper protocol.TextContent
+		return &protocol.CallToolResult{
 			IsError: true,
-			Content: []mcp.Content{
-				{
-					Type: mcp.ContentTypeText,
+			Content: []protocol.Content{
+				&protocol.TextContent{
+					Type: "text",
 					Text: fmt.Sprintf("Tool not found: %s", toolName),
 				},
 			},
 		}, nil
 	}
+
+	// Use the universal client to execute the operation
+	log.Printf("Executing operation %s on tool %s", opName, toolName)
 
 	// Create a universal client for the tool
 	opts := []universalclient.ClientOption{}
@@ -115,13 +90,24 @@ func (h *ToolHandler) CallTool(ctx context.Context, params mcp.CallToolParams, _
 		opts = append(opts, universalclient.WithAuth(tool.AuthSchemaName, tool.AuthKey))
 	}
 
-	uc, err := universalclient.NewClient([]byte(tool.OASSpec), "", opts...)
+	// Attempt to decode the OAS spec as base64 (it may be stored encoded)
+	specBytes := []byte(tool.OASSpec)
+	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+	if err == nil {
+		// Successfully decoded as base64
+		log.Printf("Successfully decoded base64 OAS spec for tool %s", toolName)
+		specBytes = decodedSpec
+	}
+
+	// Create client with potentially decoded spec
+	uc, err := universalclient.NewClient(specBytes, "", opts...)
 	if err != nil {
-		return mcp.CallToolResult{
+		// Return error response with proper protocol.TextContent
+		return &protocol.CallToolResult{
 			IsError: true,
-			Content: []mcp.Content{
-				{
-					Type: mcp.ContentTypeText,
+			Content: []protocol.Content{
+				&protocol.TextContent{
+					Type: "text",
 					Text: fmt.Sprintf("Failed to create client: %v", err),
 				},
 			},
@@ -130,12 +116,13 @@ func (h *ToolHandler) CallTool(ctx context.Context, params mcp.CallToolParams, _
 
 	// Parse the arguments into the required format
 	var args map[string]interface{}
-	if err := json.Unmarshal(params.Arguments, &args); err != nil {
-		return mcp.CallToolResult{
+	if err := json.Unmarshal(req.RawArguments, &args); err != nil {
+		// Return error response with proper protocol.TextContent
+		return &protocol.CallToolResult{
 			IsError: true,
-			Content: []mcp.Content{
-				{
-					Type: mcp.ContentTypeText,
+			Content: []protocol.Content{
+				&protocol.TextContent{
+					Type: "text",
 					Text: fmt.Sprintf("Failed to parse arguments: %v", err),
 				},
 			},
@@ -143,13 +130,14 @@ func (h *ToolHandler) CallTool(ctx context.Context, params mcp.CallToolParams, _
 	}
 
 	// Execute the operation
-	result, err := uc.CallOperation(opName, nil, args, nil)
+	opResult, err := uc.CallOperation(opName, nil, args, nil)
 	if err != nil {
-		return mcp.CallToolResult{
+		// Return error response with proper protocol.TextContent
+		return &protocol.CallToolResult{
 			IsError: true,
-			Content: []mcp.Content{
-				{
-					Type: mcp.ContentTypeText,
+			Content: []protocol.Content{
+				&protocol.TextContent{
+					Type: "text",
 					Text: fmt.Sprintf("Operation failed: %v", err),
 				},
 			},
@@ -157,24 +145,25 @@ func (h *ToolHandler) CallTool(ctx context.Context, params mcp.CallToolParams, _
 	}
 
 	// Convert the result to a string
-	resultBytes, err := json.MarshalIndent(result, "", "  ")
+	resultBytes, err := json.MarshalIndent(opResult, "", "  ")
 	if err != nil {
-		return mcp.CallToolResult{
+		// Return error response with proper protocol.TextContent
+		return &protocol.CallToolResult{
 			IsError: true,
-			Content: []mcp.Content{
-				{
-					Type: mcp.ContentTypeText,
+			Content: []protocol.Content{
+				&protocol.TextContent{
+					Type: "text",
 					Text: fmt.Sprintf("Failed to format result: %v", err),
 				},
 			},
 		}, nil
 	}
 
-	// Return the result
-	return mcp.CallToolResult{
-		Content: []mcp.Content{
-			{
-				Type: mcp.ContentTypeText,
+	// Create success result with proper protocol.TextContent
+	return &protocol.CallToolResult{
+		Content: []protocol.Content{
+			&protocol.TextContent{
+				Type: "text",
 				Text: string(resultBytes),
 			},
 		},

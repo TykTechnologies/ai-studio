@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -13,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/mcpserver"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -342,6 +345,101 @@ func (s *MCPService) StartMCPServer(mcpServerID uint) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create MCP server: %w", err)
+	}
+
+	// Register tools with the MCP server
+	// This is required to make the tools available via the MCP protocol
+	mcpLogger.Infof("Registering %d tools with MCP server", len(tools))
+
+	for _, tool := range tools {
+		operations := tool.GetOperations()
+
+		// Skip tools with no operations
+		if len(operations) == 0 {
+			mcpLogger.Debugf("Skipping tool %s with no operations", tool.Name)
+			continue
+		}
+
+		// Try to decode the OAS spec (it's stored as base64)
+		decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+		if err != nil {
+			mcpLogger.Warnf("Failed to decode base64 OAS spec for tool %s: %v", tool.Name, err)
+			continue
+		}
+
+		// Create a universal client to parse the OAS spec
+		uc, err := universalclient.NewClient(decodedSpec, "")
+		if err != nil {
+			mcpLogger.Warnf("Failed to create universal client for tool %s: %v", tool.Name, err)
+			continue
+		}
+
+		for _, op := range operations {
+			toolName := fmt.Sprintf("%s_%s", tool.Name, op)
+			mcpLogger.Infof("Registering tool: %s", toolName)
+
+			var schemaJSON []byte
+
+			// Use AsTool to generate the complete schema with all type information
+			llmTools, err := uc.AsTool(op)
+			if err != nil {
+				mcpLogger.Warnf("Failed to get tool definition for %s: %v", op, err)
+				// Fallback to basic schema
+				schemaJSON = []byte(`{
+					"type": "object",
+					"properties": {
+						"parameters": { "type": "object" },
+						"body": { "type": "object" }
+					}
+				}`)
+			} else if len(llmTools) > 0 {
+				// Extract the parameter schema from the first tool
+				// This contains all the rich schema information from the OAS spec
+				// including types, enums, formats, required flags, etc.
+				paramSchema := llmTools[0].Function.Parameters
+
+				// Convert to JSON - this preserves all the rich type information
+				schemaJSON, err = json.Marshal(paramSchema)
+				if err != nil {
+					mcpLogger.Warnf("Failed to marshal schema for %s: %v", op, err)
+					// Fallback to basic schema
+					schemaJSON = []byte(`{
+						"type": "object",
+						"properties": {
+							"parameters": { "type": "object" },
+							"body": { "type": "object" }
+						}
+					}`)
+				}
+
+				mcpLogger.Debugf("Rich schema for %s: %s", op, string(schemaJSON))
+			} else {
+				mcpLogger.Warnf("AsTool returned no tools for %s", op)
+				// Fallback to basic schema
+				schemaJSON = []byte(`{
+					"type": "object",
+					"properties": {
+						"parameters": { "type": "object" },
+						"body": { "type": "object" }
+					}
+				}`)
+			}
+
+			// Register the tool with the MCP server
+			mcpTool := &protocol.Tool{
+				Name:           toolName,
+				Description:    fmt.Sprintf("%s - %s operation", tool.Description, op),
+				RawInputSchema: schemaJSON,
+			}
+
+			// Use toolHandler.CallTool as the handler for this tool
+			mcpServer.RegisterTool(mcpTool, func(req *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+				mcpLogger.Debugf("Tool call: %s with args: %s", req.Name, string(req.RawArguments))
+
+				// Directly delegate to the toolHandler
+				return toolHandler.HandleToolRequest(req)
+			})
+		}
 	}
 
 	// Create a cancellable context for the server
