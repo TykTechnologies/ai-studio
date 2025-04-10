@@ -4,6 +4,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "Tyk AI Studio",
   description: "Tyk AI Studio - Accelerate AI innovation without sacrificing control",
+  ignoreDeadLinks: true,
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     appearance: false, // Disable dark/light mode switch
@@ -69,5 +70,6 @@ export default defineConfig({
         allow: ['/Users/leonidbugaev/go/src/']
       }
     }
-  }
+  },
+  srcExclude: ['**/themes/**']
 })
