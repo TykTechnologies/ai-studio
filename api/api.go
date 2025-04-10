@@ -70,6 +70,7 @@ type API struct {
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
 	ssoService          *services.SSOService
+	mcpHandlers         *MCPHandlers
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
@@ -126,6 +127,9 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		})
 	}
 
+	// Initialize MCP handlers
+	mcpHandlers := NewMCPHandlers(config.DB, service.MCP)
+
 	api := &API{
 		service:     service,
 		router:      router,
@@ -135,6 +139,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		proxy:       proxy,
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
+		mcpHandlers: mcpHandlers,
 	}
 
 	if config.TIBEnabled {
@@ -613,6 +618,16 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/secrets/:id", a.updateSecret)
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
+
+	// MCP server routes
+	v1.POST("/mcp-servers", a.mcpHandlers.CreateMCPServer)
+	v1.GET("/mcp-servers/:id", a.mcpHandlers.GetMCPServer)
+	v1.PATCH("/mcp-servers/:id", a.mcpHandlers.UpdateMCPServer)
+	v1.DELETE("/mcp-servers/:id", a.mcpHandlers.DeleteMCPServer)
+	v1.GET("/mcp-servers", a.mcpHandlers.GetMCPServers)
+	v1.POST("/mcp-servers/:id/tools", a.mcpHandlers.AddToolToMCPServer)
+	v1.DELETE("/mcp-servers/:id/tools/:tool_id", a.mcpHandlers.RemoveToolFromMCPServer)
+	v1.GET("/mcp-servers/:id/tools", a.mcpHandlers.GetMCPServerTools)
 
 	// SSO routes
 	if a.config.TIBEnabled {

@@ -1,8 +1,8 @@
 module github.com/TykTechnologies/midsommar/v2
 
-go 1.23.0
+go 1.23.3
 
-toolchain go1.23.1
+toolchain go1.23.4
 
 require (
 	github.com/TykTechnologies/tyk-identity-broker v1.7.0
@@ -56,6 +56,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/MegaGrindStone/go-mcp v0.6.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/TykTechnologies/gojsonschema v0.0.0-20170222154038-dcb3e4bb7990 // indirect
@@ -175,6 +176,7 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tidwall/sjson v1.0.4 // indirect
+	github.com/tmaxmax/go-sse v0.10.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/uber/jaeger-client-go v2.30.1-0.20220110192849-8d8e8fcfd04d+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.2-0.20210604143007-135cf5605a6d+incompatible // indirect
@@ -237,4 +239,5 @@ require (
 )
 
 replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20250131233632-4cdc6fe5fe92
+
 replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.34.0
