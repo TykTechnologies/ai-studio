@@ -5,6 +5,7 @@ import useOverviewData from './useOverviewData';
 import useUserEntitlements from './useUserEntitlements';
 import useSystemFeatures from './useSystemFeatures';
 import useLLMs from './useLLMs';
+import useConfig from './useConfig';
 
 // Mock the dependency hooks
 jest.mock('./useUserEntitlements', () => ({
@@ -18,6 +19,11 @@ jest.mock('./useSystemFeatures', () => ({
 }));
 
 jest.mock('./useLLMs', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+jest.mock('./useConfig', () => ({
   __esModule: true,
   default: jest.fn(),
 }));
@@ -36,9 +42,9 @@ function TestComponent() {
   const hookResult = useOverviewData();
   
   return (
-    <div>
-      <div data-testid="loading">{hookResult.loading.toString()}</div>
-      <div data-testid="error">{hookResult.error || 'no-error'}</div>
+  <div>
+    <div data-testid="loading">{hookResult.loading.toString()}</div>
+    <div data-testid="error">{hookResult.error ? (typeof hookResult.error === 'string' ? hookResult.error : hookResult.error.message || 'Error object') : 'no-error'}</div>
       <div data-testid="userEntitlements">{JSON.stringify(hookResult.userEntitlements)}</div>
       <div data-testid="userName">{hookResult.userName || 'no-username'}</div>
       <div data-testid="features">{JSON.stringify(hookResult.features)}</div>
@@ -58,11 +64,13 @@ describe('useOverviewData Hook', () => {
   const mockFetchUserEntitlements = jest.fn();
   const mockFetchFeatures = jest.fn();
   const mockFetchLLMs = jest.fn();
+  const mockFetchConfig = jest.fn();
   
   const mockUserEntitlements = { role: 'admin' };
   const mockUserName = 'Test User';
   const mockFeatures = { feature_chat: true, feature_gateway: true };
   const mockHasLLMs = true;
+  const mockConfig = { apiBaseURL: 'http://example.com' };
   
   beforeEach(() => {
     jest.clearAllMocks();
@@ -81,6 +89,13 @@ describe('useOverviewData Hook', () => {
       error: null
     });
     
+    useConfig.mockReturnValue({
+      config: mockConfig,
+      fetchConfig: mockFetchConfig,
+      getDocsLink: jest.fn(),
+      error: null
+    });
+    
     useLLMs.mockReturnValue({
       hasLLMs: mockHasLLMs,
       fetchLLMs: mockFetchLLMs,
@@ -88,9 +103,10 @@ describe('useOverviewData Hook', () => {
     });
     
     // Default successful promise resolutions
-    mockFetchUserEntitlements.mockResolvedValue(mockUserEntitlements);
-    mockFetchFeatures.mockResolvedValue(mockFeatures);
-    mockFetchLLMs.mockResolvedValue({ hasLLMs: mockHasLLMs });
+    mockFetchUserEntitlements.mockImplementation(() => Promise.resolve(mockUserEntitlements));
+    mockFetchFeatures.mockImplementation(() => Promise.resolve(mockFeatures));
+    mockFetchLLMs.mockImplementation(() => Promise.resolve({ hasLLMs: mockHasLLMs }));
+    mockFetchConfig.mockImplementation(() => Promise.resolve(mockConfig));
   });
   
   test('should initialize with loading state and fetch all data', async () => {

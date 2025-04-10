@@ -6,6 +6,7 @@ import useOverviewData from '../hooks/useOverviewData';
 import BasicCard from '../components/common/BasicCard';
 import IconBadge from '../components/common/IconBadge';
 import { createDocsLinkHandler } from '../utils/docsLinkUtils';
+import VideoPlayer from '../components/common/VideoPlayer';
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
@@ -108,7 +109,10 @@ const Overview = () => {
               </Typography>
             </Box>
             <Box sx={{ width: { xs: '100%', sm: '50%' }, boxSizing: 'border-box' }}>
-              {/* Placeholder for the play demo section */}
+              <VideoPlayer
+                url={getDocsLink('demo_video')}
+                sx={{ width: '100%', height: '100%' }}
+              />
             </Box>
           </Box>
         </DescriptionSection>
