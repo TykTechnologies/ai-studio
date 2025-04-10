@@ -175,9 +175,9 @@ func getConfigFromEnv() *AppConf {
 		conf.TIBEnabled = true
 	}
 
-	conf.TIBAPISecret = os.Getenv("TIB_API_SECRET")
+	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
 	if conf.TIBAPISecret == "" && conf.TIBEnabled {
-		log.Println("Warning: TIB_API_SECRET environment variable is not set but TIB is enabled")
+		log.Println("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
 	}
 
 	return conf
