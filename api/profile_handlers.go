@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -23,6 +24,10 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 
 	if profile.SelectedProviderType == provSAML {
 		callbackBaseURL = accessor.GetString("SAMLBaseURL", "")
+	}
+
+	if callbackBaseURL != "" && !strings.HasSuffix(callbackBaseURL, "/") {
+		callbackBaseURL += "/"
 	}
 
 	failureRedirect := accessor.GetString("FailureRedirect", "")
