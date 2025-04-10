@@ -7,10 +7,13 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool) (*models.User, error) {
-	// Only allow notifications if user is admin
+func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
 	if notificationsEnabled && !isAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
+	}
+
+	if accessToSSOConfig && !isAdmin {
+		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
 	}
 
 	user := &models.User{
@@ -21,6 +24,7 @@ func (s *Service) CreateUser(email, name, password string, isAdmin bool, showCha
 		ShowPortal:           showPortal,
 		EmailVerified:        emailVerified,
 		NotificationsEnabled: notificationsEnabled,
+		AccessToSSOConfig:    accessToSSOConfig,
 	}
 
 	if err := user.SetPassword(password); err != nil {
@@ -71,15 +75,18 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool) (*models.User, error) {
+func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
 	user, err := s.GetUserByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Only allow notifications if user is admin
 	if notificationsEnabled && !isAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
+	}
+
+	if accessToSSOConfig && !isAdmin {
+		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
 	}
 
 	user.Email = email
@@ -89,6 +96,7 @@ func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat
 	user.ShowPortal = showPortal
 	user.EmailVerified = emailVerified
 	user.NotificationsEnabled = notificationsEnabled
+	user.AccessToSSOConfig = accessToSSOConfig
 
 	if err := user.Update(s.DB); err != nil {
 		return nil, err
