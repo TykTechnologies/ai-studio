@@ -36,7 +36,8 @@ jobs:
         run: cd docs/site && npm install # Use npm install instead of npm ci to ensure package-lock.json is generated
 
       - name: Build VitePress Site
-        run: cd docs/site && npm run docs:build # Build the VitePress site in the site directory
+        # Explicitly set NODE_ENV to production for the build
+        run: cd docs/site && NODE_ENV=production npm run docs:build # Build the VitePress site in the site directory
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
