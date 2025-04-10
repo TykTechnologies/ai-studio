@@ -8,12 +8,10 @@ import (
 )
 
 func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
-	// Only allow notifications and SSO config access if user is admin
 	if notificationsEnabled && !isAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
 	}
 
-	// Only allow access to SSO config if user is admin
 	if accessToSSOConfig && !isAdmin {
 		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
 	}
@@ -83,12 +81,10 @@ func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat
 		return nil, err
 	}
 
-	// Only allow notifications and SSO config access if user is admin
 	if notificationsEnabled && !isAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
 	}
 
-	// Only allow access to SSO config if user is admin
 	if accessToSSOConfig && !isAdmin {
 		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
 	}
