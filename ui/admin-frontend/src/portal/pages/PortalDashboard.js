@@ -7,6 +7,8 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
+import ServerIcon from "@mui/icons-material/Storage";
+import Grid from "@mui/material/Grid";
 import pubClient from "../../admin/utils/pubClient";
 import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
@@ -75,24 +77,48 @@ const PortalDashboard = () => {
       </Typography>
 
       {showPortalFeatures && showPortal && (
-        <Paper sx={{ p: 4, textAlign: "center", mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Create and Manage AI Applications
-          </Typography>
-          <Typography variant="body1" paragraph>
-            Build custom AI applications with our powerful tools and services.
-            Apps provide access to LLMs and Data sources via the AI Gateway for
-            your code.
-          </Typography>
-          <PrimaryButton
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleCreateApp}
-          >
-            Create a new App
-          </PrimaryButton>
-        </Paper>
+        <Grid container spacing={4}>
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 4, textAlign: "center", height: "100%" }}>
+              <Typography variant="h6" gutterBottom>
+                Create and Manage AI Applications
+              </Typography>
+              <Typography variant="body1" paragraph>
+                Build custom AI applications with our powerful tools and services.
+                Apps provide access to LLMs and Data sources via the AI Gateway for
+                your code.
+              </Typography>
+              <PrimaryButton
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={handleCreateApp}
+              >
+                Create a new App
+              </PrimaryButton>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 4, textAlign: "center", height: "100%" }}>
+              <Typography variant="h6" gutterBottom>
+                MCP Servers
+              </Typography>
+              <Typography variant="body1" paragraph>
+                Deploy and manage MCP servers to enable AI agents to interact with your tools
+                through a standardized protocol. Connect your tools to AI systems seamlessly.
+              </Typography>
+              <PrimaryButton
+                variant="contained"
+                color="primary"
+                startIcon={<ServerIcon />}
+                onClick={() => navigate("/portal/mcp-servers")}
+              >
+                Manage MCP Servers
+              </PrimaryButton>
+            </Paper>
+          </Grid>
+        </Grid>
       )}
     </Container>
   );

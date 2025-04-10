@@ -6,6 +6,9 @@ import DataSourceListView from "../portal/components/DataSourceListView";
 import AppBuilder from "../portal/components/AppBuilder";
 import AppListView from "../portal/components/AppListView";
 import AppDetailView from "../portal/components/AppDetailView";
+import MCPServerListView from "../portal/components/MCPServerListView";
+import MCPServerDetailView from "../portal/components/MCPServerDetailView";
+import MCPServerCreation from "../portal/components/MCPServerCreation";
 import { Navigate } from "react-router-dom";
 
 const PortalRoutes = () => (
@@ -17,6 +20,9 @@ const PortalRoutes = () => (
     <Route path="/app/new" element={<AppBuilder />} />
     <Route path="/apps" element={<AppListView />} />
     <Route path="/apps/:id" element={<AppDetailView />} />
+    <Route path="/mcp-servers" element={<MCPServerListView />} />
+    <Route path="/mcp-servers/new" element={<MCPServerCreation />} />
+    <Route path="/mcp-servers/:id" element={<MCPServerDetailView />} />
   </Routes>
 );
 

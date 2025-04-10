@@ -37,6 +37,12 @@ const PortalDrawer = () => {
         path: '/portal/apps'
       },
       {
+        id: 'mcp-servers',
+        text: 'MCP Servers',
+        icon: <Icon name="server" />,
+        path: '/portal/mcp-servers'
+      },
+      {
         id: 'catalogs',
         text: 'Catalogs',
         icon: <Icon name="rectangle-history" />,

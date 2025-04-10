@@ -71,6 +71,7 @@ type API struct {
 	setupChatRoutesFunc func(*gin.RouterGroup)
 	ssoService          *services.SSOService
 	mcpHandlers         *MCPHandlers
+	portalMCPHandlers   *PortalMCPHandlers
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
@@ -129,17 +130,19 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 
 	// Initialize MCP handlers
 	mcpHandlers := NewMCPHandlers(config.DB, service.MCP)
+	portalMCPHandlers := NewPortalMCPHandlers(config.DB, service.MCP)
 
 	api := &API{
-		service:     service,
-		router:      router,
-		disableCORS: disableCORS,
-		auth:        authService,
-		config:      config,
-		proxy:       proxy,
-		staticFiles: staticFiles,
-		providers:   providerRegistry,
-		mcpHandlers: mcpHandlers,
+		service:           service,
+		router:            router,
+		disableCORS:       disableCORS,
+		auth:              authService,
+		config:            config,
+		proxy:             proxy,
+		staticFiles:       staticFiles,
+		providers:         providerRegistry,
+		mcpHandlers:       mcpHandlers,
+		portalMCPHandlers: portalMCPHandlers,
 	}
 
 	if config.TIBEnabled {
@@ -195,6 +198,10 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 }
 
 func (a *API) Run(addr string, certFile string, keyFile string) error {
+	// Register MCP server endpoints
+	log.Printf("Registering MCP server endpoints")
+	a.service.MCP.RegisterMCPServerEndpoints(a.router)
+
 	if certFile != "" && keyFile != "" {
 		return a.router.RunTLS(addr, certFile, keyFile)
 	}
@@ -307,6 +314,13 @@ func (a *API) setupRoutes() {
 			return
 		}
 
+		// Check if it's an MCP server endpoint
+		if strings.HasPrefix(c.Request.URL.Path, "/mcp/server/") {
+			log.Printf("MCP server request detected: %s", c.Request.URL.Path)
+			c.Next()
+			return
+		}
+
 		// For all other routes, serve the frontend application
 		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
 		if err != nil {
@@ -340,6 +354,22 @@ func (a *API) setupRoutes() {
 	authed.POST("/logout", a.handleLogout)
 	authed.GET("/me", a.handleMe)
 	authed.GET("/system", a.handleFeatureSet)
+
+	// Portal MCP routes
+	authed.POST("/mcp-servers", a.portalMCPHandlers.CreateMCPServer)
+	authed.GET("/mcp-servers", a.portalMCPHandlers.GetMCPServers)
+	authed.GET("/mcp-servers/:id", a.portalMCPHandlers.GetMCPServer)
+	authed.PATCH("/mcp-servers/:id", a.portalMCPHandlers.UpdateMCPServer)
+	authed.DELETE("/mcp-servers/:id", a.portalMCPHandlers.DeleteMCPServer)
+	authed.POST("/mcp-servers/:id/tools", a.portalMCPHandlers.AddToolToMCPServer)
+	authed.DELETE("/mcp-servers/:id/tools/:tool_id", a.portalMCPHandlers.RemoveToolFromMCPServer)
+	authed.GET("/mcp-servers/:id/tools", a.portalMCPHandlers.GetMCPServerTools)
+	authed.POST("/mcp-servers/:id/start", a.portalMCPHandlers.StartMCPServer)
+	authed.POST("/mcp-servers/:id/stop", a.portalMCPHandlers.StopMCPServer)
+	authed.POST("/mcp-servers/:id/restart", a.portalMCPHandlers.RestartMCPServer)
+	authed.POST("/mcp/sessions", a.portalMCPHandlers.CreateSession)
+	authed.DELETE("/mcp/sessions/:session_id", a.portalMCPHandlers.EndSession)
+	authed.PATCH("/mcp/sessions/:session_id/activity", a.portalMCPHandlers.UpdateSessionActivity)
 
 	// PORTAL FEATURES
 	authed.GET("/catalogues/:id/llms", a.getCatalogueLLMs)
@@ -628,6 +658,13 @@ func (a *API) setupRoutes() {
 	v1.POST("/mcp-servers/:id/tools", a.mcpHandlers.AddToolToMCPServer)
 	v1.DELETE("/mcp-servers/:id/tools/:tool_id", a.mcpHandlers.RemoveToolFromMCPServer)
 	v1.GET("/mcp-servers/:id/tools", a.mcpHandlers.GetMCPServerTools)
+
+	// Dynamic MCP server endpoint handlers - these match server-specific paths
+	// These catch-all handlers need to be registered in the main router, not just admin routes
+	public.GET("/mcp/server/:id", a.mcpHandlers.HandleServerRequest)
+	public.GET("/mcp/server/:id/sse", a.mcpHandlers.HandleServerSSE)
+	public.POST("/mcp/server/:id/message", a.mcpHandlers.HandleServerMessage)
+	public.OPTIONS("/mcp/server/:id/message", a.mcpHandlers.HandleServerMessageOptions)
 
 	// SSO routes
 	if a.config.TIBEnabled {

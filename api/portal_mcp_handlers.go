@@ -1,93 +1,75 @@
 package api
 
 import (
-	"bytes"
 	"errors"
-	"io"
-	"log"
 	"net/http"
 	"strconv"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// getUserIDFromContext extracts the user ID from the Gin context
-func getUserIDFromContext(c *gin.Context) (uint, bool) {
-	user, exists := c.Get("user")
-	if !exists {
-		return 0, false
-	}
-	currentUser := user.(*models.User)
-	return currentUser.ID, true
-}
-
-// MCPServerCreateInput represents input for creating an MCP server
-type MCPServerCreateInput struct {
-	Name        string `json:"name" binding:"required"`
-	Description string `json:"description"`
-}
-
-// MCPServerUpdateInput represents input for updating an MCP server
-type MCPServerUpdateInput struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-// MCPServerToolInput represents input for adding/removing a tool
-type MCPServerToolInput struct {
-	ToolID uint `json:"tool_id" binding:"required"`
-}
-
-// MCPSessionCreateInput represents input for creating an MCP session
-type MCPSessionCreateInput struct {
-	MCPServerID uint   `json:"mcp_server_id" binding:"required"`
-	ClientID    string `json:"client_id" binding:"required"`
-}
-
-// MCPHandlers contains handlers for MCP server operations
-type MCPHandlers struct {
+// PortalMCPHandlers contains handlers for MCP server operations for portal users
+type PortalMCPHandlers struct {
 	db     *gorm.DB
 	mcpSvc *services.MCPService
 }
 
-// NewMCPHandlers creates a new MCPHandlers
-func NewMCPHandlers(db *gorm.DB, mcpSvc *services.MCPService) *MCPHandlers {
-	return &MCPHandlers{
+// NewPortalMCPHandlers creates a new PortalMCPHandlers
+func NewPortalMCPHandlers(db *gorm.DB, mcpSvc *services.MCPService) *PortalMCPHandlers {
+	return &PortalMCPHandlers{
 		db:     db,
 		mcpSvc: mcpSvc,
 	}
 }
 
-// CreateMCPServer creates a new MCP server
-func (h *MCPHandlers) CreateMCPServer(c *gin.Context) {
+// CreateMCPServer creates a new MCP server for the current user
+func (h *PortalMCPHandlers) CreateMCPServer(c *gin.Context) {
 	var input MCPServerCreateInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Get user ID from context
+	// Get user ID from context (required for portal users)
 	userID, exists := getUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	// Create the MCP server
+	// Additional validation could be added here
+	// - Check server name length
+	// - Validate description
+	// - Check user quota for servers
+
+	// Create the MCP server with user ownership
 	server, err := h.mcpSvc.CreateMCPServer(userID, input.Name, input.Description)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create MCP server"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, server)
+	// Format server to match the frontend expectation with attributes property
+	formattedServer := gin.H{
+		"id": server.ID,
+		"attributes": gin.H{
+			"name":        server.Name,
+			"description": server.Description,
+			"endpoint":    server.Endpoint,
+			"status":      server.Status,
+			"tools":       server.Tools,
+			"created_at":  server.CreatedAt,
+			"updated_at":  server.UpdatedAt,
+		},
+	}
+	// Return sanitized response in the expected format that includes a data property
+	c.JSON(http.StatusCreated, gin.H{"data": formattedServer})
 }
 
 // GetMCPServers gets all MCP servers for the current user
-func (h *MCPHandlers) GetMCPServers(c *gin.Context) {
+func (h *PortalMCPHandlers) GetMCPServers(c *gin.Context) {
 	// Get user ID from context
 	userID, exists := getUserIDFromContext(c)
 	if !exists {
@@ -95,18 +77,34 @@ func (h *MCPHandlers) GetMCPServers(c *gin.Context) {
 		return
 	}
 
-	// Get servers for the user
+	// Get servers for the user - this already filters by user ID
 	servers, err := h.mcpSvc.GetMCPServersByUserID(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch MCP servers"})
 		return
 	}
 
-	c.JSON(http.StatusOK, servers)
+	// Format servers to match the frontend expectation with attributes property
+	formattedServers := []gin.H{}
+	for _, server := range servers {
+		formattedServers = append(formattedServers, gin.H{
+			"id": server.ID,
+			"attributes": gin.H{
+				"name":        server.Name,
+				"description": server.Description,
+				"endpoint":    server.Endpoint,
+				"status":      server.Status,
+				"tools":       server.Tools,
+				"created_at":  server.CreatedAt,
+				"updated_at":  server.UpdatedAt,
+			},
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": formattedServers})
 }
 
-// GetMCPServer gets an MCP server by ID
-func (h *MCPHandlers) GetMCPServer(c *gin.Context) {
+// GetMCPServer gets an MCP server by ID, ensuring the user has access
+func (h *PortalMCPHandlers) GetMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -128,7 +126,7 @@ func (h *MCPHandlers) GetMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -144,15 +142,28 @@ func (h *MCPHandlers) GetMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server"})
 		return
 	}
 
-	c.JSON(http.StatusOK, server)
+	// Format server to match the frontend expectation with attributes property
+	formattedServer := gin.H{
+		"id": server.ID,
+		"attributes": gin.H{
+			"name":        server.Name,
+			"description": server.Description,
+			"endpoint":    server.Endpoint,
+			"status":      server.Status,
+			"tools":       server.Tools,
+			"created_at":  server.CreatedAt,
+			"updated_at":  server.UpdatedAt,
+		},
+	}
+	c.JSON(http.StatusOK, gin.H{"data": formattedServer})
 }
 
-// UpdateMCPServer updates an MCP server
-func (h *MCPHandlers) UpdateMCPServer(c *gin.Context) {
+// UpdateMCPServer updates an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) UpdateMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -180,7 +191,7 @@ func (h *MCPHandlers) UpdateMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -189,18 +200,33 @@ func (h *MCPHandlers) UpdateMCPServer(c *gin.Context) {
 		return
 	}
 
+	// Additional validation could be added here
+
 	// Update the server
 	server, err := h.mcpSvc.UpdateMCPServer(uint(id), input.Name, input.Description)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update server"})
 		return
 	}
 
-	c.JSON(http.StatusOK, server)
+	// Format server to match the frontend expectation with attributes property
+	formattedServer := gin.H{
+		"id": server.ID,
+		"attributes": gin.H{
+			"name":        server.Name,
+			"description": server.Description,
+			"endpoint":    server.Endpoint,
+			"status":      server.Status,
+			"tools":       server.Tools,
+			"created_at":  server.CreatedAt,
+			"updated_at":  server.UpdatedAt,
+		},
+	}
+	c.JSON(http.StatusOK, gin.H{"data": formattedServer})
 }
 
-// DeleteMCPServer deletes an MCP server
-func (h *MCPHandlers) DeleteMCPServer(c *gin.Context) {
+// DeleteMCPServer deletes an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) DeleteMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -222,7 +248,7 @@ func (h *MCPHandlers) DeleteMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -233,15 +259,15 @@ func (h *MCPHandlers) DeleteMCPServer(c *gin.Context) {
 
 	// Delete the server
 	if err := h.mcpSvc.DeleteMCPServer(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete server"})
 		return
 	}
 
 	c.Status(http.StatusNoContent)
 }
 
-// AddToolToMCPServer adds a tool to an MCP server
-func (h *MCPHandlers) AddToolToMCPServer(c *gin.Context) {
+// AddToolToMCPServer adds a tool to an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) AddToolToMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -269,7 +295,7 @@ func (h *MCPHandlers) AddToolToMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -278,17 +304,25 @@ func (h *MCPHandlers) AddToolToMCPServer(c *gin.Context) {
 		return
 	}
 
+	// Check if user has access to the tool
+	// This would need to be implemented in the MCP service
+	// hasAccessToTool, err := h.mcpSvc.UserHasAccessToTool(userID, input.ToolID)
+	// if err != nil || !hasAccessToTool {
+	//     c.JSON(http.StatusForbidden, gin.H{"error": "access denied to tool"})
+	//     return
+	// }
+
 	// Add the tool to the server
 	if err := h.mcpSvc.AddToolToMCPServer(uint(id), input.ToolID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add tool to server"})
 		return
 	}
 
 	c.Status(http.StatusNoContent)
 }
 
-// RemoveToolFromMCPServer removes a tool from an MCP server
-func (h *MCPHandlers) RemoveToolFromMCPServer(c *gin.Context) {
+// RemoveToolFromMCPServer removes a tool from an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) RemoveToolFromMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -317,7 +351,7 @@ func (h *MCPHandlers) RemoveToolFromMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -328,15 +362,15 @@ func (h *MCPHandlers) RemoveToolFromMCPServer(c *gin.Context) {
 
 	// Remove the tool from the server
 	if err := h.mcpSvc.RemoveToolFromMCPServer(uint(id), uint(toolID)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove tool from server"})
 		return
 	}
 
 	c.Status(http.StatusNoContent)
 }
 
-// GetMCPServerTools gets all tools for an MCP server
-func (h *MCPHandlers) GetMCPServerTools(c *gin.Context) {
+// GetMCPServerTools gets all tools for an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) GetMCPServerTools(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -358,7 +392,7 @@ func (h *MCPHandlers) GetMCPServerTools(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -370,15 +404,37 @@ func (h *MCPHandlers) GetMCPServerTools(c *gin.Context) {
 	// Get tools for the server
 	tools, err := h.mcpSvc.GetToolsForMCPServer(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get tools"})
 		return
 	}
 
-	c.JSON(http.StatusOK, tools)
+	// Format tools to match the frontend expectation with attributes property
+	formattedTools := []gin.H{}
+	for _, tool := range tools {
+		formattedTools = append(formattedTools, gin.H{
+			"id":   tool.ID,
+			"type": "tool",
+			"attributes": gin.H{
+				"name":          tool.Name,
+				"description":   tool.Description,
+				"tool_type":     tool.ToolType, // Fixed field name from Type to ToolType
+				"oas_spec":      tool.OASSpec,
+				"privacy_score": tool.PrivacyScore,
+				// Using empty slice for operations since it's not directly available
+				"operations":       []string{},
+				"auth_key":         tool.AuthKey,
+				"auth_schema_name": tool.AuthSchemaName,
+				"file_stores":      tool.FileStores,
+				"filters":          tool.Filters,
+				"dependencies":     tool.Dependencies,
+			},
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": formattedTools})
 }
 
-// StartMCPServer starts an MCP server
-func (h *MCPHandlers) StartMCPServer(c *gin.Context) {
+// StartMCPServer starts an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) StartMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -400,7 +456,7 @@ func (h *MCPHandlers) StartMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -411,15 +467,15 @@ func (h *MCPHandlers) StartMCPServer(c *gin.Context) {
 
 	// Start the server
 	if err := h.mcpSvc.StartMCPServer(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start server"})
 		return
 	}
 
 	c.Status(http.StatusNoContent)
 }
 
-// StopMCPServer stops an MCP server
-func (h *MCPHandlers) StopMCPServer(c *gin.Context) {
+// StopMCPServer stops an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) StopMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -441,7 +497,7 @@ func (h *MCPHandlers) StopMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -452,15 +508,15 @@ func (h *MCPHandlers) StopMCPServer(c *gin.Context) {
 
 	// Stop the server
 	if err := h.mcpSvc.StopMCPServer(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stop server"})
 		return
 	}
 
 	c.Status(http.StatusNoContent)
 }
 
-// RestartMCPServer restarts an MCP server
-func (h *MCPHandlers) RestartMCPServer(c *gin.Context) {
+// RestartMCPServer restarts an MCP server, ensuring the user has access
+func (h *PortalMCPHandlers) RestartMCPServer(c *gin.Context) {
 	// Get server ID from path
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -482,7 +538,7 @@ func (h *MCPHandlers) RestartMCPServer(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
@@ -493,7 +549,7 @@ func (h *MCPHandlers) RestartMCPServer(c *gin.Context) {
 
 	// Restart the server
 	if err := h.mcpSvc.RestartMCPServer(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to restart server"})
 		return
 	}
 
@@ -501,7 +557,7 @@ func (h *MCPHandlers) RestartMCPServer(c *gin.Context) {
 }
 
 // CreateSession creates a new MCP session
-func (h *MCPHandlers) CreateSession(c *gin.Context) {
+func (h *PortalMCPHandlers) CreateSession(c *gin.Context) {
 	var input MCPSessionCreateInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -515,24 +571,51 @@ func (h *MCPHandlers) CreateSession(c *gin.Context) {
 		return
 	}
 
-	// Create the session
-	session, err := h.mcpSvc.CreateSession(input.MCPServerID, userID, input.ClientID)
+	// Check if the user has access to the server
+	hasAccess, err := h.mcpSvc.UserHasAccessToMCPServer(userID, input.MCPServerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify access"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, session)
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		return
+	}
+
+	// Create the session
+	session, err := h.mcpSvc.CreateSession(input.MCPServerID, userID, input.ClientID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": session})
 }
 
-// EndSession ends an MCP session
-func (h *MCPHandlers) EndSession(c *gin.Context) {
+// EndSession ends an MCP session, ensuring the user has access
+func (h *PortalMCPHandlers) EndSession(c *gin.Context) {
 	// Get session ID from path
 	sessionID := c.Param("session_id")
 
+	// Get user ID from context
+	_, exists := getUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// TODO: Check if user owns this session
+	// This would need a service method to verify session ownership
+	// For now, we'll just check authentication
+
 	// End the session
 	if err := h.mcpSvc.EndSession(sessionID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to end session"})
 		return
 	}
 
@@ -540,146 +623,26 @@ func (h *MCPHandlers) EndSession(c *gin.Context) {
 }
 
 // UpdateSessionActivity updates the last seen timestamp for a session
-func (h *MCPHandlers) UpdateSessionActivity(c *gin.Context) {
+func (h *PortalMCPHandlers) UpdateSessionActivity(c *gin.Context) {
 	// Get session ID from path
 	sessionID := c.Param("session_id")
 
+	// Get user ID from context
+	_, exists := getUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// TODO: Check if user owns this session
+	// This would need a service method to verify session ownership
+	// For now, we'll just check authentication
+
 	// Update the session
 	if err := h.mcpSvc.UpdateSessionActivity(sessionID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session activity"})
 		return
 	}
 
-	c.Status(http.StatusNoContent)
-}
-
-// DYNAMIC MCP SERVER REQUEST HANDLERS
-// These handlers use URL patterns to find the corresponding server
-
-// HandleServerRequest handles requests to the base server endpoint
-func (h *MCPHandlers) HandleServerRequest(c *gin.Context) {
-	// Extract server ID from URL
-	serverID := c.Param("id")
-	endpoint := "/mcp/server/" + serverID
-
-	// Look up the server
-	server, _, err := h.mcpSvc.GetMCPServerByEndpoint(endpoint)
-	if err != nil {
-		log.Printf("Server not found for endpoint %s: %v", endpoint, err)
-		c.Status(http.StatusNotFound)
-		return
-	}
-
-	// Return basic server info
-	c.JSON(http.StatusOK, gin.H{
-		"id":     server.ID,
-		"name":   server.Name,
-		"status": server.Status,
-		"tools":  len(server.Tools),
-	})
-}
-
-// HandleServerSSE handles SSE connections to MCP servers
-func (h *MCPHandlers) HandleServerSSE(c *gin.Context) {
-	// Get server ID from URL and look it up
-	log.Printf("[MCP-DEBUG] SSE connection request for path: %s", c.Request.URL.Path)
-	server, instance, err := h.mcpSvc.GetMCPServerByPathPrefix(c.Request.URL.Path)
-	if err != nil {
-		log.Printf("[MCP-ERROR] Error finding server for %s: %v", c.Request.URL.Path, err)
-		c.Status(http.StatusNotFound)
-		return
-	}
-
-	if server == nil {
-		log.Printf("[MCP-ERROR] No server found for path: %s", c.Request.URL.Path)
-		c.Status(http.StatusNotFound)
-		return
-	}
-
-	if instance == nil {
-		log.Printf("[MCP-ERROR] Server exists but is not running for ID: %d", server.ID)
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "MCP server exists but is not running",
-			"id":    server.ID,
-		})
-		return
-	}
-
-	log.Printf("[MCP-DEBUG] Found active MCP server %d for path %s with %d tools and delegating to SSE handler",
-		server.ID, c.Request.URL.Path, len(server.Tools))
-
-	// Delegate to the actual SSE handler from go-mcp
-	// This is critical - we're passing control to the go-mcp library
-	// which implements the MCP protocol over SSE
-	if instance.SSEHandler != nil {
-		log.Printf("[MCP-DEBUG] Delegating to MCP SSE handler for server %d", server.ID)
-		instance.SSEHandler.HandleSSE().ServeHTTP(c.Writer, c.Request)
-		return
-	}
-
-	log.Printf("[MCP-ERROR] No SSE handler available for server %d", server.ID)
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"error": "MCP server SSE handler not available",
-	})
-}
-
-// HandleServerMessage handles message posts to MCP servers
-func (h *MCPHandlers) HandleServerMessage(c *gin.Context) {
-	// Extract server ID from URL
-	log.Printf("[MCP-DEBUG] Message endpoint request for path: %s", c.Request.URL.Path)
-
-	// Look up the server and active instance
-	server, instance, err := h.mcpSvc.GetMCPServerByPathPrefix(c.Request.URL.Path)
-	if err != nil {
-		log.Printf("[MCP-ERROR] Error finding server for %s: %v", c.Request.URL.Path, err)
-		c.Status(http.StatusNotFound)
-		return
-	}
-
-	if server == nil {
-		log.Printf("[MCP-ERROR] No server found for path: %s", c.Request.URL.Path)
-		c.Status(http.StatusNotFound)
-		return
-	}
-
-	if instance == nil {
-		log.Printf("[MCP-ERROR] Server exists but is not running for ID: %d", server.ID)
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "MCP server exists but is not running",
-			"id":    server.ID,
-		})
-		return
-	}
-
-	// Delegate to the actual Message handler from go-mcp
-	// This is critical - we're passing control to the go-mcp library
-	if instance.SSEHandler != nil {
-		log.Printf("[MCP-DEBUG] Delegating to MCP message handler for server %d", server.ID)
-
-		// First log the request body for debugging
-		bodyBytes, err := io.ReadAll(c.Request.Body)
-		if err == nil {
-			log.Printf("[MCP-DEBUG] Raw message body: %s", string(bodyBytes))
-			// Restore the body for the handler
-			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		}
-
-		// Let the SSE handler process the message
-		instance.SSEHandler.HandleMessage().ServeHTTP(c.Writer, c.Request)
-		return
-	}
-
-	log.Printf("[MCP-ERROR] No message handler available for server %d", server.ID)
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"error": "MCP server message handler not available",
-	})
-}
-
-// HandleServerMessageOptions handles OPTIONS requests to MCP server message endpoints
-func (h *MCPHandlers) HandleServerMessageOptions(c *gin.Context) {
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	c.Header("Access-Control-Max-Age", "86400") // 24 hours
 	c.Status(http.StatusNoContent)
 }

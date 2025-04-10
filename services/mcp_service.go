@@ -1,18 +1,75 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
-	"github.com/MegaGrindStone/go-mcp"
+	"github.com/ThinkInAIXYZ/go-mcp/protocol"
+	"github.com/ThinkInAIXYZ/go-mcp/server"
+	"github.com/ThinkInAIXYZ/go-mcp/transport"
 	"github.com/TykTechnologies/midsommar/v2/mcpserver"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// CustomLogger implements the pkg.Logger interface
+type CustomLogger struct {
+	logger *log.Logger
+}
+
+// NewCustomLogger creates a new CustomLogger
+func NewCustomLogger(serverID uint) *CustomLogger {
+	prefix := fmt.Sprintf("[MCP-SERVER-%d] ", serverID)
+	logger := log.New(log.Writer(), prefix, log.LstdFlags)
+	return &CustomLogger{
+		logger: logger,
+	}
+}
+
+// Info logs an info message
+func (l *CustomLogger) Info(msg string) {
+	l.logger.Printf("INFO: %s", msg)
+}
+
+// Infof logs an info message with formatting
+func (l *CustomLogger) Infof(format string, args ...interface{}) {
+	l.logger.Printf("INFO: "+format, args...)
+}
+
+// Debug logs a debug message
+func (l *CustomLogger) Debug(msg string) {
+	l.logger.Printf("DEBUG: %s", msg)
+}
+
+// Debugf logs a debug message with formatting
+func (l *CustomLogger) Debugf(format string, args ...interface{}) {
+	l.logger.Printf("DEBUG: "+format, args...)
+}
+
+// Error logs an error message
+func (l *CustomLogger) Error(msg string) {
+	l.logger.Printf("ERROR: %s", msg)
+}
+
+// Errorf logs an error message with formatting
+func (l *CustomLogger) Errorf(format string, args ...interface{}) {
+	l.logger.Printf("ERROR: "+format, args...)
+}
+
+// Warn logs a warning message
+func (l *CustomLogger) Warn(msg string) {
+	l.logger.Printf("WARN: %s", msg)
+}
+
+// Warnf logs a warning message with formatting
+func (l *CustomLogger) Warnf(format string, args ...interface{}) {
+	l.logger.Printf("WARN: "+format, args...)
+}
 
 // MCPService handles MCP server operations
 type MCPService struct {
@@ -26,10 +83,12 @@ type MCPService struct {
 
 // serverInstance represents a running MCP server instance
 type serverInstance struct {
-	server   *mcp.Server
-	sseServ  *mcp.SSEServer
-	handler  *mcpserver.HTTPHandler
-	endpoint string
+	server       *server.Server
+	transport    transport.ServerTransport
+	SSEHandler   *transport.SSEHandler // Exported for use by handlers
+	toolHandler  *mcpserver.ToolHandler
+	endpoint     string
+	shutdownFunc func()
 }
 
 // NewMCPService creates a new MCP service
@@ -237,36 +296,85 @@ func (s *MCPService) StartMCPServer(mcpServerID uint) error {
 	s.serversMutex.RUnlock()
 
 	// Get the server configuration
-	server, err := s.GetMCPServerByID(mcpServerID)
+	mcpServerModel, err := s.GetMCPServerByID(mcpServerID)
 	if err != nil {
 		return err
 	}
 
-	// For a complete implementation, we would load tools here
-	// For now, we're using a mock implementation
-	_, err = server.GetTools(s.db)
+	// Get tools for the server
+	tools, err := mcpServerModel.GetTools(s.db)
 	if err != nil {
 		return fmt.Errorf("failed to get MCP server tools: %w", err)
 	}
 
-	// We need to mock this implementation for now as we're having Go MCP library compatibility issues
-	// In a real implementation, we would create the MCP server with proper tool handlers
+	// Create a dedicated tool handler that manages tool registration and calls
+	toolHandler := mcpserver.NewToolHandler(s.db, mcpServerID, tools)
 
-	// For now, just update the server status in the database
-	server.Status = "running"
-	server.LastStarted = time.Now()
-	if err := server.Update(s.db); err != nil {
+	// Define the full URL for the message endpoint (used by SSE transport)
+	baseURL := fmt.Sprintf("http://localhost:8080%s", mcpServerModel.Endpoint)
+	messageEndpoint := fmt.Sprintf("%s/message", baseURL)
+
+	// Create a logger for the server
+	mcpLogger := NewCustomLogger(mcpServerID)
+
+	// Create the server transport and handler
+	serverTransport, sseHandler, err := transport.NewSSEServerTransportAndHandler(
+		messageEndpoint,
+		transport.WithSSEServerTransportAndHandlerOptionLogger(mcpLogger),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create MCP server transport: %w", err)
+	}
+
+	// Create the server with the transport
+	mcpServer, err := server.NewServer(
+		serverTransport,
+		server.WithServerInfo(protocol.Implementation{
+			Name:    fmt.Sprintf("midsommar-mcp-server-%d", mcpServerID),
+			Version: "0.1.0",
+		}),
+		server.WithLogger(mcpLogger),
+		server.WithCapabilities(protocol.ServerCapabilities{
+			Tools: &protocol.ToolsCapability{
+				ListChanged: true,
+			},
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create MCP server: %w", err)
+	}
+
+	// Create a cancellable context for the server
+	_, shutdownFunc := context.WithCancel(context.Background())
+
+	// Start the server in a goroutine
+	go func() {
+		if err := mcpServer.Run(); err != nil {
+			log.Printf("Error running MCP server %d: %v", mcpServerID, err)
+		}
+	}()
+
+	// Update the server status in the database
+	mcpServerModel.Status = "running"
+	mcpServerModel.LastStarted = time.Now()
+	if err := mcpServerModel.Update(s.db); err != nil {
+		shutdownFunc() // Shutdown the server if we can't update the status
 		return fmt.Errorf("failed to update MCP server status: %w", err)
 	}
 
-	// Record this server as active
+	// Store the active server instance with all components
 	s.serversMutex.Lock()
 	s.activeServers[mcpServerID] = &serverInstance{
-		endpoint: server.Endpoint,
+		server:       mcpServer,
+		transport:    serverTransport,
+		SSEHandler:   sseHandler,
+		toolHandler:  toolHandler,
+		endpoint:     mcpServerModel.Endpoint,
+		shutdownFunc: shutdownFunc,
 	}
 	s.serversMutex.Unlock()
 
-	log.Printf("MCP server %d started with mock implementation", mcpServerID)
+	log.Printf("MCP server %d started with %d tools", mcpServerID, len(tools))
 
 	return nil
 }
@@ -278,15 +386,27 @@ func (s *MCPService) StopMCPServer(mcpServerID uint) error {
 
 	// Check if the server is running
 	s.serversMutex.RLock()
-	_, exists := s.activeServers[mcpServerID]
+	instance, exists := s.activeServers[mcpServerID]
 	s.serversMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("MCP server is not running")
 	}
 
-	// For a complete implementation, we would shut down the MCP server here
-	// Since we're using a mock implementation, we just need to log the shutdown
+	// Trigger server shutdown
+	if instance.shutdownFunc != nil {
+		instance.shutdownFunc()
+	}
+
+	// Give the server a chance to shut down
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Properly shut down the server
+	if err := instance.server.Shutdown(ctx); err != nil {
+		log.Printf("Error shutting down MCP server %d: %v", mcpServerID, err)
+	}
+
 	log.Printf("MCP server %d stopped", mcpServerID)
 
 	// Remove the server from active servers
@@ -323,10 +443,79 @@ func (s *MCPService) RestartMCPServer(mcpServerID uint) error {
 	return s.StartMCPServer(mcpServerID)
 }
 
-// RegisterMCPServerRoutes registers MCP server routes with the HTTP router
-func (s *MCPService) RegisterMCPServerRoutes(router http.Handler) {
-	// This method would be used to register the MCP server routes with the HTTP router
-	// For now, we'll leave it unimplemented
+// RegisterMCPServerEndpoints registers MCP server routes with the HTTP router
+func (s *MCPService) RegisterMCPServerEndpoints(router *gin.Engine) {
+	// Lock to prevent changes while we're iterating
+	s.serversMutex.RLock()
+	defer s.serversMutex.RUnlock()
+
+	// Register routes for each active server
+	for _, instance := range s.activeServers {
+		// Need to create an instance-specific handler to avoid closure issues
+		sseHandler := instance.SSEHandler
+		endpoint := instance.endpoint
+
+		// Register SSE endpoint
+		sseEndpoint := fmt.Sprintf("%s/sse", endpoint)
+		router.GET(sseEndpoint, func(c *gin.Context) {
+			sseHandler.HandleSSE().ServeHTTP(c.Writer, c.Request)
+		})
+
+		// Register message endpoint
+		messageEndpoint := fmt.Sprintf("%s/message", endpoint)
+		router.POST(messageEndpoint, func(c *gin.Context) {
+			sseHandler.HandleMessage().ServeHTTP(c.Writer, c.Request)
+		})
+
+		log.Printf("Registered MCP server routes: %s/sse and %s/message", endpoint, endpoint)
+	}
+}
+
+// GetMCPServerByEndpoint retrieves an MCP server by endpoint
+func (s *MCPService) GetMCPServerByEndpoint(endpoint string) (*models.MCPServer, *serverInstance, error) {
+	// Find server by endpoint in the database
+	var mcpServer models.MCPServer
+	if err := s.db.Where("endpoint = ?", endpoint).First(&mcpServer).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to get MCP server by endpoint: %w", err)
+	}
+
+	// Load tools
+	tools, err := mcpServer.GetTools(s.db)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get MCP server tools: %w", err)
+	}
+	mcpServer.Tools = tools
+
+	// Find the corresponding server instance
+	s.serversMutex.RLock()
+	instance, exists := s.activeServers[mcpServer.ID]
+	s.serversMutex.RUnlock()
+
+	if !exists {
+		return &mcpServer, nil, nil
+	}
+
+	return &mcpServer, instance, nil
+}
+
+// GetMCPServerByPathPrefix retrieves an MCP server by path prefix
+func (s *MCPService) GetMCPServerByPathPrefix(path string) (*models.MCPServer, *serverInstance, error) {
+	// Loop through all active servers to find one with a matching path prefix
+	s.serversMutex.RLock()
+	defer s.serversMutex.RUnlock()
+
+	for id, instance := range s.activeServers {
+		if len(path) >= len(instance.endpoint) && path[:len(instance.endpoint)] == instance.endpoint {
+			// Found a matching server
+			server, err := s.GetMCPServerByID(id)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get MCP server: %w", err)
+			}
+			return server, instance, nil
+		}
+	}
+
+	return nil, nil, fmt.Errorf("no MCP server found for path: %s", path)
 }
 
 // CreateSession creates a new MCP session
