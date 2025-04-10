@@ -50,7 +50,7 @@ const useConfig = (skipInitialFetch = false) => {
     
     const link = config.docsLinks[key];
     if (!link) {
-      console.warn(`Documentation link for key "${key}" not found`);
+      console.error(`Documentation link for key "${key}" not found`);
       return null;
     }
     
