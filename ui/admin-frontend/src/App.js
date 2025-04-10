@@ -9,16 +9,19 @@ import {
 import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import SuccessBanner from "./admin/components/common/SuccessBanner";
 
 // Configurations and utilities
-import { getConfig, loadConfig } from "./config";
+import { loadConfig } from "./config";
 import { reinitializeApiClient } from "./admin/utils/apiClient";
 import { reinitializePubClient } from "./admin/utils/pubClient";
 import pubClient from "./admin/utils/pubClient";
 
 // Themes
-import portalTheme from "./portal/theme/portalTheme";
-import theme from "./admin/theme";
+import adminTheme from "./admin/theme";
+
+// Components
 
 // Layouts
 import MainLayout from "./layouts/MainLayout";
@@ -40,6 +43,11 @@ function App() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(true);
+
+  const handleCloseBanner = () => {
+    setShowSuccessBanner(false);
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -121,7 +129,7 @@ function App() {
   return (
     <Router>
       <NotificationProvider>
-        <ThemeProvider theme={portalTheme}>
+        <ThemeProvider theme={adminTheme}>
           <CssBaseline />
           <Routes>
             {/* Public Routes */}
@@ -193,7 +201,7 @@ function App() {
               <Route path="/chat/*" element={<ChatRoutes />} />
 
               {/* Admin Routes */}
-              <Route path="/admin/*" element={<AdminRoutes />} />
+              <Route path="/admin/*" element={<AdminRoutes uiOptions={entitlements?.ui_options} />} />
 
               {/* Common Routes */}
               <Route path="/notifications" element={<NotificationsPage />} />
@@ -202,18 +210,30 @@ function App() {
               <Route
                 path="/"
                 element={
-                  <Navigate
-                    to={
-                      isAuthenticated
-                        ? entitlements?.is_admin === true
-                          ? "/admin"
-                          : entitlements?.ui_options?.show_portal
-                            ? "/portal/dashboard"
-                            : "/chat/dashboard"
-                        : "/login"
-                    }
-                    replace
-                  />
+                  isAuthenticated ? (
+                    entitlements?.is_admin === true ? (
+                      <Navigate to="/admin/dash" replace />
+                    ) : entitlements?.ui_options?.show_portal ? (
+                      <Navigate to="/portal/dashboard" replace />
+                    ) : entitlements?.ui_options?.show_chat ? (
+                      <Navigate to="/chat/dashboard" replace />
+                    ) : (
+                      <Box sx={{ p: 7, display: "flex", flexDirection: "column", gap: 2 }}>
+                        <Typography variant="headingXLarge">
+                          Welcome to Tyk AI Studio!
+                        </Typography>
+                        {showSuccessBanner && (
+                          <SuccessBanner
+                            title="Tyk AI studio account"
+                            message="You'll receive an email once your role is assigned and access is ready. If there's a delay, contact your organization admin"
+                            onClose={handleCloseBanner}
+                          />
+                        )}
+                      </Box>
+                    )
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
                 }
               />
             </Route>

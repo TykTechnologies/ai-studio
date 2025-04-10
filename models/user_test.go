@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -230,4 +231,83 @@ func TestUser_GetAccessibleCatalogues(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, accessibleCatalogues, 2)
 	assert.ElementsMatch(t, []string{"Catalogue 1", "Catalogue 2"}, []string{accessibleCatalogues[0].Name, accessibleCatalogues[1].Name})
+}
+
+func TestUser_UpdateGroupMemberships(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a user
+	user := &User{Email: "test@example.com", Password: "password"}
+	err := user.Create(db)
+	assert.NoError(t, err)
+
+	// Create multiple groups
+	group1 := &Group{Name: "Group 1"}
+	err = group1.Create(db)
+	assert.NoError(t, err)
+
+	group2 := &Group{Name: "Group 2"}
+	err = group2.Create(db)
+	assert.NoError(t, err)
+
+	group3 := &Group{Name: "Group 3"}
+	err = group3.Create(db)
+	assert.NoError(t, err)
+
+	// Test 1: Add user to multiple groups
+	err = user.UpdateGroupMemberships(db, 
+		strconv.FormatUint(uint64(group1.ID), 10), 
+		strconv.FormatUint(uint64(group2.ID), 10))
+	assert.NoError(t, err)
+
+	// Verify user is in both groups
+	var fetchedUser User
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 2)
+
+	// Verify the correct groups were assigned
+	groupIDs := []uint{fetchedUser.Groups[0].ID, fetchedUser.Groups[1].ID}
+	assert.Contains(t, groupIDs, group1.ID)
+	assert.Contains(t, groupIDs, group2.ID)
+
+	// Test 2: Change user's groups (replace existing groups)
+	err = user.UpdateGroupMemberships(db, 
+		strconv.FormatUint(uint64(group2.ID), 10), 
+		strconv.FormatUint(uint64(group3.ID), 10))
+	assert.NoError(t, err)
+
+	// Verify user is now in the new set of groups
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 2)
+
+	// Verify the correct groups were assigned
+	groupIDs = []uint{fetchedUser.Groups[0].ID, fetchedUser.Groups[1].ID}
+	assert.Contains(t, groupIDs, group2.ID)
+	assert.Contains(t, groupIDs, group3.ID)
+	assert.NotContains(t, groupIDs, group1.ID) // Should no longer be in group1
+
+	// Test 3: Remove all groups
+	err = user.UpdateGroupMemberships(db) // No group IDs provided
+	assert.NoError(t, err)
+
+	// Verify user has no groups
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 0)
+
+	// Test 4: Invalid group ID
+	err = user.UpdateGroupMemberships(db, "invalid_id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid group ID")
+
+	// Test 5: Non-existent group ID
+	err = user.UpdateGroupMemberships(db, "9999")
+	assert.NoError(t, err) // Should not error, just assign to an empty set of groups
+
+	// Verify user has no groups (since group 9999 doesn't exist)
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 0)
 }

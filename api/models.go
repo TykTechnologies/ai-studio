@@ -832,8 +832,9 @@ type UserWithEntitlementsResponse struct {
 		Name      string `json:"name"`
 		IsAdmin   bool   `json:"is_admin"`
 		UIOptions struct {
-			ShowChat   bool `json:"show_chat"`
-			ShowPortal bool `json:"show_portal"`
+			ShowChat      bool `json:"show_chat"`
+			ShowPortal    bool `json:"show_portal"`
+			ShowSSOConfig bool `json:"show_sso_config"`
 		} `json:"ui_options"`
 		Entitlements struct {
 			Catalogues     []CatalogueResponse     `json:"catalogues"`
@@ -929,6 +930,7 @@ type FrontendConfig struct {
 	APIBaseURL        string `json:"apiBaseURL"`
 	ProxyURL          string `json:"proxyURL"`
 	DefaultSignUpMode string `json:"defaultSignUpMode"`
+	TIBEnabled        bool   `json:"tibEnabled"`
 }
 
 // FileStoreInput represents the input for filestore-related operations
@@ -986,6 +988,95 @@ type SecretResponse struct {
 // @Description Secret list response model
 type SecretListResponse struct {
 	Data []SecretResponse `json:"data"`
+	Meta struct {
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+		PageSize   int   `json:"page_size"`
+		PageNumber int   `json:"page_number"`
+	} `json:"meta"`
+}
+
+// ProfileInput represents the input for creating/updating an SSO profile
+// @Description Profile input model
+type ProfileInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			ProfileID                 string                 `json:"profile_id"`
+			Name                      string                 `json:"name"`
+			OrgID                     string                 `json:"org_id"`
+			ActionType                string                 `json:"action_type"`
+			MatchedPolicyID           string                 `json:"matched_policy_id"`
+			Type                      string                 `json:"type"`
+			ProviderName              string                 `json:"provider_name"`
+			CustomEmailField          string                 `json:"custom_email_field"`
+			CustomUserIDField         string                 `json:"custom_user_id_field"`
+			ProviderConfig            map[string]interface{} `json:"provider_config"`
+			IdentityHandlerConfig     map[string]interface{} `json:"identity_handler_config"`
+			ProviderConstraintsDomain string                 `json:"provider_constraints_domain"`
+			ProviderConstraintsGroup  string                 `json:"provider_constraints_group"`
+			ReturnURL                 string                 `json:"return_url"`
+			DefaultUserGroupID        string                 `json:"default_user_group_id"`
+			CustomUserGroupField      string                 `json:"custom_user_group_field"`
+			UserGroupMapping          map[string]string      `json:"user_group_mapping"`
+			UserGroupSeparator        string                 `json:"user_group_separator"`
+			SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ProfileResponse represents the response for an SSO profile
+// @Description Profile response model
+type ProfileResponse struct {
+	Type       string `json:"type"`
+	ID         uint   `json:"id"`
+	Attributes struct {
+		ProfileID                 string                 `json:"profile_id"`
+		Name                      string                 `json:"name"`
+		OrgID                     string                 `json:"org_id"`
+		ActionType                string                 `json:"action_type"`
+		MatchedPolicyID           string                 `json:"matched_policy_id"`
+		Type                      string                 `json:"type"`
+		ProviderName              string                 `json:"provider_name"`
+		CustomEmailField          string                 `json:"custom_email_field"`
+		CustomUserIDField         string                 `json:"custom_user_id_field"`
+		ProviderConfig            map[string]interface{} `json:"provider_config"`
+		IdentityHandlerConfig     map[string]interface{} `json:"identity_handler_config"`
+		ProviderConstraintsDomain string                 `json:"provider_constraints_domain"`
+		ProviderConstraintsGroup  string                 `json:"provider_constraints_group"`
+		ReturnURL                 string                 `json:"return_url"`
+		DefaultUserGroupID        string                 `json:"default_user_group_id"`
+		CustomUserGroupField      string                 `json:"custom_user_group_field"`
+		UserGroupMapping          map[string]string      `json:"user_group_mapping"`
+		UserGroupSeparator        string                 `json:"user_group_separator"`
+		SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
+		SelectedProviderType      string                 `json:"selected_provider_type"`
+		LoginURL                  string                 `json:"login_url"`
+		CallbackURL               string                 `json:"callback_url"`
+		FailureRedirectURL        string                 `json:"failure_redirect_url"`
+		UseInLoginPage            bool                   `json:"use_in_login_page"`
+	} `json:"attributes"`
+}
+
+// ProfileListItem represents a simplified profile item for list responses
+// @Description Profile list item model
+type ProfileListItem struct {
+	Type       string `json:"type"`
+	ID         uint   `json:"id"`
+	Attributes struct {
+		Name         string    `json:"name"`
+		ProfileID    string    `json:"profile_id"`
+		ProfileType  string    `json:"profile_type"`
+		ProviderType string    `json:"provider_type"`
+		UpdatedBy    string    `json:"updated_by"`
+		UpdatedAt    time.Time `json:"updated_at"`
+	} `json:"attributes"`
+}
+
+// ProfilesResponse represents the paginated response for listing profiles
+// @Description Profiles list response model
+type ProfilesResponse struct {
+	Data []ProfileListItem `json:"data"`
 	Meta struct {
 		TotalCount int64 `json:"total_count"`
 		TotalPages int   `json:"total_pages"`

@@ -1,12 +1,12 @@
 import React from 'react';
 import BaseDrawer from './base-drawer';
-import useSystemFeatures from '../../hooks/useSystemFeatures';
+import useAdminData from '../../hooks/useAdminData';
 import Icon from '../../../components/common/Icon';
 
 const Drawer = () => {
-  const { features, loading } = useSystemFeatures();
+  const { features, uiOptions, config, loading, error } = useAdminData();
 
-  if (loading) {
+  if (loading || error) {
     return null;
   }
 
@@ -25,24 +25,27 @@ const Drawer = () => {
       path: '/admin/dash'
     },
     {
+      id: 'llm-management',
       text: 'LLM management',
       icon: <Icon name="microchip-ai" />,
       subItems: [
-        { text: 'LLM providers', path: '/admin/llms' },
-        { text: 'Model prices', path: '/admin/model-prices' },
+        { id: 'llms', text: 'LLM providers', path: '/admin/llms' },
+        { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices' },
       ],
     },
     {
+      id: 'context-management',
       text: 'Context management',
       icon: <Icon name="layer-group" />,
       subItems: [
-        { text: 'Data sources', path: '/admin/datasources' },
+        { id: 'datasources', text: 'Data sources', path: '/admin/datasources' },
         ...(features.feature_chat
-          ? [{ text: 'Tools', path: '/admin/tools' }]
+          ? [{ id: 'tools', text: 'Tools', path: '/admin/tools' }]
           : []),
       ],
     },
     {
+      id: 'Governance',
       text: 'Governance',
       icon: <Icon name="shield" />,
       subItems: [
@@ -52,8 +55,11 @@ const Drawer = () => {
         features.feature_chat
           ? [{ id: 'groups', text: 'User groups', path: '/admin/groups' }]
           : []),
-        { text: 'Filters & Middleware', path: '/admin/filters' },
-        { text: 'Secrets', path: '/admin/secrets' },
+        ...(uiOptions?.show_sso_config && config?.tibEnabled
+          ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
+          : []),
+        { id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' },
+        { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
       ],
     },
     ...(features.feature_gateway &&
@@ -61,29 +67,32 @@ const Drawer = () => {
     !features.feature_chat
       ? [
           {
+            id: 'apps-credentials',
             text: 'Apps & credentials',
             icon: <Icon name="grid-2-plus" />,
-            subItems: [{ text: 'Apps', path: '/admin/apps' }],
+            subItems: [{ id: 'apps', text: 'Apps', path: '/admin/apps' }],
           },
         ]
       : []),
     ...(features.feature_portal
       ? [
           {
+            id: 'ai-portal',
             text: 'AI Portal',
             icon: <Icon name="display" />,
-            subItems: [{ text: 'Apps', path: '/admin/apps' }],
+            subItems: [{ id: 'portal-apps', text: 'Apps', path: '/admin/apps' }],
           },
         ]
       : []),
     ...(features.feature_chat
       ? [
           {
+            id: 'chat',
             text: 'Chat',
             icon: <Icon name="message-lines" />,
             subItems: [
-              { text: 'Chats', path: '/admin/chats' },
-              { text: 'Model call settings', path: '/admin/llm-settings' },
+              { id: 'chats', text: 'Chats', path: '/admin/chats' },
+              { id: 'llm-settings', text: 'Model call settings', path: '/admin/llm-settings' },
             ],
           },
         ]
@@ -91,15 +100,16 @@ const Drawer = () => {
     ...((features.feature_portal || features.feature_chat)
       ? [
           {
+            id: 'catalogs',
             text: 'Catalogs',
             icon: <Icon name="rectangle-history" />,
             subItems: [
               ...(features.feature_portal
-                ? [{ text: 'LLM providers', path: '/admin/catalogs/llms' }]
+                ? [{ id: 'catalog-llms', text: 'LLM providers', path: '/admin/catalogs/llms' }]
                 : []),
-              { text: 'Data sources', path: '/admin/catalogs/data' },
+              { id: 'catalog-data', text: 'Data sources', path: '/admin/catalogs/data' },
               ...(features.feature_chat
-                ? [{ text: 'Tools', path: '/admin/catalogs/tools' }]
+                ? [{ id: 'catalog-tools', text: 'Tools', path: '/admin/catalogs/tools' }]
                 : []),
             ],
           },

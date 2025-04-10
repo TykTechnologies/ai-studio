@@ -1,352 +1,173 @@
-# Notifications
+## Notification System
 
-## Introduction
+This document provides a detailed explanation of the Midsommar Notification System, designed for product managers, QAs, engineers, and administrators. It covers the feature's purpose, architecture, data flow, implementation details, API endpoints, UI integration, dependencies, and potential considerations, based on code analysis.
 
-This document explains Midsommar's **Notification System** in depth, including how it integrates with the backend, database models, services, and frontend UI. Additionally, it proposes enhancements to support more robust notification features and future expansions.
+**1. Overview & Purpose**
 
----
+The Midsommar Notification System provides a centralized mechanism for managing and delivering alerts and messages across the platform. Its primary goals are:
 
-## Table of Contents
+*   **Event Alerting:** Inform users (administrators or specific individuals) about significant occurrences like budget threshold breaches (**Budget Control System**), new user registrations (**User Management**), or other system events.
+*   **Multi-Channel Delivery:** Deliver notifications via:
+    *   **Email:** Using a configured SMTP server.
+    *   **In-App UI:** Displaying notifications within the Midsommar web interface, with near real-time updates via polling.
+*   **User Experience:** Offer users visibility into relevant events through persistent storage, retrieval via API, and a dedicated UI section.
+*   **Deduplication & Tracking:** Prevent sending duplicate notifications for the same event context using a unique `NotificationID` and track read/unread status per user.
+*   **Extensibility:** Allow new types of notifications and potentially new delivery channels to be added easily.
 
-1. [Overview](#overview)
-2. [System Architecture](#system-architecture)
-3. [Key Components](#key-components)
-4. [Notification Flow](#notification-flow)
-5. [Notification Types](#notification-types)
-6. [Delivery Methods](#delivery-methods)
-7. [Permissions and Settings](#permissions-and-settings)
-8. [Code References](#code-references)
-9. [Testing Strategy](#testing-strategy)
-10. [UI Integration](#ui-integration)
-11. [Suggested Improvements](#suggested-improvements)
-12. [Future Enhancements](#future-enhancements)
-13. [Conclusion](#conclusion)
+**User Roles & Interactions:**
 
----
+*   **Administrator (via User Management):** Receives admin-targeted notifications (if `NotificationsEnabled=true`), manages the `NotificationsEnabled` setting for other admins, views notifications in the UI or via API.
+*   **AI Developer/App Owner (via User Management):** Receives user-specific notifications (e.g., budget alerts for their apps), views notifications in the UI or via API.
+*   **System Services (e.g., BudgetService, AuthService, Proxy):** Trigger notifications based on internal events.
+*   **End User (via UI):** Interacts with the `NotificationIcon` and `NotificationsPage` to view and manage their notifications.
 
-## Overview
+**2. Architecture & Data Flow**
 
-The **Midsommar Notification System** centralizes the management and delivery of notifications across the platform. Its core objectives are:
+**Core Components & Interactions:**
 
-- **Consistent & Uniform Delivery:** Provide a unified approach to sending in-app and email notifications.
-- **Deduplication & Tracking:** Use a unique `notification_id` for each record to avoid sending duplicates, and store read/unread status.
-- **Multi-Channel Delivery:** Deliver notifications via:
-  - Email (using the configured SMTP server).
-  - In-App UI with real-time checks for unread messages.
-- **Extensible & Configurable:** Additional notification types or channels can be added with minimal overhead.
+*   **NotificationService (`services/notification_service.go`):** Central orchestrator for creating, storing, deduplicating, and dispatching notifications.
+    *   *Dependency:* Uses `models.User` data (DB) for recipient lookup and email addresses.
+    *   *Dependency:* Uses `notifications.MailService` for email dispatch.
+    *   *Dependency:* Interacts with `Database` (`notifications` table) for storage and deduplication.
+*   **Database (`models/`):**
+    *   `notifications` (`models/notifications.go`): Stores individual `Notification` records (recipient `UserID`, `NotificationID`, `Type`, `Title`, `Content`, `Read` status, `SentAt`).
+    *   `users` (`models/user.go`): Stores user info, including `Email`, `IsAdmin`, and `NotificationsEnabled` flags.
+*   **Calling Services:**
+    *   `BudgetService` (`services/budget_service.go`): Triggers `"budget_alert"` notifications.
+    *   `AuthService` (`auth/auth.go`): Triggers admin notifications for new user registration (`"user_signup"` implicitly).
+    *   `Proxy` (`proxy/analyze_utils.go`): Triggers budget usage analysis which can lead to notifications via the `BudgetService`.
+    *   Other services can potentially call `NotificationService.Notify` or `SendAdminAppNotification`.
+*   **MailService (`notifications/email.go`):** Abstraction for sending emails via SMTP. Includes `TestMailer` for testing.
+*   **API Handlers (`api/notification_handlers.go`):** Expose REST endpoints (`/common/api/v1/notifications/*`) for UI interaction (list, count, mark read). Authenticated via middleware.
+*   **Frontend UI Components (`src/admin/components/notifications/`, `src/admin/pages/`):**
+    *   `NotificationContext.js`: Manages state, fetches data, handles marking as read.
+    *   `NotificationIcon.js`: Displays bell icon and unread count badge; polls `/unread/count`.
+    *   `NotificationList.js`: Displays the list of notifications fetched from `/notifications`.
+    *   `NotificationsPage.js`: Dedicated page hosting the `NotificationList`.
+*   **Templates (`templates/`):** HTML templates (e.g., `budget_alert.tmpl`, `admin-notify.tmpl`) used for email content formatting.
 
----
+**Data Flow:**
 
-## System Architecture
+```mermaid
+flowchart TD
+    subgraph "Triggering"
+        A["Event Occurs\n(Budget, New User etc.)"] --> B{"Calling Service\n(BudgetService, AuthService, Proxy etc.)"};
+    end
 
-1. **Database Table:** A `notifications` table holds each notification ([models/notifications.go](../models/notifications.go)).
-2. **NotificationService:** A dedicated service layer ([services/notification_service.go](../services/notification_service.go)) orchestrates creating, storing, deduplicating, and sending notifications.
-3. **Email Integration:** The `MailService` handles email dispatch if an SMTP host is configured ([notifications/email.go](../notifications/email.go)).
-4. **Budget Integration:** A portion of the system automatically sends **budget alerts** (80% or 100% usage) via the `BudgetService` ([services/budget_service.go](../services/budget_service.go)), illustrating how domain-specific logic can fire notifications.
-5. **API Endpoints:** REST endpoints under `/common/api/v1/notifications` provide listing, unread count, and "mark as read" functionality ([api/notification_handlers.go](../api/notification_handlers.go)).
-6. **Auth Integration:** The `auth.go` logic can trigger admin notifications about new user registrations or changes ([auth.go](../auth/auth.go)).
-7. **Proxy Integration:** The [proxy/analyze_utils.go](../proxy/analyze_utils.go) triggers budget usage analysis, which may generate notifications if budgets exceed thresholds.
+    subgraph "Processing"
+        B -- "1: Call Notify(...)" --> C["NotificationService"];
+        C -- "2: Render Template" --> T(["Template Files"]);
+        C -- "3: Find Recipients" --> D[("Database - users")];
+        C -- "4: Check Duplicate & Store" --> E[("Database - notifications")];
+    end
 
----
+    subgraph "Delivery"
+        E -- "5a: Send Email (if configured)" --> MS["MailService"] --> EMAIL(["Email Server"]);
+        E -- "5b: Stored for API" --> API{"API Handlers\n(/notifications)"};
+    end
 
-## Key Components
+    subgraph "UI Interaction"
+        UI_User["User via Browser"] --> FE["Frontend UI\n(NotificationIcon, NotificationsPage)"];
+        FE -- "6a: Poll /unread/count (60s)" --> API;
+        FE -- "6b: Fetch /notifications" --> API;
+        FE -- "6c: PUT /notifications/:id/read" --> API;
+        API -- "7: Call NotificationService" --> C;
+        C -- "8: Interact w/ DB" --> E;
+        API -- "9: Return Data" --> FE;
+        FE -- "10: Display to User" --> UI_User;
+    end
 
-### 1. Notification Model
-
-**File Location:** [models/notifications.go](../models/notifications.go)
-
-~~~go
-type Notification struct {
-    gorm.Model
-    NotificationID string `gorm:"uniqueIndex"` // Unique for deduplication
-    Type           string // e.g. "budget_alert", "system_update", "admin_app_notification", etc.
-    Title          string
-    Content        string
-    UserID         uint
-    Read           bool      // Track if viewed
-    SentAt         time.Time // When the notification was sent
-}
-~~~
-
-### 2. User Model with Notification Settings
-
-**File Location:** [models/user.go](../models/user.go)
-
-```go
-type User struct {
-    // ... standard user fields ...
-    IsAdmin              bool
-    NotificationsEnabled bool // If true, receives admin-level notifications
-}
+    style E fill:#ccf,stroke:#333,stroke-width:2px
 ```
 
-### 3. NotificationService
-
-**File Location:** [services/notification_service.go](../services/notification_service.go)
-
-```go
-type NotificationService struct {
-    db          *gorm.DB
-    mailService *MailService
-    // ...
-}
-```
-
-- **Send(*Notification)**
-  - Deduplicates via `NotificationID`
-  - Persists to the database
-  - Dispatches an email if SMTP is configured
-- **SendAdminAppNotification(title, content string)**
-  - Sends notifications to all admin users with `NotificationsEnabled = true`
-  - Also sends an email to `config.Get().AdminEmail` if it differs from the admins' addresses
-- **GetUserNotifications(userID, limit, offset int)**
-  - Returns a paginated list of notifications for the specified user.
-- **GetUnreadCount(userID uint)**
-  - Returns the count of unread notifications for the user.
-- **MarkAsRead(notificationID uint)**
-  - Updates a notification’s status to read in the database.
-
-### 4. MailService & Email Sending
-
-**File Location:** [notifications/email.go](../notifications/email.go)
-
-- Handles email sending if `SMTPHost != ""`
-- Uses the `go-mail/mail` library for constructing and dispatching emails.
-- **TestMailer** (see [test_mailer.go](../notifications/test_mailer.go)) captures outbound emails for testing purposes.
-
-### 5. BudgetService Integration
-
-**File Location:** [services/budget_service.go](../services/budget_service.go)
-
-- Leverages the NotificationService to send “budget_alert” notifications at 80% or 100% usage.
-- Differentiates between:
-  - App budget alerts (sent to the app owner and all admins)
-  - LLM budget alerts (sent only to admins)
-- Uses a composite `notification_id` incorporating the entity, threshold, and budget period for uniqueness.
-
-### 6. API Endpoints
-
-**File Location:** [api/notification_handlers.go](../api/notification_handlers.go)
-
-| Endpoint                                           | Description                                                           |
-| -------------------------------------------------- | --------------------------------------------------------------------- |
-| GET `/common/api/v1/notifications`                 | Lists notifications for the user                                      |
-| GET `/common/api/v1/notifications/unread/count`    | Returns the unread notification count                                 |
-| PUT `/common/api/v1/notifications/:id/read`        | Marks a specific notification as read                                 |
-
-> These endpoints are protected by user authentication (via `auth.AuthMiddleware()` in [api/api.go](../api/api.go)), ensuring that users only access their own notifications.
-
----
-
-## Notification Flow
-
-1. **Trigger:** A domain-specific event occurs (e.g., budget threshold exceeded, new user registration, new app creation).
-2. **Service Call:** The corresponding service (e.g., BudgetService, AuthService, or custom logic) invokes `NotificationService.Send(...)`.
-3. **Deduplication & DB Storage:** The system checks if the `notification_id` has been used; if not, it persists the notification.
-4. **Email Dispatch:** If `mailService` is configured (i.e., a valid SMTP setup exists), an email is sent.
-5. **Frontend Poll/Fetch:** The UI periodically calls the `/unread/count` endpoint (default every 60 seconds) and fetches the notifications list via `/notifications`.
-6. **User Reads Notification:** Upon viewing, the backend updates the notification's `Read` status to `true`.
-
----
-
-## Notification Types
-
-Midsommar currently supports:
-
-1. **Budget Alerts ("budget_alert")**
-   - Triggered by BudgetService at 80% or 100% usage.
-   - Sent to the app owner and admins (for apps) or only admins (for LLM budgets).
-
-2. **System Updates ("system_update")**
-   - Used for scheduled maintenance or feature announcements.
-   - Can be broadcast to all users or targeted groups based on domain logic.
-
-3. **Admin App Notifications ("admin_app_notification")**
-   - For events like new app creation, credential approval, or usage anomalies.
-   - Delivered to admin users with `NotificationsEnabled = true` and optionally to `config.Get().AdminEmail`.
-
-4. **(Proposed) User Registration Notifications**
-   - Currently integrated in `auth.go` for alerting admins about new signups.
-   - Can be refined as a distinct type, e.g. `"user_signup"`.
-
-The `Type` field in the Notification model allows for easy expansion of notification types as new domain events emerge.
-
----
-
-## Delivery Methods
-
-1. **Email**
-   - If `MailService.SMTPHost != ""`, each call to `Send()` attempts to dispatch an email.
-   - Templated messages are located in the `templates/` directory (e.g., `budget_alert.tmpl`, `admin-notify.tmpl`).
-
-2. **In-App UI**
-   - **NotificationIcon** ([src/admin/components/notifications/NotificationIcon.js](../src/admin/components/notifications/NotificationIcon.js)) displays a badge with the unread count.
-   - **NotificationList** ([NotificationList.js](../src/admin/components/notifications/NotificationList.js)) shows all notifications with markdown rendering support.
-   - **NotificationContext** ([NotificationContext.js](../src/admin/components/notifications/NotificationContext.js)) manages fetching, state sharing, and marking notifications as read.
-   - **NotificationsPage** ([NotificationsPage.js](../src/admin/pages/NotificationsPage.js)) offers a dedicated view for notifications.
-
----
-
-## Permissions and Settings
-
-1. **Admin vs Non-Admin**
-   - **Admins:** Can enable `NotificationsEnabled` and receive additional system-wide notifications.
-   - **Non-admins:** Receive direct notifications (e.g., app-specific budget alerts).
-
-2. **NotificationsEnabled**
-   - A boolean flag in the User model ([models/user.go](../models/user.go)).
-   - When disabled, admin-level notifications are not sent to that user.
-   - By default, the super admin (first user) is set with `NotificationsEnabled = true`.
-
-3. **Email Verification**
-   - Email dispatch does not strictly require verified emails, though the system tracks `EmailVerified`.
-   - Additional checks can be incorporated within `NotificationService.Send()` or `AuthService` to enforce verification.
-
----
-
-## Code References
-
-Below is a map of files contributing to the Notification System:
-
-- **Email Functionality:**
-  - [notifications/email.go](../notifications/email.go): Core email functionality, including `MailService.SendEmail()`.
-  - [notifications/test_mailer.go](../notifications/test_mailer.go) & associated tests: Capturing test emails to verify email logic.
-- **Data Models:**
-  - [models/notifications.go](../models/notifications.go): Notification model definition.
-  - [models/user.go](../models/user.go): User model including `NotificationsEnabled`.
-- **Services:**
-  - [services/notification_service.go](../services/notification_service.go): Manages creation, sending, and storage of notifications.
-    - *Tests:* `notification_service_test.go`.
-  - [services/budget_service.go](../services/budget_service.go): Connects budget usage events to notifications.
-    - *Tests:* `budget_service_test.go`.
-- **API Endpoints:**
-  - [api/notification_handlers.go](../api/notification_handlers.go) & [api/api.go](../api/api.go): Define REST endpoints and integrate them with the main router.
-- **Authentication:**
-  - [auth/auth.go](../auth/auth.go): Triggers admin notifications on new user registrations.
-- **Proxy Analysis:**
-  - [proxy/analyze_utils.go](../proxy/analyze_utils.go): Generates notifications based on budget usage analysis.
-- **Frontend Components:**
-  - `NotificationList.js`
-  - `NotificationIcon.js`
-  - `NotificationContext.js`
-  - `NotificationsPage.js`
-  - `UserForm.js` (for admin user creation/edit, toggles `NotificationsEnabled`)
-  - `UserDetails.js` (displays the notifications setting)
-
----
-
-## Testing Strategy
-
-1. **Unit Tests**
-   - `notification_service_test.go`: Validates deduplication, database persistence, and email dispatch using mock mailers.
-   - `test_mailer.go`: Ensures email logic works without sending real emails.
-
-2. **Integration Tests**
-   - **Budget Alerts:** Use tests (e.g., `proxy_budget_test.go`) to simulate real usage events and validate notification creation.
-   - **Auth Registration:** Confirm that new user signups trigger the appropriate admin notifications through the service chain (AuthService → NotificationService).
-
-3. **UI Tests**
-   - Components like `NotificationList` and `NotificationIcon` can be tested with tools such as React Testing Library or Cypress to verify:
-     - Correct fetching and rendering of notifications.
-     - Proper updating of the unread counter.
-
-4. **Recommended Enhancements**
-   - Increase test coverage for advanced scenarios (e.g., environments with SMTP disabled, concurrency handling, stress testing with a high volume of notifications).
-   - Introduce snapshot tests for email templates to ensure message consistency and correctness of placeholders.
-
----
-
-## UI Integration
-
-### Notification Menu & Polling
-
-- **NotificationIcon.js**
-  - Renders a bell icon with an unread count badge.
-  - Polls every 60 seconds via `fetchUnreadCount()` from `/common/api/v1/notifications/unread/count`.
-  - On click, navigates to the notifications listing page (`/notifications`).
-
-### Notifications Page
-
-- **NotificationsPage.js**
-  - Hosts the `NotificationList.js` component.
-- **NotificationList.js**
-  - Retrieves notifications from `/common/api/v1/notifications`.
-  - Provides functionality to mark individual notifications as read (via PUT to `/common/api/v1/notifications/:id/read`).
-  - Distinguishes unread items visually.
-
-### URLs & Routes
-
-- **Frontend Route:** `/notifications` renders the NotificationsPage.
-- **Backend Endpoint:** `/common/api/v1/notifications` handles list, read, and unread count operations.
-
-### Permissions & Visibility
-
-- **Non-admin users:** Do not see the admin toggle for notifications but receive user-specific alerts (e.g., budget alerts for their apps).
-- **Admin users:** Can toggle `NotificationsEnabled` within `UserForm.js` and view it in `UserDetails.js`.
-
----
-
-## Suggested Improvements
-
-While robust, the notification system can benefit from further enhancements:
-
-1. **Notification Categories & Filters**
-   - Introduce a category field (or expand the `Type` field) to enable filtering (e.g., “budget”, “security”, “system update”).
-   - Enhance the NotificationsPage with filtering options.
-
-2. **Global or Team-Level Notifications**
-   - Allow broadcast notifications to multiple teams or groups rather than only individual records.
-   - Consider implementing a `group_id` reference or a multi-user broadcast model.
-
-3. **Optional Real-Time Updates**
-   - Replace the 60-second polling with WebSocket or Server-Sent Events (SSE) for instant UI updates.
-
-4. **"Mark All As Read"**
-   - Add an endpoint or UI control to mark all notifications as read in one action.
-
-5. **Delivery Preferences**
-   - Split the `NotificationsEnabled` setting into separate toggles for in-app and email notifications, giving admins finer control.
-
-6. **Multi-Language Support**
-   - Externalize message strings or utilize templates that support localization based on user preferences.
-
-7. **Scalability & Performance**
-   - For high volumes, consider offloading notifications to a dedicated queue or microservice.
-   - Introduce asynchronous processing for complex notifications.
-
----
-
-## Future Enhancements
-
-1. **Security Alerts**
-   - Implement alerts for suspicious login attempts, changes to sensitive settings, or 2FA reminders.
-
-2. **Usage Summaries**
-   - Send weekly or monthly usage summaries to users or app owners.
-
-3. **Task & Collaboration Notifications**
-   - If Midsommar expands into collaboration or task management, develop a central “task update” notification type.
-
-4. **Customizable Notification Rules**
-   - Allow advanced users to define custom triggers (e.g., “notify me if usage exceeds $X/day for my app” or “alert on new user signups under my domain”).
-
-5. **Slack / Chat Integrations**
-   - Expand beyond email by integrating with Slack, MS Teams, or other chat platforms via webhooks for immediate notifications.
-
----
-
-## Conclusion
-
-Midsommar’s Notification System is a core component that provides:
-
-- Centralized management of various notification types.
-- Deduplication and persistent storage in the notifications table.
-- Multi-channel delivery (in-app and email).
-- Configurability for both admins and end users via the `NotificationsEnabled` setting.
-- Seamless integration with budgeting, user authentication, and other domain-specific processes.
-
-To evolve further, the system should:
-1. Introduce specialized categories or filters.
-2. Enhance user customization options.
-3. Explore real-time and multi-channel integrations.
-4. Strengthen testing to cover broader and more complex scenarios.
+**Flow Explanation:**
+
+1.  An event triggers a **Calling Service**.
+2.  The service calls `NotificationService.Notify` with event details, template info, and recipient flags.
+3.  **NotificationService** renders the specified email template, determines recipients (querying `users` DB), generates unique `NotificationID`s per recipient.
+4.  For each recipient, it checks the `notifications` DB for duplicates using `NotificationID`. If not found, it stores the new `Notification` record.
+5.  If **MailService** (SMTP) is configured, an email is sent. The notification is now available via the API.
+6.  The **Frontend UI** (`NotificationIcon`) polls the `/unread/count` API endpoint every 60 seconds. When the user navigates to the `NotificationsPage` or interacts with the list, it fetches notifications via `/notifications` API and allows marking as read via `PUT /notifications/:id/read` API.
+7.  The **API Handlers** receive requests from the UI.
+8.  API Handlers call the **NotificationService** to retrieve data or update the `Read` status.
+9.  **NotificationService** interacts with the `notifications` database table.
+10. API returns data (count, list, status) to the Frontend UI.
+11. UI displays the information to the user.
+
+**3. Implementation Details**
+
+*   **Notification Model (`models/Notification`):** Stores `NotificationID` (unique string for deduplication), `Type` (string like "budget\_alert"), `Title`, `Content`, recipient `UserID`, `Read` status (bool), `SentAt` (time).
+*   **Recipient Targeting (`NotificationService.Notify`):** Uses `userFlags` (specific `UserID` or `models.NotifyAdmins`). Queries `users` table for admins where `is_admin = true` AND `notifications_enabled = true`. A specific `UserID` is extracted by clearing the admin flag (`userID := userFlags &^ models.NotifyAdmins`).
+*   **Deduplication (`NotificationService.Send`):** Checks for existing `NotificationID` in `notifications` table using a `gorm.First` query before inserting. Skips if `result.Error == nil`.
+*   **Email Sending (`notifications.MailService`):** Uses `go-mail/mail`, requires SMTP config (`fromEmail`, `smtpHost`, etc.). Errors are logged (`fmt.Printf`).
+*   **Template Rendering (`NotificationService.renderTemplate`):** Uses Go's `html/template`, searches for templates first by exact path, then by walking up directories to find `templates/<templateName>`.
+*   **User Preference (`models.User.NotificationsEnabled`):** Boolean flag, only applicable if `IsAdmin=true`. Controls receipt of admin-level notifications. Managed via User API/UI (`services/user_service.go` enforces the admin requirement).
+*   **API Endpoints (`api/notification_handlers.go`):**
+    *   `GET /common/api/v1/notifications`: List notifications for auth'd user (paginated via `limit`, `offset`).
+    *   `GET /common/api/v1/notifications/unread/count`: Get unread count for auth'd user.
+    *   `PUT /common/api/v1/notifications/:id/read`: Mark notification (by DB `ID`) as read for auth'd user.
+*   **Admin Notifications (`NotificationService.SendAdminAppNotification`):** A specific helper function to send notifications to all enabled admins and optionally to a globally configured `config.Get().AdminEmail`.
+
+**4. Notification Types**
+
+Based on system behavior and code analysis:
+
+1.  **`budget_alert`**: Triggered by `BudgetService` at 80%/100% usage. Sent to App Owner + Admins (for Apps) or Admins only (for LLMs). Uses `budget_alert.tmpl`.
+2.  **`system_update`**: A potential type for announcements, though specific implementation details are not detailed here.
+3.  **`admin_app_notification`**: Used for events like new app creation or approvals, likely sent via `SendAdminAppNotification`.
+4.  **`user_signup`** (Implicit): Triggered by `AuthService.notifyAdmin` on new registration, notifies admins. Uses `admin-notify.tmpl`. The `NotificationID` format is `new_user_<userID>_<timestamp>`.
+
+**5. Delivery Methods**
+
+1.  **Email:** Sent via `MailService` if SMTP is configured. Uses HTML templates from `templates/`.
+2.  **In-App UI:**
+    *   Near real-time unread count via polling (`NotificationIcon.js` hitting `/unread/count` every 60s).
+    *   Full list display on `NotificationsPage.js` (using `NotificationList.js` hitting `/notifications`).
+    *   Managed state via `NotificationContext.js`.
+    *   Allows marking as read, triggering API calls.
+
+**6. UI Integration**
+
+*   **Polling:** `NotificationIcon` polls `/common/api/v1/notifications/unread/count` every 60 seconds using `fetchUnreadCount` from `NotificationContext`.
+*   **Display:**
+    *   `NotificationIcon` (in header/sidebar): Shows a bell icon with a badge indicating the unread count. Clicking navigates to `/notifications`.
+    *   `NotificationsPage` (route `/notifications`): Displays a list of notifications using `NotificationList`, showing title, content (markdown rendered), timestamp, and read status visually distinct for unread items.
+*   **Interaction:** Clicking a notification (or an explicit "mark read" button) triggers `NotificationContext` to call the `PUT /common/api/v1/notifications/:id/read` endpoint via its `markNotificationAsRead` function.
+*   **State Management:** `NotificationContext` fetches data (`fetchNotifications`, `fetchUnreadCount`), manages loading/error states, and provides notification data/functions (`notifications`, `unreadCount`, `markNotificationAsRead`) to consuming components.
+*   **Settings:** Admins can toggle the `NotificationsEnabled` flag for users via `UserForm.js` (visible in `UserDetails.js`).
+
+**7. Code References**
+
+*   **Backend:**
+    *   `models/notifications.go`, `models/user.go`
+    *   `services/notification_service.go`, `services/budget_service.go`, `services/user_service.go`
+    *   `notifications/email.go`, `notifications/test_mailer.go`
+    *   `api/notification_handlers.go`, `api/api.go`, `api/user_handlers.go`
+    *   `auth/auth.go`
+    *   `proxy/analyze_utils.go`
+    *   `templates/*.tmpl`
+*   **Frontend:**
+    *   `src/admin/components/notifications/NotificationIcon.js`
+    *   `src/admin/components/notifications/NotificationList.js`
+    *   `src/admin/components/notifications/NotificationContext.js`
+    *   `src/admin/pages/NotificationsPage.js`
+    *   `src/admin/components/users/UserForm.js`
+    *   `src/admin/components/users/UserDetails.js`
+
+**8. Testing Strategy**
+
+*   **Unit Tests:** `notification_service_test.go` (using `TestMailer`), tests for handlers, models, and potentially frontend components using Jest/React Testing Library.
+*   **Integration Tests:** Verify full flows like budget alerts (`proxy_budget_test.go`) or new user registration triggering notifications (`auth_test.go`).
+*   **UI/E2E Tests (Cypress/Playwright):** Verify `NotificationIcon` polling/badge update, `NotificationList` rendering, navigation, and "mark as read" functionality from the user's perspective.
+
+**9. Potential Considerations & Future Enhancements**
+
+*   **Scalability:** `notifications` table growth; consider archiving or using a message queue for high volume.
+*   **Real-time UI:** Replace polling with WebSockets or Server-Sent Events (SSE) for instant updates.
+*   **Filtering/Categories:** Enhance UI and API with filtering by `Type` or introducing categories.
+*   **"Mark All As Read":** Add API endpoint and UI button.
+*   **Granular Preferences:** Allow users (especially admins) to toggle email/in-app per notification type.
+*   **Delivery Channels:** Integrate with Slack, Teams, etc.
+*   **Custom Rules:** Allow users to define custom notification triggers.
+*   **Localization:** Support multi-language templates/content.
+*   **Error Handling:** Improve visibility/alerting for email sending failures.
