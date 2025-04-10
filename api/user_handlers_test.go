@@ -25,6 +25,7 @@ func TestUserEndpoints(t *testing.T) {
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -37,6 +38,7 @@ func TestUserEndpoints(t *testing.T) {
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 			}{
 				Email:    "test@example.com",
 				Name:     "Test User",
@@ -73,6 +75,7 @@ func TestUserEndpoints(t *testing.T) {
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -85,11 +88,13 @@ func TestUserEndpoints(t *testing.T) {
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 			}{
 				Email:                "updated@example.com",
 				Name:                 "Updated User",
 				IsAdmin:              true,
 				NotificationsEnabled: true,
+				AccessToSSOConfig:    true,
 			},
 		},
 	}
