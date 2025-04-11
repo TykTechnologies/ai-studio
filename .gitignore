@@ -22,3 +22,4 @@ docs/site/.vitepress/dist/
 __debug_bin*
 coverage.out
 coverage.html
+node_modules
