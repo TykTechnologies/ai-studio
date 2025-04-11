@@ -28,17 +28,21 @@ const MenuItem = ({
   const isExpanded = expandedItems[itemId];
   const immediateParentId = parentId || itemId;
 
-  const isSelected = (item.exact ? selectedPath === item.path : selectedPath === item.path || selectedPath.startsWith(`${item.path}/`)) || 
-    (hasSubItems && item.subItems?.some(subItem => {
-      if (subItem.path === selectedPath || (subItem.path && selectedPath?.startsWith(subItem.path + '/'))) return true;
-      if (subItem.subItems) {
-        return subItem.subItems.some(deepSubItem =>
-          deepSubItem.path === selectedPath ||
-          (deepSubItem.path && selectedPath?.startsWith(deepSubItem.path + '/'))
-        );
-      }
-      return false;
-    }));
+  const pathMatches = (itemPath, currentPath) => {
+    return itemPath === currentPath || (itemPath && currentPath?.startsWith(itemPath + '/'));
+  };
+
+  const isItemSelected = (item, currentPath) => {
+    if (pathMatches(item.path, currentPath)) return true;
+    if (item.subItems) {
+      return item.subItems.some(subItem => isItemSelected(subItem, currentPath));
+    }
+    return false;
+  };
+
+  const isSelected = item.exact
+    ? selectedPath === item.path
+    : isItemSelected(item, selectedPath);
 
   const ListItemComponent = depth === 0 ? ParentListItem : SubListItem;
 
@@ -96,7 +100,7 @@ const MenuItem = ({
       to={item.path}
       depth={depth}
       onClick={() => onPathSelect(item.path)}
-      selected={selectedPath === item.path || (item.path && selectedPath?.startsWith(item.path + '/'))}
+      selected={item.exact ? selectedPath === item.path : pathMatches(item.path, selectedPath)}
       disableRipple
       disableTouchRipple
       rootParentId={immediateParentId}

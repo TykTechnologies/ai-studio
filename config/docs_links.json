@@ -1,11 +1,12 @@
 {
-  "llm_providers": "",
-  "data_sources": "",
-  "tools": "",
-  "rbac_user_groups": "",
-  "privacy_levels": "",
-  "filters": "",
-  "apps": "",
-  "chats": "",
-  "demo_video": "https://drive.google.com/file/d/11NMmwgckmxFn9qzMM96Z12tU-9tmvDkc/preview"
+  "llm_providers": "https://tyktechnologies.github.io/midsommar/docs/llm-management.html",
+  "data_sources": "https://tyktechnologies.github.io/midsommar/docs/datasources-rag.html",
+  "tools": "https://tyktechnologies.github.io/midsommar/docs/tools.html",
+  "rbac_user_groups": "https://tyktechnologies.github.io/midsommar/docs/user-management.html",
+  "privacy_levels": "https://tyktechnologies.github.io/midsommar/docs/filters.html",
+  "filters": "https://tyktechnologies.github.io/midsommar/docs/filters.html",
+  "apps": "https://tyktechnologies.github.io/midsommar/docs/proxy.html",
+  "chats": "https://tyktechnologies.github.io/midsommar/docs/chat-interface.html",
+  "demo_video": "https://www.youtube.com/embed/J2BY7NYRk7U?si=tpxmeSBFcMfKPEuV&controls=0&modestbranding=1&showinfo=0&rel=0&fs=0",
+  "demo_video_hqdefault": "https://i.ytimg.com/vi/J2BY7NYRk7U/maxresdefault.jpg"
 }

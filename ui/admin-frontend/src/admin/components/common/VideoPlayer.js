@@ -1,70 +1,84 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Box } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { PrimaryButton } from '../../styles/sharedStyles';
 
-const VideoPlayer = ({ url, sx = {} }) => {
-  const [showPlayButton, setShowPlayButton] = useState(true);
-  const iframeRef = useRef(null);
-
+const VideoPlayer = ({ url, thumbnailUrl, sx = {} }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  
   const handlePlayClick = () => {
-    setShowPlayButton(false);
-    
-    // Get the iframe element
-    const iframe = iframeRef.current;
-    if (iframe) {
-      // Add autoplay parameter to the URL
-      const autoplayUrl = url.includes('?')
-        ? `${url}&autoplay=1`
-        : `${url}?autoplay=1`;
-      
-      // Update the iframe src to include autoplay
-      iframe.src = autoplayUrl;
-    }
+    setIsPlaying(true);
   };
-
+  
+  const autoplayUrl = url.includes('?')
+    ? `${url}&autoplay=1`
+    : `${url}?autoplay=1`;
+  
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: '100%', ...sx }}>
-      <Box
-        component="iframe"
-        ref={iframeRef}
-        src={url}
-        width="100%"
-        height="100%"
-        sx={{
-          border: 'none',
-          borderRadius: '8px',
-          minHeight: '250px',
-          boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.1)',
-        }}
-        allowFullScreen
-        allow="autoplay"
-        title="Video Player"
-      />
-      
-      {showPlayButton && (
+    <Box sx={{
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      borderRadius: '8px',
+      overflow: 'hidden',
+      ...sx
+    }}>
+      {isPlaying ? (
         <Box
+          component="iframe"
+          src={autoplayUrl}
           sx={{
             position: 'absolute',
             top: 0,
             left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            objectFit: 'cover',
+            border: 'none',
             borderRadius: '8px',
-            zIndex: 1,
+            width: '100%',
+            height: "100%"
           }}
-        >
-          <PrimaryButton
-            variant="contained"
-            onClick={handlePlayClick}
-            startIcon={<PlayArrowIcon />}
+          allowFullScreen
+          allow="autoplay"
+          title="Video Player"
+        />
+      ) : (
+        <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+          <Box
+            component="img"
+            src={thumbnailUrl}
+            alt="Video thumbnail"
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              objectFit: 'cover',
+              borderRadius: '8px',
+              width: '100%',
+              height: "100%"
+            }}
+          />
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderRadius: '8px',
+              zIndex: 1,
+            }}
           >
-            play demo
-          </PrimaryButton>
+            <PrimaryButton
+              variant="contained"
+              onClick={handlePlayClick}
+              startIcon={<PlayArrowIcon />}
+            >
+              play demo
+            </PrimaryButton>
+          </Box>
         </Box>
       )}
     </Box>
