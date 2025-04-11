@@ -37,6 +37,8 @@ type Config struct {
 	AdminEmail             string
 	TestMode               bool
 	AllowedRegisterDomains []string
+	TIBAPISecret           string
+	TIBEnabled             bool
 }
 
 // Ensure AuthService implements models.EmailSender
@@ -60,23 +62,13 @@ func NewAuthService(config *Config, mailService *notifications.MailService, serv
 	}
 }
 
-func (a *AuthService) Login(c *gin.Context, email, password string) error {
-	user, err := a.Config.Service.AuthenticateUser(email, password)
-	if err != nil {
-		if errors.Is(err, services.EmailNotVerifiedError) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
-			return fmt.Errorf("unauthorized: %w", err)
-		}
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
+func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
 	token, err := a.generateToken()
 	if err != nil {
 		return err
 	}
 
-	expirationTime := time.Now().Add(6 * time.Hour)
+	expirationTime := time.Now().Add(6 * time.Hour) //TODO: get this from a config
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     a.Config.CookieName,
 		Value:    token,
@@ -97,44 +89,63 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 	return nil
 }
 
+func (a *AuthService) Login(c *gin.Context, email, password string) error {
+	user, err := a.Config.Service.AuthenticateUser(email, password)
+	if err != nil {
+		if errors.Is(err, services.EmailNotVerifiedError) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
+			return fmt.Errorf("unauthorized: %w", err)
+		}
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		return fmt.Errorf("unauthorized: %w", err)
+	}
+
+	return a.SetUserSession(c, user)
+}
+
+func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
+	// Try to get auth from cookie first
+	cookie, err := c.Cookie(a.Config.CookieName)
+	if err == nil {
+		// Cookie exists, validate it
+		user := &models.User{}
+		if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
+			return user
+		}
+	}
+
+	// Try to get token from query parameter
+	token := c.Query("token")
+	if token != "" {
+		user, err := a.Config.Service.GetUserByAPIKey(token)
+		if err == nil && user.EmailVerified {
+			return user
+		}
+	}
+
+	// Try to get token from Authorization header
+	authHeader := c.Request.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 {
+			apiKey := parts[1]
+			user, err := a.Config.Service.GetUserByAPIKey(apiKey)
+			if err == nil && user.EmailVerified {
+				return user
+			}
+		}
+	}
+
+	return nil
+}
+
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Try to get auth from cookie first
-		cookie, err := c.Cookie(a.Config.CookieName)
-		if err == nil {
-			// Cookie exists, validate it
-			user := &models.User{}
-			if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
-				c.Set("user", user)
-				c.Next()
-				return
-			}
-		}
-
-		// Try to get token from query parameter
-		token := c.Query("token")
-		if token != "" {
-			user, err := a.Config.Service.GetUserByAPIKey(token)
-			if err == nil {
-				c.Set("user", user)
-				c.Next()
-				return
-			}
-		}
-
-		// Try to get token from Authorization header
-		authHeader := c.Request.Header.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 {
-				apiKey := parts[1]
-				user, err := a.Config.Service.GetUserByAPIKey(apiKey)
-				if err == nil {
-					c.Set("user", user)
-					c.Next()
-					return
-				}
-			}
+		user := a.GetAuthenticatedUser(c)
+		if user != nil {
+			c.Set("user", user)
+			c.Next()
+			return
 		}
 
 		// In test mode, allow the request to proceed
@@ -172,6 +183,35 @@ func (a *AuthService) AdminOnly() gin.HandlerFunc {
 	}
 }
 
+func (a *AuthService) SSOOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.Config.TestMode {
+			c.Next()
+			return
+		}
+
+		u, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		user, ok := u.(*models.User)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		if !user.AccessToSSOConfig {
+			slog.Error("user is not allowed", "user", user.Name)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
 	userInterface, exists := c.Get("user")
 	if !exists {
@@ -197,16 +237,18 @@ func (a *AuthService) Logout(c *gin.Context) error {
 		return err
 	}
 
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     a.Config.CookieName,
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		Secure:   a.Config.CookieSecure,
-		HttpOnly: a.Config.CookieHTTPOnly,
-		SameSite: a.Config.CookieSameSite,
-		Path:     "/",
-		Domain:   a.Config.CookieDomain,
-	})
+	for _, cookie := range c.Request.Cookies() {
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     cookie.Name,
+			Value:    "",
+			Expires:  time.Now().Add(-1 * time.Hour),
+			Path:     "/",
+			Domain:   a.Config.CookieDomain,
+			Secure:   a.Config.CookieSecure,
+			HttpOnly: a.Config.CookieHTTPOnly,
+			SameSite: a.Config.CookieSameSite,
+		})
+	}
 
 	return nil
 }
@@ -375,18 +417,18 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		return fmt.Errorf("failed to count users: %w", err)
 	}
 
-	user := &models.User{
-		Email:      email,
-		Name:       name,
-		Password:   string(hashedPassword),
-		ShowPortal: showPortal,
-		ShowChat:   showChat,
-	}
+	user := models.NewUser()
+	user.Email = email
+	user.Name = name
+	user.Password = string(hashedPassword)
+	user.ShowPortal = showPortal
+	user.ShowChat = showChat
 
 	if count == 0 {
 		user.IsAdmin = true
 		user.EmailVerified = true
 		user.NotificationsEnabled = true
+		user.AccessToSSOConfig = true
 	}
 
 	if err := user.Create(a.Config.DB); err != nil {

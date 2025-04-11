@@ -1,12 +1,44 @@
-import React, { useState } from "react";
-import { Box, TextField, Button, Typography, Alert, Link } from "@mui/material";
+import React, { useState, useEffect } from "react";
+import { Box, Alert, Typography, useTheme } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import pubClient from "../../admin/utils/pubClient";
+import AuthLayout from "./AuthLayout";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import {
+  StyledTextField,
+  FormLabel,
+  FormLink,
+  FormText
+} from "../styles/authStyles";
 
 const Login = () => {
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
+  const [ssoEnabled, setSSOEnabled] = useState(false);
+  const [ssoProfile, setSSOProfile] = useState(null);
+
+  useEffect(() => {
+    const fetchSSOConfig = async () => {
+      try {
+        const configResponse = await pubClient.get("/auth/config");
+        const tibEnabled = configResponse.data.tibEnabled;
+        setSSOEnabled(tibEnabled);
+        
+        if (tibEnabled) {
+          const profileResponse = await pubClient.get("/login-sso-profile");
+          if (profileResponse.data?.data) {
+            setSSOProfile(profileResponse.data.data);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching SSO config:", err);
+      }
+    };
+    
+    fetchSSOConfig();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,115 +85,111 @@ const Login = () => {
   };
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-      }}
-    >
-      <Box sx={{ maxWidth: 400, width: "100%", p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          Login
-        </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-        <form onSubmit={handleSubmit}>
-          <TextField
+    <AuthLayout>
+      <Typography variant="headingXLarge" component="h1" gutterBottom align="center" color="text.primary">
+        Log in to your account
+      </Typography>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      
+      <form onSubmit={handleSubmit}>
+        <Box mb={2} mt={2}>
+          <FormLabel component="label" htmlFor="email">
+            Email address
+          </FormLabel>
+          <StyledTextField
+            id="email"
             fullWidth
-            label="Email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            margin="normal"
             required
             autoComplete="username"
             autoFocus
-            InputLabelProps={{
-              shrink: true,
-              sx: {
-                position: "relative",
-                transform: "none",
-                marginBottom: "8px",
-              }
-            }}
-            sx={{
-              "& .MuiInputBase-input:-webkit-autofill": {
-                "-webkit-box-shadow": "0 0 0 100px #fff inset",
-                "-webkit-text-fill-color": "inherit",
-              },
-              "& .MuiInputLabel-root": {
-                position: "relative",
-                transform: "none !important",
-              },
-              "& .MuiInputBase-root": {
-                marginTop: "0",
-              }
-            }}
+            variant="outlined"
           />
-          <TextField
+        </Box>
+        
+        <Box mb={3}>
+          <FormLabel component="label" htmlFor="password">
+            Password
+          </FormLabel>
+          <StyledTextField
+            id="password"
             fullWidth
-            label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            margin="normal"
             required
             autoComplete="current-password"
-            InputLabelProps={{
-              shrink: true,
-              sx: {
-                position: "relative",
-                transform: "none",
-                marginBottom: "8px",
-              }
-            }}
-            sx={{
-              "& .MuiInputBase-input:-webkit-autofill": {
-                "-webkit-box-shadow": "0 0 0 100px #fff inset",
-                "-webkit-text-fill-color": "inherit",
-              },
-              "& .MuiInputLabel-root": {
-                position: "relative",
-                transform: "none !important",
-              },
-              "& .MuiInputBase-root": {
-                marginTop: "0",
-              }
-            }}
+            variant="outlined"
           />
-          <Button
+        </Box>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
+          <PrimaryButton
             type="submit"
             variant="contained"
-            color="primary"
-            fullWidth
-            sx={{ mt: 2 }}
           >
-            Login
-          </Button>
-        </form>
-        <Box sx={{ mt: 2, textAlign: "center" }}>
-          <Typography variant="body2">
-            Don't have an account?{" "}
-            <Link component={RouterLink} to="/register">
-              Register here
-            </Link>
-          </Typography>
+            Log in
+          </PrimaryButton>
         </Box>
-        <Box sx={{ mt: 1, textAlign: "center" }}>
-          <Typography variant="body2">
-            <Link component={RouterLink} to="/forgot-password">
-              Forgot password?
-            </Link>
-          </Typography>
-        </Box>
+      </form>
+      
+      <Box sx={{ textAlign: "center" }}>
+        <FormText sx={{ mb: 1 }}>
+          Don't have an account?
+          <FormLink component={RouterLink} to="/register" ml={1}>
+            Sign up
+          </FormLink>
+        </FormText>
+        
+        <FormLink component={RouterLink} to="/forgot-password">
+          Forgot password?
+        </FormLink>
       </Box>
-    </Box>
+      
+      {ssoEnabled && ssoProfile && (
+        <>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mt: 5,
+              mb: 3,
+              "&::before, &::after": {
+                content: '""',
+                flex: 1,
+                borderBottom: `1px solid ${theme.palette.background.buttonPrimaryOutlineHover}`
+              }
+            }}
+          >
+            <Typography
+              variant="headingSmall"
+              color={theme.palette.custom.white}
+              sx={{ mx: 2 }}
+            >
+              OR
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <PrimaryButton
+              component="a"
+              href={ssoProfile.attributes.login_url
+              }
+              variant="contained"
+            >
+              Log in with SSO
+            </PrimaryButton>
+          </Box>
+        </>
+      )}
+    </AuthLayout>
   );
 };
 

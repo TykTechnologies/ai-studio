@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -230,4 +231,141 @@ func TestUser_GetAccessibleCatalogues(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, accessibleCatalogues, 2)
 	assert.ElementsMatch(t, []string{"Catalogue 1", "Catalogue 2"}, []string{accessibleCatalogues[0].Name, accessibleCatalogues[1].Name})
+}
+
+func TestUser_UpdateGroupMemberships(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a user
+	user := &User{Email: "test@example.com", Password: "password"}
+	err := user.Create(db)
+	assert.NoError(t, err)
+
+	// Create multiple groups
+	group1 := &Group{Name: "Group 1"}
+	err = group1.Create(db)
+	assert.NoError(t, err)
+
+	group2 := &Group{Name: "Group 2"}
+	err = group2.Create(db)
+	assert.NoError(t, err)
+
+	group3 := &Group{Name: "Group 3"}
+	err = group3.Create(db)
+	assert.NoError(t, err)
+
+	// Test 1: Add user to multiple groups
+	err = user.UpdateGroupMemberships(db,
+		strconv.FormatUint(uint64(group1.ID), 10),
+		strconv.FormatUint(uint64(group2.ID), 10))
+	assert.NoError(t, err)
+
+	// Verify user is in both groups
+	var fetchedUser User
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 2)
+
+	// Verify the correct groups were assigned
+	groupIDs := []uint{fetchedUser.Groups[0].ID, fetchedUser.Groups[1].ID}
+	assert.Contains(t, groupIDs, group1.ID)
+	assert.Contains(t, groupIDs, group2.ID)
+
+	// Test 2: Change user's groups (replace existing groups)
+	err = user.UpdateGroupMemberships(db,
+		strconv.FormatUint(uint64(group2.ID), 10),
+		strconv.FormatUint(uint64(group3.ID), 10))
+	assert.NoError(t, err)
+
+	// Verify user is now in the new set of groups
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 2)
+
+	// Verify the correct groups were assigned
+	groupIDs = []uint{fetchedUser.Groups[0].ID, fetchedUser.Groups[1].ID}
+	assert.Contains(t, groupIDs, group2.ID)
+	assert.Contains(t, groupIDs, group3.ID)
+	assert.NotContains(t, groupIDs, group1.ID) // Should no longer be in group1
+
+	// Test 3: Remove all groups
+	err = user.UpdateGroupMemberships(db) // No group IDs provided
+	assert.NoError(t, err)
+
+	// Verify user has no groups
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 0)
+
+	// Test 4: Invalid group ID
+	err = user.UpdateGroupMemberships(db, "invalid_id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid group ID")
+
+	// Test 5: Non-existent group ID
+	err = user.UpdateGroupMemberships(db, "9999")
+	assert.NoError(t, err) // Should not error, just assign to an empty set of groups
+
+	// Verify user has no groups (since group 9999 doesn't exist)
+	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedUser.Groups, 0)
+}
+
+func TestUser_AccessToSSOConfig(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Test creating a user with AccessToSSOConfig = true
+	user := &User{
+		Email:             "test@example.com",
+		Name:              "Test User",
+		IsAdmin:           true,
+		AccessToSSOConfig: true,
+	}
+	err := user.Create(db)
+	assert.NoError(t, err)
+	assert.True(t, user.AccessToSSOConfig)
+
+	// Test retrieving the user
+	retrievedUser := NewUser()
+	err = retrievedUser.Get(db, user.ID)
+	assert.NoError(t, err)
+	assert.True(t, retrievedUser.AccessToSSOConfig)
+
+	// Test updating the user's AccessToSSOConfig field
+	retrievedUser.AccessToSSOConfig = false
+	err = retrievedUser.Update(db)
+	assert.NoError(t, err)
+
+	// Verify the update
+	updatedUser := NewUser()
+	err = updatedUser.Get(db, user.ID)
+	assert.NoError(t, err)
+	assert.False(t, updatedUser.AccessToSSOConfig)
+}
+
+func TestUser_AccessToSSOConfigValidation(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Test that non-admin users cannot have AccessToSSOConfig = true
+	// This is enforced at the service layer, but we can test the model behavior
+
+	// Create a non-admin user with AccessToSSOConfig = true
+	nonAdminUser := &User{
+		Email:             "nonadmin@example.com",
+		Name:              "Non Admin User",
+		IsAdmin:           false,
+		AccessToSSOConfig: true, // This would be rejected by the service layer
+	}
+
+	// The model itself doesn't enforce this constraint, so it should save successfully
+	err := nonAdminUser.Create(db)
+	assert.NoError(t, err)
+
+	// Retrieve the user to verify the field was saved
+	retrievedUser := NewUser()
+	err = retrievedUser.Get(db, nonAdminUser.ID)
+	assert.NoError(t, err)
+	assert.True(t, retrievedUser.AccessToSSOConfig)
+	assert.False(t, retrievedUser.IsAdmin)
 }

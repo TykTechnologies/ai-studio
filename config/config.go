@@ -30,6 +30,8 @@ type AppConf struct {
 	ProxyOnly           bool
 	DocsURL             string
 	DefaultSignupMode   string
+	TIBEnabled          bool
+	TIBAPISecret        string
 }
 
 var globalConfig *AppConf
@@ -166,6 +168,16 @@ func getConfigFromEnv() *AppConf {
 	conf.DefaultSignupMode = os.Getenv("DEFAULT_SIGNUP_MODE")
 	if conf.DefaultSignupMode == "" {
 		conf.DefaultSignupMode = "both"
+	}
+
+	tibEnabledStr := os.Getenv("TIB_ENABLED")
+	if tibEnabledStr == "true" || tibEnabledStr == "1" {
+		conf.TIBEnabled = true
+	}
+
+	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
+	if conf.TIBAPISecret == "" && conf.TIBEnabled {
+		log.Println("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
 	}
 
 	return conf

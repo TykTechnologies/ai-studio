@@ -198,6 +198,18 @@ const UserDetails = () => {
               </Grid>
             </>
           )}
+          {user.attributes.is_admin && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Access to IdP configuration:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <FieldValue>
+                  {user.attributes.access_to_sso_config ? "Enabled" : "Disabled"}
+                </FieldValue>
+              </Grid>
+            </>
+          )}
         </Grid>
         <Box
           mb={2}
