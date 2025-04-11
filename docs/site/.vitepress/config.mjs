@@ -34,12 +34,13 @@ export default defineConfig({
       {
         text: 'Core Features',
         items: [
-          { text: 'LLM Management', link: '/docs/llm-management' }, // New (merge llms, pricing, budget?)
-          { text: 'Chat Interface', link: '/docs/chat-interface' }, // Rename chat-rooms
-          { text: 'Tools & Extensibility', link: '/docs/tools' }, // Keep tools, merge catalogs?
-          { text: 'Data Sources & RAG', link: '/docs/datasources-rag' }, // Rename vector-sources, merge catalogs?
-          { text: 'Proxy & API Gateway', link: '/docs/proxy' }, // New
-          { text: 'Filters & Policies', link: '/docs/filters' } // Keep filters
+          { text: 'AI Gateway', link: '/docs/proxy' }, // Renamed from Proxy & API Gateway
+          { text: 'AI Portal', link: '/docs/ai-portal' }, // New
+          { text: 'Chat Interface', link: '/docs/chat-interface' }, // Moved up
+          { text: 'LLM Management', link: '/docs/llm-management' }, 
+          { text: 'Tools & Extensibility', link: '/docs/tools' }, 
+          { text: 'Data Sources & RAG', link: '/docs/datasources-rag' }, 
+          { text: 'Filters & Policies', link: '/docs/filters' } 
         ]
       },
       {
