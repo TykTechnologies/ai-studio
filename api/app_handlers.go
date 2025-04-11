@@ -55,6 +55,15 @@ func (a *API) createApp(c *gin.Context) {
 		llmIDs,
 	)
 	if err != nil {
+		if err == services.ERRPrivacyScoreMismatch {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Privacy Score Mismatch", Detail: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."}},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -159,6 +168,15 @@ func (a *API) updateApp(c *gin.Context) {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
 				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
+		if err == services.ERRPrivacyScoreMismatch {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Privacy Score Mismatch", Detail: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."}},
 			})
 			return
 		}
