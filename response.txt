@@ -1,0 +1,41 @@
+# CI/CD Fix: Replacing Hugo with VitePress
+
+I've analyzed the issue with the CI/CD pipeline and identified the necessary changes to fix the failing docs stage. The problem is that Hugo was removed and replaced with VitePress, but the CI test workflow still tries to use Hugo.
+
+## Required Changes to `.github/workflows/ci-test.yml`:
+
+1. **Remove the Hugo setup step**:
+   ```yml
+   -
+     name: Setup Hugo
+     uses: peaceiris/actions-hugo@v2
+     with:
+       hugo-version: 'latest'
+       extended: true
+   ```
+
+2. **Remove the Hugo cache step**:
+   ```yml
+   # Cache Hugo resources
+   -
+     name: Cache Hugo resources
+     uses: actions/cache@v3
+     with:
+       path: docs/site/resources
+       key: ${{ runner.os }}-hugomod-${{ hashFiles('docs/site/go.sum') }}
+       restore-keys: |
+         ${{ runner.os }}-hugomod-
+   ```
+
+3. **Update the "Build Docs" step** to use VitePress instead of Hugo:
+   ```yml
+   -
+     name: Build Docs
+     run: |
+       cp .env.example .env
+       cd docs/site && npm install && NODE_ENV=production npm run docs:build && cd ../..
+   ```
+
+The Node.js setup is already in place in the workflow, so no additional changes are needed for that part.
+
+These changes will align the CI test workflow with the VitePress configuration used in the `.github/workflows/vitepress.yml` file, fixing the failing docs stage.
