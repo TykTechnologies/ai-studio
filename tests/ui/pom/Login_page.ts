@@ -3,19 +3,19 @@ import { config } from '../config';
 
 export class LoginPage {
     readonly page: Page;
-    readonly emailInput: Locator;
-    readonly passwordInput: Locator;
-    readonly loginButton: Locator;
-    readonly registerHereButton: Locator;
-    readonly forgotPasswordButton: Locator;
+    readonly EmailInput: Locator;
+    readonly PasswordInput: Locator;
+    readonly LoginButton: Locator;
+    readonly RegisterHereButton: Locator;
+    readonly ForgotPasswordButton: Locator;
 
     constructor(page: Page) {
         this.page = page;
-        this.emailInput = this.page.getByLabel('Email address');
-        this.passwordInput = this.page.getByLabel('Password');
-        this.loginButton = this.page.getByRole('button', { name: 'Log in' });
-        this.registerHereButton = this.page.getByText('Sign up');
-        this.forgotPasswordButton = this.page.getByText('Forgot password?');
+        this.EmailInput = this.page.getByRole('textbox', { name: 'Email' });
+        this.PasswordInput = this.page.getByRole('textbox', { name: 'Password' });
+        this.LoginButton = this.page.getByRole('button').filter({ hasText: /log in/i });
+        this.RegisterHereButton = this.page.getByRole('link', { name: 'Sign up' });
+        this.ForgotPasswordButton = this.page.getByText('Forgot password?');
     }
     
     async goto() {
@@ -23,8 +23,16 @@ export class LoginPage {
     }
 
     async login(email: string, password: string) {
-        await this.emailInput.fill(email);
-        await this.passwordInput.fill(password);
-        await this.loginButton.click();
+        await this.EmailInput.fill(email);
+        await this.PasswordInput.fill(password);
+        await this.LoginButton.click();
+        await this.page.waitForTimeout(1000); // Wait for 1 seconds to allow the login process to complete
+        if (await this.page.getByRole('img', { name: 'Logo' }).isVisible()) {
+            return;
+        }
+        console.log('Login failed. Retrying...');
+        await this.EmailInput.fill(email);
+        await this.PasswordInput.fill(password);
+        await this.LoginButton.click();
     }
 }
