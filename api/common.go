@@ -483,7 +483,7 @@ func (a *API) createUserApp(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Data source privacy score cannot be higher than LLM privacy score"}}})
+			}{{Title: "Privacy Score Mismatch", Detail: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."}}})
 		} else {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
