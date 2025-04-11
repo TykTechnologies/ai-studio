@@ -162,6 +162,7 @@ describe('Overview Component', () => {
       hasLLMs: false,
       loading: false,
       error: null,
+      getDocsLink: jest.fn().mockReturnValue('https://docs.example.com/mock-link'),
     });
 
     renderWithProviders(<Overview />);

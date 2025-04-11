@@ -3,14 +3,14 @@ import { Box } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { PrimaryButton } from '../../styles/sharedStyles';
 
-const VideoPlayer = ({ url, thumbnailUrl, sx = {} }) => {
+const VideoPlayer = ({ url = '', thumbnailUrl, sx = {} }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   
   const handlePlayClick = () => {
     setIsPlaying(true);
   };
   
-  const autoplayUrl = url.includes('?')
+  const autoplayUrl = url?.includes('?')
     ? `${url}&autoplay=1`
     : `${url}?autoplay=1`;
   
