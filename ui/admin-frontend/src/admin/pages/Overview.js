@@ -85,19 +85,20 @@ const Overview = () => {
       </TitleBox>
       <ContentBox>
         <DescriptionSection>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: { xs: 'column', sm: 'row' }, 
-            gap: 3,
+          <Box sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            alignItems: 'center',
+            gap: 4,
           }}>
-            <Box sx={{ 
-              width: { xs: '100%', sm: '50%' }, 
-              display: 'flex', 
-              flexDirection: 'column', 
+            <Box sx={{
+              width: { xs: '100%', md: '50%' },
+              display: 'flex',
+              flexDirection: 'column',
               gap: 2,
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
             }}>
               <Typography variant="headingxLarge" color="text.primary" gutterBottom>
                 Explore AI studio
@@ -108,10 +109,21 @@ const Overview = () => {
                 adoption with flexible, user-friendly AI platforms.
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', sm: '50%' }, boxSizing: 'border-box' }}>
+            <Box sx={{
+              width: { xs: '100%', md: '50%' },
+              boxSizing: 'border-box',
+              overflow: 'hidden',
+              borderRadius: '8px'
+            }}>
               <VideoPlayer
                 url={getDocsLink('demo_video')}
-                sx={{ width: '100%', height: '100%' }}
+                thumbnailUrl={getDocsLink('demo_video_hqdefault')}
+                sx={{
+                  width: '100%',
+                  height: 'auto',
+                  paddingTop: '56.25%', // Standard 16:9 aspect ratio
+                  position: 'relative'
+                }}
               />
             </Box>
           </Box>
@@ -131,7 +143,7 @@ const Overview = () => {
               boxSizing: 'border-box'
             }}>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -163,7 +175,7 @@ const Overview = () => {
               </BasicCard>
             </Box>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -195,7 +207,7 @@ const Overview = () => {
               </BasicCard>
             </Box>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -243,7 +255,7 @@ const Overview = () => {
               boxSizing: 'border-box'
             }}>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -275,7 +287,7 @@ const Overview = () => {
               </BasicCard>
             </Box>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -324,7 +336,7 @@ const Overview = () => {
             }}>
             {showAppsCard && (
               <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -359,7 +371,7 @@ const Overview = () => {
             )}
             {showChatCard && (
               <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
