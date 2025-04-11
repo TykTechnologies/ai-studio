@@ -104,6 +104,7 @@ const theme = createTheme({
       neutralDefault: '#D8D8DF',
       neutralHovered: '#9D9DAF',
       neutralDefaultSubdued: '#F1F1F4',
+      neutralPressed: '#656582',
       criticalDefault: '#AE2410',
       criticalDefaultSubdue: '#F9DDD8',
       criticalHover: '#8B1D12',
@@ -137,6 +138,7 @@ const theme = createTheme({
       criticalDefault: "#3E0E18",
       successDefault: "#0E3129",
       warningDefault: "#473717",
+      neutralDisabled: "#818198",
     },
   },
   components: {
