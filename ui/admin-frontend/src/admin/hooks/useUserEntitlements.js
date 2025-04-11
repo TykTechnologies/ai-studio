@@ -1,59 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
+import cacheService from '../utils/cacheService';
 
-const CACHE_KEY = 'userEntitlements';
-const CACHE_EXPIRY = 10000;
+const ENTITLEMENTS_CACHE_KEY = 'tyk_ai_studio_admin_userEntitlements';
 
-const useUserEntitlements = () => {
+const useUserEntitlements = (skipInitialFetch = false) => {
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [uiOptions, setUiOptions] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!skipInitialFetch);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchUserEntitlements = async () => {
-      try {
-        const cachedData = localStorage.getItem(CACHE_KEY);
-        if (cachedData) {
-          const { data, timestamp } = JSON.parse(cachedData);
-          if (Date.now() - timestamp < CACHE_EXPIRY) {
-            setUserEntitlements(data);
-            setUiOptions(data.ui_options);
-            setLoading(false);
-            return;
-          }
-        }
+  const fetchUserEntitlements = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    const cachedData = cacheService.get(ENTITLEMENTS_CACHE_KEY);
+    if (cachedData) {
+      setUserEntitlements(cachedData);
+      setUiOptions(cachedData.ui_options);
+      setLoading(false);
+      return cachedData;
+    }
 
-        const response = await pubClient.get('/common/me');
+    return pubClient.get('/common/me')
+      .then(response => {
         const newData = response.data.attributes.entitlements;
         const newUiOptions = response.data.attributes.ui_options;
         
         setUserEntitlements(newData);
         setUiOptions(newUiOptions);
         
-        localStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({
-            data: { ...newData, ui_options: newUiOptions },
-            timestamp: Date.now(),
-          })
-        );
-      } catch (error) {
+        const dataToCache = { ...newData, ui_options: newUiOptions };
+        cacheService.set(ENTITLEMENTS_CACHE_KEY, dataToCache, 10000); // 10 seconds expiry
+        
+        return newData;
+      })
+      .catch(error => {
         console.error('Failed to fetch user entitlements:', error);
         setError(error);
-      } finally {
+        throw error;
+      })
+      .finally(() => {
         setLoading(false);
-      }
-    };
-
-    fetchUserEntitlements();
+      });
   }, []);
+
+  useEffect(() => {
+    if (!skipInitialFetch) {
+      fetchUserEntitlements();
+    }
+  }, [fetchUserEntitlements, skipInitialFetch]);
 
   return {
     userEntitlements,
     uiOptions,
     loading,
     error,
+    fetchUserEntitlements
   };
 };
 

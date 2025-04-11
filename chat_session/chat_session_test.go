@@ -359,9 +359,10 @@ func TestChatSession_HandleToolCalls(t *testing.T) {
 		},
 	}
 
-	called, err := cs.handleToolCalls(choice, &llms.MessageContent{}, &llms.MessageContent{})
-	assert.NoError(t, err)
-	assert.True(t, called)
+	toolCall := &llms.MessageContent{}
+	toolResult := &llms.MessageContent{}
+	cs.handleToolCalls(choice, toolCall, toolResult)
+	assert.NotEmpty(t, toolResult.Parts, "Tool result should have parts")
 }
 
 func TestChatSession_GetMessages(t *testing.T) {
@@ -691,6 +692,48 @@ func TestChatSession_PrivacyScoreValidation(t *testing.T) {
 
 	err = cs.AddTool(lowPrivacyTool.Name, lowPrivacyTool)
 	assert.NoError(t, err)
+}
+
+func TestChatSession_HandleToolError(t *testing.T) {
+	// Create a chat session
+	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil, nil, &uid, &sid)
+
+	// Create a channel to capture the status message
+	cs.outputMessages = make(chan *ChatResponse, 1)
+
+	// Create a tool result message content
+	toolResult := &llms.MessageContent{
+		Parts: []llms.ContentPart{},
+	}
+
+	// Test parameters
+	errMsg := "Test error message"
+	toolCallID := "test-tool-call-id"
+	functionName := "testFunction"
+
+	// Call the function
+	cs.handleToolError(errMsg, toolCallID, functionName, toolResult)
+
+	// Verify the status message was sent
+	select {
+	case response := <-cs.outputMessages:
+		assert.Contains(t, response.Payload, errMsg)
+		assert.Contains(t, response.Payload, ":::system")
+	default:
+		assert.Fail(t, "No status message was sent")
+	}
+
+	// Verify the tool result was updated
+	assert.Len(t, toolResult.Parts, 1)
+
+	// Check that the part is a ToolCallResponse
+	toolResp, ok := toolResult.Parts[0].(llms.ToolCallResponse)
+	assert.True(t, ok, "Part should be a ToolCallResponse")
+
+	// Verify the ToolCallResponse properties
+	assert.Equal(t, toolCallID, toolResp.ToolCallID)
+	assert.Equal(t, functionName, toolResp.Name)
+	assert.Equal(t, "ERROR: "+errMsg, toolResp.Content)
 }
 
 // func TestChatSession_Live_Weather(t *testing.T) {

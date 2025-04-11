@@ -12,12 +12,12 @@ export class RegisterPage {
 
     constructor(page: Page) {
         this.page = page;
-        this.nameInput = this.page.getByRole('textbox', { name: 'Name' });
-        this.emailInput = this.page.getByRole('textbox', { name: 'Email' });
-        this.passwordInput = this.page.getByRole('textbox', { name: 'Password' });
-        this.signUpForAIDeveloperPortalCheckbox = this.page.getByRole('checkbox', { name: 'Sign up for AI Developer' });
-        this.signUpForAIChatCheckbox = this.page.getByRole('checkbox', { name: 'Sign up for AI Chat' });
-        this.registerButton = this.page.getByRole('button', { name: 'Register' });
+        this.nameInput = this.page.getByLabel('Name');
+        this.emailInput = this.page.getByLabel('Email address');
+        this.passwordInput = this.page.getByLabel('Password');
+        this.signUpForAIDeveloperPortalCheckbox = this.page.getByLabel('Sign up for AI Portal');
+        this.signUpForAIChatCheckbox = this.page.getByLabel('Sign up for AI Chats');
+        this.registerButton = this.page.getByRole('button', { name: 'Sign up' });
     }
 
     async goto() {
@@ -29,7 +29,5 @@ export class RegisterPage {
         await this.emailInput.fill(email);
         await this.passwordInput.fill(password);
         await this.registerButton.click();
-        await this.registerButton.click();
-
     }
 }

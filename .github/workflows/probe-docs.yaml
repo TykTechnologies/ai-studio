@@ -1,0 +1,25 @@
+name: Probe Editing handler
+
+on:
+  issue_comment:
+    types: [created]          
+    
+# Define permissions needed for the workflow
+permissions:
+  issues: write
+  pull-requests: write
+  contents: write
+
+jobs:
+  trigger_probe_implement:
+    uses: buger/probe/.github/workflows/probe.yml@main
+    with:
+      command_prefix: "/docs" # Or '/ai', '/ask', etc.
+      allow_edit: true
+      prompt: |
+        You are expert in technical writing, as well as in vitepress. 
+        You are allowed to implement changes only in docs/site directory, but in order to answer user questions about the code you can do search anywhere in this project.
+        If you have a big task, it makes more sense separating it to milestones, and call implment tool for each milstone. 
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.PROBE_ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_URL: ${{ secrets.PROBE_ANTHROPIC_URL }}
