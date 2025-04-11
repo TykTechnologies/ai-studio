@@ -53,7 +53,7 @@ function TestComponent({ skipInitialFetch = false, docsLinkKey = null }) {
   };
   
   // Get docs link if a key is provided
-  const docsLink = docsLinkKey ? hookResult.getDocsLink(docsLinkKey) : null;
+  const docsLink = hookResult.getDocsLink(docsLinkKey);
   
   return (
     <div>
