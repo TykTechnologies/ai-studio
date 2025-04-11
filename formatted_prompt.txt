@@ -1,0 +1,13 @@
+<github_context type="issue" number="104">
+  <details><title><![CDATA[CI/CD is broken because Hugo was removed]]></title><body><![CDATA[We need to fix .github/workflows/ci-test.yml, it fails on docs stage now.
+
+It broken because we removed the hugo and replaced it with vitepress. 
+Check how vitepress works, by looking to .github/workflows/vitepress.yml
+
+So replace in tests hugo jobs with vitepress jobs. ]]></body></details>
+  
+  <comments><comment type="issue"><author>buger</author><timestamp>2025-04-11T11:35:08Z</timestamp><content><![CDATA[/engineer can you fix it?]]></content></comment><comment type="issue"><author>tykbot[bot]</author><timestamp>2025-04-11T11:35:20Z</timestamp><content><![CDATA[@buger Sorry, but I do not understand!]]></content></comment></comments>
+  <user_request author="buger" timestamp="2025-04-11T11:35:08Z"><![CDATA[can you fix it?]]></user_request>
+  </github_context>
+  
+  <instructions><![CDATA[You are an AI assistant analyzing a GitHub Issue...]]></instructions>

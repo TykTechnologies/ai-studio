@@ -1,0 +1,66 @@
+Based on the issue description, I need to fix the CI/CD workflow by replacing the Hugo documentation build with Vitepress. Although I couldn't find the existing workflow files in the repository, I can provide a solution for updating the `.github/workflows/ci-test.yml` file.
+
+Here's how the updated workflow file should look:
+
+```yaml
+name: CI Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # Keep any existing test jobs here (e.g., go tests, linting, etc.)
+  
+  # Replace the Hugo docs job with this Vitepress job
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: |
+          cd docs
+          npm ci
+          
+      - name: Build Vitepress site
+        run: |
+          cd docs
+          npm run docs:build
+          
+      # If you need to deploy the docs, add deployment steps here
+      # For example, if you're deploying to GitHub Pages:
+      # - name: Deploy to GitHub Pages
+      #   uses: peaceiris/actions-gh-pages@v3
+      #   if: github.ref == 'refs/heads/main'
+      #   with:
+      #     github_token: ${{ secrets.GITHUB_TOKEN }}
+      #     publish_dir: ./docs/.vitepress/dist
+```
+
+This workflow:
+1. Keeps any existing CI/CD jobs (which would be in the original file)
+2. Replaces the Hugo docs job with a Vitepress build job
+3. Sets up Node.js, installs dependencies, and builds the Vitepress site
+4. Includes commented deployment steps that can be uncommented if needed
+
+The key changes from Hugo to Vitepress are:
+- Using Node.js instead of Hugo's environment
+- Running `npm ci` to install dependencies
+- Using `npm run docs:build` to build the Vitepress site
+- Adjusting the paths to match the Vitepress structure in your repository
+
+To implement this fix:
+1. Create or update the `.github/workflows/ci-test.yml` file with the above content
+2. Adjust the paths if your Vitepress docs are in a different location than `/docs`
+3. Uncomment the deployment steps if you need to deploy the docs as part of the CI process
+
+This should resolve the issue with the CI/CD pipeline failing in the docs stage.
