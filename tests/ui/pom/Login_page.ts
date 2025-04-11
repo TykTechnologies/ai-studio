@@ -13,8 +13,8 @@ export class LoginPage {
         this.page = page;
         this.EmailInput = this.page.getByRole('textbox', { name: 'Email' });
         this.PasswordInput = this.page.getByRole('textbox', { name: 'Password' });
-        this.LoginButton = this.page.getByRole('button', { name: 'Login' });
-        this.RegisterHereButton = this.page.getByText('Register here');
+        this.LoginButton = this.page.getByRole('button').filter({ hasText: /log in/i });
+        this.RegisterHereButton = this.page.getByRole('link', { name: 'Sign up' });
         this.ForgotPasswordButton = this.page.getByText('Forgot password?');
     }
     
