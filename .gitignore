@@ -23,3 +23,4 @@ __debug_bin*
 coverage.out
 coverage.html
 node_modules
+docs/site/package-lock.json
