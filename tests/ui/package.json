@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "prerequisite": "npx playwright test --project='prerequisite' --repeat-each=1",
     "test": "npx playwright test --project='chromium'",
     "gui": "npx playwright test --project='chromium' --ui",
     "upload_report_to_s3": "node ./node_modules/tyk-test-automation-wrappers/lib/utils/uploadReport.js"
@@ -16,5 +15,9 @@
     "@playwright/test": "^1.50.1",
     "@types/node": "^22.13.8",
     "tyk-test-automation-wrappers": "git+https://github.com/TykTechnologies/tyk-test-automation-wrappers.git#main"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.89.0"
   }
 }
