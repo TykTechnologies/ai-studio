@@ -79,6 +79,22 @@ const ChatDashboard = () => {
   const handleStartNewChat = (chatId) => {
     navigate(`/chat/${chatId}`);
   };
+  
+  const handleDeleteChat = async (chatId) => {
+    if (window.confirm('Are you sure you want to delete this chat?')) {
+      try {
+        await pubClient.patch(`/chat-history-records/${chatId}/visibility`, {
+          hidden: true
+        });
+        
+        // Refresh the chat history
+        fetchData();
+      } catch (error) {
+        console.error('Error deleting chat:', error);
+        setError("Failed to delete chat. Please try again later.");
+      }
+    }
+  };
 
   const handlePageChange = (event, value) => {
     setCurrentPage(value);
@@ -199,6 +215,13 @@ const ChatDashboard = () => {
                   <StyledTableRow key={record.id}>
                     <StyledTableCell>{record.attributes.name}</StyledTableCell>
                     <StyledTableCell align="right">
+                      <Button
+                        onClick={() => handleDeleteChat(record.id)}
+                        color="error"
+                        sx={{ mr: 1 }}
+                      >
+                        Delete
+                      </Button>
                       <Button
                         onClick={() =>
                           handleContinueChat(
