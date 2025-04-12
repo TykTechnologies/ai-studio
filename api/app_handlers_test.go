@@ -307,7 +307,7 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 		},
 	}
 
-	w := performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/apps/%d", app.ID), updateAppInput)
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/apps/%d", app.ID), updateAppInput)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var errorResponse models.ErrorResponse
