@@ -271,3 +271,13 @@ The **App Edit View** allows administrators to modify app details and manage cre
 ---
 
 The **App Edit View** is a critical feature for managing user-created apps in the Tyk AI Studio, providing administrators with full control over app configuration, approval, and access management.
+
+### Privacy Score Validation
+
+When creating or updating an app, the system validates that the privacy scores of selected datasources are not higher than the privacy scores of selected LLMs. This ensures data governance and prevents sensitive data from being exposed to less secure LLMs.
+
+If you attempt to create or update an app with datasources that have higher privacy requirements (scores) than the selected LLMs, you'll receive an error message: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."
+
+To resolve this issue, either:
+1. Select LLMs with higher privacy scores that match or exceed your datasource requirements
+2. Use datasources with lower privacy requirements that are compatible with your selected LLMs
