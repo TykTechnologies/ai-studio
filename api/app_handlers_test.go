@@ -223,7 +223,7 @@ func TestCreateAppPrivacyScoreMismatch(t *testing.T) {
 	
 	// Verify error message contains privacy score mismatch information
 	assert.Len(t, errorResponse.Errors, 1)
-	assert.Contains(t, errorResponse.Errors[0].Detail, "privacy score mismatch")
+	assert.Contains(t, errorResponse.Errors[0].Detail, "Datasources have higher privacy requirements than the selected LLMs")
 }
 
 func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
@@ -316,5 +316,5 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 	
 	// Verify error message contains privacy score mismatch information
 	assert.Len(t, errorResponse.Errors, 1)
-	assert.Contains(t, errorResponse.Errors[0].Detail, "privacy score mismatch")
+	assert.Contains(t, errorResponse.Errors[0].Detail, "Datasources have higher privacy requirements than the selected LLMs")
 }
