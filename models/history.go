@@ -25,6 +25,7 @@ type ChatHistoryRecord struct {
 	ChatID    uint   `gorm:"index"`
 	UserID    uint   `gorm:"index"`
 	Name      string
+	Hidden    bool   `gorm:"default:false"`
 }
 
 // Create a new ChatHistoryRecord
@@ -59,6 +60,25 @@ func (chr *ChatHistoryRecord) GetByChatID(db *gorm.DB, chatID uint) error {
 
 func (chr *ChatHistoryRecord) UpdateName(db *gorm.DB, newName string) error {
 	return db.Model(chr).Update("name", newName).Error
+}
+
+// UpdateVisibility updates the Hidden field of a ChatHistoryRecord
+func (chr *ChatHistoryRecord) UpdateVisibility(db *gorm.DB, hidden bool) error {
+	return db.Model(chr).Update("hidden", hidden).Error
+}
+
+// UpdateChatHistoryVisibility updates the visibility of a chat history record by ID
+func UpdateChatHistoryVisibility(db *gorm.DB, id uint, hidden bool) (*ChatHistoryRecord, error) {
+	var record ChatHistoryRecord
+	if err := db.First(&record, id).Error; err != nil {
+		return nil, err
+	}
+	
+	if err := record.UpdateVisibility(db, hidden); err != nil {
+		return nil, err
+	}
+	
+	return &record, nil
 }
 
 func (cm *CMessage) UnmarshalContent() any {
@@ -112,6 +132,12 @@ func ListChatHistoryRecordsByUserID(db *gorm.DB, userID uint, pageSize int, page
 
 // ListChatHistoryRecordsByUserIDPaginated retrieves ChatHistoryRecords for a given UserID with pagination
 func ListChatHistoryRecordsByUserIDPaginated(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
+	return ListChatHistoryRecordsByUserIDPaginatedWithVisibility(db, userID, pageSize, pageNumber, all, false)
+}
+
+// ListChatHistoryRecordsByUserIDPaginatedWithVisibility retrieves ChatHistoryRecords for a given UserID with pagination
+// and controls whether to include hidden records (for admin users)
+func ListChatHistoryRecordsByUserIDPaginatedWithVisibility(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool, includeHidden bool) ([]ChatHistoryRecord, int64, int, error) {
 	var records []ChatHistoryRecord
 	var totalCount int64
 
@@ -124,8 +150,14 @@ func ListChatHistoryRecordsByUserIDPaginated(db *gorm.DB, userID uint, pageSize 
 	// Main query
 	query := db.Model(&ChatHistoryRecord{}).
 		Where("user_id = ?", userID).
-		Where("session_id IN (?)", subQuery).
-		Order("created_at DESC")
+		Where("session_id IN (?)", subQuery)
+
+	// Filter out hidden records unless includeHidden is true (for admins)
+	if !includeHidden {
+		query = query.Where("hidden = ?", false)
+	}
+
+	query = query.Order("created_at DESC")
 
 	// Count total records
 	if err := query.Count(&totalCount).Error; err != nil {

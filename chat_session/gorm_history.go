@@ -52,42 +52,17 @@ func NewGormChatMessageHistory(db *gorm.DB, session string, chatReference uint, 
 		sessionRecordExists = false
 	}
 
-	// otherwise we create it
-	if !sessionRecordExists {
-		uid := 0
-		if h.UserID != 0 {
-			uid = int(h.UserID)
-		}
-
-		cid := 0
-		if h.ChatID != 0 {
-			cid = int(h.ChatID)
-		}
-
-		// create a record of this Chat Session
-		chr := &models.ChatHistoryRecord{
-			SessionID: session,
-			ChatID:    uint(cid),
-			UserID:    uint(uid),
-			Name:      time.Now().Format("3PM on Monday (02/01/06)"),
-		}
-
-		err := db.Create(chr).Error
-		if err != nil {
-			slog.Error("failed to create chat history record", "error", err)
-		}
-
-		if systemPrompt != "" {
-			err := h.AddSystemMessage(context.Background(), systemPrompt)
-			if err != nil {
-				slog.Error("failed to add system prompt", "error", err)
-			}
-		}
-
-		return h
+	if sessionRecordExists {
+		h.ChatID = first.ChatID
 	}
 
-	h.ChatID = first.ChatID
+	if systemPrompt != "" {
+		err := h.AddSystemMessage(context.Background(), systemPrompt)
+		if err != nil {
+			slog.Error("failed to add system prompt", "error", err)
+		}
+	}
+
 	return h
 }
 
@@ -172,6 +147,39 @@ func (h *GormChatMessageHistory) AddAIMessage(ctx context.Context, text string) 
 
 // AddUserMessage adds a user message to the chat message history
 func (h *GormChatMessageHistory) AddUserMessage(ctx context.Context, text string) error {
+	// Check if this is the first message and if a session record exists
+	sessionRecordExists, _, err := h.CheckIfSessionExists(ctx)
+	if err != nil {
+		slog.Error("failed to check if session exists", "error", err)
+	}
+
+	// If no session record exists, create one before adding the message
+	if !sessionRecordExists {
+		uid := 0
+		if h.UserID != 0 {
+			uid = int(h.UserID)
+		}
+
+		cid := 0
+		if h.ChatID != 0 {
+			cid = int(h.ChatID)
+		}
+
+		// Create a record of this Chat Session
+		chr := &models.ChatHistoryRecord{
+			SessionID: h.Session,
+			ChatID:    uint(cid),
+			UserID:    uint(uid),
+			Name:      time.Now().Format("3PM on Monday (02/01/06)"),
+			Hidden:    false,
+		}
+
+		err := h.DB.Create(chr).Error
+		if err != nil {
+			slog.Error("failed to create chat history record", "error", err)
+		}
+	}
+
 	mc := llms.TextParts(llms.ChatMessageTypeHuman, text)
 	return h.addMessage(ctx, mc)
 }

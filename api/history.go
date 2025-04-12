@@ -86,11 +86,13 @@ func (a *API) createChatHistoryRecord(c *gin.Context) {
 			ChatID    uint   `json:"chat_id"`
 			UserID    uint   `json:"user_id"`
 			Name      string `json:"name"`
+			Hidden    bool   `json:"hidden"`
 		}{
 			SessionID: record.SessionID,
 			ChatID:    record.ChatID,
 			UserID:    record.UserID,
 			Name:      record.Name,
+			Hidden:    record.Hidden,
 		},
 	})
 }
@@ -133,11 +135,13 @@ func (a *API) getChatHistoryRecord(c *gin.Context) {
 			ChatID    uint   `json:"chat_id"`
 			UserID    uint   `json:"user_id"`
 			Name      string `json:"name"`
+			Hidden    bool   `json:"hidden"`
 		}{
 			SessionID: record.SessionID,
 			ChatID:    record.ChatID,
 			UserID:    record.UserID,
 			Name:      record.Name,
+			Hidden:    record.Hidden,
 		},
 	})
 }
@@ -184,6 +188,73 @@ func (a *API) listChatHistoryRecords(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// toggleChatHistoryVisibility godoc
+// @Summary Toggle visibility of a chat history record
+// @Description Mark a chat history record as hidden or visible
+// @Tags chat-history
+// @Accept json
+// @Produce json
+// @Param id path int true "Chat History Record ID"
+// @Param input body ChatHistoryVisibilityInput true "Visibility Input"
+// @Success 200 {object} ChatHistoryRecordResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /chat-history-records/{id}/visibility [patch]
+func (a *API) toggleChatHistoryVisibility(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid ID format"}}})
+		return
+	}
+
+	var input ChatHistoryVisibilityInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	record, err := a.service.UpdateChatHistoryVisibility(uint(id), input.Data.Attributes.Hidden)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Chat history record not found"}}})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, ChatHistoryRecordResponse{
+		Type: "chat_history_record",
+		ID:   strconv.FormatUint(uint64(record.ID), 10),
+		Attributes: struct {
+			SessionID string `json:"session_id"`
+			ChatID    uint   `json:"chat_id"`
+			UserID    uint   `json:"user_id"`
+			Name      string `json:"name"`
+			Hidden    bool   `json:"hidden"`
+		}{
+			SessionID: record.SessionID,
+			ChatID:    record.ChatID,
+			UserID:    record.UserID,
+			Name:      record.Name,
+			Hidden:    record.Hidden,
+		},
+	})
+}
+
 // deleteChatHistoryRecord godoc
 // @Summary Delete a chat history record
 // @Description Delete a chat history record by its ID
@@ -224,6 +295,15 @@ func (a *API) deleteChatHistoryRecord(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+type ChatHistoryVisibilityInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Hidden bool `json:"hidden"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
 type CMessageListResponse struct {
 	Data []CMessageResponse `json:"data"`
 }
@@ -239,11 +319,13 @@ func serializeChatHistoryRecords(records []models.ChatHistoryRecord) []ChatHisto
 				ChatID    uint   `json:"chat_id"`
 				UserID    uint   `json:"user_id"`
 				Name      string `json:"name"`
+				Hidden    bool   `json:"hidden"`
 			}{
 				SessionID: record.SessionID,
 				ChatID:    record.ChatID,
 				UserID:    record.UserID,
 				Name:      record.Name,
+				Hidden:    record.Hidden,
 			},
 		}
 	}
