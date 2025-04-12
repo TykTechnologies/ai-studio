@@ -8,7 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy score than LLMs")
+var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
 func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint) (*models.App, error) {
