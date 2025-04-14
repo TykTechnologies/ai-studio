@@ -5,6 +5,8 @@ import { TitleBox, ContentBox, PrimaryButton } from '../styles/sharedStyles';
 import useOverviewData from '../hooks/useOverviewData';
 import BasicCard from '../components/common/BasicCard';
 import IconBadge from '../components/common/IconBadge';
+import { createDocsLinkHandler } from '../utils/docsLinkUtils';
+import VideoPlayer from '../components/common/VideoPlayer';
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
@@ -47,7 +49,7 @@ const SectionContainer = styled(Box)(({ theme }) => ({
 }));
 
 const Overview = () => {
-  const { userName, features, hasLLMs, loading, error } = useOverviewData();
+  const { userName, features, hasLLMs, getDocsLink, loading, error } = useOverviewData();
   const navigate = useNavigate();
 
   const showChatCard = features?.feature_chat;
@@ -83,19 +85,20 @@ const Overview = () => {
       </TitleBox>
       <ContentBox>
         <DescriptionSection>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: { xs: 'column', sm: 'row' }, 
-            gap: 3,
+          <Box sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            alignItems: 'center',
+            gap: 4,
           }}>
-            <Box sx={{ 
-              width: { xs: '100%', sm: '50%' }, 
-              display: 'flex', 
-              flexDirection: 'column', 
+            <Box sx={{
+              width: { xs: '100%', md: '50%' },
+              display: 'flex',
+              flexDirection: 'column',
               gap: 2,
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
             }}>
               <Typography variant="headingxLarge" color="text.primary" gutterBottom>
                 Explore AI studio
@@ -106,8 +109,22 @@ const Overview = () => {
                 adoption with flexible, user-friendly AI platforms.
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', sm: '50%' }, boxSizing: 'border-box' }}>
-              {/* Placeholder for the play demo section */}
+            <Box sx={{
+              width: { xs: '100%', md: '50%' },
+              boxSizing: 'border-box',
+              overflow: 'hidden',
+              borderRadius: '8px'
+            }}>
+              <VideoPlayer
+                url={getDocsLink('demo_video')}
+                thumbnailUrl={getDocsLink('demo_video_hqdefault')}
+                sx={{
+                  width: '100%',
+                  height: 'auto',
+                  paddingTop: '56.25%', // Standard 16:9 aspect ratio
+                  position: 'relative'
+                }}
+              />
             </Box>
           </Box>
         </DescriptionSection>
@@ -126,7 +143,7 @@ const Overview = () => {
               boxSizing: 'border-box'
             }}>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -135,9 +152,9 @@ const Overview = () => {
                   label: 'Add LLM provider', 
                   onClick: () => navigate('/admin/llms/new') 
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'llm_providers')
                 }}
               > 
                 <Box sx={{ 
@@ -158,7 +175,7 @@ const Overview = () => {
               </BasicCard>
             </Box>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -167,9 +184,9 @@ const Overview = () => {
                   label: 'Add Data source', 
                   onClick: () => navigate('/admin/datasources/new')
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'data_sources')
                 }}
               >
                 <Box sx={{ 
@@ -190,7 +207,7 @@ const Overview = () => {
               </BasicCard>
             </Box>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -199,9 +216,9 @@ const Overview = () => {
                   label: 'Add Tool', 
                   onClick: () => navigate('/admin/tools/new')
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'tools')
                 }}
               >
                 <Box sx={{ 
@@ -238,7 +255,7 @@ const Overview = () => {
               boxSizing: 'border-box'
             }}>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -247,9 +264,9 @@ const Overview = () => {
                   label: 'Add user', 
                   onClick: () => navigate('/admin/users/new') 
                 }}
-                secondaryAction={{ 
-                  label: 'Learn more', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn more',
+                  onClick: createDocsLinkHandler(getDocsLink, 'rbac_user_groups')
                 }}
               >
                 <Box sx={{ 
@@ -270,18 +287,18 @@ const Overview = () => {
               </BasicCard>
             </Box>
             <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
               <BasicCard
                 primaryAction={{ 
                   label: 'Learn Filters', 
-                  onClick: () => {} 
+                  onClick: createDocsLinkHandler(getDocsLink, 'filters')
                 }}
-                secondaryAction={{ 
-                  label: 'Learn Privacy Levels', 
-                  onClick: () => {} 
+                secondaryAction={{
+                  label: 'Learn Privacy Levels',
+                  onClick: createDocsLinkHandler(getDocsLink, 'privacy_levels')
                 }}
               >
                 <Box sx={{ 
@@ -319,7 +336,7 @@ const Overview = () => {
             }}>
             {showAppsCard && (
               <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -331,7 +348,7 @@ const Overview = () => {
                   }}
                   secondaryAction={{
                     label: 'Learn more',
-                    onClick: () => {}
+                    onClick: createDocsLinkHandler(getDocsLink, 'apps')
                   }}
                 >
                   <Box sx={{ 
@@ -354,7 +371,7 @@ const Overview = () => {
             )}
             {showChatCard && (
               <Box sx={{ 
-                flex: '1 0 400px',
+                flex: '1 0 370px',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -366,7 +383,7 @@ const Overview = () => {
                   }}
                   secondaryAction={{
                     label: 'Learn more',
-                    onClick: () => {}
+                    onClick: createDocsLinkHandler(getDocsLink, 'chats')
                   }}
                 >
                   <Box sx={{ 
