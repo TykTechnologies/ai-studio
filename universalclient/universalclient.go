@@ -310,7 +310,8 @@ func (c *Client) CallOperation(operationId string, params map[string][]string, p
 
 	// Prepare the request body
 	var body io.Reader
-	if payload != nil {
+	// Only set body for methods that typically accept a body and when payload has content
+	if payload != nil && len(payload) > 0 && method != "GET" && method != "HEAD" && method != "OPTIONS" {
 		jsonBody, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal payload: %w", err)
