@@ -45,11 +45,24 @@ const useConfig = (skipInitialFetch = false) => {
     }
   }, [fetchConfig, skipInitialFetch]);
 
+  const getDocsLink = useCallback((key) => {
+    if (!config || !config.docsLinks) return null;
+    
+    const link = config.docsLinks[key];
+    if (!link) {
+      console.error(`Documentation link for key "${key}" not found`);
+      return null;
+    }
+    
+    return link;
+  }, [config]);
+
   return {
     config,
     loading,
     error,
-    fetchConfig
+    fetchConfig,
+    getDocsLink
   };
 };
 
