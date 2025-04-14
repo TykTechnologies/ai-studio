@@ -12,6 +12,13 @@ const Drawer = () => {
 
   const getMenuItems = () => [
     {
+      id: 'overview',
+      text: 'Overview',
+      icon: <Icon name="house" />,
+      path: '/admin',
+      exact: true
+    },
+    {
       id: 'dashboard',
       text: 'Analytics',
       icon: <Icon name="monitor-waveform" />,

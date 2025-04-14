@@ -38,6 +38,8 @@ export const TitleBox = styled(Box)(({ theme, top = '0px' }) => ({
 
 export const ContentBox = styled(Box)(({ theme }) => ({
   padding: theme.spacing(3),
+  maxWidth: '100%',
+  overflowX: 'hidden',
 }));
 
 export const StyledTableHeaderCell = styled(TableCell)(({ theme }) => ({
