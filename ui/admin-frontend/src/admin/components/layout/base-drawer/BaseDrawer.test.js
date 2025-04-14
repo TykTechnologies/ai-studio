@@ -84,7 +84,7 @@ describe('BaseDrawer', () => {
       id: 'dashboard',
       text: 'Dashboard',
       icon: <DashboardIcon data-testid="dashboard-icon" />,
-      path: '/admin/dashboard',
+      path: '/admin',
     },
     {
       id: 'team',
