@@ -255,8 +255,8 @@ func TestUser_UpdateGroupMemberships(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test 1: Add user to multiple groups
-	err = user.UpdateGroupMemberships(db, 
-		strconv.FormatUint(uint64(group1.ID), 10), 
+	err = user.UpdateGroupMemberships(db,
+		strconv.FormatUint(uint64(group1.ID), 10),
 		strconv.FormatUint(uint64(group2.ID), 10))
 	assert.NoError(t, err)
 
@@ -272,8 +272,8 @@ func TestUser_UpdateGroupMemberships(t *testing.T) {
 	assert.Contains(t, groupIDs, group2.ID)
 
 	// Test 2: Change user's groups (replace existing groups)
-	err = user.UpdateGroupMemberships(db, 
-		strconv.FormatUint(uint64(group2.ID), 10), 
+	err = user.UpdateGroupMemberships(db,
+		strconv.FormatUint(uint64(group2.ID), 10),
 		strconv.FormatUint(uint64(group3.ID), 10))
 	assert.NoError(t, err)
 
@@ -310,4 +310,62 @@ func TestUser_UpdateGroupMemberships(t *testing.T) {
 	err = db.Preload("Groups").First(&fetchedUser, user.ID).Error
 	assert.NoError(t, err)
 	assert.Len(t, fetchedUser.Groups, 0)
+}
+
+func TestUser_AccessToSSOConfig(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Test creating a user with AccessToSSOConfig = true
+	user := &User{
+		Email:             "test@example.com",
+		Name:              "Test User",
+		IsAdmin:           true,
+		AccessToSSOConfig: true,
+	}
+	err := user.Create(db)
+	assert.NoError(t, err)
+	assert.True(t, user.AccessToSSOConfig)
+
+	// Test retrieving the user
+	retrievedUser := NewUser()
+	err = retrievedUser.Get(db, user.ID)
+	assert.NoError(t, err)
+	assert.True(t, retrievedUser.AccessToSSOConfig)
+
+	// Test updating the user's AccessToSSOConfig field
+	retrievedUser.AccessToSSOConfig = false
+	err = retrievedUser.Update(db)
+	assert.NoError(t, err)
+
+	// Verify the update
+	updatedUser := NewUser()
+	err = updatedUser.Get(db, user.ID)
+	assert.NoError(t, err)
+	assert.False(t, updatedUser.AccessToSSOConfig)
+}
+
+func TestUser_AccessToSSOConfigValidation(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Test that non-admin users cannot have AccessToSSOConfig = true
+	// This is enforced at the service layer, but we can test the model behavior
+
+	// Create a non-admin user with AccessToSSOConfig = true
+	nonAdminUser := &User{
+		Email:             "nonadmin@example.com",
+		Name:              "Non Admin User",
+		IsAdmin:           false,
+		AccessToSSOConfig: true, // This would be rejected by the service layer
+	}
+
+	// The model itself doesn't enforce this constraint, so it should save successfully
+	err := nonAdminUser.Create(db)
+	assert.NoError(t, err)
+
+	// Retrieve the user to verify the field was saved
+	retrievedUser := NewUser()
+	err = retrievedUser.Get(db, nonAdminUser.ID)
+	assert.NoError(t, err)
+	assert.True(t, retrievedUser.AccessToSSOConfig)
+	assert.False(t, retrievedUser.IsAdmin)
 }

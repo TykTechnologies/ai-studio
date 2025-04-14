@@ -12,7 +12,7 @@ on:
 permissions:
   issues: write
   pull-requests: write
-  contents: read
+  contents: write
 
 jobs:
   trigger_probe_chat:
@@ -35,3 +35,5 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.PROBE_ANTHROPIC_API_KEY }}
       ANTHROPIC_API_URL: ${{ secrets.PROBE_ANTHROPIC_URL }}
+      APP_ID: ${{ secrets.PROBE_APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.PROBE_APP_PRIVATE_KEY }}
