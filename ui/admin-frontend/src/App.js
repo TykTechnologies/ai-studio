@@ -11,6 +11,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import SuccessBanner from "./admin/components/common/SuccessBanner";
+import { QuickStartContainer } from "./admin/components/wizards/quick-start";
 
 // Configurations and utilities
 import { loadConfig } from "./config";
@@ -253,6 +254,7 @@ function App() {
               }
             />
           </Routes>
+          {isAuthenticated && entitlements?.is_admin && <QuickStartContainer />}
         </ThemeProvider>
       </NotificationProvider>
     </Router>

@@ -11,6 +11,11 @@ const theme = createTheme({
     body2: {
       fontSize: "0.89rem",
     },
+    bodyXLargeDefault: {
+      fontSize: "16px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Regular",  
+    },
     bodyLargeDefault: {
       fontSize: "14px",
       lineHeight: "20px",
@@ -91,6 +96,7 @@ const theme = createTheme({
       surfaceCriticalDefault: '#FCEFEC',
       surfaceWarningDefault: '#FFFBF2',
       surfaceSuccessDefault: '#EEF8F1',
+      surfaceInformativeDefault: '#EBF8FE',
       iconSuccessDefault: '#2BA84A',
       iconWarningDefault: '#FFC453',
       buttonPrimaryDefault: '#343452',
@@ -110,6 +116,7 @@ const theme = createTheme({
       criticalHover: '#8B1D12',
       successDefaultSubdued: '#DDF1E2 ',
       warningDefaultSubdued: '#FFF5E3',
+      informativeDefaultSubdued: '#D6F1FC',
     },
     gray: {
       ligh: "#F5F5F5",
@@ -123,6 +130,7 @@ const theme = createTheme({
       purpleDark: "#8438FA",
       purpleLight: "#B421FA",
       purpleExtraLight: "#F0E4FF",
+      purpleMedium: "#BB11FF",
       teal: "#21ecba",
       lightTeal: "rgb(33 236 186 / 7%)",
       hoverTeal: "rgb(33 236 186 / 47%)",
@@ -142,6 +150,7 @@ const theme = createTheme({
     },
   },
   components: {
+
     MuiSvgIcon: {
       styleOverrides: {
         root: {
