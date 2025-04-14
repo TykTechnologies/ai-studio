@@ -16,6 +16,7 @@ type UserInput struct {
 			ShowPortal           bool   `json:"show_portal"`
 			EmailVerified        bool   `json:"email_verified"`
 			NotificationsEnabled bool   `json:"notifications_enabled"`
+			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -63,6 +64,7 @@ type UserResponse struct {
 		EmailVerified        bool   `json:"email_verified"`
 		APIKey               string `json:"api_key"`
 		NotificationsEnabled bool   `json:"notifications_enabled"`
+		AccessToSSOConfig    bool   `json:"access_to_sso_config"`
 	} `json:"attributes"`
 }
 

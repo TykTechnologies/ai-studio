@@ -41,21 +41,6 @@ jobs:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
 
-      # Cache Hugo resources
-      - name: Cache Hugo resources
-        uses: actions/cache@v3
-        with:
-          path: docs/site/resources
-          key: ${{ runner.os }}-hugomod-${{ hashFiles('docs/site/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-hugomod-
-
-      - name: Setup Hugo
-        uses: peaceiris/actions-hugo@v2
-        with:
-          hugo-version: "latest"
-          extended: true
-
       - name: Build UI
         run: |
           cd ui/admin-frontend
@@ -72,12 +57,6 @@ jobs:
           echo "Verifying static files..."
           find build -type f
           cd ../..
-
-      - name: Build Docs
-        run: |
-          cp .env.example .env
-          git clone https://github.com/alex-shpak/hugo-book.git docs/site/themes/hugo-book
-          cd docs/site && hugo && cd ../..
 
       - name: Install Build Dependencies
         run: |

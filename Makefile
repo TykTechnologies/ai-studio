@@ -53,6 +53,26 @@ stop-dev:
 	@pkill -f "./midsommar" || true
 	@screen -S midsommar -X quit || true
 
+# Start pre-defined test env in docker
+start-test-env:
+	echo "Make sure the frontend is already built"
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo ".env file created from .env.example"; \
+	fi
+	echo "Creating copy of the postgres test data"
+	mkdir -p ./tests/postgres_data_temp
+	cp -r tests/postgres_data ./tests/postgres_data_temp
+	echo "Starting the test environment"
+	docker compose --env-file .env -f tests/compose.yml up
+
+# Stop pre-defined test env in docker
+stop-test-env:
+	echo "Stopping the test environment"
+	docker compose --env-file .env -f tests/compose.yml down
+	echo "Removing the copy of the postgres test data"
+	rm -rf /tests/postgres_temp
+
 # Build extras only (transformer and reranker)
 build-docker-extras:
 	cd extra/transformer_server && \
