@@ -12,6 +12,9 @@ WORKDIR /app
 # Copy templates directory
 COPY templates ./templates
 
+# Copy docs_links.json file
+COPY config/docs_links.json ./config/docs_links.json
+
 # Set up architecture-specific binary selection
 ARG TARGETARCH
 # Copy pre-built binary (static files are embedded)
