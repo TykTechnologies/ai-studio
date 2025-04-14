@@ -40,7 +40,7 @@ afterAll(() => {
 });
 
 // Test component that uses the hook
-function TestComponent({ skipInitialFetch = false }) {
+function TestComponent({ skipInitialFetch = false, docsLinkKey = null }) {
   const [fetchError, setFetchError] = React.useState(null);
   const hookResult = useConfig(skipInitialFetch);
   
@@ -52,11 +52,15 @@ function TestComponent({ skipInitialFetch = false }) {
     }
   };
   
+  // Get docs link if a key is provided
+  const docsLink = hookResult.getDocsLink(docsLinkKey);
+  
   return (
     <div>
       <div data-testid="loading">{hookResult.loading.toString()}</div>
       <div data-testid="error">{hookResult.error ? hookResult.error.message : (fetchError ? fetchError.message : 'no-error')}</div>
       <div data-testid="config">{JSON.stringify(hookResult.config || {})}</div>
+      <div data-testid="docs-link">{docsLink || 'no-link'}</div>
       <button
         data-testid="fetch-button"
         onClick={handleFetchClick}
@@ -72,7 +76,13 @@ describe('useConfig hook', () => {
     apiBaseURL: 'http://example.com',
     proxyURL: 'http://proxy.example.com',
     defaultSignUpMode: 'both',
-    tibEnabled: true
+    tibEnabled: true,
+    docsLinks: {
+      llm_providers: 'https://docs.example.com/llm',
+      data_sources: 'https://docs.example.com/data',
+      tools: 'https://docs.example.com/tools',
+      rbac_user_groups: 'https://docs.example.com/rbac'
+    }
   };
   
   let pubClient;
@@ -267,5 +277,74 @@ describe('useConfig hook', () => {
     
     // Verify console.error was called
     expect(console.error).toHaveBeenCalled();
+  });
+
+  describe('getDocsLink function', () => {
+    test('should return the correct documentation link for a valid key', async () => {
+      // Mock cache miss
+      cacheService.get.mockReturnValueOnce(null);
+      
+      // Mock the pubClient.get to return the mockConfig with docsLinks
+      pubClient.get.mockResolvedValueOnce({ data: mockConfig });
+
+      render(<TestComponent docsLinkKey="llm_providers" />);
+      
+      // Wait for the fetch to complete
+      await waitFor(() => {
+        expect(screen.getByTestId('loading').textContent).toBe('false');
+      });
+      
+      // Check if the correct link is returned
+      expect(screen.getByTestId('docs-link').textContent).toBe('https://docs.example.com/llm');
+    });
+
+    test('should return "no-link" for an invalid key', async () => {
+      // Mock cache miss
+      cacheService.get.mockReturnValueOnce(null);
+      
+      // Mock the pubClient.get to return the mockConfig with docsLinks
+      pubClient.get.mockResolvedValueOnce({ data: mockConfig });
+
+      render(<TestComponent docsLinkKey="invalid_key" />);
+      
+      // Wait for the fetch to complete
+      await waitFor(() => {
+        expect(screen.getByTestId('loading').textContent).toBe('false');
+      });
+      
+      // Check if "no-link" is returned for invalid key
+      expect(screen.getByTestId('docs-link').textContent).toBe('no-link');
+      
+      // Verify console.warn was called
+      expect(console.error).toHaveBeenCalled();
+    });
+
+    test('should return "no-link" when config is not loaded', () => {
+      render(<TestComponent skipInitialFetch={true} docsLinkKey="llm_providers" />);
+      
+      // Config not loaded yet, should return "no-link"
+      expect(screen.getByTestId('docs-link').textContent).toBe('no-link');
+    });
+
+    test('should return "no-link" when docsLinks is not available in config', async () => {
+      // Mock config without docsLinks
+      const configWithoutLinks = { ...mockConfig, docsLinks: undefined };
+      
+      // Mock cache miss
+      cacheService.get.mockReturnValueOnce(null);
+      
+      // Mock API response with config without docsLinks
+      pubClient.get.mockResolvedValueOnce({ data: configWithoutLinks });
+
+      render(<TestComponent docsLinkKey="llm_providers" />);
+      
+      // Wait for the fetch to complete
+      await waitFor(() => {
+        expect(screen.getByTestId('loading').textContent).toBe('false');
+      });
+      
+      // Check if "no-link" is returned when docsLinks is not available
+      expect(screen.getByTestId('docs-link').textContent).toBe('no-link');
+    });
   });
 });

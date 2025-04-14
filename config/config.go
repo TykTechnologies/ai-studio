@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"strconv"
@@ -32,6 +33,22 @@ type AppConf struct {
 	DefaultSignupMode   string
 	TIBEnabled          bool
 	TIBAPISecret        string
+	DocsLinks           DocsLinks
+}
+
+type DocsLinks map[string]string
+
+func (d DocsLinks) ReadFromFile(fileName string) {
+	data, err := os.ReadFile(fileName)
+	if err != nil {
+		log.Printf("Warning: Failed to parse docs_links.json: %v", err)
+		return
+	}
+
+	err = json.Unmarshal(data, &d)
+	if err != nil {
+		log.Printf("Warning: Could not read docs_links.json: %v", err)
+	}
 }
 
 var globalConfig *AppConf
@@ -159,6 +176,9 @@ func getConfigFromEnv() *AppConf {
 	if conf.DocsURL == "" {
 		conf.DocsURL = "http://localhost:8989"
 	}
+
+	conf.DocsLinks = make(DocsLinks)
+	conf.DocsLinks.ReadFromFile("config/docs_links.json")
 
 	conf.ProxyURL = os.Getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
