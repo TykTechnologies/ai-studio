@@ -767,15 +767,18 @@ func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
 			// All requests should succeed
 			require.NoError(t, err, "Operation should not fail")
 			
-			// Verify response
-			jsonStr, ok := result.(string)
-			require.True(t, ok, "Expected result to be a string")
-			
-			var responseMap map[string]interface{}
-			err = json.Unmarshal([]byte(jsonStr), &responseMap)
-			require.NoError(t, err, "Failed to unmarshal JSON response")
-			
-			assert.Equal(t, "success", responseMap["status"], "Expected success status")
+			// Skip response body validation for HEAD requests since they don't return a body
+			if tc.method != "HEAD" {
+				// Verify response
+				jsonStr, ok := result.(string)
+				require.True(t, ok, "Expected result to be a string")
+				
+				var responseMap map[string]interface{}
+				err = json.Unmarshal([]byte(jsonStr), &responseMap)
+				require.NoError(t, err, "Failed to unmarshal JSON response")
+				
+				assert.Equal(t, "success", responseMap["status"], "Expected success status")
+			}
 		})
 	}
 }
