@@ -726,7 +726,10 @@ func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
 
 		// Return success response
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		// Skip writing response body for HEAD requests
+		if r.Method != "HEAD" {
+			json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		}
 	}))
 	defer server.Close()
 
