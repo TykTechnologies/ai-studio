@@ -28,8 +28,14 @@ The table displays the following columns:
 3. **Vendor**:
    The name of the LLM vendor providing the model (e.g., Anthropic, OpenAI).
 
-4. **Privacy Score**:
-   A numerical score indicating the model's privacy level. Higher scores suggest better data privacy and handling. These values are arbitrary however higher values mean the vendor can handle more private data.
+4. **Privacy Level**:
+   Indicates the model's privacy capability. Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can't access higher-level data sources and tools, ensuring secure and appropriate data handling.
+   
+   The system works with 4 privacy levels from low to high:
+   - Public – Safe to share (e.g., blogs, press releases).
+   - Internal – Company-only info (e.g., reports, policies).
+   - Confidential – Sensitive business data (e.g., financials, strategies).
+   - Restricted (PII) – Personal data (e.g., names, emails, customer info).
 
 5. **Proxied**:
    A status indicator showing whether the LLM is proxied through the AI Gateway for added security and control.
@@ -83,8 +89,8 @@ The **Edit/Create LLM Vendor View** allows administrators to configure or update
 5. **Default Model** *(Required)*:
    The specific model to use by default for this LLM (e.g., "claude-3.5-sonnet-20240620"). Administrators can specify the exact model version.
 
-6. **Privacy Score** *(Optional)*:
-   A numerical value representing the LLM's privacy handling capabilities. Higher scores indicate better privacy protections.
+6. **Privacy Level** *(Optional)*:
+   The privacy capability of the LLM. Select from four levels (Public, Internal, Confidential, Restricted) to indicate what sensitivity of data the LLM can handle.
 
 ---
 
