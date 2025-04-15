@@ -32,7 +32,13 @@ Administrators can configure connections to different LLM providers through the 
 
 5.  **Route ID:** A unique identifier used in API paths (e.g., `/proxy/{routeId}/...` or `/openai/{routeId}/...`) to target this specific LLM configuration.
 
-6.  **Privacy Score:** Assign a privacy score (integer) to the LLM. This interacts with the Tool system, preventing tools with higher privacy scores from being used with LLMs having lower scores.
+6.  **Privacy Level:** Assign a privacy level to the LLM. This interacts with the Tool system, preventing tools with higher privacy levels from being used with LLMs having lower levels.
+
+    Privacy levels define how data is protected by controlling LLM access based on its sensitivity:
+    - Public – Safe to share (e.g., blogs, press releases).
+    - Internal – Company-only info (e.g., reports, policies).
+    - Confidential – Sensitive business data (e.g., financials, strategies).
+    - Restricted (PII) – Personal data (e.g., names, emails, customer info).
 
 7.  **Save:** Save the configuration.
 
