@@ -655,6 +655,134 @@ func TestValidateSpec(t *testing.T) {
 
 // }
 
+func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
+	// Define a basic OpenAPI spec with different HTTP methods
+	specJSON := `{
+		"openapi": "3.0.0",
+		"info": {"title": "Test API", "version": "1.0.0"},
+		"servers": [{"url": "https://api.example.com/v1"}],
+		"paths": {
+			"/test": {
+				"get": {
+					"operationId": "testGet"
+				},
+				"post": {
+					"operationId": "testPost"
+				},
+				"put": {
+					"operationId": "testPut"
+				},
+				"delete": {
+					"operationId": "testDelete"
+				},
+				"head": {
+					"operationId": "testHead"
+				},
+				"options": {
+					"operationId": "testOptions"
+				},
+				"patch": {
+					"operationId": "testPatch"
+				}
+			}
+		}
+	}`
+
+	// Create a mock server that checks for request bodies
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the body
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("Failed to read request body: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		
+		// Check if body is empty for GET, HEAD, OPTIONS
+		if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
+			if len(body) > 0 {
+				t.Errorf("Request body should be empty for %s method, got: %s", r.Method, string(body))
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		} else {
+			// For other methods, check if body contains the expected payload
+			if r.Header.Get("Content-Type") == "application/json" {
+				var payload map[string]interface{}
+				if err := json.Unmarshal(body, &payload); err != nil {
+					t.Errorf("Failed to unmarshal request body: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				
+				// Verify payload contains the expected data
+				if val, ok := payload["test"]; !ok || val != "data" {
+					t.Errorf("Expected payload with {\"test\":\"data\"}, got: %s", string(body))
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		// Return success response
+		w.WriteHeader(http.StatusOK)
+		// Skip writing response body for HEAD requests
+		if r.Method != "HEAD" {
+			json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		}
+	}))
+	defer server.Close()
+
+	// Create the client
+	client, err := NewClient([]byte(specJSON), server.URL, WithResponseFormat(ResponseFormatJSON))
+	require.NoError(t, err)
+
+	// Test payload
+	payload := map[string]interface{}{"test": "data"}
+	emptyPayload := map[string]interface{}{}
+
+	// Test cases
+	testCases := []struct {
+		name        string
+		operationId string
+		method      string
+		payload     map[string]interface{}
+	}{
+		{"GET with payload", "testGet", "GET", payload},
+		{"GET with empty payload", "testGet", "GET", emptyPayload},
+		{"POST with payload", "testPost", "POST", payload},
+		{"PUT with payload", "testPut", "PUT", payload},
+		{"DELETE with payload", "testDelete", "DELETE", payload},
+		{"HEAD with payload", "testHead", "HEAD", payload},
+		{"HEAD with empty payload", "testHead", "HEAD", emptyPayload},
+		{"OPTIONS with payload", "testOptions", "OPTIONS", payload},
+		{"OPTIONS with empty payload", "testOptions", "OPTIONS", emptyPayload},
+		{"PATCH with payload", "testPatch", "PATCH", payload},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := client.CallOperation(tc.operationId, nil, tc.payload, nil)
+			
+			// All requests should succeed
+			require.NoError(t, err, "Operation should not fail")
+			
+			// Skip response body validation for HEAD requests since they don't return a body
+			if tc.method != "HEAD" {
+				// Verify response
+				jsonStr, ok := result.(string)
+				require.True(t, ok, "Expected result to be a string")
+				
+				var responseMap map[string]interface{}
+				err = json.Unmarshal([]byte(jsonStr), &responseMap)
+				require.NoError(t, err, "Failed to unmarshal JSON response")
+				
+				assert.Equal(t, "success", responseMap["status"], "Expected success status")
+			}
+		})
+	}
+}
+
 func decodeToUTF8(s string) (string, error) {
 	// Step 1: Decode base64
 	decodedBytes, err := base64.StdEncoding.DecodeString(s)
