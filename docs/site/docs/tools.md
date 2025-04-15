@@ -26,7 +26,13 @@ Tools bridge the gap between conversational AI and external functionalities. By 
 *   **Tool Definition:** A Tool in Tyk AI Studio is essentially a wrapper around an external API. Its structure and available operations are defined using an **OpenAPI Specification (OAS)** (v3.x, JSON or YAML).
 *   **Allowed Operations:** From the provided OAS, administrators select the specific `operationIds` that the LLM is permitted to invoke. This provides granular control over which parts of an API are exposed.
 *   **Authentication:** Tools often require authentication to access the target API. Tyk AI Studio handles this securely by integrating with [Secrets Management](./secrets.md). You configure the authentication method (e.g., Bearer Token, Basic Auth) defined in the OAS and reference a stored Secret containing the actual credentials.
-*   **Privacy Scores:** Each Tool is assigned an integer privacy score. This score is compared against the privacy score of the [LLM Configuration](./llm-management.md) being used. A Tool can only be used if its privacy score is less than or equal to the LLM's score, preventing sensitive tools from being used with potentially less secure or external LLMs.
+*   **Privacy Levels:** Each Tool is assigned a privacy level. This level is compared against the privacy level of the [LLM Configuration](./llm-management.md) being used. A Tool can only be used if its privacy level is less than or equal to the LLM's level, preventing sensitive tools from being used with potentially less secure or external LLMs.
+
+    Privacy levels define how data is protected by controlling LLM access based on its sensitivity:
+    - Public – Safe to share (e.g., blogs, press releases).
+    - Internal – Company-only info (e.g., reports, policies).
+    - Confidential – Sensitive business data (e.g., financials, strategies).
+    - Restricted (PII) – Personal data (e.g., names, emails, customer info).
 *   **Tool Catalogues:** Tools are grouped into logical collections called Catalogues. This simplifies management and access control.
 *   **Filters:** Optional [Filters](./filters.md) can be applied to tool interactions to pre-process requests sent to the tool or post-process responses received from it (e.g., for data sanitization).
 *   **Documentation:** Administrators can provide additional natural language documentation or instructions specifically for the LLM, guiding it on how and when to use the tool effectively.
@@ -51,7 +57,7 @@ When a user interacts with an LLM via the [Chat Interface](./chat-interface.md):
 
 Administrators define and manage Tools via the UI or API:
 
-1.  **Define Tool:** Provide a name, description, and privacy score.
+1.  **Define Tool:** Provide a name, description, and privacy level.
 2.  **Upload OpenAPI Spec:** Provide the OAS document (JSON/YAML).
 3.  **Select Operations:** Choose the specific `operationIds` the LLM can use.
 4.  **Configure Authentication:** Select the OAS security scheme and link to a stored [Secret](./secrets.md) for credentials.
@@ -73,6 +79,6 @@ Tools become available to end-users within the [Chat Interface](./chat-interface
 
 1.  The specific Chat Experience configuration includes the relevant Tool Catalogue.
 2.  The user belongs to a Group that has been assigned that Tool Catalogue.
-3.  The Tool's privacy score is compatible with the LLM being used in the Chat Experience.
+3.  The Tool's privacy level is compatible with the LLM being used in the Chat Experience.
 
 The LLM will then automatically decide when to use these available tools based on the conversation.
