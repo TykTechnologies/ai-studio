@@ -36,7 +36,7 @@ The primary goal is to enhance LLM interactions by:
     3.  The retrieved text chunks are added as context to the prompt sent to the LLM.
     4.  The LLM uses this context to generate a more informed and relevant response.
 *   **Data Source Catalogues:** Similar to Tools, Data Sources are grouped into Catalogues for easier management and assignment to user groups.
-*   **Privacy Scores:** Each Data Source has a privacy score. It can only be used in RAG if its score is less than or equal to the privacy score of the [LLM Configuration](./llm-management.md) being used, ensuring data governance.
+*   **Privacy Levels:** Each Data Source has a privacy level. It can only be used in RAG if its level is less than or equal to the privacy level of the [LLM Configuration](./llm-management.md) being used, ensuring data governance. Privacy levels define how data is protected by controlling LLM access based on its sensitivity. The system works with 4 privacy levels from low to high: Public (safe to share), Internal (company-only info), Confidential (sensitive business data), and Restricted (PII - personal data).
 
 ## How RAG Works in the Chat Interface
 
@@ -54,7 +54,7 @@ When RAG is enabled for a Chat Experience:
 
 Administrators configure Data Sources via the UI or API:
 
-1.  **Define Data Source:** Provide a name, description, and privacy score.
+1.  **Define Data Source:** Provide a name, description, and privacy level.
 2.  **Configure Vector Store:**
     *   Select the database type (e.g., `pinecone`).
     *   Provide connection details (e.g., endpoint/connection string, namespace/index name).
@@ -83,6 +83,6 @@ A Data Source will be used for RAG if:
 
 1.  The specific Chat Experience configuration includes the relevant Data Source Catalogue.
 2.  The user belongs to a Group that has been assigned that Data Source Catalogue.
-3.  The Data Source's privacy score is compatible with the LLM being used.
+3.  The Data Source's privacy level is compatible with the LLM being used.
 
 APIs may also exist for directly querying configured Data Sources programmatically.
