@@ -1,0 +1,45 @@
+{
+  "proxyPort": 8888,
+  "llms": [
+    {
+      "name": "MockGPT",
+      "vendor": "MOCK_VENDOR",
+      "apiEndpoint": "http://localhost:9000",
+      "apiKey": "mock_api_key",
+      "active": true,
+      "models": ["gpt-3.5-turbo", "gpt-4"]
+    },
+    {
+      "name": "MockClaude",
+      "vendor": "anthropic",
+      "apiEndpoint": "https://api.anthropic.com",
+      "apiKey": "XXXXXX",
+      "active": true,
+      "models": ["claude-3-7-sonnet-latest"]
+    }
+  ],
+  "datasources": [
+    {
+      "name": "MockVectorDB",
+      "type": "vector",
+      "active": true
+    },
+    {
+      "name": "MockDocuments",
+      "type": "documents",
+      "active": true
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "email": "test@example.com",
+      "apiKey": "test_api_key"
+    },
+    {
+      "id": 2,
+      "email": "admin@example.com",
+      "apiKey": "admin_api_key"
+    }
+  ]
+}

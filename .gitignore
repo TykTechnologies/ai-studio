@@ -24,3 +24,5 @@ coverage.out
 coverage.html
 node_modules
 docs/site/package-lock.json
+conf.json
+utils/mockproxy/mockproxy

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -115,11 +116,13 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(token)
 	if err != nil || !cred.Active {
+		slog.Warn("invalid credential or inactive", "error", err, "active", cred.Active)
 		return false, r
 	}
 
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
+		slog.Warn("failed to get app by credential ID", "error", err)
 		return false, r
 	}
 
@@ -143,6 +146,7 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID s
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
 		if !ok {
+			slog.Warn("failed to get LLM by slug", "slug", llmSlug)
 			return false, r
 		}
 
@@ -152,6 +156,7 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID s
 			}
 		}
 
+		slog.Warn("LLM not found in app", "llmID", llm.ID, "appID", app.ID)
 		return false, r
 	}
 
@@ -167,6 +172,7 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID s
 			}
 		}
 
+		slog.Warn("routeID not found in app", "llmID", px.ID, "appID", app.ID)
 		return false, r
 	}
 

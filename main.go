@@ -146,7 +146,7 @@ func main() {
 	pConfig := &proxy.Config{
 		Port: 9090,
 	}
-	p := proxy.NewProxy(service, pConfig, budgetService)
+	p := proxy.NewProxyLegacy(service, pConfig, budgetService)
 
 	gatewayEnabled, gatewayOk := licensing.Entitlement(licensing.FEATUREGateway)
 	if gatewayOk && gatewayEnabled.Bool() {

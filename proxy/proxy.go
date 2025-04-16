@@ -23,12 +23,10 @@ import (
 	"github.com/tmc/langchaingo/schema"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
-	"github.com/TykTechnologies/midsommar/v2/auth"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
-	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 )
 
@@ -58,7 +56,7 @@ type SearchResults struct {
 }
 
 type Proxy struct {
-	service        *services.Service
+	service        ProxyServiceInterface
 	server         *http.Server
 	llms           map[string]*models.LLM
 	datasources    map[string]*models.Datasource
@@ -67,15 +65,15 @@ type Proxy struct {
 	credValidator  *CredentialValidator
 	modelValidator *ModelValidator
 	filters        []*models.Filter
-	budgetService  *services.BudgetService
-	authService    *auth.AuthService
+	budgetService  BudgetServiceInterface
+	authService    AuthServiceInterface
 }
 
 type Config struct {
 	Port int
 }
 
-func NewProxy(service *services.Service, config *Config, budgetService *services.BudgetService) *Proxy {
+func NewProxy(service ProxyServiceInterface, config *Config, budgetService BudgetServiceInterface, authService AuthServiceInterface) *Proxy {
 	p := &Proxy{
 		service:       service,
 		llms:          make(map[string]*models.LLM),
@@ -83,6 +81,7 @@ func NewProxy(service *services.Service, config *Config, budgetService *services
 		config:        config,
 		filters:       make([]*models.Filter, 0),
 		budgetService: budgetService,
+		authService:   authService,
 	}
 
 	val := NewCredentialValidator(service, p)
@@ -308,15 +307,15 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 
 // cloudflareHeadersMiddleware adds headers that help with Cloudflare proxying
 func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Add these headers before passing to the next handler
-        w.Header().Set("Connection", "keep-alive")
-        w.Header().Set("Keep-Alive", "timeout=300")
-        w.Header().Set("X-Accel-Buffering", "no")
-        
-        // Continue to the next handler
-        next.ServeHTTP(w, r)
-    })
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add these headers before passing to the next handler
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Keep-Alive", "timeout=300")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		// Continue to the next handler
+		next.ServeHTTP(w, r)
+	})
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error) {
@@ -394,7 +393,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if bodyReadDuration > 100*time.Millisecond {
 		log.Printf("SLOW BODY READ: Request body read took %v", bodyReadDuration)
 	}
-	
+
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err)
 		return
@@ -633,7 +632,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if bodyReadDuration > 100*time.Millisecond {
 		log.Printf("SLOW BODY READ: Streaming request body read took %v", bodyReadDuration)
 	}
-	
+
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err)
 		return
@@ -720,7 +719,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			MaxIdleConnsPerHost: 20,
 		},
 	}
-	
+
 	upstreamStart := time.Now()
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
@@ -728,7 +727,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer resp.Body.Close()
-	
+
 	upstreamDuration := time.Since(upstreamStart)
 	if upstreamDuration > 1*time.Second {
 		log.Printf("SLOW UPSTREAM CONNECTION: Initial streaming connection took %v for llm %d",
@@ -775,7 +774,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			isErr = true
 			break
 		}
-		
+
 		// Log if we're experiencing slow chunks
 		now := time.Now()
 		chunkDuration := now.Sub(lastChunkTime)
@@ -785,7 +784,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 		lastChunkTime = now
 	}
-	
+
 	totalStreamDuration := time.Since(streamStart)
 	if totalStreamDuration > 10*time.Second {
 		log.Printf("SLOW STREAMING: Total streaming took %v for llm %d",
