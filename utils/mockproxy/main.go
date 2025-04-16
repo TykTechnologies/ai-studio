@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 )
 
@@ -44,6 +45,8 @@ type User struct {
 func main() {
 	// Parse command line arguments
 	configPath := flag.String("conf", "", "Path to the configuration file")
+	analyticsMode := flag.String("analytics", "both", "Analytics output mode: 'console', 'file', or 'both'")
+	analyticsFile := flag.String("log-file", "analytics.log", "Path to analytics log file (when using 'file' or 'both' mode)")
 	flag.Parse()
 
 	if *configPath == "" {
@@ -55,6 +58,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
+
+	// Initialize the mock analytics recorder
+	mockRecorder, err := NewMockRecorder(*analyticsMode, *analyticsFile)
+	if err != nil {
+		log.Fatalf("Failed to create mock recorder: %v", err)
+	}
+	defer mockRecorder.Close()
+
+	// Set the mock recorder as the current recorder
+	analytics.SetRecorder(mockRecorder)
+	fmt.Printf("Analytics recording enabled (mode: %s)\n", *analyticsMode)
 
 	// Create custom proxy dependencies
 	deps := NewMockDependencies(cfg)

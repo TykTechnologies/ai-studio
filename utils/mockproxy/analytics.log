@@ -1,0 +1,246 @@
+[2025-04-16T18:31:19+12:00] ProxyLog Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "AppID": 1,
+  "UserID": 1,
+  "TimeStamp": "2025-04-16T18:31:19.41361+12:00",
+  "Vendor": "anthropic",
+  "RequestBody": "{\n     \"model\": \"claude-3-7-sonnet-20250219\",\n     \"max_tokens\": 1024,\n     \"messages\": [\n         {\"role\": \"user\", \"content\": \"Hello, world\"}\n     ]\n }",
+  "ResponseBody": "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"}}",
+  "ResponseCode": 401
+}
+
+[2025-04-16T18:31:19+12:00] ChatRecord Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "Name": "claude-3-7-sonnet-20250219",
+  "Vendor": "anthropic",
+  "LLMID": 2,
+  "TotalTimeMS": 0,
+  "PromptTokens": 0,
+  "ResponseTokens": 0,
+  "TotalTokens": 0,
+  "TimeStamp": "2025-04-16T18:31:19.414243+12:00",
+  "UserID": 1,
+  "Choices": 0,
+  "ToolCalls": 0,
+  "ChatID": "",
+  "AppID": 1,
+  "Cost": 0,
+  "Currency": "",
+  "InteractionType": "proxy",
+  "CacheWritePromptTokens": 0,
+  "CacheReadPromptTokens": 0
+}
+
+[2025-04-16T18:31:39+12:00] ProxyLog Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "AppID": 1,
+  "UserID": 1,
+  "TimeStamp": "2025-04-16T18:31:39.631686+12:00",
+  "Vendor": "anthropic",
+  "RequestBody": "{\n     \"model\": \"claude-3-7-sonnet-20250219\",\n     \"max_tokens\": 1024,\n     \"messages\": [\n         {\"role\": \"user\", \"content\": \"Hello, world\"}\n     ]\n }",
+  "ResponseBody": "{\"id\":\"msg_01CtcRNyQz4dkrjPCU7D6aF4\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-7-sonnet-20250219\",\"content\":[{\"type\":\"text\",\"text\":\"Hello! How can I assist you today? Feel free to ask any questions or let me know if there's something specific you'd like help with.\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":33}}",
+  "ResponseCode": 200
+}
+
+[2025-04-16T18:31:39+12:00] ChatRecord Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "Name": "claude-3-7-sonnet-20250219",
+  "Vendor": "anthropic",
+  "LLMID": 2,
+  "TotalTimeMS": 0,
+  "PromptTokens": 10,
+  "ResponseTokens": 33,
+  "TotalTokens": 43,
+  "TimeStamp": "2025-04-16T18:31:39.631958+12:00",
+  "UserID": 1,
+  "Choices": 0,
+  "ToolCalls": 0,
+  "ChatID": "",
+  "AppID": 1,
+  "Cost": 0,
+  "Currency": "",
+  "InteractionType": "proxy",
+  "CacheWritePromptTokens": 0,
+  "CacheReadPromptTokens": 0
+}
+
+[2025-04-16T18:31:41+12:00] ProxyLog Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "AppID": 1,
+  "UserID": 1,
+  "TimeStamp": "2025-04-16T18:31:41.665635+12:00",
+  "Vendor": "anthropic",
+  "RequestBody": "{\n     \"model\": \"claude-3-7-sonnet-20250219\",\n     \"max_tokens\": 1024,\n     \"messages\": [\n         {\"role\": \"user\", \"content\": \"Hello, world\"}\n     ]\n }",
+  "ResponseBody": "{\"id\":\"msg_015YgCG9pPocdUK6ApZwawbc\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-7-sonnet-20250219\",\"content\":[{\"type\":\"text\",\"text\":\"Hello! How can I assist you today? I'm here to help with any questions or tasks you might have.\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":26}}",
+  "ResponseCode": 200
+}
+
+[2025-04-16T18:31:41+12:00] ChatRecord Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "Name": "claude-3-7-sonnet-20250219",
+  "Vendor": "anthropic",
+  "LLMID": 2,
+  "TotalTimeMS": 0,
+  "PromptTokens": 10,
+  "ResponseTokens": 26,
+  "TotalTokens": 36,
+  "TimeStamp": "2025-04-16T18:31:41.665715+12:00",
+  "UserID": 1,
+  "Choices": 0,
+  "ToolCalls": 0,
+  "ChatID": "",
+  "AppID": 1,
+  "Cost": 0,
+  "Currency": "",
+  "InteractionType": "proxy",
+  "CacheWritePromptTokens": 0,
+  "CacheReadPromptTokens": 0
+}
+
+[2025-04-16T18:31:43+12:00] ProxyLog Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "AppID": 1,
+  "UserID": 1,
+  "TimeStamp": "2025-04-16T18:31:43.72107+12:00",
+  "Vendor": "anthropic",
+  "RequestBody": "{\n     \"model\": \"claude-3-7-sonnet-20250219\",\n     \"max_tokens\": 1024,\n     \"messages\": [\n         {\"role\": \"user\", \"content\": \"Hello, world\"}\n     ]\n }",
+  "ResponseBody": "{\"id\":\"msg_019NtCNWN9j5WN7PVvXB6czm\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-7-sonnet-20250219\",\"content\":[{\"type\":\"text\",\"text\":\"Hello! How can I assist you today? I'm here to help with information, answer questions, or discuss topics you're interested in. Feel free to let me know what you'd like to talk about.\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":45}}",
+  "ResponseCode": 200
+}
+
+[2025-04-16T18:31:43+12:00] ChatRecord Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "Name": "claude-3-7-sonnet-20250219",
+  "Vendor": "anthropic",
+  "LLMID": 2,
+  "TotalTimeMS": 0,
+  "PromptTokens": 10,
+  "ResponseTokens": 45,
+  "TotalTokens": 55,
+  "TimeStamp": "2025-04-16T18:31:43.721387+12:00",
+  "UserID": 1,
+  "Choices": 0,
+  "ToolCalls": 0,
+  "ChatID": "",
+  "AppID": 1,
+  "Cost": 0,
+  "Currency": "",
+  "InteractionType": "proxy",
+  "CacheWritePromptTokens": 0,
+  "CacheReadPromptTokens": 0
+}
+
+[2025-04-16T18:31:46+12:00] ProxyLog Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "AppID": 1,
+  "UserID": 1,
+  "TimeStamp": "2025-04-16T18:31:46.632481+12:00",
+  "Vendor": "anthropic",
+  "RequestBody": "{\n     \"model\": \"claude-3-7-sonnet-20250219\",\n     \"max_tokens\": 1024,\n     \"messages\": [\n         {\"role\": \"user\", \"content\": \"Hello, world\"}\n     ]\n }",
+  "ResponseBody": "{\"id\":\"msg_01F4MoW9mXWnFDeWHNGXc47x\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-7-sonnet-20250219\",\"content\":[{\"type\":\"text\",\"text\":\"Hello! It's nice to meet you. I'm an AI assistant here to help you with information, answer questions, or just chat. Is there something specific you'd like to talk about or a question I can help you with today?\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":51}}",
+  "ResponseCode": 200
+}
+
+[2025-04-16T18:31:46+12:00] ChatRecord Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "Name": "claude-3-7-sonnet-20250219",
+  "Vendor": "anthropic",
+  "LLMID": 2,
+  "TotalTimeMS": 0,
+  "PromptTokens": 10,
+  "ResponseTokens": 51,
+  "TotalTokens": 61,
+  "TimeStamp": "2025-04-16T18:31:46.632544+12:00",
+  "UserID": 1,
+  "Choices": 0,
+  "ToolCalls": 0,
+  "ChatID": "",
+  "AppID": 1,
+  "Cost": 0,
+  "Currency": "",
+  "InteractionType": "proxy",
+  "CacheWritePromptTokens": 0,
+  "CacheReadPromptTokens": 0
+}
+
+[2025-04-16T18:31:48+12:00] ProxyLog Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "AppID": 1,
+  "UserID": 1,
+  "TimeStamp": "2025-04-16T18:31:48.627987+12:00",
+  "Vendor": "anthropic",
+  "RequestBody": "{\n     \"model\": \"claude-3-7-sonnet-20250219\",\n     \"max_tokens\": 1024,\n     \"messages\": [\n         {\"role\": \"user\", \"content\": \"Hello, world\"}\n     ]\n }",
+  "ResponseBody": "{\"id\":\"msg_01P6uXvtw24mNyoGGn3Sgrvq\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-7-sonnet-20250219\",\"content\":[{\"type\":\"text\",\"text\":\"Hello! How can I assist you today? Whether you have a question, need information, or just want to chat, I'm here to help. Feel free to let me know what's on your mind.\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":45}}",
+  "ResponseCode": 200
+}
+
+[2025-04-16T18:31:48+12:00] ChatRecord Record:
+{
+  "CreatedAt": "0001-01-01T00:00:00Z",
+  "UpdatedAt": "0001-01-01T00:00:00Z",
+  "DeletedAt": null,
+  "ID": 0,
+  "Name": "claude-3-7-sonnet-20250219",
+  "Vendor": "anthropic",
+  "LLMID": 2,
+  "TotalTimeMS": 0,
+  "PromptTokens": 10,
+  "ResponseTokens": 45,
+  "TotalTokens": 55,
+  "TimeStamp": "2025-04-16T18:31:48.628052+12:00",
+  "UserID": 1,
+  "Choices": 0,
+  "ToolCalls": 0,
+  "ChatID": "",
+  "AppID": 1,
+  "Cost": 0,
+  "Currency": "",
+  "InteractionType": "proxy",
+  "CacheWritePromptTokens": 0,
+  "CacheReadPromptTokens": 0
+}
+

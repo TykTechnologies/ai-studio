@@ -12,6 +12,8 @@ This utility provides a standalone implementation of the proxy server using the 
 - Mock implementations of the required interfaces
 - Support for multiple LLMs and datasources
 - Basic command-line interface
+- Built-in analytics recording without database connection
+- Configurable analytics output (console, file, or both)
 
 ## Usage
 
@@ -31,6 +33,22 @@ Run the utility with a configuration file:
 
 ```bash
 ./mockproxy --conf ./conf.json
+```
+
+Additional command-line options for analytics:
+
+```bash
+# Default - logs to both console and file
+./mockproxy --conf ./conf.json
+
+# Log analytics to console only
+./mockproxy --conf ./conf.json --analytics console
+
+# Log analytics to file only
+./mockproxy --conf ./conf.json --analytics file --log-file ./my-analytics.log
+
+# Log analytics to both console and file with custom filename
+./mockproxy --conf ./conf.json --analytics both --log-file ./my-analytics.log
 ```
 
 ### Configuration
@@ -90,6 +108,28 @@ The mockproxy demonstrates the "Embedded Usage with Custom Implementations" patt
 - `BudgetServiceInterface` - Mock budget service that approves all requests
 - `AuthServiceInterface` - Mock authentication service
 - `ProxyDependencies` - Container for all the above dependencies
+
+## Analytics
+
+The mockproxy includes a lightweight analytics implementation that doesn't require a database connection:
+
+- Records the same types of analytics data as the full Midsommar platform:
+  - Proxy logs (request/response details)
+  - Chat records (token usage, costs)
+  - Tool calls
+  - Content messages
+- Formats all data as human-readable JSON for easy inspection
+- Provides flexible output options:
+  - Console output for real-time monitoring
+  - File output for persistent logging
+  - Both simultaneously
+- Thread-safe implementation using mutex locks
+
+This analytics implementation is useful for:
+- Debugging proxy interactions
+- Testing analytics data generation
+- Demonstrating the analytics capabilities without requiring a database
+- Learning about the structure of analytics data in the Midsommar platform
 
 ## Testing the Proxy
 
