@@ -152,7 +152,429 @@ graph TD
 *   **System Indexes File:** Triggered by the "Start Processing" button via the API.
 *   **User Query triggers RAG:** Unchanged from the user's perspective.
 
-**5. Potential Considerations & Future Enhancements**
+**5. Datasource API Endpoint**
+
+The Datasource API provides programmatic access to create, read, update, and delete datasource configurations, as well as manage associated files and trigger embedding processes.
+
+**Endpoint Structure:**
+
+Base URL: `/api/v1/datasources`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/datasources` | List all datasources |
+| GET | `/api/v1/datasources/{id}` | Get a specific datasource by ID |
+| POST | `/api/v1/datasources` | Create a new datasource |
+| PUT | `/api/v1/datasources/{id}` | Update an existing datasource |
+| DELETE | `/api/v1/datasources/{id}` | Delete a datasource |
+| POST | `/api/v1/datasources/{id}/filestores/{fileStoreId}` | Associate a FileStore with a datasource |
+| DELETE | `/api/v1/datasources/{id}/filestores/{fileStoreId}` | Remove a FileStore association |
+| POST | `/api/v1/datasources/{id}/process-embeddings` | Trigger embedding processing for associated files |
+
+**Authentication Requirements:**
+
+All API endpoints require authentication using one of the following methods:
+- API Key: Include in the `X-API-Key` header
+- Bearer Token: Include in the `Authorization` header as `Bearer {token}`
+- Session Cookie: For browser-based access
+
+**Request and Response Formats:**
+
+Requests and responses use JSON format following the JSON:API specification.
+
+**Example Request (Create Datasource):**
+```json
+POST /api/v1/datasources
+Content-Type: application/json
+X-API-Key: your-api-key
+
+{
+  "data": {
+    "type": "datasource",
+    "attributes": {
+      "name": "My Pinecone Datasource",
+      "short_description": "Knowledge base for product documentation",
+      "long_description": "Contains all product manuals and guides",
+      "icon": "database",
+      "url": "https://my-index.pinecone.io",
+      "privacy_score": 3,
+      "vector_store_type": "pinecone",
+      "vector_store_config": {
+        "api_key": "your-pinecone-api-key",
+        "environment": "us-west1-gcp",
+        "index_name": "my-index"
+      },
+      "embedder_type": "openai",
+      "embedder_config": {
+        "api_key": "your-openai-api-key",
+        "model": "text-embedding-ada-002"
+      }
+    }
+  }
+}
+```
+
+**Example Response:**
+```json
+{
+  "data": {
+    "type": "datasource",
+    "id": "42",
+    "attributes": {
+      "name": "My Pinecone Datasource",
+      "short_description": "Knowledge base for product documentation",
+      "long_description": "Contains all product manuals and guides",
+      "icon": "database",
+      "url": "https://my-index.pinecone.io",
+      "privacy_score": 3,
+      "vector_store_type": "pinecone",
+      "embedder_type": "openai",
+      "created_at": "2025-04-18T10:30:00Z",
+      "updated_at": "2025-04-18T10:30:00Z"
+    }
+  }
+}
+```
+
+**Example Usage:**
+
+**cURL:**
+```bash
+# List all datasources
+curl -X GET "https://your-instance.example.com/api/v1/datasources" \
+  -H "X-API-Key: your-api-key"
+
+# Create a new datasource
+curl -X POST "https://your-instance.example.com/api/v1/datasources" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "data": {
+      "type": "datasource",
+      "attributes": {
+        "name": "My Datasource",
+        "vector_store_type": "pinecone",
+        "vector_store_config": {
+          "api_key": "your-pinecone-api-key",
+          "environment": "us-west1-gcp",
+          "index_name": "my-index"
+        },
+        "embedder_type": "openai",
+        "embedder_config": {
+          "api_key": "your-openai-api-key",
+          "model": "text-embedding-ada-002"
+        }
+      }
+    }
+  }'
+```
+
+**Python:**
+```python
+import requests
+import json
+
+API_URL = "https://your-instance.example.com/api/v1"
+API_KEY = "your-api-key"
+
+headers = {
+    "Content-Type": "application/json",
+    "X-API-Key": API_KEY
+}
+
+# List all datasources
+response = requests.get(f"{API_URL}/datasources", headers=headers)
+datasources = response.json()
+print(json.dumps(datasources, indent=2))
+
+# Create a new datasource
+payload = {
+    "data": {
+        "type": "datasource",
+        "attributes": {
+            "name": "Python-created Datasource",
+            "vector_store_type": "pinecone",
+            "vector_store_config": {
+                "api_key": "your-pinecone-api-key",
+                "environment": "us-west1-gcp",
+                "index_name": "my-index"
+            },
+            "embedder_type": "openai",
+            "embedder_config": {
+                "api_key": "your-openai-api-key",
+                "model": "text-embedding-ada-002"
+            }
+        }
+    }
+}
+
+response = requests.post(f"{API_URL}/datasources", headers=headers, json=payload)
+new_datasource = response.json()
+print(json.dumps(new_datasource, indent=2))
+```
+
+**JavaScript:**
+```javascript
+const API_URL = 'https://your-instance.example.com/api/v1';
+const API_KEY = 'your-api-key';
+
+// List all datasources
+async function listDatasources() {
+  const response = await fetch(`${API_URL}/datasources`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY
+    }
+  });
+  
+  const data = await response.json();
+  console.log(data);
+  return data;
+}
+
+// Create a new datasource
+async function createDatasource() {
+  const payload = {
+    data: {
+      type: 'datasource',
+      attributes: {
+        name: 'JS-created Datasource',
+        vector_store_type: 'pinecone',
+        vector_store_config: {
+          api_key: 'your-pinecone-api-key',
+          environment: 'us-west1-gcp',
+          index_name: 'my-index'
+        },
+        embedder_type: 'openai',
+        embedder_config: {
+          api_key: 'your-openai-api-key',
+          model: 'text-embedding-ada-002'
+        }
+      }
+    }
+  };
+  
+  const response = await fetch(`${API_URL}/datasources`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  const data = await response.json();
+  console.log(data);
+  return data;
+}
+```
+
+**Important Note About Trailing Slashes:**
+
+The API is sensitive to trailing slashes in URLs. Ensure consistency in how you format your API requests:
+
+- Correct: `/api/v1/datasources`
+- Incorrect: `/api/v1/datasources/`
+
+Using inconsistent trailing slashes may result in 404 errors or unexpected behavior.
+
+**Common Error Cases and Troubleshooting:**
+
+| Error | Possible Cause | Solution |
+|-------|----------------|----------|
+| 401 Unauthorized | Missing or invalid API key | Check your authentication credentials |
+| 403 Forbidden | Insufficient permissions | Ensure your account has the necessary permissions |
+| 404 Not Found | Incorrect endpoint URL or resource doesn't exist | Verify the URL and resource ID |
+| 422 Unprocessable Entity | Invalid request payload | Check your request format against the API schema |
+| 500 Internal Server Error | Server-side issue | Contact support with the request details and timestamp |
+
+**Troubleshooting Tips:**
+1. Verify all required fields are included in your request
+2. Check that your authentication credentials are valid and not expired
+3. Ensure your JSON payload is properly formatted
+4. For file processing issues, verify the FileStore ID exists and is accessible
+5. When updating a datasource, use PUT for full updates and PATCH for partial updates
+6. Monitor the response headers for rate limiting information
+
+**6. Datasource Query API Endpoint**
+
+The Datasource Query API provides a simple way for developers to search datasources directly from their applications. This endpoint allows semantic search against the vector database associated with a specific datasource.
+
+**Endpoint Structure:**
+
+Base URL: `/datasource/{dsSlug}`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/datasource/{dsSlug}` | Search a specific datasource by its slug |
+
+Where `{dsSlug}` is the unique slug identifier for the datasource.
+
+**Authentication Requirements:**
+
+All query API endpoints require authentication using one of the following methods:
+- API Key: Include in the `X-API-Key` header
+- Bearer Token: Include in the `Authorization` header as `Bearer {token}`
+- Session Cookie: For browser-based access
+
+**Request and Response Formats:**
+
+**Request Format:**
+```json
+{
+  "query": "Your search query text here",
+  "n": 5,
+  "include_metadata": true
+}
+```
+
+**Request Parameters:**
+- `query` (required): The text to search for in the datasource
+- `n` (optional): Maximum number of results to return (default: 5)
+- `include_metadata` (optional): Whether to include metadata in results (default: true)
+
+**Response Format:**
+```json
+{
+  "results": [
+    {
+      "content": "The text content of the matching chunk",
+      "metadata": {
+        "source": "document1.pdf",
+        "page": 5,
+        "chunk_id": "abc123"
+      },
+      "score": 0.89
+    },
+    {
+      "content": "Another matching text chunk",
+      "metadata": {
+        "source": "document2.txt",
+        "page": 1,
+        "chunk_id": "def456"
+      },
+      "score": 0.82
+    }
+  ]
+}
+```
+
+**Example Usage:**
+
+**cURL:**
+```bash
+# Query a datasource
+curl -X POST "https://your-instance.example.com/datasource/product-docs" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "query": "How do I reset my password?",
+    "n": 3
+  }'
+```
+
+**Python:**
+```python
+import requests
+import json
+
+API_URL = "https://your-instance.example.com"
+API_KEY = "your-api-key"
+DATASOURCE_SLUG = "product-docs"
+
+headers = {
+    "Content-Type": "application/json",
+    "X-API-Key": API_KEY
+}
+
+# Query a datasource
+payload = {
+    "query": "How do I reset my password?",
+    "n": 3
+}
+
+response = requests.post(
+    f"{API_URL}/datasource/{DATASOURCE_SLUG}", 
+    headers=headers, 
+    json=payload
+)
+
+results = response.json()
+print(json.dumps(results, indent=2))
+
+# Access the first result
+if results["results"]:
+    first_result = results["results"][0]
+    print(f"Best match (score: {first_result['score']}):")
+    print(first_result["content"])
+```
+
+**JavaScript:**
+```javascript
+const API_URL = 'https://your-instance.example.com';
+const API_KEY = 'your-api-key';
+const DATASOURCE_SLUG = 'product-docs';
+
+// Query a datasource
+async function queryDatasource() {
+  const payload = {
+    query: 'How do I reset my password?',
+    n: 3
+  };
+  
+  const response = await fetch(`${API_URL}/datasource/${DATASOURCE_SLUG}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  const data = await response.json();
+  console.log(data);
+  
+  // Access the first result
+  if (data.results && data.results.length > 0) {
+    const firstResult = data.results[0];
+    console.log(`Best match (score: ${firstResult.score}):`);
+    console.log(firstResult.content);
+  }
+  
+  return data;
+}
+```
+
+**Important Note About Trailing Slashes:**
+
+The Query API is also sensitive to trailing slashes in URLs. Ensure consistency in how you format your API requests:
+
+- Correct: `/datasource/product-docs`
+- Incorrect: `/datasource/product-docs/`
+
+Using inconsistent trailing slashes may result in 404 errors or unexpected behavior.
+
+**Common Error Cases and Troubleshooting:**
+
+| Error | Possible Cause | Solution |
+|-------|----------------|----------|
+| 401 Unauthorized | Missing or invalid API key | Check your authentication credentials |
+| 403 Forbidden | Insufficient permissions | Ensure your account has the necessary permissions |
+| 404 Not Found | Datasource slug doesn't exist | Verify the datasource slug is correct |
+| 422 Unprocessable Entity | Invalid query parameters | Check your request format and parameters |
+| 429 Too Many Requests | Rate limit exceeded | Implement backoff strategy and respect rate limits |
+| 500 Internal Server Error | Server-side issue | Contact support with the request details and timestamp |
+
+**Troubleshooting Tips:**
+1. Ensure your datasource slug is correct and the datasource exists
+2. Verify your query is not empty and is properly formatted
+3. Try adjusting the threshold value if you're getting too few or too many results
+4. Check that the datasource has been properly indexed with content
+5. For large result sets, use pagination by adjusting the limit parameter
+6. Monitor your API usage to avoid hitting rate limits
+
+**7. Potential Considerations & Future Enhancements**
 
 (Considerations remain largely the same, with added UI points)
 
