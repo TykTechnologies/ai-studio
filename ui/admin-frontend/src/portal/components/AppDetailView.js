@@ -111,7 +111,7 @@ const AppDetailView = () => {
 
   const generateEndpointUrl = (path, name) => {
     const slug = generateSlug(name);
-    return `${baseUrl}${path}${slug}/`;
+    return `${baseUrl}${path}${slug}`;
   };
 
   const copyToClipboard = (text) => {
