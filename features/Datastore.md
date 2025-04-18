@@ -397,28 +397,22 @@ Using inconsistent trailing slashes may result in 404 errors or unexpected behav
 5. When updating a datasource, use PUT for full updates and PATCH for partial updates
 6. Monitor the response headers for rate limiting information
 
-**6. Datasource Query API Endpoint**
+**6. Datasource Proxy API**
 
-The Datasource Query API provides a simple way for developers to search datasources directly from their applications. This endpoint allows semantic search against the vector database associated with a specific datasource.
+The Datasource Proxy API provides developers with direct access to query datasources from their applications. This feature is exposed in the developer portal UI, allowing semantic search against vector databases without needing to implement RAG logic.
 
 **Endpoint Structure:**
 
-Base URL: `/datasource/{dsSlug}`
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/datasource/{dsSlug}` | Search a specific datasource by its slug |
+```
+POST /datasource/{dsSlug}
+```
 
 Where `{dsSlug}` is the unique slug identifier for the datasource.
 
-**Authentication Requirements:**
-
-All query API endpoints require authentication using one of the following methods:
+**Authentication:**
 - API Key: Include in the `X-API-Key` header
 - Bearer Token: Include in the `Authorization` header as `Bearer {token}`
 - Session Cookie: For browser-based access
-
-**Request and Response Formats:**
 
 **Request Format:**
 ```json
@@ -428,11 +422,6 @@ All query API endpoints require authentication using one of the following method
   "include_metadata": true
 }
 ```
-
-**Request Parameters:**
-- `query` (required): The text to search for in the datasource
-- `n` (optional): Maximum number of results to return (default: 5)
-- `include_metadata` (optional): Whether to include metadata in results (default: true)
 
 **Response Format:**
 ```json
@@ -446,25 +435,13 @@ All query API endpoints require authentication using one of the following method
         "chunk_id": "abc123"
       },
       "score": 0.89
-    },
-    {
-      "content": "Another matching text chunk",
-      "metadata": {
-        "source": "document2.txt",
-        "page": 1,
-        "chunk_id": "def456"
-      },
-      "score": 0.82
     }
   ]
 }
 ```
 
 **Example Usage:**
-
-**cURL:**
 ```bash
-# Query a datasource
 curl -X POST "https://your-instance.example.com/datasource/product-docs" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key" \
@@ -474,105 +451,7 @@ curl -X POST "https://your-instance.example.com/datasource/product-docs" \
   }'
 ```
 
-**Python:**
-```python
-import requests
-import json
-
-API_URL = "https://your-instance.example.com"
-API_KEY = "your-api-key"
-DATASOURCE_SLUG = "product-docs"
-
-headers = {
-    "Content-Type": "application/json",
-    "X-API-Key": API_KEY
-}
-
-# Query a datasource
-payload = {
-    "query": "How do I reset my password?",
-    "n": 3
-}
-
-response = requests.post(
-    f"{API_URL}/datasource/{DATASOURCE_SLUG}", 
-    headers=headers, 
-    json=payload
-)
-
-results = response.json()
-print(json.dumps(results, indent=2))
-
-# Access the first result
-if results["results"]:
-    first_result = results["results"][0]
-    print(f"Best match (score: {first_result['score']}):")
-    print(first_result["content"])
-```
-
-**JavaScript:**
-```javascript
-const API_URL = 'https://your-instance.example.com';
-const API_KEY = 'your-api-key';
-const DATASOURCE_SLUG = 'product-docs';
-
-// Query a datasource
-async function queryDatasource() {
-  const payload = {
-    query: 'How do I reset my password?',
-    n: 3
-  };
-  
-  const response = await fetch(`${API_URL}/datasource/${DATASOURCE_SLUG}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
-    body: JSON.stringify(payload)
-  });
-  
-  const data = await response.json();
-  console.log(data);
-  
-  // Access the first result
-  if (data.results && data.results.length > 0) {
-    const firstResult = data.results[0];
-    console.log(`Best match (score: ${firstResult.score}):`);
-    console.log(firstResult.content);
-  }
-  
-  return data;
-}
-```
-
-**Important Note About Trailing Slashes:**
-
-The Query API is also sensitive to trailing slashes in URLs. Ensure consistency in how you format your API requests:
-
-- Correct: `/datasource/product-docs`
-- Incorrect: `/datasource/product-docs/`
-
-Using inconsistent trailing slashes may result in 404 errors or unexpected behavior.
-
-**Common Error Cases and Troubleshooting:**
-
-| Error | Possible Cause | Solution |
-|-------|----------------|----------|
-| 401 Unauthorized | Missing or invalid API key | Check your authentication credentials |
-| 403 Forbidden | Insufficient permissions | Ensure your account has the necessary permissions |
-| 404 Not Found | Datasource slug doesn't exist | Verify the datasource slug is correct |
-| 422 Unprocessable Entity | Invalid query parameters | Check your request format and parameters |
-| 429 Too Many Requests | Rate limit exceeded | Implement backoff strategy and respect rate limits |
-| 500 Internal Server Error | Server-side issue | Contact support with the request details and timestamp |
-
-**Troubleshooting Tips:**
-1. Ensure your datasource slug is correct and the datasource exists
-2. Verify your query is not empty and is properly formatted
-3. Try adjusting the threshold value if you're getting too few or too many results
-4. Check that the datasource has been properly indexed with content
-5. For large result sets, use pagination by adjusting the limit parameter
-6. Monitor your API usage to avoid hitting rate limits
+**Important Note:** The API is sensitive to trailing slashes in URLs. Use `/datasource/product-docs` (correct) instead of `/datasource/product-docs/` (incorrect) to avoid 404 errors.
 
 **7. Potential Considerations & Future Enhancements**
 
