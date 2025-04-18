@@ -91,4 +91,116 @@ A Data Source will be used for RAG if:
 2.  The user belongs to a Group that has been assigned that Data Source Catalogue.
 3.  The Data Source's privacy level is compatible with the LLM being used.
 
-APIs may also exist for directly querying configured Data Sources programmatically.
+## Programmatic Access via API
+
+Tyk AI Studio provides a direct API endpoint for querying configured Data Sources programmatically:
+
+### Datasource API Endpoint
+
+*   **Endpoint:** `/datasource/{dsSlug}` (where `{dsSlug}` is the datasource identifier)
+*   **Method:** POST
+*   **Authentication:** Bearer token required in the Authorization header
+
+### Request Format
+
+```json
+{
+  "query": "your semantic search query here",
+  "n": 5  // optional, number of results to return (default: 3)
+}
+```
+
+### Response Format
+
+```json
+{
+  "documents": [
+    {
+      "content": "text content of the document chunk",
+      "metadata": {
+        "source": "filename.pdf",
+        "page": 42
+      }
+    },
+    // additional results...
+  ]
+}
+```
+
+### Example Usage
+
+#### cURL
+
+```bash
+curl -X POST "https://your-tyk-instance/datasource/product-docs" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I configure authentication?", "n": 3}'
+```
+
+#### Python
+
+```python
+import requests
+
+url = "https://your-tyk-instance/datasource/product-docs"
+headers = {
+    "Authorization": "Bearer YOUR_TOKEN",
+    "Content-Type": "application/json"
+}
+payload = {
+    "query": "How do I configure authentication?",
+    "n": 3
+}
+
+response = requests.post(url, json=payload, headers=headers)
+results = response.json()
+
+for doc in results["documents"]:
+    print(f"Content: {doc['content']}")
+    print(f"Source: {doc['metadata']['source']}")
+    print("---")
+```
+
+#### JavaScript
+
+```javascript
+async function queryDatasource() {
+  const response = await fetch('https://your-tyk-instance/datasource/product-docs', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_TOKEN',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      query: 'How do I configure authentication?',
+      n: 3
+    })
+  });
+  
+  const data = await response.json();
+  
+  data.documents.forEach(doc => {
+    console.log(`Content: ${doc.content}`);
+    console.log(`Source: ${doc.metadata.source}`);
+    console.log('---');
+  });
+}
+```
+
+### Common Issues and Troubleshooting
+
+1. **Trailing Slash Error:** The endpoint does not accept a trailing slash. Use `/datasource/{dsSlug}` and not `/datasource/{dsSlug}/`.
+
+2. **Authentication Errors:** Ensure your Bearer token is valid and has not expired. The token must have permissions to access the specified datasource.
+
+3. **404 Not Found:** Verify that the datasource slug is correct and that the datasource exists and is properly configured.
+
+4. **403 Forbidden:** Check that your user account has been granted access to the datasource catalogue containing this datasource.
+
+5. **Empty Results:** If you receive an empty documents array, try:
+   - Reformulating your query to better match the content
+   - Increasing the value of `n` to get more results
+   - Verifying that the datasource has been properly populated with documents
+
+This API endpoint allows developers to build custom applications that leverage the semantic search capabilities of configured vector stores without needing to implement the full RAG pipeline.
