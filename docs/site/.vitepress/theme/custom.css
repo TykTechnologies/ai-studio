@@ -973,33 +973,56 @@ body {
   display: block;
 }
 
-/* Dark mode adjustments */
+/* Override dark mode completely - disable dark mode styling */
 html.dark {
-  --bg-white: #1E1E1E;
-  --bg-gray-50: #121212;
-  --text-dark: #FFFFFF;
-  --text-gray-600: #D1D5DB;
+  /* Reset all dark mode variables to light mode values */
+  --vp-c-bg: #FFFFFF !important;
+  --vp-c-bg-alt: #F9FAFB !important;
+  --vp-c-bg-soft: #F9FAFB !important;
+  --bg-white: #FFFFFF !important;
+  --bg-gray-50: #F9FAFB !important;
+  --text-dark: #111827 !important;
+  --text-gray-600: #4B5563 !important;
+  
+  /* Force all text colors back to light mode */
+  color-scheme: light !important;
 }
 
-html.dark {
-  --docsearch-muted-color: #ced5e0;
-  /* Lighter gray */
+/* Ensure all text in dark mode uses light mode colors */
+html.dark .VPContent,
+html.dark .VPDoc,
+html.dark .VPHome,
+html.dark .VPFeatures,
+html.dark .VPFooter,
+html.dark .custom-block,
+html.dark .vp-doc h1,
+html.dark .vp-doc h2,
+html.dark .vp-doc h3,
+html.dark .vp-doc h4,
+html.dark .vp-doc h5,
+html.dark .vp-doc h6,
+html.dark .vp-doc p,
+html.dark .vp-doc a,
+html.dark .vp-doc li {
+  color: var(--text-dark) !important;
 }
 
+/* Keep the navbar gradient in dark mode */
 html.dark .VPNav {
   /* Gradient takes precedence over dark mode bg */
-  background: linear-gradient(to right, #5B21B6, #8437FA);
+  background: linear-gradient(to right, #5B21B6, #8437FA) !important;
   /* Updated gradient */
   border-bottom: 1px solid transparent;
 }
 
+/* Ensure feature items have proper styling in dark mode */
 html.dark .VPFeatures .item {
   background-color: var(--bg-white);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 html.dark .VPFeatures .icon {
-  background-color: #374151;
+  background-color: #f3f4ff;
 }
 
 /* === Header Scroll Behavior === */
