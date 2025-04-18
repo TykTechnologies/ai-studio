@@ -65,6 +65,39 @@ While the AI Portal primarily provides a web-based user interface, it is built o
 *   **Authentication API:** `/api/v1/auth/...` endpoints for managing user sessions.
 *   **Chat API:** `/api/v1/chat/...` endpoints for programmatic access to chat functionality.
 *   **User Profile API:** `/api/v1/users/...` endpoints for managing user information.
+*   **Datasource API:** `/datasource/{dsSlug}` endpoint for directly querying configured data sources.
+
+### Datasource API
+
+The Datasource API allows direct semantic search against configured vector stores:
+
+*   **Endpoint:** `/datasource/{dsSlug}` (where `{dsSlug}` is the datasource identifier)
+*   **Method:** POST
+*   **Authentication:** Bearer token required
+*   **Request Format:**
+    ```json
+    {
+      "query": "your search query here",
+      "n": 5  // optional, number of results to return (default: 3)
+    }
+    ```
+*   **Response Format:**
+    ```json
+    {
+      "documents": [
+        {
+          "content": "text content of the document chunk",
+          "metadata": {
+            "source": "filename.pdf",
+            "page": 42
+          }
+        },
+        // additional results...
+      ]
+    }
+    ```
+
+**Important Note:** The endpoint does not accept a trailing slash. Use `/datasource/{dsSlug}` and not `/datasource/{dsSlug}/`.
 
 This API-first approach ensures that all functionality available through the AI Portal can also be accessed programmatically for custom applications or integrations.
 
