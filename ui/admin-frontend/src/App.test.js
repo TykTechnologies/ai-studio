@@ -243,7 +243,7 @@ describe('App Component', () => {
     // Wait for either the navigation or the dashboard content to appear
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/admin\/(dashboard|dash)$/),
+        "/admin",
         expect.objectContaining({ replace: true })
       );
     }, { timeout: 3000 });

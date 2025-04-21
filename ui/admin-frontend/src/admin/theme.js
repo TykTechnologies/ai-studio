@@ -12,9 +12,19 @@ const theme = createTheme({
       fontSize: "0.89rem",
     },
     bodyXLargeDefault: {
+      fontSize: "18px",
+      lineHeight: "24px",
+      fontFamily: "Inter-Regular",
+    },
+    bodyXLargeMedium: {
       fontSize: "16px",
       lineHeight: "20px",
-      fontFamily: "Inter-Regular",  
+      fontFamily: "Inter-Medium",
+    },
+    bodyXLargeBold: {
+      fontSize: "16px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Bold",
     },
     bodyLargeDefault: {
       fontSize: "14px",
@@ -56,6 +66,11 @@ const theme = createTheme({
       lineHeight: "36px",
       fontFamily: "Inter-SemiBold",
     },
+    headingxLarge : {
+      fontSize: "24px",
+      lineHeight: "24px",
+      fontFamily: "Inter-Bold",
+    },
     headingLarge: {
       fontSize: "20px",
       lineHeight: "24px",
@@ -91,6 +106,7 @@ const theme = createTheme({
       surfaceDefaultHover: '#B7F9E926',
       surfaceDefaultSelected: '#B7F9E973',
       surfaceNeutralDisabled: '#FCFCFC',
+      surfaceNeutralHover: '#F8F8F9',
       surfaceBrandDefaultPortal: '#EFF3FF',
       surfaceBrandDefaultDashboard: '#F6EFFF',
       surfaceBrandHovered: '#EBDFFE',
@@ -296,6 +312,7 @@ const theme = createTheme({
           position: 'relative',
           borderRadius: 20,
           padding: '8px 16px',
+          minWidth: 'fit-content',
           color: theme.palette.text.defaultSubdued,
           backgroundColor: theme.palette.background.buttonSecondary,
           boxShadow: "none",
