@@ -91,6 +91,8 @@ const theme = createTheme({
       surfaceDefaultHover: '#B7F9E926',
       surfaceDefaultSelected: '#B7F9E973',
       surfaceNeutralDisabled: '#FCFCFC',
+      surfaceBrandDefaultPortal: '#EFF3FF',
+      surfaceBrandDefaultDashboard: '#F6EFFF',
       surfaceBrandHovered: '#EBDFFE',
       surfaceDefaultBubble: '#B7F9E9C2',
       surfaceCriticalDefault: '#FCEFEC',

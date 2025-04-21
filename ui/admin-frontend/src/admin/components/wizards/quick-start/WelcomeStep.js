@@ -1,9 +1,9 @@
 import React from 'react';
 import { Box, Typography, Button } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { PrimaryButton } from '../../styles/sharedStyles';
-import { ActionsContainer } from './quick-start/styles';
-import { useQuickStart } from './quick-start/QuickStartContext';
+import { PrimaryButton } from '../../../styles/sharedStyles';
+import { ActionsContainer } from './styles';
+import { useQuickStart } from './QuickStartContext';
 
 // Import the welcome step image
 import welcomeStepImage from './welcome_step.png';
