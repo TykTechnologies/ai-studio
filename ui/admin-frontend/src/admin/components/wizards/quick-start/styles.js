@@ -16,7 +16,7 @@ export const StyledDialog = styled(Dialog)(({ theme }) => ({
     border: `1px solid ${theme.palette.border.neutralPressed}`,
     boxShadow: '0px 16px 32px 0px rgba(9, 9, 35, 0.25)',
     maxWidth: '80%',
-    maxHeight:'80%',
+    maxHeight:'90%',
     margin: '0 auto',
   },
 }));

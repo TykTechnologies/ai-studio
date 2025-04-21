@@ -15,7 +15,7 @@ const QuickStartStepProgress = () => {
 
   if (isLastStep) return null;
 
-  const progressSteps = steps.filter(step => !step.isWelcomeStep);
+  const progressSteps = steps.filter(step => !step.isWelcomeStep && !step.isLastStep);
   const currentStepIndex = activeStep === 0 ? -1 : activeStep - 1;
   
   // Determine if a step is completed (any step before the current step)

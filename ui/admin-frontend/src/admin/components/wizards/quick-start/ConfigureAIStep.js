@@ -3,18 +3,38 @@ import {
   Box,
   Typography,
   Divider,
+  CircularProgress,
+  Snackbar,
+  Alert
 } from '@mui/material';
-import { StyledTextField } from '../../styles/sharedStyles';
-import { useQuickStart } from './quick-start/QuickStartContext';
-import { ActionsContainer } from './quick-start/styles';
-import { PrimaryButton, SecondaryLinkButton } from '../../styles/sharedStyles';
-import CustomNote from '../common/CustomNote';
-import CustomSelect from '../common/CustomSelect';
-import PrivacyLevelBadge from '../common/PrivacyLevelBadge';
-import Icon from '../../../components/common/Icon';
+import { StyledTextField } from '../../../styles/sharedStyles';
+import { useQuickStart } from './QuickStartContext';
+import apiClient from '../../../utils/apiClient';
+import { ActionsContainer } from './styles';
+import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
+import CustomNote from '../../common/CustomNote';
+import CustomSelect from '../../common/CustomSelect';
+import CustomSelectBadge from '../../common/CustomSelectBadge';
+import Icon from '../../../../components/common/Icon';
+
+const PRIVACY_LEVEL_SCORES = {
+  public: 25,
+  internal: 50,
+  confidential: 75,
+  restricted: 100
+};
 
 const ConfigureAIStep = () => {
-  const { setStepValid, goToNextStep, goToPreviousStep } = useQuickStart();
+  const {
+    setStepValid,
+    goToNextStep,
+    goToPreviousStep,
+    llmData,
+    setLlmData,
+    createdLlmId,
+    setCreatedLlmId
+  } = useQuickStart();
+  
   const [formData, setFormData] = useState({
     name: '',
     llmProvider: '',
@@ -25,6 +45,12 @@ const ConfigureAIStep = () => {
   const [errors, setErrors] = useState({});
   const [vendors, setVendors] = useState([]);
   const [isFormValid, setIsFormValid] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   const checkRequiredFields = React.useCallback(() => {
     const isValid = formData.name.trim() !== '' && formData.llmProvider.trim() !== '';
@@ -43,10 +69,15 @@ const ConfigureAIStep = () => {
     ];
     setVendors(vendorList);
   }, []);
-  
   useEffect(() => {
     checkRequiredFields();
   }, [formData, checkRequiredFields]);
+  
+  useEffect(() => {
+    if (llmData && Object.keys(llmData).length > 0) {
+      setFormData(llmData);
+    }
+  }, [llmData]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -59,9 +90,69 @@ const ConfigureAIStep = () => {
     return isValid;
   };
   
+  const createOrUpdateLLM = async () => {
+    setLoading(true);
+    
+    try {
+      const llmPayload = {
+        data: {
+          type: "LLM",
+          attributes: {
+            name: formData.name,
+            api_key: formData.apiKey,
+            api_endpoint: formData.apiEndpoint,
+            privacy_score: PRIVACY_LEVEL_SCORES[formData.privacyLevel],
+            short_description: "",
+            long_description: "",
+            logo_url: "",
+            vendor: formData.llmProvider,
+            active: true,
+            filters: [],
+            default_model: "",
+            allowed_models: []
+          }
+        }
+      };
+      
+      let response;
+      
+      if (createdLlmId) {
+        if (JSON.stringify(formData) !== JSON.stringify(llmData)) {
+          response = await apiClient.patch(`/llms/${createdLlmId}`, llmPayload);
+          setSnackbar({
+            open: true,
+            message: 'LLM updated successfully',
+            severity: 'success'
+          });
+        }
+      } else {
+        response = await apiClient.post('/llms', llmPayload);
+        const newLlmId = response.data.data.id;
+        setCreatedLlmId(newLlmId);
+        setSnackbar({
+          open: true,
+          message: 'LLM created successfully',
+          severity: 'success'
+        });
+      }
+      
+      setLlmData(formData);
+      goToNextStep();
+    } catch (error) {
+      console.error('Error creating/updating LLM:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.message || 'Unknown error'}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   const handleNextClick = () => {
     if (validateForm()) {
-      goToNextStep();
+      createOrUpdateLLM();
     }
   };
 
@@ -80,6 +171,33 @@ const ConfigureAIStep = () => {
     { value: 'confidential', label: 'Confidential', description: 'Sensitive data (e.g. financials, strategies)' },
     { value: 'restricted', label: 'Restricted', description: 'PII or personal data (e.g. names, emails, costumer info)' }
   ];
+
+  const privacyBadgeConfigs = {
+    public: {
+      icon: 'unlock',
+      text: 'Public',
+      textColor: 'text.successDefault',
+      bgColor: 'border.successDefaultSubdued'
+    },
+    internal: {
+      icon: 'lock',
+      text: 'Internal',
+      textColor: 'text.warningDefault',
+      bgColor: 'border.warningDefaultSubdued'
+    },
+    confidential: {
+      icon: 'lock-keyhole',
+      text: 'Confidential',
+      textColor: 'border.criticalHover',
+      bgColor: 'border.criticalDefaultSubdue'
+    },
+    restricted: {
+      icon: 'shield-keyhole',
+      text: 'Restricted',
+      textColor: 'background.surfaceCriticalDefault',
+      bgColor: 'background.buttonPrimaryDefault'
+    }
+  };
 
   return (
     <Box sx={{ width: '100%', pt: 2 }}>
@@ -180,7 +298,7 @@ const ConfigureAIStep = () => {
             renderOption={(option) => (
               <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                 <Box sx={{ mr: 2 }}>
-                  <PrivacyLevelBadge level={option.value} />
+                  <CustomSelectBadge config={privacyBadgeConfigs[option.value]} />
                 </Box>
                 <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
                   {option.description}
@@ -201,11 +319,26 @@ const ConfigureAIStep = () => {
         </SecondaryLinkButton>
         <PrimaryButton
           onClick={handleNextClick}
-          disabled={!isFormValid}
+          disabled={!isFormValid || loading}
         >
-          Continue
+          {loading ? <CircularProgress size={24} color="inherit" /> : 'Continue'}
         </PrimaryButton>
       </ActionsContainer>
+      
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

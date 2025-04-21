@@ -2,15 +2,22 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 
 const QuickStartContext = createContext();
 
-export const QuickStartProvider = ({ 
-  children, 
-  steps, 
-  initialStep = 0, 
-  onComplete, 
-  onSkip 
+export const QuickStartProvider = ({
+  children,
+  steps,
+  initialStep = 0,
+  onComplete,
+  onSkip
 }) => {
   const [activeStep, setActiveStep] = useState(initialStep);
   const [stepValidation, setStepValidation] = useState({});
+  const [llmData, setLlmData] = useState({});
+  const [createdLlmId, setCreatedLlmId] = useState(null);
+  const [ownerData, setOwnerData] = useState({});
+  const [createdOwnerId, setCreatedOwnerId] = useState(null);
+  const [appData, setAppData] = useState({});
+  const [credentialData, setCredentialData] = useState({});
+  const [createdAppId, setCreatedAppId] = useState(null);
 
   const validateStep = useCallback((stepId) => {
     const step = steps.find(s => s.id === stepId);
@@ -57,7 +64,21 @@ export const QuickStartProvider = ({
     setStepValid,
     isFirstStep: activeStep === 0,
     isLastStep: activeStep === steps.length - 1,
-    currentStep: steps[activeStep]
+    currentStep: steps[activeStep],
+    llmData,
+    setLlmData,
+    createdLlmId,
+    setCreatedLlmId,
+    ownerData,
+    setOwnerData,
+    createdOwnerId,
+    setCreatedOwnerId,
+    appData,
+    credentialData,
+    setCredentialData,
+    setAppData,
+    createdAppId,
+    setCreatedAppId
   };
 
   return (

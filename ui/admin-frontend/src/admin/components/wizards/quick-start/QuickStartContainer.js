@@ -1,7 +1,11 @@
 import React, { useRef } from 'react';
-import { QuickStartModal, useQuickStart as useQuickStartContext } from './index';
-import WelcomeStep from '../WelcomeStep';
-import ConfigureAIStep from '../ConfigureAIStep';
+import QuickStartModal from './QuickStartModal';
+import { useQuickStart as useQuickStartContext } from './QuickStartContext';
+import WelcomeStep from './WelcomeStep';
+import ConfigureAIStep from './ConfigureAIStep';
+import AssignOwnerStep from './AssignOwnerStep';
+import AppDetailsStep from './AppDetailsStep';
+import SummaryStep from './SummaryStep';
 import useQuickStart from '../../../hooks/useQuickStart';
 
 const QuickStartContainer = () => {
@@ -42,22 +46,29 @@ const QuickStartContainer = () => {
           id: "configure-ai",
           label: "Configure AI",
           content: <ConfigureAIStep />,
-          validate: () => true // Validation is handled within the component
+          validate: () => true
         },
         {
           id: "assign-owner",
           label: "Assign owner",
-          content: null // Will be implemented later
+          content: <AssignOwnerStep />,
+          validate: () => true
         },
         {
           id: "app-details",
           label: "App details",
-          content: null // Will be implemented later
+          content: <AppDetailsStep />,
+          validate: () => true
         },
         {
           id: "summary",
           label: "Summary & credentials",
-          content: null // Will be implemented later
+          content: <SummaryStep />
+        },
+        {
+          id: "finish",
+          label: "Finish",
+          isLastStep: true,
         }
       ]}
       onComplete={handleQuickStartComplete}
