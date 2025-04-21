@@ -246,7 +246,7 @@ function App() {
                 <Navigate
                   to={
                     isAuthenticated
-                      ? "/admin/dash" // Just redirect to admin dash for unknown routes
+                      ? "/admin"
                       : "/login"
                   }
                   replace

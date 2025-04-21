@@ -36,7 +36,13 @@ The primary goal is to enhance LLM interactions by:
     3.  The retrieved text chunks are added as context to the prompt sent to the LLM.
     4.  The LLM uses this context to generate a more informed and relevant response.
 *   **Data Source Catalogues:** Similar to Tools, Data Sources are grouped into Catalogues for easier management and assignment to user groups.
-*   **Privacy Scores:** Each Data Source has a privacy score. It can only be used in RAG if its score is less than or equal to the privacy score of the [LLM Configuration](./llm-management.md) being used, ensuring data governance.
+*   **Privacy Levels:** Each Data Source has a privacy level. It can only be used in RAG if its level is less than or equal to the privacy level of the [LLM Configuration](./llm-management.md) being used, ensuring data governance.
+
+    Privacy levels define how data is protected by controlling LLM access based on its sensitivity:
+    - Public – Safe to share (e.g., blogs, press releases).
+    - Internal – Company-only info (e.g., reports, policies).
+    - Confidential – Sensitive business data (e.g., financials, strategies).
+    - Restricted (PII) – Personal data (e.g., names, emails, customer info).
 
 ## How RAG Works in the Chat Interface
 
@@ -54,7 +60,7 @@ When RAG is enabled for a Chat Experience:
 
 Administrators configure Data Sources via the UI or API:
 
-1.  **Define Data Source:** Provide a name, description, and privacy score.
+1.  **Define Data Source:** Provide a name, description, and privacy level.
 2.  **Configure Vector Store:**
     *   Select the database type (e.g., `pinecone`).
     *   Provide connection details (e.g., endpoint/connection string, namespace/index name).
@@ -83,6 +89,118 @@ A Data Source will be used for RAG if:
 
 1.  The specific Chat Experience configuration includes the relevant Data Source Catalogue.
 2.  The user belongs to a Group that has been assigned that Data Source Catalogue.
-3.  The Data Source's privacy score is compatible with the LLM being used.
+3.  The Data Source's privacy level is compatible with the LLM being used.
 
-APIs may also exist for directly querying configured Data Sources programmatically.
+## Programmatic Access via API
+
+Tyk AI Studio provides a direct API endpoint for querying configured Data Sources programmatically:
+
+### Datasource API Endpoint
+
+*   **Endpoint:** `/datasource/{dsSlug}` (where `{dsSlug}` is the datasource identifier)
+*   **Method:** POST
+*   **Authentication:** Bearer token required in the Authorization header
+
+### Request Format
+
+```json
+{
+  "query": "your semantic search query here",
+  "n": 5  // optional, number of results to return (default: 3)
+}
+```
+
+### Response Format
+
+```json
+{
+  "documents": [
+    {
+      "content": "text content of the document chunk",
+      "metadata": {
+        "source": "filename.pdf",
+        "page": 42
+      }
+    },
+    // additional results...
+  ]
+}
+```
+
+### Example Usage
+
+#### cURL
+
+```bash
+curl -X POST "https://your-tyk-instance/datasource/product-docs" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I configure authentication?", "n": 3}'
+```
+
+#### Python
+
+```python
+import requests
+
+url = "https://your-tyk-instance/datasource/product-docs"
+headers = {
+    "Authorization": "Bearer YOUR_TOKEN",
+    "Content-Type": "application/json"
+}
+payload = {
+    "query": "How do I configure authentication?",
+    "n": 3
+}
+
+response = requests.post(url, json=payload, headers=headers)
+results = response.json()
+
+for doc in results["documents"]:
+    print(f"Content: {doc['content']}")
+    print(f"Source: {doc['metadata']['source']}")
+    print("---")
+```
+
+#### JavaScript
+
+```javascript
+async function queryDatasource() {
+  const response = await fetch('https://your-tyk-instance/datasource/product-docs', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_TOKEN',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      query: 'How do I configure authentication?',
+      n: 3
+    })
+  });
+  
+  const data = await response.json();
+  
+  data.documents.forEach(doc => {
+    console.log(`Content: ${doc.content}`);
+    console.log(`Source: ${doc.metadata.source}`);
+    console.log('---');
+  });
+}
+```
+
+### Common Issues and Troubleshooting
+
+1. **Trailing Slash Error:** The endpoint does not accept a trailing slash. Use `/datasource/{dsSlug}` and not `/datasource/{dsSlug}/`.
+
+2. **Authentication Errors:** Ensure your Bearer token is valid and has not expired. The token must have permissions to access the specified datasource.
+
+3. **404 Not Found:** Verify that the datasource slug is correct and that the datasource exists and is properly configured.
+
+4. **403 Forbidden:** Check that your user account has been granted access to the datasource catalogue containing this datasource.
+
+5. **Empty Results:** If you receive an empty documents array, try:
+   - Reformulating your query to better match the content
+   - Increasing the value of `n` to get more results
+   - Verifying that the datasource has been properly populated with documents
+
+This API endpoint allows developers to build custom applications that leverage the semantic search capabilities of configured vector stores without needing to implement the full RAG pipeline.

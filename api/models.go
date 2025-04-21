@@ -929,10 +929,11 @@ type PaginatedProxyLogs struct {
 // FrontendConfig holds front-end configuration settings
 // @Description Front-end config model
 type FrontendConfig struct {
-	APIBaseURL        string `json:"apiBaseURL"`
-	ProxyURL          string `json:"proxyURL"`
-	DefaultSignUpMode string `json:"defaultSignUpMode"`
-	TIBEnabled        bool   `json:"tibEnabled"`
+	APIBaseURL        string            `json:"apiBaseURL"`
+	ProxyURL          string            `json:"proxyURL"`
+	DefaultSignUpMode string            `json:"defaultSignUpMode"`
+	TIBEnabled        bool              `json:"tibEnabled"`
+	DocsLinks         map[string]string `json:"docsLinks"`
 }
 
 // FileStoreInput represents the input for filestore-related operations

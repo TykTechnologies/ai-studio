@@ -22,19 +22,24 @@ jobs:
       steps:
         - name: Checkout code
           uses: actions/checkout@v2
+        - name: Install Node.js 19.0.1
+          uses: actions/setup-node@v4
+          with:
+            node-version: "19.0.1"
+        - name: Build Frontend
+          run: |
+            npm install
+            CI='' npm run build
+          working-directory: ui/admin-frontend
         - name: Start AI Portal
           env: 
             TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
             TYK_AI_SECRET_KEY: ${{ secrets.TYK_AI_SECRET_KEY }}
-            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-            ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_AI_KEY }}
+            OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+            ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}
             GO_BUILD_FLAGS: "-buildvcs=false"
           run: |
             docker compose -f tests/compose.yml up &
-        - name: Install Node.js 18.16
-          uses: actions/setup-node@v4
-          with:
-            node-version: "18.16"
         - name: Install test dependencies
           working-directory: tests/ui
           run: |
@@ -56,9 +61,6 @@ jobs:
               fi
               sleep 10
             done
-        - name: Execute prerequisites
-          working-directory: tests/ui
-          run: npm run prerequisite
         - name: Execute UI tests
           id: test_execution
           working-directory: tests/ui

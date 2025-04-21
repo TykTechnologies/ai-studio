@@ -58,6 +58,7 @@ import SecretDetails from "./components/secrets/SecretDetails";
 import SecretForm from "./components/secrets/SecretForm";
 
 import Dashboard from "./pages/Dashboard";
+import Overview from "./pages/Overview";
 
 import SSOProfiles from "./pages/SSOProfiles";
 import SSOProfileEditor from "./components/sso-profiles/SSOProfileEditor";
@@ -65,6 +66,7 @@ import SSOProfileDetails from "./components/sso-profiles/SSOProfileDetails";
 
 const mainAdminRoutes = (
   <>
+    <Route index element={<Overview />} />
     <Route path="dash" element={<Dashboard />} />
     <Route path="dashboard" element={<Dashboard />} />
     <Route path="users" element={<Users />} />

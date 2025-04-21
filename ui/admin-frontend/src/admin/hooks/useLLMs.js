@@ -48,10 +48,6 @@ const useLLMs = ({
       });
       
       const data = response.data.data || [];
-      console.log('useLLMs - Fetched LLMs:', {
-        count: data.length,
-        checkExistenceOnly
-      });
       setLLMs(data);
       
       // Parse pagination headers if they exist
