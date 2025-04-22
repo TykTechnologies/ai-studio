@@ -16,6 +16,7 @@ import CustomNote from '../../common/CustomNote';
 import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
 import Icon from '../../../../components/common/Icon';
+import { getVendorCodes, getVendorName, getVendorLogo } from '../../../utils/vendorLogos';
 
 const PRIVACY_LEVEL_SCORES = {
   public: 25,
@@ -28,7 +29,7 @@ const ConfigureAIStep = () => {
   const {
     setStepValid,
     goToNextStep,
-    goToPreviousStep,
+    skipQuickStart,
     llmData,
     setLlmData,
     createdLlmId,
@@ -42,7 +43,6 @@ const ConfigureAIStep = () => {
     apiKey: '',
     privacyLevel: 'public'
   });
-  const [errors, setErrors] = useState({});
   const [vendors, setVendors] = useState([]);
   const [isFormValid, setIsFormValid] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -60,13 +60,11 @@ const ConfigureAIStep = () => {
   }, [formData, setStepValid]);
 
   useEffect(() => {
-    const vendorList = [
-      { value: 'openai', label: 'OpenAI' },
-      { value: 'anthropic', label: 'Anthropic' },
-      { value: 'google', label: 'Google AI' },
-      { value: 'azure', label: 'Azure OpenAI' },
-      { value: 'cohere', label: 'Cohere' },
-    ];
+    const vendorCodes = getVendorCodes();
+    const vendorList = vendorCodes.map(code => ({
+      value: code,
+      label: getVendorName(code)
+    }));
     setVendors(vendorList);
   }, []);
   useEffect(() => {
@@ -79,16 +77,6 @@ const ConfigureAIStep = () => {
     }
   }, [llmData]);
 
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = "Name is required";
-    if (!formData.llmProvider.trim()) newErrors.llmProvider = "LLM Provider is required";
-    
-    setErrors(newErrors);
-    const isValid = Object.keys(newErrors).length === 0;
-    
-    return isValid;
-  };
   
   const createOrUpdateLLM = async () => {
     setLoading(true);
@@ -118,28 +106,17 @@ const ConfigureAIStep = () => {
       
       if (createdLlmId) {
         if (JSON.stringify(formData) !== JSON.stringify(llmData)) {
-          response = await apiClient.patch(`/llms/${createdLlmId}`, llmPayload);
-          setSnackbar({
-            open: true,
-            message: 'LLM updated successfully',
-            severity: 'success'
-          });
+          await apiClient.patch(`/llms/${createdLlmId}`, llmPayload);
         }
       } else {
         response = await apiClient.post('/llms', llmPayload);
         const newLlmId = response.data.data.id;
         setCreatedLlmId(newLlmId);
-        setSnackbar({
-          open: true,
-          message: 'LLM created successfully',
-          severity: 'success'
-        });
       }
       
       setLlmData(formData);
       goToNextStep();
     } catch (error) {
-      console.error('Error creating/updating LLM:', error);
       setSnackbar({
         open: true,
         message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.message || 'Unknown error'}`,
@@ -151,9 +128,7 @@ const ConfigureAIStep = () => {
   };
   
   const handleNextClick = () => {
-    if (validateForm()) {
-      createOrUpdateLLM();
-    }
+    createOrUpdateLLM();
   };
 
   const handleChange = (e) => {
@@ -162,7 +137,6 @@ const ConfigureAIStep = () => {
       ...prev,
       [name]: value
     }));
-    // Form validation is now handled by the useEffect hook
   };
 
   const privacyLevelOptions = [
@@ -201,12 +175,37 @@ const ConfigureAIStep = () => {
 
   return (
     <Box sx={{ width: '100%', pt: 2 }}>
-      <Box sx={{ textAlign: 'center', mb: 4, px: 10 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+      <Box sx={{
+        textAlign: 'center',
+        mb: 4,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10
+        }
+      }}>
+        <Typography
+          variant="bodyLargeDefault"
+          color="text.defaultSubdued"
+          sx={{
+            fontSize: {
+              xs: '0.875rem',
+              sm: 'inherit'
+            }
+          }}
+        >
           Let's start building your AI infrastructure by setting up the Large Language Model provider you want your developers to access. Set a name for the LLM, select the LLM provider and specify the privacy level.
         </Typography>
       </Box>
-      <Box sx={{ mt: 3, px: 25 }}>
+      <Box sx={{
+        mt: 3,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10,
+          lg: 25
+        }
+      }}>
         <Box sx={{ mb: 3 }}>
           <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
             Name*
@@ -216,8 +215,6 @@ const ConfigureAIStep = () => {
             name="name"
             value={formData.name}
             onChange={handleChange}
-            error={!!errors.name}
-            helperText={errors.name}
             required
             autoComplete="off"
           />
@@ -232,9 +229,26 @@ const ConfigureAIStep = () => {
             value={formData.llmProvider}
             onChange={handleChange}
             options={vendors}
-            error={!!errors.llmProvider}
-            helperText={errors.llmProvider}
             required
+            renderOption={(option) => (
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <img
+                  src={getVendorLogo(option.value)}
+                  alt={option.label}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    marginRight: 8,
+                    objectFit: "contain",
+                  }}
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = "/images/placeholder-logo.png";
+                  }}
+                />
+                {option.label}
+              </Box>
+            )}
           />
           <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
             <Icon 
@@ -252,17 +266,37 @@ const ConfigureAIStep = () => {
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: 2,
+            mb: 4
+          }}
+          autoComplete="off"
+          data-form-type="other"
+        >
           <Box sx={{ flex: 1 }}>
             <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
               API Endpoint
             </Typography>
             <StyledTextField
               fullWidth
-              name="apiEndpoint"
+              name="api_endpoint_field"
               value={formData.apiEndpoint}
-              onChange={handleChange}
-              autoComplete="off"
+              onChange={(e) => {
+                const { value } = e.target;
+                setFormData(prev => ({
+                  ...prev,
+                  apiEndpoint: value
+                }));
+              }}
+              autoComplete="new-password"
+              inputProps={{
+                autoComplete: "new-password",
+                "data-form-type": "other",
+                "data-lpignore": "true"
+              }}
             />
           </Box>
 
@@ -272,11 +306,22 @@ const ConfigureAIStep = () => {
             </Typography>
             <StyledTextField
               fullWidth
-              name="apiKey"
+              name="api_key_field"
               type="password"
               value={formData.apiKey}
-              onChange={handleChange}
-              autoComplete="off"
+              onChange={(e) => {
+                const { value } = e.target;
+                setFormData(prev => ({
+                  ...prev,
+                  apiKey: value
+                }));
+              }}
+              autoComplete="new-password"
+              inputProps={{
+                autoComplete: "new-password",
+                "data-form-type": "other",
+                "data-lpignore": "true"
+              }}
             />
           </Box>
         </Box>
@@ -287,7 +332,16 @@ const ConfigureAIStep = () => {
           <Typography variant="bodyLargeBold" color="text.primary">
             Privacy Level
           </Typography>
-          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+          <Typography
+            variant="bodyMediumDefault"
+            color="text.defaultSubdued"
+            sx={{
+              fontSize: {
+                xs: '0.75rem',
+                sm: 'inherit'
+              }
+            }}
+          >
             Privacy levels control LLM access based on data sensitivity. Lower-level models can't access higher-security data or tools. Set the privacy level to limit the highest data sensitivity this model can access.
           </Typography>
           <CustomSelect
@@ -300,7 +354,16 @@ const ConfigureAIStep = () => {
                 <Box sx={{ mr: 2 }}>
                   <CustomSelectBadge config={privacyBadgeConfigs[option.value]} />
                 </Box>
-                <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+                <Typography
+                  variant="bodyLargeDefault"
+                  color="text.defaultSubdued"
+                  sx={{
+                    fontSize: {
+                      xs: '0.75rem',
+                      sm: 'inherit'
+                    }
+                  }}
+                >
                   {option.description}
                 </Typography>
               </Box>
@@ -313,8 +376,17 @@ const ConfigureAIStep = () => {
         />
       </Box>
       
-      <ActionsContainer sx={{ justifyContent: 'space-between'}}>
-        <SecondaryLinkButton onClick={goToPreviousStep}>
+      <ActionsContainer sx={{
+        justifyContent: 'space-between',
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: { xs: 2, sm: 0 },
+        width: '100%',
+        padding: { xs: 2, sm: 0 },
+        alignItems: 'center'
+      }}>
+        <SecondaryLinkButton
+          onClick={skipQuickStart}
+        >
           Skip quick start
         </SecondaryLinkButton>
         <PrimaryButton

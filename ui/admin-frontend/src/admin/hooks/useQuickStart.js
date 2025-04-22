@@ -1,26 +1,34 @@
 import { useState, useEffect, useCallback } from 'react';
 import useUserEntitlements from './useUserEntitlements';
-import useLLMs from './useLLMs';
+import apiClient from '../utils/apiClient';
 
 const useQuickStart = () => {
   const [showQuickStart, setShowQuickStart] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const { 
-    userName, 
-    fetchUserEntitlements, 
-    error: entitlementsError 
+  // Create a wrapped version of setShowQuickStart that logs when it's called
+  const setShowQuickStartWithLogging = (value) => {
+    console.log('setShowQuickStart called with value:', value);
+    setShowQuickStart(value);
+  };
+
+  const {
+    userName,
+    fetchUserEntitlements,
+    error: entitlementsError
   } = useUserEntitlements(true);
-  
-  const { 
-    hasLLMs, 
-    fetchLLMs, 
-    error: llmsError 
-  } = useLLMs({ 
-    skipInitialFetch: true,
-    checkExistenceOnly: true 
-  });
+
+  const fetchAppsCount = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/apps/count');
+      const count = response.data.count || 0;
+      return count;
+    } catch (error) {
+      console.error('Error fetching apps count:', error);
+      return 0;
+    }
+  }, []);
 
   const fetchQuickStartData = useCallback(async () => {
     setLoading(true);
@@ -28,11 +36,11 @@ const useQuickStart = () => {
     
     return Promise.all([
       fetchUserEntitlements(),
-      fetchLLMs()
+      fetchAppsCount()
     ])
-      .then(() => {
-        if (!hasLLMs) {
-          setShowQuickStart(true);
+      .then(([_, appsCount]) => {
+        if (appsCount === 0) {
+          setShowQuickStartWithLogging(true);
         }
       })
       .catch(error => {
@@ -42,25 +50,25 @@ const useQuickStart = () => {
       .finally(() => {
         setLoading(false);
       });
-  }, [fetchUserEntitlements, fetchLLMs]);
+  }, [fetchUserEntitlements, fetchAppsCount]);
 
   useEffect(() => {
     fetchQuickStartData();
   }, [fetchQuickStartData]);
 
   const handleQuickStartComplete = () => {
-    setShowQuickStart(false);
+    setShowQuickStartWithLogging(false);
   };
 
   const handleQuickStartSkip = () => {
-    setShowQuickStart(false);
+    setShowQuickStartWithLogging(false);
   };
 
-  const combinedError = entitlementsError || llmsError || error;
+  const combinedError = entitlementsError || error;
 
   return {
     showQuickStart,
-    setShowQuickStart,
+    setShowQuickStart: setShowQuickStartWithLogging, // This will be used by the button in Overview.js
     userName,
     loading,
     error: combinedError,

@@ -150,22 +150,35 @@ describe('Overview Component', () => {
   });
 
   test('renders welcome message with placeholder when user name is not available', () => {
-    // Override the default mock for this specific test
-    useOverviewData.mockReturnValueOnce({
-      userEntitlements: {},
-      userName: null,
-      features: {
-        feature_chat: false,
-        feature_gateway: false,
-        feature_portal: false,
-      },
-      hasLLMs: false,
-      loading: false,
-      error: null,
-      getDocsLink: jest.fn().mockReturnValue('https://docs.example.com/mock-link'),
-    });
-
-    renderWithProviders(<Overview />);
+    // We need to modify the test to properly test the placeholder scenario
+    
+    // First, let's modify the renderWithProviders function to not set a default userName
+    const renderWithoutUserName = () => {
+      // Override the default mock for this specific test
+      useOverviewData.mockReturnValue({
+        userEntitlements: {},
+        userName: null, // This is the key - userName is null
+        features: {
+          feature_chat: false,
+          feature_gateway: false,
+          feature_portal: false,
+        },
+        hasLLMs: false,
+        loading: false,
+        error: null,
+        getDocsLink: jest.fn().mockReturnValue('https://docs.example.com/mock-link'),
+      });
+      
+      return render(
+        <ThemeProvider theme={mockTheme}>
+          <MemoryRouter>
+            <Overview />
+          </MemoryRouter>
+        </ThemeProvider>
+      );
+    };
+    
+    renderWithoutUserName();
     
     expect(screen.getByText(/Hi \[user name\], welcome to Tyk AI Studio!/i)).toBeInTheDocument();
   });

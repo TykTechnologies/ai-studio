@@ -110,3 +110,109 @@ func TestUserEndpoints(t *testing.T) {
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/users/%s", userID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
+
+func TestUserEmailUniqueness(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	createUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			}{
+				Email:    "test@example.com",
+				Name:     "Test User",
+				Password: "password123",
+				IsAdmin:  true,
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var firstUserResponse map[string]UserResponse
+	err := json.Unmarshal(w.Body.Bytes(), &firstUserResponse)
+	assert.NoError(t, err)
+
+	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var errorResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
+	assert.NoError(t, err)
+
+	errors := errorResponse["errors"].([]interface{})
+	assert.Equal(t, "Bad Request", errors[0].(map[string]interface{})["title"])
+	assert.Equal(t, "Email is already in use", errors[0].(map[string]interface{})["detail"])
+
+	createUserInput.Data.Attributes.Email = "TEST@example.com"
+	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	createUserInput.Data.Attributes.Email = "another@example.com"
+	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var secondUserResponse map[string]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &secondUserResponse)
+	assert.NoError(t, err)
+
+	updateUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			}{
+				Email:   "test@example.com",
+				Name:    "Updated User",
+				IsAdmin: true,
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", secondUserResponse["data"].ID), updateUserInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}

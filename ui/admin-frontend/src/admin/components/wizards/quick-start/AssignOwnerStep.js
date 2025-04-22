@@ -9,7 +9,8 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  FormControl
+  FormControl,
+  Button,
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
@@ -18,12 +19,14 @@ import { ActionsContainer } from './styles';
 import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
 import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
+import { validateEmail, validatePassword } from './utils';
 
 const AssignOwnerStep = ({ currentUser }) => {
   const {
     setStepValid,
     goToNextStep,
     goToPreviousStep,
+    skipQuickStart,
     ownerData,
     setOwnerData,
     createdOwnerId,
@@ -35,11 +38,17 @@ const AssignOwnerStep = ({ currentUser }) => {
     name: '',
     email: '',
     password: '',
-    role: 'chatUser'
+    role: 'developer'
   });
   const [errors, setErrors] = useState({});
   const [isFormValid, setIsFormValid] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passwordCriteria, setPasswordCriteria] = useState({
+    length: false,
+    number: false,
+    special: false,
+    uppercase: false,
+  });
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -88,6 +97,15 @@ const AssignOwnerStep = ({ currentUser }) => {
   useEffect(() => {
     checkRequiredFields();
   }, [formData, ownerType, checkRequiredFields]);
+
+  useEffect(() => {
+    setPasswordCriteria({
+      length: formData.password.length >= 8,
+      number: /\d/.test(formData.password),
+      special: /[!@#$%^&*(),.?":{}|<>_+=-~]/.test(formData.password),
+      uppercase: /[A-Z]/.test(formData.password),
+    });
+  }, [formData.password]);
   
   useEffect(() => {
     if (ownerData && Object.keys(ownerData).length > 0) {
@@ -104,12 +122,16 @@ const AssignOwnerStep = ({ currentUser }) => {
     }
 
     const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = "Name is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "Email is invalid";
-    if (!formData.password.trim()) newErrors.password = "Password is required";
-    else if (formData.password.length < 8) newErrors.password = "Password must be at least 8 characters";
-    if (!formData.role.trim()) newErrors.role = "Role is required";
+    
+    const emailError = validateEmail(formData.email);
+    if (emailError) {
+      newErrors.email = emailError;
+    }
+    
+    const passwordError = validatePassword(formData.password, passwordCriteria);
+    if (passwordError) {
+      newErrors.password = passwordError;
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -149,22 +171,12 @@ const AssignOwnerStep = ({ currentUser }) => {
       
       if (createdOwnerId) {
         if (JSON.stringify(formData) !== JSON.stringify(ownerData.formData)) {
-          response = await apiClient.patch(`/users/${createdOwnerId}`, userPayload);
-          setSnackbar({
-            open: true,
-            message: 'User updated successfully',
-            severity: 'success'
-          });
+          await apiClient.patch(`/users/${createdOwnerId}`, userPayload);
         }
       } else {
         response = await apiClient.post('/users', userPayload);
         const newUserId = response.data.data.id;
         setCreatedOwnerId(newUserId);
-        setSnackbar({
-          open: true,
-          message: 'User created successfully',
-          severity: 'success'
-        });
       }
       
       setOwnerData({
@@ -174,7 +186,6 @@ const AssignOwnerStep = ({ currentUser }) => {
       });
       goToNextStep();
     } catch (error) {
-      console.error('Error creating/updating user:', error);
       setSnackbar({
         open: true,
         message: `Failed to ${createdOwnerId ? 'update' : 'create'} user: ${error.message || 'Unknown error'}`,
@@ -197,6 +208,13 @@ const AssignOwnerStep = ({ currentUser }) => {
       ...prev,
       [name]: value
     }));
+    
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: undefined
+      }));
+    }
   };
 
   const handleOwnerTypeChange = (e) => {
@@ -211,12 +229,37 @@ const AssignOwnerStep = ({ currentUser }) => {
 
   return (
     <Box sx={{ width: '100%', pt: 2 }}>
-      <Box sx={{ textAlign: 'center', mb: 4, px: 10 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-        Now let’s choose who will own this app to directly access the LLM provider. You can assign yourself as the app owner or add a new user.
+      <Box sx={{
+        textAlign: 'center',
+        mb: 4,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10
+        }
+      }}>
+        <Typography
+          variant="bodyLargeDefault"
+          color="text.defaultSubdued"
+          sx={{
+            fontSize: {
+              xs: '0.875rem',
+              sm: 'inherit'
+            }
+          }}
+        >
+        Now let's choose who will own this app to directly access the LLM provider. You can assign yourself as the app owner or add a new user.
         </Typography>
       </Box>
-      <Box sx={{ my: 3, px: 25 }}>
+      <Box sx={{
+        my: 3,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10,
+          lg: 25
+        }
+      }}>
         <FormControl component="fieldset" sx={{ width: '100%', mb: 2 }}>
           <RadioGroup
             name="ownerType"
@@ -271,9 +314,18 @@ const AssignOwnerStep = ({ currentUser }) => {
               />
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+            <Box sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 2,
+              mb: 4
+            }}>
                 <Box sx={{ flex: 1 }}>
-                <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+                <Typography
+                  variant="bodyLargeBold"
+                  color="text.primary"
+                  sx={{ mb: 1 }}
+                >
                     Email*
                 </Typography>
                 <StyledTextField
@@ -290,7 +342,11 @@ const AssignOwnerStep = ({ currentUser }) => {
                 </Box>
     
                 <Box sx={{ flex: 1 }}>
-                <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+                <Typography
+                  variant="bodyLargeBold"
+                  color="text.primary"
+                  sx={{ mb: 1 }}
+                >
                     Password*
                 </Typography>
                 <StyledTextField
@@ -324,7 +380,16 @@ const AssignOwnerStep = ({ currentUser }) => {
                     <Box sx={{ mr: 2 }}>
                       <CustomSelectBadge config={roleConfigs[option.value]} />
                     </Box>
-                    <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+                    <Typography
+                      variant="bodyLargeDefault"
+                      color="text.defaultSubdued"
+                      sx={{
+                        fontSize: {
+                          xs: '0.75rem',
+                          sm: 'inherit'
+                        }
+                      }}
+                    >
                       {option.description}
                     </Typography>
                   </Box>
@@ -335,16 +400,46 @@ const AssignOwnerStep = ({ currentUser }) => {
         )}
       </Box>
       
-      <ActionsContainer sx={{ justifyContent: 'space-between'}}>
-        <SecondaryLinkButton onClick={goToPreviousStep}>
-          Back
-        </SecondaryLinkButton>
-        <PrimaryButton
-          onClick={handleNextClick}
-          disabled={!isFormValid || loading}
+      <ActionsContainer sx={{
+        flexWrap: 'wrap',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 2,
+        width: '100%',
+        padding: { xs: 2, sm: 0 },
+        mt: 1
+      }}>
+        <SecondaryLinkButton
+          onClick={skipQuickStart}
+          sx={{
+            minWidth: '120px',
+            flex: { xs: '1 1 100%', sm: '0 1 auto' }
+          }}
         >
-          {loading ? <CircularProgress size={24} color="inherit" /> : 'Continue'}
-        </PrimaryButton>
+          Skip quick start
+        </SecondaryLinkButton>
+        
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          flex: { xs: '1 1 100%', sm: '0 1 auto' },
+          justifyContent: { xs: 'space-between', sm: 'flex-end' }
+        }}>
+          <Button
+            onClick={goToPreviousStep}
+            sx={{ minWidth: '80px' }}
+          >
+            Back
+          </Button>
+          <PrimaryButton
+            onClick={handleNextClick}
+            disabled={!isFormValid || loading}
+            sx={{ minWidth: '100px' }}
+          >
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Continue'}
+          </PrimaryButton>
+        </Box>
       </ActionsContainer>
       
       <Snackbar

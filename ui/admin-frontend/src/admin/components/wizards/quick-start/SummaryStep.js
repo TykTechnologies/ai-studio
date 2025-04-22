@@ -6,7 +6,8 @@ import {
   Collapse,
   IconButton,
   Paper,
-  Stack
+  Stack,
+  Button
 } from '@mui/material';
 import { useQuickStart } from './QuickStartContext';
 import { ActionsContainer } from './styles';
@@ -25,6 +26,7 @@ const SummaryStep = () => {
   const {
     goToNextStep,
     goToPreviousStep,
+    skipQuickStart,
     llmData,
     ownerData,
     appData,
@@ -57,21 +59,51 @@ const SummaryStep = () => {
 
   return (
     <Box sx={{ width: '100%', pt: 2, position: 'relative' }}>
-      <Box sx={{ textAlign: 'center', mb: 4, px: 10 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+      <Box sx={{
+        textAlign: 'center',
+        mb: 4,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10
+        }
+      }}>
+        <Typography
+          variant="bodyLargeDefault"
+          color="text.defaultSubdued"
+          sx={{
+            fontSize: {
+              xs: '0.95rem',
+              sm: 'inherit'
+            }
+          }}
+        >
           Your app has been created. Please review the details below and copy the access information and credentials to interact with the LLM in your app.
         </Typography>
       </Box>
       
-      <Box sx={{ mt: 3, px: 25 }}>
+      <Box sx={{
+        mt: 3,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10,
+          lg: 25
+        }
+      }}>
         <Stack spacing={0}>
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="end" mb={1.5}>
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Stack
+            direction="row"
+            alignItems={{ xs: "center", sm: "end" }}
+            mb={1.5}
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
                 LLM provider
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
+            <Box sx={{ width: '75%' }}>
               <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
                 {llmData.llmProvider || 'Not specified'}
               </Typography>
@@ -80,13 +112,18 @@ const SummaryStep = () => {
           
           <Divider sx={{ borderColor: 'border.neutralDefault' }} />
           
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="end" my={1.5}>
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Stack
+            direction="row"
+            alignItems={{ xs: "center", sm: "end" }}
+            my={1.5}
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
                 Owner
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
+            <Box sx={{ width: '75%' }}>
               <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
                 {getOwnerName(ownerData)}
               </Typography>
@@ -95,39 +132,55 @@ const SummaryStep = () => {
           
           <Divider sx={{ borderColor: 'border.neutralDefault' }} />
           
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="end" mt={1.5} mb={0.5}>
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Stack
+            direction="row"
+            alignItems={{ xs: "center", sm: "end" }}
+            mt={1.5}
+            mb={1}
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
                 App name
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
+            <Box sx={{ width: '75%' }}>
               <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
                 {appData.name || 'Not specified'}
               </Typography>
             </Box>
           </Stack>
           
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="end" mb={0.5}>
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Stack
+            direction="row"
+            alignItems={{ xs: "center", sm: "end" }}
+            mb={1}
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
                 Description
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
+            <Box sx={{ width: '75%' }}>
               <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
                 {appData.description || 'No description'}
               </Typography>
             </Box>
           </Stack>
           
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="end" mb={1.5}>
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Stack
+            direction="row"
+            alignItems={{ xs: "center", sm: "end" }}
+            mb={1.5}
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
                 Budget limit
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
+            <Box sx={{ width: '75%' }}>
               <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
                 {getBudgetLimitText(appData)}
               </Typography>
@@ -140,14 +193,23 @@ const SummaryStep = () => {
             Credentials
           </Typography>
           
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center" mt={0.5}>
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            mt={0.75}
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
                 Key ID
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
-              <Box sx={{ display: "flex", alignItems: "center" }}>
+            <Box sx={{ width: '75%' }}>
+              <Box sx={{
+                display: "flex",
+                alignItems: "center",
+                mt: { xs: 0.5, sm: 0 }
+              }}>
                 <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 0.5 }}>
                   {credentialData.keyID || 'Not available'}
                 </Typography>
@@ -160,13 +222,14 @@ const SummaryStep = () => {
                     <ContentCopyIcon fontSize="small" />
                     {copyTooltips.keyID && (
                       <Box sx={{ 
-                        position: 'absolute', 
-                        top: -30, 
-                        left: -10, 
-                        bgcolor: 'background.paper', 
-                        p: 0.5, 
+                        position: 'absolute',
+                        top: { xs: -25, sm: -30 },
+                        left: { xs: -5, sm: -10 },
+                        bgcolor: 'background.paper',
+                        p: 0.5,
                         borderRadius: 1,
-                        boxShadow: 1
+                        boxShadow: 1,
+                        zIndex: 10
                       }}>
                         <Typography variant="caption">Copied!</Typography>
                       </Box>
@@ -177,14 +240,31 @@ const SummaryStep = () => {
             </Box>
           </Stack>
           
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center">
-            <Box sx={{ width: { xs: '100%', md: '25%' } }}>
-              <Typography variant="bodyLargeBold" color="text.primary">
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={0}
+          >
+            <Box sx={{ width: '25%', minWidth: '100px' }}>
+              <Typography
+                variant="bodyLargeBold"
+                color="text.primary"
+                sx={{
+                  fontSize: {
+                    xs: '1rem',
+                    sm: 'inherit'
+                  }
+                }}
+              >
                 Secret
               </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '75%' } }}>
-              <Box sx={{ display: "flex", alignItems: "center" }}>
+            <Box sx={{ width: '75%' }}>
+              <Box sx={{
+                display: "flex",
+                alignItems: "center",
+                mt: { xs: 0.5, sm: 0 }
+              }}>
                 <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 1 }}>
                   {credentialData.secret ? '••••••••••••••••' : 'Not available'}
                 </Typography>
@@ -197,13 +277,14 @@ const SummaryStep = () => {
                     <ContentCopyIcon fontSize="small" />
                     {copyTooltips.secret && (
                       <Box sx={{ 
-                        position: 'absolute', 
-                        top: -30, 
-                        left: -10, 
-                        bgcolor: 'background.paper', 
-                        p: 0.5, 
+                        position: 'absolute',
+                        top: { xs: -25, sm: -30 },
+                        left: { xs: -5, sm: -10 },
+                        bgcolor: 'background.paper',
+                        p: 0.5,
                         borderRadius: 1,
-                        boxShadow: 1
+                        boxShadow: 1,
+                        zIndex: 10
                       }}>
                         <Typography variant="caption">Copied!</Typography>
                       </Box>
@@ -235,18 +316,60 @@ const SummaryStep = () => {
             <Typography variant="bodyLargeMedium" color="text.primary" sx={{ mb: 1 }}>
               SDK-Specific Endpoints
             </Typography>
-            <Typography variant="bodySmallDefault" color="text.defaultSubdued" sx={{ mb: 2, display: 'block' }}>
+            <Typography
+              variant="bodySmallDefault"
+              color="text.defaultSubdued"
+              sx={{
+                mb: 2,
+                display: 'block',
+                fontSize: {
+                  xs: '0.85rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
               Use these URLs in your app with the right vendor SDK or API.
             </Typography>
           </Box>
           
           <Box sx={{ mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Typography variant="bodyLargeMedium" color="text.defaultSubdued" sx={{ width: 120 }}>
+            <Box sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              mb: 1
+            }}>
+              <Typography
+                variant="bodyLargeMedium"
+                color="text.defaultSubdued"
+                sx={{
+                  width: 120,
+                  minWidth: '80px',
+                  fontSize: {
+                    xs: '0.9rem',
+                    sm: 'inherit'
+                  }
+                }}
+              >
                 REST API:
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 1 }}>
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flex: 1
+              }}>
+                <Typography
+                  variant="bodyLargeDefault"
+                  color="text.defaultSubdued"
+                  sx={{
+                    mr: 1,
+                    fontSize: {
+                      xs: '0.9rem',
+                      sm: 'inherit'
+                    },
+                    wordBreak: 'break-all'
+                  }}
+                >
                   {generateEndpointUrl('/llm/rest/', llmData.llmProvider || 'default')}
                 </Typography>
                 <IconButton 
@@ -257,13 +380,14 @@ const SummaryStep = () => {
                   <ContentCopyIcon fontSize="small" />
                   {copyTooltips.restAPI && (
                     <Box sx={{ 
-                      position: 'absolute', 
-                      top: -30, 
-                      left: -10, 
-                      bgcolor: 'background.paper', 
-                      p: 0.5, 
+                      position: 'absolute',
+                      top: { xs: -25, sm: -30 },
+                      left: { xs: -5, sm: -10 },
+                      bgcolor: 'background.paper',
+                      p: 0.5,
                       borderRadius: 1,
-                      boxShadow: 1
+                      boxShadow: 1,
+                      zIndex: 10
                     }}>
                       <Typography variant="caption">Copied!</Typography>
                     </Box>
@@ -272,12 +396,42 @@ const SummaryStep = () => {
               </Box>
             </Box>
             
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Typography variant="bodyLargeMedium" color="text.defaultSubdued" sx={{ width: 120 }}>
+            <Box sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { xs: 'flex-start', sm: 'center' }
+            }}>
+              <Typography
+                variant="bodyLargeMedium"
+                color="text.defaultSubdued"
+                sx={{
+                  width: 120,
+                  minWidth: '80px',
+                  fontSize: {
+                    xs: '0.9rem',
+                    sm: 'inherit'
+                  }
+                }}
+              >
                 STREAM API:
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 1 }}>
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flex: 1
+              }}>
+                <Typography
+                  variant="bodyLargeDefault"
+                  color="text.defaultSubdued"
+                  sx={{
+                    mr: 1,
+                    fontSize: {
+                      xs: '0.9rem',
+                      sm: 'inherit'
+                    },
+                    wordBreak: 'break-all'
+                  }}
+                >
                   {generateEndpointUrl('/llm/stream/', llmData.llmProvider || 'default')}
                 </Typography>
                 <IconButton 
@@ -288,13 +442,14 @@ const SummaryStep = () => {
                   <ContentCopyIcon fontSize="small" />
                   {copyTooltips.streamAPI && (
                     <Box sx={{ 
-                      position: 'absolute', 
-                      top: -30, 
-                      left: -10, 
-                      bgcolor: 'background.paper', 
-                      p: 0.5, 
+                      position: 'absolute',
+                      top: { xs: -25, sm: -30 },
+                      left: { xs: -5, sm: -10 },
+                      bgcolor: 'background.paper',
+                      p: 0.5,
                       borderRadius: 1,
-                      boxShadow: 1
+                      boxShadow: 1,
+                      zIndex: 10
                     }}>
                       <Typography variant="caption">Copied!</Typography>
                     </Box>
@@ -305,20 +460,72 @@ const SummaryStep = () => {
           </Box>
           
           <Box>
-            <Typography variant="bodyLargeMedium" color="text.primary" sx={{ mb: 1, mt: 3 }}>
+            <Typography
+              variant="bodyLargeMedium"
+              color="text.primary"
+              sx={{
+                mb: 1,
+                mt: 3,
+                fontSize: {
+                  xs: '0.95rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
               OpenAI compatible Endpoint
             </Typography>
-            <Typography variant="bodySmallDefault" color="text.defaultSubdued" sx={{ mb: 2, display: 'block' }}>
+            <Typography
+              variant="bodySmallDefault"
+              color="text.defaultSubdued"
+              sx={{
+                mb: 2,
+                display: 'block',
+                fontSize: {
+                  xs: '0.85rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
               The Unified Endpoint is an OpenAI-compatible endpoint that converts your API calls for each vendor. It doesn't support streams.
             </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="bodyLargeMedium" color="text.defaultSubdued" sx={{ width: 120 }}>
+          <Box sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'flex-start', sm: 'center' }
+          }}>
+            <Typography
+              variant="bodyLargeMedium"
+              color="text.defaultSubdued"
+              sx={{
+                width: 120,
+                minWidth: '80px',
+                fontSize: {
+                  xs: '1rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
               Unified API:
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-              <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 1 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              flex: 1
+            }}>
+              <Typography
+                variant="bodyLargeDefault"
+                color="text.defaultSubdued"
+                sx={{
+                  mr: 1,
+                  fontSize: {
+                    xs: '0.9rem',
+                    sm: 'inherit'
+                  },
+                  wordBreak: 'break-all'
+                }}
+              >
                 {`${generateEndpointUrl('/ai/', llmData.llmProvider || 'default')}v1`}
               </Typography>
               <IconButton 
@@ -329,13 +536,14 @@ const SummaryStep = () => {
                 <ContentCopyIcon fontSize="small" />
                 {copyTooltips.unifiedAPI && (
                   <Box sx={{ 
-                    position: 'absolute', 
-                    top: -30, 
-                    left: -10, 
-                    bgcolor: 'background.paper', 
-                    p: 0.5, 
+                    position: 'absolute',
+                    top: { xs: -25, sm: -30 },
+                    left: { xs: -5, sm: -10 },
+                    bgcolor: 'background.paper',
+                    p: 0.5,
                     borderRadius: 1,
-                    boxShadow: 1
+                    boxShadow: 1,
+                    zIndex: 10
                   }}>
                     <Typography variant="caption">Copied!</Typography>
                   </Box>
@@ -346,16 +554,21 @@ const SummaryStep = () => {
         </Box>
         
         <Box sx={{ mt: 1 }}>
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
               cursor: 'pointer',
-              mb: 1
+              mb: 1,
+              flexDirection: 'row'
             }}
             onClick={toggleCurlExpanded}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mr: 1
+            }}>
               {curlExpanded ? (
                 <KeyboardArrowUpIcon
                   sx={{
@@ -374,7 +587,16 @@ const SummaryStep = () => {
                 />
               )}
             </Box>
-            <Typography variant="bodyLargeBold" color="text.primary">
+            <Typography
+              variant="bodyLargeBold"
+              color="text.primary"
+              sx={{
+                fontSize: {
+                  xs: '1rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
               Curl example
             </Typography>
             <IconButton 
@@ -383,18 +605,22 @@ const SummaryStep = () => {
                 e.stopPropagation();
                 copyToClipboard(getCurlExample(llmData.llmProvider), 'curl');
               }}
-              sx={{ ml: 1, position: 'relative' }}
+              sx={{
+                ml: 1,
+                position: 'relative'
+              }}
             >
               <ContentCopyIcon fontSize="small" />
               {copyTooltips.curl && (
                 <Box sx={{ 
-                  position: 'absolute', 
-                  top: -30, 
-                  left: -10, 
-                  bgcolor: 'background.paper', 
-                  p: 0.5, 
+                  position: 'absolute',
+                  top: { xs: -25, sm: -30 },
+                  left: { xs: -5, sm: -10 },
+                  bgcolor: 'background.paper',
+                  p: 0.5,
                   borderRadius: 1,
-                  boxShadow: 1
+                  boxShadow: 1,
+                  zIndex: 10
                 }}>
                   <Typography variant="caption">Copied!</Typography>
                 </Box>
@@ -406,7 +632,7 @@ const SummaryStep = () => {
             <Paper 
               elevation={0} 
               sx={{ 
-                p: 2, 
+                p: { xs: 1.5, sm: 2 },
                 bgcolor: 'background.paper',
                 border: '1px solid',
                 borderColor: 'border.neutralDefault',
@@ -418,7 +644,7 @@ const SummaryStep = () => {
                 component="pre" 
                 sx={{ 
                   fontFamily: 'Courier New',
-                  fontSize: '12px',
+                  fontSize: { xs: '13px', sm: '12px' },
                   fontWeight: 400,
                   lineHeight: '100%',
                   color: 'text.primary',
@@ -433,13 +659,44 @@ const SummaryStep = () => {
         </Box>
       </Box>
       
-      <ActionsContainer sx={{ justifyContent: 'space-between'}}>
-        <SecondaryLinkButton onClick={goToPreviousStep}>
-          Back
+      <ActionsContainer sx={{
+        flexWrap: 'wrap',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 2,
+        width: '100%',
+        padding: { xs: 2, sm: 0 },
+        mt: 2
+      }}>
+        <SecondaryLinkButton
+          onClick={skipQuickStart}
+          sx={{
+            minWidth: '120px',
+            flex: { xs: '1 1 100%', sm: '0 1 auto' }
+          }}
+        >
+          Skip quick start
         </SecondaryLinkButton>
-        <PrimaryButton onClick={goToNextStep}>
-          Finish
-        </PrimaryButton>
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          flex: { xs: '1 1 100%', sm: '0 1 auto' },
+          justifyContent: { xs: 'space-between', sm: 'flex-end' }
+        }}>
+          <Button
+            onClick={goToPreviousStep}
+            sx={{ minWidth: '80px' }}
+          >
+            Back
+          </Button>
+          <PrimaryButton
+            onClick={goToNextStep}
+            sx={{ minWidth: '100px' }}
+          >
+            Finish
+          </PrimaryButton>
+        </Box>
       </ActionsContainer>
     </Box>
   );

@@ -10,31 +10,40 @@ const CustomNote = ({ title, message }) => {
     <Box
       sx={{
         mb: 3,
-        p: 2,
+        p: { xs: 1.5, sm: 2 },
         border: '2px solid',
         borderColor: 'border.informativeDefaultSubdued',
         bgcolor: 'background.surfaceInformativeDefault',
         borderRadius: 1,
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 1,
+        gap: { xs: 0.5, sm: 1 },
       }}
     >
       <Icon
         name="circle-info"
         sx={{
-          width: 16,
-          height: 16,
+          width: { xs: 14, sm: 16 },
+          height: { xs: 14, sm: 16 },
           mt: 0.3,
           color: theme => theme.palette.text.linkDefault
         }}
       />
       
-      <Box sx={{ display: 'flex', flexDirection: 'column', px: 1, py: 0 }}>
+      <Box sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        px: { xs: 0.5, sm: 1 },
+        py: 0
+      }}>
         {title && (
           <Typography
             variant="bodyLargeBold"
-            sx={{ color: 'text.linkDefault', mb: 0.5 }}
+            sx={{
+              color: 'text.linkDefault',
+              mb: 0.5,
+              fontSize: { xs: '0.875rem', sm: 'inherit' }
+            }}
           >
             {title}
           </Typography>
@@ -42,7 +51,10 @@ const CustomNote = ({ title, message }) => {
         
         <Typography
           variant="bodyLargeDefault"
-          sx={{ color: 'text.defaultSubdued' }}
+          sx={{
+            color: 'text.defaultSubdued',
+            fontSize: { xs: '0.875rem', sm: 'inherit' }
+          }}
         >
           {message}
         </Typography>

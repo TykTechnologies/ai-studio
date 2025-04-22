@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography, Box } from '@mui/material';
+import { Typography, Box, useMediaQuery, useTheme } from '@mui/material';
 import { useQuickStart } from './QuickStartContext';
 import Icon from '../../../../components/common/Icon';
 import {
@@ -12,6 +12,9 @@ import {
 
 const QuickStartStepProgress = () => {
   const { steps, activeStep, isLastStep } = useQuickStart();
+  const theme = useTheme();
+  const isMobile = useMediaQuery('(max-width:600px)');
+  const isTablet = useMediaQuery('(max-width:900px)');
 
   if (isLastStep) return null;
 
@@ -24,11 +27,11 @@ const QuickStartStepProgress = () => {
   };
   
   // Calculate the width for the active step indicator (current step only)
-  const activeStepWidth = currentStepIndex >= 0 ? 
+  const activeStepWidth = currentStepIndex >= 0 ?
     `calc(${100 / progressSteps.length}%)` : '0';
     
   // Calculate the width for completed steps indicator
-  const completedStepsWidth = currentStepIndex > 0 ? 
+  const completedStepsWidth = currentStepIndex > 0 ?
     `calc(${currentStepIndex * (100 / progressSteps.length)}%)` : '0';
 
   return (
@@ -74,28 +77,36 @@ const QuickStartStepProgress = () => {
           return (
             <StepContainer key={step.id} width={stepWidth}>
               {completed ? (
-                <Icon 
-                  name="circle-check" 
-                  sx={{ 
-                    width: 24, 
-                    height: 24, 
+                <Icon
+                  name="circle-check"
+                  sx={{
+                    width: isMobile ? 20 : isTablet ? 22 : 24,
+                    height: isMobile ? 20 : isTablet ? 22 : 24,
                     color: theme => theme.palette.background.iconSuccessDefault,
-                    marginRight: theme => theme.spacing(1)
-                  }} 
+                    marginRight: theme => theme.spacing(isMobile ? 0.5 : isTablet ? 0.75 : 1)
+                  }}
                 />
               ) : (
                 <StepNumber active={isActive} completed={completed}>
-                  <Typography 
-                    variant="bodyMediumMedium" 
+                  <Typography
+                    variant="bodyMediumMedium"
                     color={isActive ? "text.primary" : "text.defaultSubdued"}
+                    sx={{
+                      fontSize: isMobile ? '0.75rem' : isTablet ? '0.85rem' : 'inherit',
+                      lineHeight: 1
+                    }}
                   >
                     {index + 1}
                   </Typography>
                 </StepNumber>
               )}
-              <Typography 
+              <Typography
                 variant={isActive ? "bodyLargeBold" : "bodyLargeDefault"}
                 color={isActive ? "text.primary" : "text.neutralDisabled"}
+                sx={{
+                  fontSize: isMobile ? '0.75rem' : isTablet ? '0.85rem' : 'inherit',
+                  lineHeight: 1.2
+                }}
               >
                 {step.label}
               </Typography>

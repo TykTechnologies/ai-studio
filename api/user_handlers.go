@@ -31,6 +31,27 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
+	isUnique, err := models.IsEmailUnique(a.service.DB, input.Data.Attributes.Email, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	if !isUnique {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Email is already in use"}},
+		})
+		return
+	}
+
 	user, err := a.service.CreateUser(
 		input.Data.Attributes.Email,
 		input.Data.Attributes.Name,
@@ -123,6 +144,27 @@ func (a *API) updateUser(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	isUnique, err := models.IsEmailUnique(a.service.DB, input.Data.Attributes.Email, uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	if !isUnique {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Email is already in use"}},
 		})
 		return
 	}
