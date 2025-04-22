@@ -8,7 +8,8 @@ import {
   Alert,
   Switch,
   FormControlLabel,
-  InputAdornment
+  InputAdornment,
+  Button
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
@@ -23,6 +24,7 @@ const AppDetailsStep = () => {
     setStepValid,
     goToNextStep,
     goToPreviousStep,
+    skipQuickStart,
     appData,
     setAppData,
     createdAppId,
@@ -39,7 +41,6 @@ const AppDetailsStep = () => {
     monthlyBudget: '',
     budgetStartDate: new Date().toISOString().split('T')[0]
   });
-  const [errors, setErrors] = useState({});
   const [isFormValid, setIsFormValid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -49,7 +50,12 @@ const AppDetailsStep = () => {
   });
 
   const checkRequiredFields = React.useCallback(() => {
-    const isValid = formData.name.trim() !== '';
+    let isValid = formData.name.trim() !== '';
+    
+    if (formData.setBudget && (!formData.monthlyBudget || formData.monthlyBudget === '')) {
+      isValid = false;
+    }
+    
     setIsFormValid(isValid);
     setStepValid('app-details', isValid);
     return isValid;
@@ -65,13 +71,6 @@ const AppDetailsStep = () => {
     }
   }, [appData]);
 
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = "Name is required";
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
   
   const createOrUpdateApp = async () => {
     setLoading(true);
@@ -83,7 +82,7 @@ const AppDetailsStep = () => {
           attributes: {
             name: formData.name,
             description: formData.description,
-            user_id: ownerData.userId,
+            user_id: ownerData.userId ? parseInt(ownerData.userId, 10) : null,
             llm_ids: createdLlmId ? [parseInt(createdLlmId, 10)] : [],
             datasource_ids: [],
             monthly_budget: formData.setBudget ? parseFloat(formData.monthlyBudget) : null,
@@ -96,20 +95,15 @@ const AppDetailsStep = () => {
       
       if (createdAppId) {
         if (JSON.stringify(formData) !== JSON.stringify(appData)) {
-          response = await apiClient.patch(`/apps/${createdAppId}`, appPayload);
-          setSnackbar({
-            open: true,
-            message: 'App updated successfully',
-            severity: 'success'
-          });
+          await apiClient.patch(`/apps/${createdAppId}`, appPayload);
         }
       } else {
         response = await apiClient.post('/apps', appPayload);
-        console.log('App created:', response.data);
         const newAppId = response.data.data.id;
         setCreatedAppId(newAppId);
         
-        // Fetch the credential details using the credential_id from the response
+        await apiClient.post(`/apps/${newAppId}/activate-credential`);
+        
         if (response.data.data.attributes.credential_id) {
           const credentialId = response.data.data.attributes.credential_id;
           const credentialResponse = await apiClient.get(`/credentials/${credentialId}`);
@@ -121,18 +115,11 @@ const AppDetailsStep = () => {
             });
           }
         }
-        
-        setSnackbar({
-          open: true,
-          message: 'App created successfully',
-          severity: 'success'
-        });
       }
       
       setAppData(formData);
       goToNextStep();
     } catch (error) {
-      console.error('Error creating/updating app:', error);
       setSnackbar({
         open: true,
         message: `Failed to ${createdAppId ? 'update' : 'create'} app: ${error.message || 'Unknown error'}`,
@@ -144,9 +131,7 @@ const AppDetailsStep = () => {
   };
   
   const handleNextClick = () => {
-    if (validateForm()) {
-      createOrUpdateApp();
-    }
+    createOrUpdateApp();
   };
 
   const handleChange = (e) => {
@@ -166,14 +151,43 @@ const AppDetailsStep = () => {
 
   return (
     <Box sx={{ width: '100%', pt: 2 }}>
-      <Box sx={{ textAlign: 'center', mb: 4, px: 10 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+      <Box sx={{
+        textAlign: 'center',
+        mb: 4,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10
+        }
+      }}>
+        <Typography
+          variant="bodyLargeDefault"
+          color="text.defaultSubdued"
+          sx={{
+            fontSize: {
+              xs: '0.875rem',
+              sm: 'inherit'
+            }
+          }}
+        >
           Finally, let's add a name and description to your app so developers know what it's for. Once you create the app, you'll get credentials for developers to access the gateway API and work directly with the LLM.
         </Typography>
       </Box>
-      <Box sx={{ mt: 3, px: 25 }}>
+      <Box sx={{
+        mt: 3,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10,
+          lg: 25
+        }
+      }}>
         <Box sx={{ mb: 3 }}>
-          <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+          <Typography
+            variant="bodyLargeBold"
+            color="text.primary"
+            sx={{ mb: 1 }}
+          >
             App Name*
           </Typography>
           <StyledTextField
@@ -181,15 +195,17 @@ const AppDetailsStep = () => {
             name="name"
             value={formData.name}
             onChange={handleChange}
-            error={!!errors.name}
-            helperText={errors.name}
             required
             autoComplete="off"
           />
         </Box>
 
         <Box sx={{ mb: 3 }}>
-          <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+          <Typography
+            variant="bodyLargeBold"
+            color="text.primary"
+            sx={{ mb: 1 }}
+          >
             Description
           </Typography>
           <StyledTextField
@@ -209,7 +225,16 @@ const AppDetailsStep = () => {
                 color: 'border.neutralPressed'
               }} 
             />
-            <Typography variant="bodySmallDefault" color="text.defaultSubdued">
+            <Typography
+              variant="bodySmallDefault"
+              color="text.defaultSubdued"
+              sx={{
+                fontSize: {
+                  xs: '0.7rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
               xxx characters max
             </Typography>
           </Box>
@@ -234,7 +259,16 @@ const AppDetailsStep = () => {
               />
             }
             label={
-              <Typography variant="bodyLargeBold" color="text.primary">
+              <Typography
+                variant="bodyLargeBold"
+                color="text.primary"
+                sx={{
+                  fontSize: {
+                    xs: '0.875rem',
+                    sm: 'inherit'
+                  }
+                }}
+              >
                 Set budget limit (optional)
               </Typography>
             }
@@ -243,9 +277,18 @@ const AppDetailsStep = () => {
 
         {formData.setBudget && (
           <>
-            <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+            <Box sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 2,
+              mb: 4
+            }}>
               <Box sx={{ flex: 1 }}>
-                <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+                <Typography
+                  variant="bodyLargeBold"
+                  color="text.primary"
+                  sx={{ mb: 1 }}
+                >
                   Monthly budget*
                 </Typography>
                 <StyledTextField
@@ -263,7 +306,11 @@ const AppDetailsStep = () => {
               </Box>
 
               <Box sx={{ flex: 1 }}>
-                <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+                <Typography
+                  variant="bodyLargeBold"
+                  color="text.primary"
+                  sx={{ mb: 1 }}
+                >
                   Budget cycle start date
                 </Typography>
                 <StyledTextField
@@ -287,16 +334,45 @@ const AppDetailsStep = () => {
         )}
       </Box>
       
-      <ActionsContainer sx={{ justifyContent: 'space-between'}}>
-        <SecondaryLinkButton onClick={goToPreviousStep}>
-          Back
-        </SecondaryLinkButton>
-        <PrimaryButton
-          onClick={handleNextClick}
-          disabled={!isFormValid || loading}
+      <ActionsContainer sx={{
+        flexWrap: 'wrap',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 2,
+        width: '100%',
+        padding: { xs: 2, sm: 0 },
+        mt: 1
+      }}>
+        <SecondaryLinkButton
+          onClick={skipQuickStart}
+          sx={{
+            minWidth: '120px',
+            flex: { xs: '1 1 100%', sm: '0 1 auto' }
+          }}
         >
-          {loading ? <CircularProgress size={24} color="inherit" /> : 'Create app'}
-        </PrimaryButton>
+          Skip quick start
+        </SecondaryLinkButton>
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          flex: { xs: '1 1 100%', sm: '0 1 auto' },
+          justifyContent: { xs: 'space-between', sm: 'flex-end' }
+        }}>
+          <Button
+            onClick={goToPreviousStep}
+            sx={{ minWidth: '80px' }}
+          >
+            Back
+          </Button>
+          <PrimaryButton
+            onClick={handleNextClick}
+            disabled={!isFormValid || loading}
+            sx={{ minWidth: '100px' }}
+          >
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Create app'}
+          </PrimaryButton>
+        </Box>
       </ActionsContainer>
       
       <Snackbar

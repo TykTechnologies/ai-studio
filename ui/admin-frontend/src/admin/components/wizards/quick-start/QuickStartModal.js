@@ -29,6 +29,7 @@ const QuickStartModal = ({
   initialStep = 0,
   renderBeforeContent
 }) => {
+  
   const handleComplete = () => {
     onComplete && onComplete();
     onClose && onClose();

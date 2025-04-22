@@ -36,7 +36,6 @@ import {
   getVendorLogo,
   getVendorCodes,
 } from "../../utils/vendorLogos";
-import { useTheme } from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
 import AddIcon from "@mui/icons-material/Add";
 
@@ -77,7 +76,6 @@ const LLMForm = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
-  const theme = useTheme();
   const [newModel, setNewModel] = useState("");
 
   useEffect(() => {
@@ -466,6 +464,12 @@ const LLMForm = () => {
                     name="api_endpoint"
                     value={llm.api_endpoint}
                     onChange={handleChange}
+                    autoComplete="off"
+                    inputProps={{
+                      autoComplete: "off",
+                      "data-form-type": "other",
+                      "data-lpignore": "true"
+                    }}
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -476,6 +480,12 @@ const LLMForm = () => {
                     type={showApiKey ? "text" : "password"}
                     value={llm.api_key}
                     onChange={handleChange}
+                    autoComplete="off"
+                    inputProps={{
+                      autoComplete: "off",
+                      "data-form-type": "other",
+                      "data-lpignore": "true"
+                    }}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">

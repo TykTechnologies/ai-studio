@@ -83,7 +83,6 @@ const useLLMs = ({
     totalPages,
     fetchLLMs,
     hasLLMs: llms.length > 0,
-    llmsCount: llms.length,
   };
 };
 

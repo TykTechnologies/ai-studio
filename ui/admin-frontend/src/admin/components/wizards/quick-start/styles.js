@@ -93,6 +93,15 @@ export const ActionsContainer = styled(Box)(({ theme }) => ({
   justifyContent: 'center',
   marginTop: theme.spacing(1),
   gap: theme.spacing(2),
+  '@media (max-width: 600px)': {
+    flexDirection: 'column',
+    width: '100%',
+    alignItems: 'center',
+    '& > button': {
+      width: '100%',
+      marginBottom: '0.5rem',
+    },
+  },
 }));
 
 export const LeftActions = styled(Box)({
@@ -143,6 +152,8 @@ export const StepItem = styled(Box)(({ theme, active }) => ({
 export const StepNumber = styled(Box)(({ theme, active, completed }) => ({
   width: '24px',
   height: '24px',
+  minWidth: '24px',
+  minHeight: '24px',
   borderRadius: '50%',
   border: `${active ? '1.5px' : '1px'} solid ${completed
     ? theme.palette.background.iconSuccessDefault
@@ -156,6 +167,21 @@ export const StepNumber = styled(Box)(({ theme, active, completed }) => ({
   marginRight: theme.spacing(1),
   position: 'relative',
   zIndex: 2,
+  boxSizing: 'border-box',
+  '@media (max-width: 900px)': {
+    width: '22px',
+    height: '22px',
+    minWidth: '22px',
+    minHeight: '22px',
+    marginRight: theme.spacing(0.75),
+  },
+  '@media (max-width: 600px)': {
+    width: '20px',
+    height: '20px',
+    minWidth: '20px',
+    minHeight: '20px',
+    marginRight: theme.spacing(0.5),
+  },
 }));
 
 export const StepProgressContainer = styled(Box)(({ theme }) => ({
@@ -200,4 +226,12 @@ export const StepContainer = styled(Box)(({ theme, width }) => ({
   paddingBottom: theme.spacing(1),
   width: width,
   zIndex: 2,
+  '@media (max-width: 900px)': {
+    padding: theme.spacing(0, 0.75),
+    paddingBottom: theme.spacing(1),
+  },
+  '@media (max-width: 600px)': {
+    padding: theme.spacing(0, 0.5),
+    paddingBottom: theme.spacing(1),
+  },
 }));

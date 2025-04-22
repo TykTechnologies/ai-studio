@@ -3,10 +3,12 @@ import { Typography, Box, styled, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { TitleBox, ContentBox, PrimaryButton } from '../styles/sharedStyles';
 import useOverviewData from '../hooks/useOverviewData';
+import useQuickStart from '../hooks/useQuickStart';
 import BasicCard from '../components/common/BasicCard';
 import IconBadge from '../components/common/IconBadge';
 import { createDocsLinkHandler } from '../utils/docsLinkUtils';
 import VideoPlayer from '../components/common/VideoPlayer';
+import { QuickStartContainer } from '../components/wizards/quick-start';
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
@@ -50,6 +52,8 @@ const SectionContainer = styled(Box)(({ theme }) => ({
 
 const Overview = () => {
   const { userName, features, hasLLMs, getDocsLink, loading, error } = useOverviewData();
+  const quickStartState = useQuickStart();
+  const { setShowQuickStart } = quickStartState;
   const navigate = useNavigate();
 
   const showChatCard = features?.feature_chat;
@@ -73,12 +77,17 @@ const Overview = () => {
 
   return (
     <>
+      <QuickStartContainer quickStartState={quickStartState} />
       <TitleBox top="64px">
         <Typography variant="headingXLarge">
           Hi {userName || '[user name]'}, welcome to Tyk AI Studio!
         </Typography>
         <PrimaryButton
           variant="contained"
+          onClick={() => {
+            console.log('Quick start button clicked in Overview.js');
+            setShowQuickStart(true);
+          }}
         >
           Quick start
         </PrimaryButton>

@@ -6,16 +6,23 @@ import ConfigureAIStep from './ConfigureAIStep';
 import AssignOwnerStep from './AssignOwnerStep';
 import AppDetailsStep from './AppDetailsStep';
 import SummaryStep from './SummaryStep';
+import FinalStep from './FinalStep';
 import useQuickStart from '../../../hooks/useQuickStart';
 
-const QuickStartContainer = () => {
+const QuickStartContainer = ({ quickStartState }) => {
+  // Always call the hook to avoid conditional hook calls
+  const hookState = useQuickStart();
+  
+  // Use the passed quickStartState if available, otherwise use the hook state
   const {
     showQuickStart,
     setShowQuickStart,
     userName,
     handleQuickStartComplete,
     handleQuickStartSkip
-  } = useQuickStart();
+  } = quickStartState || hookState;
+  
+  console.log('QuickStartContainer rendered with showQuickStart:', showQuickStart);
   
   // Create a ref to store the goToNextStep function from the QuickStartContext
   const quickStartContextRef = useRef(null);
@@ -68,6 +75,7 @@ const QuickStartContainer = () => {
         {
           id: "finish",
           label: "Finish",
+          content: <FinalStep />,
           isLastStep: true,
         }
       ]}

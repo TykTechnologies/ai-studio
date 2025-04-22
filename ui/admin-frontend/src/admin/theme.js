@@ -313,6 +313,7 @@ const theme = createTheme({
           borderRadius: 20,
           padding: '8px 16px',
           minWidth: 'fit-content',
+          maxWidth: 'fit-content',
           color: theme.palette.text.defaultSubdued,
           backgroundColor: theme.palette.background.buttonSecondary,
           boxShadow: "none",
