@@ -46,8 +46,7 @@ type BudgetService struct {
 
 // cacheUpdateRequest represents a request to update the cache
 type cacheUpdateRequest struct {
-	key      usageKey
-	priority int // higher number = higher priority
+	key usageKey
 }
 
 // calculateBudgetPeriodStart determines the start of the current budget period
@@ -131,8 +130,8 @@ func (s *BudgetService) startUpdateWorker() {
 func (s *BudgetService) processUpdateQueue() {
 	defer atomic.StoreInt32(&s.queueRunning, 0)
 	
-	// Use a map to track the highest priority for each key
-	pendingUpdates := make(map[usageKey]int)
+	// Use a map to track unique keys to update
+	pendingUpdates := make(map[usageKey]struct{})
 	
 	for {
 		select {
@@ -142,16 +141,14 @@ func (s *BudgetService) processUpdateQueue() {
 				return
 			}
 			
-			// Only keep the highest priority request for each key
-			if existingPriority, exists := pendingUpdates[req.key]; !exists || req.priority > existingPriority {
-				pendingUpdates[req.key] = req.priority
-			}
+			// Just mark this key as needing an update
+			pendingUpdates[req.key] = struct{}{}
 			
 		case <-time.After(100 * time.Millisecond):
 			// Process accumulated requests after a short delay
 			if len(pendingUpdates) > 0 {
 				s.processPendingUpdates(pendingUpdates)
-				pendingUpdates = make(map[usageKey]int) // Clear the map
+				pendingUpdates = make(map[usageKey]struct{}) // Clear the map
 			}
 			
 			// If no more requests for a while, exit
@@ -160,9 +157,7 @@ func (s *BudgetService) processUpdateQueue() {
 				case req, ok := <-s.updateQueue:
 					if ok {
 						// Got one more request, process it in the next iteration
-						if existingPriority, exists := pendingUpdates[req.key]; !exists || req.priority > existingPriority {
-							pendingUpdates[req.key] = req.priority
-						}
+						pendingUpdates[req.key] = struct{}{}
 						continue
 					}
 				case <-time.After(5 * time.Second):
@@ -175,10 +170,10 @@ func (s *BudgetService) processUpdateQueue() {
 }
 
 // processPendingUpdates processes a batch of update requests
-func (s *BudgetService) processPendingUpdates(updates map[usageKey]int) {
+func (s *BudgetService) processPendingUpdates(updates map[usageKey]struct{}) {
 	now := time.Now()
 	
-	for key, priority := range updates {
+	for key := range updates {
 		var spent float64
 		var err error
 		
@@ -197,18 +192,16 @@ func (s *BudgetService) processPendingUpdates(updates map[usageKey]int) {
 		// Update both caches
 		s.updateCaches(key, spent, now)
 		
-		// For high priority updates, trigger budget analysis
-		if priority >= 2 {
-			if key.entityType == "App" {
-				var app models.App
-				if err := s.db.First(&app, key.entityID).Error; err == nil {
-					go s.AnalyzeBudgetUsage(&app, nil)
-				}
-			} else if key.entityType == "LLM" {
-				var llm models.LLM
-				if err := s.db.First(&llm, key.entityID).Error; err == nil {
-					go s.AnalyzeBudgetUsage(nil, &llm)
-				}
+		// Always trigger budget analysis for consistency
+		if key.entityType == "App" {
+			var app models.App
+			if err := s.db.First(&app, key.entityID).Error; err == nil {
+				go s.AnalyzeBudgetUsage(&app, nil)
+			}
+		} else if key.entityType == "LLM" {
+			var llm models.LLM
+			if err := s.db.First(&llm, key.entityID).Error; err == nil {
+				go s.AnalyzeBudgetUsage(nil, &llm)
 			}
 		}
 	}
@@ -453,7 +446,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			// Cache miss - queue an update but use a default value for now
 			// This makes the check optimistic - we'll assume budget is not exceeded
 			// until we have data that proves otherwise
-			s.updateQueue <- cacheUpdateRequest{key: key, priority: 2}
+			s.updateQueue <- cacheUpdateRequest{key: key}
 			
 			// Check for existing notifications to see if we already know the budget is exceeded
 			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
@@ -526,7 +519,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			log.Printf("LLM %d spending from cache: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
 		} else {
 			// Cache miss - queue an update but use a default value for now
-			s.updateQueue <- cacheUpdateRequest{key: key, priority: 2}
+			s.updateQueue <- cacheUpdateRequest{key: key}
 			
 			// Check for existing notifications to see if we already know the budget is exceeded
 			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
@@ -615,7 +608,6 @@ func (s *BudgetService) getFromAtomicCache(key usageKey) (float64, bool) {
 // This now runs in the background and doesn't block the main request flow
 func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 	now := time.Now()
-	end := now
 
 	// Use a separate context with timeout for database operations
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -647,7 +639,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 		// If cache miss, fetch from database
 		var err error
 		if !cacheHit {
-			spent, err = s.fetchAppSpending(app.ID, start, end)
+			spent, err = s.fetchAppSpending(app.ID, start, now)
 			if err != nil {
 				log.Printf("Error calculating app spending: %v", err)
 				return
@@ -736,7 +728,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 		// If cache miss, fetch from database
 		var err error
 		if !cacheHit {
-			spent, err = s.fetchLLMSpending(llm.ID, start, end)
+			spent, err = s.fetchLLMSpending(llm.ID, start, now)
 			if err != nil {
 				log.Printf("Error calculating LLM spending: %v", err)
 				return
