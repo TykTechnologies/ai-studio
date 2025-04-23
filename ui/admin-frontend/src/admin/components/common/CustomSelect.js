@@ -30,6 +30,12 @@ const CustomSelect = ({
               zIndex: 9999,
               '& .MuiPaper-root': {
                 borderRadius: '8px'
+              },
+              '& .MuiMenuItem-root.Mui-selected': {
+                backgroundColor: theme => `${theme.palette.background.surfaceNeutralHover} !important`,
+              },
+              '& .MuiMenuItem-root.Mui-selected:hover': {
+                backgroundColor: theme => `${theme.palette.background.surfaceNeutralHover} !important`,
               }
             }
           }}
@@ -41,10 +47,16 @@ const CustomSelect = ({
               value={option.value}
               sx={{
                 '&.Mui-selected': {
-                  backgroundColor: theme => theme.palette.background.surfaceNeutralHover,
+                  backgroundColor: `${theme => theme.palette.background.surfaceNeutralHover} !important`,
                   '&:hover': {
-                    backgroundColor: theme => theme.palette.background.surfaceNeutralHover
+                    backgroundColor: `${theme => theme.palette.background.surfaceNeutralHover} !important`
                   }
+                },
+                '&.MuiMenuItem-root.Mui-selected': {
+                  backgroundColor: `${theme => theme.palette.background.surfaceNeutralHover} !important`,
+                },
+                '&.MuiMenuItem-root.Mui-selected:hover': {
+                  backgroundColor: `${theme => theme.palette.background.surfaceNeutralHover} !important`,
                 }
               }}
             >

@@ -23,10 +23,17 @@ export class LoginPage {
     }
 
     async login(email: string, password: string) {
+        // Check if the quick start wizard is visible and skip it if needed
+        const exploreByMyselfButton = this.page.getByRole('button', { name: 'Explore by myself' });
+        if (await exploreByMyselfButton.isVisible()) {
+            await exploreByMyselfButton.click();
+            await this.page.waitForTimeout(1000);
+        }
+
         await this.EmailInput.fill(email);
         await this.PasswordInput.fill(password);
         await this.LoginButton.click();
-        await this.page.waitForTimeout(1000); // Wait for 1 seconds to allow the login process to complete
+        await this.page.waitForTimeout(1000);
         if (await this.page.getByRole('img', { name: 'Logo' }).isVisible()) {
             return;
         }
