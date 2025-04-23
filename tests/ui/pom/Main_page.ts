@@ -117,14 +117,4 @@ export class MainPage {
     async closeBanner() {
         await this.BannerButton.click();
     }
-
-    async dismissQuickStartModal() {
-        await this.page.waitForTimeout(2000);
-        
-        if (await this.ExploreByMyselfButton.isVisible()) {
-            await this.ExploreByMyselfButton.scrollIntoViewIfNeeded();
-            await this.ExploreByMyselfButton.click();
-            await this.page.waitForTimeout(2000);
-        }
-    }
 }
