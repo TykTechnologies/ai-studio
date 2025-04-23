@@ -409,7 +409,6 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, float64, error) {
 	now := time.Now()
 	var appUsage, llmUsage float64
-	var appSpent, llmSpent float64
 	var appBudgetExceeded, llmBudgetExceeded bool
 
 	// Ensure the update worker is running
