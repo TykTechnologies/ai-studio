@@ -1,4 +1,4 @@
-import { getBaseUrl } from "../../../utils/urlUtils";
+import { getConfig } from "../../../../config";
 
 export const generateSlug = (name) => {
   return name
@@ -8,7 +8,9 @@ export const generateSlug = (name) => {
 };
 
 export const generateEndpointUrl = (path, name) => {
-  const baseUrl = getBaseUrl();
+  const config = getConfig();
+  const currentHost = window.location.hostname;
+  const baseUrl = config.proxyURL || `//${currentHost}:9090`;
   const slug = generateSlug(name);
   return `${baseUrl}${path}${slug}/`;
 };
@@ -25,25 +27,82 @@ export const getOwnerName = (ownerData) => {
   return ownerData.formData?.name || 'New user';
 };
 
-export const getCurlExample = (llmProvider = 'openai') => {
-  const baseUrl = getBaseUrl();
-  const promptText = "Generate a template OpenAPI Specification (OAS) for a simple TODO API.";
-  const temperature = 0.7;
-  const maxTokens = 1000;
-  
-  let defaultModel;
-  let requestBody;
-  
-  const openaiFormat = (model) => `{
+const PROVIDER_CONFIG = {
+  openai: {
+    defaultModel: 'gpt-4o',
+    getEndpointPath: (endpoint, model) => `${endpoint}v1/chat/completions`,
+    headers: () => [
+      '-H "Content-Type: application/json"',
+      '-H "Authorization: Bearer YOUR_SECRET"'
+    ],
+    formatBody: 'openai'
+  },
+  anthropic: {
+    defaultModel: 'claude-3-5-sonnet-20240620',
+    getEndpointPath: (endpoint) => `${endpoint}v1/messages`,
+    headers: () => [
+      '-H "Content-Type: application/json"',
+      '-H "x-api-key: YOUR_SECRET"',
+      '-H "anthropic-version: 2023-06-01"'
+    ],
+    formatBody: 'openai'
+  },
+  google_ai: {
+    defaultModel: 'gemini-1.5-flash',
+    getEndpointPath: (endpoint, model) => `${endpoint}v1/models/${model}:generateContent?key=YOUR_SECRET`,
+    headers: () => [
+      '-H "Content-Type: application/json"'
+    ],
+    formatBody: 'google'
+  },
+  google: {
+    defaultModel: 'gemini-1.5-flash',
+    getEndpointPath: (endpoint, model) => `${endpoint}v1/models/${model}:generateContent?key=YOUR_SECRET`,
+    headers: () => [
+      '-H "Content-Type: application/json"'
+    ],
+    formatBody: 'google'
+  },
+  vertex: {
+    defaultModel: 'gemini-pro',
+    getEndpointPath: (endpoint, model) => `${endpoint}v1/models/${model}:generateContent`,
+    headers: () => [
+      '-H "Content-Type: application/json"',
+      '-H "Authorization: Bearer YOUR_SECRET"'
+    ],
+    formatBody: 'google'
+  },
+  ollama: {
+    defaultModel: 'llama3',
+    getEndpointPath: (endpoint) => `${endpoint}api/chat`,
+    headers: () => [
+      '-H "Content-Type: application/json"',
+      '-H "Authorization: YOUR_SECRET"'
+    ],
+    formatBody: 'openai'
+  },
+  huggingface: {
+    defaultModel: 'mistralai/Mistral-7B-Instruct-v0.2',
+    getEndpointPath: (endpoint, model) => `${endpoint}models/${model}`,
+    headers: () => [
+      '-H "Content-Type: application/json"',
+      '-H "Authorization: Bearer YOUR_SECRET"'
+    ],
+    formatBody: 'openai'
+  }
+};
+
+const formatBody = {
+  openai: (model, promptText, temperature, maxTokens) => `{
     "model": "${model}",
     "messages": [
       {"role": "user", "content": "${promptText}"}
     ],
     "temperature": ${temperature},
     "max_tokens": ${maxTokens}
-}`;
-
-  const googleFormat = (model) => `{
+  }`,
+  
+  google: (model, promptText, temperature, maxTokens) => `{
     "contents": [{
       "parts":[{"text": "${promptText}"}]
     }],
@@ -52,39 +111,26 @@ export const getCurlExample = (llmProvider = 'openai') => {
       "temperature": ${temperature},
       "maxOutputTokens": ${maxTokens}
     }
-}`;
+  }`
+};
+
+export const getCurlExample = (llmProvider = 'openai', llmName = 'OpenAI') => {
+  const promptText = "Generate a template OpenAPI Specification (OAS) for a simple TODO API.";
+  const temperature = 0.7;
+  const maxTokens = 1000;
   
-  switch (llmProvider) {
-    case 'anthropic':
-      defaultModel = 'claude-sonnet';
-      requestBody = openaiFormat(defaultModel);
-      break;
-    case 'google':
-    case 'google_ai':
-      defaultModel = 'gemini-1.5-flash';
-      requestBody = googleFormat(defaultModel);
-      break;
-    case 'vertex':
-      defaultModel = 'gemini-pro';
-      requestBody = googleFormat(defaultModel);
-      break;
-    case 'ollama':
-      defaultModel = 'llama3';
-      requestBody = openaiFormat(defaultModel);
-      break;
-    case 'huggingface':
-      defaultModel = 'mistralai/Mistral-7B-Instruct-v0.2';
-      requestBody = openaiFormat(defaultModel);
-      break;
-    default:
-      defaultModel = 'gpt-4o';
-      requestBody = openaiFormat(defaultModel);
-      break;
-  }
+  const config = PROVIDER_CONFIG[llmProvider] || PROVIDER_CONFIG.openai;
+  const defaultModel = config.defaultModel;
   
-  return `curl -X POST "${baseUrl}/ai/${llmProvider}/v1" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+  const formatter = formatBody[config.formatBody];
+  const requestBody = formatter(defaultModel, promptText, temperature, maxTokens);
+  
+  const endpoint = generateEndpointUrl('/llm/rest/', llmName);
+  const fullEndpointPath = config.getEndpointPath(endpoint, defaultModel);
+  const headers = config.headers();
+  
+  return `curl -X POST "${fullEndpointPath}" \\
+  ${headers.join(' \\\n  ')} \\
   -d '${requestBody}'`;
 };
 

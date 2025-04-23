@@ -42,7 +42,7 @@ func TestCreateAppWithNotifications(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Create app
-		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
+		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil, nil, nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, app)
 
@@ -75,7 +75,7 @@ func TestCreateAppWithNotifications(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Create app - should succeed even with notifications disabled
-		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil)
+		app, err := service.CreateApp("Test App", "Description", admin.ID, nil, nil, nil, nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, app)
 
@@ -99,7 +99,7 @@ func TestCreateApp(t *testing.T) {
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, err := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID})
+	app, err := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID}, nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, app)
 	assert.NotZero(t, app.ID)
@@ -108,7 +108,7 @@ func TestCreateApp(t *testing.T) {
 	assert.Len(t, app.LLMs, 2)
 
 	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid", true)
-	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID})
+	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID}, nil, nil)
 	assert.Error(t, err)
 }
 
@@ -124,7 +124,7 @@ func TestGetApp(t *testing.T) {
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
 
 	fetchedApp, err := service.GetAppByID(app.ID)
 	assert.NoError(t, err)
@@ -156,7 +156,7 @@ func TestUpdateApp(t *testing.T) {
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
 
 	updatedApp, err := service.UpdateApp(app.ID, "Updated App", "Updated Description", []uint{ds1.ID}, []uint{llm2.ID}, nil, nil)
 	assert.NoError(t, err)
@@ -183,7 +183,7 @@ func TestAppCredentialActivation(t *testing.T) {
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
 
 	err := service.ActivateAppCredential(app.ID)
 	assert.NoError(t, err)
@@ -208,7 +208,7 @@ func TestAppDatasourceOperations(t *testing.T) {
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
 
 	newDS, _ := service.CreateDatasource("NewDS", "Short", "Long", "icon.png", "https://newds.com", 65, user.ID, []string{}, "conn_string_new", "source_type_new", "api_key_new", "db1", "embed_vendor_new", "embed_url_new", "embed_api_key_new", "embed_model_new", true)
 	err := service.AddDatasourceToApp(app.ID, newDS.ID)
@@ -239,7 +239,7 @@ func TestAppLLMOperations(t *testing.T) {
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{}, []uint{})
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{}, []uint{}, nil, nil)
 	err := service.AddLLMToApp(app.ID, llm1.ID)
 	assert.NoError(t, err)
 	err = service.AddDatasourceToApp(app.ID, ds1.ID)
@@ -284,7 +284,7 @@ func TestDeleteApp(t *testing.T) {
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
-	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID})
+	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
 
 	err := service.DeleteApp(app.ID)
 	assert.NoError(t, err)
@@ -305,7 +305,7 @@ func TestAppServiceErrorCases(t *testing.T) {
 	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
 	assert.NoError(t, err)
 
-	app, err := service.CreateApp("Test App", "Description", user.ID, nil, nil)
+	app, err := service.CreateApp("Test App", "Description", user.ID, nil, nil, nil, nil)
 	assert.NoError(t, err)
 
 	// Test AddDatasourceToApp with non-existent datasource
@@ -333,11 +333,11 @@ func TestAppServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test CreateApp with non-existent datasource
-	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{9999}, []uint{})
+	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{9999}, []uint{}, nil, nil)
 	assert.Error(t, err)
 
 	// Test CreateApp with non-existent LLM
-	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{}, []uint{9999})
+	_, err = service.CreateApp("Invalid App", "Description", user.ID, []uint{}, []uint{9999}, nil, nil)
 	assert.Error(t, err)
 
 	// Test UpdateApp with non-existent datasource
@@ -368,9 +368,9 @@ func TestAppService_MultipleApps(t *testing.T) {
 	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
 	// Create multiple apps
-	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, []uint{ds1.ID}, []uint{llm1.ID})
-	app2, _ := service.CreateApp("App 2", "Description 2", user1.ID, []uint{ds1.ID}, []uint{llm2.ID})
-	app3, _ := service.CreateApp("App 3", "Description 3", user2.ID, []uint{ds2.ID}, []uint{llm2.ID})
+	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
+	app2, _ := service.CreateApp("App 2", "Description 2", user1.ID, []uint{ds1.ID}, []uint{llm2.ID}, nil, nil)
+	app3, _ := service.CreateApp("App 3", "Description 3", user2.ID, []uint{ds2.ID}, []uint{llm2.ID}, nil, nil)
 
 	// Test GetAppsByUserID for user1
 	user1Apps, err := service.GetAppsByUserID(user1.ID)
@@ -424,9 +424,9 @@ func TestListApps(t *testing.T) {
 	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true, true)
 
 	// Create multiple apps
-	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, nil, nil)
-	app2, _ := service.CreateApp("App 2", "Description 2", user1.ID, nil, nil)
-	app3, _ := service.CreateApp("App 3", "Description 3", user2.ID, nil, nil)
+	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, nil, nil, nil, nil)
+	app2, _ := service.CreateApp("App 2", "Description 2", user1.ID, nil, nil, nil, nil)
+	app3, _ := service.CreateApp("App 3", "Description 3", user2.ID, nil, nil, nil, nil)
 
 	// Test ListApps
 	apps, err := service.ListApps()
@@ -447,7 +447,7 @@ func TestListAppsWithPagination(t *testing.T) {
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
-		_, _ = service.CreateApp(fmt.Sprintf("App %d", i), fmt.Sprintf("Description %d", i), user.ID, nil, nil)
+		_, _ = service.CreateApp(fmt.Sprintf("App %d", i), fmt.Sprintf("Description %d", i), user.ID, nil, nil, nil, nil)
 	}
 
 	// Test ListAppsWithPagination
@@ -490,10 +490,10 @@ func TestListAppsByUserID(t *testing.T) {
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {
-		_, _ = service.CreateApp(fmt.Sprintf("User1 App %d", i), "Description", user1.ID, nil, nil)
+		_, _ = service.CreateApp(fmt.Sprintf("User1 App %d", i), "Description", user1.ID, nil, nil, nil, nil)
 	}
 	for i := 1; i <= 2; i++ {
-		_, _ = service.CreateApp(fmt.Sprintf("User2 App %d", i), "Description", user2.ID, nil, nil)
+		_, _ = service.CreateApp(fmt.Sprintf("User2 App %d", i), "Description", user2.ID, nil, nil, nil, nil)
 	}
 
 	// Test ListAppsByUserID
@@ -534,9 +534,9 @@ func TestSearchApps(t *testing.T) {
 	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true, true)
 
 	// Create apps with different names and descriptions
-	_, _ = service.CreateApp("Test App", "This is a test app", user.ID, nil, nil)
-	_, _ = service.CreateApp("Production App", "This is a production app", user.ID, nil, nil)
-	_, _ = service.CreateApp("Development App", "This is a development app", user.ID, nil, nil)
+	_, _ = service.CreateApp("Test App", "This is a test app", user.ID, nil, nil, nil, nil)
+	_, _ = service.CreateApp("Production App", "This is a production app", user.ID, nil, nil, nil, nil)
+	_, _ = service.CreateApp("Development App", "This is a development app", user.ID, nil, nil, nil, nil)
 
 	// Test SearchApps
 	testApps, totalCount, totalPages, err := service.SearchApps("test", 1, 10, true, "id")
@@ -600,7 +600,7 @@ func TestCountApps(t *testing.T) {
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
-		_, _ = service.CreateApp(fmt.Sprintf("App %d", i), fmt.Sprintf("Description %d", i), user.ID, nil, nil)
+		_, _ = service.CreateApp(fmt.Sprintf("App %d", i), fmt.Sprintf("Description %d", i), user.ID, nil, nil, nil, nil)
 	}
 
 	// Test CountApps
@@ -622,10 +622,10 @@ func TestCountAppsByUserID(t *testing.T) {
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {
-		_, _ = service.CreateApp(fmt.Sprintf("User1 App %d", i), "Description", user1.ID, nil, nil)
+		_, _ = service.CreateApp(fmt.Sprintf("User1 App %d", i), "Description", user1.ID, nil, nil, nil, nil)
 	}
 	for i := 1; i <= 2; i++ {
-		_, _ = service.CreateApp(fmt.Sprintf("User2 App %d", i), "Description", user2.ID, nil, nil)
+		_, _ = service.CreateApp(fmt.Sprintf("User2 App %d", i), "Description", user2.ID, nil, nil, nil, nil)
 	}
 
 	// Test CountAppsByUserID

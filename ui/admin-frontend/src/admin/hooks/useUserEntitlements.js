@@ -8,6 +8,8 @@ const useUserEntitlements = (skipInitialFetch = false) => {
   const [userEntitlements, setUserEntitlements] = useState(null);
   const [uiOptions, setUiOptions] = useState(null);
   const [userName, setUserName] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
   const [loading, setLoading] = useState(!skipInitialFetch);
   const [error, setError] = useState(null);
 
@@ -20,6 +22,8 @@ const useUserEntitlements = (skipInitialFetch = false) => {
       setUserEntitlements(cachedData.entitlements);
       setUiOptions(cachedData.ui_options);
       setUserName(cachedData.userName);
+      setUserId(cachedData.userId);
+      setUserEmail(cachedData.userEmail);
       setLoading(false);
       return cachedData;
     }
@@ -29,15 +33,21 @@ const useUserEntitlements = (skipInitialFetch = false) => {
         const newData = response.data.attributes.entitlements;
         const newUiOptions = response.data.attributes.ui_options;
         const newUserName = response.data.attributes.name;
+        const newUserId = response.data.id;
+        const newUserEmail = response.data.attributes.email;
         
         setUserEntitlements(newData);
         setUiOptions(newUiOptions);
         setUserName(newUserName);
+        setUserId(newUserId);
+        setUserEmail(newUserEmail);
         
         const dataToCache = {
           entitlements: newData,
           ui_options: newUiOptions,
-          userName: newUserName
+          userName: newUserName,
+          userId: newUserId,
+          userEmail: newUserEmail
         };
         cacheService.set(ENTITLEMENTS_CACHE_KEY, dataToCache, 10000); // 10 seconds expiry
         
@@ -63,6 +73,8 @@ const useUserEntitlements = (skipInitialFetch = false) => {
     userEntitlements,
     uiOptions,
     userName,
+    userId,
+    userEmail,
     loading,
     error,
     fetchUserEntitlements

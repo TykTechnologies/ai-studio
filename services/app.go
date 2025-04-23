@@ -11,16 +11,18 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint) (*models.App, error) {
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
 		return nil, err
 	}
 
 	app := &models.App{
-		Name:        name,
-		Description: description,
-		UserID:      userID,
+		Name:            name,
+		Description:     description,
+		UserID:          userID,
+		MonthlyBudget:   monthlyBudget,
+		BudgetStartDate: budgetStartDate,
 	}
 
 	if err := app.Create(s.DB); err != nil {

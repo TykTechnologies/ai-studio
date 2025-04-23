@@ -370,11 +370,11 @@ const SummaryStep = () => {
                     wordBreak: 'break-all'
                   }}
                 >
-                  {generateEndpointUrl('/llm/rest/', llmData.llmProvider || 'default')}
+                  {generateEndpointUrl('/llm/rest/', llmData.name || 'Default')}
                 </Typography>
                 <IconButton 
                   size="small" 
-                  onClick={() => copyToClipboard(generateEndpointUrl('/llm/rest/', llmData.llmProvider || 'default'), 'restAPI')}
+                  onClick={() => copyToClipboard(generateEndpointUrl('/llm/rest/', llmData.name || 'Default'), 'restAPI')}
                   sx={{ position: 'relative' }}
                 >
                   <ContentCopyIcon fontSize="small" />
@@ -432,11 +432,11 @@ const SummaryStep = () => {
                     wordBreak: 'break-all'
                   }}
                 >
-                  {generateEndpointUrl('/llm/stream/', llmData.llmProvider || 'default')}
+                  {generateEndpointUrl('/llm/stream/', llmData.name || 'Default')}
                 </Typography>
                 <IconButton 
                   size="small" 
-                  onClick={() => copyToClipboard(generateEndpointUrl('/llm/stream/', llmData.llmProvider || 'default'), 'streamAPI')}
+                  onClick={() => copyToClipboard(generateEndpointUrl('/llm/stream/', llmData.name || 'Default'), 'streamAPI')}
                   sx={{ position: 'relative' }}
                 >
                   <ContentCopyIcon fontSize="small" />
@@ -526,11 +526,11 @@ const SummaryStep = () => {
                   wordBreak: 'break-all'
                 }}
               >
-                {`${generateEndpointUrl('/ai/', llmData.llmProvider || 'default')}v1`}
+                {`${generateEndpointUrl('/ai/', llmData.name || 'Default')}v1`}
               </Typography>
               <IconButton 
                 size="small" 
-                onClick={() => copyToClipboard(`${generateEndpointUrl('/ai/', llmData.llmProvider || 'default')}v1`, 'unifiedAPI')}
+                onClick={() => copyToClipboard(`${generateEndpointUrl('/ai/', llmData.name || 'Default')}v1`, 'unifiedAPI')}
                 sx={{ position: 'relative' }}
               >
                 <ContentCopyIcon fontSize="small" />
@@ -603,7 +603,7 @@ const SummaryStep = () => {
               size="small" 
               onClick={(e) => {
                 e.stopPropagation();
-                copyToClipboard(getCurlExample(llmData.llmProvider), 'curl');
+                copyToClipboard(getCurlExample(llmData.llmProvider, llmData.name), 'curl');
               }}
               sx={{
                 ml: 1,
@@ -652,7 +652,7 @@ const SummaryStep = () => {
                   wordBreak: 'break-word'
                 }}
               >
-                {getCurlExample(llmData.llmProvider)}
+                {getCurlExample(llmData.llmProvider, llmData.name)}
               </Typography>
             </Paper>
           </Collapse>

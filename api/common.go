@@ -476,7 +476,7 @@ func (a *API) createUserApp(c *gin.Context) {
 	}
 
 	// Create the app
-	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs)
+	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, nil, nil)
 	if err != nil {
 		// Check for specific error types and return appropriate responses
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {

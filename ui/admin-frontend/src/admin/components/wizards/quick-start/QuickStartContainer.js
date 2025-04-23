@@ -10,28 +10,20 @@ import FinalStep from './FinalStep';
 import useQuickStart from '../../../hooks/useQuickStart';
 
 const QuickStartContainer = ({ quickStartState }) => {
-  // Always call the hook to avoid conditional hook calls
   const hookState = useQuickStart();
-  
-  // Use the passed quickStartState if available, otherwise use the hook state
+
   const {
     showQuickStart,
     setShowQuickStart,
-    userName,
+    currentUser,
     handleQuickStartComplete,
     handleQuickStartSkip
   } = quickStartState || hookState;
   
-  console.log('QuickStartContainer rendered with showQuickStart:', showQuickStart);
-  
-  // Create a ref to store the goToNextStep function from the QuickStartContext
   const quickStartContextRef = useRef(null);
 
-  // This component will capture the QuickStartContext value
   const ContextCapture = () => {
     const contextValue = useQuickStartContext();
-    
-    // Store the context value in the ref
     quickStartContextRef.current = contextValue;
     
     return null;
@@ -46,7 +38,7 @@ const QuickStartContainer = ({ quickStartState }) => {
         {
           id: "welcome",
           label: "Welcome",
-          content: <WelcomeStep userName={userName} />,
+          content: <WelcomeStep userName={currentUser?.name} />,
           isWelcomeStep: true
         },
         {
@@ -58,7 +50,7 @@ const QuickStartContainer = ({ quickStartState }) => {
         {
           id: "assign-owner",
           label: "Assign owner",
-          content: <AssignOwnerStep />,
+          content: <AssignOwnerStep currentUser={currentUser} />,
           validate: () => true
         },
         {

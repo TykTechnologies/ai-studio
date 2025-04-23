@@ -235,7 +235,7 @@ const AppDetailsStep = () => {
                 }
               }}
             >
-              xxx characters max
+              200 characters max
             </Typography>
           </Box>
         </Box>
