@@ -25,6 +25,40 @@ const PRIVACY_LEVEL_SCORES = {
   restricted: 100
 };
 
+const privacyLevelOptions = [
+  { value: 'public', label: 'Public', description: 'Safe to share data (e.g. blogs, press releases)' },
+  { value: 'internal', label: 'Internal', description: 'Limited to users within the org. (e.g. reports, policies)' },
+  { value: 'confidential', label: 'Confidential', description: 'Sensitive data (e.g. financials, strategies)' },
+  { value: 'restricted', label: 'Restricted', description: 'PII or personal data (e.g. names, emails, costumer info)' }
+];
+
+const privacyBadgeConfigs = {
+  public: {
+    icon: 'unlock',
+    text: 'Public',
+    textColor: 'text.successDefault',
+    bgColor: 'border.successDefaultSubdued'
+  },
+  internal: {
+    icon: 'lock',
+    text: 'Internal',
+    textColor: 'text.warningDefault',
+    bgColor: 'border.warningDefaultSubdued'
+  },
+  confidential: {
+    icon: 'lock-keyhole',
+    text: 'Confidential',
+    textColor: 'border.criticalHover',
+    bgColor: 'border.criticalDefaultSubdue'
+  },
+  restricted: {
+    icon: 'shield-keyhole',
+    text: 'Restricted',
+    textColor: 'background.surfaceCriticalDefault',
+    bgColor: 'background.buttonPrimaryDefault'
+  }
+};
+
 const ConfigureAIStep = () => {
   const {
     setStepValid,
@@ -77,6 +111,7 @@ const ConfigureAIStep = () => {
     }));
     setVendors(vendorList);
   }, []);
+  
   useEffect(() => {
     checkRequiredFields();
   }, [formData, checkRequiredFields]);
@@ -147,40 +182,6 @@ const ConfigureAIStep = () => {
       ...prev,
       [name]: value
     }));
-  };
-
-  const privacyLevelOptions = [
-    { value: 'public', label: 'Public', description: 'Safe to share data (e.g. blogs, press releases)' },
-    { value: 'internal', label: 'Internal', description: 'Limited to users within the org. (e.g. reports, policies)' },
-    { value: 'confidential', label: 'Confidential', description: 'Sensitive data (e.g. financials, strategies)' },
-    { value: 'restricted', label: 'Restricted', description: 'PII or personal data (e.g. names, emails, costumer info)' }
-  ];
-
-  const privacyBadgeConfigs = {
-    public: {
-      icon: 'unlock',
-      text: 'Public',
-      textColor: 'text.successDefault',
-      bgColor: 'border.successDefaultSubdued'
-    },
-    internal: {
-      icon: 'lock',
-      text: 'Internal',
-      textColor: 'text.warningDefault',
-      bgColor: 'border.warningDefaultSubdued'
-    },
-    confidential: {
-      icon: 'lock-keyhole',
-      text: 'Confidential',
-      textColor: 'border.criticalHover',
-      bgColor: 'border.criticalDefaultSubdue'
-    },
-    restricted: {
-      icon: 'shield-keyhole',
-      text: 'Restricted',
-      textColor: 'background.surfaceCriticalDefault',
-      bgColor: 'background.buttonPrimaryDefault'
-    }
   };
 
   return (
