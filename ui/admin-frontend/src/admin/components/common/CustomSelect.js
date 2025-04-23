@@ -36,7 +36,18 @@ const CustomSelect = ({
           {...props}
         >
           {options.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
+            <MenuItem
+              key={option.value}
+              value={option.value}
+              sx={{
+                '&.Mui-selected': {
+                  backgroundColor: theme => theme.palette.background.surfaceNeutralHover,
+                  '&:hover': {
+                    backgroundColor: theme => theme.palette.background.surfaceNeutralHover
+                  }
+                }
+              }}
+            >
               {renderOption ? renderOption(option) : option.label}
             </MenuItem>
           ))}

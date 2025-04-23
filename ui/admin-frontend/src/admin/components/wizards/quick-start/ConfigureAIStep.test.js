@@ -90,6 +90,7 @@ jest.mock('../../../utils/vendorLogos', () => ({
   getVendorCodes: jest.fn(),
   getVendorName: jest.fn(),
   getVendorLogo: jest.fn(),
+  vendorRequiresAccessDetails: jest.fn(),
 }));
 
 describe('ConfigureAIStep Component', () => {
@@ -149,16 +150,18 @@ describe('ConfigureAIStep Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useQuickStart.mockReturnValue(defaultContextValues);
-    vendorLogos.getVendorCodes.mockReturnValue(['openai', 'anthropic', 'google_ai']);
+    vendorLogos.getVendorCodes.mockReturnValue(['openai', 'anthropic', 'google_ai', 'ollama']);
     vendorLogos.getVendorName.mockImplementation((code) => {
       const vendorMap = {
         'openai': 'OpenAI',
         'anthropic': 'Anthropic',
         'google_ai': 'Google AI',
+        'ollama': 'Ollama',
       };
       return vendorMap[code] || code;
     });
     vendorLogos.getVendorLogo.mockImplementation((code) => `/logos/${code}.png`);
+    vendorLogos.vendorRequiresAccessDetails.mockImplementation((code) => code !== 'ollama');
   });
 
   // Wrapper component with theme provider
@@ -210,7 +213,7 @@ describe('ConfigureAIStep Component', () => {
     expect(continueButton).not.toBeDisabled();
   });
 
-  test('validates form fields correctly', () => {
+  test('validates form fields correctly for providers requiring access details', () => {
     renderWithTheme(<ConfigureAIStep />);
     
     // Initially the form should be invalid (no name or provider)
@@ -224,13 +227,73 @@ describe('ConfigureAIStep Component', () => {
     // Form should still be invalid (no provider selected)
     expect(continueButton).toBeDisabled();
     
-    // Select LLM provider
+    // Select LLM provider that requires access details
     const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
+    
+    // Form should still be invalid (no API endpoint and key)
+    expect(continueButton).toBeDisabled();
+    
+    // Enter API endpoint
+    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
+    
+    // Form should still be invalid (no API key)
+    expect(continueButton).toBeDisabled();
+    
+    // Enter API key
+    const apiKeyInput = screen.getByTestId('api_key_field');
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Form should now be valid
     expect(continueButton).not.toBeDisabled();
     expect(mockSetStepValid).toHaveBeenCalledWith('configure-ai', true);
+  });
+  
+  test('validates form fields correctly for Ollama (no access details required)', () => {
+    renderWithTheme(<ConfigureAIStep />);
+    
+    // Initially the form should be invalid (no name or provider)
+    const continueButton = screen.getByRole('button', { name: /continue/i });
+    expect(continueButton).toBeDisabled();
+    
+    // Enter LLM name
+    const nameInput = screen.getAllByRole('textbox')[0]; // First textbox is the name input
+    fireEvent.change(nameInput, { target: { value: 'Test LLM' } });
+    
+    // Form should still be invalid (no provider selected)
+    expect(continueButton).toBeDisabled();
+    
+    // Select Ollama as provider (doesn't require access details)
+    const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
+    fireEvent.change(providerSelect, { target: { value: 'ollama' } });
+    
+    // Form should now be valid without API endpoint and key
+    expect(continueButton).not.toBeDisabled();
+    expect(mockSetStepValid).toHaveBeenCalledWith('configure-ai', true);
+  });
+
+  test('displays asterisks for API fields when required', () => {
+    renderWithTheme(<ConfigureAIStep />);
+    
+    // Initially, no provider is selected, so no asterisks should be shown
+    expect(screen.queryByText('API Endpoint*')).not.toBeInTheDocument();
+    expect(screen.queryByText('API Key*')).not.toBeInTheDocument();
+    
+    // Select a provider that requires access details (OpenAI)
+    const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
+    fireEvent.change(providerSelect, { target: { value: 'openai' } });
+    
+    // Asterisks should now be shown
+    expect(screen.getByText('API Endpoint*')).toBeInTheDocument();
+    expect(screen.getByText('API Key*')).toBeInTheDocument();
+    
+    // Change to Ollama which doesn't require access details
+    fireEvent.change(providerSelect, { target: { value: 'ollama' } });
+    
+    // Asterisks should be removed
+    expect(screen.queryByText('API Endpoint*')).not.toBeInTheDocument();
+    expect(screen.queryByText('API Key*')).not.toBeInTheDocument();
   });
 
   test('creates a new LLM when form is submitted', async () => {
@@ -374,6 +437,13 @@ describe('ConfigureAIStep Component', () => {
     const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
     
+    // Add API endpoint and key for OpenAI
+    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
+    
+    const apiKeyInput = screen.getByTestId('api_key_field');
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
+    
     // Submit the form
     const continueButton = screen.getByRole('button', { name: /continue/i });
     fireEvent.click(continueButton);
@@ -402,6 +472,13 @@ describe('ConfigureAIStep Component', () => {
     
     const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
+    
+    // Add API endpoint and key for OpenAI
+    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
+    
+    const apiKeyInput = screen.getByTestId('api_key_field');
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Submit the form
     const continueButton = screen.getByRole('button', { name: /continue/i });
@@ -451,6 +528,13 @@ describe('ConfigureAIStep Component', () => {
     
     const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
+    
+    // Add API endpoint and key for OpenAI
+    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
+    
+    const apiKeyInput = screen.getByTestId('api_key_field');
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Submit the form
     const continueButton = screen.getByRole('button', { name: /continue/i });

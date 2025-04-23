@@ -249,12 +249,6 @@ const SummaryStep = () => {
               <Typography
                 variant="bodyLargeBold"
                 color="text.primary"
-                sx={{
-                  fontSize: {
-                    xs: '1rem',
-                    sm: 'inherit'
-                  }
-                }}
               >
                 Secret
               </Typography>
@@ -590,12 +584,6 @@ const SummaryStep = () => {
             <Typography
               variant="bodyLargeBold"
               color="text.primary"
-              sx={{
-                fontSize: {
-                  xs: '1rem',
-                  sm: 'inherit'
-                }
-              }}
             >
               Curl example
             </Typography>
