@@ -16,7 +16,7 @@ import CustomNote from '../../common/CustomNote';
 import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
 import Icon from '../../../../components/common/Icon';
-import { getVendorCodes, getVendorName, getVendorLogo } from '../../../utils/vendorLogos';
+import { getVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
 
 const PRIVACY_LEVEL_SCORES = {
   public: 25,
@@ -53,7 +53,17 @@ const ConfigureAIStep = () => {
   });
 
   const checkRequiredFields = React.useCallback(() => {
-    const isValid = formData.name.trim() !== '' && formData.llmProvider.trim() !== '';
+    const nameValid = formData.name.trim() !== '';
+    const providerValid = formData.llmProvider.trim() !== '';
+    
+    const requiresAccessDetails = formData.llmProvider &&
+      vendorRequiresAccessDetails(formData.llmProvider);
+    
+    const apiEndpointValid = !requiresAccessDetails || formData.apiEndpoint.trim() !== '';
+    const apiKeyValid = !requiresAccessDetails || formData.apiKey.trim() !== '';
+    
+    const isValid = nameValid && providerValid && apiEndpointValid && apiKeyValid;
+    
     setIsFormValid(isValid);
     setStepValid('configure-ai', isValid);
     return isValid;
@@ -278,7 +288,7 @@ const ConfigureAIStep = () => {
         >
           <Box sx={{ flex: 1 }}>
             <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-              API Endpoint
+              API Endpoint{formData.llmProvider && vendorRequiresAccessDetails(formData.llmProvider) ? '*' : ''}
             </Typography>
             <StyledTextField
               fullWidth
@@ -302,7 +312,7 @@ const ConfigureAIStep = () => {
 
           <Box sx={{ flex: 1 }}>
             <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-              API Key
+              API Key{formData.llmProvider && vendorRequiresAccessDetails(formData.llmProvider) ? '*' : ''}
             </Typography>
             <StyledTextField
               fullWidth

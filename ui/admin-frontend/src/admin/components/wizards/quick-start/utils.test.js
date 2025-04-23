@@ -7,10 +7,10 @@ import {
   validateEmail,
   validatePassword
 } from './utils';
-import { getConfig } from '../../../config';
+import { getConfig } from '../../../../config';
 
 // Mock the getConfig function
-jest.mock('../../../config', () => ({
+jest.mock('../../../../config', () => ({
   getConfig: jest.fn()
 }));
 
@@ -147,7 +147,7 @@ describe('Quick Start Wizard Utils', () => {
     test('returns OpenAI curl example by default', () => {
       const result = getCurlExample();
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/openai/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/openai/v1/chat/completions"');
       expect(result).toContain('"model": "gpt-4o"');
       expect(result).toContain('"temperature": 0.7');
       expect(result).toContain('"max_tokens": 1000');
@@ -156,14 +156,14 @@ describe('Quick Start Wizard Utils', () => {
     test('returns Anthropic curl example', () => {
       const result = getCurlExample('anthropic', 'Anthropic Claude');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/anthropic-claude/v1"');
-      expect(result).toContain('"model": "claude-sonnet"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/anthropic-claude/v1/messages"');
+      expect(result).toContain('"model": "claude-3-5-sonnet-20240620"');
     });
 
     test('returns Google AI curl example', () => {
       const result = getCurlExample('google_ai', 'Google Gemini');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/google-gemini/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/google-gemini/v1/models/gemini-1.5-flash:generateContent?key=YOUR_SECRET"');
       expect(result).toContain('"model": "gemini-1.5-flash"');
       expect(result).toContain('"temperature": 0.7');
       expect(result).toContain('"maxOutputTokens": 1000');
@@ -172,7 +172,7 @@ describe('Quick Start Wizard Utils', () => {
     test('returns Google curl example', () => {
       const result = getCurlExample('google', 'Google AI');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/google-ai/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/google-ai/v1/models/gemini-1.5-flash:generateContent?key=YOUR_SECRET"');
       expect(result).toContain('"model": "gemini-1.5-flash"');
       expect(result).toContain('"temperature": 0.7');
       expect(result).toContain('"maxOutputTokens": 1000');
@@ -181,28 +181,28 @@ describe('Quick Start Wizard Utils', () => {
     test('returns Vertex curl example', () => {
       const result = getCurlExample('vertex', 'Vertex AI');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/vertex-ai/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/vertex-ai/v1/models/gemini-pro:generateContent"');
       expect(result).toContain('"model": "gemini-pro"');
     });
 
     test('returns Ollama curl example', () => {
       const result = getCurlExample('ollama', 'Ollama');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/ollama/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/ollama/api/chat"');
       expect(result).toContain('"model": "llama3"');
     });
 
     test('returns HuggingFace curl example', () => {
       const result = getCurlExample('huggingface', 'HuggingFace');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/huggingface/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/huggingface/models/mistralai/Mistral-7B-Instruct-v0.2"');
       expect(result).toContain('"model": "mistralai/Mistral-7B-Instruct-v0.2"');
     });
 
     test('uses different name for URL construction', () => {
       const result = getCurlExample('openai', 'Custom OpenAI Name');
       
-      expect(result).toContain('curl -X POST "https://example.com/ai/custom-openai-name/v1"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/custom-openai-name/v1/chat/completions"');
       expect(result).toContain('"model": "gpt-4o"');
     });
   });
