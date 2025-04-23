@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -24,13 +25,29 @@ type usageData struct {
 	cachedAt time.Time
 }
 
+// atomicUsageCache is a thread-safe cache entry
+type atomicUsageCache struct {
+	spent    uint64 // stored as integer (float * 10000)
+	cachedAt int64  // unix timestamp in nanoseconds
+}
+
 type BudgetService struct {
 	db              *gorm.DB
-	usageCache      map[usageKey]usageData
+	usageCache      map[usageKey]usageData        // legacy cache
+	atomicCache     map[usageKey]*atomicUsageCache // optimistic cache
 	cacheMutex      sync.RWMutex
+	updateMutex     sync.Mutex // separate mutex for background updates
 	cacheDuration   time.Duration
 	notificationSvc *NotificationService
 	templatePath    string
+	updateQueue     chan cacheUpdateRequest
+	queueRunning    int32 // atomic flag to track if update worker is running
+}
+
+// cacheUpdateRequest represents a request to update the cache
+type cacheUpdateRequest struct {
+	key      usageKey
+	priority int // higher number = higher priority
 }
 
 // calculateBudgetPeriodStart determines the start of the current budget period
@@ -89,13 +106,178 @@ func NewBudgetService(db *gorm.DB, notificationSvc *NotificationService) *Budget
 	s := &BudgetService{
 		db:              db,
 		usageCache:      make(map[usageKey]usageData),
+		atomicCache:     make(map[usageKey]*atomicUsageCache),
 		cacheMutex:      sync.RWMutex{},
+		updateMutex:     sync.Mutex{},
 		cacheDuration:   5 * time.Minute,
 		notificationSvc: notificationSvc,
 		templatePath:    templatePath,
+		updateQueue:     make(chan cacheUpdateRequest, 100), // Buffer size of 100
+		queueRunning:    0,
 	}
 	go s.cleanupCache()
 	return s
+}
+
+// startUpdateWorker ensures the update worker is running
+func (s *BudgetService) startUpdateWorker() {
+	// Only start if not already running
+	if atomic.CompareAndSwapInt32(&s.queueRunning, 0, 1) {
+		go s.processUpdateQueue()
+	}
+}
+
+// processUpdateQueue processes cache update requests in the background
+func (s *BudgetService) processUpdateQueue() {
+	defer atomic.StoreInt32(&s.queueRunning, 0)
+	
+	// Use a map to track the highest priority for each key
+	pendingUpdates := make(map[usageKey]int)
+	
+	for {
+		select {
+		case req, ok := <-s.updateQueue:
+			if !ok {
+				// Channel closed
+				return
+			}
+			
+			// Only keep the highest priority request for each key
+			if existingPriority, exists := pendingUpdates[req.key]; !exists || req.priority > existingPriority {
+				pendingUpdates[req.key] = req.priority
+			}
+			
+		case <-time.After(100 * time.Millisecond):
+			// Process accumulated requests after a short delay
+			if len(pendingUpdates) > 0 {
+				s.processPendingUpdates(pendingUpdates)
+				pendingUpdates = make(map[usageKey]int) // Clear the map
+			}
+			
+			// If no more requests for a while, exit
+			if len(s.updateQueue) == 0 {
+				select {
+				case req, ok := <-s.updateQueue:
+					if ok {
+						// Got one more request, process it in the next iteration
+						if existingPriority, exists := pendingUpdates[req.key]; !exists || req.priority > existingPriority {
+							pendingUpdates[req.key] = req.priority
+						}
+						continue
+					}
+				case <-time.After(5 * time.Second):
+					// No requests for 5 seconds, exit the goroutine
+					return
+				}
+			}
+		}
+	}
+}
+
+// processPendingUpdates processes a batch of update requests
+func (s *BudgetService) processPendingUpdates(updates map[usageKey]int) {
+	now := time.Now()
+	
+	for key, priority := range updates {
+		var spent float64
+		var err error
+		
+		// Process based on entity type
+		if key.entityType == "App" {
+			spent, err = s.fetchAppSpending(key.entityID, key.startDate, now)
+		} else if key.entityType == "LLM" {
+			spent, err = s.fetchLLMSpending(key.entityID, key.startDate, now)
+		}
+		
+		if err != nil {
+			log.Printf("Error updating cache for %s %d: %v", key.entityType, key.entityID, err)
+			continue
+		}
+		
+		// Update both caches
+		s.updateCaches(key, spent, now)
+		
+		// For high priority updates, trigger budget analysis
+		if priority >= 2 {
+			if key.entityType == "App" {
+				var app models.App
+				if err := s.db.First(&app, key.entityID).Error; err == nil {
+					go s.AnalyzeBudgetUsage(&app, nil)
+				}
+			} else if key.entityType == "LLM" {
+				var llm models.LLM
+				if err := s.db.First(&llm, key.entityID).Error; err == nil {
+					go s.AnalyzeBudgetUsage(nil, &llm)
+				}
+			}
+		}
+	}
+}
+
+// updateCaches updates both the legacy and atomic caches
+func (s *BudgetService) updateCaches(key usageKey, spent float64, now time.Time) {
+	// Update legacy cache
+	s.cacheMutex.Lock()
+	s.usageCache[key] = usageData{
+		spent:    spent,
+		cachedAt: now,
+	}
+	s.cacheMutex.Unlock()
+	
+	// Update atomic cache (create if doesn't exist)
+	s.cacheMutex.RLock()
+	cache, exists := s.atomicCache[key]
+	s.cacheMutex.RUnlock()
+	
+	if !exists {
+		s.cacheMutex.Lock()
+		cache, exists = s.atomicCache[key]
+		if !exists {
+			cache = &atomicUsageCache{}
+			s.atomicCache[key] = cache
+		}
+		s.cacheMutex.Unlock()
+	}
+	
+	// Update atomic values
+	atomic.StoreUint64(&cache.spent, uint64(spent*10000))
+	atomic.StoreInt64(&cache.cachedAt, now.UnixNano())
+}
+
+// fetchAppSpending gets the spending for an app directly from the database
+func (s *BudgetService) fetchAppSpending(appID uint, start, end time.Time) (float64, error) {
+	// Adjust end time to include full day
+	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
+	
+	var rawTotal float64
+	query := s.db.Model(&models.LLMChatRecord{}).
+		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
+		Select("COALESCE(SUM(cost), 0)")
+	
+	err := query.Scan(&rawTotal).Error
+	if err != nil {
+		return 0, err
+	}
+	
+	return rawTotal / 10000.0, nil
+}
+
+// fetchLLMSpending gets the spending for an LLM directly from the database
+func (s *BudgetService) fetchLLMSpending(llmID uint, start, end time.Time) (float64, error) {
+	// Adjust end time to include full day
+	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
+	
+	var rawTotal float64
+	query := s.db.Model(&models.LLMChatRecord{}).
+		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
+		Select("COALESCE(SUM(cost), 0)")
+	
+	err := query.Scan(&rawTotal).Error
+	if err != nil {
+		return 0, err
+	}
+	
+	return rawTotal / 10000.0, nil
 }
 
 func (s *BudgetService) cleanupCache() {
@@ -135,6 +317,7 @@ func (s *BudgetService) cleanupCache() {
 }
 
 // GetMonthlySpending calculates total spending for an app since its budget start date or the current month.
+// Now uses the optimistic cache approach
 func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (float64, error) {
 	var app models.App
 	if err := s.db.First(&app, appID).Error; err != nil {
@@ -142,87 +325,46 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 	}
 
 	// Use passed-in start date, as it should already account for budget start date
-
 	key := usageKey{
 		entityID:   appID,
 		entityType: "App",
 		startDate:  start,
 	}
 
+	// Try atomic cache first (no locking)
+	spent, cacheHit := s.getFromAtomicCache(key)
+	if cacheHit {
+		log.Printf("App %d spending from atomic cache: %.2f", appID, spent)
+		return spent, nil
+	}
+	
+	// Fall back to legacy cache with read lock
 	s.cacheMutex.RLock()
-	if data, exists := s.usageCache[key]; exists {
-		if time.Since(data.cachedAt) < s.cacheDuration {
-			s.cacheMutex.RUnlock()
-			log.Printf("App %d spending from cache: %.2f (cached %v ago)", appID, data.spent, time.Since(data.cachedAt))
-			return data.spent, nil
-		}
-		log.Printf("App %d cache expired (cached %v ago)", appID, time.Since(data.cachedAt))
+	data, exists := s.usageCache[key]
+	if exists && time.Since(data.cachedAt) < s.cacheDuration {
+		spent = data.spent
+		s.cacheMutex.RUnlock()
+		log.Printf("App %d spending from legacy cache: %.2f", appID, spent)
+		return spent, nil
 	}
 	s.cacheMutex.RUnlock()
 	
 	log.Printf("App %d spending cache miss, querying database", appID)
 
-	// Adjust end time to include full day
-	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
-
-	var totalSpent float64
-	var recordCount int64
-
-	// First get count of records for debugging
-	countQuery := s.db.Model(&models.LLMChatRecord{}).
-		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end)
-	if err := countQuery.Count(&recordCount).Error; err != nil {
-		log.Printf("Error counting records for app %d: %v", appID, err)
-	}
-
-	// Get raw sum before division
-	var rawSum float64
-	rawQuery := s.db.Model(&models.LLMChatRecord{}).
-		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
-		Select("COALESCE(CAST(SUM(cost) AS DECIMAL(20,4)), 0)")
-	if err := rawQuery.Scan(&rawSum).Error; err != nil {
-		log.Printf("Error getting raw sum for app %d: %v", appID, err)
-	}
-
-	// Get raw sum and perform division in application layer
-	query := s.db.Model(&models.LLMChatRecord{}).
-		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
-		Select("COALESCE(SUM(cost), 0)")
-
-	// Enhanced logging for query debugging
-	sql := query.Statement.SQL.String()
-	vars := query.Statement.Vars
-	log.Printf("App %d spending calculation:", appID)
-	log.Printf("- Records found: %d", recordCount)
-	log.Printf("- Raw sum before division: %.4f", rawSum)
-	log.Printf("- Query: %s with values: %v", sql, vars)
-
-	var rawTotal float64
-	err := query.Scan(&rawTotal).Error
+	// Queue an update for the future and fetch immediately
+	spent, err := s.fetchAppSpending(appID, start, end)
 	if err != nil {
-		log.Printf("Error calculating app %d spending: %v", appID, err)
 		return 0, err
 	}
-
-	totalSpent = rawTotal / 10000.0
-
-	if err != nil {
-		log.Printf("Error calculating app %d spending: %v", appID, err)
-		return 0, err
-	}
-	log.Printf("App %d spending calculated: %.2f (start: %v, end: %v)", appID, totalSpent, start, end)
-
-	s.cacheMutex.Lock()
-	s.usageCache[key] = usageData{
-		spent:    totalSpent,
-		cachedAt: time.Now(),
-	}
-	s.cacheMutex.Unlock()
-
-	return totalSpent, nil
+	
+	// Update both caches
+	s.updateCaches(key, spent, time.Now())
+	
+	return spent, nil
 }
 
 // GetLLMMonthlySpending calculates total spending for a given LLM since its budget start date or the current month.
+// Now uses the optimistic cache approach
 func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) (float64, error) {
 	var llm models.LLM
 	if err := s.db.First(&llm, llmID).Error; err != nil {
@@ -230,84 +372,42 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	}
 
 	// Use passed-in start date, as it should already account for budget start date
-
 	key := usageKey{
 		entityID:   llmID,
 		entityType: "LLM",
 		startDate:  start,
 	}
 
+	// Try atomic cache first (no locking)
+	spent, cacheHit := s.getFromAtomicCache(key)
+	if cacheHit {
+		log.Printf("LLM %d spending from atomic cache: %.2f", llmID, spent)
+		return spent, nil
+	}
+	
+	// Fall back to legacy cache with read lock
 	s.cacheMutex.RLock()
-	if data, exists := s.usageCache[key]; exists {
-		if time.Since(data.cachedAt) < s.cacheDuration {
-			s.cacheMutex.RUnlock()
-			log.Printf("LLM %d spending from cache: %.2f (cached %v ago)", llmID, data.spent, time.Since(data.cachedAt))
-			return data.spent, nil
-		}
-		log.Printf("LLM %d cache expired (cached %v ago)", llmID, time.Since(data.cachedAt))
+	data, exists := s.usageCache[key]
+	if exists && time.Since(data.cachedAt) < s.cacheDuration {
+		spent = data.spent
+		s.cacheMutex.RUnlock()
+		log.Printf("LLM %d spending from legacy cache: %.2f", llmID, spent)
+		return spent, nil
 	}
 	s.cacheMutex.RUnlock()
 	
 	log.Printf("LLM %d spending cache miss, querying database", llmID)
 
-	// Adjust end time to include full day
-	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
-
-	var totalSpent float64
-	var recordCount int64
-
-	// First get count of records for debugging
-	countQuery := s.db.Model(&models.LLMChatRecord{}).
-		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end)
-	if err := countQuery.Count(&recordCount).Error; err != nil {
-		log.Printf("Error counting records for LLM %d: %v", llmID, err)
-	}
-
-	// Get raw sum before division
-	var rawSum float64
-	rawQuery := s.db.Model(&models.LLMChatRecord{}).
-		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
-		Select("COALESCE(CAST(SUM(cost) AS DECIMAL(20,4)), 0)")
-	if err := rawQuery.Scan(&rawSum).Error; err != nil {
-		log.Printf("Error getting raw sum for LLM %d: %v", llmID, err)
-	}
-
-	// Get raw sum and perform division in application layer
-	query := s.db.Model(&models.LLMChatRecord{}).
-		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
-		Select("COALESCE(SUM(cost), 0)")
-
-	// Enhanced logging for query debugging
-	sql := query.Statement.SQL.String()
-	vars := query.Statement.Vars
-	log.Printf("LLM %d spending calculation:", llmID)
-	log.Printf("- Records found: %d", recordCount)
-	log.Printf("- Raw sum before division: %.4f", rawSum)
-	log.Printf("- Query: %s with values: %v", sql, vars)
-
-	var rawTotal float64
-	err := query.Scan(&rawTotal).Error
+	// Queue an update for the future and fetch immediately
+	spent, err := s.fetchLLMSpending(llmID, start, end)
 	if err != nil {
-		log.Printf("Error calculating LLM %d spending: %v", llmID, err)
 		return 0, err
 	}
-
-	totalSpent = rawTotal / 10000.0
-
-	if err != nil {
-		log.Printf("Error calculating LLM %d spending: %v", llmID, err)
-		return 0, err
-	}
-	log.Printf("LLM %d spending calculated: %.2f (start: %v, end: %v)", llmID, totalSpent, start, end)
-
-	s.cacheMutex.Lock()
-	s.usageCache[key] = usageData{
-		spent:    totalSpent,
-		cachedAt: time.Now(),
-	}
-	s.cacheMutex.Unlock()
-
-	return totalSpent, nil
+	
+	// Update both caches
+	s.updateCaches(key, spent, time.Now())
+	
+	return spent, nil
 }
 
 // CheckBudget verifies if a request would exceed either App or LLM budget by first checking the cache,
@@ -319,74 +419,81 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 	var appSpent, llmSpent float64
 	var appBudgetExceeded, llmBudgetExceeded bool
 
+	// Ensure the update worker is running
+	s.startUpdateWorker()
+
 	// Check for app budget
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
 		
-		// Check cache first for quick response
+		// Create the key for cache lookup
 		key := usageKey{
 			entityID:   app.ID,
 			entityType: "App",
 			startDate:  start,
 		}
 		
-		s.cacheMutex.RLock()
-		if data, exists := s.usageCache[key]; exists && time.Since(data.cachedAt) < s.cacheDuration {
-			appSpent = data.spent
+		// Try atomic cache first (no locking)
+		appSpent, cacheHit := s.getFromAtomicCache(key)
+		
+		if !cacheHit {
+			// Fall back to legacy cache with read lock
+			s.cacheMutex.RLock()
+			data, exists := s.usageCache[key]
+			if exists && time.Since(data.cachedAt) < s.cacheDuration {
+				appSpent = data.spent
+				cacheHit = true
+			}
 			s.cacheMutex.RUnlock()
+		}
+		
+		if cacheHit {
 			log.Printf("App %d spending from cache: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
+		} else {
+			// Cache miss - queue an update but use a default value for now
+			// This makes the check optimistic - we'll assume budget is not exceeded
+			// until we have data that proves otherwise
+			s.updateQueue <- cacheUpdateRequest{key: key, priority: 2}
 			
-			// Calculate usage percentage
+			// Check for existing notifications to see if we already know the budget is exceeded
+			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+				app.ID,
+				monthOffset,
+				int(*app.MonthlyBudget),
+				100, // 100% threshold
+			)
+			
+			// Quick check for notification existence
+			var notification models.Notification
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			
+			err := s.db.WithContext(ctx).Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+				fmt.Sprintf("%s_owner", baseNotificationID),
+				fmt.Sprintf("%s_admin_%%", baseNotificationID),
+				start).First(&notification).Error
+			
+			if err == nil {
+				// Notification exists, budget is exceeded
+				appBudgetExceeded = true
+				appUsage = 100
+				log.Printf("App %d budget exceeded (notification exists)", app.ID)
+			} else {
+				// No notification, use a conservative estimate
+				appSpent = 0
+			}
+		}
+		
+		// Calculate usage percentage if we have spending data
+		if !appBudgetExceeded {
 			appUsage = (appSpent / *app.MonthlyBudget) * 100
 			
 			// Check if budget is exceeded
 			if appSpent >= *app.MonthlyBudget {
 				appBudgetExceeded = true
-				log.Printf("App %d budget exceeded from cache: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
+				log.Printf("App %d budget exceeded: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
 			}
-		} else {
-			s.cacheMutex.RUnlock()
-			// Cache miss or expired, get current spending from database
-			var err error
-			appSpent, err = s.GetMonthlySpending(app.ID, start, now)
-			if err != nil {
-				log.Printf("Error getting app spending: %v", err)
-			} else {
-				// Calculate usage percentage
-				appUsage = (appSpent / *app.MonthlyBudget) * 100
-				
-				// Check if budget is exceeded
-				if appSpent >= *app.MonthlyBudget {
-					appBudgetExceeded = true
-					log.Printf("App %d budget exceeded from DB: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
-				}
-			}
-		}
-		
-		// Check for existing notifications after calculating current spending
-		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
-			app.ID,
-			monthOffset,
-			int(*app.MonthlyBudget),
-			100, // 100% threshold
-		)
-
-		log.Printf("Checking app notification: %s", baseNotificationID)
-
-		// Check for either owner or admin notifications
-		var notification models.Notification
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		err := s.db.WithContext(ctx).Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
-			fmt.Sprintf("%s_owner", baseNotificationID),
-			fmt.Sprintf("%s_admin_%%", baseNotificationID),
-			start).First(&notification).Error
-		
-		// If notification exists or budget is exceeded, mark as exceeded
-		if err == nil || appBudgetExceeded {
-			appBudgetExceeded = true
 		}
 	}
 
@@ -394,77 +501,76 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
 		
-		// Check cache first for quick response
+		// Create the key for cache lookup
 		key := usageKey{
 			entityID:   llm.ID,
 			entityType: "LLM",
 			startDate:  start,
 		}
 		
-		s.cacheMutex.RLock()
-		if data, exists := s.usageCache[key]; exists && time.Since(data.cachedAt) < s.cacheDuration {
-			llmSpent = data.spent
+		// Try atomic cache first (no locking)
+		llmSpent, cacheHit := s.getFromAtomicCache(key)
+		
+		if !cacheHit {
+			// Fall back to legacy cache with read lock
+			s.cacheMutex.RLock()
+			data, exists := s.usageCache[key]
+			if exists && time.Since(data.cachedAt) < s.cacheDuration {
+				llmSpent = data.spent
+				cacheHit = true
+			}
 			s.cacheMutex.RUnlock()
+		}
+		
+		if cacheHit {
 			log.Printf("LLM %d spending from cache: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
+		} else {
+			// Cache miss - queue an update but use a default value for now
+			s.updateQueue <- cacheUpdateRequest{key: key, priority: 2}
 			
-			// Calculate usage percentage
+			// Check for existing notifications to see if we already know the budget is exceeded
+			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+				llm.ID,
+				monthOffset,
+				int(*llm.MonthlyBudget),
+				100, // 100% threshold
+			)
+			
+			// Quick check for notification existence
+			var notification models.Notification
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			
+			err := s.db.WithContext(ctx).Where("notification_id LIKE ? AND sent_at >= ?",
+				fmt.Sprintf("%s_admin_%%", baseNotificationID),
+				start).First(&notification).Error
+			
+			if err == nil {
+				// Notification exists, budget is exceeded
+				llmBudgetExceeded = true
+				llmUsage = 100
+				log.Printf("LLM %d budget exceeded (notification exists)", llm.ID)
+			} else {
+				// No notification, use a conservative estimate
+				llmSpent = 0
+			}
+		}
+		
+		// Calculate usage percentage if we have spending data
+		if !llmBudgetExceeded {
 			llmUsage = (llmSpent / *llm.MonthlyBudget) * 100
 			
 			// Check if budget is exceeded
 			if llmSpent >= *llm.MonthlyBudget {
 				llmBudgetExceeded = true
-				log.Printf("LLM %d budget exceeded from cache: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
+				log.Printf("LLM %d budget exceeded: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
 			}
-		} else {
-			s.cacheMutex.RUnlock()
-			// Cache miss or expired, get current spending from database
-			var err error
-			llmSpent, err = s.GetLLMMonthlySpending(llm.ID, start, now)
-			if err != nil {
-				log.Printf("Error getting LLM spending: %v", err)
-			} else {
-				// Calculate usage percentage
-				llmUsage = (llmSpent / *llm.MonthlyBudget) * 100
-				
-				// Check if budget is exceeded
-				if llmSpent >= *llm.MonthlyBudget {
-					llmBudgetExceeded = true
-					log.Printf("LLM %d budget exceeded from DB: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
-				}
-			}
-		}
-		
-		// Check for existing notifications after calculating current spending
-		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
-			llm.ID,
-			monthOffset,
-			int(*llm.MonthlyBudget),
-			100, // 100% threshold
-		)
-
-		log.Printf("Checking LLM notification: %s", baseNotificationID)
-
-		// Check for admin notifications
-		var notification models.Notification
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		err := s.db.WithContext(ctx).Where("notification_id LIKE ? AND sent_at >= ?",
-			fmt.Sprintf("%s_admin_%%", baseNotificationID),
-			start).First(&notification).Error
-		
-		// If notification exists or budget is exceeded, mark as exceeded
-		if err == nil || llmBudgetExceeded {
-			llmBudgetExceeded = true
-		} else if err != gorm.ErrRecordNotFound {
-			// Log unexpected errors but don't block the request
-			log.Printf("Error checking for budget notifications: %v", err)
 		}
 	}
 
-	// Always analyze budget usage to ensure notifications are created
-	s.AnalyzeBudgetUsage(app, llm)
+	// Queue budget analysis in the background instead of blocking
+	go s.AnalyzeBudgetUsage(app, llm)
 
 	// Return appropriate error if budget is exceeded
 	if appBudgetExceeded {
@@ -478,125 +584,216 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 	return appUsage, llmUsage, nil
 }
 
+// getFromAtomicCache retrieves a value from the atomic cache without locking
+func (s *BudgetService) getFromAtomicCache(key usageKey) (float64, bool) {
+	// First check if the key exists with a read lock
+	s.cacheMutex.RLock()
+	cache, exists := s.atomicCache[key]
+	s.cacheMutex.RUnlock()
+	
+	if !exists {
+		return 0, false
+	}
+	
+	// Read atomic values
+	spentRaw := atomic.LoadUint64(&cache.spent)
+	cachedAtNano := atomic.LoadInt64(&cache.cachedAt)
+	
+	// Convert to proper types
+	spent := float64(spentRaw) / 10000.0
+	cachedAt := time.Unix(0, cachedAtNano)
+	
+	// Check if cache is still valid
+	if time.Since(cachedAt) < s.cacheDuration {
+		return spent, true
+	}
+	
+	return 0, false
+}
+
 // AnalyzeBudgetUsage analyzes current budget usage and sends notifications if thresholds are reached
+// This now runs in the background and doesn't block the main request flow
 func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 	now := time.Now()
 	end := now
 
+	// Use a separate context with timeout for database operations
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Check app budget
-	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
+	if app != nil && app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
-		spent, err := s.GetMonthlySpending(app.ID, start, end)
-		if err == nil {
-			appUsage := (spent / *app.MonthlyBudget) * 100
-			log.Printf("App %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
-				app.ID, appUsage, spent, *app.MonthlyBudget)
-			budget := *app.MonthlyBudget
-			usage := &models.BudgetUsage{
-				EntityID:        app.ID,
-				EntityType:      "App",
-				Name:            app.Name,
-				Usage:           appUsage,
-				Budget:          &budget,
-				Spent:           spent,
-				BudgetStartDate: &start,
+		
+		// Create cache key
+		key := usageKey{
+			entityID:   app.ID,
+			entityType: "App",
+			startDate:  start,
+		}
+		
+		// Try to get from cache first
+		spent, cacheHit := s.getFromAtomicCache(key)
+		if !cacheHit {
+			s.cacheMutex.RLock()
+			data, exists := s.usageCache[key]
+			if exists && time.Since(data.cachedAt) < s.cacheDuration {
+				spent = data.spent
+				cacheHit = true
 			}
-
-			// Check for existing notifications in this period
-			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			s.cacheMutex.RUnlock()
+		}
+		
+		// If cache miss, fetch from database
+		var err error
+		if !cacheHit {
+			spent, err = s.fetchAppSpending(app.ID, start, end)
+			if err != nil {
+				log.Printf("Error calculating app spending: %v", err)
+				return
+			}
 			
-			baseNotificationID80 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
-				app.ID,
-				monthOffset,
-				int(*app.MonthlyBudget),
-				80,
-			)
-			baseNotificationID100 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
-				app.ID,
-				monthOffset,
-				int(*app.MonthlyBudget),
-				100,
-			)
+			// Update cache in the background
+			s.updateCaches(key, spent, now)
+		}
+		
+		appUsage := (spent / *app.MonthlyBudget) * 100
+		log.Printf("App %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
+			app.ID, appUsage, spent, *app.MonthlyBudget)
+		budget := *app.MonthlyBudget
+		usage := &models.BudgetUsage{
+			EntityID:        app.ID,
+			EntityType:      "App",
+			Name:            app.Name,
+			Usage:           appUsage,
+			Budget:          &budget,
+			Spent:           spent,
+			BudgetStartDate: &start,
+		}
 
-			var existing80, existing100 models.Notification
-			err80 := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
-				fmt.Sprintf("%s_owner", baseNotificationID80),
-				fmt.Sprintf("%s_admin_%%", baseNotificationID80),
-				start).First(&existing80).Error
-			err100 := s.db.Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
-				fmt.Sprintf("%s_owner", baseNotificationID100),
-				fmt.Sprintf("%s_admin_%%", baseNotificationID100),
-				start).First(&existing100).Error
+		// Check for existing notifications in this period
+		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		
+		baseNotificationID80 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+			app.ID,
+			monthOffset,
+			int(*app.MonthlyBudget),
+			80,
+		)
+		baseNotificationID100 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
+			app.ID,
+			monthOffset,
+			int(*app.MonthlyBudget),
+			100,
+		)
 
-			// Simplified threshold checks for immediate notification
-			if appUsage >= 80 && err80 != nil {
-				if err := s.NotifyBudgetUsage(usage, 80); err != nil {
-					log.Printf("Failed to send app budget notification (80%%): %v", err)
-				}
+		var existing80, existing100 models.Notification
+		err80 := s.db.WithContext(ctx).Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+			fmt.Sprintf("%s_owner", baseNotificationID80),
+			fmt.Sprintf("%s_admin_%%", baseNotificationID80),
+			start).First(&existing80).Error
+		err100 := s.db.WithContext(ctx).Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
+			fmt.Sprintf("%s_owner", baseNotificationID100),
+			fmt.Sprintf("%s_admin_%%", baseNotificationID100),
+			start).First(&existing100).Error
+
+		// Simplified threshold checks for immediate notification
+		if appUsage >= 80 && err80 != nil {
+			if err := s.NotifyBudgetUsage(usage, 80); err != nil {
+				log.Printf("Failed to send app budget notification (80%%): %v", err)
 			}
-			if appUsage >= 100 && err100 != nil {
-				if err := s.NotifyBudgetUsage(usage, 100); err != nil {
-					log.Printf("Failed to send app budget notification (100%%): %v", err)
-				}
+		}
+		if appUsage >= 100 && err100 != nil {
+			if err := s.NotifyBudgetUsage(usage, 100); err != nil {
+				log.Printf("Failed to send app budget notification (100%%): %v", err)
 			}
 		}
 	}
 
 	// Check LLM budget
-	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
+	if llm != nil && llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
-		spent, err := s.GetLLMMonthlySpending(llm.ID, start, end)
-		if err == nil {
-			llmUsage := (spent / *llm.MonthlyBudget) * 100
-			log.Printf("LLM %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
-				llm.ID, llmUsage, spent, *llm.MonthlyBudget)
-			budget := *llm.MonthlyBudget
-			usage := &models.BudgetUsage{
-				EntityID:        llm.ID,
-				EntityType:      "LLM",
-				Name:            llm.Name,
-				Usage:           llmUsage,
-				Budget:          &budget,
-				Spent:           spent,
-				BudgetStartDate: &start,
+		
+		// Create cache key
+		key := usageKey{
+			entityID:   llm.ID,
+			entityType: "LLM",
+			startDate:  start,
+		}
+		
+		// Try to get from cache first
+		spent, cacheHit := s.getFromAtomicCache(key)
+		if !cacheHit {
+			s.cacheMutex.RLock()
+			data, exists := s.usageCache[key]
+			if exists && time.Since(data.cachedAt) < s.cacheDuration {
+				spent = data.spent
+				cacheHit = true
 			}
-
-			// Check for existing notifications in this period
-			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+			s.cacheMutex.RUnlock()
+		}
+		
+		// If cache miss, fetch from database
+		var err error
+		if !cacheHit {
+			spent, err = s.fetchLLMSpending(llm.ID, start, end)
+			if err != nil {
+				log.Printf("Error calculating LLM spending: %v", err)
+				return
+			}
 			
-			baseNotificationID80 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
-				llm.ID,
-				monthOffset,
-				int(*llm.MonthlyBudget),
-				80,
-			)
-			baseNotificationID100 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
-				llm.ID,
-				monthOffset,
-				int(*llm.MonthlyBudget),
-				100,
-			)
+			// Update cache in the background
+			s.updateCaches(key, spent, now)
+		}
+		
+		llmUsage := (spent / *llm.MonthlyBudget) * 100
+		log.Printf("LLM %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
+			llm.ID, llmUsage, spent, *llm.MonthlyBudget)
+		budget := *llm.MonthlyBudget
+		usage := &models.BudgetUsage{
+			EntityID:        llm.ID,
+			EntityType:      "LLM",
+			Name:            llm.Name,
+			Usage:           llmUsage,
+			Budget:          &budget,
+			Spent:           spent,
+			BudgetStartDate: &start,
+		}
 
-			var existing80, existing100 models.Notification
-			err80 := s.db.Where("notification_id LIKE ? AND sent_at >= ?",
-				fmt.Sprintf("%s_admin_%%", baseNotificationID80),
-				start).First(&existing80).Error
-			err100 := s.db.Where("notification_id LIKE ? AND sent_at >= ?",
-				fmt.Sprintf("%s_admin_%%", baseNotificationID100),
-				start).First(&existing100).Error
+		// Check for existing notifications in this period
+		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		
+		baseNotificationID80 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+			llm.ID,
+			monthOffset,
+			int(*llm.MonthlyBudget),
+			80,
+		)
+		baseNotificationID100 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
+			llm.ID,
+			monthOffset,
+			int(*llm.MonthlyBudget),
+			100,
+		)
 
-			// Simplified threshold checks for immediate notification
-			if llmUsage >= 80 && err80 != nil {
-				if err := s.NotifyBudgetUsage(usage, 80); err != nil {
-					log.Printf("Failed to send LLM budget notification (80%%): %v", err)
-				}
+		var existing80, existing100 models.Notification
+		err80 := s.db.WithContext(ctx).Where("notification_id LIKE ? AND sent_at >= ?",
+			fmt.Sprintf("%s_admin_%%", baseNotificationID80),
+			start).First(&existing80).Error
+		err100 := s.db.WithContext(ctx).Where("notification_id LIKE ? AND sent_at >= ?",
+			fmt.Sprintf("%s_admin_%%", baseNotificationID100),
+			start).First(&existing100).Error
+
+		// Simplified threshold checks for immediate notification
+		if llmUsage >= 80 && err80 != nil {
+			if err := s.NotifyBudgetUsage(usage, 80); err != nil {
+				log.Printf("Failed to send LLM budget notification (80%%): %v", err)
 			}
-			if llmUsage >= 100 && err100 != nil {
-				if err := s.NotifyBudgetUsage(usage, 100); err != nil {
-					log.Printf("Failed to send LLM budget notification (100%%): %v", err)
-				}
+		}
+		if llmUsage >= 100 && err100 != nil {
+			if err := s.NotifyBudgetUsage(usage, 100); err != nil {
+				log.Printf("Failed to send LLM budget notification (100%%): %v", err)
 			}
-			// No special case handling needed
 		}
 	}
 }
@@ -605,6 +802,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 func (s *BudgetService) ClearCache() {
 	s.cacheMutex.Lock()
 	s.usageCache = make(map[usageKey]usageData)
+	s.atomicCache = make(map[usageKey]*atomicUsageCache)
 	s.cacheMutex.Unlock()
 }
 
@@ -642,6 +840,14 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 	// Get start time for notification ID
 	now := time.Now()
 	start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
+	
+	// Calculate end of budget period
+	var endDate time.Time
+	if start.Month() == 12 {
+		endDate = time.Date(start.Year()+1, 1, start.Day()-1, 23, 59, 59, 0, start.Location())
+	} else {
+		endDate = time.Date(start.Year(), start.Month()+1, start.Day()-1, 23, 59, 59, 0, start.Location())
+	}
 
 	// Create base notification ID (used for budget check)
 	monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
@@ -661,6 +867,8 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 		"Budget":       budget,
 		"Currency":     currency,
 		"Threshold":    threshold,
+		"StartDate":    start,
+		"EndDate":      endDate,
 	}
 
 	// Send notification to both owner and admins
@@ -684,6 +892,14 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 	// Get start time for notification ID
 	now := time.Now()
 	start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
+	
+	// Calculate end of budget period
+	var endDate time.Time
+	if start.Month() == 12 {
+		endDate = time.Date(start.Year()+1, 1, start.Day()-1, 23, 59, 59, 0, start.Location())
+	} else {
+		endDate = time.Date(start.Year(), start.Month()+1, start.Day()-1, 23, 59, 59, 0, start.Location())
+	}
 
 	// Create base notification ID (used for budget check)
 	monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
@@ -709,6 +925,8 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 		"Budget":       budget,
 		"Currency":     currency,
 		"Threshold":    threshold,
+		"StartDate":    start,
+		"EndDate":      endDate,
 	}
 
 	// Send to admins
