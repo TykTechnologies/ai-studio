@@ -7,17 +7,19 @@ const useQuickStart = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Create a wrapped version of setShowQuickStart that logs when it's called
-  const setShowQuickStartWithLogging = (value) => {
-    console.log('setShowQuickStart called with value:', value);
-    setShowQuickStart(value);
-  };
-
   const {
     userName,
+    userId,
+    userEmail,
     fetchUserEntitlements,
     error: entitlementsError
   } = useUserEntitlements(true);
+
+  const currentUser = userId ? {
+    id: userId,
+    name: userName,
+    email: userEmail
+  } : null;
 
   const fetchAppsCount = useCallback(async () => {
     try {
@@ -40,7 +42,7 @@ const useQuickStart = () => {
     ])
       .then(([_, appsCount]) => {
         if (appsCount === 0) {
-          setShowQuickStartWithLogging(true);
+          setShowQuickStart(true);
         }
       })
       .catch(error => {
@@ -57,19 +59,19 @@ const useQuickStart = () => {
   }, [fetchQuickStartData]);
 
   const handleQuickStartComplete = () => {
-    setShowQuickStartWithLogging(false);
+    setShowQuickStart(false);
   };
 
   const handleQuickStartSkip = () => {
-    setShowQuickStartWithLogging(false);
+    setShowQuickStart(false);
   };
 
   const combinedError = entitlementsError || error;
 
   return {
     showQuickStart,
-    setShowQuickStart: setShowQuickStartWithLogging, // This will be used by the button in Overview.js
-    userName,
+    setShowQuickStart: setShowQuickStart,
+    currentUser,
     loading,
     error: combinedError,
     handleQuickStartComplete,
