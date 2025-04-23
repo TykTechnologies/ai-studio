@@ -19,6 +19,7 @@ test('Register and manage users', async ({ page, loginPage, registerPage, adminM
   await test.step('Add a new admin user', async () => {
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
+    await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToUsers();
     await adminUsersPage.AddUserButton.click();
     await adminUsersPage.NameInput.fill('Admin User');
