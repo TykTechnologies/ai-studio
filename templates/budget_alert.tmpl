@@ -8,3 +8,4 @@ The LLM {{.Name}} has {{if eq .Threshold 100}}exceeded{{else}}reached {{.Thresho
 
 Current usage: {{.CurrentUsage}} {{.Currency}}
 Budget limit: {{.Budget}} {{.Currency}}
+Budget period: {{.StartDate | formatDate}} to {{.EndDate | formatDate}}
