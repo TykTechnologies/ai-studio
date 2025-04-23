@@ -17,47 +17,7 @@ import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
 import Icon from '../../../../components/common/Icon';
 import { getVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
-
-const PRIVACY_LEVEL_SCORES = {
-  public: 25,
-  internal: 50,
-  confidential: 75,
-  restricted: 100
-};
-
-const privacyLevelOptions = [
-  { value: 'public', label: 'Public', description: 'Safe to share data (e.g. blogs, press releases)' },
-  { value: 'internal', label: 'Internal', description: 'Limited to users within the org. (e.g. reports, policies)' },
-  { value: 'confidential', label: 'Confidential', description: 'Sensitive data (e.g. financials, strategies)' },
-  { value: 'restricted', label: 'Restricted', description: 'PII or personal data (e.g. names, emails, costumer info)' }
-];
-
-const privacyBadgeConfigs = {
-  public: {
-    icon: 'unlock',
-    text: 'Public',
-    textColor: 'text.successDefault',
-    bgColor: 'border.successDefaultSubdued'
-  },
-  internal: {
-    icon: 'lock',
-    text: 'Internal',
-    textColor: 'text.warningDefault',
-    bgColor: 'border.warningDefaultSubdued'
-  },
-  confidential: {
-    icon: 'lock-keyhole',
-    text: 'Confidential',
-    textColor: 'border.criticalHover',
-    bgColor: 'border.criticalDefaultSubdue'
-  },
-  restricted: {
-    icon: 'shield-keyhole',
-    text: 'Restricted',
-    textColor: 'background.surfaceCriticalDefault',
-    bgColor: 'background.buttonPrimaryDefault'
-  }
-};
+import { PRIVACY_LEVEL_SCORES, PRIVACY_LEVEL_OPTIONS, PRIVACY_BADGE_CONFIGS } from './utils';
 
 const ConfigureAIStep = () => {
   const {
@@ -347,11 +307,11 @@ const ConfigureAIStep = () => {
             name="privacyLevel"
             value={formData.privacyLevel}
             onChange={handleChange}
-            options={privacyLevelOptions}
+            options={PRIVACY_LEVEL_OPTIONS}
             renderOption={(option) => (
               <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                 <Box sx={{ mr: 2 }}>
-                  <CustomSelectBadge config={privacyBadgeConfigs[option.value]} />
+                  <CustomSelectBadge config={PRIVACY_BADGE_CONFIGS[option.value]} />
                 </Box>
                 <Typography
                   variant="bodyLargeDefault"

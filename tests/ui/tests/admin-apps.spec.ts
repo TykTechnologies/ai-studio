@@ -11,12 +11,7 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
 
-    // Check if the quick start wizard is visible and skip it if needed
-    const exploreByMyselfButton = adminMainPage.page.getByRole('button', { name: 'Explore by myself' });
-    if (await exploreByMyselfButton.isVisible()) {
-        await exploreByMyselfButton.click();
-        await adminMainPage.page.waitForTimeout(1000);
-    }
+    await adminMainPage.dismissQuickStartModal();
 
     await adminMainPage.navigateToApps();
     await adminAppsPage.AddAppButton.click();

@@ -153,3 +153,44 @@ export const validatePassword = (password, passwordCriteria) => {
   }
   return null;
 };
+
+export const PRIVACY_LEVEL_SCORES = {
+  public: 25,
+  internal: 50,
+  confidential: 75,
+  restricted: 100
+};
+
+export const PRIVACY_LEVEL_OPTIONS = [
+  { value: 'public', label: 'Public', description: 'Safe to share data (e.g. blogs, press releases)' },
+  { value: 'internal', label: 'Internal', description: 'Limited to users within the org. (e.g. reports, policies)' },
+  { value: 'confidential', label: 'Confidential', description: 'Sensitive data (e.g. financials, strategies)' },
+  { value: 'restricted', label: 'Restricted', description: 'PII or personal data (e.g. names, emails, costumer info)' }
+];
+
+export const PRIVACY_BADGE_CONFIGS = {
+  public: {
+    icon: 'unlock',
+    text: 'Public',
+    textColor: 'text.successDefault',
+    bgColor: 'border.successDefaultSubdued'
+  },
+  internal: {
+    icon: 'lock',
+    text: 'Internal',
+    textColor: 'text.warningDefault',
+    bgColor: 'border.warningDefaultSubdued'
+  },
+  confidential: {
+    icon: 'lock-keyhole',
+    text: 'Confidential',
+    textColor: 'border.criticalHover',
+    bgColor: 'border.criticalDefaultSubdue'
+  },
+  restricted: {
+    icon: 'shield-keyhole',
+    text: 'Restricted',
+    textColor: 'background.surfaceCriticalDefault',
+    bgColor: 'background.buttonPrimaryDefault'
+  }
+};
