@@ -27,7 +27,8 @@ const QuickStartModal = ({
   onComplete,
   onSkip,
   initialStep = 0,
-  renderBeforeContent
+  renderBeforeContent,
+  currentUser
 }) => {
   
   const handleComplete = () => {
@@ -48,6 +49,7 @@ const QuickStartModal = ({
           initialStep={initialStep}
           onComplete={handleComplete}
           onSkip={handleSkip}
+          currentUser={currentUser}
         >
           {renderBeforeContent && renderBeforeContent()}
           <QuickStartStepProgress />

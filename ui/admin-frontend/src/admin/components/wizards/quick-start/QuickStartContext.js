@@ -7,7 +7,8 @@ export const QuickStartProvider = ({
   steps,
   initialStep = 0,
   onComplete,
-  onSkip
+  onSkip,
+  currentUser = null
 }) => {
   const [activeStep, setActiveStep] = useState(initialStep);
   const [stepValidation, setStepValidation] = useState({});
@@ -78,7 +79,8 @@ export const QuickStartProvider = ({
     setCredentialData,
     setAppData,
     createdAppId,
-    setCreatedAppId
+    setCreatedAppId,
+    currentUser
   };
 
   return (

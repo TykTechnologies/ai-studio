@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -86,7 +86,7 @@ const ConfigureAIStep = () => {
     severity: 'success'
   });
 
-  const checkRequiredFields = React.useCallback(() => {
+  const checkRequiredFields = useCallback(() => {
     const nameValid = formData.name.trim() !== '';
     const providerValid = formData.llmProvider.trim() !== '';
     
@@ -164,7 +164,7 @@ const ConfigureAIStep = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.message || 'Unknown error'}`,
+        message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.response?.data?.message || error.message || 'Unknown error'}`,
         severity: 'error'
       });
     } finally {
@@ -293,15 +293,9 @@ const ConfigureAIStep = () => {
             </Typography>
             <StyledTextField
               fullWidth
-              name="api_endpoint_field"
+              name="apiEndpoint"
               value={formData.apiEndpoint}
-              onChange={(e) => {
-                const { value } = e.target;
-                setFormData(prev => ({
-                  ...prev,
-                  apiEndpoint: value
-                }));
-              }}
+              onChange={handleChange}
               autoComplete="new-password"
               inputProps={{
                 autoComplete: "new-password",
@@ -317,16 +311,10 @@ const ConfigureAIStep = () => {
             </Typography>
             <StyledTextField
               fullWidth
-              name="api_key_field"
+              name="apiKey"
               type="password"
               value={formData.apiKey}
-              onChange={(e) => {
-                const { value } = e.target;
-                setFormData(prev => ({
-                  ...prev,
-                  apiKey: value
-                }));
-              }}
+              onChange={handleChange}
               autoComplete="new-password"
               inputProps={{
                 autoComplete: "new-password",
@@ -426,4 +414,4 @@ const ConfigureAIStep = () => {
   );
 };
 
-export default ConfigureAIStep;
+export default memo(ConfigureAIStep);

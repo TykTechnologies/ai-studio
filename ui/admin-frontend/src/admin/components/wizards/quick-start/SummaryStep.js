@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import {
   Box,
   Typography,
@@ -153,7 +153,7 @@ const SummaryStep = () => {
           
           <Stack
             direction="row"
-            alignItems={{ xs: "center", sm: "end" }}
+            alignItems={{ xs: "center", sm: "center" }}
             mb={1}
             spacing={0}
           >
@@ -690,4 +690,4 @@ const SummaryStep = () => {
   );
 };
 
-export default SummaryStep;
+export default memo(SummaryStep);

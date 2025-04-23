@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -49,7 +49,7 @@ const AppDetailsStep = () => {
     severity: 'success'
   });
 
-  const checkRequiredFields = React.useCallback(() => {
+  const checkRequiredFields = useCallback(() => {
     let isValid = formData.name.trim() !== '';
     
     if (formData.setBudget && (!formData.monthlyBudget || formData.monthlyBudget === '')) {
@@ -122,7 +122,7 @@ const AppDetailsStep = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdAppId ? 'update' : 'create'} app: ${error.message || 'Unknown error'}`,
+        message: `Failed to ${createdAppId ? 'update' : 'create'} app: ${error.response?.data?.message || error.message || 'Unknown error'}`,
         severity: 'error'
       });
     } finally {
@@ -214,6 +214,7 @@ const AppDetailsStep = () => {
             value={formData.description}
             onChange={handleChange}
             autoComplete="off"
+            inputProps={{ maxLength: 200 }}
           />
           <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
             <Icon 
@@ -393,4 +394,4 @@ const AppDetailsStep = () => {
   );
 };
 
-export default AppDetailsStep;
+export default memo(AppDetailsStep);

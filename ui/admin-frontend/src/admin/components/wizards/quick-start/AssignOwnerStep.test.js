@@ -174,6 +174,13 @@ describe('AssignOwnerStep Component', () => {
   const mockSetOwnerData = jest.fn();
   const mockSetCreatedOwnerId = jest.fn();
 
+  // Mock current user
+  const mockCurrentUser = {
+    id: 'user123',
+    name: 'Test User',
+    email: 'test@example.com',
+  };
+
   // Default context values
   const defaultContextValues = {
     setStepValid: mockSetStepValid,
@@ -184,13 +191,7 @@ describe('AssignOwnerStep Component', () => {
     setOwnerData: mockSetOwnerData,
     createdOwnerId: null,
     setCreatedOwnerId: mockSetCreatedOwnerId,
-  };
-
-  // Mock current user
-  const mockCurrentUser = {
-    id: 'user123',
-    name: 'Test User',
-    email: 'test@example.com',
+    currentUser: mockCurrentUser,
   };
 
   // Reset mocks before each test
@@ -217,7 +218,7 @@ describe('AssignOwnerStep Component', () => {
   };
 
   test('renders the component with current user as default owner type', () => {
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Check that the component renders with the correct title and radio options
     expect(screen.getByText(/Now let's choose who will own this app/)).toBeInTheDocument();
@@ -257,7 +258,7 @@ describe('AssignOwnerStep Component', () => {
       ownerData: existingOwnerData
     });
     
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Check that the "new user" option is selected
     const newUserRadio = screen.getByLabelText('Add a new user');
@@ -283,7 +284,7 @@ describe('AssignOwnerStep Component', () => {
   });
 
   test('toggles between current user and new user forms', () => {
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Initially, the current user option should be selected
     const currentUserRadio = screen.getByLabelText('Set me as owner');
@@ -318,7 +319,7 @@ describe('AssignOwnerStep Component', () => {
   });
 
   test('validates form fields correctly', () => {
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Switch to new user form
     const newUserRadio = screen.getByLabelText('Add a new user');
@@ -363,7 +364,7 @@ describe('AssignOwnerStep Component', () => {
       }
     });
     
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Switch to new user form
     const newUserRadio = screen.getByLabelText('Add a new user');
@@ -432,7 +433,7 @@ describe('AssignOwnerStep Component', () => {
       }
     });
     
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Form should be pre-filled with existing data
     const nameInput = screen.getByTestId('input-name');
@@ -499,7 +500,7 @@ describe('AssignOwnerStep Component', () => {
       }
     });
     
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Submit the form without changing anything
     const continueButton = screen.getByTestId('primary-button');
@@ -524,7 +525,7 @@ describe('AssignOwnerStep Component', () => {
     // Mock API failure
     apiClient.post.mockRejectedValue(new Error('API Error'));
     
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Switch to new user form
     const newUserRadio = screen.getByLabelText('Add a new user');
@@ -553,7 +554,7 @@ describe('AssignOwnerStep Component', () => {
   });
 
   test('handles navigation buttons correctly', () => {
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Click Back button
     const backButton = screen.getByRole('button', { name: /back/i });
@@ -567,7 +568,7 @@ describe('AssignOwnerStep Component', () => {
   });
 
   test('sets current user as owner when that option is selected', async () => {
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Current user option should be selected by default
     const currentUserRadio = screen.getByLabelText('Set me as owner');
@@ -593,7 +594,7 @@ describe('AssignOwnerStep Component', () => {
   });
 
   test('handles different role selections correctly', async () => {
-    renderWithTheme(<AssignOwnerStep currentUser={mockCurrentUser} />);
+    renderWithTheme(<AssignOwnerStep />);
     
     // Switch to new user form
     const newUserRadio = screen.getByLabelText('Add a new user');

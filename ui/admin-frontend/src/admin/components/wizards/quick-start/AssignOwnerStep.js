@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -21,7 +21,7 @@ import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
 import { validateEmail, validatePassword } from './utils';
 
-const AssignOwnerStep = ({ currentUser }) => {
+const AssignOwnerStep = () => {
   const {
     setStepValid,
     goToNextStep,
@@ -30,7 +30,8 @@ const AssignOwnerStep = ({ currentUser }) => {
     ownerData,
     setOwnerData,
     createdOwnerId,
-    setCreatedOwnerId
+    setCreatedOwnerId,
+    currentUser
   } = useQuickStart();
   
   const [ownerType, setOwnerType] = useState(ownerData.ownerType || 'current');
@@ -76,7 +77,7 @@ const AssignOwnerStep = ({ currentUser }) => {
     }
   };
 
-  const checkRequiredFields = React.useCallback(() => {
+  const checkRequiredFields = useCallback(() => {
     if (ownerType === 'current') {
       setIsFormValid(true);
       setStepValid('assign-owner', true);
@@ -188,7 +189,7 @@ const AssignOwnerStep = ({ currentUser }) => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdOwnerId ? 'update' : 'create'} user: ${error.message || 'Unknown error'}`,
+        message: `Failed to ${createdOwnerId ? 'update' : 'create'} user: ${error.response?.data?.message || error.message || 'Unknown error'}`,
         severity: 'error'
       });
     } finally {
@@ -460,4 +461,4 @@ const AssignOwnerStep = ({ currentUser }) => {
   );
 };
 
-export default AssignOwnerStep;
+export default memo(AssignOwnerStep);

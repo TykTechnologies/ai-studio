@@ -72,6 +72,7 @@ describe('WelcomeStep Component', () => {
   const defaultContextValues = {
     goToNextStep: mockGoToNextStep,
     skipQuickStart: mockSkipQuickStart,
+    currentUser: { name: 'User' }
   };
 
   // Reset mocks before each test
@@ -106,7 +107,13 @@ describe('WelcomeStep Component', () => {
   });
 
   test('renders with custom userName', () => {
-    renderWithTheme(<WelcomeStep userName="John Doe" />);
+    // Mock the context with a custom user name
+    useQuickStart.mockReturnValue({
+      ...defaultContextValues,
+      currentUser: { name: 'John Doe' }
+    });
+    
+    renderWithTheme(<WelcomeStep />);
     
     // Check that the component renders with the custom userName
     expect(screen.getByText('Welcome to Tyk, John Doe')).toBeInTheDocument();

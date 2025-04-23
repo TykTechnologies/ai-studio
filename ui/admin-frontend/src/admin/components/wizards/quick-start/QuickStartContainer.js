@@ -34,6 +34,7 @@ const QuickStartContainer = ({ quickStartState }) => {
       open={showQuickStart}
       onClose={() => setShowQuickStart(false)}
       renderBeforeContent={() => <ContextCapture />}
+      currentUser={currentUser}
       steps={[
         {
           id: "welcome",

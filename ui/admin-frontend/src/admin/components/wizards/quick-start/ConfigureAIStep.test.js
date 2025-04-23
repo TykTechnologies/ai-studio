@@ -235,14 +235,14 @@ describe('ConfigureAIStep Component', () => {
     expect(continueButton).toBeDisabled();
     
     // Enter API endpoint
-    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    const apiEndpointInput = screen.getByTestId('apiEndpoint');
     fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
     
     // Form should still be invalid (no API key)
     expect(continueButton).toBeDisabled();
     
     // Enter API key
-    const apiKeyInput = screen.getByTestId('api_key_field');
+    const apiKeyInput = screen.getByTestId('apiKey');
     fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Form should now be valid
@@ -316,10 +316,10 @@ describe('ConfigureAIStep Component', () => {
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
     
     // Get API endpoint and key inputs
-    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    const apiEndpointInput = screen.getByTestId('apiEndpoint');
     fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
     
-    const apiKeyInput = screen.getByTestId('api_key_field');
+    const apiKeyInput = screen.getByTestId('apiKey');
     fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Submit the form
@@ -438,10 +438,10 @@ describe('ConfigureAIStep Component', () => {
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
     
     // Add API endpoint and key for OpenAI
-    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    const apiEndpointInput = screen.getByTestId('apiEndpoint');
     fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
     
-    const apiKeyInput = screen.getByTestId('api_key_field');
+    const apiKeyInput = screen.getByTestId('apiKey');
     fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Submit the form
@@ -474,10 +474,10 @@ describe('ConfigureAIStep Component', () => {
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
     
     // Add API endpoint and key for OpenAI
-    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    const apiEndpointInput = screen.getByTestId('apiEndpoint');
     fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
     
-    const apiKeyInput = screen.getByTestId('api_key_field');
+    const apiKeyInput = screen.getByTestId('apiKey');
     fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Submit the form
@@ -530,10 +530,10 @@ describe('ConfigureAIStep Component', () => {
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
     
     // Add API endpoint and key for OpenAI
-    const apiEndpointInput = screen.getByTestId('api_endpoint_field');
+    const apiEndpointInput = screen.getByTestId('apiEndpoint');
     fireEvent.change(apiEndpointInput, { target: { value: 'https://api.openai.com/v1' } });
     
-    const apiKeyInput = screen.getByTestId('api_key_field');
+    const apiKeyInput = screen.getByTestId('apiKey');
     fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
     
     // Submit the form
