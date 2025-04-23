@@ -9,8 +9,6 @@ import BasicCard from '../../../components/common/BasicCard';
 import IconBadge from '../../../components/common/IconBadge';
 import { createDocsLinkHandler } from '../../../utils/docsLinkUtils';
 import useConfig from '../../../hooks/useConfig';
-
-// Import the final step image
 import finalStepImage from './final_step.png';
 
 const ImageContainer = styled(Box)(({ theme }) => ({
@@ -81,7 +79,6 @@ const FinalStep = () => {
       </Typography>
       
       <CardsContainer>
-        {/* Data sources card */}
         <CardWrapper>
           <BasicCard
             secondaryAction={{
@@ -107,7 +104,6 @@ const FinalStep = () => {
           </BasicCard>
         </CardWrapper>
         
-        {/* Filters card */}
         <CardWrapper>
           <BasicCard
             secondaryAction={{
@@ -132,8 +128,7 @@ const FinalStep = () => {
             </Box>
           </BasicCard>
         </CardWrapper>
-        
-        {/* Catalogs card */}
+
         <CardWrapper>
           <BasicCard
             secondaryAction={{

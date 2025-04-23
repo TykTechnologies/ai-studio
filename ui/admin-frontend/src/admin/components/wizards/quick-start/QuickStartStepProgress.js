@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography, Box, useMediaQuery, useTheme } from '@mui/material';
+import { Typography, Box, useMediaQuery } from '@mui/material';
 import { useQuickStart } from './QuickStartContext';
 import Icon from '../../../../components/common/Icon';
 import {
@@ -12,7 +12,6 @@ import {
 
 const QuickStartStepProgress = () => {
   const { steps, activeStep, isLastStep } = useQuickStart();
-  const theme = useTheme();
   const isMobile = useMediaQuery('(max-width:600px)');
   const isTablet = useMediaQuery('(max-width:900px)');
 
@@ -21,16 +20,13 @@ const QuickStartStepProgress = () => {
   const progressSteps = steps.filter(step => !step.isWelcomeStep && !step.isLastStep);
   const currentStepIndex = activeStep === 0 ? -1 : activeStep - 1;
   
-  // Determine if a step is completed (any step before the current step)
   const isStepCompleted = (index) => {
     return index < currentStepIndex;
   };
   
-  // Calculate the width for the active step indicator (current step only)
   const activeStepWidth = currentStepIndex >= 0 ?
     `calc(${100 / progressSteps.length}%)` : '0';
     
-  // Calculate the width for completed steps indicator
   const completedStepsWidth = currentStepIndex > 0 ?
     `calc(${currentStepIndex * (100 / progressSteps.length)}%)` : '0';
 
@@ -38,7 +34,6 @@ const QuickStartStepProgress = () => {
     <StepProgressContainer>
       <StepProgressConnector />
       
-      {/* Completed steps indicator with rgba(43, 168, 74, 0.5) color */}
       {currentStepIndex > 0 && (
         <Box
           sx={{
@@ -53,7 +48,6 @@ const QuickStartStepProgress = () => {
         />
       )}
       
-      {/* Active step indicator with iconSuccessDefault color */}
       {currentStepIndex >= 0 && (
         <Box
           sx={{

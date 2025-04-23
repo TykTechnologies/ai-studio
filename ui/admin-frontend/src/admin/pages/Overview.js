@@ -85,7 +85,6 @@ const Overview = () => {
         <PrimaryButton
           variant="contained"
           onClick={() => {
-            console.log('Quick start button clicked in Overview.js');
             setShowQuickStart(true);
           }}
         >
