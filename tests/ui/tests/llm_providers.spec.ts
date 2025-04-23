@@ -7,6 +7,8 @@ test('Add LLM provider', async ({ loginPage, adminLLMProvidersPage, adminMainPag
 
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
+
+    await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToLLMProviders();
     await adminLLMProvidersPage.AddLLMButton.click();
     await adminLLMProvidersPage.ProviderNameInput.fill(LLMProviderName);
