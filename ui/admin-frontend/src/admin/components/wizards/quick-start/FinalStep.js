@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Box, Typography, Button } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
@@ -158,4 +158,4 @@ const FinalStep = () => {
   );
 };
 
-export default FinalStep;
+export default memo(FinalStep);

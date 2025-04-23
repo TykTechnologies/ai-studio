@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Box, Typography, Button, useMediaQuery } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { PrimaryButton } from '../../../styles/sharedStyles';
@@ -25,8 +25,9 @@ const WelcomeImage = styled('img')({
   objectFit: 'contain',
 });
 
-const WelcomeStep = ({ userName = 'User' }) => {
-  const { goToNextStep, skipQuickStart } = useQuickStart();
+const WelcomeStep = () => {
+  const { goToNextStep, skipQuickStart, currentUser } = useQuickStart();
+  const userName = currentUser?.name || 'User';
   const isMobile = useMediaQuery('(max-width:600px)');
   
   return (
@@ -113,4 +114,4 @@ const WelcomeStep = ({ userName = 'User' }) => {
   );
 };
 
-export default WelcomeStep;
+export default memo(WelcomeStep);

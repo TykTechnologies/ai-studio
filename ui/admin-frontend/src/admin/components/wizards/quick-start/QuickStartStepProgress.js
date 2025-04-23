@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Typography, Box, useMediaQuery } from '@mui/material';
 import { useQuickStart } from './QuickStartContext';
 import Icon from '../../../../components/common/Icon';
@@ -112,4 +112,4 @@ const QuickStartStepProgress = () => {
   );
 };
 
-export default QuickStartStepProgress;
+export default memo(QuickStartStepProgress);
