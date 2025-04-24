@@ -33,7 +33,7 @@ export const QuickStartProvider = ({
     if (activeStep < steps.length - 1) {
       setActiveStep(prev => prev + 1);
     } else {
-      onComplete && onComplete();
+      onComplete?.();
     }
   }, [activeStep, steps, validateStep, onComplete]);
 
@@ -44,7 +44,7 @@ export const QuickStartProvider = ({
   }, [activeStep]);
 
   const skipQuickStart = useCallback(() => {
-    onSkip && onSkip();
+    onSkip?.();
   }, [onSkip]);
 
   const setStepValid = useCallback((stepId, isValid) => {

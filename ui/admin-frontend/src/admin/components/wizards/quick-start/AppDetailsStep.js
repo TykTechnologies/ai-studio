@@ -64,7 +64,7 @@ const AppDetailsStep = () => {
 
   useEffect(() => {
     checkRequiredFields();
-  }, [formData, checkRequiredFields]);
+  }, [checkRequiredFields]);
   
   useEffect(() => {
     if (appData && Object.keys(appData).length > 0) {
