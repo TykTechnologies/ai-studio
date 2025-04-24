@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import PropTypes from 'prop-types';
 import {
   List,
@@ -10,9 +10,9 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import { StyledNavLink } from '../../../styles/sharedStyles';
 import { ParentListItem, SubListItem, ListItemIcon } from './styles';
 
-const MenuItem = ({ 
-  item, 
-  depth = 0, 
+const MenuItem = ({
+  item,
+  depth = 0,
   parentId = null,
   rootParentId = null,
   open,
@@ -20,7 +20,6 @@ const MenuItem = ({
   onExpandClick,
   onPathSelect,
   selectedPath,
-  disableRipple,
   isFirstItem,
 }) => {
   const itemId = item.id || item.text;
@@ -43,14 +42,19 @@ const MenuItem = ({
   const isSelected = item.exact
     ? selectedPath === item.path
     : isItemSelected(item, selectedPath);
-
+    
   const ListItemComponent = depth === 0 ? ParentListItem : SubListItem;
 
   if (hasSubItems) {
+    const handleItemClick = (e) => {
+      e.stopPropagation();
+      onExpandClick(itemId, parentId);
+    };
+
     return (
       <React.Fragment key={itemId}>
         <ListItemComponent
-          onClick={() => onExpandClick(itemId, parentId)}
+          onClick={handleItemClick}
           depth={depth}
           selected={isSelected}
           disableRipple
@@ -138,8 +142,7 @@ MenuItem.propTypes = {
   onExpandClick: PropTypes.func.isRequired,
   onPathSelect: PropTypes.func.isRequired,
   selectedPath: PropTypes.string,
-  disableRipple: PropTypes.bool,
   isFirstItem: PropTypes.bool,
 };
 
-export default React.memo(MenuItem);
+export default memo(MenuItem);
