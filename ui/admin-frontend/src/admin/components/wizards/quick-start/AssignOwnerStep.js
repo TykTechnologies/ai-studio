@@ -97,7 +97,7 @@ const AssignOwnerStep = () => {
 
   useEffect(() => {
     checkRequiredFields();
-  }, [formData, ownerType, checkRequiredFields]);
+  }, [checkRequiredFields]);
 
   useEffect(() => {
     setPasswordCriteria({
