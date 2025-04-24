@@ -32,8 +32,8 @@ const QuickStartModal = ({
 }) => {
   
   const handleComplete = () => {
-    onComplete && onComplete();
-    onClose && onClose();
+    onComplete?.();
+    onClose?.();
   };
 
   const handleSkip = () => {
