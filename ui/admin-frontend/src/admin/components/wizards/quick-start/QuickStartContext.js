@@ -33,7 +33,7 @@ export const QuickStartProvider = ({
     if (activeStep < steps.length - 1) {
       setActiveStep(prev => prev + 1);
     } else {
-      onComplete && onComplete();
+      onComplete?.();
     }
   }, [activeStep, steps, validateStep, onComplete]);
 
