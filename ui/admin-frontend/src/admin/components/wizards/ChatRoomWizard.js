@@ -116,7 +116,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
           attributes: {
             name: formData.vendorName,
             vendor: formData.vendor,
-            privacy_score: formData.privacyLevel,
+            privacy_score: Number(formData.privacyLevel),
             api_endpoint: formData.apiEndpoint,
             api_key: formData.apiKey,
             active: true,
