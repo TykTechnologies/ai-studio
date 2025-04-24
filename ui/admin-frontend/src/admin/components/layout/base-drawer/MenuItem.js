@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { memo } from 'react';
 import PropTypes from 'prop-types';
 import {
   List,
@@ -145,4 +145,4 @@ MenuItem.propTypes = {
   isFirstItem: PropTypes.bool,
 };
 
-export default React.memo(MenuItem);
+export default memo(MenuItem);
