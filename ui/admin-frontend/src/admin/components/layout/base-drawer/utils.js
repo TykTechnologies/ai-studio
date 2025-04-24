@@ -23,3 +23,21 @@ export const saveSelectedPath = (storageKey, path) => {
     console.error('Error saving selected path:', error);
   }
 };
+
+export const findParentItemsForPath = (items, currentPath) => {
+  const result = [];
+  
+  for (const item of items) {
+    if (item.subItems?.length > 0) {
+      const hasMatchingChild = item.subItems.some(subItem =>
+        subItem.path === currentPath || (subItem.path && currentPath?.startsWith(subItem.path + '/'))
+      );
+      
+      if (hasMatchingChild && item.id) {
+        result.push(item.id);
+      }
+    }
+  }
+  
+  return result;
+};

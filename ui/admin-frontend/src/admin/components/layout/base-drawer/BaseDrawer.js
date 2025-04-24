@@ -29,7 +29,7 @@ const BaseDrawer = ({
     handleDrawerToggle,
     handleExpandClick,
     handlePathSelect,
-  } = useDrawerState(STORAGE_KEY, defaultOpen, defaultExpandedItems);
+  } = useDrawerState(STORAGE_KEY, defaultOpen, defaultExpandedItems, menuItems);
 
   const currentWidth = open ? drawerWidth : minimizedWidth;
 
