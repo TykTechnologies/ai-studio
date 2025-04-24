@@ -29,8 +29,8 @@ export const findParentItemsForPath = (items, currentPath) => {
   
   for (const item of items) {
     if (item.subItems?.length > 0) {
-      const hasMatchingChild = item.subItems.some(subItem =>
-        subItem.path === currentPath || (subItem.path && currentPath?.startsWith(subItem.path + '/'))
+      const hasMatchingChild = item.subItems?.some(subItem =>
+        subItem.path === currentPath || currentPath?.startsWith(subItem.path + '/')
       );
       
       if (hasMatchingChild && item.id) {

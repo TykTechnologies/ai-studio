@@ -78,6 +78,9 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
     setExpandedItems((prevState) => {
       const newState = { ...prevState };
       newState[itemId] = !prevState[itemId];
+      if (parentId && !prevState[itemId]) {
+        newState[parentId] = true;
+      }
       return newState;
     });
   };
