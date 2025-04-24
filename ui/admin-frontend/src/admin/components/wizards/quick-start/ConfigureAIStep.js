@@ -74,7 +74,7 @@ const ConfigureAIStep = () => {
   
   useEffect(() => {
     checkRequiredFields();
-  }, [formData, checkRequiredFields]);
+  }, [checkRequiredFields]);
   
   useEffect(() => {
     if (llmData && Object.keys(llmData).length > 0) {
