@@ -55,7 +55,6 @@ const BaseDrawer = ({
                 onExpandClick={handleExpandClick}
                 onPathSelect={handlePathSelect}
                 selectedPath={selectedPath}
-                disableRipple
                 isFirstItem={index === 0}
               />
             ))}
