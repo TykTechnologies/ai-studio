@@ -11,16 +11,18 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint) (*models.App, error) {
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
 		return nil, err
 	}
 
 	app := &models.App{
-		Name:        name,
-		Description: description,
-		UserID:      userID,
+		Name:            name,
+		Description:     description,
+		UserID:          userID,
+		MonthlyBudget:   monthlyBudget,
+		BudgetStartDate: budgetStartDate,
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -78,7 +80,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
@@ -91,6 +93,7 @@ func (s *Service) UpdateApp(id uint, name, description string, datasourceIDs, ll
 
 	app.Name = name
 	app.Description = description
+	app.UserID = userID
 	app.MonthlyBudget = monthlyBudget
 	app.BudgetStartDate = budgetStartDate
 

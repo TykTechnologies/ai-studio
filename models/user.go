@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -26,7 +27,7 @@ type User struct {
 	ShowChat             bool
 	AccessToSSOConfig    bool
 	APIKey               string
-	NotificationsEnabled bool `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
+	NotificationsEnabled bool    `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
 	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
 }
 
@@ -232,4 +233,21 @@ func (u *User) UpdateGroupMemberships(db *gorm.DB, groupIDs ...string) error {
 	}
 
 	return nil
+}
+
+func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
+	email = strings.ToLower(email)
+
+	var count int64
+	query := db.Model(&User{}).Where("LOWER(email) = ?", email)
+
+	if userID != 0 {
+		query = query.Where("id != ?", userID)
+	}
+
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count == 0, nil
 }
