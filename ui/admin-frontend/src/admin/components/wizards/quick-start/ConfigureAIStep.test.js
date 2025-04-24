@@ -4,7 +4,7 @@ import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import ConfigureAIStep from './ConfigureAIStep';
 import { useQuickStart } from './QuickStartContext';
-import apiClient from '../../../utils/apiClient';
+import { createLLM, updateLLM } from '../../../services';
 import * as vendorLogos from '../../../utils/vendorLogos';
 
 // Mock the QuickStartContext hook
@@ -12,15 +12,15 @@ jest.mock('./QuickStartContext', () => ({
   useQuickStart: jest.fn(),
 }));
 
-// Mock the apiClient
-jest.mock('../../../utils/apiClient', () => ({
-  __esModule: true,
-  default: {
-    post: jest.fn(),
-    patch: jest.fn(),
-    get: jest.fn(),
-  },
-}));
+// Mock the services
+jest.mock('../../../services', () => {
+  const originalModule = jest.requireActual('../../../services');
+  return {
+    ...originalModule,
+    createLLM: jest.fn(),
+    updateLLM: jest.fn(),
+  };
+});
 
 // Mock the Icon component
 jest.mock('../../../../components/common/Icon', () => {
@@ -298,12 +298,8 @@ describe('ConfigureAIStep Component', () => {
 
   test('creates a new LLM when form is submitted', async () => {
     // Mock API response
-    apiClient.post.mockResolvedValue({
-      data: {
-        data: {
-          id: '123'
-        }
-      }
+    createLLM.mockResolvedValue({
+      id: '123'
     });
     
     renderWithTheme(<ConfigureAIStep />);
@@ -328,17 +324,12 @@ describe('ConfigureAIStep Component', () => {
     
     // Wait for API calls to complete
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/llms', expect.objectContaining({
-        data: {
-          type: "LLM",
-          attributes: expect.objectContaining({
-            name: 'New Test LLM',
-            vendor: 'openai',
-            api_endpoint: 'https://api.openai.com/v1',
-            api_key: 'sk-test123',
-            privacy_score: 25, // public is default
-          })
-        }
+      expect(createLLM).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'New Test LLM',
+        llmProvider: 'openai',
+        apiEndpoint: 'https://api.openai.com/v1',
+        apiKey: 'sk-test123',
+        privacyScore: 25, // public is default
       }));
     });
     
@@ -376,13 +367,8 @@ describe('ConfigureAIStep Component', () => {
     
     // Wait for API calls to complete
     await waitFor(() => {
-      expect(apiClient.patch).toHaveBeenCalledWith('/llms/123', expect.objectContaining({
-        data: {
-          type: "LLM",
-          attributes: expect.objectContaining({
-            name: 'Updated LLM'
-          })
-        }
+      expect(updateLLM).toHaveBeenCalledWith('123', expect.objectContaining({
+        name: 'Updated LLM'
       }));
     });
     
@@ -415,8 +401,8 @@ describe('ConfigureAIStep Component', () => {
     
     // Wait for component to process
     await waitFor(() => {
-      // Patch should not be called since data hasn't changed
-      expect(apiClient.patch).not.toHaveBeenCalled();
+      // updateLLM should not be called since data hasn't changed
+      expect(updateLLM).not.toHaveBeenCalled();
     });
     
     // Context should still be updated
@@ -426,7 +412,7 @@ describe('ConfigureAIStep Component', () => {
 
   test('shows error message when API call fails', async () => {
     // Mock API failure
-    apiClient.post.mockRejectedValue(new Error('API Error'));
+    createLLM.mockRejectedValue(new Error('API Error'));
     
     renderWithTheme(<ConfigureAIStep />);
     
@@ -486,13 +472,8 @@ describe('ConfigureAIStep Component', () => {
     
     // Wait for API call
     return waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/llms', expect.objectContaining({
-        data: {
-          type: "LLM",
-          attributes: expect.objectContaining({
-            privacy_score: 75, // confidential level
-          })
-        }
+      expect(createLLM).toHaveBeenCalledWith(expect.objectContaining({
+        privacyScore: 75, // confidential level
       }));
     });
   });
@@ -508,14 +489,10 @@ describe('ConfigureAIStep Component', () => {
 
   test('displays loading state during form submission', async () => {
     // Mock delayed API response
-    apiClient.post.mockImplementation(() => new Promise(resolve => {
+    createLLM.mockImplementation(() => new Promise(resolve => {
       setTimeout(() => {
         resolve({
-          data: {
-            data: {
-              id: '123'
-            }
-          }
+          id: '123'
         });
       }, 100);
     }));

@@ -158,7 +158,7 @@ func TestUpdateApp(t *testing.T) {
 
 	app, _ := service.CreateApp("Test App", "Description", user.ID, []uint{ds1.ID}, []uint{llm1.ID}, nil, nil)
 
-	updatedApp, err := service.UpdateApp(app.ID, "Updated App", "Updated Description", []uint{ds1.ID}, []uint{llm2.ID}, nil, nil)
+	updatedApp, err := service.UpdateApp(app.ID, "Updated App", "Updated Description", user.ID, []uint{ds1.ID}, []uint{llm2.ID}, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, app.ID, updatedApp.ID)
 	assert.Equal(t, "Updated App", updatedApp.Name)
@@ -167,7 +167,7 @@ func TestUpdateApp(t *testing.T) {
 	assert.Len(t, updatedApp.LLMs, 1)
 
 	invalidDS, _ := service.CreateDatasource("InvalidDS", "Short", "Long", "icon.png", "https://invalid.com", 95, user.ID, []string{}, "conn_string_invalid", "source_type_invalid", "api_key_invalid", "db1", "embed_vendor_invalid", "embed_url_invalid", "embed_api_key_invalid", "embed_model_invalid", true)
-	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID}, nil, nil)
+	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", user.ID, []uint{invalidDS.ID}, []uint{llm1.ID, llm2.ID}, nil, nil)
 	assert.Error(t, err)
 }
 
@@ -341,11 +341,11 @@ func TestAppServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test UpdateApp with non-existent datasource
-	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{9999}, []uint{}, nil, nil)
+	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", user.ID, []uint{9999}, []uint{}, nil, nil)
 	assert.Error(t, err)
 
 	// Test UpdateApp with non-existent LLM
-	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", []uint{}, []uint{9999}, nil, nil)
+	_, err = service.UpdateApp(app.ID, "Invalid Update", "Description", user.ID, []uint{}, []uint{9999}, nil, nil)
 	assert.Error(t, err)
 }
 

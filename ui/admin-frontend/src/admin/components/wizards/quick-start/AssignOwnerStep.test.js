@@ -4,7 +4,7 @@ import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import AssignOwnerStep from './AssignOwnerStep';
 import { useQuickStart } from './QuickStartContext';
-import apiClient from '../../../utils/apiClient';
+import { createUser, updateUser } from '../../../services';
 import { validateEmail, validatePassword } from './utils';
 
 // Mock the QuickStartContext hook
@@ -12,15 +12,15 @@ jest.mock('./QuickStartContext', () => ({
   useQuickStart: jest.fn(),
 }));
 
-// Mock the apiClient
-jest.mock('../../../utils/apiClient', () => ({
-  __esModule: true,
-  default: {
-    post: jest.fn(),
-    patch: jest.fn(),
-    get: jest.fn(),
-  },
-}));
+// Mock the services
+jest.mock('../../../services', () => {
+  const originalModule = jest.requireActual('../../../services');
+  return {
+    ...originalModule,
+    createUser: jest.fn(),
+    updateUser: jest.fn(),
+  };
+});
 
 // Mock the Icon component
 jest.mock('../../../../components/common/Icon', () => {
@@ -352,15 +352,11 @@ describe('AssignOwnerStep Component', () => {
 
   test('creates a new user when form is submitted', async () => {
     // Mock API response
-    apiClient.post.mockResolvedValue({
-      data: {
-        data: {
-          id: 'user456',
-          attributes: {
-            name: 'John Doe',
-            email: 'john@example.com'
-          }
-        }
+    createUser.mockResolvedValue({
+      id: 'user456',
+      attributes: {
+        name: 'John Doe',
+        email: 'john@example.com'
       }
     });
     
@@ -387,18 +383,13 @@ describe('AssignOwnerStep Component', () => {
     
     // Wait for API call to complete
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/users', expect.objectContaining({
-        data: {
-          type: "User",
-          attributes: expect.objectContaining({
-            name: 'John Doe',
-            email: 'john@example.com',
-            password: 'Password123!',
-            is_admin: true,
-            show_portal: true,
-            show_chat: true
-          })
-        }
+      expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'John Doe',
+        email: 'john@example.com',
+        password: 'Password123!',
+        isAdmin: true,
+        showPortal: true,
+        showChat: true
       }));
     });
     
@@ -453,18 +444,13 @@ describe('AssignOwnerStep Component', () => {
     
     // Wait for API call to complete
     await waitFor(() => {
-      expect(apiClient.patch).toHaveBeenCalledWith('/users/user456', expect.objectContaining({
-        data: {
-          type: "User",
-          attributes: expect.objectContaining({
-            name: 'John Smith',
-            email: 'john@example.com',
-            password: 'Password123!',
-            is_admin: false,
-            show_portal: true,
-            show_chat: true
-          })
-        }
+      expect(updateUser).toHaveBeenCalledWith('user456', expect.objectContaining({
+        name: 'John Smith',
+        email: 'john@example.com',
+        password: 'Password123!',
+        isAdmin: false,
+        showPortal: true,
+        showChat: true
       }));
     });
     
@@ -508,8 +494,8 @@ describe('AssignOwnerStep Component', () => {
     
     // Wait for component to process
     await waitFor(() => {
-      // Patch should not be called since data hasn't changed
-      expect(apiClient.patch).not.toHaveBeenCalled();
+      // updateUser should not be called since data hasn't changed
+      expect(updateUser).not.toHaveBeenCalled();
     });
     
     // Context should still be updated
@@ -523,7 +509,7 @@ describe('AssignOwnerStep Component', () => {
 
   test('shows error message when API call fails', async () => {
     // Mock API failure
-    apiClient.post.mockRejectedValue(new Error('API Error'));
+    createUser.mockRejectedValue(new Error('API Error'));
     
     renderWithTheme(<AssignOwnerStep />);
     
@@ -579,8 +565,8 @@ describe('AssignOwnerStep Component', () => {
     fireEvent.click(continueButton);
     
     // No API calls should be made
-    expect(apiClient.post).not.toHaveBeenCalled();
-    expect(apiClient.patch).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
+    expect(updateUser).not.toHaveBeenCalled();
     
     // Check that context was updated correctly
     expect(mockSetOwnerData).toHaveBeenCalledWith({
@@ -619,15 +605,13 @@ describe('AssignOwnerStep Component', () => {
     
     // Wait for API call to complete
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/users', expect.objectContaining({
-        data: {
-          type: "User",
-          attributes: expect.objectContaining({
-            is_admin: false,
-            show_portal: false,
-            show_chat: true
-          })
-        }
+      expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'John Doe',
+        email: 'john@example.com',
+        password: 'Password123!',
+        isAdmin: false,
+        showPortal: false,
+        showChat: true
       }));
     });
   });

@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
-import apiClient from '../../../utils/apiClient';
+import { createLLM, updateLLM } from '../../../services';
 import { ActionsContainer } from './styles';
 import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
 import CustomNote from '../../common/CustomNote';
@@ -87,35 +87,24 @@ const ConfigureAIStep = () => {
     setLoading(true);
     
     try {
-      const llmPayload = {
-        data: {
-          type: "LLM",
-          attributes: {
-            name: formData.name,
-            api_key: formData.apiKey,
-            api_endpoint: formData.apiEndpoint,
-            privacy_score: PRIVACY_LEVEL_SCORES[formData.privacyLevel],
-            short_description: "",
-            long_description: "",
-            logo_url: "",
-            vendor: formData.llmProvider,
-            active: true,
-            filters: [],
-            default_model: "",
-            allowed_models: []
-          }
-        }
+      const llmDataForApi = {
+        name: formData.name,
+        apiKey: formData.apiKey,
+        apiEndpoint: formData.apiEndpoint,
+        privacyScore: PRIVACY_LEVEL_SCORES[formData.privacyLevel],
+        llmProvider: formData.llmProvider,
+        active: true
       };
       
       let response;
       
       if (createdLlmId) {
         if (JSON.stringify(formData) !== JSON.stringify(llmData)) {
-          await apiClient.patch(`/llms/${createdLlmId}`, llmPayload);
+          await updateLLM(createdLlmId, llmDataForApi);
         }
       } else {
-        response = await apiClient.post('/llms', llmPayload);
-        const newLlmId = response.data.data.id;
+        response = await createLLM(llmDataForApi);
+        const newLlmId = response.id;
         setCreatedLlmId(newLlmId);
       }
       
@@ -124,7 +113,7 @@ const ConfigureAIStep = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.response?.data?.message || error.message || 'Unknown error'}`,
+        message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.message}`,
         severity: 'error'
       });
     } finally {
