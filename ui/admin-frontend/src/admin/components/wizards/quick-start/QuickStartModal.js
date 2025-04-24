@@ -37,8 +37,8 @@ const QuickStartModal = ({
   };
 
   const handleSkip = () => {
-    onSkip && onSkip();
-    onClose && onClose();
+    onSkip?.();
+    onClose?.();
   };
   
   return (
