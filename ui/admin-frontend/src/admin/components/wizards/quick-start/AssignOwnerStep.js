@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
-import apiClient from '../../../utils/apiClient';
+import { createUser, updateUser } from '../../../services';
 import { ActionsContainer } from './styles';
 import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
 import CustomSelect from '../../common/CustomSelect';
@@ -154,42 +154,37 @@ const AssignOwnerStep = () => {
         return;
       }
 
-      const userPayload = {
-        data: {
-          type: "User",
-          attributes: {
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            is_admin: formData.role === 'admin',
-            show_portal: formData.role === 'developer' || formData.role === 'admin',
-            show_chat: true
-          }
-        }
+      const userDataForApi = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        isAdmin: formData.role === 'admin',
+        showPortal: formData.role === 'developer' || formData.role === 'admin',
+        showChat: true
       };
       
       let response;
       
       if (createdOwnerId) {
         if (JSON.stringify(formData) !== JSON.stringify(ownerData.formData)) {
-          await apiClient.patch(`/users/${createdOwnerId}`, userPayload);
+          await updateUser(createdOwnerId, userDataForApi);
         }
       } else {
-        response = await apiClient.post('/users', userPayload);
-        const newUserId = response.data.data.id;
+        response = await createUser(userDataForApi);
+        const newUserId = response.id;
         setCreatedOwnerId(newUserId);
       }
       
       setOwnerData({
         ownerType: 'new',
         formData: formData,
-        userId: createdOwnerId || (response?.data?.data?.id)
+        userId: createdOwnerId || (response?.id)
       });
       goToNextStep();
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdOwnerId ? 'update' : 'create'} user: ${error.response?.data?.message || error.message || 'Unknown error'}`,
+        message: `Failed to ${createdOwnerId ? 'update' : 'create'} user: ${error.message}`,
         severity: 'error'
       });
     } finally {

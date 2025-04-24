@@ -4,22 +4,24 @@ import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import AppDetailsStep from './AppDetailsStep';
 import { useQuickStart } from './QuickStartContext';
-import apiClient from '../../../utils/apiClient';
+import { createApp, updateApp, activateCredential, getCredential } from '../../../services';
 
 // Mock the QuickStartContext hook
 jest.mock('./QuickStartContext', () => ({
   useQuickStart: jest.fn(),
 }));
 
-// Mock the apiClient
-jest.mock('../../../utils/apiClient', () => ({
-  __esModule: true,
-  default: {
-    post: jest.fn(),
-    patch: jest.fn(),
-    get: jest.fn(),
-  },
-}));
+// Mock the services
+jest.mock('../../../services', () => {
+  const originalModule = jest.requireActual('../../../services');
+  return {
+    ...originalModule,
+    createApp: jest.fn(),
+    updateApp: jest.fn(),
+    activateCredential: jest.fn(),
+    getCredential: jest.fn(),
+  };
+});
 
 // Mock the Icon component
 jest.mock('../../../../components/common/Icon', () => {
@@ -209,33 +211,20 @@ describe('AppDetailsStep Component', () => {
 
   test('creates a new app when form is submitted', async () => {
     // Mock API responses
-    apiClient.post.mockImplementation((url) => {
-      if (url === '/apps') {
-        return Promise.resolve({
-          data: {
-            data: {
-              id: '789',
-              attributes: {
-                credential_id: '101112'
-              }
-            }
-          }
-        });
-      } else if (url === '/apps/789/activate-credential') {
-        return Promise.resolve({});
+    createApp.mockResolvedValue({
+      id: '789',
+      attributes: {
+        credential_id: '101112'
       }
-      return Promise.reject(new Error('Unexpected URL'));
     });
     
-    apiClient.get.mockResolvedValue({
-      data: {
-        data: {
-          attributes: {
-            key_id: 'key123',
-            secret: 'secret456',
-            active: true
-          }
-        }
+    activateCredential.mockResolvedValue({});
+    
+    getCredential.mockResolvedValue({
+      attributes: {
+        key_id: 'key123',
+        secret: 'secret456',
+        active: true
       }
     });
     
@@ -255,19 +244,20 @@ describe('AppDetailsStep Component', () => {
     
     // Wait for API calls to complete
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/apps', expect.objectContaining({
-        data: {
-          type: "apps",
-          attributes: expect.objectContaining({
-            name: 'New Test App',
-            description: 'New Test Description'
-          })
-        }
+      expect(createApp).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'New Test App',
+        description: 'New Test Description',
+        userId: expect.any(String),
+        llmIds: expect.any(Array),
+        datasourceIds: expect.any(Array),
+        setBudget: expect.any(Boolean),
+        monthlyBudget: expect.any(String),
+        budgetStartDate: expect.any(String)
       }));
     });
     
-    expect(apiClient.post).toHaveBeenCalledWith('/apps/789/activate-credential');
-    expect(apiClient.get).toHaveBeenCalledWith('/credentials/101112');
+    expect(activateCredential).toHaveBeenCalledWith('789');
+    expect(getCredential).toHaveBeenCalledWith('101112');
     
     // Check that context was updated
     expect(mockSetCreatedAppId).toHaveBeenCalledWith('789');
@@ -294,26 +284,36 @@ describe('AppDetailsStep Component', () => {
       }
     });
     
+    // Mock appService.updateApp for update scenario
+    updateApp.mockResolvedValue({
+      id: '789',
+      attributes: {}
+    });
+    
     renderWithTheme(<AppDetailsStep />);
     
-    // Modify the form
+    // Modify the form so it's different from initial appData
     const inputs = screen.getAllByRole('textbox');
     const nameInput = inputs.find(input => input.getAttribute('name') === 'name');
     fireEvent.change(nameInput, { target: { value: 'Updated App' } });
+    const descInput = inputs.find(input => input.getAttribute('name') === 'description');
+    fireEvent.change(descInput, { target: { value: 'Updated Description' } });
     
     // Submit the form
-    const createButton = screen.getByRole('button', { name: /create app/i });
-    fireEvent.click(createButton);
+    const updateButton = screen.getByRole('button', { name: /update app|create app/i });
+    fireEvent.click(updateButton);
     
-    // Wait for API calls to complete
+    // Wait for service function to be called
     await waitFor(() => {
-      expect(apiClient.patch).toHaveBeenCalledWith('/apps/789', expect.objectContaining({
-        data: {
-          type: "apps",
-          attributes: expect.objectContaining({
-            name: 'Updated App'
-          })
-        }
+      expect(updateApp).toHaveBeenCalledWith('789', expect.objectContaining({
+        name: 'Updated App',
+        description: 'Updated Description',
+        userId: expect.any(String),
+        llmIds: expect.any(Array),
+        datasourceIds: expect.any(Array),
+        setBudget: expect.any(Boolean),
+        monthlyBudget: expect.any(String),
+        budgetStartDate: expect.any(String)
       }));
     });
     
@@ -324,7 +324,7 @@ describe('AppDetailsStep Component', () => {
 
   test('shows error message when API call fails', async () => {
     // Mock API failure
-    apiClient.post.mockRejectedValue(new Error('API Error'));
+    createApp.mockRejectedValue(new Error('API Error'));
     
     renderWithTheme(<AppDetailsStep />);
     
@@ -385,7 +385,7 @@ describe('AppDetailsStep Component', () => {
     // Wait for component to process
     await waitFor(() => {
       // Patch should not be called since data hasn't changed
-      expect(apiClient.patch).not.toHaveBeenCalled();
+      expect(updateApp).not.toHaveBeenCalled();
     });
     
     // Context should still be updated

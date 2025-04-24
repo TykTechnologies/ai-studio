@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
-import apiClient from '../../../utils/apiClient';
+import { createApp, updateApp, activateCredential, getCredential } from '../../../services';
 import { ActionsContainer } from './styles';
 import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
 import CustomNote from '../../common/CustomNote';
@@ -43,6 +43,7 @@ const AppDetailsStep = () => {
   });
   const [isFormValid, setIsFormValid] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [ownerId, setOwnerId] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -70,48 +71,52 @@ const AppDetailsStep = () => {
       setFormData(appData);
     }
   }, [appData]);
-
   
   const createOrUpdateApp = async () => {
     setLoading(true);
     
     try {
-      const appPayload = {
-        data: {
-          type: "apps",
-          attributes: {
-            name: formData.name,
-            description: formData.description,
-            user_id: ownerData.userId ? parseInt(ownerData.userId, 10) : null,
-            llm_ids: createdLlmId ? [parseInt(createdLlmId, 10)] : [],
-            datasource_ids: [],
-            monthly_budget: formData.setBudget ? parseFloat(formData.monthlyBudget) : null,
-            budget_start_date: formData.setBudget ? new Date(formData.budgetStartDate).toISOString() : null
-          }
-        }
+      const appDataForApi = {
+        name: formData.name,
+        description: formData.description,
+        userId: ownerData.userId,
+        llmIds: createdLlmId ? [parseInt(createdLlmId, 10)] : [],
+        datasourceIds: [],
+        setBudget: formData.setBudget,
+        monthlyBudget: formData.monthlyBudget,
+        budgetStartDate: formData.budgetStartDate
       };
       
       let response;
       
       if (createdAppId) {
-        if (JSON.stringify(formData) !== JSON.stringify(appData)) {
-          await apiClient.patch(`/apps/${createdAppId}`, appPayload);
+        const formDataChanged = JSON.stringify(formData) !== JSON.stringify(appData);
+        const ownerChanged = ownerId !== ownerData.userId;
+        
+        if (formDataChanged || ownerChanged) {
+          await updateApp(createdAppId, appDataForApi);
+          
+          if (ownerChanged) {
+            setOwnerId(ownerData.userId);
+          }
         }
       } else {
-        response = await apiClient.post('/apps', appPayload);
-        const newAppId = response.data.data.id;
+        response = await createApp(appDataForApi);
+        const newAppId = response.id;
         setCreatedAppId(newAppId);
         
-        await apiClient.post(`/apps/${newAppId}/activate-credential`);
+        setOwnerId(ownerData.userId);
         
-        if (response.data.data.attributes.credential_id) {
-          const credentialId = response.data.data.attributes.credential_id;
-          const credentialResponse = await apiClient.get(`/credentials/${credentialId}`);
-          if (credentialResponse.data && credentialResponse.data.data) {
+        await activateCredential(newAppId);
+        
+        if (response.attributes.credential_id) {
+          const credentialId = response.attributes.credential_id;
+          const credential = await getCredential(credentialId);
+          if (credential) {
             setCredentialData({
-              keyID: credentialResponse.data.data.attributes.key_id,
-              secret: credentialResponse.data.data.attributes.secret,
-              active: credentialResponse.data.data.attributes.active
+              keyID: credential.attributes.key_id,
+              secret: credential.attributes.secret,
+              active: credential.attributes.active
             });
           }
         }
@@ -122,16 +127,12 @@ const AppDetailsStep = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdAppId ? 'update' : 'create'} app: ${error.response?.data?.message || error.message || 'Unknown error'}`,
+        message: `Failed to ${createdAppId ? 'update' : 'create'} app: ${error.message}`,
         severity: 'error'
       });
     } finally {
       setLoading(false);
     }
-  };
-  
-  const handleNextClick = () => {
-    createOrUpdateApp();
   };
 
   const handleChange = (e) => {
@@ -367,7 +368,7 @@ const AppDetailsStep = () => {
             Back
           </Button>
           <PrimaryButton
-            onClick={handleNextClick}
+            onClick={createOrUpdateApp}
             disabled={!isFormValid || loading}
             sx={{ minWidth: '100px' }}
           >

@@ -159,6 +159,7 @@ func (a *API) updateApp(c *gin.Context) {
 		uint(id),
 		input.Data.Attributes.Name,
 		input.Data.Attributes.Description,
+		input.Data.Attributes.UserID,
 		datasourceIDs,
 		llmIDs,
 		input.Data.Attributes.MonthlyBudget,
