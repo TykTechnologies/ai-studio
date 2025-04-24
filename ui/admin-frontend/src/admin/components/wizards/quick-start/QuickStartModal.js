@@ -51,7 +51,7 @@ const QuickStartModal = ({
           onSkip={handleSkip}
           currentUser={currentUser}
         >
-          {renderBeforeContent && renderBeforeContent()}
+          {renderBeforeContent?.()}
           <QuickStartStepProgress />
           <StepContent />
         </QuickStartProvider>
