@@ -32,13 +32,13 @@ const QuickStartModal = ({
 }) => {
   
   const handleComplete = () => {
-    onComplete && onComplete();
-    onClose && onClose();
+    onComplete?.();
+    onClose?.();
   };
 
   const handleSkip = () => {
-    onSkip && onSkip();
-    onClose && onClose();
+    onSkip?.();
+    onClose?.();
   };
   
   return (
@@ -51,7 +51,7 @@ const QuickStartModal = ({
           onSkip={handleSkip}
           currentUser={currentUser}
         >
-          {renderBeforeContent && renderBeforeContent()}
+          {renderBeforeContent?.()}
           <QuickStartStepProgress />
           <StepContent />
         </QuickStartProvider>
