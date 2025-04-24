@@ -118,4 +118,15 @@ export class AdminMainPage {
     async closeBanner() {
         await this.BannerButton.click();
     }
+
+    async dismissQuickStartModal() {
+        await this.page.waitForTimeout(2000);
+        
+        const exploreByMyselfButton = this.page.getByRole('button', { name: 'Explore by myself' });
+        if (await exploreByMyselfButton.isVisible()) {
+            await exploreByMyselfButton.scrollIntoViewIfNeeded();
+            await exploreByMyselfButton.click();
+            await this.page.waitForTimeout(2000);
+        }
+    }
 }

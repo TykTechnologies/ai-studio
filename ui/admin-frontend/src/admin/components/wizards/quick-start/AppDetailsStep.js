@@ -1,0 +1,398 @@
+import React, { useState, useEffect, memo, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Divider,
+  CircularProgress,
+  Snackbar,
+  Alert,
+  Switch,
+  FormControlLabel,
+  InputAdornment,
+  Button
+} from '@mui/material';
+import { StyledTextField } from '../../../styles/sharedStyles';
+import { useQuickStart } from './QuickStartContext';
+import { createApp, updateApp, activateCredential, getCredential } from '../../../services';
+import { ActionsContainer } from './styles';
+import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
+import CustomNote from '../../common/CustomNote';
+import Icon from '../../../../components/common/Icon';
+
+const AppDetailsStep = () => {
+  const {
+    setStepValid,
+    goToNextStep,
+    goToPreviousStep,
+    skipQuickStart,
+    appData,
+    setAppData,
+    createdAppId,
+    setCreatedAppId,
+    ownerData,
+    createdLlmId,
+    setCredentialData
+  } = useQuickStart();
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    setBudget: false,
+    monthlyBudget: '',
+    budgetStartDate: new Date().toISOString().split('T')[0]
+  });
+  const [isFormValid, setIsFormValid] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [ownerId, setOwnerId] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
+  const checkRequiredFields = useCallback(() => {
+    let isValid = formData.name.trim() !== '';
+    
+    if (formData.setBudget && (!formData.monthlyBudget || formData.monthlyBudget === '')) {
+      isValid = false;
+    }
+    
+    setIsFormValid(isValid);
+    setStepValid('app-details', isValid);
+    return isValid;
+  }, [formData, setStepValid]);
+
+  useEffect(() => {
+    checkRequiredFields();
+  }, [checkRequiredFields]);
+  
+  useEffect(() => {
+    if (appData && Object.keys(appData).length > 0) {
+      setFormData(appData);
+    }
+  }, [appData]);
+  
+  const createOrUpdateApp = async () => {
+    setLoading(true);
+    
+    try {
+      const appDataForApi = {
+        name: formData.name,
+        description: formData.description,
+        userId: ownerData.userId,
+        llmIds: createdLlmId ? [parseInt(createdLlmId, 10)] : [],
+        datasourceIds: [],
+        setBudget: formData.setBudget,
+        monthlyBudget: formData.monthlyBudget,
+        budgetStartDate: formData.budgetStartDate
+      };
+      
+      let response;
+      
+      if (createdAppId) {
+        const formDataChanged = JSON.stringify(formData) !== JSON.stringify(appData);
+        const ownerChanged = ownerId !== ownerData.userId;
+        
+        if (formDataChanged || ownerChanged) {
+          await updateApp(createdAppId, appDataForApi);
+          
+          if (ownerChanged) {
+            setOwnerId(ownerData.userId);
+          }
+        }
+      } else {
+        response = await createApp(appDataForApi);
+        const newAppId = response.id;
+        setCreatedAppId(newAppId);
+        
+        setOwnerId(ownerData.userId);
+        
+        await activateCredential(newAppId);
+        
+        if (response.attributes.credential_id) {
+          const credentialId = response.attributes.credential_id;
+          const credential = await getCredential(credentialId);
+          if (credential) {
+            setCredentialData({
+              keyID: credential.attributes.key_id,
+              secret: credential.attributes.secret,
+              active: credential.attributes.active
+            });
+          }
+        }
+      }
+      
+      setAppData(formData);
+      goToNextStep();
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: `Failed to ${createdAppId ? 'update' : 'create'} app: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleBudgetToggle = (e) => {
+    setFormData(prev => ({
+      ...prev,
+      setBudget: e.target.checked
+    }));
+  };
+
+  return (
+    <Box sx={{ width: '100%', pt: 2 }}>
+      <Box sx={{
+        textAlign: 'center',
+        mb: 4,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10
+        }
+      }}>
+        <Typography
+          variant="bodyLargeDefault"
+          color="text.defaultSubdued"
+          sx={{
+            fontSize: {
+              xs: '0.875rem',
+              sm: 'inherit'
+            }
+          }}
+        >
+          Finally, let's add a name and description to your app so developers know what it's for. Once you create the app, you'll get credentials for developers to access the gateway API and work directly with the LLM.
+        </Typography>
+      </Box>
+      <Box sx={{
+        mt: 3,
+        px: {
+          xs: 2,
+          sm: 4,
+          md: 10,
+          lg: 25
+        }
+      }}>
+        <Box sx={{ mb: 3 }}>
+          <Typography
+            variant="bodyLargeBold"
+            color="text.primary"
+            sx={{ mb: 1 }}
+          >
+            App Name*
+          </Typography>
+          <StyledTextField
+            fullWidth
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+            autoComplete="off"
+          />
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography
+            variant="bodyLargeBold"
+            color="text.primary"
+            sx={{ mb: 1 }}
+          >
+            Description
+          </Typography>
+          <StyledTextField
+            fullWidth
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            autoComplete="off"
+            inputProps={{ maxLength: 200 }}
+          />
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+            <Icon 
+              name="circle-exclamation" 
+              sx={{ 
+                width: 14, 
+                height: 14, 
+                mr: 0.5,
+                color: 'border.neutralPressed'
+              }} 
+            />
+            <Typography
+              variant="bodySmallDefault"
+              color="text.defaultSubdued"
+              sx={{
+                fontSize: {
+                  xs: '0.7rem',
+                  sm: 'inherit'
+                }
+              }}
+            >
+              200 characters max
+            </Typography>
+          </Box>
+        </Box>
+
+        <Divider sx={{ borderColor: 'border.neutralDefault', mb: 3 }} />
+
+        <Box sx={{ mb: 3 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.setBudget}
+                onChange={handleBudgetToggle}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: theme => theme.palette.background.buttonPrimaryDefault
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: theme => theme.palette.background.buttonPrimaryDefault
+                  }
+                }}
+              />
+            }
+            label={
+              <Typography
+                variant="bodyLargeBold"
+                color="text.primary"
+                sx={{
+                  fontSize: {
+                    xs: '0.875rem',
+                    sm: 'inherit'
+                  }
+                }}
+              >
+                Set budget limit (optional)
+              </Typography>
+            }
+          />
+        </Box>
+
+        {formData.setBudget && (
+          <>
+            <Box sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 2,
+              mb: 4
+            }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="bodyLargeBold"
+                  color="text.primary"
+                  sx={{ mb: 1 }}
+                >
+                  Monthly budget*
+                </Typography>
+                <StyledTextField
+                  fullWidth
+                  name="monthlyBudget"
+                  type="number"
+                  value={formData.monthlyBudget}
+                  onChange={handleChange}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                  }}
+                  required={formData.setBudget}
+                  autoComplete="off"
+                />
+              </Box>
+
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="bodyLargeBold"
+                  color="text.primary"
+                  sx={{ mb: 1 }}
+                >
+                  Budget cycle start date
+                </Typography>
+                <StyledTextField
+                  fullWidth
+                  name="budgetStartDate"
+                  type="date"
+                  value={formData.budgetStartDate}
+                  onChange={handleChange}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  autoComplete="off"
+                />
+              </Box>
+            </Box>
+
+            <CustomNote
+              message="To track expenses within this budget, set the provider's costs in the Model Prices section."
+            />
+          </>
+        )}
+      </Box>
+      
+      <ActionsContainer sx={{
+        flexWrap: 'wrap',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 2,
+        width: '100%',
+        padding: { xs: 2, sm: 0 },
+        mt: 1
+      }}>
+        <SecondaryLinkButton
+          onClick={skipQuickStart}
+          sx={{
+            minWidth: '120px',
+            flex: { xs: '1 1 100%', sm: '0 1 auto' }
+          }}
+        >
+          Skip quick start
+        </SecondaryLinkButton>
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          flex: { xs: '1 1 100%', sm: '0 1 auto' },
+          justifyContent: { xs: 'space-between', sm: 'flex-end' }
+        }}>
+          <Button
+            onClick={goToPreviousStep}
+            sx={{ minWidth: '80px' }}
+          >
+            Back
+          </Button>
+          <PrimaryButton
+            onClick={createOrUpdateApp}
+            disabled={!isFormValid || loading}
+            sx={{ minWidth: '100px' }}
+          >
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Create app'}
+          </PrimaryButton>
+        </Box>
+      </ActionsContainer>
+      
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default memo(AppDetailsStep);

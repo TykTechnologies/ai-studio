@@ -369,3 +369,40 @@ func TestUser_AccessToSSOConfigValidation(t *testing.T) {
 	assert.True(t, retrievedUser.AccessToSSOConfig)
 	assert.False(t, retrievedUser.IsAdmin)
 }
+
+func TestIsEmailUnique(t *testing.T) {
+	db := setupTestDB(t)
+
+	user1 := &User{Email: "test@example.com", Name: "Test User 1"}
+	err := user1.Create(db)
+	assert.NoError(t, err)
+
+	user2 := &User{Email: "another@example.com", Name: "Test User 2"}
+	err = user2.Create(db)
+	assert.NoError(t, err)
+
+	// Test case 1: Check if a new email is unique
+	isUnique, err := IsEmailUnique(db, "new@example.com", 0)
+	assert.NoError(t, err)
+	assert.True(t, isUnique)
+
+	// Test case 2: Check if an existing email is not unique
+	isUnique, err = IsEmailUnique(db, "test@example.com", 0)
+	assert.NoError(t, err)
+	assert.False(t, isUnique)
+
+	// Test case 3: Check if an existing email with different case is not unique
+	isUnique, err = IsEmailUnique(db, "TEST@example.com", 0)
+	assert.NoError(t, err)
+	assert.False(t, isUnique)
+
+	// Test case 4: Check if an existing email is unique when excluding the user
+	isUnique, err = IsEmailUnique(db, "test@example.com", user1.ID)
+	assert.NoError(t, err)
+	assert.True(t, isUnique)
+
+	// Test case 5: Check if another user's email is not unique
+	isUnique, err = IsEmailUnique(db, "another@example.com", user1.ID)
+	assert.NoError(t, err)
+	assert.False(t, isUnique)
+}

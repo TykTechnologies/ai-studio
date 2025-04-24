@@ -11,6 +11,10 @@ import {
   DialogTitle,
   Accordion,
   DialogContent,
+  TextField,
+  Select,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import { NavLink } from "react-router-dom";
@@ -105,6 +109,14 @@ export const PrimaryButton = styled(Button)(({ theme }) => ({
     backgroundColor: theme.palette.background.buttonPrimaryDefaultHover,
     boxShadow: "none",
     color: theme.palette.primary.main,
+  },
+  "&.Mui-disabled": {
+    color: theme.palette.text.neutralDisabled,
+    backgroundColor: theme.palette.background.surfaceNeutralDisabled,
+    "&::before": {
+      content: 'none',
+    },
+    border: `1px solid ${theme.palette.background.defaultSubdued}`,
   },
 }));
 
@@ -279,4 +291,78 @@ export const StyledAccordion = styled(Accordion)(({ theme }) => ({
   "& .MuiAccordion-root": {
     transition: theme.transitions.create(["margin", "border-radius"]),
   },
+}));
+
+export const StyledSelect = styled(Select)(({ theme }) => ({
+  height: '32px', 
+  backgroundColor: theme.palette.custom.white,
+  borderRadius: '8px',
+  marginTop: theme.spacing(1),
+  '& .MuiOutlinedInput-notchedOutline': {
+    borderRadius: '8px',
+  },
+  '& .MuiSelect-select': {
+    height: '32px', 
+    display: 'flex',
+    alignItems: 'center',
+    paddingTop: theme.spacing(1.5),
+  },
+  '& .MuiSelect-icon': {
+    top: '20%',
+    right: '7px',
+    position: 'absolute',
+    transition: 'transform 0.2s', 
+  },
+  '&.Mui-focused': {
+    height: '41px',
+    marginTop: 0,
+    paddingTop: theme.spacing(2.5),
+    '& .MuiSelect-select': {
+      paddingTop: 0, 
+    },
+    '& .MuiSelect-icon': {
+      top: '35%',
+    },
+  },
+  '&.MuiOutlinedInput-root.Mui-focused': {
+    height: '41px', 
+    '& .MuiSelect-select': {
+      height: '41px',
+    }
+  },
+  '&&': {
+    '& .MuiMenu-paper, & .MuiPopover-paper': {
+      borderRadius: '8px',
+      marginTop: '4px',
+      boxShadow: '0px 5px 15px rgba(0, 0, 0, 0.2)'
+    }
+  }
+}));
+
+export const StyledFormControl = styled(FormControl)(({ theme }) => ({
+  width: '100%',
+  '& .MuiInputLabel-root': {
+    transform: 'translate(14px, 9px) scale(1)',
+  },
+  '& .MuiInputLabel-shrink': {
+    transform: 'translate(14px, -9px) scale(0.75)',
+  },
+}));
+
+export const StyledTextField = styled(TextField)(({ theme }) => ({
+  width: '100%',
+  height: '36px',
+  marginTop: theme.spacing(0.3),
+  backgroundColor: theme.palette.custom.white,
+  borderRadius: '8px',
+  '& .MuiOutlinedInput-root': {
+    width: '100%',
+    boxSizing: 'border-box',
+    borderRadius: '8px',
+  },
+  '& .MuiInputBase-input': {
+    height: '36px',
+    width: '100%',
+    boxSizing: 'border-box',
+  }
 }));

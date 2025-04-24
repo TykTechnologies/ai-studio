@@ -54,6 +54,8 @@ func (a *API) createApp(c *gin.Context) {
 		input.Data.Attributes.UserID,
 		datasourceIDs,
 		llmIDs,
+		input.Data.Attributes.MonthlyBudget,
+		input.Data.Attributes.BudgetStartDate,
 	)
 	if err != nil {
 		if err == services.ERRPrivacyScoreMismatch {
@@ -157,6 +159,7 @@ func (a *API) updateApp(c *gin.Context) {
 		uint(id),
 		input.Data.Attributes.Name,
 		input.Data.Attributes.Description,
+		input.Data.Attributes.UserID,
 		datasourceIDs,
 		llmIDs,
 		input.Data.Attributes.MonthlyBudget,
