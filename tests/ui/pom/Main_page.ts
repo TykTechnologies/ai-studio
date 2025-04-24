@@ -23,6 +23,7 @@ export class MainPage {
     readonly CatalogsButton: Locator;
     readonly ModelCallSettingsLink: Locator;
     readonly BannerButton: Locator;
+    readonly ExploreByMyselfButton: Locator;
 
     constructor(page: Page) {
         this.page = page;
@@ -47,6 +48,7 @@ export class MainPage {
         this.CatalogsButton = this.page.getByRole('button', { name: 'Catalogs' });
         this.ModelCallSettingsLink = this.page.getByRole('link', { name: 'Model call settings' });
         this.BannerButton = this.page.getByRole('banner').getByRole('button').filter({ hasText: /^$/ });
+        this.ExploreByMyselfButton = this.page.getByRole('button', { name: 'Explore by myself' });
     }
 
     async navigateToAnalytics() {

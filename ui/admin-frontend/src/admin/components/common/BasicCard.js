@@ -5,7 +5,7 @@ import { SecondaryOutlineButton } from '../../styles/sharedStyles';
 const CardContainer = styled(Box)(({ theme }) => ({
   height: 'auto',
   minHeight: '214px',
-  minWidth: '400px',
+  minWidth: '345px',
   width: '100%',
   border: `1px solid ${theme.palette.border.neutralDefault}`,
   borderRadius: '8px',

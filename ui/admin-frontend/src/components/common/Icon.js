@@ -18,6 +18,13 @@ const iconComponents = {
   'hexagon-exclamation': lazy(() => import('../../common/fontawesome/hexagon-exclamation.svg').then(module => ({ default: module.ReactComponent }))),
   'hexagon-check': lazy(() => import('../../common/fontawesome/hexagon-check.svg').then(module => ({ default: module.ReactComponent }))),
   'triangle-exclamation': lazy(() => import('../../common/fontawesome/triangle-exclamation.svg').then(module => ({ default: module.ReactComponent }))),
+  'lock': lazy(() => import('../../common/fontawesome/lock.svg').then(module => ({ default: module.ReactComponent }))),
+  'unlock': lazy(() => import('../../common/fontawesome/unlock.svg').then(module => ({ default: module.ReactComponent }))),
+  'lock-keyhole': lazy(() => import('../../common/fontawesome/lock-keyhole.svg').then(module => ({ default: module.ReactComponent }))),
+  'shield-keyhole': lazy(() => import('../../common/fontawesome/shield-keyhole.svg').then(module => ({ default: module.ReactComponent }))),
+  'circle-info': lazy(() => import('../../common/fontawesome/circle-info.svg').then(module => ({ default: module.ReactComponent }))),
+  'circle-exclamation': lazy(() => import('../../common/fontawesome/circle-exclamation.svg').then(module => ({ default: module.ReactComponent }))),
+  'circle-check': lazy(() => import('../../common/fontawesome/circle-check.svg').then(module => ({ default: module.ReactComponent }))),
 };
 
 const Icon = ({ name, ...svgProps }) => {

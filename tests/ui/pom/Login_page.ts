@@ -26,13 +26,17 @@ export class LoginPage {
         await this.EmailInput.fill(email);
         await this.PasswordInput.fill(password);
         await this.LoginButton.click();
-        await this.page.waitForTimeout(1000); // Wait for 1 seconds to allow the login process to complete
-        if (await this.page.getByRole('img', { name: 'Logo' }).isVisible()) {
+        await this.page.waitForTimeout(1000);
+        
+        if (await this.page.getByRole('img', { name: 'Logo' }).isVisible() ||
+            await this.page.getByRole('button', { name: 'Explore by myself' }).isVisible()) {
             return;
         }
-        console.log('Login failed. Retrying...');
-        await this.EmailInput.fill(email);
-        await this.PasswordInput.fill(password);
-        await this.LoginButton.click();
+        
+        if (await this.EmailInput.isVisible()) {
+            await this.EmailInput.fill(email);
+            await this.PasswordInput.fill(password);
+            await this.LoginButton.click();
+        }
     }
 }

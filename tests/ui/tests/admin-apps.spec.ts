@@ -10,6 +10,9 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
   await test.step('Crating new app', async () => {
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
+
+    await adminMainPage.dismissQuickStartModal();
+
     await adminMainPage.navigateToApps();
     await adminAppsPage.AddAppButton.click();
     await adminAppsPage.NameInput.fill(app_name);

@@ -3,11 +3,13 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
 func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
+	email = strings.ToLower(email)
 	if notificationsEnabled && !isAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
 	}
@@ -76,6 +78,7 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 }
 
 func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
+	email = strings.ToLower(email)
 	user, err := s.GetUserByID(id)
 	if err != nil {
 		return nil, err
