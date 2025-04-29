@@ -563,6 +563,7 @@ func TestSerializeProfileList(t *testing.T) {
 			Name:                 "Social Profile",
 			ProfileID:            "social-profile",
 			SelectedProviderType: "social",
+			ActionType:           "GenerateOrLoginUserProfile",
 		}
 
 		response := serializeProfileList(profile)
@@ -577,6 +578,7 @@ func TestSerializeProfileList(t *testing.T) {
 			Name:                 "OpenID Profile",
 			ProfileID:            "openid-profile",
 			SelectedProviderType: provOpenID,
+			ActionType:           "GenerateOrLoginUserProfile",
 		}
 
 		response := serializeProfileList(profile)
@@ -591,6 +593,7 @@ func TestSerializeProfileList(t *testing.T) {
 			Name:                 "LDAP Profile",
 			ProfileID:            "ldap-profile",
 			SelectedProviderType: provLDAP,
+			ActionType:           "GenerateOrLoginUserProfile",
 		}
 
 		response := serializeProfileList(profile)
@@ -605,6 +608,7 @@ func TestSerializeProfileList(t *testing.T) {
 			Name:                 "SAML Profile",
 			ProfileID:            "saml-profile",
 			SelectedProviderType: provSAML,
+			ActionType:           "GenerateOrLoginUserProfile",
 		}
 
 		response := serializeProfileList(profile)
