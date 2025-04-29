@@ -6,6 +6,7 @@ import {
   CircularProgress,
   Alert,
   Snackbar,
+  Box,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DataTable from "../components/common/DataTable";
@@ -38,7 +39,6 @@ const SSOProfiles = () => {
     title: "",
     message: ""
   });
-  const [bannerTimeout, setBannerTimeout] = useState(null);
   const [sortField, setSortField] = useState("profile_id");
   const [sortOrder, setSortOrder] = useState("desc");
   const [warningDialogOpen, setWarningDialogOpen] = useState(false);
@@ -100,12 +100,6 @@ const SSOProfiles = () => {
               title: notification.title,
               message: notification.message
             });
-
-            const timeout = setTimeout(() => {
-              setSuccessBanner(current => ({ ...current, show: false }));
-            }, 6000);
-            
-            setBannerTimeout(timeout);
           } else {
             setSnackbar({
               open: true,
@@ -122,12 +116,7 @@ const SSOProfiles = () => {
       }
     }
     
-    return () => {
-      if (bannerTimeout) {
-        clearTimeout(bannerTimeout);
-      }
-    };
-  }, [bannerTimeout]);
+  }, []);
 
   const handleDeleteClick = (profile) => {
     setProfileToDelete(profile);
@@ -151,15 +140,15 @@ const SSOProfiles = () => {
       await apiClient.post(`/sso-profiles/${profileToSetDefault.attributes.profile_id}/use-in-login-page`);
       setSnackbar({
         open: true,
-        message: "Default SSO login profile set successfully",
+        message: "Default IdP profile for SSO login set successfully",
         severity: "success",
       });
       fetchProfiles();
     } catch (error) {
-      console.error("Error setting default SSO login profile", error);
+      console.error("Error setting default IdP profile for SSO login", error);
       setSnackbar({
         open: true,
-        message: "Failed to set default SSO login profile",
+        message: "Failed to set default IdP profile for SSO login",
         severity: "error",
       });
     } finally {
@@ -210,11 +199,6 @@ const SSOProfiles = () => {
   
   const handleCloseBanner = () => {
     setSuccessBanner(current => ({ ...current, show: false }));
-    
-    if (bannerTimeout) {
-      clearTimeout(bannerTimeout);
-      setBannerTimeout(null);
-    }
   };
 
   const handleAddProfile = () => {
@@ -239,7 +223,24 @@ const SSOProfiles = () => {
       field: "name",
       headerName: "Profile Name",
       sortable: true,
-      renderCell: (item) => item.attributes.name || item.attributes.profile_id,
+      renderCell: (item) => (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {item.attributes.name || item.attributes.profile_id}
+          {item.attributes.use_in_login_page && (
+            <Box
+              sx={{
+                backgroundColor: "background.neutralDefault",
+                borderRadius: "6px",
+                padding: "2px 6px",
+              }}
+            >
+              <Typography variant="bodySmallDefault" color="text.primary">
+                Default
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      ),
     },
     {
       field: "profile_id",
@@ -251,13 +252,13 @@ const SSOProfiles = () => {
       field: "profile_type",
       headerName: "Profile Type",
       sortable: true,
-      renderCell: (item) => item.attributes.profile_type,
+      renderCell: (item) => item.attributes.profile_type || "-",
     },
     {
       field: "provider_type",
       headerName: "Provider Type",
       sortable: true,
-      renderCell: (item) => item.attributes.provider_type,
+      renderCell: (item) => item.attributes.provider_type || "-",
     },
     {
       field: "updated_by",
@@ -283,7 +284,7 @@ const SSOProfiles = () => {
       onClick: handleDeleteClick,
     },
     {
-      label: "Set as default SSO login profile",
+      label: "Default IdP for SSO login",
       onClick: handleSetDefaultClick,
     }
   ];
@@ -381,7 +382,7 @@ const SSOProfiles = () => {
 
       <ConfirmationDialog
         open={confirmDialogOpen}
-        title="Set as default SSO profile at login"
+        title="Set as the default IdP profile for SSO login"
         message="Only one profile can be set as default on the login page. Selecting this will replace the current default."
         buttonLabel="Confirm"
         onConfirm={handleConfirmSetDefault}
