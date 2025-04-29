@@ -46,6 +46,7 @@ export const TwoColumnLayout = styled(Box)(({ theme }) => ({
 export const FieldLabel = styled(Typography)(({ theme }) => ({
   color: theme.palette.text.primary,
   minWidth: '20%',
+  marginRight: theme.spacing(2),
   [theme.breakpoints.down('md')]: {
     minWidth: '40%',
   },

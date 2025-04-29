@@ -31,7 +31,7 @@ const ProfileDetailsSection = ({ profileData, profileMetadata, handleCopyToClipb
       />
 
       <LabeledField
-        label="Default profile for SSO at Login page"
+        label="Default profile at Login"
         value={profileMetadata.useInLoginPage ? "Yes" : "No"}
       />
     </Stack>
