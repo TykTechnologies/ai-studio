@@ -14,7 +14,7 @@ const LDAPFields = ({ profileData }) => {
     <Stack spacing={2}>
       <TwoColumnLayout>
         <FieldGroup>
-          <FieldLabel variant="bodyLargeBold" sx={{ width: '40%' }}>Server</FieldLabel>
+          <FieldLabel variant="bodyLargeBold" sx={{ minWidth: '40%' }}>Server</FieldLabel>
           <BreakableFieldValue variant="bodyLargeDefault" ml={1}>
             {profileData.ProviderConfig?.LDAPServer || "-"}
           </BreakableFieldValue>
