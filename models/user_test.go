@@ -406,3 +406,41 @@ func TestIsEmailUnique(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, isUnique)
 }
+
+func TestSetSkipQuickStartForUser(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a test user with SkipQuickStart = false
+	user := &User{
+		Email:          "test@example.com",
+		Name:           "Test User",
+		SkipQuickStart: false,
+	}
+	err := user.Create(db)
+	assert.NoError(t, err)
+	assert.False(t, user.SkipQuickStart)
+
+	// Call the SetSkipQuickStartForUser function
+	err = SetSkipQuickStartForUser(db, user.ID)
+	assert.NoError(t, err)
+
+	// Retrieve the user and verify SkipQuickStart is now true
+	var updatedUser User
+	err = db.First(&updatedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.True(t, updatedUser.SkipQuickStart)
+
+	// Test with non-existent user ID
+	err = SetSkipQuickStartForUser(db, 9999)
+	assert.NoError(t, err) // Should not error, just not update any rows
+
+	// Test idempotency - calling the function again should not cause errors
+	err = SetSkipQuickStartForUser(db, user.ID)
+	assert.NoError(t, err)
+
+	// Verify SkipQuickStart is still true
+	var reUpdatedUser User
+	err = db.First(&reUpdatedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.True(t, reUpdatedUser.SkipQuickStart)
+}

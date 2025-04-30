@@ -6,11 +6,11 @@ import {
   CircularProgress,
   Snackbar,
   Alert,
+  Button,
   RadioGroup,
   FormControlLabel,
   Radio,
   FormControl,
-  Button,
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
@@ -19,6 +19,7 @@ import { ActionsContainer } from './styles';
 import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
 import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
+import RadioSelectionGroup from '../../common/RadioSelectionGroup';
 import { validateEmail, validatePassword } from './utils';
 
 const AssignOwnerStep = () => {
@@ -49,6 +50,7 @@ const AssignOwnerStep = () => {
     number: false,
     special: false,
     uppercase: false,
+    lowercase: false,
   });
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -103,8 +105,9 @@ const AssignOwnerStep = () => {
     setPasswordCriteria({
       length: formData.password.length >= 8,
       number: /\d/.test(formData.password),
-      special: /[!@#$%^&*(),.?":{}|<>_+=-~]/.test(formData.password),
+      special: /[!@#$%^&*(),.?":{}|<>_+=\-~]/.test(formData.password),
       uppercase: /[A-Z]/.test(formData.password),
+      lowercase: /[a-z]/.test(formData.password),
     });
   }, [formData.password]);
   
@@ -129,7 +132,7 @@ const AssignOwnerStep = () => {
       newErrors.email = emailError;
     }
     
-    const passwordError = validatePassword(formData.password, passwordCriteria);
+    const passwordError = validatePassword(passwordCriteria);
     if (passwordError) {
       newErrors.password = passwordError;
     }
@@ -256,144 +259,127 @@ const AssignOwnerStep = () => {
           lg: 25
         }
       }}>
-        <FormControl component="fieldset" sx={{ width: '100%', mb: 2 }}>
-          <RadioGroup
-            name="ownerType"
-            value={ownerType}
-            onChange={handleOwnerTypeChange}
-          >
-            <FormControlLabel 
-              value="current" 
-              control={<Radio sx={{
-                '&.Mui-checked': {
-                  color: theme => theme.palette.background.buttonPrimaryDefault
-                }
-              }} />}
-              label={
-                <Typography variant="bodyLargeBold" color="text.primary">
-                  Set me as owner
-                </Typography>
-              } 
-            />
-            <Divider sx={{ borderColor: 'border.neutralDefault', my: 2 }} />
-            <FormControlLabel 
-              value="new" 
-              control={<Radio sx={{
-                '&.Mui-checked': {
-                  color: theme => theme.palette.background.buttonPrimaryDefault
-                }
-              }} />}
-              label={
-                <Typography variant="bodyLargeBold" color="text.primary">
-                  Add a new user
-                </Typography>
-              } 
-            />
-          </RadioGroup>
-        </FormControl>
-
-        {ownerType === 'new' && (
-          <>
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-                Name*
-              </Typography>
-              <StyledTextField
-                fullWidth
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                error={!!errors.name}
-                helperText={errors.name}
-                required
-                autoComplete="off"
-              />
-            </Box>
-
-            <Box sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              gap: 2,
-              mb: 4
-            }}>
-                <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="bodyLargeBold"
-                  color="text.primary"
-                  sx={{ mb: 1 }}
-                >
-                    Email*
-                </Typography>
-                <StyledTextField
-                    fullWidth
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    error={!!errors.email}
-                    helperText={errors.email}
-                    required
-                    autoComplete="off"
-                />
-                </Box>
-    
-                <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="bodyLargeBold"
-                  color="text.primary"
-                  sx={{ mb: 1 }}
-                >
-                    Password*
-                </Typography>
-                <StyledTextField
-                    fullWidth
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    error={!!errors.password}
-                    helperText={errors.password}
-                    required
-                    autoComplete="new-password"
-                />
-                </Box>
-            </Box>
-
-            <Box sx={{ mb: 6 }}>
-              <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-                Role*
-              </Typography>
-              <CustomSelect
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                options={roleOptions}
-                error={!!errors.role}
-                helperText={errors.role}
-                required
-                renderOption={(option) => (
-                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                    <Box sx={{ mr: 2 }}>
-                      <CustomSelectBadge config={roleConfigs[option.value]} />
-                    </Box>
-                    <Typography
-                      variant="bodyLargeDefault"
-                      color="text.defaultSubdued"
-                      sx={{
-                        fontSize: {
-                          xs: '0.75rem',
-                          sm: 'inherit'
-                        }
-                      }}
-                    >
-                      {option.description}
+        <RadioSelectionGroup
+          options={[
+            {
+              value: 'current',
+              label: 'Set me as owner',
+            },
+            {
+              value: 'new',
+              label: 'Add a new user',
+            }
+          ]}
+          value={ownerType}
+          onChange={handleOwnerTypeChange}
+          renderContent={(option) => {
+            if (option.value === 'new') {
+              return (
+                <Box sx={{ ml: 4, mt: 2, mb: 2 }}>
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+                      Name*
                     </Typography>
+                    <StyledTextField
+                      fullWidth
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      error={!!errors.name}
+                      helperText={errors.name}
+                      required
+                      autoComplete="off"
+                    />
                   </Box>
-                )}
-              />
-            </Box>
-          </>
-        )}
+
+                  <Box sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    gap: 2,
+                    mb: 4
+                  }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography
+                        variant="bodyLargeBold"
+                        color="text.primary"
+                        sx={{ mb: 1 }}
+                      >
+                        Email*
+                      </Typography>
+                      <StyledTextField
+                        fullWidth
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        error={!!errors.email}
+                        helperText={errors.email}
+                        required
+                        autoComplete="off"
+                      />
+                    </Box>
+          
+                    <Box sx={{ flex: 1 }}>
+                      <Typography
+                        variant="bodyLargeBold"
+                        color="text.primary"
+                        sx={{ mb: 1 }}
+                      >
+                        Password*
+                      </Typography>
+                      <StyledTextField
+                        fullWidth
+                        name="password"
+                        type="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        error={!!errors.password}
+                        helperText={errors.password}
+                        required
+                        autoComplete="new-password"
+                      />
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ mb: 6 }}>
+                    <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+                      Role*
+                    </Typography>
+                    <CustomSelect
+                      name="role"
+                      value={formData.role}
+                      onChange={handleChange}
+                      options={roleOptions}
+                      error={!!errors.role}
+                      helperText={errors.role}
+                      required
+                      renderOption={(option) => (
+                        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                          <Box sx={{ mr: 2 }}>
+                            <CustomSelectBadge config={roleConfigs[option.value]} />
+                          </Box>
+                          <Typography
+                            variant="bodyLargeDefault"
+                            color="text.defaultSubdued"
+                            sx={{
+                              fontSize: {
+                                xs: '0.75rem',
+                                sm: 'inherit'
+                              }
+                            }}
+                          >
+                            {option.description}
+                          </Typography>
+                        </Box>
+                      )}
+                    />
+                  </Box>
+                </Box>
+              );
+            }
+            return null;
+          }}
+        />
       </Box>
       
       <ActionsContainer sx={{

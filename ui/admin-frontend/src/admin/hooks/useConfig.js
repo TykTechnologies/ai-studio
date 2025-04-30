@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
 import cacheService from '../utils/cacheService';
-
-const CONFIG_CACHE_KEY = 'tyk_ai_studio_admin_config';
+import { CACHE_KEYS } from '../utils/constants';
 
 const useConfig = (skipInitialFetch = false) => {
   const [config, setConfig] = useState(null);
@@ -13,7 +12,7 @@ const useConfig = (skipInitialFetch = false) => {
     setLoading(true);
     setError(null);
     
-    const cachedConfig = cacheService.get(CONFIG_CACHE_KEY);
+    const cachedConfig = cacheService.get(CACHE_KEYS.CONFIG);
     if (cachedConfig) {
       setConfig(cachedConfig);
       setLoading(false);
@@ -25,7 +24,7 @@ const useConfig = (skipInitialFetch = false) => {
         const newData = response.data;
         
         setConfig(newData);
-        cacheService.set(CONFIG_CACHE_KEY, newData);
+        cacheService.set(CACHE_KEYS.CONFIG, newData);
         
         return newData;
       })

@@ -20,9 +20,7 @@ import {
   SecondaryLinkButton,
   DangerOutlineButton
 } from "../../styles/sharedStyles";
-
-// Constant for localStorage key
-const SSO_NOTIFICATION_KEY = 'tyk_ai_studio_admin_sso_notification';
+import { CACHE_KEYS } from "../../utils/constants";
 
 const SSOProfileEditor = () => {
   const { profileId } = useParams();
@@ -69,7 +67,7 @@ const SSOProfileEditor = () => {
       if (isEditMode) {
         await apiClient.put(`/sso-profiles/${profileId}`, payload);
         
-        localStorage.setItem(SSO_NOTIFICATION_KEY, JSON.stringify({
+        localStorage.setItem(CACHE_KEYS.SSO_NOTIFICATION, JSON.stringify({
           operation: "update",
           message: "Identity provider profile updated successfully",
           timestamp: Date.now()
@@ -79,7 +77,7 @@ const SSOProfileEditor = () => {
       } else {
         await apiClient.post("/sso-profiles", payload);
         
-        localStorage.setItem(SSO_NOTIFICATION_KEY, JSON.stringify({
+        localStorage.setItem(CACHE_KEYS.SSO_NOTIFICATION, JSON.stringify({
           operation: "create",
           title: "Your Identity provider profile has been created!",
           message: "After users register with SSO, you'll need to assign them a role in their user details to control their access and permissions.",
@@ -118,7 +116,7 @@ const SSOProfileEditor = () => {
       await apiClient.delete(`/sso-profiles/${profileId}`);
       
       // Store notification data for the listing page
-      localStorage.setItem(SSO_NOTIFICATION_KEY, JSON.stringify({
+      localStorage.setItem(CACHE_KEYS.SSO_NOTIFICATION, JSON.stringify({
         operation: "delete",
         message: "Identity provider profile deleted successfully",
         timestamp: Date.now()

@@ -422,3 +422,41 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeUser(user)})
 }
+
+// @Summary Skip user quick start wizard
+// @Description Set a user's skip_quick_start flag to true
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} string
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /users/{id}/skip-quick-start [post]
+// @Security BearerAuth
+func (a *API) skipUserQuickStart(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
+		})
+		return
+	}
+
+	// Update only the skipQuickStart flag
+	err = a.service.SkipQuickStartForUser(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}

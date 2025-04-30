@@ -144,6 +144,7 @@ describe('ConfigureAIStep Component', () => {
     setLlmData: mockSetLlmData,
     createdLlmId: null,
     setCreatedLlmId: mockSetCreatedLlmId,
+    availableLLMs: []
   };
 
   // Reset mocks before each test

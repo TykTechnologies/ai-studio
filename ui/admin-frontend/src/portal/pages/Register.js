@@ -68,7 +68,7 @@ const Register = () => {
       setPasswordCriteria({
         length: password.length >= 8,
         number: /\d/.test(password),
-        special: /[!@#$%^&*(),.?":{}|<>_+=-~]/.test(password),
+        special: /[!@#$%^&*(),.?":{}|<>_+=\-~]/.test(password),
         uppercase: /[A-Z]/.test(password),
       });
     };
