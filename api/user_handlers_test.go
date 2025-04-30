@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -215,4 +216,46 @@ func TestUserEmailUniqueness(t *testing.T) {
 
 	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", secondUserResponse["data"].ID), updateUserInput)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSkipUserQuickStart(t *testing.T) {
+	api, db := setupTestAPI(t)
+
+	// Create a test user
+	user := &models.User{
+		Email:          "test@example.com",
+		Name:           "Test User",
+		IsAdmin:        false,
+		ShowPortal:     true,
+		ShowChat:       true,
+		EmailVerified:  true,
+		SkipQuickStart: false, // Initially false
+	}
+	err := user.Create(db)
+	assert.NoError(t, err)
+	assert.False(t, user.SkipQuickStart)
+
+	// Test the skipUserQuickStart endpoint
+	w := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/users/%d/skip-quick-start", user.ID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify response format
+	var response map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", response["status"])
+
+	// Verify the user's SkipQuickStart flag was updated in the database
+	var updatedUser models.User
+	err = db.First(&updatedUser, user.ID).Error
+	assert.NoError(t, err)
+	assert.True(t, updatedUser.SkipQuickStart)
+
+	// Test with invalid user ID
+	w = performRequest(api.router, "POST", "/api/v1/users/invalid/skip-quick-start", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test with non-existent user ID
+	w = performRequest(api.router, "POST", "/api/v1/users/9999/skip-quick-start", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
 }

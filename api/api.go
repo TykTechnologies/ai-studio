@@ -373,7 +373,8 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/users/:id", a.deleteUser)
 	v1.GET("/users", a.listUsers)
 	v1.GET("/users/:id/catalogues", a.getUserAccessibleCatalogues)
-	v1.POST("users/:id/roll-api-key", a.rollUserAPIKey)
+	v1.POST("/users/:id/roll-api-key", a.rollUserAPIKey)
+	v1.POST("/users/:id/skip-quick-start", a.skipUserQuickStart)
 
 	// Group routes
 	v1.POST("/groups", a.createGroup)

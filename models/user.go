@@ -26,6 +26,7 @@ type User struct {
 	ShowPortal           bool
 	ShowChat             bool
 	AccessToSSOConfig    bool
+	SkipQuickStart       bool
 	APIKey               string
 	NotificationsEnabled bool    `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
 	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
@@ -250,4 +251,8 @@ func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
 	}
 
 	return count == 0, nil
+}
+
+func SetSkipQuickStartForUser(db *gorm.DB, userID uint) error {
+	return db.Model(&User{}).Where("id = ?", userID).Update("skip_quick_start", true).Error
 }

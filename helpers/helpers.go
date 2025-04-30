@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
@@ -225,4 +226,26 @@ func (a *JSONMapAccessor) GetSlice(key string) []interface{} {
 	}
 
 	return nil
+}
+
+func ValidateEmailDomain(email string) error {
+	appConfig := config.Get()
+
+	if len(appConfig.FilterSignupDomains) == 0 {
+		return nil
+	}
+
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid email address")
+	}
+
+	domain := strings.ToLower(parts[1])
+	for _, allowed := range appConfig.FilterSignupDomains {
+		if strings.ToLower(allowed) == domain {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("email domain '%s' is not permitted", domain)
 }

@@ -141,17 +141,22 @@ export const validateEmail = (email) => {
   return null;
 };
 
-export const validatePassword = (password, passwordCriteria) => {
-  if (!passwordCriteria.length) {
-    return "Password must be at least 8 characters";
-  } else if (!passwordCriteria.number) {
-    return "Password must contain a number";
-  } else if (!passwordCriteria.special) {
-    return "Password must contain a special character";
-  } else if (!passwordCriteria.uppercase) {
-    return "Password must contain an uppercase letter";
+export const validatePassword = (passwordCriteria) => {
+  console.log("Password criteria:", passwordCriteria);
+  switch (false) {
+    case passwordCriteria.length:
+      return "Password must be at least 8 characters";
+    case passwordCriteria.number:
+      return "Password must contain a number";
+    case passwordCriteria.special:
+      return "Password must contain a special character";
+    case passwordCriteria.uppercase:
+      return "Password must contain an uppercase letter";
+    case passwordCriteria.lowercase:
+      return "Password must contain a lowercase letter";
+    default:
+      return null;
   }
-  return null;
 };
 
 export const PRIVACY_LEVEL_SCORES = {
