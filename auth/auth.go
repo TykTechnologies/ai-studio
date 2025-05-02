@@ -354,7 +354,6 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		return errors.New("registration is currently disabled")
 	}
 
-	// Use the service's domain validation
 	if err := helpers.ValidateEmailDomain(email); err != nil {
 		return err
 	}
