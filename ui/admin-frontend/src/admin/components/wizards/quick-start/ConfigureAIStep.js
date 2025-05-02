@@ -32,16 +32,20 @@ const ConfigureAIStep = () => {
     availableLLMs
   } = useQuickStart();
   
-  const [llmType, setLlmType] = useState('existing');
+  const [llmType, setLlmType] = useState('new');
   const [selectedLlmId, setSelectedLlmId] = useState('');
   
-  const [formData, setFormData] = useState({
+  const [newLlmCreated, setNewLlmCreated] = useState(false);
+  const [newLlmId, setNewLlmId] = useState(null);
+  
+  const [newLlmFormData, setNewLlmFormData] = useState({
     name: '',
     llmProvider: '',
     apiEndpoint: '',
     apiKey: '',
     privacyLevel: 'public'
   });
+  const [existingLlmData, setExistingLlmData] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [isFormValid, setIsFormValid] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -59,21 +63,21 @@ const ConfigureAIStep = () => {
       return isValid;
     }
 
-    const nameValid = formData.name.trim() !== '';
-    const providerValid = formData.llmProvider.trim() !== '';
+    const nameValid = newLlmFormData.name.trim() !== '';
+    const providerValid = newLlmFormData.llmProvider.trim() !== '';
     
-    const requiresAccessDetails = formData.llmProvider &&
-      vendorRequiresAccessDetails(formData.llmProvider);
+    const requiresAccessDetails = newLlmFormData.llmProvider &&
+      vendorRequiresAccessDetails(newLlmFormData.llmProvider);
     
-    const apiEndpointValid = !requiresAccessDetails || formData.apiEndpoint.trim() !== '';
-    const apiKeyValid = !requiresAccessDetails || formData.apiKey.trim() !== '';
+    const apiEndpointValid = !requiresAccessDetails || newLlmFormData.apiEndpoint.trim() !== '';
+    const apiKeyValid = !requiresAccessDetails || newLlmFormData.apiKey.trim() !== '';
     
     const isValid = nameValid && providerValid && apiEndpointValid && apiKeyValid;
     
     setIsFormValid(isValid);
     setStepValid('configure-ai', isValid);
     return isValid;
-  }, [formData, llmType, selectedLlmId, setStepValid]);
+  }, [newLlmFormData, llmType, selectedLlmId, setStepValid]);
 
   useEffect(() => {
     const vendorCodes = getVendorCodes();
@@ -88,28 +92,24 @@ const ConfigureAIStep = () => {
   useEffect(() => {
     checkRequiredFields();
   }, [checkRequiredFields]);
-  
+
   useEffect(() => {
-    if (llmData && Object.keys(llmData).length > 0) {
-      setFormData(llmData);
+    if (newLlmCreated && llmData && createdLlmId === newLlmId) {
+      setNewLlmFormData({ ...llmData });
     }
-  }, [llmData]);
+  }, [newLlmCreated, llmData, createdLlmId, newLlmId]);
+
+  useEffect(() => {
+    if (availableLLMs.length > 0) {
+      setLlmType('existing');
+    }
+  }, [availableLLMs]);
   
   const handleLlmTypeChange = (e) => {
     setLlmType(e.target.value);
     
     if (e.target.value === 'new') {
       setSelectedLlmId('');
-      setCreatedLlmId('');
-      if (selectedLlmId) {
-        setFormData({
-          name: '',
-          llmProvider: '',
-          apiEndpoint: '',
-          apiKey: '',
-          privacyLevel: 'public'
-        });
-      }
     }
   };
   
@@ -119,7 +119,7 @@ const ConfigureAIStep = () => {
     
     const selectedLlm = availableLLMs.find(llm => llm.id === llmId);
     if (selectedLlm) {
-      setFormData({
+      setExistingLlmData({
         name: selectedLlm.attributes.name,
         llmProvider: selectedLlm.attributes.vendor,
         apiEndpoint: selectedLlm.attributes.api_endpoint,
@@ -136,45 +136,40 @@ const ConfigureAIStep = () => {
     
     try {
       if (llmType === 'existing' && selectedLlmId) {
-        const selectedLlm = availableLLMs.find(llm => llm.id === selectedLlmId);
-        if (selectedLlm) {
-          setLlmData({
-            name: selectedLlm.attributes.name,
-            llmProvider: selectedLlm.attributes.vendor,
-            apiEndpoint: selectedLlm.attributes.api_endpoint,
-            apiKey: selectedLlm.attributes.api_key,
-            privacyLevel: Object.keys(PRIVACY_LEVEL_SCORES).find(
-              key => PRIVACY_LEVEL_SCORES[key] === selectedLlm.attributes.privacy_score
-            ) || 'public'
-          });
+        if (existingLlmData) {
+          setLlmData(existingLlmData);
           setCreatedLlmId(selectedLlmId);
           goToNextStep();
           return;
         }
       }
       
-      const llmDataForApi = {
-        name: formData.name,
-        apiKey: formData.apiKey,
-        apiEndpoint: formData.apiEndpoint,
-        privacyScore: PRIVACY_LEVEL_SCORES[formData.privacyLevel],
-        llmProvider: formData.llmProvider,
-        active: true
-      };
-      
-      let response;
-      
-      if (createdLlmId) {
-        if (JSON.stringify(formData) !== JSON.stringify(llmData)) {
-          await updateLLM(createdLlmId, llmDataForApi);
+      if (llmType === 'new') {
+        const llmDataForApi = {
+          name: newLlmFormData.name,
+          apiKey: newLlmFormData.apiKey,
+          apiEndpoint: newLlmFormData.apiEndpoint,
+          privacyScore: PRIVACY_LEVEL_SCORES[newLlmFormData.privacyLevel],
+          llmProvider: newLlmFormData.llmProvider,
+          active: true
+        };
+        
+        if (newLlmCreated && newLlmId) {
+          if (JSON.stringify(newLlmFormData) !== JSON.stringify(llmData)) {
+            await updateLLM(newLlmId, llmDataForApi);
+          }
+          setCreatedLlmId(newLlmId);
+        } else {
+          const response = await createLLM(llmDataForApi);
+          const createdId = response.id;
+          setNewLlmId(createdId);
+          setCreatedLlmId(createdId);
+          setNewLlmCreated(true);
         }
-      } else {
-        response = await createLLM(llmDataForApi);
-        const newLlmId = response.id;
-        setCreatedLlmId(newLlmId);
+        
+        setLlmData(newLlmFormData);
       }
       
-      setLlmData(formData);
       goToNextStep();
     } catch (error) {
       setSnackbar({
@@ -191,9 +186,9 @@ const ConfigureAIStep = () => {
     createOrUpdateLLM();
   };
 
-  const handleChange = (e) => {
+  const handleNewLlmChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setNewLlmFormData(prev => ({
       ...prev,
       [name]: value
     }));
@@ -296,8 +291,8 @@ const ConfigureAIStep = () => {
               <StyledTextField
                 fullWidth
                 name="name"
-                value={formData.name}
-                onChange={handleChange}
+                value={newLlmFormData.name}
+                onChange={handleNewLlmChange}
                 required
                 autoComplete="off"
               />
@@ -309,8 +304,8 @@ const ConfigureAIStep = () => {
               </Typography>
               <CustomSelect
                 name="llmProvider"
-                value={formData.llmProvider}
-                onChange={handleChange}
+                value={newLlmFormData.llmProvider}
+                onChange={handleNewLlmChange}
                 options={vendors}
                 required
                 renderOption={(option) => (
@@ -361,13 +356,13 @@ const ConfigureAIStep = () => {
             >
               <Box sx={{ flex: 1 }}>
                 <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-                  API Endpoint{formData.llmProvider && vendorRequiresAccessDetails(formData.llmProvider) ? '*' : ''}
+                  API Endpoint{newLlmFormData.llmProvider && vendorRequiresAccessDetails(newLlmFormData.llmProvider) ? '*' : ''}
                 </Typography>
                 <StyledTextField
                   fullWidth
                   name="apiEndpoint"
-                  value={formData.apiEndpoint}
-                  onChange={handleChange}
+                  value={newLlmFormData.apiEndpoint}
+                  onChange={handleNewLlmChange}
                   autoComplete="new-password"
                   inputProps={{
                     autoComplete: "new-password",
@@ -379,14 +374,14 @@ const ConfigureAIStep = () => {
 
               <Box sx={{ flex: 1 }}>
                 <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-                  API Key{formData.llmProvider && vendorRequiresAccessDetails(formData.llmProvider) ? '*' : ''}
+                  API Key{newLlmFormData.llmProvider && vendorRequiresAccessDetails(newLlmFormData.llmProvider) ? '*' : ''}
                 </Typography>
                 <StyledTextField
                   fullWidth
                   name="apiKey"
                   type="password"
-                  value={formData.apiKey}
-                  onChange={handleChange}
+                  value={newLlmFormData.apiKey}
+                  onChange={handleNewLlmChange}
                   autoComplete="new-password"
                   inputProps={{
                     autoComplete: "new-password",
@@ -417,8 +412,8 @@ const ConfigureAIStep = () => {
               </Typography>
               <CustomSelect
                 name="privacyLevel"
-                value={formData.privacyLevel}
-                onChange={handleChange}
+                value={newLlmFormData.privacyLevel}
+                onChange={handleNewLlmChange}
                 options={PRIVACY_LEVEL_OPTIONS}
                 renderOption={(option) => (
                   <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
