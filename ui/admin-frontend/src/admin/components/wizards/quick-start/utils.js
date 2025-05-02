@@ -142,7 +142,6 @@ export const validateEmail = (email) => {
 };
 
 export const validatePassword = (passwordCriteria) => {
-  console.log("Password criteria:", passwordCriteria);
   switch (false) {
     case passwordCriteria.length:
       return "Password must be at least 8 characters";
