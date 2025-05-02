@@ -219,6 +219,7 @@ describe('ConfigureAIStep Component', () => {
   // Reset mocks before each test
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSetStepValid.mockClear(); // Clear the mockSetStepValid mock before each test
     useQuickStart.mockReturnValue(defaultContextValues);
     vendorLogos.getVendorCodes.mockReturnValue(['openai', 'anthropic', 'google_ai', 'ollama']);
     vendorLogos.getVendorName.mockImplementation((code) => {
@@ -258,41 +259,34 @@ describe('ConfigureAIStep Component', () => {
     expect(continueButton).toBeDisabled();
   });
 
-  test('loads existing LLM data when available', () => {
-    const existingLlmData = {
+  test('can fill out form and validate fields', () => {
+    const formData = {
       name: 'Test LLM',
       llmProvider: 'openai',
       apiEndpoint: 'https://api.openai.com/v1',
       apiKey: 'sk-test123',
       privacyLevel: 'internal'
     };
-    
-    // Mock the context with isFormValid set to true
-    useQuickStart.mockReturnValue({
-      ...defaultContextValues,
-      llmData: existingLlmData,
-      setStepValid: jest.fn() // Mock this to avoid actual validation
-    });
-    
-    const { container } = render(
-      <ThemeProvider theme={mockTheme}>
-        <PrimaryButton disabled={false}>Continue</PrimaryButton>
-      </ThemeProvider>
-    );
-    
-    // Check that a non-disabled button can be rendered
-    const continueButton = screen.getByRole('button', { name: /continue/i });
-    expect(continueButton).not.toBeDisabled();
-    
-    // Now render the actual component
-    const { unmount } = renderWithTheme(<ConfigureAIStep />);
-    
-    // Check that the form is populated with existing data
-    const nameInput = screen.getByTestId('name');
-    expect(nameInput.value).toBe('Test LLM');
+
+    renderWithTheme(<ConfigureAIStep />);
+
+    // Get form fields
+    const formNameInput = screen.getByTestId('name');
+    const formProviderSelect = screen.getAllByTestId('mock-custom-select')[0];
+    const formEndpointInput = screen.getByTestId('apiEndpoint');
+    const formKeyInput = screen.getByTestId('apiKey');
+
+    // Fill out the form
+    fireEvent.change(formNameInput, { target: { value: formData.name } });
+    fireEvent.change(formProviderSelect, { target: { value: formData.llmProvider } });
+    fireEvent.change(formEndpointInput, { target: { value: formData.apiEndpoint } });
+    fireEvent.change(formKeyInput, { target: { value: formData.apiKey } });
+
+    // Verify that validation was called with the correct arguments
+    expect(mockSetStepValid).toHaveBeenCalledWith('configure-ai', true);
     
     // Verify the form data is correctly loaded
-    expect(nameInput).toHaveValue('Test LLM');
+    expect(formNameInput).toHaveValue('Test LLM');
   });
 
   test('validates form fields correctly for providers requiring access details', () => {
@@ -326,12 +320,8 @@ describe('ConfigureAIStep Component', () => {
     // Enter API key
     const apiKeyInput = screen.getByTestId('apiKey');
     fireEvent.change(apiKeyInput, { target: { value: 'sk-test123' } });
-    
-    // Manually call the validation function to simulate what would happen
-    mockSetStepValid.mockClear();
-    mockSetStepValid('configure-ai', true);
-    
-    // Verify the validation function was called
+
+    // Verify that the validation function was called with the correct parameters
     expect(mockSetStepValid).toHaveBeenCalledWith('configure-ai', true);
   });
   
@@ -348,16 +338,11 @@ describe('ConfigureAIStep Component', () => {
     
     // Form should still be invalid (no provider selected)
     expect(continueButton).toBeDisabled();
-    
     // Select Ollama as provider (doesn't require access details)
     const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
     fireEvent.change(providerSelect, { target: { value: 'ollama' } });
-    
-    // Manually call the validation function to simulate what would happen
-    mockSetStepValid.mockClear();
-    mockSetStepValid('configure-ai', true);
-    
-    // Verify the validation function was called
+
+    // Verify that the validation function was called with the correct parameters
     expect(mockSetStepValid).toHaveBeenCalledWith('configure-ai', true);
   });
 
@@ -599,9 +584,9 @@ describe('ConfigureAIStep Component', () => {
     
     renderWithTheme(<ConfigureAIStep />);
     
-    // Radio options should be present
+    // Radio options should be present and "existing" should be selected by default
     expect(screen.getByTestId('radio-selection-group')).toBeInTheDocument();
-    expect(screen.getByTestId('radio-existing')).toBeInTheDocument();
+    expect(screen.getByTestId('radio-existing')).toBeChecked();
     expect(screen.getByTestId('radio-new')).toBeInTheDocument();
     expect(screen.getByText('Use existing LLM provider')).toBeInTheDocument();
     expect(screen.getByText('Add new LLM provider')).toBeInTheDocument();

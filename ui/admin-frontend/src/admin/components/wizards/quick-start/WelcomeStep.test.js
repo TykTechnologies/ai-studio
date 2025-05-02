@@ -1,16 +1,10 @@
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import WelcomeStep from './WelcomeStep';
 import { useQuickStart } from './QuickStartContext';
-import { skipQuickStartForUser } from '../../../services/userService';
-
-// Mock the skipQuickStartForUser function
-jest.mock('../../../services/userService', () => ({
-  skipQuickStartForUser: jest.fn().mockResolvedValue({}),
-}));
 
 // Mock the image import
 jest.mock('./welcome_step.png', () => 'mocked-image-path');
@@ -100,13 +94,18 @@ describe('WelcomeStep Component', () => {
     expect(screen.getByText('Welcome to Tyk, User')).toBeInTheDocument();
     
     // Check that the descriptive text is rendered
-    expect(screen.getByText(/Empower your team to build AI Apps/)).toBeInTheDocument();
-    expect(screen.getByText(/which can be used for code editors, knowledge search/)).toBeInTheDocument();
+    expect(screen.getByText(/Empower your team to build AI Apps with direct access to LLM providers and data sources/)).toBeInTheDocument();
+    expect(screen.getByText(/which can be used for code editors, knowledge search, and task automation keeping centralized control, usage tracking, and security/)).toBeInTheDocument();
     
     // Check that the image is rendered
     const image = screen.getByAltText('Welcome to Tyk AI Studio');
     expect(image).toBeInTheDocument();
     expect(image.tagName).toBe('IMG');
+    
+    // Check that the new explanatory text about AI studio App is rendered
+    expect(screen.getByText(/Start by creating an/)).toBeInTheDocument();
+    expect(screen.getByText('AI studio App')).toBeInTheDocument();
+    expect(screen.getByText(/in three easy steps: configure AI infrastructure, manage access, and add details/)).toBeInTheDocument();
     
     // Check that the buttons are rendered
     expect(screen.getByText('Explore by myself')).toBeInTheDocument();
@@ -126,36 +125,15 @@ describe('WelcomeStep Component', () => {
     expect(screen.getByText('Welcome to Tyk, John Doe')).toBeInTheDocument();
   });
 
-  test('calls skipQuickStartForUser and skipQuickStart when "Explore by myself" button is clicked', async () => {
+  test('calls skipQuickStart when "Explore by myself" button is clicked', () => {
     renderWithTheme(<WelcomeStep />);
     
     // Click the "Explore by myself" button
     const exploreButton = screen.getByText('Explore by myself');
     fireEvent.click(exploreButton);
     
-    // Check that skipQuickStartForUser was called with the user ID
-    await waitFor(() => {
-      expect(skipQuickStartForUser).toHaveBeenCalledWith('123');
-    });
-    
-    // Check that skipQuickStart was also called
+    // Check that skipQuickStart was called
     expect(mockSkipQuickStart).toHaveBeenCalledTimes(1);
-  });
-
-  test('calls skipQuickStart even if skipQuickStartForUser fails', async () => {
-    // Mock the API call to fail
-    skipQuickStartForUser.mockRejectedValueOnce(new Error('API error'));
-    
-    renderWithTheme(<WelcomeStep />);
-    
-    // Click the "Explore by myself" button
-    const exploreButton = screen.getByText('Explore by myself');
-    fireEvent.click(exploreButton);
-    
-    // Check that skipQuickStart was still called despite the API error
-    await waitFor(() => {
-      expect(mockSkipQuickStart).toHaveBeenCalledTimes(1);
-    });
   });
 
   test('calls goToNextStep when "Quick start" button is clicked', () => {
