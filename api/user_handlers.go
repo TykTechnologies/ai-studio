@@ -446,7 +446,6 @@ func (a *API) skipUserQuickStart(c *gin.Context) {
 		return
 	}
 
-	// Update only the skipQuickStart flag
 	err = a.service.SkipQuickStartForUser(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

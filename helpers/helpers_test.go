@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -281,14 +282,14 @@ func TestIntToObjectId(t *testing.T) {
 func TestDecodeToUTF8(t *testing.T) {
 	// Set Gin to test mode to suppress debug messages
 	gin.SetMode(gin.TestMode)
-	
+
 	// Let's examine the actual behavior of the DecodeToUTF8 function
 	// For empty string, let's check if it returns an error
 	emptyResult, emptyErr := DecodeToUTF8("")
-	
+
 	// For special characters, let's get the actual output
 	specialResult, _ := DecodeToUTF8("w6nDqMOgw6fDtMO2")
-	
+
 	tests := []struct {
 		name     string
 		input    string
@@ -339,31 +340,31 @@ func TestDecodeToUTF8(t *testing.T) {
 func TestSendErrorResponse(t *testing.T) {
 	tests := []struct {
 		name           string
-		error         error
+		error          error
 		expectedStatus int
 		expectedTitle  string
 	}{
 		{
 			name:           "Bad Request Error",
-			error:         NewBadRequestError("Invalid input"),
+			error:          NewBadRequestError("Invalid input"),
 			expectedStatus: http.StatusBadRequest,
 			expectedTitle:  "Bad Request",
 		},
 		{
 			name:           "Internal Server Error",
-			error:         NewInternalServerError("Server error"),
+			error:          NewInternalServerError("Server error"),
 			expectedStatus: http.StatusInternalServerError,
 			expectedTitle:  "Internal Server Error",
 		},
 		{
 			name:           "Not Found Error",
-			error:         NewNotFoundError("Resource not found"),
+			error:          NewNotFoundError("Resource not found"),
 			expectedStatus: http.StatusNotFound,
 			expectedTitle:  "Not Found",
 		},
 		{
 			name:           "Standard error",
-			error:         fmt.Errorf("standard error"),
+			error:          fmt.Errorf("standard error"),
 			expectedStatus: http.StatusInternalServerError,
 			expectedTitle:  "Internal Server Error",
 		},
@@ -471,4 +472,73 @@ func TestJSONMapAccessor(t *testing.T) {
 		sliceResult := nilAccessor.GetSlice("any_key")
 		assert.Nil(t, sliceResult)
 	})
+}
+
+func TestValidateEmailDomain(t *testing.T) {
+	originalFilterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")
+	defer os.Setenv("FILTER_SIGNUP_DOMAINS", originalFilterDomains)
+
+	tests := []struct {
+		name           string
+		email          string
+		filterDomains  string
+		expectedError  bool
+		expectedErrMsg string
+	}{
+		{
+			name:          "Email domain is allowed",
+			email:         "user@example.com",
+			filterDomains: "example.com,anotherdomain.com",
+			expectedError: false,
+		},
+		{
+			name:           "Email domain is not allowed",
+			email:          "user@rejected.com",
+			filterDomains:  "example.com,anotherdomain.com",
+			expectedError:  true,
+			expectedErrMsg: "email domain 'rejected.com' is not permitted",
+		},
+		{
+			name:           "Invalid email format",
+			email:          "invalid-email",
+			filterDomains:  "example.com",
+			expectedError:  true,
+			expectedErrMsg: "invalid email address",
+		},
+		{
+			name:          "Case-insensitive domain matching - lowercase config, uppercase email",
+			email:         "user@EXAMPLE.COM",
+			filterDomains: "example.com",
+			expectedError: false,
+		},
+		{
+			name:          "Case-insensitive domain matching - uppercase config, lowercase email",
+			email:         "user@example.com",
+			filterDomains: "EXAMPLE.COM",
+			expectedError: false,
+		},
+		{
+			name:           "Multiple @ symbols in email",
+			email:          "user@domain@example.com",
+			filterDomains:  "example.com",
+			expectedError:  true,
+			expectedErrMsg: "invalid email address",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("FILTER_SIGNUP_DOMAINS", tt.filterDomains)
+
+			err := ValidateEmailDomain(tt.email)
+			if tt.expectedError {
+				assert.Error(t, err)
+				if tt.expectedErrMsg != "" {
+					assert.Equal(t, tt.expectedErrMsg, err.Error())
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
