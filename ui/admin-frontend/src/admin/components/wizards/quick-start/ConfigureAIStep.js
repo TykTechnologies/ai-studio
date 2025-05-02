@@ -107,10 +107,6 @@ const ConfigureAIStep = () => {
   
   const handleLlmTypeChange = (e) => {
     setLlmType(e.target.value);
-    
-    if (e.target.value === 'new') {
-      setSelectedLlmId('');
-    }
   };
   
   const handleExistingLlmChange = (e) => {
