@@ -339,6 +339,32 @@ export const StyledSelect = styled(Select)(({ theme }) => ({
   }
 }));
 
+export const ResponsiveTitleBox = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'flex-end',
+  justifyContent: 'space-between',
+  width: '100%'
+}));
+
+export const TitleContentBox = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  [theme.breakpoints.down('sm')]: {
+    marginBottom: theme.spacing(2)
+  }
+}));
+
+export const ActionButtonsBox = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  gap: theme.spacing(2),
+  [theme.breakpoints.down('sm')]: {
+    width: '100%',
+    justifyContent: 'flex-start'
+  }
+}));
+
 export const StyledFormControl = styled(FormControl)(({ theme }) => ({
   width: '100%',
   '& .MuiInputLabel-root': {

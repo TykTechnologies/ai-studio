@@ -66,7 +66,10 @@ jest.mock('../../styles/sharedStyles', () => ({
   ),
   DangerOutlineButton: ({ children, onClick, ...props }) => (
     <button data-testid="danger-outline-button" onClick={onClick} {...props}>{children}</button>
-  )
+  ),
+  ResponsiveTitleBox: ({ children, ...props }) => <div data-testid="responsive-title-box" {...props}>{children}</div>,
+  TitleContentBox: ({ children, ...props }) => <div data-testid="title-content-box" {...props}>{children}</div>,
+  ActionButtonsBox: ({ children, ...props }) => <div data-testid="action-buttons-box" {...props}>{children}</div>
 }));
 
 // Mock ConfirmationDialog

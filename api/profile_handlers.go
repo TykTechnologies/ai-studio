@@ -88,13 +88,19 @@ func serializeProfileList(profile *models.Profile) ProfileListItem {
 
 	resp.Attributes.Name = profile.Name
 	resp.Attributes.ProfileID = profile.ProfileID
-	resp.Attributes.ProfileType = userProfile
+	resp.Attributes.UseInLoginPage = profile.UseInLoginPage
+
+	if profile.ActionType != "" {
+		resp.Attributes.ProfileType = userProfile
+	}
 
 	pt, ok := providerType[profile.SelectedProviderType]
 
 	if ok {
 		resp.Attributes.ProviderType = pt
-	} else {
+	}
+
+	if profile.SelectedProviderType != "" && !ok {
 		resp.Attributes.ProviderType = "Social"
 	}
 

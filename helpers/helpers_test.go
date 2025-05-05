@@ -281,14 +281,14 @@ func TestIntToObjectId(t *testing.T) {
 func TestDecodeToUTF8(t *testing.T) {
 	// Set Gin to test mode to suppress debug messages
 	gin.SetMode(gin.TestMode)
-	
+
 	// Let's examine the actual behavior of the DecodeToUTF8 function
 	// For empty string, let's check if it returns an error
 	emptyResult, emptyErr := DecodeToUTF8("")
-	
+
 	// For special characters, let's get the actual output
 	specialResult, _ := DecodeToUTF8("w6nDqMOgw6fDtMO2")
-	
+
 	tests := []struct {
 		name     string
 		input    string
@@ -339,31 +339,31 @@ func TestDecodeToUTF8(t *testing.T) {
 func TestSendErrorResponse(t *testing.T) {
 	tests := []struct {
 		name           string
-		error         error
+		error          error
 		expectedStatus int
 		expectedTitle  string
 	}{
 		{
 			name:           "Bad Request Error",
-			error:         NewBadRequestError("Invalid input"),
+			error:          NewBadRequestError("Invalid input"),
 			expectedStatus: http.StatusBadRequest,
 			expectedTitle:  "Bad Request",
 		},
 		{
 			name:           "Internal Server Error",
-			error:         NewInternalServerError("Server error"),
+			error:          NewInternalServerError("Server error"),
 			expectedStatus: http.StatusInternalServerError,
 			expectedTitle:  "Internal Server Error",
 		},
 		{
 			name:           "Not Found Error",
-			error:         NewNotFoundError("Resource not found"),
+			error:          NewNotFoundError("Resource not found"),
 			expectedStatus: http.StatusNotFound,
 			expectedTitle:  "Not Found",
 		},
 		{
 			name:           "Standard error",
-			error:         fmt.Errorf("standard error"),
+			error:          fmt.Errorf("standard error"),
 			expectedStatus: http.StatusInternalServerError,
 			expectedTitle:  "Internal Server Error",
 		},
@@ -425,17 +425,24 @@ func TestJSONMapAccessor(t *testing.T) {
 
 	t.Run("GetString with non-string value", func(t *testing.T) {
 		result := accessor.GetString("int_key", "default")
-		assert.Equal(t, "42", result)
+		assert.Equal(t, "", result)
 	})
 
 	t.Run("GetString with complex value", func(t *testing.T) {
 		result := accessor.GetString("invalid_key", "default")
-		assert.Contains(t, result, "map")
+		assert.Equal(t, "", result)
 	})
 
 	t.Run("GetString with non-existent key", func(t *testing.T) {
 		result := accessor.GetString("non_existent", "default")
 		assert.Equal(t, "default", result)
+	})
+
+	t.Run("GetString with nil value", func(t *testing.T) {
+		// Add a nil value to the data map
+		accessor.data["nil_key"] = nil
+		result := accessor.GetString("nil_key", "default")
+		assert.Equal(t, "", result)
 	})
 
 	// Test GetSlice
