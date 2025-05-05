@@ -1,16 +1,12 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
+import isEqual from 'lodash/isEqual';
 import {
   Box,
   Typography,
-  Divider,
   CircularProgress,
   Snackbar,
   Alert,
   Button,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  FormControl,
 } from '@mui/material';
 import { StyledTextField } from '../../../styles/sharedStyles';
 import { useQuickStart } from './QuickStartContext';
@@ -169,7 +165,7 @@ const AssignOwnerStep = () => {
       let response;
       
       if (createdOwnerId) {
-        if (JSON.stringify(formData) !== JSON.stringify(ownerData.formData)) {
+        if (!isEqual(formData, ownerData.formData)) {
           await updateUser(createdOwnerId, userDataForApi);
         }
       } else {
