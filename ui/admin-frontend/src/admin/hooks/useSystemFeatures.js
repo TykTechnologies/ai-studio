@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import pubClient from "../utils/pubClient";
 import cacheService from "../utils/cacheService";
-
-const FEATURES_CACHE_KEY = 'tyk_ai_studio_admin_features';
+import { CACHE_KEYS } from "../utils/constants";
 
 const useSystemFeatures = (skipInitialFetch = false) => {
   const [features, setFeatures] = useState({
@@ -17,7 +16,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
     setLoading(true);
     setError(null);
     
-    const cachedFeatures = cacheService.get(FEATURES_CACHE_KEY);
+    const cachedFeatures = cacheService.get(CACHE_KEYS.FEATURES);
     if (cachedFeatures) {
       setFeatures(cachedFeatures);
       setLoading(false);
@@ -29,7 +28,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
         const newData = response.data.features;
         
         setFeatures(newData);
-        cacheService.set(FEATURES_CACHE_KEY, newData);
+        cacheService.set(CACHE_KEYS.FEATURES, newData);
         
         return newData;
       })

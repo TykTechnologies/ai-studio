@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import pubClient from '../utils/pubClient';
 import cacheService from '../utils/cacheService';
-
-const ENTITLEMENTS_CACHE_KEY = 'tyk_ai_studio_admin_userEntitlements';
+import { CACHE_KEYS } from '../utils/constants';
 
 const useUserEntitlements = (skipInitialFetch = false) => {
   const [userEntitlements, setUserEntitlements] = useState(null);
@@ -17,7 +16,7 @@ const useUserEntitlements = (skipInitialFetch = false) => {
     setLoading(true);
     setError(null);
     
-    const cachedData = cacheService.get(ENTITLEMENTS_CACHE_KEY);
+    const cachedData = cacheService.get(CACHE_KEYS.USER_ENTITLEMENTS);
     if (cachedData) {
       setUserEntitlements(cachedData.entitlements);
       setUiOptions(cachedData.ui_options);
@@ -49,9 +48,9 @@ const useUserEntitlements = (skipInitialFetch = false) => {
           userId: newUserId,
           userEmail: newUserEmail
         };
-        cacheService.set(ENTITLEMENTS_CACHE_KEY, dataToCache, 10000); // 10 seconds expiry
+        cacheService.set(CACHE_KEYS.USER_ENTITLEMENTS, dataToCache, 10000); // 10 seconds expiry
         
-        return newData;
+        return dataToCache;
       })
       .catch(error => {
         console.error('Failed to fetch user entitlements:', error);

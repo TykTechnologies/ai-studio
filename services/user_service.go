@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
 func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
 	email = strings.ToLower(email)
+
+	if err := helpers.ValidateEmailDomain(email); err != nil {
+		return nil, err
+	}
+
 	if notificationsEnabled && !isAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
 	}
@@ -300,4 +306,8 @@ func mapToSlice[T any](m map[uint]T) []T {
 		slice = append(slice, v)
 	}
 	return slice
+}
+
+func (s *Service) SkipQuickStartForUser(userID uint) error {
+	return models.SetSkipQuickStartForUser(s.DB, userID)
 }

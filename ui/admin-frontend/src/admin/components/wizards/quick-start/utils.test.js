@@ -239,10 +239,11 @@ describe('Quick Start Wizard Utils', () => {
         length: true,
         number: true,
         special: true,
-        uppercase: true
+        uppercase: true,
+        lowercase: true
       };
       
-      expect(validatePassword('Password123!', passwordCriteria)).toBeNull();
+      expect(validatePassword(passwordCriteria)).toBeNull();
     });
 
     test('returns error message when length criterion is not met', () => {
@@ -250,10 +251,11 @@ describe('Quick Start Wizard Utils', () => {
         length: false,
         number: true,
         special: true,
-        uppercase: true
+        uppercase: true,
+        lowercase: true
       };
       
-      expect(validatePassword('Pass1!', passwordCriteria)).toBe('Password must be at least 8 characters');
+      expect(validatePassword(passwordCriteria)).toBe('Password must be at least 8 characters');
     });
 
     test('returns error message when number criterion is not met', () => {
@@ -261,10 +263,11 @@ describe('Quick Start Wizard Utils', () => {
         length: true,
         number: false,
         special: true,
-        uppercase: true
+        uppercase: true,
+        lowercase: true
       };
       
-      expect(validatePassword('Password!', passwordCriteria)).toBe('Password must contain a number');
+      expect(validatePassword(passwordCriteria)).toBe('Password must contain a number');
     });
 
     test('returns error message when special character criterion is not met', () => {
@@ -272,10 +275,11 @@ describe('Quick Start Wizard Utils', () => {
         length: true,
         number: true,
         special: false,
-        uppercase: true
+        uppercase: true,
+        lowercase: true
       };
       
-      expect(validatePassword('Password123', passwordCriteria)).toBe('Password must contain a special character');
+      expect(validatePassword(passwordCriteria)).toBe('Password must contain a special character');
     });
 
     test('returns error message when uppercase criterion is not met', () => {
@@ -283,10 +287,23 @@ describe('Quick Start Wizard Utils', () => {
         length: true,
         number: true,
         special: true,
-        uppercase: false
+        uppercase: false,
+        lowercase: true
       };
       
-      expect(validatePassword('password123!', passwordCriteria)).toBe('Password must contain an uppercase letter');
+      expect(validatePassword(passwordCriteria)).toBe('Password must contain an uppercase letter');
+    });
+
+    test('returns error message when lowercase criterion is not met', () => {
+      const passwordCriteria = {
+        length: true,
+        number: true,
+        special: true,
+        uppercase: true,
+        lowercase: false
+      };
+      
+      expect(validatePassword(passwordCriteria)).toBe('Password must contain a lowercase letter');
     });
 
     test('checks criteria in the correct order', () => {
@@ -294,11 +311,12 @@ describe('Quick Start Wizard Utils', () => {
         length: false,
         number: false,
         special: false,
-        uppercase: false
+        uppercase: false,
+        lowercase: false
       };
       
       // Should return the first error (length) even though all criteria fail
-      expect(validatePassword('pass', passwordCriteria)).toBe('Password must be at least 8 characters');
+      expect(validatePassword(passwordCriteria)).toBe('Password must be at least 8 characters');
     });
   });
 });
