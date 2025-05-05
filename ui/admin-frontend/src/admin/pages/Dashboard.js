@@ -726,7 +726,9 @@ const Dashboard = () => {
                       "LLM Costs"
                     )}
                     {renderBudgetTable(
-                      budgetUsageData.filter(item => item.entity_type === "App"),
+                      budgetUsageData
+                        .filter(item => item.entity_type === "App")
+                        .sort((a, b) => parseFloat(b.totalCost || 0) - parseFloat(a.totalCost || 0)),
                       "Application Costs"
                     )}
                   </>
