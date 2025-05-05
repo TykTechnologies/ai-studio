@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
+import isEqual from 'lodash/isEqual';
 import {
   Box,
   Typography,
@@ -151,7 +152,7 @@ const ConfigureAIStep = () => {
         };
         
         if (newLlmCreated && newLlmId) {
-          if (JSON.stringify(newLlmFormData) !== JSON.stringify(llmData)) {
+          if (!isEqual(newLlmFormData, llmData)) {
             await updateLLM(newLlmId, llmDataForApi);
           }
           setCreatedLlmId(newLlmId);

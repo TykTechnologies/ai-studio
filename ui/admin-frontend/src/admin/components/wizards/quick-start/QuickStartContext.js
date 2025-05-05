@@ -23,17 +23,9 @@ export const QuickStartProvider = ({
   const [availableLLMs, setAvailableLLMs] = useState([]);
   
   useEffect(() => {
-    const fetchLLMs = async () => {
-      try {
-        const llms = await getAllLLMs();
-        setAvailableLLMs(llms);
-      } catch (error) {
-        console.error('Error fetching LLMs', error);
-        setAvailableLLMs([]);
-      }
-    };
-    
-    fetchLLMs();
+    getAllLLMs()
+    .then((llms) => setAvailableLLMs(llms))
+    .catch(error => console.error('Error fetching LLMs', error));
   }, []);
 
   const validateStep = useCallback((stepId) => {
