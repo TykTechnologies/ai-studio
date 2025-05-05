@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -478,4 +479,73 @@ func TestJSONMapAccessor(t *testing.T) {
 		sliceResult := nilAccessor.GetSlice("any_key")
 		assert.Nil(t, sliceResult)
 	})
+}
+
+func TestValidateEmailDomain(t *testing.T) {
+	originalFilterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")
+	defer os.Setenv("FILTER_SIGNUP_DOMAINS", originalFilterDomains)
+
+	tests := []struct {
+		name           string
+		email          string
+		filterDomains  string
+		expectedError  bool
+		expectedErrMsg string
+	}{
+		{
+			name:          "Email domain is allowed",
+			email:         "user@example.com",
+			filterDomains: "example.com,anotherdomain.com",
+			expectedError: false,
+		},
+		{
+			name:           "Email domain is not allowed",
+			email:          "user@rejected.com",
+			filterDomains:  "example.com,anotherdomain.com",
+			expectedError:  true,
+			expectedErrMsg: "email domain 'rejected.com' is not permitted",
+		},
+		{
+			name:           "Invalid email format",
+			email:          "invalid-email",
+			filterDomains:  "example.com",
+			expectedError:  true,
+			expectedErrMsg: "invalid email address",
+		},
+		{
+			name:          "Case-insensitive domain matching - lowercase config, uppercase email",
+			email:         "user@EXAMPLE.COM",
+			filterDomains: "example.com",
+			expectedError: false,
+		},
+		{
+			name:          "Case-insensitive domain matching - uppercase config, lowercase email",
+			email:         "user@example.com",
+			filterDomains: "EXAMPLE.COM",
+			expectedError: false,
+		},
+		{
+			name:           "Multiple @ symbols in email",
+			email:          "user@domain@example.com",
+			filterDomains:  "example.com",
+			expectedError:  true,
+			expectedErrMsg: "invalid email address",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("FILTER_SIGNUP_DOMAINS", tt.filterDomains)
+
+			err := ValidateEmailDomain(tt.email)
+			if tt.expectedError {
+				assert.Error(t, err)
+				if tt.expectedErrMsg != "" {
+					assert.Equal(t, tt.expectedErrMsg, err.Error())
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

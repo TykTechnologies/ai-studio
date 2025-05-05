@@ -20,9 +20,7 @@ import {
 } from "../styles/sharedStyles";
 import usePagination from "../hooks/usePagination";
 import { format } from "date-fns";
-
-// Constant for localStorage key
-const SSO_NOTIFICATION_KEY = 'tyk_ai_studio_admin_sso_notification';
+import { CACHE_KEYS } from "../utils/constants";
 
 const SSOProfiles = () => {
   const navigate = useNavigate();
@@ -86,7 +84,7 @@ const SSOProfiles = () => {
   }, [fetchProfiles]);
 
   useEffect(() => {
-    const notificationData = localStorage.getItem(SSO_NOTIFICATION_KEY);
+    const notificationData = localStorage.getItem(CACHE_KEYS.SSO_NOTIFICATION);
     
     if (notificationData) {
       try {
@@ -109,10 +107,10 @@ const SSOProfiles = () => {
           }
         }
         
-        localStorage.removeItem(SSO_NOTIFICATION_KEY);
+        localStorage.removeItem(CACHE_KEYS.SSO_NOTIFICATION);
       } catch (error) {
         console.error('Error parsing notification data', error);
-        localStorage.removeItem(SSO_NOTIFICATION_KEY);
+        localStorage.removeItem(CACHE_KEYS.SSO_NOTIFICATION);
       }
     }
     

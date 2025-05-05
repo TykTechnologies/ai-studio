@@ -372,9 +372,10 @@ func (a *API) handleMe(c *gin.Context) {
 			Name      string `json:"name"`
 			IsAdmin   bool   `json:"is_admin"`
 			UIOptions struct {
-				ShowChat      bool `json:"show_chat"`
-				ShowPortal    bool `json:"show_portal"`
-				ShowSSOConfig bool `json:"show_sso_config"`
+				ShowChat       bool `json:"show_chat"`
+				ShowPortal     bool `json:"show_portal"`
+				ShowSSOConfig  bool `json:"show_sso_config"`
+				SkipQuickStart bool `json:"skip_quick_start"`
 			} `json:"ui_options"`
 			Entitlements struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`
@@ -387,13 +388,15 @@ func (a *API) handleMe(c *gin.Context) {
 			Name:    entitlements.User.Name,
 			IsAdmin: entitlements.User.IsAdmin,
 			UIOptions: struct {
-				ShowChat      bool `json:"show_chat"`
-				ShowPortal    bool `json:"show_portal"`
-				ShowSSOConfig bool `json:"show_sso_config"`
+				ShowChat       bool `json:"show_chat"`
+				ShowPortal     bool `json:"show_portal"`
+				ShowSSOConfig  bool `json:"show_sso_config"`
+				SkipQuickStart bool `json:"skip_quick_start"`
 			}{
-				ShowChat:      entitlements.User.ShowChat,
-				ShowPortal:    entitlements.User.ShowPortal,
-				ShowSSOConfig: entitlements.User.IsAdmin && entitlements.User.AccessToSSOConfig,
+				ShowChat:       entitlements.User.ShowChat,
+				ShowPortal:     entitlements.User.ShowPortal,
+				ShowSSOConfig:  entitlements.User.IsAdmin && entitlements.User.AccessToSSOConfig,
+				SkipQuickStart: entitlements.User.SkipQuickStart,
 			},
 			Entitlements: struct {
 				Catalogues     []CatalogueResponse     `json:"catalogues"`

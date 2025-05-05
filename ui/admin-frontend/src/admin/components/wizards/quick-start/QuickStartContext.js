@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { getAllLLMs } from '../../../services/llmService';
 
 const QuickStartContext = createContext();
 
@@ -19,6 +20,13 @@ export const QuickStartProvider = ({
   const [appData, setAppData] = useState({});
   const [credentialData, setCredentialData] = useState({});
   const [createdAppId, setCreatedAppId] = useState(null);
+  const [availableLLMs, setAvailableLLMs] = useState([]);
+  
+  useEffect(() => {
+    getAllLLMs()
+    .then((llms) => setAvailableLLMs(llms))
+    .catch(error => console.error('Error fetching LLMs', error));
+  }, []);
 
   const validateStep = useCallback((stepId) => {
     const step = steps.find(s => s.id === stepId);
@@ -80,7 +88,8 @@ export const QuickStartProvider = ({
     setAppData,
     createdAppId,
     setCreatedAppId,
-    currentUser
+    currentUser,
+    availableLLMs
   };
 
   return (

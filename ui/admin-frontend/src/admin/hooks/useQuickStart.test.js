@@ -4,6 +4,9 @@ import '@testing-library/jest-dom';
 import useQuickStart from './useQuickStart';
 import useUserEntitlements from './useUserEntitlements';
 import apiClient from '../utils/apiClient';
+import { skipQuickStartForUser } from '../services/userService';
+import cacheService from '../utils/cacheService';
+import { CACHE_KEYS } from '../utils/constants';
 
 // Mock dependencies
 jest.mock('./useUserEntitlements', () => ({
@@ -15,6 +18,18 @@ jest.mock('../utils/apiClient', () => ({
   __esModule: true,
   default: {
     get: jest.fn(),
+  },
+}));
+
+jest.mock('../services/userService', () => ({
+  __esModule: true,
+  skipQuickStartForUser: jest.fn().mockResolvedValue({}),
+}));
+
+jest.mock('../utils/cacheService', () => ({
+  __esModule: true,
+  default: {
+    remove: jest.fn(),
   },
 }));
 
@@ -60,6 +75,11 @@ describe('useQuickStart Hook', () => {
     userId: 'user123',
     userEmail: 'test@example.com',
     fetchUserEntitlements: mockFetchUserEntitlements,
+    userEntitlements: {
+      ui_options: {
+        skip_quick_start: false
+      }
+    },
     error: null
   };
 
@@ -119,6 +139,45 @@ describe('useQuickStart Hook', () => {
     const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     
     // Quick start should not be shown because apps count > 0
+    expect(data.showQuickStart).toBe(false);
+  });
+
+  test('does not show quick start when user has skip_quick_start preference', async () => {
+    // Mock apiClient to return apps count = 0
+    apiClient.get.mockResolvedValue({ data: { count: 0 } });
+    
+    // First reset the mocks
+    jest.clearAllMocks();
+    
+    // Setup mock to return entitlements with skip_quick_start true
+    const mockEntitlementsWithSkip = {
+      ...mockUserEntitlements,
+      userEntitlements: {
+        ui_options: {
+          skip_quick_start: true
+        }
+      }
+    };
+    
+    useUserEntitlements.mockReturnValue(mockEntitlementsWithSkip);
+    mockFetchUserEntitlements.mockResolvedValue({
+      ui_options: {
+        skip_quick_start: true
+      }
+    });
+    
+    // Render with mock that has skip_quick_start true
+    render(<TestComponent />);
+    
+    // Wait for initial data fetch to complete and verify state
+    // First wait for loading to complete
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    
+    // Then check that showQuickStart is false
+    const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(false);
   });
 
@@ -211,7 +270,60 @@ describe('useQuickStart Hook', () => {
     expect(data.showQuickStart).toBe(false);
   });
 
-  test('handleQuickStartSkip sets showQuickStart to false', async () => {
+  test('handleQuickStartSkip sets showQuickStart to false and calls skipQuickStartForUser', async () => {
+    // Reset mocks to ensure we can verify calls
+    jest.clearAllMocks();
+    skipQuickStartForUser.mockClear();
+    cacheService.remove.mockClear();
+    
+    // Reset default mocks
+    apiClient.get.mockResolvedValue({ data: { count: 0 } });
+    useUserEntitlements.mockReturnValue(mockUserEntitlements);
+    
+    // Set up mock implementations
+    skipQuickStartForUser.mockResolvedValue({});
+    
+    render(<TestComponent />);
+    
+    // Wait for initial data fetch to complete
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    
+    // Click the skip button and wait for async operations
+    await act(async () => {
+      screen.getByTestId('skip-button').click();
+      // Wait a bit for any async actions to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    
+    // Verify skipQuickStartForUser was called with the correct user ID
+    expect(skipQuickStartForUser).toHaveBeenCalledWith('user123');
+    
+    // Verify cache was cleared
+    expect(cacheService.remove).toHaveBeenCalledWith(CACHE_KEYS.USER_ENTITLEMENTS);
+    
+    // Verify showQuickStart is set to false
+    const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+    expect(data.showQuickStart).toBe(false);
+  });
+  
+  test('handleQuickStartSkip does not call skipQuickStartForUser when skip_quick_start is already true', async () => {
+    // Reset mocks to ensure we can verify calls
+    skipQuickStartForUser.mockClear();
+    cacheService.remove.mockClear();
+    
+    // Mock user entitlements with skip_quick_start already set to true
+    useUserEntitlements.mockReturnValue({
+      ...mockUserEntitlements,
+      userEntitlements: {
+        ui_options: {
+          skip_quick_start: true
+        }
+      }
+    });
+    
     render(<TestComponent />);
     
     // Wait for initial data fetch to complete
@@ -228,9 +340,17 @@ describe('useQuickStart Hook', () => {
     // Verify showQuickStart is set to false
     const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(false);
+    
+    // Verify skipQuickStartForUser was NOT called
+    expect(skipQuickStartForUser).not.toHaveBeenCalled();
+    expect(cacheService.remove).not.toHaveBeenCalled();
   });
 
-  test('setShowQuickStart updates the state and logs the change', async () => {
+  test('setShowQuickStart updates the state', async () => {
+    // Reset mocks and force apps count to be > 0 so showQuickStart is initially false
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: { count: 5 } });
+    
     render(<TestComponent />);
     
     // Wait for initial data fetch to complete
@@ -239,21 +359,18 @@ describe('useQuickStart Hook', () => {
       expect(data.loading).toBe(false);
     });
     
-    // First, set showQuickStart to false
-    act(() => {
-      screen.getByTestId('skip-button').click();
-    });
-    
-    // Verify showQuickStart is set to false
+    // Verify showQuickStart is false initially (since apps count > 0)
     let data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(false);
     
-    // Now set it back to true
-    act(() => {
+    // Now set it to true
+    await act(async () => {
       screen.getByTestId('show-button').click();
+      // Wait a bit for any state updates
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
     
-    // Verify showQuickStart is set to true
+    // Verify showQuickStart is now true
     data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(true);
   });

@@ -30,7 +30,6 @@ const QuickStartModal = ({
   renderBeforeContent,
   currentUser
 }) => {
-  
   const handleComplete = () => {
     onComplete?.();
     onClose?.();
