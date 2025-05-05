@@ -165,3 +165,44 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	assert.False(t, updatedUser.IsAdmin)
 	assert.False(t, updatedUser.AccessToSSOConfig)
 }
+
+func TestSkipQuickStartForUser(t *testing.T) {
+	db := setupUserTestDB(t)
+	service := NewService(db)
+
+	// Create a test user
+	user, err := service.CreateUser(
+		"test@example.com",
+		"Test User",
+		"password123",
+		false, // isAdmin
+		true,  // showChat
+		true,  // showPortal
+		true,  // emailVerified
+		false, // notificationsEnabled
+		false, // accessToSSOConfig
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, user)
+
+	// Verify initial state - SkipQuickStart should be false by default
+	assert.False(t, user.SkipQuickStart)
+
+	// Call the SkipQuickStartForUser method
+	err = service.SkipQuickStartForUser(user.ID)
+	assert.NoError(t, err)
+
+	// Fetch the user again to verify the flag was updated
+	updatedUser, err := service.GetUserByID(user.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, updatedUser)
+
+	// Verify SkipQuickStart is now true
+	assert.True(t, updatedUser.SkipQuickStart)
+
+	// Test with non-existent user ID
+	err = service.SkipQuickStartForUser(9999)
+	// This should not return an error since the update operation succeeds
+	// even if no rows are affected (it's a valid SQL operation)
+	assert.NoError(t, err)
+}

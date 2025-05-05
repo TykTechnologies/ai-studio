@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -72,7 +73,7 @@ describe('WelcomeStep Component', () => {
   const defaultContextValues = {
     goToNextStep: mockGoToNextStep,
     skipQuickStart: mockSkipQuickStart,
-    currentUser: { name: 'User' }
+    currentUser: { id: '123', name: 'User' }
   };
 
   // Reset mocks before each test
@@ -93,13 +94,18 @@ describe('WelcomeStep Component', () => {
     expect(screen.getByText('Welcome to Tyk, User')).toBeInTheDocument();
     
     // Check that the descriptive text is rendered
-    expect(screen.getByText(/Empower your team to build AI Apps/)).toBeInTheDocument();
-    expect(screen.getByText(/which can be used for code editors, knowledge search/)).toBeInTheDocument();
+    expect(screen.getByText(/Empower your team to build AI Apps with direct access to LLM providers and data sources/)).toBeInTheDocument();
+    expect(screen.getByText(/which can be used for code editors, knowledge search, and task automation keeping centralized control, usage tracking, and security/)).toBeInTheDocument();
     
     // Check that the image is rendered
     const image = screen.getByAltText('Welcome to Tyk AI Studio');
     expect(image).toBeInTheDocument();
     expect(image.tagName).toBe('IMG');
+    
+    // Check that the new explanatory text about AI studio App is rendered
+    expect(screen.getByText(/Start by creating an/)).toBeInTheDocument();
+    expect(screen.getByText('AI studio App')).toBeInTheDocument();
+    expect(screen.getByText(/in three easy steps: configure AI infrastructure, manage access, and add details/)).toBeInTheDocument();
     
     // Check that the buttons are rendered
     expect(screen.getByText('Explore by myself')).toBeInTheDocument();

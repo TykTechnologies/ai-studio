@@ -204,8 +204,8 @@ describe('AssignOwnerStep Component', () => {
       }
       return null;
     });
-    validatePassword.mockImplementation((password, criteria) => {
-      if (!criteria.length) {
+    validatePassword.mockImplementation((passwordCriteria) => {
+      if (!passwordCriteria.length) {
         return "Password must be at least 8 characters";
       }
       return null;

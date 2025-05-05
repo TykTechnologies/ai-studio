@@ -13,6 +13,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -353,24 +354,8 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		return errors.New("registration is currently disabled")
 	}
 
-	if len(a.Config.AllowedRegisterDomains) > 0 {
-		parts := strings.Split(email, "@")
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid email address")
-		}
-
-		domain := strings.Replace(parts[1], "@", "", 1)
-		cont := false
-		for _, allowed := range a.Config.AllowedRegisterDomains {
-			if strings.ToLower(domain) == strings.ToLower(allowed) {
-				cont = true
-				break
-			}
-		}
-
-		if !cont {
-			return fmt.Errorf("registration is not permitted")
-		}
+	if err := helpers.ValidateEmailDomain(email); err != nil {
+		return err
 	}
 
 	existing, _ := a.Service.GetUserByEmail(email)

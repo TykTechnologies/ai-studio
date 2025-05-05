@@ -44,6 +44,7 @@ const AppDetailsStep = () => {
   const [isFormValid, setIsFormValid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ownerId, setOwnerId] = useState(null);
+  const [llmId, setLlmId] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -92,12 +93,17 @@ const AppDetailsStep = () => {
       if (createdAppId) {
         const formDataChanged = JSON.stringify(formData) !== JSON.stringify(appData);
         const ownerChanged = ownerId !== ownerData.userId;
+        const llmChanged = llmId !== createdLlmId;
         
-        if (formDataChanged || ownerChanged) {
+        if (formDataChanged || ownerChanged || llmChanged) {
           await updateApp(createdAppId, appDataForApi);
           
           if (ownerChanged) {
             setOwnerId(ownerData.userId);
+          }
+          
+          if (llmChanged) {
+            setLlmId(createdLlmId);
           }
         }
       } else {
@@ -106,6 +112,7 @@ const AppDetailsStep = () => {
         setCreatedAppId(newAppId);
         
         setOwnerId(ownerData.userId);
+        setLlmId(createdLlmId);
         
         await activateCredential(newAppId);
         
