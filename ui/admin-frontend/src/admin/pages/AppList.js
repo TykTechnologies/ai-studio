@@ -34,6 +34,7 @@ const AppList = () => {
   const navigate = useNavigate();
   const [apps, setApps] = useState([]);
   const [users, setUsers] = useState({});
+  const [credentials, setCredentials] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
@@ -44,7 +45,7 @@ const AppList = () => {
     severity: "success",
   });
   const [sortField, setSortField] = useState("id");
-  const [sortOrder, setSortOrder] = useState("asc");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const {
     page,
@@ -58,14 +59,42 @@ const AppList = () => {
   const fetchApps = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // Handle special sort fields that need custom handling
+      let sortParam = sortField;
+      if (sortField === "approval_status") {
+        // Use a default sort field since approval status is calculated client-side
+        sortParam = "id";
+      } else if (sortField === "monthly_budget") {
+        // Use the correct field name for the API
+        sortParam = "monthly_budget";
+      }
+      
       const response = await apiClient.get("/apps", {
         params: {
           page,
           page_size: pageSize,
-          sort: `${sortOrder === "desc" ? "-" : ""}${sortField}`,
+          sort: `${sortOrder === "desc" ? "-" : ""}${sortParam}`,
         },
       });
-      setApps(response.data.data || []);
+      
+      let appsData = response.data.data || [];
+      
+      // If sorting by approval status, we need to sort client-side
+      if (sortField === "approval_status") {
+        appsData = [...appsData].sort((a, b) => {
+          const statusA = getApprovalStatus(a);
+          const statusB = getApprovalStatus(b);
+          
+          // Define order: Approved > Inactive > Pending
+          const statusOrder = { "Approved": 0, "Inactive": 1, "Pending": 2 };
+          
+          const comparison = statusOrder[statusA] - statusOrder[statusB];
+          return sortOrder === "asc" ? comparison : -comparison;
+        });
+      }
+      
+      setApps(appsData);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
       updatePaginationData(totalCount, totalPages);
@@ -76,7 +105,7 @@ const AppList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortField, sortOrder, updatePaginationData]);
+  }, [page, pageSize, sortField, sortOrder, updatePaginationData, credentials]);
 
   useEffect(() => {
     fetchApps();
@@ -84,7 +113,26 @@ const AppList = () => {
 
   useEffect(() => {
     fetchUsers();
+    fetchCredentials();
   }, []);
+
+  const fetchCredentials = async () => {
+    try {
+      const response = await apiClient.get("/credentials", {
+        params: {
+          all: true,
+          page_size: 1000
+        }
+      });
+      const credentialMap = {};
+      response.data.data.forEach((credential) => {
+        credentialMap[credential.id] = credential.attributes;
+      });
+      setCredentials(credentialMap);
+    } catch (error) {
+      console.error("Error fetching credentials", error);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -114,6 +162,21 @@ const AppList = () => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const getApprovalStatus = (app) => {
+    const credentialId = app.attributes.credential_id;
+    
+    if (!credentialId) {
+      return "Pending";
+    }
+    
+    const credential = credentials[credentialId];
+    if (!credential) {
+      return "Pending";
+    }
+    
+    return credential.active ? "Approved" : "Inactive";
   };
 
   const handleDelete = async (id) => {
@@ -225,6 +288,24 @@ const AppList = () => {
                     >
                       User {sortField === "user_id" && (sortOrder === "asc" ? "↑" : "↓")}
                     </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "approval_status" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("approval_status");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Status {sortField === "approval_status" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "monthly_budget" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("monthly_budget");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Budget {sortField === "monthly_budget" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
@@ -240,6 +321,14 @@ const AppList = () => {
                       <StyledTableCell>{app.attributes.description}</StyledTableCell>
                       <StyledTableCell>
                         {users[app.attributes.user_id] || "Unknown"}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {getApprovalStatus(app)}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {app.attributes.monthly_budget ? 
+                          `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}` : 
+                          "Not set"}
                       </StyledTableCell>
                       <StyledTableCell align="right">
                         <IconButton
