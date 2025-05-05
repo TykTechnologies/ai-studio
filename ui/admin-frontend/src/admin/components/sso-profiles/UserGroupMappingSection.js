@@ -1,17 +1,14 @@
 import React from "react";
-import { Box, Typography, Stack, Alert } from "@mui/material";
+import { Box, Typography, Alert } from "@mui/material";
 import DataTable from "../common/DataTable";
+import {
+  TwoColumnLayout,
+  FieldGroup,
+  FieldLabel,
+  FieldValue,
+  BreakableFieldValue,
+} from "./styles";
 
-/**
- * Component for displaying the user group mapping section
- * 
- * @param {Object} props - Component props
- * @param {Object} props.profileData - The profile data to display
- * @param {Array} props.groups - The list of available groups
- * @param {string} props.groupsError - Error message for groups loading
- * @param {Function} props.getGroupNameById - Function to get group name by ID
- * @returns {React.ReactElement}
- */
 const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNameById }) => {
   // Prepare data for the user group mapping table
   const prepareUserGroupMappingData = () => {
@@ -46,8 +43,8 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
   return (
     <>
       <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
-        User group mapping is how you assign users to AI studio teams after Single Sign-On. 
-        If you don't specify a user group mapping, 
+        User group mapping is how you assign users to AI studio teams after Single Sign-On.
+        If you don't specify a user group mapping,
         users will be automatically assigned to the default team.
       </Typography>
 
@@ -57,35 +54,24 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
         </Alert>
       )}
 
-      <Stack spacing={2} sx={{ py: 3, borderBottom: "1px solid", borderColor: "border.neutralDefaultSubdued" }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center">
-          <Box sx={{ width: { xs: '100%', md: '50%' }, display: 'flex', alignItems: "center" }}>
-            <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-              <Typography variant="bodyLargeBold" color="text.primary">
-                Default user group
-              </Typography>
-            </Box>
-            <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-              <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-                {getGroupNameById(profileData.DefaultUserGroupID) || "Default group"}
-              </Typography>
-            </Box>
-          </Box>
-          
-          <Box sx={{ width: { xs: '100%', md: '50%' }, display: 'flex', alignItems: "center"}}>
-            <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-              <Typography variant="bodyLargeBold" color="text.primary">
-                Custom user group claim name
-              </Typography>
-            </Box>
-            <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-              <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-                {profileData.CustomUserGroupField || "group"}
-              </Typography>
-            </Box>
-          </Box>
-        </Stack>
-      </Stack>
+      <Box sx={{ py: 3, borderBottom: "1px solid", borderColor: "border.neutralDefaultSubdued" }}>
+        <TwoColumnLayout>
+          <FieldGroup>
+            <FieldLabel variant="bodyLargeBold" sx={{ width: '40%' }}>Default user group</FieldLabel>
+            <FieldValue variant="bodyLargeDefault" ml={1}>
+              {getGroupNameById(profileData.DefaultUserGroupID) || "Default group"}
+            </FieldValue>
+          </FieldGroup>
+          <FieldGroup>
+            <FieldLabel variant="bodyLargeBold" sx={{ minWidth: '40%', width: '40%' }}>
+              Custom user group claim name
+            </FieldLabel>
+            <BreakableFieldValue variant="bodyLargeDefault" ml={1}>
+              {profileData.CustomUserGroupField || "group"}
+            </BreakableFieldValue>
+          </FieldGroup>
+        </TwoColumnLayout>
+      </Box>
 
       {/* User Group Mapping Table */}
       {Object.keys(profileData.UserGroupMapping || {}).length > 0 ? (

@@ -1,13 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { findParentItemsForPath } from './utils';
 
 export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, menuItems = []) => {
-  const menuItemsRef = useRef(menuItems);
-  
-  useEffect(() => {
-    menuItemsRef.current = menuItems;
-  }, [menuItems]);
   const getInitialState = () => {
     try {
       const savedState = localStorage.getItem(storageKey);
@@ -39,9 +34,8 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
     const path = location.pathname;
     setSelectedPath(path);
     
-    const currentMenuItems = menuItemsRef.current;
-    if (currentMenuItems.length > 0) {
-      const parentIds = findParentItemsForPath(currentMenuItems, path);
+    if (menuItems.length > 0) {
+      const parentIds = findParentItemsForPath(menuItems, path);
       
       if (parentIds.length > 0) {
         setExpandedItems((prevState) => {
@@ -53,7 +47,7 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
         });
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, menuItems]);
 
   useEffect(() => {
     try {
