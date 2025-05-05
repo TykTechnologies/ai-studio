@@ -21,6 +21,9 @@ import {
   ContentBox,
   PrimaryButton,
   SecondaryLinkButton,
+  ResponsiveTitleBox,
+  TitleContentBox,
+  ActionButtonsBox
 } from "../../styles/sharedStyles";
 
 const SSOProfileDetails = () => {
@@ -141,33 +144,42 @@ const SSOProfileDetails = () => {
 
   return (
     <Box>
-      <TitleBox sx={{ display: 'flex', alignItems: 'flex-end' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          <SecondaryLinkButton
-            component={Link}
-            to="/admin/sso-profiles"
-            color="inherit"
-            sx={{ mb: 1, px: 0 }}
-            startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
-          >
-            back to IdP profiles
-          </SecondaryLinkButton>
-          <Typography variant="headingXLarge">
-            Profile - {profileData.Name || profileData.ID}
-          </Typography>
-        </Box>
-        <Box>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={handleEditProfile}
-          >
-            Edit profile
-          </PrimaryButton>
-        </Box>
+      <TitleBox>
+        <ResponsiveTitleBox>
+          <TitleContentBox>
+            <SecondaryLinkButton
+              component={Link}
+              to="/admin/sso-profiles"
+              color="inherit"
+              sx={{ mb: 1, px: 0 }}
+              startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
+            >
+              back to IdP profiles
+            </SecondaryLinkButton>
+            <Typography variant="headingXLarge">
+              Profile - {profileData.Name || profileData.ID}
+            </Typography>
+          </TitleContentBox>
+          <ActionButtonsBox>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={handleEditProfile}
+            >
+              Edit profile
+            </PrimaryButton>
+          </ActionButtonsBox>
+        </ResponsiveTitleBox>
       </TitleBox>
 
-      <ContentBox>
+      <ContentBox sx={{
+        maxWidth: {
+          xs: '100%',
+          sm: '100%',
+          md: '85%',
+          lg: '75%'
+        }
+      }}>
         {/* Profile Details Section */}
         <CollapsibleSection title="Profile details">
           <ProfileDetailsSection
@@ -188,11 +200,11 @@ const SSOProfileDetails = () => {
 
         {/* User Group Mapping Section */}
         <CollapsibleSection title="User group mapping">
-          <UserGroupMappingSection 
-            profileData={profileData} 
-            groups={groups} 
-            groupsError={groupsError} 
-            getGroupNameById={getGroupNameById} 
+          <UserGroupMappingSection
+            profileData={profileData}
+            groups={groups}
+            groupsError={groupsError}
+            getGroupNameById={getGroupNameById}
           />
         </CollapsibleSection>
       </ContentBox>

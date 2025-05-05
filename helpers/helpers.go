@@ -210,7 +210,7 @@ func (a *JSONMapAccessor) GetString(key, defaultValue string) string {
 			return s
 		}
 
-		return fmt.Sprint(v)
+		return ""
 	}
 
 	return defaultValue

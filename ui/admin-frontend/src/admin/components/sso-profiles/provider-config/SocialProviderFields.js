@@ -1,59 +1,34 @@
 import React from "react";
-import { Box, Typography, Stack } from "@mui/material";
+import { Stack } from "@mui/material";
+import {
+  TwoColumnLayout,
+  FieldGroup,
+  LabeledField,
+  BreakableFieldValue,
+  FieldLabel,
+  FieldValue,
+} from "../styles";
 
-/**
- * Component for displaying Social Provider specific configuration fields
- * 
- * @param {Object} props - Component props
- * @param {Object} props.profileData - The profile data to display
- * @param {Function} props.handleCopyToClipboard - Function to handle copying to clipboard
- * @returns {React.ReactElement}
- */
-const SocialProviderFields = ({ profileData, handleCopyToClipboard }) => {
+const SocialProviderFields = ({ profileData }) => {
   return (
     <Stack spacing={2}>
-      <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center">
-        <Box sx={{ width: { xs: '100%', md: '25%' }}}>
-          <Typography variant="bodyLargeBold" color="text.primary">
-            Social Provider
-          </Typography>
-        </Box>
-        <Box sx={{ width: { xs: '100%', md: '75%' }}}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-            {profileData.ProviderConfig?.UseProviders?.[0]?.Name || "-"}
-          </Typography>
-        </Box>
-      </Stack>
+      <LabeledField
+        label="Social Provider"
+        value={profileData.ProviderConfig?.UseProviders?.[0]?.Name}
+      />
 
-      <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center">
-        <Box sx={{ width: { xs: '100%', md: '50%' }, display: 'flex', alignItems: "center" }}>
-          <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-            <Typography variant="bodyLargeBold" color="text.primary">
-              Client ID/Key
-            </Typography>
-          </Box>
-          <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-                {profileData.ProviderConfig?.UseProviders?.[0]?.Key || "-"}
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-        
-        <Box sx={{ width: { xs: '100%', md: '50%' }, display: 'flex', alignItems: "center"}}>
-          <Box sx={{ width: { xs: '50%', md: '50%' } }}>
-            <Typography variant="bodyLargeBold" color="text.primary">
-              Secret
-            </Typography>
-          </Box>
-          <Box sx={{ width: { xs: '50%', md: '50%' }, pt: 1 }}>
-            <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-              {"*".repeat(8)}
-            </Typography>
-          </Box>
-        </Box>
-      </Stack>
+      <TwoColumnLayout>
+        <FieldGroup>
+          <FieldLabel variant="bodyLargeBold" sx={{ minWidth: '40%' }}>Client ID/Key</FieldLabel>
+          <BreakableFieldValue variant="bodyLargeDefault" ml={1}>
+            {profileData.ProviderConfig?.UseProviders?.[0]?.Key || "-"}
+          </BreakableFieldValue>
+        </FieldGroup>
+        <FieldGroup>
+          <FieldLabel variant="bodyLargeBold" sx={{ width: '40%' }}>Secret</FieldLabel>
+          <FieldValue variant="bodyLargeDefault" ml={1}>{"*".repeat(8)}</FieldValue>
+        </FieldGroup>
+      </TwoColumnLayout>
     </Stack>
   );
 };
