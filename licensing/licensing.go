@@ -36,11 +36,11 @@ type Licenser struct {
 
 func NewLicenser(config LicenseConfig) *Licenser {
 	if config.TelemetryPeriod == 0 {
-		config.TelemetryPeriod = 1 * time.Hour
+		config.TelemetryPeriod = DefaultTelemetryPeriod
 	}
 
 	if config.ValidityCheckPeriod == 0 {
-		config.ValidityCheckPeriod = 10 * time.Minute
+		config.ValidityCheckPeriod = DefaultValidityCheckPeriod
 	}
 
 	if config.TelemetryURL == "" {

@@ -17,6 +17,9 @@ const (
 	claimVersion = "v"
 	claimExp     = "exp"
 	claimScope   = "scope"
+
+	DefaultTelemetryPeriod     = 1 * time.Hour
+	DefaultValidityCheckPeriod = 10 * time.Minute
 )
 
 type LicenseInfo struct {
