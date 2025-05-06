@@ -159,6 +159,34 @@ func TestChats_GetByLLMID(t *testing.T) {
 	assert.Len(t, retrievedChats, 2)
 }
 
+func TestChats_GetChatCount(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Ensure we start with an empty database
+	var initialChats Chats
+	initialCount, err := initialChats.GetChatCount(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), initialCount, "Database should be empty at start")
+
+	// Create a specific number of chats
+	expectedCount := 3
+	chats := []Chat{
+		{Name: "Chat 1", LLMSettingsID: 1, LLMID: 1},
+		{Name: "Chat 2", LLMSettingsID: 2, LLMID: 2},
+		{Name: "Chat 3", LLMSettingsID: 3, LLMID: 3},
+	}
+	for _, c := range chats {
+		err := db.Create(&c).Error
+		assert.NoError(t, err)
+	}
+
+	// Get the count and verify it matches our expectation
+	var testChats Chats
+	count, err := testChats.GetChatCount(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(expectedCount), count)
+}
+
 func TestChats_GetByLLMSettingsID(t *testing.T) {
 	db := setupTestDB(t)
 

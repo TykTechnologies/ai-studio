@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
@@ -60,6 +61,14 @@ func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {
 		AdminEmail:          "admin@example.com",
 		TestMode:            true,
 	}
+}
+
+func SetupTestLicenser() *licensing.Licenser {
+	licenser := licensing.NewLicenser(licensing.LicenseConfig{})
+	licenser.InitializeForTests(map[string]interface{}{
+		licensing.FEATUREChat: true,
+	})
+	return licenser
 }
 
 func PerformRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
