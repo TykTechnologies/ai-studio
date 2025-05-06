@@ -18,7 +18,8 @@ func TestChatEndpoints(t *gotest.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
+	licenser := apitest.SetupTestLicenser()
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, licenser)
 
 	// Create test user
 	user := &models.User{
@@ -238,7 +239,8 @@ func TestChatEndpointsErrors(t *gotest.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
+	licenser := apitest.SetupTestLicenser()
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, licenser)
 
 	// Test Get non-existent chat
 	w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/chats/999", nil)

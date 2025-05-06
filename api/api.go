@@ -70,9 +70,10 @@ type API struct {
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
 	ssoService          *services.SSOService
+	licenser            *licensing.Licenser
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licenser *licensing.Licenser) *API {
 	gin.SetMode(gin.ReleaseMode)
 
 	// Initialize provider registry
@@ -135,6 +136,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		proxy:       proxy,
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
+		licenser:    licenser,
 	}
 
 	if config.TIBEnabled {
@@ -640,7 +642,7 @@ func (a *API) setupRoutes() {
 		profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
 	}
 
-	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
+	chatEnabled, chaOK := a.licenser.Entitlement(licensing.FEATUREChat)
 	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
 		a.setupChatRoutesFunc(authed)
 	}

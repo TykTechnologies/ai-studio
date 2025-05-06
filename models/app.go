@@ -290,3 +290,10 @@ func (a *App) CountByUserID(db *gorm.DB, userID uint) (int64, error) {
 	err := db.Model(&App{}).Where("user_id = ?", userID).Count(&count).Error
 	return count, err
 }
+
+func (a *Apps) GetAppCount(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&App{}).Count(&count).Error
+
+	return count, err
+}

@@ -11,7 +11,6 @@ import (
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -24,7 +23,8 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	api := NewAPI(service, true, authService, config, nil, emptyFile)
+	licenser := apitest.SetupTestLicenser()
+	api := NewAPI(service, true, authService, config, nil, emptyFile, licenser)
 
 	return api, db
 }
@@ -44,10 +44,8 @@ func performRequest(r http.Handler, method, path string, body interface{}) *http
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 
-	// Initialize features for test mode
-	licensing.InitializeForTests(map[string]interface{}{
-		"feature_chat": true,
-	})
+	// Initialize test licenser
+	apitest.SetupTestLicenser()
 
 	os.Exit(m.Run())
 }

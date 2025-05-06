@@ -1,11 +1,12 @@
 package licensing
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
-	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,104 +24,144 @@ ZwIDAQAB
 -----END PUBLIC KEY-----
 `
 
-var (
-	features     = map[string]interface{}{}
-	featuresInit = make(chan struct{})
-	initialized  bool
-)
+type Licenser struct {
+	license         *LicenseInfo
+	config          LicenseConfig
+	telemetryClient *Client
+	done            chan bool
+	lock            sync.RWMutex
+	featuresInit    chan struct{}
+	initialized     bool
+}
 
-// InitializeForTests sets up the licensing features for test mode
-func InitializeForTests(testFeatures map[string]interface{}) {
-	features = testFeatures
-	if !initialized {
-		initialized = true
-		close(featuresInit)
+func NewLicenser(config LicenseConfig) *Licenser {
+	if config.TelemetryPeriod == 0 {
+		config.TelemetryPeriod = 1 * time.Hour
+	}
+
+	if config.ValidityCheckPeriod == 0 {
+		config.ValidityCheckPeriod = 10 * time.Minute
+	}
+
+	if config.TelemetryURL == "" {
+		config.TelemetryURL = telemetryAPIURL
+	}
+
+	featuresInit := make(chan struct{})
+
+	return &Licenser{
+		config:          config,
+		telemetryClient: NewClient(config.TelemetryURL),
+		done:            make(chan bool),
+		featuresInit:    featuresInit,
 	}
 }
 
-func FeatureSet() map[string]interface{} {
-	if !initialized {
-		<-featuresInit // Wait for initialization
+func (l *Licenser) Start() {
+	if err := l.isLicensed(); err != nil {
+		log.Fatalf("License is not valid: %v", err)
 	}
-	return features
+
+	l.initialized = true
+	close(l.featuresInit)
+
+	if !l.config.DisableTelemetry {
+		go l.SendTelemetry()
+	}
+
+	licenseCheckTicker := time.NewTicker(l.config.ValidityCheckPeriod)
+	telemetryTicker := time.NewTicker(l.config.TelemetryPeriod)
+
+	go func() {
+		for {
+			select {
+			case <-l.done:
+				licenseCheckTicker.Stop()
+				telemetryTicker.Stop()
+				return
+			case <-licenseCheckTicker.C:
+				if err := l.isLicensed(); err != nil {
+					log.Fatalf("License is not valid: %v", err)
+				}
+			case <-telemetryTicker.C:
+				if !l.config.DisableTelemetry {
+					l.SendTelemetry()
+				}
+			}
+		}
+	}()
 }
 
-func Entitlement(name string) (*Feature, bool) {
-	if !initialized {
-		<-featuresInit // Wait for initialization
+func (l *Licenser) Stop() {
+	l.done <- true
+}
+
+func (l *Licenser) FeatureSet() map[string]*Feature {
+	if !l.initialized {
+		<-l.featuresInit
 	}
-	f, ok := features[name]
+
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	if l.license == nil {
+		return nil
+	}
+
+	return l.license.Features
+}
+
+func (l *Licenser) Entitlement(name string) (*Feature, bool) {
+	if !l.initialized {
+		<-l.featuresInit
+	}
+
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	if l.license == nil || l.license.Features == nil {
+		return nil, false
+	}
+
+	f, ok := l.license.Features[name]
 	if !ok {
 		return nil, false
 	}
 
-	feat, err := NewFeature(f)
-	if err != nil {
-		slog.Error("failed to check entitlement", "name", name, "error", err)
-		return nil, false
-	}
-
-	return feat, true
+	return f, true
 }
 
-func LicenseService() {
-	// Initialize features on first run
-	if err := IsLicensed(); err != nil {
-		log.Fatalf("License is not valid: %v", err)
-	}
-	initialized = true
-	close(featuresInit)
-
-	// Start periodic check
-	for {
-		time.Sleep(10 * time.Minute)
-		if err := IsLicensed(); err != nil {
-			log.Fatalf("License is not valid: %v", err)
-		}
-	}
-}
-
-func IsLicensed() error {
-	licenseStr := os.Getenv("TYK_AI_LICENSE")
+func (l *Licenser) isLicensed() error {
+	licenseStr := l.config.LicenseKey
 	if licenseStr == "" {
-		return fmt.Errorf("No TYK_AI_LICENSE env var found")
+		return errors.New("no TYK_AI_LICENSE env var found")
 	}
 
-	claims, err := Validate(licenseStr, []byte(pubKey))
+	claims, err := l.validate(licenseStr, []byte(pubKey))
 	if err != nil {
 		return err
 	}
 
-	claimsStr, ok := claims.(string)
-	if !ok {
-		return fmt.Errorf("invalid license format")
+	licenseInfo := &LicenseInfo{
+		Key:      licenseStr,
+		IsValid:  true,
+		Features: make(map[string]*Feature),
+		claims:   claims,
 	}
 
-	asArr := strings.Split(claimsStr, ",")
-	claimsMap := make(map[string]interface{})
-	for i, _ := range asArr {
-		claimsMap[asArr[i]] = true
-	}
+	licenseInfo.setup()
 
-	features = claimsMap
-
-	// DEBUGGING LICENSE CLAIMS
-	// slog.Warn("License claims", "claims", claimsMap)
-	// slog.Warn("REMOVE THIS CODE BEFORE PRODUCTION")
-
-	// features = map[string]interface{}{
-	// 	"feature_chat": true,
-	// }
-
-	// END DEBUGGING LICENSE CLAIMS
+	l.lock.Lock()
+	l.license = licenseInfo
+	l.lock.Unlock()
 
 	return nil
 }
 
-func Validate(token string, pub []byte) (interface{}, error) {
+func (l *Licenser) validate(token string, pubKey []byte) (jwt.MapClaims, error) {
 	key, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pubKey))
 	if err != nil {
-		return "", fmt.Errorf("validate: parse key: %w", err)
+		return nil, fmt.Errorf("validate: parse key: %w", err)
 	}
 
 	tok, err := jwt.Parse(token, func(jwtToken *jwt.Token) (interface{}, error) {
@@ -139,7 +180,196 @@ func Validate(token string, pub []byte) (interface{}, error) {
 		return nil, fmt.Errorf("validate: invalid")
 	}
 
-	return claims["scope"], nil
+	return claims, nil
+}
+
+func (l *LicenseInfo) setup() {
+	if !l.IsValid {
+		return
+	}
+
+	l.setVersion()
+	l.setLicenseExpire()
+	l.setFeatures()
+}
+
+func (l *LicenseInfo) getClaim(name string) (claim interface{}, found bool) {
+	claim, found = l.claims[name]
+	return
+}
+
+func (l *LicenseInfo) setVersion() {
+	licenseVersion, found := l.getClaim(claimVersion)
+	if !found {
+		return
+	}
+
+	version, ok := licenseVersion.(string)
+	if ok {
+		l.Version = version
+	}
+}
+
+func (l *LicenseInfo) setLicenseExpire() {
+	asTime, found := l.getClaim(claimExp)
+	if !found {
+		return
+	}
+
+	expFloat, ok := asTime.(float64)
+	if ok {
+		l.ExpiresAt = time.Unix(int64(expFloat), 0)
+	}
+}
+
+func (l *LicenseInfo) setFeatures() {
+	capabilities, found := l.getClaim(claimScope)
+	if !found {
+		return
+	}
+
+	capStr, ok := capabilities.(string)
+	if !ok {
+		return
+	}
+
+	featureMap := make(map[string]*Feature)
+
+	for _, c := range strings.Split(capStr, ",") {
+		feature, err := NewFeature(true)
+		if err != nil {
+			log.Printf("Warning: failed to create feature %s: %v", c, err)
+			continue
+		}
+
+		featureMap[c] = feature
+	}
+
+	l.Features = featureMap
+}
+
+func (l *Licenser) collectLLMStats() {
+	stats, err := l.config.TelemetryService.GetLLMStats()
+	if err != nil {
+		slog.Error("Failed to collect LLM stats", "error", err)
+		return
+	}
+
+	err = l.sendTelemetryReport("llm_report", stats)
+	if err != nil {
+		slog.Error("Failed to send LLM telemetry report", "error", err)
+	}
+}
+
+func (l *Licenser) collectAppStats() {
+	stats, err := l.config.TelemetryService.GetAppStats()
+	if err != nil {
+		slog.Error("Failed to collect App stats", "error", err)
+		return
+	}
+
+	err = l.sendTelemetryReport("app_report", stats)
+	if err != nil {
+		slog.Error("Failed to send App telemetry report", "error", err)
+	}
+}
+
+func (l *Licenser) collectUserStats() {
+	stats, err := l.config.TelemetryService.GetUserStats()
+	if err != nil {
+		slog.Error("Failed to collect User stats", "error", err)
+		return
+	}
+
+	err = l.sendTelemetryReport("user_report", stats)
+	if err != nil {
+		slog.Error("Failed to send User telemetry report", "error", err)
+	}
+}
+
+func (l *Licenser) collectChatStats() {
+	stats, err := l.config.TelemetryService.GetChatStats()
+	if err != nil {
+		slog.Error("Failed to collect Chat stats", "error", err)
+		return
+	}
+
+	err = l.sendTelemetryReport("chat_report", stats)
+	if err != nil {
+		slog.Error("Failed to send Chat telemetry report", "error", err)
+	}
+}
+
+func (l *Licenser) sendTelemetryReport(reportName string, stats map[string]interface{}) error {
+	l.lock.RLock()
+	license := l.license
+	l.lock.RUnlock()
+
+	if license == nil {
+		return fmt.Errorf("no license available")
+	}
+
+	licenseHash := HashString(license.Key)
+
+	properties := map[string]interface{}{
+		"midsommar_version": l.config.Version,
+		"component":         l.config.Component,
+	}
+
+	for k := range license.Features {
+		properties[k] = true
+	}
+
+	for k, v := range stats {
+		properties[k] = v
+	}
+
+	return l.telemetryClient.Track(licenseHash, reportName, properties)
+}
+
+func (l *Licenser) SendTelemetry() {
+	if l.config.TelemetryService == nil || l.config.DisableTelemetry {
+		return
+	}
+
+	l.collectLLMStats()
+	l.collectAppStats()
+	l.collectUserStats()
+	l.collectChatStats()
+}
+
+func (l *Licenser) License() *LicenseInfo {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	return l.license
+}
+
+func (l *Licenser) InitializeForTests(testFeatures map[string]interface{}) {
+	featureMap := make(map[string]*Feature)
+	for k, v := range testFeatures {
+		feature, err := NewFeature(v)
+		if err == nil {
+			featureMap[k] = feature
+		}
+	}
+
+	l.lock.Lock()
+
+	l.license = &LicenseInfo{
+		Key:      "test-license",
+		IsValid:  true,
+		Features: featureMap,
+	}
+
+	wasInitialized := l.initialized
+	l.initialized = true
+
+	// Only close the channel if it wasn't already initialized
+	if !wasInitialized {
+		close(l.featuresInit)
+	}
+	l.lock.Unlock()
 }
 
 func Create(ttl time.Duration, content interface{}, pKey []byte) (string, error) {
@@ -151,10 +381,10 @@ func Create(ttl time.Duration, content interface{}, pKey []byte) (string, error)
 	now := time.Now().UTC()
 
 	claims := make(jwt.MapClaims)
-	claims["scope"] = content           // Our custom data.
-	claims["exp"] = now.Add(ttl).Unix() // The expiration time after which the token must be disregarded.
-	claims["iat"] = now.Unix()          // The time at which the token was issued.
-	claims["nbf"] = now.Unix()          // The time before which the token must be disregarded.
+	claims["scope"] = content
+	claims["exp"] = now.Add(ttl).Unix()
+	claims["iat"] = now.Unix()
+	claims["nbf"] = now.Unix()
 
 	token, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(key)
 	if err != nil {

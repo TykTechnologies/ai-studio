@@ -16,7 +16,8 @@ func TestPagination_LLMPagination(t *gotest.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
+	licenser := apitest.SetupTestLicenser()
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, licenser)
 
 	// Create test LLMs
 	llms := []models.LLM{
@@ -104,7 +105,8 @@ func TestPagination_UserPagination(t *gotest.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile)
+	licenser := apitest.SetupTestLicenser()
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, licenser)
 
 	// Create test users
 	users := []models.User{
