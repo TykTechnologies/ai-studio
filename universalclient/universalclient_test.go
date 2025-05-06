@@ -655,6 +655,67 @@ func TestValidateSpec(t *testing.T) {
 
 // }
 
+func TestBuildParametersSchemaWithNilRequired(t *testing.T) {
+	// Create a test OpenAPI spec with a RequestBody that has a nil Required field
+	specJSON := `{
+		"openapi": "3.0.0",
+		"info": {
+			"title": "Test API",
+			"version": "1.0.0"
+		},
+		"servers": [
+			{
+				"url": "https://api.example.com"
+			}
+		],
+		"paths": {
+			"/test": {
+				"post": {
+					"operationId": "postTest",
+					"requestBody": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"message": {
+											"type": "string"
+										}
+									}
+								}
+							}
+						}
+					},
+					"responses": {
+						"200": {
+							"description": "OK"
+						}
+					}
+				}
+			}
+		}
+	}`
+
+	client, err := NewClient([]byte(specJSON), "")
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+
+	// Find the operation
+	operation, _, _, err := client.findOperation("postTest")
+	assert.NoError(t, err)
+	assert.NotNil(t, operation)
+
+	// Verify that the RequestBody.Required is nil
+	assert.NotNil(t, operation.RequestBody)
+	assert.Nil(t, operation.RequestBody.Required)
+
+	// This should not panic
+	schema := client.buildParametersSchema(operation)
+	assert.NotNil(t, schema)
+	assert.Contains(t, schema, "properties")
+	assert.Contains(t, schema["properties"].(map[string]interface{}), "body")
+}
+
 func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
 	// Define a basic OpenAPI spec with different HTTP methods
 	specJSON := `{
