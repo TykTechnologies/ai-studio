@@ -803,10 +803,8 @@ func (c *Client) buildParametersSchema(operation *v3.Operation) map[string]inter
 	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
 		if content, ok := operation.RequestBody.Content.Get("application/json"); ok {
 			properties["body"] = c.SchemaToMap(content.Schema.Schema())
-			if operation != nil {
-				if *operation.RequestBody.Required {
-					required = append(required, "body")
-				}
+			if operation.RequestBody.Required != nil && *operation.RequestBody.Required {
+				required = append(required, "body")
 			}
 		}
 	}
