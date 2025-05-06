@@ -328,7 +328,7 @@ func (l *Licenser) sendTelemetryReport(reportName string, stats map[string]inter
 }
 
 func (l *Licenser) SendTelemetry() {
-	if l.config.TelemetryService == nil || l.config.DisableTelemetry {
+	if l.config.TelemetryService == nil || !l.TelemetryEnabled() {
 		return
 	}
 
@@ -336,6 +336,29 @@ func (l *Licenser) SendTelemetry() {
 	l.collectAppStats()
 	l.collectUserStats()
 	l.collectChatStats()
+}
+
+func (l *Licenser) TelemetryEnabled() bool {
+	if l.config.DisableTelemetry {
+		return false
+	}
+
+	feature, ok := l.Entitlement(TrackLicenseUsage)
+	return ok && feature.Bool()
+}
+
+func (l *Licenser) SendHTTPTelemetry(action string, status int, accessType string) {
+	if !l.TelemetryEnabled() {
+		return
+	}
+
+	telemetryRecord := map[string]interface{}{
+		"action":      action,
+		"status":      status,
+		"access_type": accessType,
+	}
+
+	go l.sendTelemetryReport("http_interaction", telemetryRecord)
 }
 
 func (l *Licenser) License() *LicenseInfo {
@@ -365,10 +388,10 @@ func (l *Licenser) InitializeForTests(testFeatures map[string]interface{}) {
 	wasInitialized := l.initialized
 	l.initialized = true
 
-	// Only close the channel if it wasn't already initialized
 	if !wasInitialized {
 		close(l.featuresInit)
 	}
+
 	l.lock.Unlock()
 }
 

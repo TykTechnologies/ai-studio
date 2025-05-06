@@ -8,6 +8,8 @@ import (
 )
 
 const (
+	TrackLicenseUsage = "track"
+
 	FEATUREPortal  = "feature_portal"
 	FEATUREChat    = "feature_chat"
 	FEATUREGateway = "feature_gateway"

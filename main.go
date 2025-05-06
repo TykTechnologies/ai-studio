@@ -89,7 +89,7 @@ func main() {
 		DisableTelemetry:    appConf.LicenseDisableTelemetry,
 		TelemetryURL:        appConf.LicenseTelemetryURL,
 		Version:             VERSION,
-		Component:           "midsommar",
+		Component:           "tyk-ai-studio",
 		TelemetryService:    services.NewTelemetryService(db),
 	}
 
