@@ -210,7 +210,10 @@ func TestFeatureSet(t *testing.T) {
 		// Close the channel in a goroutine after a short delay to simulate initialization
 		go func() {
 			time.Sleep(10 * time.Millisecond)
+			// Use proper synchronization when modifying initialized
+			licenser.lock.Lock()
 			licenser.initialized = true
+			licenser.lock.Unlock()
 			close(licenser.featuresInit)
 		}()
 
@@ -736,6 +739,9 @@ func TestEntitlement(t *testing.T) {
 	t.Run("wait for initialization", func(t *testing.T) {
 		licenser := NewLicenser(LicenseConfig{})
 
+		// Create a channel to signal when initialization is complete
+		initDone := make(chan struct{})
+
 		// Initialize features in a goroutine after a delay
 		go func() {
 			time.Sleep(50 * time.Millisecond)
@@ -745,9 +751,13 @@ func TestEntitlement(t *testing.T) {
 			}
 
 			licenser.InitializeForTests(testFeatures)
+			close(initDone)
 		}()
 
-		// This should block until initialization is complete
+		// Wait for initialization to complete
+		<-initDone
+
+		// Now check the entitlement
 		feature, ok := licenser.Entitlement("feature_portal")
 		assert.True(t, ok)
 		assert.NotNil(t, feature)

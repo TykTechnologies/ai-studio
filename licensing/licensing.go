@@ -97,7 +97,11 @@ func (l *Licenser) Stop() {
 }
 
 func (l *Licenser) FeatureSet() map[string]*Feature {
-	if !l.initialized {
+	l.lock.RLock()
+	initialized := l.initialized
+	l.lock.RUnlock()
+
+	if !initialized {
 		<-l.featuresInit
 	}
 
@@ -112,7 +116,11 @@ func (l *Licenser) FeatureSet() map[string]*Feature {
 }
 
 func (l *Licenser) Entitlement(name string) (*Feature, bool) {
-	if !l.initialized {
+	l.lock.RLock()
+	initialized := l.initialized
+	l.lock.RUnlock()
+
+	if !initialized {
 		<-l.featuresInit
 	}
 
