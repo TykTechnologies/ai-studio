@@ -237,6 +237,9 @@ func (a *API) setupRoutes() {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
 
+	// Add telemetry middleware
+	a.router.Use(a.licenser.TelemetryMiddleware())
+
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
 	} else {
@@ -369,20 +372,20 @@ func (a *API) setupRoutes() {
 
 	// User routes
 	v1.POST("/logout", a.handleLogout)
-	v1.POST("/users", a.createUser)
-	v1.GET("/users/:id", a.getUser)
-	v1.PATCH("/users/:id", a.updateUser)
-	v1.DELETE("/users/:id", a.deleteUser)
+	v1.POST("/users", licensing.ActionHandler(a.createUser, "Create User"))
+	v1.GET("/users/:id", licensing.ActionHandler(a.getUser, "Get User"))
+	v1.PATCH("/users/:id", licensing.ActionHandler(a.updateUser, "Update User"))
+	v1.DELETE("/users/:id", licensing.ActionHandler(a.deleteUser, "Delete User"))
 	v1.GET("/users", a.listUsers)
 	v1.GET("/users/:id/catalogues", a.getUserAccessibleCatalogues)
 	v1.POST("/users/:id/roll-api-key", a.rollUserAPIKey)
 	v1.POST("/users/:id/skip-quick-start", a.skipUserQuickStart)
 
 	// Group routes
-	v1.POST("/groups", a.createGroup)
-	v1.GET("/groups/:id", a.getGroup)
-	v1.PATCH("/groups/:id", a.updateGroup)
-	v1.DELETE("/groups/:id", a.deleteGroup)
+	v1.POST("/groups", licensing.ActionHandler(a.createGroup, "Create User Group"))
+	v1.GET("/groups/:id", licensing.ActionHandler(a.getGroup, "Get User Group"))
+	v1.PATCH("/groups/:id", licensing.ActionHandler(a.updateGroup, "Update User Group"))
+	v1.DELETE("/groups/:id", licensing.ActionHandler(a.deleteGroup, "Delete User Group"))
 	v1.GET("/groups", a.listGroups)
 	v1.POST("/groups/:id/users", a.addUserToGroup)
 	v1.DELETE("/groups/:id/users/:userId", a.removeUserFromGroup)
@@ -399,10 +402,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/groups/:id/tool-catalogues", a.listGroupToolCatalogues)
 
 	// LLM routes
-	v1.POST("/llms", a.createLLM)
-	v1.GET("/llms/:id", a.getLLM)
-	v1.PATCH("/llms/:id", a.updateLLM)
-	v1.DELETE("/llms/:id", a.deleteLLM)
+	v1.POST("/llms", licensing.ActionHandler(a.createLLM, "Create LLM"))
+	v1.GET("/llms/:id", licensing.ActionHandler(a.getLLM, "Get LLM"))
+	v1.PATCH("/llms/:id", licensing.ActionHandler(a.updateLLM, "Update LLM"))
+	v1.DELETE("/llms/:id", licensing.ActionHandler(a.deleteLLM, "Delete LLM"))
 	v1.GET("/llms", a.listLLMs)
 	v1.GET("/llms/search", a.searchLLMs)
 	v1.GET("/llms/max-privacy-score", a.getLLMsByMaxPrivacyScore)
@@ -481,10 +484,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/credentials/active", a.listActiveCredentials)
 
 	// App routes
-	v1.POST("/apps", a.createApp)
-	v1.GET("/apps/:id", a.getApp)
-	v1.PATCH("/apps/:id", a.updateApp)
-	v1.DELETE("/apps/:id", a.deleteApp)
+	v1.POST("/apps", licensing.ActionHandler(a.createApp, "Create App"))
+	v1.GET("/apps/:id", licensing.ActionHandler(a.getApp, "Get App"))
+	v1.PATCH("/apps/:id", licensing.ActionHandler(a.updateApp, "Update App"))
+	v1.DELETE("/apps/:id", licensing.ActionHandler(a.deleteApp, "Delete App"))
 	v1.GET("/users/:id/apps", a.getAppsByUserID)
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
@@ -503,10 +506,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/llm-settings/search", a.searchLLMSettings)
 
 	// Chat routes
-	v1.POST("/chats", a.createChat)
-	v1.GET("/chats/:id", a.getChat)
-	v1.PATCH("/chats/:id", a.updateChat)
-	v1.DELETE("/chats/:id", a.deleteChat)
+	v1.POST("/chats", licensing.ActionHandler(a.createChat, "Create Chat"))
+	v1.GET("/chats/:id", licensing.ActionHandler(a.getChat, "Get Chat"))
+	v1.PATCH("/chats/:id", licensing.ActionHandler(a.updateChat, "Update Chat"))
+	v1.DELETE("/chats/:id", licensing.ActionHandler(a.deleteChat, "Delete Chat"))
 	v1.GET("/chats", a.listChats)
 	v1.GET("/chats/by-group", a.getChatsByGroupID)
 	v1.POST("/chats/:id/extra-context/:filestore_id", a.addExtraContextToChat)
@@ -518,10 +521,10 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/chats/:id/prompt-templates", a.updateChatPromptTemplates)
 
 	// Tool routes
-	v1.POST("/tools", a.createTool)
-	v1.GET("/tools/:id", a.getTool)
-	v1.PATCH("/tools/:id", a.updateTool)
-	v1.DELETE("/tools/:id", a.deleteTool)
+	v1.POST("/tools", licensing.ActionHandler(a.createTool, "Create Tool"))
+	v1.GET("/tools/:id", licensing.ActionHandler(a.getTool, "Get Tool"))
+	v1.PATCH("/tools/:id", licensing.ActionHandler(a.updateTool, "Update Tool"))
+	v1.DELETE("/tools/:id", licensing.ActionHandler(a.deleteTool, "Delete Tool"))
 	v1.GET("/tools", a.getAllTools)
 	v1.GET("/tools/by-type", a.getToolsByType)
 	v1.GET("/tools/search", a.searchTools)

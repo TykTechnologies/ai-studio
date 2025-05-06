@@ -404,6 +404,7 @@ func TestTelemetry(t *testing.T) {
 	testFeatures := map[string]interface{}{
 		"feature_portal":  true,
 		"feature_gateway": true,
+		"track":           true, // Enable telemetry tracking
 	}
 	licenser.InitializeForTests(testFeatures)
 
@@ -441,11 +442,12 @@ func TestTelemetry(t *testing.T) {
 	})
 
 	t.Run("send all telemetry", func(t *testing.T) {
-		trackCallsBefore := trackCalls
+		// Reset trackCalls to ensure we're starting fresh
+		trackCalls = 0
 		licenser.SendTelemetry()
 
 		// SendTelemetry should call all 4 collect methods
-		assert.Equal(t, trackCallsBefore+4, trackCalls, "SendTelemetry should make 4 track calls")
+		assert.Equal(t, 4, trackCalls, "SendTelemetry should make 4 track calls")
 	})
 
 	t.Run("telemetry disabled", func(t *testing.T) {
