@@ -237,7 +237,6 @@ func (a *API) setupRoutes() {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
 
-	// Add telemetry middleware
 	a.router.Use(a.licenser.TelemetryMiddleware())
 
 	if a.disableCORS {
