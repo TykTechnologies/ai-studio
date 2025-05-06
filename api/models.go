@@ -1068,12 +1068,13 @@ type ProfileListItem struct {
 	Type       string `json:"type"`
 	ID         uint   `json:"id"`
 	Attributes struct {
-		Name         string    `json:"name"`
-		ProfileID    string    `json:"profile_id"`
-		ProfileType  string    `json:"profile_type"`
-		ProviderType string    `json:"provider_type"`
-		UpdatedBy    string    `json:"updated_by"`
-		UpdatedAt    time.Time `json:"updated_at"`
+		Name           string    `json:"name"`
+		ProfileID      string    `json:"profile_id"`
+		ProfileType    string    `json:"profile_type"`
+		ProviderType   string    `json:"provider_type"`
+		UpdatedBy      string    `json:"updated_by"`
+		UpdatedAt      time.Time `json:"updated_at"`
+		UseInLoginPage bool      `json:"use_in_login_page"`
 	} `json:"attributes"`
 }
 

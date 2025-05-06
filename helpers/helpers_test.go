@@ -426,17 +426,24 @@ func TestJSONMapAccessor(t *testing.T) {
 
 	t.Run("GetString with non-string value", func(t *testing.T) {
 		result := accessor.GetString("int_key", "default")
-		assert.Equal(t, "42", result)
+		assert.Equal(t, "", result)
 	})
 
 	t.Run("GetString with complex value", func(t *testing.T) {
 		result := accessor.GetString("invalid_key", "default")
-		assert.Contains(t, result, "map")
+		assert.Equal(t, "", result)
 	})
 
 	t.Run("GetString with non-existent key", func(t *testing.T) {
 		result := accessor.GetString("non_existent", "default")
 		assert.Equal(t, "default", result)
+	})
+
+	t.Run("GetString with nil value", func(t *testing.T) {
+		// Add a nil value to the data map
+		accessor.data["nil_key"] = nil
+		result := accessor.GetString("nil_key", "default")
+		assert.Equal(t, "", result)
 	})
 
 	// Test GetSlice
