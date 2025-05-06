@@ -18,7 +18,10 @@ import {
   ContentBox,
   PrimaryButton,
   SecondaryLinkButton,
-  DangerOutlineButton
+  DangerOutlineButton,
+  ResponsiveTitleBox,
+  TitleContentBox,
+  ActionButtonsBox
 } from "../../styles/sharedStyles";
 import { CACHE_KEYS } from "../../utils/constants";
 
@@ -159,36 +162,38 @@ const SSOProfileEditor = () => {
 
   return (
     <Box>
-      <TitleBox sx={{ display: 'flex', alignItems: 'flex-end' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          <SecondaryLinkButton
-            component={Link}
-            to="/admin/sso-profiles"
-            color="inherit"
-            sx={{ mb: 1, px: 0 }}
-            startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
-          >
-            back to IdP profiles
-          </SecondaryLinkButton>
-          <Typography variant="headingXLarge">
-            {isEditMode ? "Edit Profile" : "New Profile"}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          {isEditMode && (
-            <DangerOutlineButton
-              onClick={handleDeleteClick}
+      <TitleBox>
+        <ResponsiveTitleBox>
+          <TitleContentBox>
+            <SecondaryLinkButton
+              component={Link}
+              to="/admin/sso-profiles"
+              color="inherit"
+              sx={{ mb: 1, px: 0 }}
+              startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
             >
-              Delete profile
-            </DangerOutlineButton>
-          )}
-          <PrimaryButton
-            variant="contained"
-            onClick={handleSave}
-          >
-            Save profile
-          </PrimaryButton>
-        </Box>
+              back to IdP profiles
+            </SecondaryLinkButton>
+            <Typography variant="headingXLarge">
+              {isEditMode ? "Edit Profile" : "New Profile"}
+            </Typography>
+          </TitleContentBox>
+          <ActionButtonsBox>
+            {isEditMode && (
+              <DangerOutlineButton
+                onClick={handleDeleteClick}
+              >
+                Delete profile
+              </DangerOutlineButton>
+            )}
+            <PrimaryButton
+              variant="contained"
+              onClick={handleSave}
+            >
+              Save profile
+            </PrimaryButton>
+          </ActionButtonsBox>
+        </ResponsiveTitleBox>
       </TitleBox>
       <ContentBox>
         <Paper 

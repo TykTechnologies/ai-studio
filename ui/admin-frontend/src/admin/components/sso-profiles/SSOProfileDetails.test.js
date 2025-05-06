@@ -23,7 +23,10 @@ jest.mock('../../styles/sharedStyles', () => ({
   ),
   SecondaryLinkButton: ({ children, ...props }) => (
     <button data-testid="secondary-link-button" {...props}>{children}</button>
-  )
+  ),
+  ResponsiveTitleBox: ({ children, ...props }) => <div data-testid="responsive-title-box" {...props}>{children}</div>,
+  TitleContentBox: ({ children, ...props }) => <div data-testid="title-content-box" {...props}>{children}</div>,
+  ActionButtonsBox: ({ children, ...props }) => <div data-testid="action-buttons-box" {...props}>{children}</div>
 }));
 
 // Mock child components
@@ -96,6 +99,7 @@ const TestWrapper = ({ children }) => (
         <Route path="/admin/sso-profiles/:profileId" element={children} />
         <Route path="/admin/sso-profiles/edit/:profileId" element={<div>Edit Page</div>} />
         <Route path="/admin/sso-profiles" element={<div>SSO Profiles List</div>} />
+        <Route path="*" element={<div>Not Found</div>} />
       </Routes>
     </MemoryRouter>
   </ThemeProvider>
@@ -375,12 +379,13 @@ describe('SSOProfileDetails', () => {
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });
     
-    // Find the back button
-    const backButton = screen.getByText('back to IdP profiles');
+    // Find the back button - it's inside a SecondaryLinkButton
+    const backButton = screen.getByTestId('secondary-link-button');
     expect(backButton).toBeInTheDocument();
+    expect(backButton).toHaveTextContent('back to IdP profiles');
     
     // Check if it has the correct "to" prop
-    expect(backButton.getAttribute('to')).toBe('/admin/sso-profiles');
+    expect(backButton).toHaveAttribute('to', '/admin/sso-profiles');
   });
 
   test('shows and closes snackbar', async () => {

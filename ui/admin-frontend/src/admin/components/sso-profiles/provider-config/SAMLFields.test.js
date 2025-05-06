@@ -48,7 +48,9 @@ describe('SAMLFields', () => {
     },
     CustomEmailField: 'custom_email',
     CustomUserIDField: 'custom_id',
-    ProviderConstraintsDomain: 'example.com'
+    ProviderConstraints: {
+      Domain: 'example.com'
+    }
   };
 
   const mockHandleCopyToClipboard = jest.fn();
