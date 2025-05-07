@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -303,70 +304,70 @@ func TestLLMs_GetAll_Pagination(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name           string
-		pageSize       int
-		pageNumber     int
-		all            bool
-		expectedCount  int
-		expectedTotal  int64
-		expectedPages  int
-		expectedFirst  string
-		expectedLast   string
+		name          string
+		pageSize      int
+		pageNumber    int
+		all           bool
+		expectedCount int
+		expectedTotal int64
+		expectedPages int
+		expectedFirst string
+		expectedLast  string
 	}{
 		{
-			name:           "First page of 10",
-			pageSize:       10,
-			pageNumber:     1,
-			all:            false,
-			expectedCount:  10,
-			expectedTotal:  25,
-			expectedPages:  3,
-			expectedFirst:  "LLM1",
-			expectedLast:   "LLM10",
+			name:          "First page of 10",
+			pageSize:      10,
+			pageNumber:    1,
+			all:           false,
+			expectedCount: 10,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM1",
+			expectedLast:  "LLM10",
 		},
 		{
-			name:           "Second page of 10",
-			pageSize:       10,
-			pageNumber:     2,
-			all:            false,
-			expectedCount:  10,
-			expectedTotal:  25,
-			expectedPages:  3,
-			expectedFirst:  "LLM11",
-			expectedLast:   "LLM20",
+			name:          "Second page of 10",
+			pageSize:      10,
+			pageNumber:    2,
+			all:           false,
+			expectedCount: 10,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM11",
+			expectedLast:  "LLM20",
 		},
 		{
-			name:           "Last page of 10",
-			pageSize:       10,
-			pageNumber:     3,
-			all:            false,
-			expectedCount:  5,
-			expectedTotal:  25,
-			expectedPages:  3,
-			expectedFirst:  "LLM21",
-			expectedLast:   "LLM25",
+			name:          "Last page of 10",
+			pageSize:      10,
+			pageNumber:    3,
+			all:           false,
+			expectedCount: 5,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM21",
+			expectedLast:  "LLM25",
 		},
 		{
-			name:           "Page size larger than total",
-			pageSize:       30,
-			pageNumber:     1,
-			all:            false,
-			expectedCount:  25,
-			expectedTotal:  25,
-			expectedPages:  1,
-			expectedFirst:  "LLM1",
-			expectedLast:   "LLM25",
+			name:          "Page size larger than total",
+			pageSize:      30,
+			pageNumber:    1,
+			all:           false,
+			expectedCount: 25,
+			expectedTotal: 25,
+			expectedPages: 1,
+			expectedFirst: "LLM1",
+			expectedLast:  "LLM25",
 		},
 		{
-			name:           "Get all LLMs",
-			pageSize:       10,
-			pageNumber:     1,
-			all:            true,
-			expectedCount:  25,
-			expectedTotal:  25,
-			expectedPages:  3,
-			expectedFirst:  "LLM1",
-			expectedLast:   "LLM25",
+			name:          "Get all LLMs",
+			pageSize:      10,
+			pageNumber:    1,
+			all:           true,
+			expectedCount: 25,
+			expectedTotal: 25,
+			expectedPages: 3,
+			expectedFirst: "LLM1",
+			expectedLast:  "LLM25",
 		},
 	}
 
@@ -386,4 +387,134 @@ func TestLLMs_GetAll_Pagination(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLLMs_GetLLMCount(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Initially, there should be no LLMs
+	var llms LLMs
+	initialCount, err := llms.GetLLMCount(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), initialCount, "Database should be empty at start")
+
+	// Create a specific number of test LLMs
+	testLLMs := []LLM{
+		{Name: "LLM1", APIKey: "key1", APIEndpoint: "https://api1.com"},
+		{Name: "LLM2", APIKey: "key2", APIEndpoint: "https://api2.com"},
+		{Name: "LLM3", APIKey: "key3", APIEndpoint: "https://api3.com"},
+	}
+
+	for _, llm := range testLLMs {
+		err := db.Create(&llm).Error
+		assert.NoError(t, err)
+	}
+
+	// Get the count and verify it matches our expectation
+	count, err := llms.GetLLMCount(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(len(testLLMs)), count)
+}
+
+func TestGetTotalTokens(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create test LLMChatRecords with known token counts
+	testRecords := []LLMChatRecord{
+		{
+			Name:        "Record1",
+			Vendor:      string(OPENAI),
+			TotalTokens: 100,
+			TimeStamp:   time.Now(),
+		},
+		{
+			Name:        "Record2",
+			Vendor:      string(ANTHROPIC),
+			TotalTokens: 200,
+			TimeStamp:   time.Now(),
+		},
+		{
+			Name:        "Record3",
+			Vendor:      string(VERTEX),
+			TotalTokens: 300,
+			TimeStamp:   time.Now(),
+		},
+	}
+
+	expectedTotalTokens := int64(0)
+	for _, record := range testRecords {
+		err := db.Create(&record).Error
+		assert.NoError(t, err)
+		expectedTotalTokens += int64(record.TotalTokens)
+	}
+
+	// Get the total tokens and verify it matches our expectation
+	totalTokens, err := GetTotalTokens(db)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTotalTokens, totalTokens)
+}
+
+func TestGetTotalTokensByInteractionType(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create test LLMChatRecords with different interaction types and known token counts
+	testRecords := []LLMChatRecord{
+		{
+			Name:            "ChatRecord1",
+			Vendor:          string(OPENAI),
+			TotalTokens:     100,
+			TimeStamp:       time.Now(),
+			InteractionType: ChatInteraction,
+		},
+		{
+			Name:            "ChatRecord2",
+			Vendor:          string(ANTHROPIC),
+			TotalTokens:     150,
+			TimeStamp:       time.Now(),
+			InteractionType: ChatInteraction,
+		},
+		{
+			Name:            "ProxyRecord1",
+			Vendor:          string(VERTEX),
+			TotalTokens:     200,
+			TimeStamp:       time.Now(),
+			InteractionType: ProxyInteraction,
+		},
+		{
+			Name:            "ProxyRecord2",
+			Vendor:          string(GOOGLEAI),
+			TotalTokens:     250,
+			TimeStamp:       time.Now(),
+			InteractionType: ProxyInteraction,
+		},
+	}
+
+	chatTokens := int64(0)
+	proxyTokens := int64(0)
+
+	for _, record := range testRecords {
+		err := db.Create(&record).Error
+		assert.NoError(t, err)
+
+		if record.InteractionType == ChatInteraction {
+			chatTokens += int64(record.TotalTokens)
+		} else if record.InteractionType == ProxyInteraction {
+			proxyTokens += int64(record.TotalTokens)
+		}
+	}
+
+	// Test for ChatInteraction
+	totalChatTokens, err := GetTotalTokensByInteractionType(db, ChatInteraction)
+	assert.NoError(t, err)
+	assert.Equal(t, chatTokens, totalChatTokens)
+
+	// Test for ProxyInteraction
+	totalProxyTokens, err := GetTotalTokensByInteractionType(db, ProxyInteraction)
+	assert.NoError(t, err)
+	assert.Equal(t, proxyTokens, totalProxyTokens)
+
+	// Test for an interaction type with no records
+	totalUnknownTokens, err := GetTotalTokensByInteractionType(db, "unknown")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), totalUnknownTokens)
 }

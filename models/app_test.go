@@ -351,3 +351,29 @@ func TestApp_LLMAssociation(t *testing.T) {
 
 // 	t.Logf("Successfully created 100 App entries in the database")
 // }
+
+func TestApps_GetAppCount(t *testing.T) {
+	// Set up the test database
+	db := setupTestDB(t)
+
+	// Create some test apps
+	testApps := []App{
+		{Name: "App 1", Description: "Description 1", UserID: 1},
+		{Name: "App 2", Description: "Description 2", UserID: 1},
+		{Name: "App 3", Description: "Description 3", UserID: 2},
+	}
+
+	// Insert the test apps into the database
+	for i := range testApps {
+		err := testApps[i].Create(db)
+		assert.NoError(t, err)
+	}
+
+	// Call the GetAppCount method
+	var apps Apps
+	count, err := apps.GetAppCount(db)
+
+	// Verify the results
+	assert.NoError(t, err)
+	assert.Equal(t, int64(len(testApps)), count)
+}
