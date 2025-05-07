@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const telemetryAPIURL = "https://telemetry.tyk.technologies"
+const telemetryAPIURL = "https://telemetry.tyk.technology"
 
 type Client struct {
 	http *http.Client
