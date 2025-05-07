@@ -15,6 +15,7 @@ type Client struct {
 	http *http.Client
 	URL  string
 }
+
 type Event struct {
 	Identity   string                 `json:"identity"`
 	Event      string                 `json:"event"`
