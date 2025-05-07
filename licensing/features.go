@@ -2,6 +2,13 @@ package licensing
 
 import "fmt"
 
+type Feature struct {
+	tp        string
+	valBool   bool
+	valString string
+	valInt    int
+}
+
 func NewFeature(value interface{}) (*Feature, error) {
 	switch value.(type) {
 	case string:
