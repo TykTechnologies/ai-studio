@@ -58,6 +58,7 @@ type LicenseConfig struct {
 	Component           string
 	TelemetryService    *services.TelemetryService
 }
+
 type Licenser struct {
 	license            *LicenseInfo
 	config             LicenseConfig
@@ -101,9 +102,7 @@ func (l *Licenser) Start() {
 	l.initialized = true
 	close(l.featuresInit)
 
-	if !l.config.DisableTelemetry {
-		go l.SendTelemetry()
-	}
+	l.SendTelemetry()
 
 	licenseCheckTicker := time.NewTicker(l.config.ValidityCheckPeriod)
 	telemetryTicker := time.NewTicker(l.config.TelemetryPeriod)
