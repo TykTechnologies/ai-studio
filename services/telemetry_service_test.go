@@ -156,8 +156,8 @@ func TestGetUserStats(t *testing.T) {
 	assert.Equal(t, int64(4), stats["users_count"])
 	assert.Equal(t, int64(1), stats["admin_users"])
 	assert.Equal(t, int64(1), stats["developers"])
-	assert.Contains(t, stats, "chat_users")
-	assert.Contains(t, stats, "user_groups")
+	assert.Equal(t, int64(2), stats["chat_users"])
+	assert.Equal(t, int64(1), stats["user_groups"])
 }
 
 func TestGetChatStats(t *testing.T) {

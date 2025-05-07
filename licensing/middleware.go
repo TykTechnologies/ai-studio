@@ -4,8 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const CtxActionKey = "telemetry_action"
-
 func (l *Licenser) TelemetryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !l.TelemetryEnabled() {
