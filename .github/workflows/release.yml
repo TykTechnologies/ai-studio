@@ -37,7 +37,6 @@ env:
   BASE_REF: ${{startsWith(github.event_name, 'pull_request') && github.base_ref || github.ref_name}}
 jobs:
   goreleaser:
-    if: false # Temporarily disabled
     name: "${{ matrix.golang_cross }}"
     runs-on: ubuntu-latest
     permissions:
