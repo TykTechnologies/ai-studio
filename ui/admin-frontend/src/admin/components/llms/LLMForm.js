@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
+import { generateSlug } from "../../components/wizards/quick-start/utils";
 import {
   TextField,
   Box,
@@ -293,7 +294,8 @@ const LLMForm = () => {
                 value={llm.name}
                 onChange={handleChange}
                 error={!!errors.name}
-                helperText={errors.name || (nameChanged ? "Warning: Changing the LLM name may affect existing integrations" : "")}
+                helperText={errors.name || (nameChanged ? 
+                  `Warning: Changing the LLM name will change the REST endpoint from /llm/rest/${generateSlug(originalName)}/ to /llm/rest/${generateSlug(llm.name)}/` : "")}
                 required
                 FormHelperTextProps={{
                   sx: nameChanged ? { color: theme.palette.warning.main } : {}
@@ -642,7 +644,13 @@ const LLMForm = () => {
         <DialogContent>
           <DialogContentText>
             You are about to change the LLM name from "{originalName}" to "{llm.name}". 
-            This may affect existing integrations that reference this LLM.
+            This will change the following endpoints:
+            <ul>
+              <li>REST endpoint: /llm/rest/{generateSlug(originalName)}/ → /llm/rest/{generateSlug(llm.name)}/</li>
+              <li>Stream endpoint: /llm/stream/{generateSlug(originalName)}/ → /llm/stream/{generateSlug(llm.name)}/</li>
+              <li>AI endpoint: /ai/{generateSlug(originalName)}/v1 → /ai/{generateSlug(llm.name)}/v1</li>
+            </ul>
+            This will affect existing integrations that reference this LLM.
             Are you sure you want to continue?
           </DialogContentText>
         </DialogContent>
