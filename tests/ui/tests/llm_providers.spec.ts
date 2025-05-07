@@ -36,7 +36,12 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
     await adminLLMProvidersPage.AddLLMButton.click();
     await adminLLMProvidersPage.ProviderNameInput.fill(originalName);
     await adminLLMProvidersPage.ProviderTypeDropDown.setValue('OpenAI');
-    await adminLLMProvidersPage.SaveButton.click();
+    
+    // Use a more direct approach to find and click the save button
+    const saveButton = adminLLMProvidersPage.page.locator('button[type="submit"]');
+    console.log('Clicking save button to create provider');
+    await saveButton.click();
+    
     await adminLLMProvidersPage.Table.expectRowWithTextExists(originalName);
 
     // Edit the provider
@@ -45,17 +50,21 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
 
     // Change the name
     await adminLLMProvidersPage.ProviderNameInput.fill(newName);
+    console.log(`Changed provider name from "${originalName}" to "${newName}"`);
     
     // Calculate endpoints for verification
     const oldEndpoint = `/llm/${originalName.toLowerCase().replace(/\s+/g, '-')}`;
     const newEndpoint = `/llm/${newName.toLowerCase().replace(/\s+/g, '-')}`;
     
     // Try to save and verify confirmation dialog appears
-    await adminLLMProvidersPage.SaveButton.click();
+    console.log('Clicking save button to trigger confirmation dialog');
+    await saveButton.waitFor({ state: 'visible' });
+    await saveButton.click();
     
     // Verify confirmation dialog
     const confirmDialog = adminLLMProvidersPage.page.locator('.MuiDialog-root');
-    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+    console.log('Confirmation dialog is visible');
     
     // Verify dialog title
     const dialogTitle = confirmDialog.locator('.MuiDialogTitle-root');
@@ -71,14 +80,17 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
     await expect(dialogContent).toContainText(newEndpoint);
     
     // Cancel the dialog
-    await confirmDialog.locator('button:has-text("Cancel")').click();
+    const cancelButton = confirmDialog.locator('button:has-text("Cancel")');
+    await cancelButton.waitFor({ state: 'visible' });
+    await cancelButton.click();
     
     // Verify we're still on the edit page
     await expect(adminLLMProvidersPage.ProviderNameInput).toBeVisible();
     await expect(adminLLMProvidersPage.ProviderNameInput).toHaveValue(newName);
     
     // Clean up - cancel edit and delete the provider
-    await adminLLMProvidersPage.CancelButton.click();
+    const cancelFormButton = adminLLMProvidersPage.page.locator('button:has-text("Cancel")');
+    await cancelFormButton.click();
     await adminLLMProvidersPage.Table.deleteRowWithText(originalName);
     await adminLLMProvidersPage.Table.expectRowWithTextNotExists(originalName);
 });
