@@ -326,10 +326,10 @@ jobs:
         run: |
           echo 'FROM ${{ matrix.distro }}
           ARG TARGETARCH
-          COPY midsommar*_${TARGETARCH}.deb /midsommar.deb
+          COPY tyk-ai-studio*_${TARGETARCH}.deb /tyk-ai-studio.deb
           RUN apt-get update && apt-get install -y curl
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/midsommar/script.deb.sh | bash && apt-get install -y midsommar=0.0.1
-          RUN dpkg -i /midsommar.deb
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.deb.sh | bash && apt-get install -y tyk-ai-studio=0.0.1
+          RUN dpkg -i /tyk-ai-studio.deb
 
           ' | tee Dockerfile
       -
@@ -377,13 +377,13 @@ jobs:
         run: |
           echo 'FROM ${{ matrix.distro }}
           ARG RHELARCH
-          COPY midsommar*.${RHELARCH}.rpm /midsommar.rpm
+          COPY tyk-ai-studio*.${RHELARCH}.rpm /tyk-ai-studio.rpm
           RUN command -v curl || yum install -y curl
           RUN command -v useradd || yum install -y shadow-utils
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/midsommar/script.rpm.sh | bash && yum install -y midsommar-0.0.1-1
-          RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o midsommar.key && rpm --import midsommar.key
-          RUN rpm --checksig /midsommar.rpm
-          RUN rpm -Uvh --force /midsommar.rpm
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.rpm.sh | bash && yum install -y tyk-ai-studio-0.0.1-1
+          RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o tyk-ai-studio.key && rpm --import tyk-ai-studio.key
+          RUN rpm --checksig /tyk-ai-studio.rpm
+          RUN rpm -Uvh --force /tyk-ai-studio.rpm
 
           ' | tee Dockerfile
       -
