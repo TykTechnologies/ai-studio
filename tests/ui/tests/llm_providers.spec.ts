@@ -53,8 +53,8 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
     console.log(`Changed provider name from "${originalName}" to "${newName}"`);
     
     // Calculate endpoints for verification
-    const oldEndpoint = `/llm/${originalName.toLowerCase().replace(/\s+/g, '-')}`;
-    const newEndpoint = `/llm/${newName.toLowerCase().replace(/\s+/g, '-')}`;
+    const oldRestEndpoint = `/llm/rest/${originalName.toLowerCase().replace(/\s+/g, '-')}/`;
+    const newRestEndpoint = `/llm/rest/${newName.toLowerCase().replace(/\s+/g, '-')}/`;
     
     // Try to save and verify confirmation dialog appears
     console.log('Clicking save button to trigger confirmation dialog');
@@ -76,8 +76,8 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
     await expect(dialogContent).toContainText(newName);
     
     // Verify dialog mentions API endpoints
-    await expect(dialogContent).toContainText(oldEndpoint);
-    await expect(dialogContent).toContainText(newEndpoint);
+    await expect(dialogContent).toContainText(oldRestEndpoint);
+    await expect(dialogContent).toContainText(newRestEndpoint);
     
     // Cancel the dialog
     const cancelButton = confirmDialog.locator('button:has-text("Cancel")');
