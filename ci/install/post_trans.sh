@@ -7,7 +7,7 @@ if command -V systemctl >/dev/null 2>&1; then
         cp /opt/tyk-ai-studio/install/inits/systemd/system/tyk-ai-studio.service /lib/systemd/system/tyk-ai-studio.service
     fi
 else
-    if [ ! -f /etc/init.d/midsommar ]; then
+    if [ ! -f /etc/init.d/tyk-ai-studio ]; then
         cp /opt/tyk-ai-studio/install/inits/sysv/init.d/tyk-ai-studio /etc/init.d/tyk-ai-studio
     fi
 fi
