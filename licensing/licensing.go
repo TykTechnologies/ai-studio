@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -25,6 +26,38 @@ ZwIDAQAB
 -----END PUBLIC KEY-----
 `
 
+const (
+	TrackLicenseUsage              = "track"
+	FEATUREPortal                  = "feature_portal"
+	FEATUREChat                    = "feature_chat"
+	FEATUREGateway                 = "feature_gateway"
+	claimVersion                   = "v"
+	claimExp                       = "exp"
+	claimScope                     = "scope"
+	DefaultTelemetryPeriod         = 1 * time.Hour
+	DefaultValidityCheckPeriod     = 10 * time.Minute
+	MaxConcurrentTelemetryRequests = 20
+)
+
+type LicenseInfo struct {
+	Key       string
+	IsValid   bool
+	ExpiresAt time.Time
+	Version   string
+	Features  map[string]*Feature
+	claims    jwt.MapClaims
+}
+
+type LicenseConfig struct {
+	LicenseKey          string
+	ValidityCheckPeriod time.Duration
+	TelemetryPeriod     time.Duration
+	DisableTelemetry    bool
+	TelemetryURL        string
+	Version             string
+	Component           string
+	TelemetryService    *services.TelemetryService
+}
 type Licenser struct {
 	license            *LicenseInfo
 	config             LicenseConfig

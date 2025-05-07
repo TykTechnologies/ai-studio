@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+const telemetryAPIURL = "https://telemetry.tyk.technologies"
+
+type Client struct {
+	http *http.Client
+	URL  string
+}
+type Event struct {
+	Identity   string                 `json:"identity"`
+	Event      string                 `json:"event"`
+	Timestamp  int64                  `json:"timestamp"`
+	Properties map[string]interface{} `json:"properties,omitempty"`
+}
+
 func NewClient(url string) *Client {
 	telemetryURL := telemetryAPIURL
 	if url != "" {
