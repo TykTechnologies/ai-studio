@@ -18,29 +18,29 @@ fi
 cleanup() {
     # After installing, remove files that were not needed on this platform / system
     if [ "${use_systemctl}" = "True" ]; then
-        rm -f /lib/systemd/system/midsommar.service
+        rm -f /lib/systemd/system/tyk-ai-studio.service
     else
-        rm -f /etc/init.d/midsommar
+        rm -f /etc/init.d/tyk-ai-studio
     fi
 }
 
 restoreServices() {
     if [ "${use_systemctl}" = "True" ]; then
-        if [ ! -f /lib/systemd/system/midsommar.service ]; then
-            cp /opt/midsommar/install/inits/systemd/system/midsommar.service /lib/systemd/system/midsommar.service
+        if [ ! -f /lib/systemd/system/tyk-ai-studio.service ]; then
+            cp /opt/tyk-ai-studio/install/inits/systemd/system/tyk-ai-studio.service /lib/systemd/system/tyk-ai-studio.service
         fi
     else
-        if [ ! -f /etc/init.d/midsommar ]; then
-            cp /opt/midsommar/install/inits/sysv/init.d/midsommar /etc/init.d/midsommar
+        if [ ! -f /etc/init.d/tyk-ai-studio ]; then
+            cp /opt/tyk-ai-studio/install/inits/sysv/init.d/tyk-ai-studio /etc/init.d/tyk-ai-studio
         fi
     fi
 }
 
 setupOwnership() {
     printf "\033[32m Post Install of the install directory ownership and permissions\033[0m\n"
-    [ "${change_ownership}" = "True" ] && chown -R tyk:tyk /opt/midsommar
+    [ "${change_ownership}" = "True" ] && chown -R tyk:tyk /opt/tyk-ai-studio
     # Config file should never be world-readable
-    chmod 660 /opt/midsommar/midsommar.conf
+    chmod 660 /opt/tyk-ai-studio/tyk-ai-studio.conf
 }
 
 cleanInstall() {
@@ -48,34 +48,34 @@ cleanInstall() {
     # Step 3 (clean install), enable the service in the proper way for this platform
     if [ "${use_systemctl}" = "False" ]; then
         if command -V chkconfig >/dev/null 2>&1; then
-            chkconfig --add midsommar
-            chkconfig midsommar on
+            chkconfig --add tyk-ai-studio
+            chkconfig tyk-ai-studio on
         fi
         if command -V update-rc.d >/dev/null 2>&1; then
-            update-rc.d midsommar defaults
+            update-rc.d tyk-ai-studio defaults
         fi
 
-        service midsommar restart ||:
+        service tyk-ai-studio restart ||:
     else
         printf "\033[32m Reload the service unit from disk\033[0m\n"
         systemctl daemon-reload ||:
         printf "\033[32m Unmask the service\033[0m\n"
-        systemctl unmask midsommar ||:
+        systemctl unmask tyk-ai-studio ||:
         printf "\033[32m Set the preset flag for the service unit\033[0m\n"
-        systemctl preset midsommar ||:
+        systemctl preset tyk-ai-studio ||:
         printf "\033[32m Set the enabled flag for the service unit\033[0m\n"
-        systemctl enable midsommar ||:
-        systemctl restart midsommar ||:
+        systemctl enable tyk-ai-studio ||:
+        systemctl restart tyk-ai-studio ||:
     fi
 }
 
 upgrade() {
     printf "\033[32m Post Install of an upgrade\033[0m\n"
     if [ "${use_systemctl}" = "False" ]; then
-        service midsommar restart
+        service tyk-ai-studio restart
     else
         systemctl daemon-reload ||:
-        systemctl restart midsommar ||:
+        systemctl restart tyk-ai-studio ||:
     fi
 }
 
