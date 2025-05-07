@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
@@ -22,7 +21,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet := make(map[string]interface{})
 
 	// Safely copy features
-	for k, v := range licensing.FeatureSet() {
+	for k, v := range a.licenser.FeatureSet() {
 		featureSet[k] = v
 	}
 

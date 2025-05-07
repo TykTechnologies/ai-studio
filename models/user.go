@@ -256,3 +256,31 @@ func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
 func SetSkipQuickStartForUser(db *gorm.DB, userID uint) error {
 	return db.Model(&User{}).Where("id = ?", userID).Update("skip_quick_start", true).Error
 }
+
+type UserCounts struct {
+	UserCount      int64
+	AdminCount     int64
+	DeveloperCount int64
+	ChatUserCount  int64
+}
+
+func GetUserCounts(db *gorm.DB) (UserCounts, error) {
+	var results UserCounts
+	err := db.Model(&User{}).
+		Select(`
+			COUNT(*) as user_count,
+			SUM(CASE WHEN is_admin = true THEN 1 ELSE 0 END) as admin_count,
+			SUM(CASE WHEN is_admin = false AND show_portal = true THEN 1 ELSE 0 END) as developer_count,
+			SUM(CASE WHEN is_admin = false AND show_portal = false AND show_chat = true THEN 1 ELSE 0 END) as chat_user_count
+		`).
+		Scan(&results).Error
+
+	return results, err
+}
+
+func GetUserGroupCount(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&Group{}).Count(&count).Error
+
+	return count, err
+}

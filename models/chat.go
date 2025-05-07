@@ -15,23 +15,23 @@ type PromptTemplate struct {
 
 type Chat struct {
 	gorm.Model
-	ID                  uint              `gorm:"primaryKey" json:"id"`
-	Name                string            `json:"name"`
-	Description         string            `json:"description"`
-	Groups              []Group           `gorm:"many2many:chat_groups;"`
-	LLMSettingsID       uint              `json:"llm_settings_id"`
-	LLMSettings         *LLMSettings      `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
-	LLMID               uint              `json:"llm_id"`
-	LLM                 *LLM              `gorm:"foreignKey:LLMID" json:"llm"`
-	Filters             []*Filter         `gorm:"many2many:chat_filters;"`
-	RagResultsPerSource int               `json:"rag_results_per_source"`
-	SupportsTools       bool              `json:"supports_tools"`
-	SystemPrompt        string            `json:"system_prompt"`
-	DefaultDataSource   *Datasource       `gorm:"foreignKey:DefaultDataSourceID;constraint:OnDelete:SET NULL" json:"default_data_source"`
-	DefaultDataSourceID *uint             `json:"default_data_source_id"`
-	ExtraContext        []FileStore       `gorm:"many2many:chat_filestores;" json:"extra_context"`
-	DefaultTools        []*Tool           `gorm:"many2many:chat_tools;" json:"default_tools"`
-	PromptTemplatesJSON string            `json:"-" gorm:"column:prompt_templates_json"`
+	ID                  uint         `gorm:"primaryKey" json:"id"`
+	Name                string       `json:"name"`
+	Description         string       `json:"description"`
+	Groups              []Group      `gorm:"many2many:chat_groups;"`
+	LLMSettingsID       uint         `json:"llm_settings_id"`
+	LLMSettings         *LLMSettings `gorm:"foreignKey:LLMSettingsID" json:"llm_settings"`
+	LLMID               uint         `json:"llm_id"`
+	LLM                 *LLM         `gorm:"foreignKey:LLMID" json:"llm"`
+	Filters             []*Filter    `gorm:"many2many:chat_filters;"`
+	RagResultsPerSource int          `json:"rag_results_per_source"`
+	SupportsTools       bool         `json:"supports_tools"`
+	SystemPrompt        string       `json:"system_prompt"`
+	DefaultDataSource   *Datasource  `gorm:"foreignKey:DefaultDataSourceID;constraint:OnDelete:SET NULL" json:"default_data_source"`
+	DefaultDataSourceID *uint        `json:"default_data_source_id"`
+	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
+	DefaultTools        []*Tool      `gorm:"many2many:chat_tools;" json:"default_tools"`
+	PromptTemplatesJSON string       `json:"-" gorm:"column:prompt_templates_json"`
 }
 
 type Chats []Chat
@@ -127,10 +127,10 @@ func (c *Chat) Update(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		// Update the chat's fields
 		if err := tx.Model(c).Updates(Chat{
-			Name:               c.Name,
-			Description:        c.Description,
-			LLMSettingsID:      c.LLMSettingsID,
-			LLMID:              c.LLMID,
+			Name:                c.Name,
+			Description:         c.Description,
+			LLMSettingsID:       c.LLMSettingsID,
+			LLMID:               c.LLMID,
 			PromptTemplatesJSON: c.PromptTemplatesJSON,
 		}).Error; err != nil {
 			return err
@@ -232,4 +232,11 @@ func (c *Chat) UpdatePromptTemplates(db *gorm.DB, templates []PromptTemplate) er
 		return err
 	}
 	return db.Model(c).Update("prompt_templates_json", c.PromptTemplatesJSON).Error
+}
+
+func (c *Chats) GetChatCount(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&Chat{}).Count(&count).Error
+
+	return count, err
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -42,7 +43,8 @@ func setupTestAPIForCommonTests(t *testing.T) (*API, *gorm.DB, *services.Service
 
 	notificationService := services.NewTestNotificationService(db)
 	authService := auth.NewAuthService(&config, nil, service, notificationService)
-	api := NewAPI(service, true, authService, &config, nil, emptyFile)
+	licenser := apitest.SetupTestLicenser()
+	api := NewAPI(service, true, authService, &config, nil, emptyFile, licenser)
 
 	return api, db, service
 }

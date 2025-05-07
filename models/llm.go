@@ -127,3 +127,29 @@ func (l *LLMs) GetByPrivacyScoreRange(db *gorm.DB, min, max int) error {
 func (l *LLMs) GetActiveLLMs(db *gorm.DB) error {
 	return db.Preload("Filters").Where("active = ?", true).Find(l).Error
 }
+
+func (l *LLMs) GetLLMCount(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&LLM{}).Count(&count).Error
+
+	return count, err
+}
+
+func GetTotalTokens(db *gorm.DB) (int64, error) {
+	var totalTokens int64
+	err := db.Model(&LLMChatRecord{}).
+		Select("COALESCE(SUM(total_tokens), 0) as total_tokens").
+		Scan(&totalTokens).Error
+
+	return totalTokens, err
+}
+
+func GetTotalTokensByInteractionType(db *gorm.DB, interactionType InteractionType) (int64, error) {
+	var totalTokens int64
+	err := db.Model(&LLMChatRecord{}).
+		Where("interaction_type = ?", interactionType).
+		Select("COALESCE(SUM(total_tokens), 0) as total_tokens").
+		Scan(&totalTokens).Error
+
+	return totalTokens, err
+}
