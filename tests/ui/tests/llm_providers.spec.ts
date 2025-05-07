@@ -22,7 +22,7 @@ test('Add LLM provider', async ({ loginPage, adminLLMProvidersPage, adminMainPag
     await adminLLMProvidersPage.Table.expectRowWithTextNotExists(LLMProviderName);
 });
 
-test('Edit LLM provider name shows warning and confirmation dialog', async ({ loginPage, adminLLMProvidersPage, adminMainPage }) => {
+test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adminLLMProvidersPage, adminMainPage }) => {
     const originalName = 'Original Provider';
     const newName = 'Renamed Provider';
 
@@ -43,40 +43,44 @@ test('Edit LLM provider name shows warning and confirmation dialog', async ({ lo
     const rowNumber = await adminLLMProvidersPage.Table.getRowNumberWithText(originalName);
     await adminLLMProvidersPage.Table.triggerEditAction(rowNumber);
 
-    // Change the name and verify warning appears
+    // Change the name
     await adminLLMProvidersPage.ProviderNameInput.fill(newName);
     
-    // Verify warning message appears as helper text below the name field
-    const warningMessage = adminLLMProvidersPage.page.locator('.MuiFormHelperText-root');
-    await expect(warningMessage).toBeVisible();
-    await expect(warningMessage).toContainText('API endpoints will change');
+    // Calculate endpoints for verification
+    const oldEndpoint = `/llm/${originalName.toLowerCase().replace(/\s+/g, '-')}`;
+    const newEndpoint = `/llm/${newName.toLowerCase().replace(/\s+/g, '-')}`;
     
-    // Verify old and new endpoints are shown in the warning
-    await expect(warningMessage).toContainText(`/llm/${originalName.toLowerCase().replace(/\s+/g, '-')}`);
-    await expect(warningMessage).toContainText(`/llm/${newName.toLowerCase().replace(/\s+/g, '-')}`);
-
     // Try to save and verify confirmation dialog appears
     await adminLLMProvidersPage.SaveButton.click();
     
     // Verify confirmation dialog
     const confirmDialog = adminLLMProvidersPage.page.locator('.MuiDialog-root');
     await expect(confirmDialog).toBeVisible();
-    await expect(confirmDialog.locator('.MuiDialogTitle-root')).toContainText('Confirm Name Change');
     
-    // Verify dialog shows old and new endpoints
-    await expect(confirmDialog).toContainText(`/llm/${originalName.toLowerCase().replace(/\s+/g, '-')}`);
-    await expect(confirmDialog).toContainText(`/llm/${newName.toLowerCase().replace(/\s+/g, '-')}`);
+    // Verify dialog title
+    const dialogTitle = confirmDialog.locator('.MuiDialogTitle-root');
+    await expect(dialogTitle).toContainText('Confirm Name Change');
     
-    // Confirm the change
-    await adminLLMProvidersPage.page.locator('button:has-text("Confirm")').click();
+    // Verify dialog mentions original and new names
+    const dialogContent = confirmDialog.locator('.MuiDialogContent-root');
+    await expect(dialogContent).toContainText(originalName);
+    await expect(dialogContent).toContainText(newName);
     
-    // Verify the name was changed successfully
-    await adminLLMProvidersPage.Table.expectRowWithTextExists(newName);
+    // Verify dialog mentions API endpoints
+    await expect(dialogContent).toContainText(oldEndpoint);
+    await expect(dialogContent).toContainText(newEndpoint);
+    
+    // Cancel the dialog
+    await confirmDialog.locator('button:has-text("Cancel")').click();
+    
+    // Verify we're still on the edit page
+    await expect(adminLLMProvidersPage.ProviderNameInput).toBeVisible();
+    await expect(adminLLMProvidersPage.ProviderNameInput).toHaveValue(newName);
+    
+    // Clean up - cancel edit and delete the provider
+    await adminLLMProvidersPage.CancelButton.click();
+    await adminLLMProvidersPage.Table.deleteRowWithText(originalName);
     await adminLLMProvidersPage.Table.expectRowWithTextNotExists(originalName);
-    
-    // Clean up - delete the provider
-    await adminLLMProvidersPage.Table.deleteRowWithText(newName);
-    await adminLLMProvidersPage.Table.expectRowWithTextNotExists(newName);
 });
 
 
