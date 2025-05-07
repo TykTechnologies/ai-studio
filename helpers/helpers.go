@@ -2,7 +2,9 @@ package helpers
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math/rand"
@@ -248,4 +250,10 @@ func ValidateEmailDomain(email string) error {
 	}
 
 	return fmt.Errorf("email domain '%s' is not permitted", domain)
+}
+
+func HashString(s string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(s))
+	return hex.EncodeToString(hasher.Sum(nil))
 }

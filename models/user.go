@@ -257,32 +257,25 @@ func SetSkipQuickStartForUser(db *gorm.DB, userID uint) error {
 	return db.Model(&User{}).Where("id = ?", userID).Update("skip_quick_start", true).Error
 }
 
-func GetUserCount(db *gorm.DB) (int64, error) {
-	var count int64
-	err := db.Model(&User{}).Count(&count).Error
-
-	return count, err
+type UserCounts struct {
+	UserCount      int64
+	AdminCount     int64
+	DeveloperCount int64
+	ChatUserCount  int64
 }
 
-func GetAdminCount(db *gorm.DB) (int64, error) {
-	var count int64
-	err := db.Model(&User{}).Where("is_admin = ?", true).Count(&count).Error
+func GetUserCounts(db *gorm.DB) (UserCounts, error) {
+	var results UserCounts
+	err := db.Model(&User{}).
+		Select(`
+			COUNT(*) as user_count,
+			SUM(CASE WHEN is_admin = true THEN 1 ELSE 0 END) as admin_count,
+			SUM(CASE WHEN is_admin = false AND show_portal = true THEN 1 ELSE 0 END) as developer_count,
+			SUM(CASE WHEN is_admin = false AND show_portal = false AND show_chat = true THEN 1 ELSE 0 END) as chat_user_count
+		`).
+		Scan(&results).Error
 
-	return count, err
-}
-
-func GetDeveloperCount(db *gorm.DB) (int64, error) {
-	var count int64
-	err := db.Model(&User{}).Where("is_admin = ? AND show_portal = ?", false, true).Count(&count).Error
-
-	return count, err
-}
-
-func GetChatUserCount(db *gorm.DB) (int64, error) {
-	var count int64
-	err := db.Model(&User{}).Where("is_admin = ? AND show_portal = ? AND show_chat = ?", false, false, true).Count(&count).Error
-
-	return count, err
+	return results, err
 }
 
 func GetUserGroupCount(db *gorm.DB) (int64, error) {

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -25,13 +26,14 @@ ZwIDAQAB
 `
 
 type Licenser struct {
-	license         *LicenseInfo
-	config          LicenseConfig
-	telemetryClient *Client
-	done            chan bool
-	lock            sync.RWMutex
-	featuresInit    chan struct{}
-	initialized     bool
+	license            *LicenseInfo
+	config             LicenseConfig
+	telemetryClient    *Client
+	done               chan bool
+	lock               sync.RWMutex
+	featuresInit       chan struct{}
+	initialized        bool
+	telemetrySemaphore chan struct{}
 }
 
 func NewLicenser(config LicenseConfig) *Licenser {
@@ -50,10 +52,11 @@ func NewLicenser(config LicenseConfig) *Licenser {
 	featuresInit := make(chan struct{})
 
 	return &Licenser{
-		config:          config,
-		telemetryClient: NewClient(config.TelemetryURL),
-		done:            make(chan bool),
-		featuresInit:    featuresInit,
+		config:             config,
+		telemetryClient:    NewClient(config.TelemetryURL),
+		done:               make(chan bool),
+		featuresInit:       featuresInit,
+		telemetrySemaphore: make(chan struct{}, MaxConcurrentTelemetryRequests),
 	}
 }
 
@@ -317,7 +320,7 @@ func (l *Licenser) sendTelemetryReport(reportName string, stats map[string]inter
 		return fmt.Errorf("no license available")
 	}
 
-	licenseHash := HashString(license.Key)
+	licenseHash := helpers.HashString(license.Key)
 
 	properties := map[string]interface{}{
 		"midsommar_version": l.config.Version,
@@ -366,7 +369,12 @@ func (l *Licenser) SendHTTPTelemetry(action string, status int, accessType strin
 		"access_type": accessType,
 	}
 
-	go l.sendTelemetryReport("http_interaction", telemetryRecord)
+	go func() {
+		l.telemetrySemaphore <- struct{}{}
+		defer func() { <-l.telemetrySemaphore }()
+
+		l.sendTelemetryReport("http_interaction", telemetryRecord)
+	}()
 }
 
 func (l *Licenser) License() *LicenseInfo {

@@ -444,95 +444,6 @@ func TestSetSkipQuickStartForUser(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, reUpdatedUser.SkipQuickStart)
 }
-
-func TestGetUserCount(t *testing.T) {
-	db := setupTestDB(t)
-
-	// Initially, there should be no users
-	count, err := GetUserCount(db)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(0), count)
-
-	// Create some users
-	users := []User{
-		{Email: "user1@example.com"},
-		{Email: "user2@example.com"},
-		{Email: "user3@example.com"},
-	}
-	for _, u := range users {
-		err := db.Create(&u).Error
-		assert.NoError(t, err)
-	}
-
-	// Now there should be 3 users
-	count, err = GetUserCount(db)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(3), count)
-}
-
-func TestGetAdminCount(t *testing.T) {
-	db := setupTestDB(t)
-
-	// Create users with different IsAdmin values
-	users := []User{
-		{Email: "admin1@example.com", IsAdmin: true},
-		{Email: "admin2@example.com", IsAdmin: true},
-		{Email: "user1@example.com", IsAdmin: false},
-	}
-	for _, u := range users {
-		err := db.Create(&u).Error
-		assert.NoError(t, err)
-	}
-
-	// There should be 2 admin users
-	count, err := GetAdminCount(db)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(2), count)
-}
-
-func TestGetDeveloperCount(t *testing.T) {
-	db := setupTestDB(t)
-
-	// Create users with different combinations of IsAdmin and ShowPortal
-	users := []User{
-		{Email: "admin@example.com", IsAdmin: true, ShowPortal: true},
-		{Email: "dev1@example.com", IsAdmin: false, ShowPortal: true},
-		{Email: "dev2@example.com", IsAdmin: false, ShowPortal: true},
-		{Email: "chat@example.com", IsAdmin: false, ShowPortal: false},
-	}
-	for _, u := range users {
-		err := db.Create(&u).Error
-		assert.NoError(t, err)
-	}
-
-	// There should be 2 developer users (IsAdmin=false, ShowPortal=true)
-	count, err := GetDeveloperCount(db)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(2), count)
-}
-
-func TestGetChatUserCount(t *testing.T) {
-	db := setupTestDB(t)
-
-	// Create users with different combinations of IsAdmin, ShowPortal, and ShowChat
-	users := []User{
-		{Email: "admin@example.com", IsAdmin: true, ShowPortal: false, ShowChat: true},
-		{Email: "dev@example.com", IsAdmin: false, ShowPortal: true, ShowChat: true},
-		{Email: "chat1@example.com", IsAdmin: false, ShowPortal: false, ShowChat: true},
-		{Email: "chat2@example.com", IsAdmin: false, ShowPortal: false, ShowChat: true},
-		{Email: "none@example.com", IsAdmin: false, ShowPortal: false, ShowChat: false},
-	}
-	for _, u := range users {
-		err := db.Create(&u).Error
-		assert.NoError(t, err)
-	}
-
-	// There should be 2 chat users (IsAdmin=false, ShowPortal=false, ShowChat=true)
-	count, err := GetChatUserCount(db)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(2), count)
-}
-
 func TestGetUserGroupCount(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -556,4 +467,63 @@ func TestGetUserGroupCount(t *testing.T) {
 	count, err = GetUserGroupCount(db)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(3), count)
+}
+
+func TestGetUserCounts(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create different types of users
+	users := []User{
+		{Email: "admin@example.com", IsAdmin: true, ShowPortal: true, ShowChat: true},        // Admin
+		{Email: "admin2@example.com", IsAdmin: true, ShowPortal: false, ShowChat: false},     // Admin (different settings)
+		{Email: "developer@example.com", IsAdmin: false, ShowPortal: true, ShowChat: true},   // Developer
+		{Email: "developer2@example.com", IsAdmin: false, ShowPortal: true, ShowChat: false}, // Developer (chat disabled)
+		{Email: "chatuser@example.com", IsAdmin: false, ShowPortal: false, ShowChat: true},   // Chat user
+		{Email: "inactive@example.com", IsAdmin: false, ShowPortal: false, ShowChat: false},  // Inactive user
+	}
+
+	// Insert users into the database
+	for _, u := range users {
+		err := db.Create(&u).Error
+		assert.NoError(t, err)
+	}
+
+	// Call the function being tested
+	counts, err := GetUserCounts(db)
+	assert.NoError(t, err)
+
+	// Verify the counts
+	assert.Equal(t, int64(6), counts.UserCount, "Total user count should be 6")
+	assert.Equal(t, int64(2), counts.AdminCount, "Admin count should be 2")
+	assert.Equal(t, int64(2), counts.DeveloperCount, "Developer count should be 2")
+	assert.Equal(t, int64(1), counts.ChatUserCount, "Chat user count should be 1")
+
+	// Test with an empty database
+	db = setupTestDB(t) // Reset the database
+	emptyCounts, err := GetUserCounts(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), emptyCounts.UserCount)
+	assert.Equal(t, int64(0), emptyCounts.AdminCount)
+	assert.Equal(t, int64(0), emptyCounts.DeveloperCount)
+	assert.Equal(t, int64(0), emptyCounts.ChatUserCount)
+
+	// Test with soft-deleted users
+	db = setupTestDB(t) // Reset the database
+	user := User{Email: "deleted@example.com", IsAdmin: true}
+	err = db.Create(&user).Error
+	assert.NoError(t, err)
+
+	// Verify user is counted
+	countsBefore, err := GetUserCounts(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), countsBefore.UserCount)
+
+	// Soft delete the user
+	err = db.Delete(&user).Error
+	assert.NoError(t, err)
+
+	// Verify soft-deleted user is not counted (GORM's default behavior)
+	countsAfter, err := GetUserCounts(db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), countsAfter.UserCount)
 }

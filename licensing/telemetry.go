@@ -2,28 +2,12 @@ package licensing
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 )
-
-const telemetryAPIURL = "https://telemetry.tyk.technologies"
-
-type Client struct {
-	http *http.Client
-	URL  string
-}
-
-type Event struct {
-	Identity   string                 `json:"identity"`
-	Event      string                 `json:"event"`
-	Timestamp  int64                  `json:"timestamp"`
-	Properties map[string]interface{} `json:"properties,omitempty"`
-}
 
 func NewClient(url string) *Client {
 	telemetryURL := telemetryAPIURL
@@ -63,10 +47,4 @@ func (c *Client) Track(identity, eventName string, properties map[string]interfa
 	}
 
 	return nil
-}
-
-func HashString(s string) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(s))
-	return hex.EncodeToString(hasher.Sum(nil))
 }
