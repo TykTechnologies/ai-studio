@@ -87,12 +87,6 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
     // Verify we're still on the edit page
     await expect(adminLLMProvidersPage.ProviderNameInput).toBeVisible();
     await expect(adminLLMProvidersPage.ProviderNameInput).toHaveValue(newName);
-    
-    // Clean up - cancel edit and delete the provider
-    const cancelFormButton = adminLLMProvidersPage.page.locator('button:has-text("Cancel")');
-    await cancelFormButton.click();
-    await adminLLMProvidersPage.Table.deleteRowWithText(originalName);
-    await adminLLMProvidersPage.Table.expectRowWithTextNotExists(originalName);
 });
 
 
