@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -548,4 +550,39 @@ func TestValidateEmailDomain(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHashString(t *testing.T) {
+	t.Run("empty string", func(t *testing.T) {
+		hash := HashString("")
+		// SHA-256 of empty string: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+		expected := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+		assert.Equal(t, expected, hash)
+	})
+
+	t.Run("non-empty string", func(t *testing.T) {
+		hash := HashString("test")
+		// SHA-256 of "test": 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+		expected := "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+		assert.Equal(t, expected, hash)
+	})
+
+	t.Run("consistency check", func(t *testing.T) {
+		// Hash the same string twice
+		hash1 := HashString("test-consistency")
+		hash2 := HashString("test-consistency")
+		assert.Equal(t, hash1, hash2)
+	})
+
+	t.Run("manual SHA-256 verification", func(t *testing.T) {
+		input := "verify-me"
+		hash := HashString(input)
+
+		// Calculate SHA-256 manually using crypto/sha256
+		hasher := sha256.New()
+		hasher.Write([]byte(input))
+		expected := hex.EncodeToString(hasher.Sum(nil))
+
+		assert.Equal(t, expected, hash)
+	})
 }

@@ -6,34 +6,39 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type AppConf struct {
-	SMTPServer          string
-	SMTPPort            int
-	SMTPUser            string
-	SMTPPass            string
-	FromEmail           string
-	AllowRegistrations  bool
-	AdminEmail          string
-	SiteURL             string
-	ProxyURL            string
-	ServerPort          string
-	CertFile            string
-	KeyFile             string
-	DisableCors         bool
-	DatabaseURL         string
-	DatabaseType        string
-	FilterSignupDomains []string
-	EchoConversation    bool
-	ProxyOnly           bool
-	DocsURL             string
-	DefaultSignupMode   string
-	TIBEnabled          bool
-	TIBAPISecret        string
-	DocsLinks           DocsLinks
+	SMTPServer              string
+	SMTPPort                int
+	SMTPUser                string
+	SMTPPass                string
+	FromEmail               string
+	AllowRegistrations      bool
+	AdminEmail              string
+	SiteURL                 string
+	ProxyURL                string
+	ServerPort              string
+	CertFile                string
+	KeyFile                 string
+	DisableCors             bool
+	DatabaseURL             string
+	DatabaseType            string
+	FilterSignupDomains     []string
+	EchoConversation        bool
+	ProxyOnly               bool
+	DocsURL                 string
+	DefaultSignupMode       string
+	TIBEnabled              bool
+	TIBAPISecret            string
+	DocsLinks               DocsLinks
+	LicenseKey              string
+	LicenseTelemetryPeriod  time.Duration
+	LicenseDisableTelemetry bool
+	LicenseTelemetryURL     string
 }
 
 type DocsLinks map[string]string
@@ -198,6 +203,26 @@ func getConfigFromEnv() *AppConf {
 	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
 	if conf.TIBAPISecret == "" && conf.TIBEnabled {
 		log.Println("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
+	}
+
+	conf.LicenseKey = os.Getenv("TYK_AI_LICENSE")
+	if conf.LicenseKey == "" {
+		log.Println("Warning: TYK_AI_LICENSE environment variable is not set")
+	}
+
+	licenseDisableTelemetryStr := os.Getenv("LICENSE_DISABLE_TELEMETRY")
+	if licenseDisableTelemetryStr == "true" || licenseDisableTelemetryStr == "1" {
+		conf.LicenseDisableTelemetry = true
+	}
+
+	conf.LicenseTelemetryURL = os.Getenv("LICENSE_TELEMETRY_URL")
+
+	licenseReportPeriodStr := os.Getenv("LICENSE_TELEMETRY_PERIOD")
+	if licenseReportPeriodStr != "" {
+		duration, err := time.ParseDuration(licenseReportPeriodStr)
+		if err == nil {
+			conf.LicenseTelemetryPeriod = duration
+		}
 	}
 
 	return conf

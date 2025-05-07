@@ -50,14 +50,6 @@ func main() {
 
 	appConf := config.Get()
 
-	err := licensing.IsLicensed()
-	if err != nil {
-		log.Fatalf("License is not valid: %v", err)
-	}
-
-	// start ongoing check
-	go licensing.LicenseService()
-
 	var dialector gorm.Dialector
 	switch appConf.DatabaseType {
 	case "sqlite":
@@ -89,6 +81,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize models: %v", err)
 	}
+
+	licenseConfig := licensing.LicenseConfig{
+		LicenseKey:          appConf.LicenseKey,
+		ValidityCheckPeriod: 10 * time.Minute,
+		TelemetryPeriod:     appConf.LicenseTelemetryPeriod,
+		DisableTelemetry:    appConf.LicenseDisableTelemetry,
+		TelemetryURL:        appConf.LicenseTelemetryURL,
+		Version:             VERSION,
+		Component:           "tyk-ai-studio",
+		TelemetryService:    services.NewTelemetryService(db),
+	}
+
+	licenser := licensing.NewLicenser(licenseConfig)
+
+	licenser.Start()
+	defer licenser.Stop()
 
 	// Create a new service instance
 	service := services.NewService(db)
@@ -148,7 +156,7 @@ func main() {
 	}
 	p := proxy.NewProxy(service, pConfig, budgetService)
 
-	gatewayEnabled, gatewayOk := licensing.Entitlement(licensing.FEATUREGateway)
+	gatewayEnabled, gatewayOk := licenser.Entitlement(licensing.FEATUREGateway)
 	if gatewayOk && gatewayEnabled.Bool() {
 		go p.Start()
 	}
@@ -171,9 +179,9 @@ func main() {
 		go docsServer.Start()
 	}
 
-	if appConf.ProxyOnly == false {
+	if !appConf.ProxyOnly {
 		// Create a new API instance
-		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles) // true to disable CORS for development
+		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, licenser) // true to disable CORS for development
 
 		// listEmbeddedFiles(staticFiles)
 		// Run the API
