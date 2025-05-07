@@ -6,15 +6,15 @@
 cleanRemove() {
     printf "\033[32m Post remove for plain removal\033[0m\n"
     if command -V systemctl >/dev/null 2>&1; then
-        systemctl stop midsommar ||:
+        systemctl stop tyk-ai-studio ||:
         systemctl daemon-reload ||:
     fi
-    service stop midsommar ||:
+    service stop tyk-ai-studio ||:
     if command -V chkconfig >/dev/null 2>&1; then
-        chkconfig --del midsommar ||:
+        chkconfig --del tyk-ai-studio ||:
     fi
     if command -V update-rc.d >/dev/null 2>&1; then
-        update-rc.d midsommar remove
+        update-rc.d tyk-ai-studio remove
     fi
 }
 
