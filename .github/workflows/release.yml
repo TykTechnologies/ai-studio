@@ -166,7 +166,7 @@ jobs:
           -e GPG_FINGERPRINT=12B5D62C28F57592D1575BD51ED14C59E37DAC20            \
           -e PKG_SIGNING_KEY="$PKG_SIGNING_KEY"                                  \
           -e PACKAGECLOUD_TOKEN=$PACKAGECLOUD_TOKEN                              \
-          -v ${{github.workspace}}:/go/src/github.com/TykTechnologies/midsommar \
+          -v ${{github.workspace}}/midsommar:/go/src/github.com/TykTechnologies/midsommar \
           -v /var/run/docker.sock:/var/run/docker.sock                           \
           -v ~/.docker/config.json:/root/.docker/config.json                     \
           -e GOCACHE=/cache/go-build                                             \
