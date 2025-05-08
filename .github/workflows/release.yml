@@ -8,19 +8,19 @@ name: Release
 # - docker hub
 # - devenv ECR
 # - Cloudsmith
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+#concurrency:
+#  group: ${{ github.workflow }}-${{ github.ref }}
+#  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
   # Trigger release every monday at midnight for master CI images
-  schedule:
-    -
-      cron: "0 0 * * 1"
-  pull_request:
+  #schedule:
+  #  -
+  #    cron: "0 0 * * 1"
+  # pull_request:
   push:
-    branches:
-      - master
-      - release-**
+    # branches:
+    #  - master
+    #  - release-**
     tags:
       - "v*"
 
@@ -37,7 +37,6 @@ env:
   BASE_REF: ${{startsWith(github.event_name, 'pull_request') && github.base_ref || github.ref_name}}
 jobs:
   goreleaser:
-    if: false # Temporarily disabled
     name: "${{ matrix.golang_cross }}"
     runs-on: ubuntu-latest
     permissions:
@@ -115,7 +114,7 @@ jobs:
       -
         name: Cache node modules
         if: steps.check_changes.outputs.ui == 'true'
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         env:
           cache-name: cache-node-modules
         with:
@@ -149,12 +148,15 @@ jobs:
           PKG_SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
         run: |
+          pwd
+          ls
           echo '#!/bin/sh
           ci/bin/unlock-agent.sh
           git config --global url."https://${{ secrets.ORG_GH_TOKEN }}@github.com".insteadOf "https://github.com"
           git config --global --add safe.directory /go/src/github.com/TykTechnologies/midsommar
           goreleaser release --clean -f ${{ matrix.goreleaser }} ${{ !startsWith(github.ref, 'refs/tags/') && ' --snapshot --skip=sign' || '' }}' | tee /tmp/build.sh
           chmod +x /tmp/build.sh
+          pwd
           docker run --rm --privileged -e GITHUB_TOKEN=${{ github.token }} \
           -e GOPRIVATE=github.com/TykTechnologies                                \
           -e DEBVERS='${{ matrix.debvers }}'                               \
@@ -194,7 +196,7 @@ jobs:
         if: ${{ matrix.golang_cross == '1.22-bullseye' }}
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.ecr.outputs.registry }}/midsommar
+          images: ${{ steps.ecr.outputs.registry }}/tyk-ai-studio
           flavor: |
             latest=false
           tags: |
@@ -225,15 +227,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            tykio/midsommar
-            docker.tyk.io/midsommar/midsommar
+            tykio/tyk-ai-studio
+            docker.tyk.io/tyktechnologies/tyk-ai-studio
           flavor: |
             latest=false
             prefix=v
           tags: |
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
-          labels: "org.opencontainers.image.title=midsommar  (distroless) \norg.opencontainers.image.description=Tyk AI Portal\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
+          labels: "org.opencontainers.image.title=tyk-ai-studio  (distroless) \norg.opencontainers.image.description=Tyk AI Studio\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
       -
         name: push image to prod
         if: ${{ matrix.golang_cross == '1.22-bullseye' }}
@@ -326,10 +328,10 @@ jobs:
         run: |
           echo 'FROM ${{ matrix.distro }}
           ARG TARGETARCH
-          COPY midsommar*_${TARGETARCH}.deb /midsommar.deb
+          COPY tyk-ai-studio*_${TARGETARCH}.deb /tyk-ai-studio.deb
           RUN apt-get update && apt-get install -y curl
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/midsommar/script.deb.sh | bash && apt-get install -y midsommar=0.0.1
-          RUN dpkg -i /midsommar.deb
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.deb.sh | bash && apt-get install -y tyk-ai-studio=0.0.1
+          RUN dpkg -i /tyk-ai-studio.deb
 
           ' | tee Dockerfile
       -
@@ -377,13 +379,13 @@ jobs:
         run: |
           echo 'FROM ${{ matrix.distro }}
           ARG RHELARCH
-          COPY midsommar*.${RHELARCH}.rpm /midsommar.rpm
+          COPY tyk-ai-studio*.${RHELARCH}.rpm /tyk-ai-studio.rpm
           RUN command -v curl || yum install -y curl
           RUN command -v useradd || yum install -y shadow-utils
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/midsommar/script.rpm.sh | bash && yum install -y midsommar-0.0.1-1
-          RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o midsommar.key && rpm --import midsommar.key
-          RUN rpm --checksig /midsommar.rpm
-          RUN rpm -Uvh --force /midsommar.rpm
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.rpm.sh | bash && yum install -y tyk-ai-studio-0.0.1-1
+          RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o tyk-ai-studio.key && rpm --import tyk-ai-studio.key
+          RUN rpm --checksig /tyk-ai-studio.rpm
+          RUN rpm -Uvh --force /tyk-ai-studio.rpm
 
           ' | tee Dockerfile
       -

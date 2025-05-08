@@ -6,16 +6,16 @@ ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
 
 COPY *${TARGETARCH}.deb /
-RUN rm -f /*fips*.deb && dpkg -i /midsommar*${TARGETARCH}.deb && rm /*.deb
+RUN rm -f /*fips*.deb && dpkg -i /tyk-ai-studio*${TARGETARCH}.deb && rm /*.deb
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=DEB /opt/midsommar /opt/midsommar
+COPY --from=DEB /opt/tyk-ai-studio /opt/tyk-ai-studio
 
 ARG PORTS
 EXPOSE $PORTS
 
-WORKDIR /opt/midsommar/
+WORKDIR /opt/tyk-ai-studio/
 
-ENTRYPOINT ["/opt/midsommar/midsommar" ]
-CMD [ "--conf=/opt/midsommar/midsommar.conf" ]
+ENTRYPOINT ["/opt/tyk-ai-studio/tyk-ai-studio" ]
+CMD [ "--conf=/opt/tyk-ai-studio/tyk-ai-studio.conf" ]
