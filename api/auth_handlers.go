@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
@@ -20,19 +21,26 @@ import (
 func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet := make(map[string]interface{})
 
-	// Safely copy features
 	for k, v := range a.licenser.FeatureSet() {
 		featureSet[k] = v
 	}
 
-	// Add docs URL if config is available
 	if cfg := config.Get(); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"features": featureSet,
-	})
+	}
+
+	if license := a.licenser.License(); license != nil && !license.ExpiresAt.IsZero() {
+		daysLeft := helpers.DaysLeft(license.ExpiresAt)
+		if daysLeft > 0 && daysLeft < 30 {
+			response["license_days_left"] = daysLeft
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // @Summary Login user

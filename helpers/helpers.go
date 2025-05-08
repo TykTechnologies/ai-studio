@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -256,4 +257,11 @@ func HashString(s string) string {
 	hasher := sha256.New()
 	hasher.Write([]byte(s))
 	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func DaysLeft(targetDate time.Time) int {
+	now := time.Now().UTC().Truncate(24 * time.Hour)
+	normalizedTarget := targetDate.UTC().Truncate(24 * time.Hour)
+
+	return int(normalizedTarget.Sub(now).Hours() / 24)
 }

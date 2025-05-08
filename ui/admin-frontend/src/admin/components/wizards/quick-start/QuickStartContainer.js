@@ -17,7 +17,9 @@ const QuickStartContainer = ({ quickStartState }) => {
     setShowQuickStart,
     currentUser,
     handleQuickStartComplete,
-    handleQuickStartSkip
+    handleQuickStartSkip,
+    showLicenseBanner,
+    licenseDaysLeft
   } = quickStartState || hookState;
   
   const quickStartContextRef = useRef(null);
@@ -35,6 +37,8 @@ const QuickStartContainer = ({ quickStartState }) => {
       onClose={() => setShowQuickStart(false)}
       renderBeforeContent={() => <ContextCapture />}
       currentUser={currentUser}
+      showLicenseBanner={showLicenseBanner}
+      licenseDaysLeft={licenseDaysLeft}
       steps={[
         {
           id: "welcome",

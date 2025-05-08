@@ -4,8 +4,8 @@ import { styled } from '@mui/material/styles';
 import { PrimaryButton } from '../../../styles/sharedStyles';
 import { ActionsContainer } from './styles';
 import { useQuickStart } from './QuickStartContext';
+import SuccessBanner from '../../../components/common/SuccessBanner';
 
-// Import the welcome step image
 import welcomeStepImage from './welcome_step.png';
 
 const ImageContainer = styled(Box)(({ theme }) => ({
@@ -26,7 +26,14 @@ const WelcomeImage = styled('img')({
 });
 
 const WelcomeStep = () => {
-  const { goToNextStep, skipQuickStart, currentUser } = useQuickStart();
+  const {
+    goToNextStep,
+    skipQuickStart,
+    currentUser,
+    showLicenseBanner,
+    licenseDaysLeft,
+  } = useQuickStart();
+  
   const userName = currentUser?.name || 'User';
   const isMobile = useMediaQuery('(max-width:600px)');
   
@@ -49,7 +56,15 @@ const WelcomeStep = () => {
       >
         Welcome to Tyk, {userName}
       </Typography>
-      
+      {showLicenseBanner && (
+        <SuccessBanner
+          title={`Enjoy your ${licenseDaysLeft}-day trial of Studio.`}
+          message= "To get you familiar with our product we have a quick start guide for you!"
+          showCloseButton={false}
+          horizontalLayout={true}
+          sx={{mt: 3, mb: 2}}
+        />
+      )}
       <Typography
         variant="headingMedium"
         color="text.defaultSubdued"

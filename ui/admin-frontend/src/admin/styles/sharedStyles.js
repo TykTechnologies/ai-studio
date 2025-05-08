@@ -14,7 +14,6 @@ import {
   TextField,
   Select,
   FormControl,
-  InputLabel,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import { NavLink } from "react-router-dom";
@@ -201,10 +200,10 @@ export const SecondaryLinkButton = styled(Button)(({ theme }) => ({
   }
 }));
 
-export const SecondaryOutlineButton = styled(Button)(({ theme }) => ({
+export const SecondaryOutlineButton = styled(Button)(({ theme, size }) => ({
   position: 'relative',
   borderRadius: 20,
-  padding: '8px 16px',
+  padding: size === 'small' ? '2px 8px' : '8px 16px',
   color: theme.palette.text.defaultSubdued,
   backgroundColor: theme.palette.background.paper,
   border: `1px solid ${theme.palette.border.neutralDefault}`,

@@ -6,6 +6,7 @@ import useUserEntitlements from './useUserEntitlements';
 import useSystemFeatures from './useSystemFeatures';
 import useLLMs from './useLLMs';
 import useConfig from './useConfig';
+import useLicenseDaysLeft from './useLicenseDaysLeft';
 
 // Mock the dependency hooks
 jest.mock('./useUserEntitlements', () => ({
@@ -24,6 +25,11 @@ jest.mock('./useLLMs', () => ({
 }));
 
 jest.mock('./useConfig', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+jest.mock('./useLicenseDaysLeft', () => ({
   __esModule: true,
   default: jest.fn(),
 }));
@@ -49,6 +55,8 @@ function TestComponent() {
       <div data-testid="userName">{hookResult.userName || 'no-username'}</div>
       <div data-testid="features">{JSON.stringify(hookResult.features)}</div>
       <div data-testid="hasLLMs">{hookResult.hasLLMs.toString()}</div>
+      <div data-testid="config">{JSON.stringify(hookResult.config)}</div>
+      <div data-testid="licenseDaysLeft">{hookResult.licenseDaysLeft?.toString() || 'no-days-left'}</div>
       <button
         data-testid="fetch-button"
         onClick={() => hookResult.fetchAllData()}
@@ -65,12 +73,14 @@ describe('useOverviewData Hook', () => {
   const mockFetchFeatures = jest.fn();
   const mockFetchLLMs = jest.fn();
   const mockFetchConfig = jest.fn();
+  const mockFetchLicenseDaysLeft = jest.fn();
   
   const mockUserEntitlements = { role: 'admin' };
   const mockUserName = 'Test User';
   const mockFeatures = { feature_chat: true, feature_gateway: true };
   const mockHasLLMs = true;
   const mockConfig = { apiBaseURL: 'http://example.com' };
+  const mockLicenseDaysLeft = 30;
   
   beforeEach(() => {
     jest.clearAllMocks();
@@ -96,6 +106,12 @@ describe('useOverviewData Hook', () => {
       error: null
     });
     
+    useLicenseDaysLeft.mockReturnValue({
+      licenseDaysLeft: mockLicenseDaysLeft,
+      fetchLicenseDaysLeft: mockFetchLicenseDaysLeft,
+      error: null
+    });
+    
     useLLMs.mockReturnValue({
       hasLLMs: mockHasLLMs,
       fetchLLMs: mockFetchLLMs,
@@ -107,6 +123,7 @@ describe('useOverviewData Hook', () => {
     mockFetchFeatures.mockImplementation(() => Promise.resolve(mockFeatures));
     mockFetchLLMs.mockImplementation(() => Promise.resolve({ hasLLMs: mockHasLLMs }));
     mockFetchConfig.mockImplementation(() => Promise.resolve(mockConfig));
+    mockFetchLicenseDaysLeft.mockImplementation(() => Promise.resolve(mockLicenseDaysLeft));
   });
   
   test('should initialize with loading state and fetch all data', async () => {
@@ -119,6 +136,8 @@ describe('useOverviewData Hook', () => {
     expect(mockFetchUserEntitlements).toHaveBeenCalledTimes(1);
     expect(mockFetchFeatures).toHaveBeenCalledTimes(1);
     expect(mockFetchLLMs).toHaveBeenCalledTimes(1);
+    expect(mockFetchConfig).toHaveBeenCalledTimes(1);
+    expect(mockFetchLicenseDaysLeft).toHaveBeenCalledTimes(1);
     
     // Wait for the initial fetch to complete
     await waitFor(() => {
@@ -131,6 +150,8 @@ describe('useOverviewData Hook', () => {
     expect(screen.getByTestId('userName').textContent).toBe(mockUserName);
     expect(screen.getByTestId('features').textContent).toBe(JSON.stringify(mockFeatures));
     expect(screen.getByTestId('hasLLMs').textContent).toBe(mockHasLLMs.toString());
+    expect(screen.getByTestId('config').textContent).toBe(JSON.stringify(mockConfig));
+    expect(screen.getByTestId('licenseDaysLeft').textContent).toBe(mockLicenseDaysLeft.toString());
   });
   
   test('should initialize with skipInitialFetch=true when passed to dependency hooks', async () => {
@@ -141,6 +162,8 @@ describe('useOverviewData Hook', () => {
     expect(useUserEntitlements).toHaveBeenCalledWith(true);
     expect(useSystemFeatures).toHaveBeenCalledWith(true);
     expect(useLLMs).toHaveBeenCalledWith({ skipInitialFetch: true, checkExistenceOnly: true });
+    expect(useConfig).toHaveBeenCalledWith(true);
+    expect(useLicenseDaysLeft).toHaveBeenCalledWith(true);
   });
   
   test('should handle manual data fetching', async () => {
@@ -155,12 +178,16 @@ describe('useOverviewData Hook', () => {
     mockFetchUserEntitlements.mockClear();
     mockFetchFeatures.mockClear();
     mockFetchLLMs.mockClear();
+    mockFetchConfig.mockClear();
+    mockFetchLicenseDaysLeft.mockClear();
     
     // Setup promises that won't resolve immediately to ensure loading state can be checked
     const delayedPromise = new Promise(resolve => setTimeout(() => resolve({}), 100));
     mockFetchUserEntitlements.mockReturnValue(delayedPromise);
     mockFetchFeatures.mockReturnValue(delayedPromise);
     mockFetchLLMs.mockReturnValue(delayedPromise);
+    mockFetchConfig.mockReturnValue(delayedPromise);
+    mockFetchLicenseDaysLeft.mockReturnValue(delayedPromise);
     
     // Trigger manual fetch
     act(() => {
@@ -176,6 +203,8 @@ describe('useOverviewData Hook', () => {
     expect(mockFetchUserEntitlements).toHaveBeenCalledTimes(1);
     expect(mockFetchFeatures).toHaveBeenCalledTimes(1);
     expect(mockFetchLLMs).toHaveBeenCalledTimes(1);
+    expect(mockFetchConfig).toHaveBeenCalledTimes(1);
+    expect(mockFetchLicenseDaysLeft).toHaveBeenCalledTimes(1);
     
     // Wait for the fetch to complete
     await waitFor(() => {
@@ -248,6 +277,49 @@ describe('useOverviewData Hook', () => {
     
     // Verify the error is correctly set
     expect(screen.getByTestId('error').textContent).toBe(llmsError);
+  });
+  
+  test('should handle error from useConfig', async () => {
+    const configError = 'Failed to fetch config';
+    
+    // Mock error from useConfig
+    useConfig.mockReturnValue({
+      config: null,
+      getDocsLink: jest.fn(),
+      fetchConfig: mockFetchConfig,
+      error: configError
+    });
+    
+    render(<TestComponent />);
+    
+    // Wait for the fetch to complete
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').textContent).toBe('false');
+    });
+    
+    // Verify the error is correctly set
+    expect(screen.getByTestId('error').textContent).toBe(configError);
+  });
+  
+  test('should handle error from useLicenseDaysLeft', async () => {
+    const licenseDaysError = 'Failed to fetch license days';
+    
+    // Mock error from useLicenseDaysLeft
+    useLicenseDaysLeft.mockReturnValue({
+      licenseDaysLeft: null,
+      fetchLicenseDaysLeft: mockFetchLicenseDaysLeft,
+      error: licenseDaysError
+    });
+    
+    render(<TestComponent />);
+    
+    // Wait for the fetch to complete
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').textContent).toBe('false');
+    });
+    
+    // Verify the error is correctly set
+    expect(screen.getByTestId('error').textContent).toBe(licenseDaysError);
   });
   
   test('should handle error during fetchAllData', async () => {
