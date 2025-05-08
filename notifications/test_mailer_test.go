@@ -19,6 +19,7 @@ func TestTestMailer(t *testing.T) {
 		"user",
 		"pass",
 		mailer,
+		false,
 	)
 
 	// Send a test email
@@ -61,6 +62,7 @@ func TestMailServiceBackwardCompatibility(t *testing.T) {
 		"user",
 		"pass",
 		nil, // No mailer needed when using empty host
+		false,
 	)
 
 	// Should return nil without error
