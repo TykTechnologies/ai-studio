@@ -136,7 +136,7 @@ func main() {
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,
-		TestMode:               os.Getenv("DEVMODE") != "",
+		TestMode:               os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1",
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
