@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getBaseUrl } from "./urlUtils";
+import { getBaseUrl, fetchCSRFToken } from "./urlUtils";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -24,19 +24,6 @@ pubClient.interceptors.response.use(
     return Promise.reject(error);
   },
 );
-
-// Function to fetch CSRF token
-const fetchCSRFToken = async () => {
-  try {
-    const response = await axios.get(`${getBaseUrl()}/csrf-token`, {
-      withCredentials: true,
-    });
-    return response.headers["x-csrf-token"];
-  } catch (error) {
-    console.error("Error fetching CSRF token:", error);
-    return null;
-  }
-};
 
 // Request interceptor to add CSRF token
 pubClient.interceptors.request.use(
