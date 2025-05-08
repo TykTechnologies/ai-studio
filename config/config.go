@@ -141,7 +141,10 @@ func getConfigFromEnv() *AppConf {
 		log.Println("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
-	if os.Getenv("DEVMODE") != "" {
+	devMode := os.Getenv("DEVMODE")
+	devModeTrue := devMode == "true" || devMode == "1"
+	if devModeTrue {
+		conf.DevMode = true
 		conf.DisableCors = true
 	}
 
@@ -224,11 +227,6 @@ func getConfigFromEnv() *AppConf {
 		if err == nil {
 			conf.LicenseTelemetryPeriod = duration
 		}
-	}
-
-	devMode := os.Getenv("DEVMODE")
-	if devMode == "true" || devMode == "1" {
-		conf.DevMode = true
 	}
 
 	return conf

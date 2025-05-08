@@ -110,6 +110,7 @@ func main() {
 		appConf.SMTPUser,
 		appConf.SMTPPass,
 		mailer,
+		appConf.DevMode,
 	)
 
 	// Create notification service that will handle all notifications

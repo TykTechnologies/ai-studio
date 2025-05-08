@@ -104,6 +104,7 @@ func NewNotificationService(db *gorm.DB, fromEmail, smtpHost string, smtpPort in
 			smtpUser,
 			smtpPass,
 			mailer,
+			false,
 		)
 	}
 
