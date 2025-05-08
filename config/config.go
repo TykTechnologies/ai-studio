@@ -39,6 +39,7 @@ type AppConf struct {
 	LicenseTelemetryPeriod  time.Duration
 	LicenseDisableTelemetry bool
 	LicenseTelemetryURL     string
+	DevMode                 bool
 }
 
 type DocsLinks map[string]string
@@ -223,6 +224,11 @@ func getConfigFromEnv() *AppConf {
 		if err == nil {
 			conf.LicenseTelemetryPeriod = duration
 		}
+	}
+
+	devMode := os.Getenv("DEVMODE")
+	if devMode == "true" || devMode == "1" {
+		conf.DevMode = true
 	}
 
 	return conf

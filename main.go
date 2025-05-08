@@ -128,7 +128,7 @@ func main() {
 		DB:                     db,
 		Service:                service,
 		CookieName:             "session",
-		CookieSecure:           os.Getenv("DEVMODE") == "", // false in dev mode
+		CookieSecure:           !appConf.DevMode,
 		CookieHTTPOnly:         true,
 		CookieSameSite:         http.SameSiteLaxMode, // less restrictive
 		CookieDomain:           "",                   // empty for development to work with localhost
@@ -136,7 +136,7 @@ func main() {
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,
-		TestMode:               os.Getenv("DEVMODE") != "",
+		TestMode:               appConf.DevMode,
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
