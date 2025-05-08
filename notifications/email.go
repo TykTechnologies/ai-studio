@@ -2,7 +2,6 @@ package notifications
 
 import (
 	"log"
-	"os"
 
 	"github.com/go-mail/mail"
 )
@@ -18,13 +17,14 @@ type MailService struct {
 	Username  string
 	Password  string
 	Mailer    Mailer
+	DevMode   bool
 }
 
 type Mailer interface {
 	DialAndSend(m ...*mail.Message) error
 }
 
-func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password string, mailer Mailer) *MailService {
+func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password string, mailer Mailer, devMode bool) *MailService {
 	// If SMTP is not configured, return a service that will silently skip sending emails
 	if smtpHost == "" || username == "" || password == "" {
 		return &MailService{
@@ -39,12 +39,13 @@ func NewMailService(fromEmail, smtpHost string, smtpPort int, username, password
 		Username:  username,
 		Password:  password,
 		Mailer:    mailer,
+		DevMode:   devMode,
 	}
 }
 
 func (m *MailService) SendEmail(to, subject, body string) error {
 	// In dev mode with no SMTP, print to console
-	if os.Getenv("DEVMODE") == "true" && m.SMTPHost == "" {
+	if m.DevMode && m.SMTPHost == "" {
 		log.Printf("\n=== DEV MODE EMAIL ===\nTo: %s\nFrom: %s\nSubject: %s\n\n%s\n==================\n",
 			to, m.FromEmail, subject, body)
 		return nil

@@ -58,7 +58,7 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		AdminEmail:          "admin@example.com",
 		TestMode:            false,
 	}
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 587, "user", "pass", suite.mockMailer)
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 587, "user", "pass", suite.mockMailer, false)
 	notificationService := services.NewTestNotificationService(suite.db)
 	suite.authService = auth.NewAuthService(config, mailService, suite.service, notificationService)
 	suite.api = &API{
