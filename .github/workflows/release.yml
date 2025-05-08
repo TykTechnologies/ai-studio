@@ -46,10 +46,10 @@ jobs:
       fail-fast: false
       matrix:
         golang_cross:
-          - 1.22-bullseye
+          - 1.23-bullseye
         include:
           -
-            golang_cross: 1.22-bullseye
+            golang_cross: 1.23-bullseye
             goreleaser: "ci/goreleaser/goreleaser.yml"
             cgo: 0
             rpmvers: "el/7 el/8 el/9 amazon/2 amazon/2023"
