@@ -142,8 +142,7 @@ func getConfigFromEnv() *AppConf {
 	}
 
 	devMode := os.Getenv("DEVMODE")
-	devModeTrue := devMode == "true" || devMode == "1"
-	if devModeTrue {
+	if devMode == "true" || devMode == "1" {
 		conf.DevMode = true
 		conf.DisableCors = true
 	}
