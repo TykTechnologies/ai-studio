@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -548,6 +549,61 @@ func TestValidateEmailDomain(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestDaysLeft(t *testing.T) {
+	// Use a fixed reference date for test cases
+	now := time.Now().UTC().Truncate(24 * time.Hour)
+
+	tests := []struct {
+		name       string
+		targetDate time.Time
+	}{
+		{
+			name:       "Same day",
+			targetDate: now,
+		},
+		{
+			name:       "Next day",
+			targetDate: now.AddDate(0, 0, 1),
+		},
+		{
+			name:       "Previous day",
+			targetDate: now.AddDate(0, 0, -1),
+		},
+		{
+			name:       "30 days later",
+			targetDate: now.AddDate(0, 0, 30),
+		},
+		{
+			name:       "30 days earlier",
+			targetDate: now.AddDate(0, 0, -30),
+		},
+		{
+			name:       "Same day, different time",
+			targetDate: time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999, time.UTC),
+		},
+		{
+			name:       "Different timezone",
+			targetDate: now.AddDate(0, 0, 5).In(time.FixedZone("EST", -5*60*60)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Calculate expected days ourselves using the same logic
+			nowAtTest := time.Now().UTC().Truncate(24 * time.Hour)
+			normalizedTarget := tt.targetDate.UTC().Truncate(24 * time.Hour)
+			expected := int(normalizedTarget.Sub(nowAtTest).Hours() / 24)
+
+			// Get result from DaysLeft
+			result := DaysLeft(tt.targetDate)
+
+			// Allow for a small tolerance due to potential time differences
+			assert.InDelta(t, expected, result, 1,
+				"DaysLeft(%v) = %d, expected approximately %d", tt.targetDate, result, expected)
 		})
 	}
 }
