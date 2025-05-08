@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
+import { generateSlug } from "../../components/wizards/quick-start/utils";
 import {
   TextField,
   Box,
@@ -18,6 +19,11 @@ import {
   AccordionSummary,
   AccordionDetails,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -65,7 +71,10 @@ const LLMForm = () => {
   });
   const [vendors, setVendors] = useState([]);
   const [filters, setFilters] = useState(null);
-
+  const [originalName, setOriginalName] = useState("");
+  const [nameChanged, setNameChanged] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  
   const [filtersLoading, setFiltersLoading] = useState(true);
 
   const [errors, setErrors] = useState({});
@@ -137,6 +146,7 @@ const LLMForm = () => {
         ...llmData,
         filters: llmData.filters.map((filter) => filter.id.toString()),
       });
+      setOriginalName(llmData.name);
     } catch (error) {
       console.error("Error fetching LLM", error);
       setSnackbar({
@@ -155,6 +165,11 @@ const LLMForm = () => {
     } else if (name === "filters") {
       const stringFilters = value.map((filterId) => filterId.toString());
       setLLM({ ...llm, filters: stringFilters });
+    } else if (name === "name") {
+      setLLM({ ...llm, [name]: value });
+      if (id && originalName) {
+        setNameChanged(value !== originalName);
+      }
     } else {
       setLLM({ ...llm, [name]: value });
     }
@@ -198,6 +213,16 @@ const LLMForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    // If name has changed and we're editing an existing LLM, show confirmation dialog
+    if (id && nameChanged) {
+      setConfirmDialogOpen(true);
+      return;
+    }
+
+    await saveLLM();
+  };
+
+  const saveLLM = async () => {
     const llmData = {
       data: {
         type: "LLM",
@@ -269,8 +294,12 @@ const LLMForm = () => {
                 value={llm.name}
                 onChange={handleChange}
                 error={!!errors.name}
-                helperText={errors.name}
+                helperText={errors.name || (nameChanged ? 
+                  `Warning: Changing the LLM name will change the REST endpoint from /llm/rest/${generateSlug(originalName)}/ to /llm/rest/${generateSlug(llm.name)}/` : "")}
                 required
+                FormHelperTextProps={{
+                  sx: nameChanged ? { color: theme.palette.warning.main } : {}
+                }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -605,6 +634,40 @@ const LLMForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Confirmation Dialog for Name Change */}
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+      >
+        <DialogTitle>Confirm Name Change</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You are about to change the LLM name from "{originalName}" to "{llm.name}". 
+            This will change the following endpoints:
+            <ul>
+              <li>REST endpoint: /llm/rest/{generateSlug(originalName)}/ → /llm/rest/{generateSlug(llm.name)}/</li>
+              <li>Stream endpoint: /llm/stream/{generateSlug(originalName)}/ → /llm/stream/{generateSlug(llm.name)}/</li>
+              <li>AI endpoint: /ai/{generateSlug(originalName)}/v1 → /ai/{generateSlug(llm.name)}/v1</li>
+            </ul>
+            This will affect existing integrations that reference this LLM.
+            Are you sure you want to continue?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <SecondaryLinkButton onClick={() => setConfirmDialogOpen(false)}>
+            Cancel
+          </SecondaryLinkButton>
+          <PrimaryButton 
+            onClick={() => {
+              setConfirmDialogOpen(false);
+              saveLLM();
+            }}
+          >
+            Confirm
+          </PrimaryButton>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

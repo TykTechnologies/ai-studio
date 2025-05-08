@@ -8,35 +8,35 @@ version: 2
 builds:
   - id: std
     ldflags:
-      - -X github.com/TykTechnologies/midsommar/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/midsommar/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/midsommar/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/midsommar/main.BuiltBy=goreleaser
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
       - amd64
       - arm64
       - s390x
-    binary: midsommar
+    binary: tyk-ai-studio
   - id: fips
     ldflags:
-      - -X github.com/TykTechnologies/midsommar/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/midsommar/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/midsommar/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/midsommar/main.BuiltBy=goreleaser
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
       - amd64
-    binary: midsommar
+    binary: tyk-ai-studio
 nfpms:
   - id: std
     vendor: "Tyk Technologies Ltd"
     homepage: "https://tyk.io"
     maintainer: "Tyk <info@tyk.io>"
-    description: Tyk AI Portal
-    package_name: midsommar
+    description: Tyk AI Studio
+    package_name: tyk-ai-studio
     file_name_template: "{{ .ConventionalFileName }}"
     builds:
       - std
@@ -45,18 +45,18 @@ nfpms:
       - rpm
     contents:
       - src: "README.md"
-        dst: "/opt/share/docs/midsommar/README.md"
+        dst: "/opt/share/docs/tyk-ai-studio/README.md"
       - src: "ci/install/*"
-        dst: "/opt/midsommar/install"
-      - src: ci/install/inits/systemd/system/midsommar.service
-        dst: /lib/systemd/system/midsommar.service
-      - src: ci/install/inits/sysv/init.d/midsommar
-        dst: /etc/init.d/midsommar
+        dst: "/opt/tyk-ai-studio/install"
+      - src: ci/install/inits/systemd/system/tyk-ai-studio.service
+        dst: /lib/systemd/system/tyk-ai-studio.service
+      - src: ci/install/inits/sysv/init.d/tyk-ai-studio
+        dst: /etc/init.d/tyk-ai-studio
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
       postremove: "ci/install/post_remove.sh"
-    bindir: "/opt/midsommar"
+    bindir: "/opt/tyk-ai-studio"
     rpm:
       scripts:
         posttrans: ci/install/post_trans.sh
@@ -71,7 +71,7 @@ nfpms:
     homepage: "https://tyk.io"
     maintainer: "Tyk <info@tyk.io>"
     description: Tyk AI Portal
-    package_name: midsommar-fips
+    package_name: tyk-ai-studio-fips
     file_name_template: "{{ .ConventionalFileName }}"
     builds:
       - fips
@@ -80,18 +80,18 @@ nfpms:
       - rpm
     contents:
       - src: "README.md"
-        dst: "/opt/share/docs/midsommar/README.md"
+        dst: "/opt/share/docs/tyk-ai-studio/README.md"
       - src: "ci/install/*"
-        dst: "/opt/midsommar/install"
-      - src: ci/install/inits/systemd/system/midsommar.service
-        dst: /lib/systemd/system/midsommar.service
-      - src: ci/install/inits/sysv/init.d/midsommar
-        dst: /etc/init.d/midsommar
+        dst: "/opt/tyk-ai-studio/install"
+      - src: ci/install/inits/systemd/system/tyk-ai-studio.service
+        dst: /lib/systemd/system/tyk-ai-studio.service
+      - src: ci/install/inits/sysv/init.d/tyk-ai-studio
+        dst: /etc/init.d/tyk-ai-studio
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
       postremove: "ci/install/post_remove.sh"
-    bindir: "/opt/midsommar"
+    bindir: "/opt/tyk-ai-studio"
     rpm:
       scripts:
         posttrans: ci/install/post_trans.sh
@@ -102,10 +102,10 @@ nfpms:
         key_file: tyk.io.signing.key
         type: origin
 publishers:
-  - name: midsommar-unstable
+  - name: tyk-ai-studio-unstable
     env:
       - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
-    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/midsommar-unstable {{ .ArtifactPath }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ai-studio-unstable {{ .ArtifactPath }}
 # This disables archives
 archives:
   - format: binary
@@ -116,7 +116,7 @@ release:
   disable: true
   github:
     owner: TykTechnologies
-    name: midsommar
+    name: tyk-ai-studio
   prerelease: auto
   draft: true
   name_template: "{{.ProjectName}}-v{{.Version}}"
