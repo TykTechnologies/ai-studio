@@ -39,6 +39,7 @@ type AppConf struct {
 	LicenseTelemetryPeriod  time.Duration
 	LicenseDisableTelemetry bool
 	LicenseTelemetryURL     string
+	DevMode                 bool
 }
 
 type DocsLinks map[string]string
@@ -140,7 +141,9 @@ func getConfigFromEnv() *AppConf {
 		log.Println("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
-	if os.Getenv("DEVMODE") != "" {
+	devMode := os.Getenv("DEVMODE")
+	if devMode == "true" || devMode == "1" {
+		conf.DevMode = true
 		conf.DisableCors = true
 	}
 
