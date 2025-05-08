@@ -9,5 +9,6 @@ func NewTestMailService() *MailService {
 		"user",
 		"pass",
 		NewTestMailer(),
+		false,
 	)
 }
