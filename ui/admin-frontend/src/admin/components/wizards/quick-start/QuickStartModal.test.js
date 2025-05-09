@@ -39,6 +39,8 @@ const renderModal = (props = {}) => {
         onSkip={props.onSkip}
         initialStep={props.initialStep || 0}
         renderBeforeContent={props.renderBeforeContent}
+        showLicenseBanner={props.showLicenseBanner || false}
+        licenseDaysLeft={props.licenseDaysLeft || null}
       />
     </ThemeProvider>
   );

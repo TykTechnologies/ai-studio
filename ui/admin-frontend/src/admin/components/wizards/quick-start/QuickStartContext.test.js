@@ -42,7 +42,13 @@ describe('QuickStartContext', () => {
 
   test('initializes with default values', () => {
     render(
-      <QuickStartProvider steps={mockSteps} onComplete={mockOnComplete} onSkip={mockOnSkip}>
+      <QuickStartProvider
+        steps={mockSteps}
+        onComplete={mockOnComplete}
+        onSkip={mockOnSkip}
+        showLicenseBanner={false}
+        licenseDaysLeft={null}
+      >
         <TestComponent />
       </QuickStartProvider>
     );
@@ -60,7 +66,14 @@ describe('QuickStartContext', () => {
 
   test('initializes with custom initial step', () => {
     render(
-      <QuickStartProvider steps={mockSteps} initialStep={1} onComplete={mockOnComplete} onSkip={mockOnSkip}>
+      <QuickStartProvider
+        steps={mockSteps}
+        initialStep={1}
+        onComplete={mockOnComplete}
+        onSkip={mockOnSkip}
+        showLicenseBanner={false}
+        licenseDaysLeft={null}
+      >
         <TestComponent />
       </QuickStartProvider>
     );
@@ -337,5 +350,26 @@ describe('QuickStartContext', () => {
     
     // We can't easily test the state change directly, but we can verify the function was called
     // The actual state change would be tested in an integration test
+  });
+
+  test('provides license banner information to context', () => {
+    render(
+      <QuickStartProvider
+        steps={mockSteps}
+        onComplete={mockOnComplete}
+        onSkip={mockOnSkip}
+        showLicenseBanner={true}
+        licenseDaysLeft={30}
+      >
+        <TestComponent />
+      </QuickStartProvider>
+    );
+    
+    // Get the context value from the test component
+    const contextValue = JSON.parse(screen.getByTestId('context-value').textContent);
+    
+    // Verify license banner props are passed correctly
+    expect(contextValue.showLicenseBanner).toBe(true);
+    expect(contextValue.licenseDaysLeft).toBe(30);
   });
 });

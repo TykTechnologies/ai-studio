@@ -3,6 +3,7 @@ import { Typography, Box, styled, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { TitleBox, ContentBox, PrimaryButton } from '../styles/sharedStyles';
 import useOverviewData from '../hooks/useOverviewData';
+import WarningBanner from '../components/common/WarningBanner';
 import useQuickStart from '../hooks/useQuickStart';
 import BasicCard from '../components/common/BasicCard';
 import IconBadge from '../components/common/IconBadge';
@@ -51,7 +52,7 @@ const SectionContainer = styled(Box)(({ theme }) => ({
 }));
 
 const Overview = () => {
-  const { userName, features, hasLLMs, getDocsLink, loading, error } = useOverviewData();
+  const { userName, features, hasLLMs, getDocsLink, loading, error, licenseDaysLeft } = useOverviewData();
   const quickStartState = useQuickStart();
   const { setShowQuickStart } = quickStartState;
   const navigate = useNavigate();
@@ -92,6 +93,15 @@ const Overview = () => {
         </PrimaryButton>
       </TitleBox>
       <ContentBox>
+        {licenseDaysLeft && (
+          <WarningBanner
+            title={`You have ${licenseDaysLeft} days left in your trial.`}
+            buttonText="Get in touch"
+            onButtonClick={createDocsLinkHandler(getDocsLink, 'get_intouch_form')}
+            showCloseButton={false}
+            sx={{ mb: 3 }}
+          />
+        )}
         <DescriptionSection>
           <Box sx={{
             display: 'flex',

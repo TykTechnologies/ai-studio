@@ -3,6 +3,7 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import useQuickStart from './useQuickStart';
 import useUserEntitlements from './useUserEntitlements';
+import useLicenseDaysLeft from './useLicenseDaysLeft';
 import apiClient from '../utils/apiClient';
 import { skipQuickStartForUser } from '../services/userService';
 import cacheService from '../utils/cacheService';
@@ -10,6 +11,11 @@ import { CACHE_KEYS } from '../utils/constants';
 
 // Mock dependencies
 jest.mock('./useUserEntitlements', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+jest.mock('./useLicenseDaysLeft', () => ({
   __esModule: true,
   default: jest.fn(),
 }));
@@ -39,30 +45,32 @@ const TestComponent = () => {
   return (
     <div>
       <div data-testid="quick-start-data">{JSON.stringify(quickStartData)}</div>
-      <button 
-        onClick={quickStartData.handleQuickStartComplete} 
+      <button
+        onClick={quickStartData.handleQuickStartComplete}
         data-testid="complete-button"
       >
         Complete
       </button>
-      <button 
-        onClick={quickStartData.handleQuickStartSkip} 
+      <button
+        onClick={quickStartData.handleQuickStartSkip}
         data-testid="skip-button"
       >
         Skip
       </button>
-      <button 
-        onClick={() => quickStartData.setShowQuickStart(true)} 
+      <button
+        onClick={() => quickStartData.setShowQuickStart(true)}
         data-testid="show-button"
       >
         Show
       </button>
-      <button 
-        onClick={() => quickStartData.fetchQuickStartData()} 
+      <button
+        onClick={() => quickStartData.fetchQuickStartData()}
         data-testid="fetch-button"
       >
         Fetch
       </button>
+      <div data-testid="license-days-left">{quickStartData.licenseDaysLeft}</div>
+      <div data-testid="show-license-banner">{quickStartData.showLicenseBanner.toString()}</div>
     </div>
   );
 };
@@ -83,11 +91,21 @@ describe('useQuickStart Hook', () => {
     error: null
   };
 
+  const mockFetchLicenseDaysLeft = jest.fn().mockResolvedValue(30);
+  const mockLicenseDaysLeft = {
+    licenseDaysLeft: 30,
+    fetchLicenseDaysLeft: mockFetchLicenseDaysLeft,
+    error: null
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     
     // Default mock implementation for useUserEntitlements
     useUserEntitlements.mockReturnValue(mockUserEntitlements);
+    
+    // Default mock implementation for useLicenseDaysLeft
+    useLicenseDaysLeft.mockReturnValue(mockLicenseDaysLeft);
     
     // Default mock implementation for apiClient.get
     apiClient.get.mockResolvedValue({ data: { count: 0 } });
@@ -122,6 +140,8 @@ describe('useQuickStart Hook', () => {
       name: 'Test User',
       email: 'test@example.com'
     });
+    expect(data.showLicenseBanner).toBe(false); // Default should be false until set by fetchQuickStartData
+    expect(data.licenseDaysLeft).toBe(30);
   });
 
   test('does not show quick start when apps count is greater than 0', async () => {
@@ -229,6 +249,31 @@ describe('useQuickStart Hook', () => {
     );
   });
 
+  test('handles error when fetching license days left fails', async () => {
+    // Mock fetchLicenseDaysLeft to throw an error
+    const errorMessage = 'Failed to fetch license days left';
+    mockFetchLicenseDaysLeft.mockRejectedValue(new Error(errorMessage));
+    
+    render(<TestComponent />);
+    
+    // Wait for initial data fetch to complete
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    
+    const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+    
+    // Error should be set
+    expect(data.error).toBe('Failed to load data');
+    
+    // Verify console.error was called with the error message
+    expect(console.error).toHaveBeenCalledWith(
+      'Error fetching quick start data:',
+      expect.any(Error)
+    );
+  });
+
   test('combines errors from useUserEntitlements', async () => {
     // Mock useUserEntitlements to return an error
     const entitlementsError = 'Failed to fetch entitlements';
@@ -249,6 +294,31 @@ describe('useQuickStart Hook', () => {
     
     // Error should be the entitlements error
     expect(data.error).toBe(entitlementsError);
+  });
+
+  test('combines errors from useLicenseDaysLeft', async () => {
+    // Reset mocks
+    jest.clearAllMocks();
+    
+    // Mock license days left error
+    const licenseDaysLeftError = 'Failed to fetch license days left';
+    useLicenseDaysLeft.mockReturnValue({
+      ...mockLicenseDaysLeft,
+      error: licenseDaysLeftError
+    });
+    
+    // Reset entitlements mock to ensure no error from that hook
+    useUserEntitlements.mockReturnValue(mockUserEntitlements);
+
+    render(<TestComponent />);
+    
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    
+    const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+    expect(data.error).toBe(licenseDaysLeftError);
   });
 
   test('handleQuickStartComplete sets showQuickStart to false', async () => {
@@ -307,6 +377,9 @@ describe('useQuickStart Hook', () => {
     // Verify showQuickStart is set to false
     const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(false);
+    
+    // Verify showLicenseBanner is set to false
+    expect(data.showLicenseBanner).toBe(false);
   });
   
   test('handleQuickStartSkip does not call skipQuickStartForUser when skip_quick_start is already true', async () => {
@@ -344,6 +417,64 @@ describe('useQuickStart Hook', () => {
     // Verify skipQuickStartForUser was NOT called
     expect(skipQuickStartForUser).not.toHaveBeenCalled();
     expect(cacheService.remove).not.toHaveBeenCalled();
+  });
+
+  test('showLicenseBanner is false when licenseDaysLeft is null', async () => {
+    // Setup with null license days
+    jest.clearAllMocks();
+    useLicenseDaysLeft.mockReturnValue({
+      ...mockLicenseDaysLeft,
+      licenseDaysLeft: null
+    });
+    
+    apiClient.get.mockResolvedValue({ data: { count: 0 } });
+    
+    render(<TestComponent />);
+    
+    // Wait for initial data fetch to complete
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    
+    // Verify showLicenseBanner is false
+    const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+    expect(data.showLicenseBanner).toBe(false);
+    expect(data.licenseDaysLeft).toBe(null);
+  });
+  
+  test('fetchQuickStartData updates showLicenseBanner when licenseDaysLeft is set', async () => {
+    // Reset mocks
+    jest.clearAllMocks();
+    
+    // Setup mocks to return truthy values
+    mockFetchUserEntitlements.mockResolvedValue({
+      ui_options: {
+        skip_quick_start: false
+      }
+    });
+    mockFetchLicenseDaysLeft.mockResolvedValue(30);
+    apiClient.get.mockResolvedValue({ data: { count: 0 } });
+    
+    // Initial render with default values
+    render(<TestComponent />);
+    
+    // Wait for initial data fetch to complete
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    
+    // Click the fetch button to manually trigger fetchQuickStartData
+    await act(async () => {
+      screen.getByTestId('fetch-button').click();
+    });
+    
+    // Wait for state update to complete
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.showLicenseBanner).toBe(true);
+    });
   });
 
   test('setShowQuickStart updates the state', async () => {
@@ -409,8 +540,9 @@ describe('useQuickStart Hook', () => {
     data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(true);
     
-    // Verify fetchUserEntitlements and apiClient.get were called
+    // Verify all fetch methods were called
     expect(mockFetchUserEntitlements).toHaveBeenCalled();
+    expect(mockFetchLicenseDaysLeft).toHaveBeenCalled();
     expect(apiClient.get).toHaveBeenCalledWith('/apps/count');
   });
 
@@ -447,7 +579,8 @@ describe('useQuickStart Hook', () => {
     
     render(<SkipFetchComponent />);
     
-    // Verify that fetchUserEntitlements was called with true
+    // Verify that hooks were called with true to skip initial fetch
     expect(useUserEntitlements).toHaveBeenCalledWith(true);
+    expect(useLicenseDaysLeft).toHaveBeenCalledWith(true);
   });
 });
