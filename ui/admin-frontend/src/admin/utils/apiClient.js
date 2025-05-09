@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { fetchCSRFToken } from './urlUtils';
 
 let apiClientInstance = null;
 
@@ -8,7 +9,19 @@ const createApiClient = () => {
     withCredentials: true,
   });
 
-  // Add a request interceptor to handle errors
+  instance.interceptors.request.use(
+    async (config) => {
+      if (config.method !== 'get') {
+        const token = await fetchCSRFToken();
+        if (token) {
+          config.headers["X-CSRF-Token"] = token;
+        }
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
