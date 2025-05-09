@@ -1,13 +1,13 @@
 {
-  "llm_providers": "https://tyktechnologies.github.io/midsommar/docs/llm-management.html",
-  "data_sources": "https://tyktechnologies.github.io/midsommar/docs/datasources-rag.html",
-  "tools": "https://tyktechnologies.github.io/midsommar/docs/tools.html",
-  "rbac_user_groups": "https://tyktechnologies.github.io/midsommar/docs/user-management.html",
-  "privacy_levels": "https://tyktechnologies.github.io/midsommar/docs/filters.html",
-  "filters": "https://tyktechnologies.github.io/midsommar/docs/filters.html",
-  "apps": "https://tyktechnologies.github.io/midsommar/docs/proxy.html",
-  "chats": "https://tyktechnologies.github.io/midsommar/docs/chat-interface.html",
-  "catalogs": "https://tyktechnologies.github.io/midsommar/docs/catalogs.html",
+  "llm_providers": "https://tyk.io/docs/ai-management/ai-studio/llm-management/",
+  "data_sources": "https://tyk.io/docs/ai-management/ai-studio/datasources-rag/",
+  "tools": "https://tyk.io/docs/ai-management/ai-studio/tools/",
+  "rbac_user_groups": "https://tyk.io/docs/ai-management/ai-studio/user-management/",
+  "privacy_levels": "https://tyk.io/docs/ai-management/ai-studio/core-concepts/",
+  "filters": "https://tyk.io/docs/ai-management/ai-studio/filters/",
+  "apps": "https://tyk.io/docs/ai-management/ai-studio/ai-portal//",
+  "chats": "https://tyk.io/docs/ai-management/ai-studio/chat-interface/",
+  "catalogs": "https://tyk.io/docs/ai-management/ai-studio/core-concepts/",
   "demo_video": "https://www.youtube.com/embed/J2BY7NYRk7U?si=tpxmeSBFcMfKPEuV&controls=0&modestbranding=1&showinfo=0&rel=0&fs=0",
   "demo_video_hqdefault": "https://i.ytimg.com/vi/J2BY7NYRk7U/maxresdefault.jpg"
 }
