@@ -9,7 +9,9 @@ export const QuickStartProvider = ({
   initialStep = 0,
   onComplete,
   onSkip,
-  currentUser = null
+  currentUser = null,
+  showLicenseBanner = false,
+  licenseDaysLeft = null
 }) => {
   const [activeStep, setActiveStep] = useState(initialStep);
   const [stepValidation, setStepValidation] = useState({});
@@ -89,7 +91,9 @@ export const QuickStartProvider = ({
     createdAppId,
     setCreatedAppId,
     currentUser,
-    availableLLMs
+    availableLLMs,
+    showLicenseBanner,
+    licenseDaysLeft,
   };
 
   return (

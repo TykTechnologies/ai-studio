@@ -28,7 +28,9 @@ const QuickStartModal = ({
   onSkip,
   initialStep = 0,
   renderBeforeContent,
-  currentUser
+  currentUser,
+  showLicenseBanner = false,
+  licenseDaysLeft = null
 }) => {
   const handleComplete = () => {
     onComplete?.();
@@ -49,6 +51,8 @@ const QuickStartModal = ({
           onComplete={handleComplete}
           onSkip={handleSkip}
           currentUser={currentUser}
+          showLicenseBanner={showLicenseBanner}
+          licenseDaysLeft={licenseDaysLeft}
         >
           {renderBeforeContent?.()}
           <QuickStartStepProgress />
