@@ -140,12 +140,12 @@ export const protectedRoutes = [
     element: <Groups />,
   },
   {
-    path: "/admin/groups/:id",
-    element: <GroupDetail />,
-  },
-  {
     path: "/admin/groups/edit/:id",
     element: <GroupForm />,
+  },
+  {
+    path: "/admin/groups/:id",
+    element: <GroupDetail />,
   },
   {
     path: "/admin/groups/new",
