@@ -383,7 +383,11 @@ const Groups = () => {
             <TableBody>
               {groups.length > 0 ? (
                 groups.map((group) => (
-                  <StyledTableRow key={group.id}>
+                  <StyledTableRow
+                    key={group.id}
+                    onClick={() => handleGroupClick(group)}
+                    sx={{ cursor: 'pointer' }}
+                  >
                     <StyledTableCell>{group.id}</StyledTableCell>
                     <StyledTableCell>{group.attributes.name}</StyledTableCell>
                     <StyledTableCell align="right">
