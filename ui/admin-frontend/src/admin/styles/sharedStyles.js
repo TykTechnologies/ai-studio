@@ -338,6 +338,55 @@ export const StyledSelect = styled(Select)(({ theme }) => ({
   }
 }));
 
+export const StyledSelectMany = styled(Select)(({ theme }) => ({
+  minHeight: '32px',
+  backgroundColor: theme.palette.custom.white,
+  borderRadius: '8px',
+  marginTop: theme.spacing(1),
+  boxSizing: 'border-box',
+  '& .MuiOutlinedInput-notchedOutline': {
+    borderRadius: '8px',
+  },
+  '& .MuiSelect-select': {
+    minHeight: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    padding: `0px ${theme.spacing(0.5)} ${theme.spacing(0.5)} ${theme.spacing(0.5)}`, // Adjusted padding for consistent height
+    boxSizing: 'border-box',
+  },
+  '& .MuiSelect-icon': {
+    top: '50%',
+    right: '7px',
+    position: 'absolute',
+    transform: 'translateY(-50%)',
+    transition: 'transform 0.2s',
+  },
+  '&.Mui-focused': {
+    marginTop: 0,
+    minHeight: '41px',
+    paddingTop: 0,
+    '& .MuiSelect-select': {
+      minHeight: '41px',
+      padding: `${theme.spacing(0.5)} ${theme.spacing(0.5)} 0px ${theme.spacing(0.5)}`, // Consistent padding
+    },
+    '& .MuiSelect-icon': {
+      top: '60%',
+    },
+  },
+  '&.MuiOutlinedInput-root.Mui-focused': {
+    '& .MuiSelect-select': {
+      height: 'auto',
+    }
+  },
+  '&&': {
+    '& .MuiMenu-paper, & .MuiPopover-paper': {
+      borderRadius: '8px',
+      marginTop: '4px',
+      boxShadow: '0px 5px 15px rgba(0, 0, 0, 0.2)'
+    }
+  }
+}));
+
 export const ResponsiveTitleBox = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexWrap: 'wrap',
@@ -390,4 +439,27 @@ export const StyledTextField = styled(TextField)(({ theme }) => ({
     width: '100%',
     boxSizing: 'border-box',
   }
+}));
+
+export const SectionContainer = styled(Paper)(({ theme }) => ({
+  border: `1px solid ${theme.palette.border.neutralDefault}`,
+  borderRadius: "8px",
+  overflow: "hidden",
+  marginBottom: theme.spacing(2),
+  boxShadow: "none",
+}));
+
+export const SectionHeader = styled(Box)(({ theme, isExpanded, isCollapsible = true }) => ({
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: theme.spacing(2),
+  cursor: isCollapsible ? "pointer" : "default",
+  borderBottom: isCollapsible
+    ? (isExpanded ? `1px solid ${theme.palette.border.neutralDefault}` : "none")
+    : `1px solid ${theme.palette.border.neutralDefault}`,
+}));
+
+export const SectionContent = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(3),
 }));

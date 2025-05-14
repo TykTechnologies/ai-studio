@@ -1,112 +1,144 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import apiClient from "../../utils/apiClient";
-import { TextField, Typography, CircularProgress, Box } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import React, { useEffect, useCallback } from "react";
+import { useParams, Link } from "react-router-dom";
+import { Typography, CircularProgress, Box } from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   SecondaryLinkButton,
   TitleBox,
   ContentBox,
-  PrimaryButton,
+  TitleContentBox,
+  PrimaryButton
 } from "../../styles/sharedStyles";
 
+import { useGroupForm } from "./hooks/useGroupForm";
+import { useUserSelection } from "./hooks/useUserSelection";
+import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
+
+import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
+import GroupMembersSection from "./components/GroupMembersSection";
+import GroupCatalogsSection from "./components/GroupCatalogsSection";
+
 const GroupForm = () => {
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const { id } = useParams();
-  const navigate = useNavigate();
+
+  const {
+    name,
+    setName,
+    loading: formLoading,
+    error,
+    selectedUsers,
+    setSelectedUsers,
+    selectedCatalogs,
+    setSelectedCatalogs,
+    selectedDataCatalogs,
+    setSelectedDataCatalogs,
+    selectedToolCatalogs,
+    setSelectedToolCatalogs,
+    handleSubmit
+  } = useGroupForm(id, []);
+
+
+  const {
+    availableUsers,
+    currentPage,
+    totalPages,
+    isLoadingMore,
+    loading: usersLoading,
+    fetchUsers,
+    handleUsersChange,
+    handleLoadMore,
+    handleSearch
+  } = useUserSelection(selectedUsers, setSelectedUsers);
+
+  const {
+    catalogs,
+    dataCatalogs,
+    toolCatalogs,
+    loading: catalogsLoading
+  } = useCatalogsSelection(selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs);
+
+  
+  const handleCatalogsChange = useCallback((newSelectedCatalogs) => {
+    setSelectedCatalogs(newSelectedCatalogs);
+  }, [setSelectedCatalogs]);
+  
+  const handleDataCatalogsChange = useCallback((newSelectedDataCatalogs) => {
+    setSelectedDataCatalogs(newSelectedDataCatalogs);
+  }, [setSelectedDataCatalogs]);
+  
+  const handleToolCatalogsChange = useCallback((newSelectedToolCatalogs) => {
+    setSelectedToolCatalogs(newSelectedToolCatalogs);
+  }, [setSelectedToolCatalogs]);
 
   useEffect(() => {
-    if (id) {
-      fetchGroup();
-    }
-  }, [id]);
+    fetchUsers();
+  }, [fetchUsers]);
 
-  const fetchGroup = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get(`/groups/${id}`);
-      setName(response.data.data.attributes.name);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching group", error);
-      setError("Failed to fetch group");
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const groupData = {
-      data: {
-        type: "Group",
-        attributes: {
-          name,
-        },
-      },
-    };
-
-    try {
-      if (id) {
-        await apiClient.patch(`/groups/${id}`, groupData);
-      } else {
-        await apiClient.post("/groups", groupData);
-      }
-      navigate("/admin/groups");
-    } catch (error) {
-      console.error("Error saving group", error);
-      setError("Failed to save group");
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <CircularProgress />;
+  if (formLoading || usersLoading || catalogsLoading) return <CircularProgress />;
 
   return (
     <>
-      <TitleBox top="64px">
-        <Typography variant="headingXLarge">
-          {id ? "Edit user group" : "Add user group"}
-        </Typography>
-        <SecondaryLinkButton
-          startIcon={<ArrowBackIcon />}
-          color="inherit"
-          onClick={() => navigate("/admin/groups")}
-        >
-          Back to groups
-        </SecondaryLinkButton>
-      </TitleBox>
-      <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">User groups help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking user groups to specific catalogs ensures each team can only see and access the LLM provider and or data relevant to them.</Typography>  
-      </Box>
-      <ContentBox>
-        <form onSubmit={handleSubmit}>
-          <TextField
-            fullWidth
-            label="Group Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            margin="normal"
-            required
-          />
-          {error && (
-            <Typography color="error" style={{ marginTop: "10px" }}>
-              {error}
-            </Typography>
-          )}
-          <PrimaryButton
-            type="submit"
-            variant="contained"
-            color="primary"
-            style={{ marginTop: "20px" }}
-            disabled={loading}
+      <TitleBox>
+        <TitleContentBox>
+          <SecondaryLinkButton
+            component={Link}
+            to="/admin/groups"
+            color="inherit"
+            sx={{ mb: 1, px: 0 }}
+            startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
           >
-            {id ? "Update group" : "Create group"}
-          </PrimaryButton>
+            back to teams
+          </SecondaryLinkButton>
+          <Typography variant="headingXLarge">
+            {id ? "Edit team" : "Create team"}
+          </Typography>
+        </TitleContentBox>
+      </TitleBox>
+
+      <ContentBox sx={{
+        maxWidth: {
+          xs: '100%',
+          sm: '100%',
+          md: '85%',
+          lg: '75%'
+        }
+      }}>
+        <form onSubmit={handleSubmit}>
+          <GroupFormBasicInfo
+            name={name}
+            setName={setName}
+            error={error}
+          />
+
+          <GroupMembersSection
+            availableUsers={availableUsers}
+            selectedUsers={selectedUsers}
+            handleUsersChange={handleUsersChange}
+            handleSearch={handleSearch}
+            handleLoadMore={handleLoadMore}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            isLoadingMore={isLoadingMore}
+          />
+
+          <GroupCatalogsSection
+            catalogs={catalogs}
+            selectedCatalogs={selectedCatalogs}
+            onCatalogsChange={handleCatalogsChange}
+            dataCatalogs={dataCatalogs}
+            selectedDataCatalogs={selectedDataCatalogs}
+            onDataCatalogsChange={handleDataCatalogsChange}
+            toolCatalogs={toolCatalogs}
+            selectedToolCatalogs={selectedToolCatalogs}
+            onToolCatalogsChange={handleToolCatalogsChange}
+            loading={catalogsLoading}
+          />
+
+          <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3 }}>
+            <PrimaryButton type="submit" disabled={formLoading || !name.trim()}>
+              {id ? "Save team" : "Create team"}
+            </PrimaryButton>
+          </Box>
         </form>
       </ContentBox>
     </>

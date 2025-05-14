@@ -87,3 +87,22 @@ func JSONScan(value, dest interface{}) error {
 
 	return nil
 }
+
+func SameIDs(a, b []uint) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	set := make(map[uint]struct{}, len(a))
+	for _, id := range a {
+		set[id] = struct{}{}
+	}
+
+	for _, id := range b {
+		if _, exists := set[id]; !exists {
+			return false
+		}
+	}
+
+	return true
+}

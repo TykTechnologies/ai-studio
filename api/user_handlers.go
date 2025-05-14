@@ -230,11 +230,12 @@ func (a *API) deleteUser(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary List all users
-// @Description Get a list of all users
+// @Summary List all users with optional search filter
+// @Description Get a list of all users, optionally filtered by search term
 // @Tags users
 // @Accept json
 // @Produce json
+// @Param search query string false "Search term for filtering users by email or name"
 // @Success 200 {array} UserResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users [get]
@@ -242,8 +243,19 @@ func (a *API) deleteUser(c *gin.Context) {
 func (a *API) listUsers(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 	sort := c.Query("sort")
+	searchTerm := c.Query("search")
 
-	users, totalCount, totalPages, err := a.service.GetAllUsers(pageSize, pageNumber, all, sort)
+	var users models.Users
+	var totalCount int64
+	var totalPages int
+	var err error
+
+	if searchTerm != "" {
+		users, totalCount, totalPages, err = a.service.SearchUsers(searchTerm, pageSize, pageNumber, sort)
+	} else {
+		users, totalCount, totalPages, err = a.service.GetAllUsers(pageSize, pageNumber, all, sort)
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -251,37 +263,12 @@ func (a *API) listUsers(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
+
 		return
 	}
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
-}
-
-func (a *API) searchUsers(c *gin.Context) {
-	emailStub := c.Query("email")
-	if emailStub == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Email stub is required"}},
-		})
-		return
-	}
-
-	users, err := a.service.SearchUsersByEmailStub(emailStub)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
 }
 
@@ -299,6 +286,7 @@ func serializeUser(user *models.User) UserResponse {
 			APIKey               string `json:"api_key"`
 			NotificationsEnabled bool   `json:"notifications_enabled"`
 			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			Role                 string `json:"role"`
 		}{
 			Email:                user.Email,
 			Name:                 user.Name,
@@ -309,6 +297,7 @@ func serializeUser(user *models.User) UserResponse {
 			APIKey:               user.APIKey,
 			NotificationsEnabled: user.NotificationsEnabled,
 			AccessToSSOConfig:    user.AccessToSSOConfig,
+			Role:                 user.GetRole(),
 		},
 	}
 }

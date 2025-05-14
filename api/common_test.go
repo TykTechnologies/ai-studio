@@ -276,7 +276,7 @@ func createTestChatHistoryRecord(t *testing.T, service *services.Service, userID
 }
 
 func addCatalogueToUserGroup(t *testing.T, service *services.Service, userID, catalogueID uint) {
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 	err = service.AddUserToGroup(userID, group.ID)
 	assert.NoError(t, err)
@@ -285,7 +285,7 @@ func addCatalogueToUserGroup(t *testing.T, service *services.Service, userID, ca
 }
 
 func addDataCatalogueToUserGroup(t *testing.T, service *services.Service, userID, dataCatalogueID uint) {
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 	err = service.AddUserToGroup(userID, group.ID)
 	assert.NoError(t, err)
@@ -294,7 +294,7 @@ func addDataCatalogueToUserGroup(t *testing.T, service *services.Service, userID
 }
 
 func addToolCatalogueToUserGroup(t *testing.T, service *services.Service, userID, toolCatalogueID uint) {
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 	err = service.AddUserToGroup(userID, group.ID)
 	assert.NoError(t, err)

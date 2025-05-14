@@ -71,7 +71,7 @@ func TestGroupService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateGroup
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 	assert.NotNil(t, group)
 	assert.NotZero(t, group.ID)
@@ -82,7 +82,7 @@ func TestGroupService(t *testing.T) {
 	assert.Equal(t, group.Name, fetchedGroup.Name)
 
 	// Test UpdateGroup
-	updatedGroup, err := service.UpdateGroup(group.ID, "Updated Group")
+	updatedGroup, err := service.UpdateGroup(group.ID, "Updated Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 	assert.Equal(t, "Updated Group", updatedGroup.Name)
 
@@ -443,9 +443,9 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create groups
-	group1, err := service.CreateGroup("Group 1")
+	group1, err := service.CreateGroup("Group 1", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
-	group2, err := service.CreateGroup("Group 2")
+	group2, err := service.CreateGroup("Group 2", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Add user to groups
@@ -490,7 +490,7 @@ func TestGroupCatalogueAssociation(t *testing.T) {
 	service := NewService(db)
 
 	// Create a group
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Create catalogues
