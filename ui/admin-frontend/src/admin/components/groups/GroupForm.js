@@ -1,14 +1,16 @@
 import React, { useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Typography, CircularProgress, Box } from "@mui/material";
+import { Typography, CircularProgress, Box, Snackbar, Alert } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   SecondaryLinkButton,
   TitleBox,
   ContentBox,
   TitleContentBox,
-  PrimaryButton
+  PrimaryButton,
+  DangerOutlineButton
 } from "../../styles/sharedStyles";
+import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 
 import { useGroupForm } from "./hooks/useGroupForm";
 import { useUserSelection } from "./hooks/useUserSelection";
@@ -34,7 +36,13 @@ const GroupForm = () => {
     setSelectedDataCatalogs,
     selectedToolCatalogs,
     setSelectedToolCatalogs,
-    handleSubmit
+    handleSubmit,
+    snackbar,
+    handleCloseSnackbar,
+    warningDialogOpen,
+    handleDeleteClick,
+    handleCancelDelete,
+    handleConfirmDelete
   } = useGroupForm(id, []);
 
 
@@ -134,13 +142,50 @@ const GroupForm = () => {
             loading={catalogsLoading}
           />
 
-          <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3 }}>
+          <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3, gap: 2 }}>
             <PrimaryButton type="submit" disabled={formLoading || !name.trim()}>
-              {id ? "Save team" : "Create team"}
+              {id ? "Update team" : "Create team"}
             </PrimaryButton>
+            {id && (
+              <DangerOutlineButton
+                onClick={handleDeleteClick}
+              >
+                Delete team
+              </DangerOutlineButton>
+            )}
           </Box>
         </form>
       </ContentBox>
+      
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      <ConfirmationDialog
+        open={warningDialogOpen}
+        title="Delete Team"
+        message="Deleting this team will remove all users from it."
+        buttonLabel="Delete team"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
+      />
     </>
   );
 };

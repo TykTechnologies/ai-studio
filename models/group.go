@@ -270,3 +270,23 @@ func (g *Group) GetAssociationsToUpdate(userIDs, catalogueIDs, dataCatalogueIDs,
 		},
 	}
 }
+
+func (g *Group) ClearAssociations(db *gorm.DB) error {
+	if err := db.Model(g).Association("Users").Clear(); err != nil {
+		return err
+	}
+
+	if err := db.Model(g).Association("Catalogues").Clear(); err != nil {
+		return err
+	}
+
+	if err := db.Model(g).Association("DataCatalogues").Clear(); err != nil {
+		return err
+	}
+
+	if err := db.Model(g).Association("ToolCatalogues").Clear(); err != nil {
+		return err
+	}
+
+	return nil
+}

@@ -19,7 +19,7 @@ const CustomSelectMany = ({
   helperText = '',
   renderOption,
   ...props
-}) => {  
+}) => {
   const selectValues = value.map(val =>
     val ? val.value : val
   );
@@ -77,16 +77,17 @@ const CustomSelectMany = ({
                       onMouseDown={(e) => e.stopPropagation()}
                       onDelete={(e) => {
                         e.stopPropagation();
-                        
+
                         const newSelected = selected.filter(item => item !== val);
-                        
+
                         const newSelectedObjects = newSelected.map(selVal => {
                           const opt = options.find(o => String(o.value) === String(selVal));
- 
+
                           return opt || { value: selVal, label: String(selVal) };
                         });
-                        
+
                         onChange(newSelectedObjects);
+                        e.target.closest('.MuiChip-root').blur();
                       }}
                     />
                   );
@@ -97,7 +98,7 @@ const CustomSelectMany = ({
           MenuProps={{
             PaperProps: {
               style: {
-                maxHeight: 250, // Set max height for the dropdown menu
+                maxHeight: 250,
               },
             },
           }}
@@ -105,7 +106,7 @@ const CustomSelectMany = ({
         >
           {options.map((option) => {
             const isSelected = selectValues.includes(option.value);
-      
+
             return (
               <MenuItem
                 key={option.value}

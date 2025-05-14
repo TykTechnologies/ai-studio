@@ -64,7 +64,22 @@ func (s *Service) DeleteGroup(id uint) error {
 		return err
 	}
 
-	return group.Delete(s.DB)
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := group.ClearAssociations(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := group.Delete(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (s *Service) AddUserToGroup(userID, groupID uint) error {

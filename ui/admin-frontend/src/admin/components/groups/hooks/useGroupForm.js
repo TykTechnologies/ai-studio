@@ -12,6 +12,13 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
   const [selectedDataCatalogs, setSelectedDataCatalogs] = useState(initialDataCatalogs);
   const [selectedToolCatalogs, setSelectedToolCatalogs] = useState(initialToolCatalogs);
   
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+  const [warningDialogOpen, setWarningDialogOpen] = useState(false);
+  
   const navigate = useNavigate();
 
   const fetchGroup = useCallback(async () => {
@@ -51,6 +58,11 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     } catch (error) {
       console.error("Error fetching group", error);
       setError("Failed to fetch group");
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch team details",
+        severity: "error",
+      });
       setLoading(false);
     }
   }, [id]);
@@ -61,14 +73,17 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     }
   }, [id, fetchGroup]);
 
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
-    console.log("selectedCatalogs", selectedCatalogs);
-    console.log("selectedDataCatalogs", selectedDataCatalogs);
-    console.log("selectedToolCatalogs", selectedToolCatalogs);
 
     const groupData = {
       data: {
@@ -83,18 +98,63 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
       },
     };
 
-    console.log("Group data to save:", groupData);
-
     try {
       if (id) {
         await teamsService.updateTeam(id, groupData);
+        setSnackbar({
+          open: true,
+          message: "Team updated successfully",
+          severity: "success",
+        });
       } else {
         await teamsService.createTeam(groupData);
+        setSnackbar({
+          open: true,
+          message: "Team created successfully",
+          severity: "success",
+        });
       }
-      navigate("/admin/groups");
+
+      setTimeout(() => navigate("/admin/groups"), 2000);
     } catch (error) {
       console.error("Error saving group", error);
       setError("Failed to save group");
+      setSnackbar({
+        open: true,
+        message: "Failed to save team. Please try again.",
+        severity: "error",
+      });
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setWarningDialogOpen(true);
+  };
+
+  const handleCancelDelete = () => {
+    setWarningDialogOpen(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      setLoading(true);
+      await teamsService.deleteTeam(id);
+      setSnackbar({
+        open: true,
+        message: "Team deleted successfully",
+        severity: "success",
+      });
+      setTimeout(() => navigate("/admin/groups"), 2000);
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete team. Please try again.",
+        severity: "error",
+      });
+    } finally {
+      setWarningDialogOpen(false);
       setLoading(false);
     }
   };
@@ -112,6 +172,12 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     setSelectedDataCatalogs,
     selectedToolCatalogs,
     setSelectedToolCatalogs,
-    handleSubmit
+    handleSubmit,
+    snackbar,
+    handleCloseSnackbar,
+    warningDialogOpen,
+    handleDeleteClick,
+    handleCancelDelete,
+    handleConfirmDelete
   };
 };
