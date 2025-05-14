@@ -73,11 +73,6 @@ const useTransferList = ({
       
       onChange({ selected: newSelected, available: newAvailable });
 
-      if (searchTerm.trim() && onSearch) {
-        setIsSearching(true);
-        onSearch(searchTerm)
-          .finally(() => setIsSearching(false));
-      }
     }
   };
 
@@ -90,11 +85,6 @@ const useTransferList = ({
       
       onChange({ selected: newSelected, available: newAvailable });
 
-      if (searchTerm.trim() && onSearch) {
-        setIsSearching(true);
-        onSearch(searchTerm)
-          .finally(() => setIsSearching(false));
-      }
     }
   };
 
