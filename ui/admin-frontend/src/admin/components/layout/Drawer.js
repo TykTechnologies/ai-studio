@@ -53,7 +53,7 @@ const Drawer = () => {
         ...(!features.feature_gateway ||
         features.feature_portal ||
         features.feature_chat
-          ? [{ id: 'groups', text: 'User groups', path: '/admin/groups' }]
+          ? [{ id: 'groups', text: 'Teams', path: '/admin/groups' }]
           : []),
         ...(uiOptions?.show_sso_config && config?.tibEnabled
           ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]

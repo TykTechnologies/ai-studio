@@ -355,18 +355,18 @@ const Groups = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="headingXLarge">User groups</Typography>
+        <Typography variant="headingXLarge">Teams</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           component={Link}
           to="/admin/groups/new"
         >
-          Add group
+          Create team
         </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">User groups help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking user groups to specific catalogs ensures each team can only see and access the LLM provider and or data relevant to them.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.</Typography>  
       </Box>
       <Box sx={{ p: 3 }}>
         <StyledPaper>

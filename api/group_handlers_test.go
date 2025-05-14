@@ -18,14 +18,26 @@ func TestGroupEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name string `json:"name"`
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
 			Type: "groups",
 			Attributes: struct {
-				Name string `json:"name"`
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
 			}{
-				Name: "Test Group",
+				Name:           "Test Group",
+				Members:        []uint{},
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
 			},
 		},
 	}
@@ -49,14 +61,26 @@ func TestGroupEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name string `json:"name"`
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
 			Type: "groups",
 			Attributes: struct {
-				Name string `json:"name"`
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
 			}{
-				Name: "Updated Group",
+				Name:           "Updated Group",
+				Members:        []uint{},
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
 			},
 		},
 	}
@@ -256,7 +280,7 @@ func TestGroupEndpointsErrors(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
 	// Create a valid group for further testing
-	group, err := api.service.CreateGroup("Test Group")
+	group, err := api.service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Test Add non-existent DataCatalogue to Group

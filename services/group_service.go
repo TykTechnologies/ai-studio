@@ -4,10 +4,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateGroup(name string) (*models.Group, error) {
+func (s *Service) CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
 	group := &models.Group{
 		Name: name,
 	}
+
+	group.ParseAssociations(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
 
 	if err := group.Create(s.DB); err != nil {
 		return nil, err
@@ -16,23 +18,40 @@ func (s *Service) CreateGroup(name string) (*models.Group, error) {
 	return group, nil
 }
 
-func (s *Service) GetGroupByID(id uint) (*models.Group, error) {
+func (s *Service) GetGroupByID(id uint, preloads ...string) (*models.Group, error) {
 	group := models.NewGroup()
-	if err := group.Get(s.DB, id); err != nil {
+	if err := group.Get(s.DB, id, preloads...); err != nil {
 		return nil, err
 	}
 	return group, nil
 }
 
-func (s *Service) UpdateGroup(id uint, name string) (*models.Group, error) {
-	group, err := s.GetGroupByID(id)
+func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
+	group, err := s.GetGroupByID(id, "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		return nil, err
 	}
 
-	group.Name = name
+	tx := s.DB.Begin()
 
-	if err := group.Update(s.DB); err != nil {
+	group.Name = name
+	if err := group.Update(tx); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	associations := group.GetAssociationsToUpdate(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
+
+	for _, assoc := range associations {
+		if assoc.NeedsUpdate {
+			if err := group.ReplaceAssociation(tx, assoc.Name, assoc.GetValue()); err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
