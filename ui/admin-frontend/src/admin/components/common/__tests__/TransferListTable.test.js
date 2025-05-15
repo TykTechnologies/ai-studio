@@ -19,18 +19,21 @@ jest.mock('@mui/material', () => ({
       {children}
     </tbody>
   ),
-  TableCell: ({ children, width, align, style, colSpan, ...props }) => (
-    <td 
-      data-testid="table-cell" 
-      data-width={width}
-      data-align={align}
-      style={style}
-      colSpan={colSpan}
-      {...props}
-    >
-      {children}
-    </td>
-  ),
+  TableCell: ({ children, width, align, style, colSpan, sx, ...props }) => {
+    const resolvedWidth = sx?.width || width;
+    return (
+      <td
+        data-testid="table-cell"
+        data-width={resolvedWidth}
+        data-align={align}
+        style={style}
+        colSpan={colSpan}
+        {...props}
+      >
+        {children}
+      </td>
+    );
+  },
   Typography: ({ children, variant, color, ...props }) => (
     <div data-testid="typography" data-variant={variant} data-color={color} {...props}>
       {children}
