@@ -1,9 +1,9 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import WarningBanner from './WarningBanner';
+import WarningBanner from '../WarningBanner';
 
 // Mock dependencies
-jest.mock('./Banner', () => {
+jest.mock('../Banner', () => {
   const Banner = ({
     title,
     message,
@@ -34,7 +34,7 @@ jest.mock('./Banner', () => {
   return Banner;
 });
 
-jest.mock('../../styles/sharedStyles', () => ({
+jest.mock('../../../styles/sharedStyles', () => ({
   SecondaryOutlineButton: ({ children, onClick, size }) => (
     <button data-testid="secondary-outline-button" onClick={onClick}>
       {children}

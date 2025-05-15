@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import VideoPlayer from './VideoPlayer';
+import VideoPlayer from '../VideoPlayer';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Create a mock theme to provide to the ThemeProvider
@@ -26,7 +26,7 @@ const mockTheme = createTheme({
 });
 
 // Mock the PrimaryButton component
-jest.mock('../../styles/sharedStyles', () => ({
+jest.mock('../../../styles/sharedStyles', () => ({
   PrimaryButton: ({ children, onClick, startIcon }) => (
     <button onClick={onClick} data-testid="play-button">
       {startIcon}

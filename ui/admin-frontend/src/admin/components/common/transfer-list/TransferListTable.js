@@ -33,8 +33,8 @@ const TransferListTable = ({
           {columns.map((column) => (
             <TableCell
               key={column.field}
-              width={column.width}
-              style={{
+              sx={{
+                width: column.width,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -63,8 +63,8 @@ const TransferListTable = ({
               {columns.map((column) => (
                 <StyledTableCell
                   key={`${item[idField]}-${column.field}`}
-                  width={column.width}
-                  style={{
+                  sx={{
+                    width: column.width,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                   }}

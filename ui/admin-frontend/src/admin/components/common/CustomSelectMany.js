@@ -20,7 +20,8 @@ const CustomSelectMany = ({
   renderOption,
   ...props
 }) => {
-  const selectValues = value.map(val =>
+  const safeValue = value || [];
+  const selectValues = safeValue.map(val =>
     val ? val.value : val
   );
 
@@ -33,7 +34,7 @@ const CustomSelectMany = ({
     const newSelectedObjects = selectedValues.map(val => {
       const option = options.find(opt => String(opt.value) === String(val));
 
-      return option || { value: val, label: String(val) };
+      return option || { value: val, label: val };
     });
     
     onChange(newSelectedObjects);
@@ -41,7 +42,7 @@ const CustomSelectMany = ({
 
   return (
     <Box sx={{ width: '100%' }}>
-      <StyledFormControl fullWidth required={required} error={error}>
+      <StyledFormControl fullWidth required={required} error={error ? "true" : undefined}>
         <InputLabel>{label}</InputLabel>
         <StyledSelectMany
           multiple
@@ -53,10 +54,13 @@ const CustomSelectMany = ({
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {selected?.map((val) => {
                   const option = options?.find(opt => String(opt.value) === String(val));
+                  const valueObj = safeValue.find(v => v && String(v.value) === String(val));
+                  const displayLabel = option ? option.label : (valueObj ? valueObj.label : String(val));
+                  
                   return (
                     <Chip
                       key={val}
-                      label={option ? option.label : String(val)}
+                      label={displayLabel}
                       sx={{
                         bgcolor: theme => theme.palette.background.buttonPrimaryOutlineHover,
                         borderRadius: '6px',
@@ -82,12 +86,14 @@ const CustomSelectMany = ({
 
                         const newSelectedObjects = newSelected.map(selVal => {
                           const opt = options.find(o => String(o.value) === String(selVal));
+                          const valueObj = safeValue.find(v => v && String(v.value) === String(selVal));
 
-                          return opt || { value: selVal, label: String(selVal) };
+                          return opt || valueObj || { value: selVal, label: selVal };
                         });
 
                         onChange(newSelectedObjects);
-                        e.target.closest('.MuiChip-root').blur();
+                        const chipElement = e.target.closest('.MuiChip-root');
+                        chipElement?.blur();
                       }}
                     />
                   );
@@ -104,7 +110,7 @@ const CustomSelectMany = ({
           }}
           {...props}
         >
-          {options.map((option) => {
+          {options?.map((option) => {
             const isSelected = selectValues.includes(option.value);
 
             return (

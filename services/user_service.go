@@ -314,10 +314,10 @@ func (s *Service) SkipQuickStartForUser(userID uint) error {
 	return models.SetSkipQuickStartForUser(s.DB, userID)
 }
 
-func (s *Service) SearchUsers(term string, pageSize, pageNumber int, sort string) (models.Users, int64, int, error) {
+func (s *Service) SearchUsers(term string, pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
 	var users models.Users
 
-	totalCount, totalPages, err := users.SearchByTerm(s.DB, term, pageSize, pageNumber, sort)
+	totalCount, totalPages, err := users.SearchByTerm(s.DB, term, pageSize, pageNumber, all, sort)
 	if err != nil {
 		return nil, 0, 0, err
 	}

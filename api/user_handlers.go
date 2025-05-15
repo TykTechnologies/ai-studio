@@ -251,7 +251,7 @@ func (a *API) listUsers(c *gin.Context) {
 	var err error
 
 	if searchTerm != "" {
-		users, totalCount, totalPages, err = a.service.SearchUsers(searchTerm, pageSize, pageNumber, sort)
+		users, totalCount, totalPages, err = a.service.SearchUsers(searchTerm, pageSize, pageNumber, all, sort)
 	} else {
 		users, totalCount, totalPages, err = a.service.GetAllUsers(pageSize, pageNumber, all, sort)
 	}

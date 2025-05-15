@@ -93,13 +93,17 @@ func SameIDs(a, b []uint) bool {
 		return false
 	}
 
-	set := make(map[uint]struct{}, len(a))
+	count := make(map[uint]int)
 	for _, id := range a {
-		set[id] = struct{}{}
+		count[id]++
 	}
 
 	for _, id := range b {
-		if _, exists := set[id]; !exists {
+		count[id]--
+	}
+
+	for id := range count {
+		if count[id] != 0 {
 			return false
 		}
 	}

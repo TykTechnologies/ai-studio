@@ -24,7 +24,7 @@ const GroupMembersSection = ({
           {
             field: "name",
             headerName: "Name",
-            width: "40%",
+            width: { md: '35%', lg: '40%' },
             renderCell: (item) => (
               <Box sx={{
                 display: 'flex',
@@ -62,7 +62,7 @@ const GroupMembersSection = ({
           {
             field: "role",
             headerName: "Role",
-            width: "35%",
+            width: { md: '45%', lg: '35%' },
             renderCell: (item) => (
               <CustomSelectBadge config={roleBadgeConfigs[item.attributes?.role] || roleBadgeConfigs["Chat user"]} />
             )

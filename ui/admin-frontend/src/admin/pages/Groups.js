@@ -355,18 +355,18 @@ const Groups = () => {
   return (
     <>
       <TitleBox top="64px">
-        <Typography variant="headingXLarge">Teams</Typography>
+        <Typography variant="headingXLarge">User groups</Typography>
         <PrimaryButton
           variant="contained"
           startIcon={<AddIcon />}
           component={Link}
           to="/admin/groups/new"
         >
-          Create team
+          Add group
         </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">User groups help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking user groups to specific catalogs ensures each team can only see and access the LLM provider and or data relevant to them.</Typography>  
       </Box>
       <Box sx={{ p: 3 }}>
         <StyledPaper>
@@ -383,11 +383,7 @@ const Groups = () => {
             <TableBody>
               {groups.length > 0 ? (
                 groups.map((group) => (
-                  <StyledTableRow
-                    key={group.id}
-                    onClick={() => handleGroupClick(group)}
-                    sx={{ cursor: 'pointer' }}
-                  >
+                  <StyledTableRow key={group.id}>
                     <StyledTableCell>{group.id}</StyledTableCell>
                     <StyledTableCell>{group.attributes.name}</StyledTableCell>
                     <StyledTableCell align="right">
