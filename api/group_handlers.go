@@ -210,43 +210,6 @@ func (a *API) listGroups(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
 }
 
-// @Summary Search groups by name
-// @Description Search for groups using a name stub
-// @Tags groups
-// @Accept json
-// @Produce json
-// @Param name query string true "Name stub to search for"
-// @Success 200 {array} GroupResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /groups/search [get]
-// @Security BearerAuth
-func (a *API) searchGroups(c *gin.Context) {
-	nameStub := c.Query("name")
-	if nameStub == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Name stub is required"}},
-		})
-		return
-	}
-
-	groups, err := a.service.SearchGroupsByNameStub(nameStub)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
-}
-
 // @Summary Add a user to a group
 // @Description Add a user to a specific group
 // @Tags groups

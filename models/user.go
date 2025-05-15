@@ -300,7 +300,7 @@ func (u *User) GetRole() string {
 	}
 }
 
-func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber int, sort string) (int64, int, error) {
+func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	query := db.Model(&User{})
 
 	if term != "" {
@@ -308,5 +308,5 @@ func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber 
 		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
 	}
 
-	return u.paginateAndSort(query, pageSize, pageNumber, false, sort)
+	return u.paginateAndSort(query, pageSize, pageNumber, all, sort)
 }

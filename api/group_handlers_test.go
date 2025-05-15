@@ -45,16 +45,39 @@ func TestGroupEndpoints(t *testing.T) {
 	w := performRequest(api.router, "POST", "/api/v1/groups", createGroupInput)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	var response map[string]GroupResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	var createResponse map[string]GroupResponse
+	err := json.Unmarshal(w.Body.Bytes(), &createResponse)
 	assert.NoError(t, err)
-	assert.Equal(t, "Test Group", response["data"].Attributes.Name)
 
-	groupID := response["data"].ID
+	// Verify createGroup response
+	assert.Equal(t, "Test Group", createResponse["data"].Attributes.Name)
+	assert.Equal(t, "groups", createResponse["data"].Type)
+	assert.NotEmpty(t, createResponse["data"].ID)
+	// Verify empty arrays are present
+	assert.Empty(t, createResponse["data"].Attributes.Users)
+	assert.Empty(t, createResponse["data"].Attributes.Catalogues)
+	assert.Empty(t, createResponse["data"].Attributes.DataCatalogues)
+	assert.Empty(t, createResponse["data"].Attributes.ToolCatalogues)
+
+	groupID := createResponse["data"].ID
 
 	// Test Get Group
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var getResponse map[string]GroupResponse
+	err = json.Unmarshal(w.Body.Bytes(), &getResponse)
+	assert.NoError(t, err)
+
+	// Verify getGroup response
+	assert.Equal(t, groupID, getResponse["data"].ID)
+	assert.Equal(t, "Test Group", getResponse["data"].Attributes.Name)
+	assert.Equal(t, "groups", getResponse["data"].Type)
+	// The related entities should be empty arrays but present
+	assert.Empty(t, getResponse["data"].Attributes.Users)
+	assert.Empty(t, getResponse["data"].Attributes.Catalogues)
+	assert.Empty(t, getResponse["data"].Attributes.DataCatalogues)
+	assert.Empty(t, getResponse["data"].Attributes.ToolCatalogues)
 
 	// Test Update Group
 	updateGroupInput := GroupInput{
@@ -87,6 +110,29 @@ func TestGroupEndpoints(t *testing.T) {
 
 	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/groups/%s", groupID), updateGroupInput)
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var updateResponse map[string]GroupResponse
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+
+	// Verify updateGroup response
+	assert.Equal(t, groupID, updateResponse["data"].ID)
+	assert.Equal(t, "Updated Group", updateResponse["data"].Attributes.Name)
+	assert.Equal(t, "groups", updateResponse["data"].Type)
+	// The related entities should be empty arrays but present
+	assert.Empty(t, updateResponse["data"].Attributes.Users)
+	assert.Empty(t, updateResponse["data"].Attributes.Catalogues)
+	assert.Empty(t, updateResponse["data"].Attributes.DataCatalogues)
+	assert.Empty(t, updateResponse["data"].Attributes.ToolCatalogues)
+
+	// Verify the group was actually updated by getting it again
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var verifyUpdateResponse map[string]GroupResponse
+	err = json.Unmarshal(w.Body.Bytes(), &verifyUpdateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "Updated Group", verifyUpdateResponse["data"].Attributes.Name)
 
 	// Test List Groups
 	w = performRequest(api.router, "GET", "/api/v1/groups", nil)
@@ -316,4 +362,88 @@ func TestGroupEndpointsErrors(t *testing.T) {
 	// Test Remove non-existent ToolCatalogue from Group
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%d/tool-catalogues/999", group.ID), nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGroupCoreEndpointsErrors(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Test completely malformed JSON for createGroup
+	w := performRequest(api.router, "POST", "/api/v1/groups", []byte(`{malformed json`))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test getGroup with invalid ID
+	w = performRequest(api.router, "GET", "/api/v1/groups/invalid", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test getGroup with non-existent ID
+	w = performRequest(api.router, "GET", "/api/v1/groups/999999", nil)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test updateGroup with invalid ID
+	validUpdateGroupInput := GroupInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "groups",
+			Attributes: struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Name: "Updated Group",
+			},
+		},
+	}
+	w = performRequest(api.router, "PATCH", "/api/v1/groups/invalid", validUpdateGroupInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test updateGroup with non-existent ID
+	w = performRequest(api.router, "PATCH", "/api/v1/groups/999999", validUpdateGroupInput)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Test malformed JSON for updateGroup
+	// Create a valid group first
+	createGroupInput := GroupInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "groups",
+			Attributes: struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Name: "Test Group For Error Tests",
+			},
+		},
+	}
+	w = performRequest(api.router, "POST", "/api/v1/groups", createGroupInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createResponse map[string]GroupResponse
+	err := json.Unmarshal(w.Body.Bytes(), &createResponse)
+	assert.NoError(t, err)
+	groupID := createResponse["data"].ID
+
+	// Now test with malformed JSON
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/groups/%s", groupID), []byte(`{malformed json`))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

@@ -3,10 +3,10 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { createTheme } from '@mui/material';
-import ConfirmationDialog from './ConfirmationDialog';
+import ConfirmationDialog from '../ConfirmationDialog';
 
 // Mock the components we need
-jest.mock('../../../components/common/Icon', () => {
+jest.mock('../../../../components/common/Icon', () => {
   return function MockIcon(props) {
     return <div data-testid="mock-icon">{props.name}</div>;
   };

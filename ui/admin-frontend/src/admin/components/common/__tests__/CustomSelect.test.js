@@ -2,11 +2,11 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CustomSelect from './CustomSelect';
-import CustomSelectBadge from './CustomSelectBadge';
+import CustomSelect from '../CustomSelect';
+import CustomSelectBadge from '../CustomSelectBadge';
 
 // Mock the Icon component
-jest.mock('../../../components/common/Icon', () => {
+jest.mock('../../../../components/common/Icon', () => {
   return function MockIcon(props) {
     return <div data-testid="mock-icon" data-icon-name={props.name} style={props.sx}>{props.name}</div>;
   };

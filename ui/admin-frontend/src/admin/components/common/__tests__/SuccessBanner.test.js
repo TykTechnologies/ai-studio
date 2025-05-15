@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import SuccessBanner from './SuccessBanner';
+import SuccessBanner from '../SuccessBanner';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Mock theme for testing
@@ -24,7 +24,7 @@ const theme = createTheme({
 });
 
 // Mock the Icon component
-jest.mock('../../../components/common/Icon', () => {
+jest.mock('../../../../components/common/Icon', () => {
   return function MockIcon(props) {
     return <div data-testid={`icon-${props.name}`} {...props} />;
   };

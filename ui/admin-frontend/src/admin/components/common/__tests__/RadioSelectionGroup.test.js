@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import RadioSelectionGroup from './RadioSelectionGroup';
+import RadioSelectionGroup from '../RadioSelectionGroup';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Create a mock theme for testing

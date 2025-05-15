@@ -1,11 +1,11 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import IconBadge from './IconBadge';
+import IconBadge from '../IconBadge';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Mock the Icon component
-jest.mock('../../../components/common/Icon', () => {
+jest.mock('../../../../components/common/Icon', () => {
   return {
     __esModule: true,
     default: ({ name, ...props }) => (

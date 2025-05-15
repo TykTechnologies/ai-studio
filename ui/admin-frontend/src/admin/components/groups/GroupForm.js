@@ -107,7 +107,7 @@ const GroupForm = () => {
         maxWidth: {
           xs: '100%',
           sm: '100%',
-          md: '85%',
+          md: '100%',
           lg: '75%'
         }
       }}>

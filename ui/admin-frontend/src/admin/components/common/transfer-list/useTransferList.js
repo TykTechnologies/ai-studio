@@ -26,27 +26,27 @@ const useTransferList = ({
   }, [available, selected, idField]);
 
   useEffect(() => {
+    const rightBox = rightBoxRef?.current;
     const handleScroll = () => {
-      if (!rightBoxRef.current || !onLoadMore || !hasMore || isLoadingMore) return;
+      if (!rightBox|| !onLoadMore || !hasMore || isLoadingMore) return;
 
-      const { scrollTop, scrollHeight, clientHeight } = rightBoxRef.current;
+      const { scrollTop, scrollHeight, clientHeight } = rightBox;
 
       if (scrollHeight - scrollTop - clientHeight < 50) {
         onLoadMore();
       }
     };
 
-    const rightBox = rightBoxRef.current;
     if (rightBox) {
       rightBox.addEventListener('scroll', handleScroll);
-    }
-
-    return () => {
-      if (rightBox) {
+      
+      return () => {
         rightBox.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [onLoadMore, hasMore, isLoadingMore, rightBoxRef]);
+      };
+    }
+    
+    return () => {}; 
+  }, [onLoadMore, hasMore, isLoadingMore]);
 
   const handleSearchChange = useCallback((e) => {
     const value = e.target.value;
@@ -55,12 +55,10 @@ const useTransferList = ({
     if (onSearch) {
       setIsSearching(true);
 
-      const timeoutId = setTimeout(() => {
+      setTimeout(() => {
         onSearch(value);
         setIsSearching(false);
       }, 500);
-
-      return () => clearTimeout(timeoutId);
     }
   }, [onSearch]);
 

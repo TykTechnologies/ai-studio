@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CollapsibleSection from './CollapsibleSection';
+import CollapsibleSection from '../CollapsibleSection';
 
 // Mock the MUI icons
 jest.mock('@mui/icons-material/KeyboardArrowDown', () => {
