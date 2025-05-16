@@ -15,7 +15,7 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 	t.Skip()
 	api, db := setupTestAPI(t)
 
-	group, err := api.service.CreateGroup("Test Group")
+	group, err := api.service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Create a test user

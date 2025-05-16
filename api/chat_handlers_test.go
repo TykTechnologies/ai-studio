@@ -45,7 +45,7 @@ func TestChatEndpoints(t *gotest.T) {
 	assert.NoError(t, err)
 
 	// Create test group
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Create LLM settings

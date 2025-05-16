@@ -2,10 +2,10 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CustomNote from './CustomNote';
+import CustomNote from '../CustomNote';
 
 // Mock the Icon component
-jest.mock('../../../components/common/Icon', () => {
+jest.mock('../../../../components/common/Icon', () => {
   return function MockIcon(props) {
     return <div data-testid="mock-icon">{props.name}</div>;
   };

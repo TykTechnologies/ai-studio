@@ -9,17 +9,22 @@ const CustomSelectBadge = ({ config }) => {
       alignItems: 'center', 
       backgroundColor: config.bgColor,
       borderRadius: '6px',
-      padding: '2px 8px'
+      padding: '2px 8px',
+      maxWidth: 'fit-content',
     }}>
-      <Icon 
-        name={config.icon} 
-        sx={{ 
-          width: 16, 
-          height: 16, 
-          mr: 0.5,
-          color: config.textColor
-        }} 
-      />
+      {
+        config.icon && (
+          <Icon 
+            name={config.icon} 
+            sx={{ 
+              width: 16, 
+              height: 16, 
+              mr: 0.5,
+              color: config.textColor
+            }} 
+          />
+        )
+      }
       <Typography 
         variant="bodySmallDefault" 
         sx={{ color: config.textColor }}

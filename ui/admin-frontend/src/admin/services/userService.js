@@ -48,10 +48,43 @@ export const updateUser = async (userId, userData) => {
   }
 };
 
+export const searchUsers = async (searchTerm, page = 1) => {
+  try {
+    const response = await apiClient.get('/users', {
+      params: {
+        search: searchTerm,
+        page
+      }
+    });
+    return {
+      data: response.data.data,
+      totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
+      totalPages: parseInt(response.headers['x-total-pages'] || '0', 10)
+    };
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
 export const skipQuickStartForUser = async (userId) => {
   try {
     const response = await apiClient.post(`/users/${userId}/skip-quick-start`);
     return response.data;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
+export const getUsers = async (page = 1) => {
+  try {
+    const response = await apiClient.get('/users', {
+      params: { page }
+    });
+    return {
+      data: response.data.data,
+      totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
+      totalPages: parseInt(response.headers['x-total-pages'] || '0', 10)
+    };
   } catch (error) {
     throw handleApiError(error);
   }

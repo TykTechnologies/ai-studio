@@ -183,7 +183,7 @@ func TestGroupCatalogueAssociation(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a group
-	group, err := api.service.CreateGroup("Test Group")
+	group, err := api.service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Create a catalogue
@@ -234,7 +234,7 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create a group
-	group, err := api.service.CreateGroup("Test Group")
+	group, err := api.service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Add user to group

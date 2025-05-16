@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import BasicCard from './BasicCard';
+import BasicCard from '../BasicCard';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Create a simple mock theme for testing

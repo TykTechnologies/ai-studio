@@ -46,6 +46,11 @@ const theme = createTheme({
       lineHeight: "20px",
       fontFamily: "Inter-Regular",
     },
+    bodyMediumMedium: {
+      fontSize: "13.2px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Medium",
+    },
     bodyMediumSemiBold: {
       fontSize: "13.2px",
       lineHeight: "20px",
@@ -109,6 +114,7 @@ const theme = createTheme({
       surfaceNeutralHover: '#F8F8F9',
       surfaceBrandDefaultPortal: '#EFF3FF',
       surfaceBrandDefaultDashboard: '#F6EFFF',
+      surfaceBrandDefaultGovernance: '#FDE9F6',
       surfaceBrandHovered: '#EBDFFE',
       surfaceDefaultBubble: '#B7F9E9C2',
       surfaceCriticalDefault: '#FCEFEC',

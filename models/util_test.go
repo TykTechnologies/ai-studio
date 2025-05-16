@@ -408,3 +408,43 @@ func TestPasswordFunctions(t *testing.T) {
 	assert.True(t, isPasswordValid(password, hashedPassword), "isPasswordValid() failed to validate a correct password")
 	assert.False(t, isPasswordValid("wrongPassword", hashedPassword), "isPasswordValid() validated an incorrect password")
 }
+
+func TestSameIDs(t *testing.T) {
+	// Test same IDs in same order
+	a := []uint{1, 2, 3, 4, 5}
+	b := []uint{1, 2, 3, 4, 5}
+	assert.True(t, SameIDs(a, b))
+
+	// Test same IDs in different order
+	a = []uint{1, 2, 3, 4, 5}
+	b = []uint{5, 4, 3, 2, 1}
+	assert.True(t, SameIDs(a, b))
+
+	// Test different lengths
+	a = []uint{1, 2, 3}
+	b = []uint{1, 2, 3, 4}
+	assert.False(t, SameIDs(a, b))
+
+	// Test different IDs
+	a = []uint{1, 2, 3}
+	b = []uint{1, 2, 4}
+	assert.False(t, SameIDs(a, b))
+
+	// Test with empty slices
+	a = []uint{}
+	b = []uint{}
+	assert.True(t, SameIDs(a, b))
+
+	// Test with nil slices
+	assert.True(t, SameIDs(nil, nil))
+
+	// Test with duplicate IDs
+	a = []uint{1, 2, 2, 3}
+	b = []uint{1, 2, 3, 3}
+	assert.False(t, SameIDs(a, b))
+
+	// Test with duplicate IDs (same duplicates)
+	a = []uint{1, 2, 2, 3}
+	b = []uint{3, 2, 1, 2}
+	assert.True(t, SameIDs(a, b))
+}

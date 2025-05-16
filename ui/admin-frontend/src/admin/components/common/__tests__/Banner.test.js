@@ -2,10 +2,10 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import Banner from './Banner';
+import Banner from '../Banner';
 
 // Mock the Icon component
-jest.mock('../../../components/common/Icon', () => ({
+jest.mock('../../../../components/common/Icon', () => ({
   __esModule: true,
   default: ({ name, sx, ...props }) => (
     <div data-testid="mocked-icon" data-icon-name={name} style={sx} {...props} />

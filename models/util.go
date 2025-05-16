@@ -87,3 +87,26 @@ func JSONScan(value, dest interface{}) error {
 
 	return nil
 }
+
+func SameIDs(a, b []uint) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	count := make(map[uint]int)
+	for _, id := range a {
+		count[id]++
+	}
+
+	for _, id := range b {
+		count[id]--
+	}
+
+	for id := range count {
+		if count[id] != 0 {
+			return false
+		}
+	}
+
+	return true
+}

@@ -32,7 +32,13 @@ func (a *API) createGroup(c *gin.Context) {
 		return
 	}
 
-	group, err := a.service.CreateGroup(input.Data.Attributes.Name)
+	group, err := a.service.CreateGroup(
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Members,
+		input.Data.Attributes.Catalogues,
+		input.Data.Attributes.DataCatalogues,
+		input.Data.Attributes.ToolCatalogues,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -69,7 +75,7 @@ func (a *API) getGroup(c *gin.Context) {
 		return
 	}
 
-	group, err := a.service.GetGroupByID(uint(id))
+	group, err := a.service.GetGroupByID(uint(id), "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -118,7 +124,14 @@ func (a *API) updateGroup(c *gin.Context) {
 		return
 	}
 
-	group, err := a.service.UpdateGroup(uint(id), input.Data.Attributes.Name)
+	group, err := a.service.UpdateGroup(
+		uint(id),
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Members,
+		input.Data.Attributes.Catalogues,
+		input.Data.Attributes.DataCatalogues,
+		input.Data.Attributes.ToolCatalogues,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -194,43 +207,6 @@ func (a *API) listGroups(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
-}
-
-// @Summary Search groups by name
-// @Description Search for groups using a name stub
-// @Tags groups
-// @Accept json
-// @Produce json
-// @Param name query string true "Name stub to search for"
-// @Success 200 {array} GroupResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /groups/search [get]
-// @Security BearerAuth
-func (a *API) searchGroups(c *gin.Context) {
-	nameStub := c.Query("name")
-	if nameStub == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Name stub is required"}},
-		})
-		return
-	}
-
-	groups, err := a.service.SearchGroupsByNameStub(nameStub)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
 }
 
@@ -381,15 +357,37 @@ func (a *API) listGroupUsers(c *gin.Context) {
 }
 
 func serializeGroup(group *models.Group) GroupResponse {
-	return GroupResponse{
+	response := GroupResponse{
 		Type: "groups",
 		ID:   strconv.FormatUint(uint64(group.ID), 10),
 		Attributes: struct {
-			Name string `json:"name"`
+			Name           string                  `json:"name"`
+			Users          []UserResponse          `json:"users,omitempty"`
+			Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
+			DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
+			ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
 		}{
 			Name: group.Name,
 		},
 	}
+
+	if len(group.Users) > 0 {
+		response.Attributes.Users = serializeUsers(group.Users)
+	}
+
+	if len(group.Catalogues) > 0 {
+		response.Attributes.Catalogues = serializeCatalogues(group.Catalogues)
+	}
+
+	if len(group.DataCatalogues) > 0 {
+		response.Attributes.DataCatalogues = serializeDataCatalogues(group.DataCatalogues)
+	}
+
+	if len(group.ToolCatalogues) > 0 {
+		response.Attributes.ToolCatalogues = serializeToolCatalogues(group.ToolCatalogues, nil)
+	}
+
+	return response
 }
 
 func serializeGroups(groups models.Groups) []GroupResponse {
