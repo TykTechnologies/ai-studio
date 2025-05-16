@@ -27,7 +27,11 @@ type GroupInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name string `json:"name"`
+			Name           string `json:"name"`
+			Members        []uint `json:"members"`
+			Catalogues     []uint `json:"catalogues"`
+			DataCatalogues []uint `json:"data_catalogues"`
+			ToolCatalogues []uint `json:"tool_catalogues"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -65,6 +69,7 @@ type UserResponse struct {
 		APIKey               string `json:"api_key"`
 		NotificationsEnabled bool   `json:"notifications_enabled"`
 		AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+		Role                 string `json:"role"`
 	} `json:"attributes"`
 }
 
@@ -74,7 +79,11 @@ type GroupResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name string `json:"name"`
+		Name           string                  `json:"name"`
+		Users          []UserResponse          `json:"users,omitempty"`
+		Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
+		DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
+		ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
 	} `json:"attributes"`
 }
 

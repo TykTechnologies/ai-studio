@@ -1,0 +1,52 @@
+import apiClient from "../utils/apiClient";
+
+export const teamsService = {
+  getTeam: async (id) => {
+    try {
+      const response = await apiClient.get(`/groups/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching team:", error);
+      throw error;
+    }
+  },
+  
+  getTeams: async () => {
+    try {
+      const response = await apiClient.get("/groups");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+      throw error;
+    }
+  },
+  
+  createTeam: async (teamData) => {
+    try {
+      const response = await apiClient.post("/groups", teamData);
+      return response.data;
+    } catch (error) {
+      console.error("Error creating team:", error);
+      throw error;
+    }
+  },
+  
+  updateTeam: async (id, teamData) => {
+    try {
+      const response = await apiClient.patch(`/groups/${id}`, teamData);
+      return response.data;
+    } catch (error) {
+      console.error("Error updating team:", error);
+      throw error;
+    }
+  },
+  
+  deleteTeam: async (id) => {
+    try {
+      await apiClient.delete(`/groups/${id}`);
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      throw error;
+    }
+  }
+};

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -526,4 +527,192 @@ func TestGetUserCounts(t *testing.T) {
 	countsAfter, err := GetUserCounts(db)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), countsAfter.UserCount)
+}
+
+func TestGetRole(t *testing.T) {
+	// Test Super Admin (ID=1)
+	user := &User{
+		ID: 1,
+	}
+	assert.Equal(t, "Super Admin", user.GetRole())
+
+	// Test Admin
+	user = &User{
+		ID:      2,
+		IsAdmin: true,
+	}
+	assert.Equal(t, "Admin", user.GetRole())
+
+	// Test Developer
+	user = &User{
+		ID:         3,
+		IsAdmin:    false,
+		ShowPortal: true,
+	}
+	assert.Equal(t, "Developer", user.GetRole())
+
+	// Test Chat user
+	user = &User{
+		ID:         4,
+		IsAdmin:    false,
+		ShowPortal: false,
+	}
+	assert.Equal(t, "Chat user", user.GetRole())
+}
+
+func TestSearchByTerm(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create test users with different names and emails
+	users := []User{
+		{Email: "johndoe@example.com", Name: "John Doe"},
+		{Email: "janedoe@example.com", Name: "Jane Doe"},
+		{Email: "bobsmith@example.com", Name: "Bob Smith"},
+		{Email: "alicejones@example.com", Name: "Alice Jones"},
+		{Email: "charliebrown@example.com", Name: "Charlie Brown"},
+	}
+
+	for _, user := range users {
+		err := db.Create(&user).Error
+		assert.NoError(t, err)
+	}
+
+	var results Users
+
+	// Test search by email fragment
+	totalCount, totalPages, err := results.SearchByTerm(db, "doe", 10, 1, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), totalCount)
+	assert.Equal(t, 1, totalPages)
+	assert.Len(t, results, 2)
+
+	emails := []string{results[0].Email, results[1].Email}
+	assert.Contains(t, emails, "johndoe@example.com")
+	assert.Contains(t, emails, "janedoe@example.com")
+
+	// Test search by name fragment
+	results = Users{}
+	totalCount, totalPages, err = results.SearchByTerm(db, "Smith", 10, 1, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), totalCount)
+	assert.Equal(t, 1, totalPages)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "bobsmith@example.com", results[0].Email)
+
+	// Test pagination
+	// Add more users to ensure pagination
+	for i := 0; i < 10; i++ {
+		user := User{
+			Email: fmt.Sprintf("brown%d@example.com", i),
+			Name:  fmt.Sprintf("Brown %d", i),
+		}
+		err := db.Create(&user).Error
+		assert.NoError(t, err)
+	}
+
+	results = Users{}
+	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 5, 1, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(11), totalCount) // 10 "brown" + 1 "Charlie Brown"
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, results, 5)
+
+	// Test second page
+	results = Users{}
+	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 5, 2, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(11), totalCount)
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, results, 5)
+
+	// Test with empty search term (should return all users)
+	results = Users{}
+	totalCount, totalPages, err = results.SearchByTerm(db, "", 20, 1, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(15), totalCount) // 5 original + 10 additional
+	assert.Equal(t, 1, totalPages)
+	assert.Len(t, results, 15)
+
+	// Test sorting
+	results = Users{}
+	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 20, 1, false, "-email")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(11), totalCount)
+	assert.Equal(t, 1, totalPages)
+	assert.Len(t, results, 11)
+	// First should be charliebrown@example.com when sorting by email DESC
+	assert.Equal(t, "charliebrown@example.com", results[0].Email)
+	// Test with all=true parameter (should return all results regardless of pagination)
+	results = Users{}
+	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 3, 1, true, "email")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(11), totalCount) // Should still report the correct total count
+	assert.Equal(t, 4, totalPages)         // Should still calculate the correct page count
+	assert.Len(t, results, 11)             // But should return ALL matching results, not just the first page
+}
+
+func TestPaginateAndSort(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create test users
+	for i := 1; i <= 15; i++ {
+		user := &User{
+			Email: fmt.Sprintf("user%d@example.com", i),
+			Name:  fmt.Sprintf("User %d", i),
+		}
+		err := user.Create(db)
+		assert.NoError(t, err)
+	}
+
+	var users Users
+
+	// Test default sorting (ASC by ID)
+	totalCount, totalPages, err := users.paginateAndSort(db.Model(&User{}), 5, 1, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(15), totalCount)
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, users, 5)
+	assert.Equal(t, "user1@example.com", users[0].Email)
+	assert.Equal(t, "user5@example.com", users[4].Email)
+
+	// Test second page
+	users = Users{}
+	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 2, false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(15), totalCount)
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, users, 5)
+	assert.Equal(t, "user6@example.com", users[0].Email)
+	assert.Equal(t, "user10@example.com", users[4].Email)
+
+	// Test explicit ascending sort by email
+	users = Users{}
+	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 1, false, "email")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(15), totalCount)
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, users, 5)
+	// When sorted lexicographically, user1, user10-14 come before user2
+	assert.Equal(t, "user10@example.com", users[0].Email)
+	assert.Equal(t, "user14@example.com", users[4].Email)
+
+	// Test descending sort by email
+	users = Users{}
+	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 1, false, "-email")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(15), totalCount)
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, users, 5)
+	// When sorted in reverse lexicographical order, user9 comes before user8, etc.
+	// But user9 comes after user15-user10 lexicographically
+	assert.Equal(t, "user9@example.com", users[0].Email)
+	assert.Equal(t, "user5@example.com", users[4].Email)
+
+	// Test skip pagination
+	users = Users{}
+	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 1, true, "")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(15), totalCount)
+	assert.Equal(t, 3, totalPages)
+	assert.Len(t, users, 15)
 }

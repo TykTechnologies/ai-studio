@@ -147,10 +147,12 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 
 func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
 	var users models.Users
+
 	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all, sort)
 	if err != nil {
 		return nil, 0, 0, err
 	}
+
 	return users, totalCount, totalPages, nil
 }
 
@@ -310,4 +312,15 @@ func mapToSlice[T any](m map[uint]T) []T {
 
 func (s *Service) SkipQuickStartForUser(userID uint) error {
 	return models.SetSkipQuickStartForUser(s.DB, userID)
+}
+
+func (s *Service) SearchUsers(term string, pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
+	var users models.Users
+
+	totalCount, totalPages, err := users.SearchByTerm(s.DB, term, pageSize, pageNumber, all, sort)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	return users, totalCount, totalPages, nil
 }

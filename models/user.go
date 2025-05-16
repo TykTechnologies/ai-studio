@@ -94,11 +94,9 @@ func (u *User) SetPassword(password string) error {
 	return nil
 }
 
-func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
+func (u *Users) paginateAndSort(query *gorm.DB, pageSize int, pageNumber int, skipPagination bool, sort string) (int64, int, error) {
 	var totalCount int64
-	query := db.Model(&User{})
 
-	// Handle sorting
 	if sort != "" {
 		if sort[0] == '-' {
 			query = query.Order(sort[1:] + " DESC")
@@ -106,7 +104,7 @@ func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort
 			query = query.Order(sort + " ASC")
 		}
 	} else {
-		query = query.Order("id ASC") // Default sort by ID ascending
+		query = query.Order("id ASC")
 	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
@@ -121,13 +119,18 @@ func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort
 		}
 	}
 
-	if !all && pageSize > 0 {
+	if !skipPagination && pageSize > 0 {
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
 	err := query.Find(u).Error
 	return totalCount, totalPages, err
+}
+
+func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
+	query := db.Model(&User{})
+	return u.paginateAndSort(query, pageSize, pageNumber, all, sort)
 }
 
 func (u *Users) GetByGroupID(db *gorm.DB, groupID uint) error {
@@ -283,4 +286,27 @@ func GetUserGroupCount(db *gorm.DB) (int64, error) {
 	err := db.Model(&Group{}).Count(&count).Error
 
 	return count, err
+}
+
+func (u *User) GetRole() string {
+	if u.ID == 1 {
+		return "Super Admin"
+	} else if u.IsAdmin {
+		return "Admin"
+	} else if u.ShowPortal {
+		return "Developer"
+	} else {
+		return "Chat user"
+	}
+}
+
+func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
+	query := db.Model(&User{})
+
+	if term != "" {
+		searchTerm := "%" + term + "%"
+		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
+	}
+
+	return u.paginateAndSort(query, pageSize, pageNumber, all, sort)
 }
