@@ -19,7 +19,7 @@ const useTransferList = ({
 
   useEffect(() => {
     const filtered = available.filter(
-      item => !selected.some(s => s[idField] === item[idField])
+      item => selected.every(s => s[idField] !== item[idField])
     );
     
     setFilteredAvailable(filtered);
