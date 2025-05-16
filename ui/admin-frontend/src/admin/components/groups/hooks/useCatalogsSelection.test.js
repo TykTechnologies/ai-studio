@@ -38,23 +38,23 @@ const TestComponent = ({
       <div data-testid="tool-catalogs">{JSON.stringify(hookResult.toolCatalogs)}</div>
       <div data-testid="selected-tool-catalogs">{JSON.stringify(hookResult.selectedToolCatalogs)}</div>
       
-      <button 
-        data-testid="change-catalogs" 
-        onClick={() => hookResult.handleCatalogsChange([{ value: '1', label: 'Catalog 1' }])}
+      <button
+        data-testid="change-catalogs"
+        onClick={() => hookResult.setSelectedCatalogs([{ value: '1', label: 'Catalog 1' }])}
       >
         Change Catalogs
       </button>
       
-      <button 
-        data-testid="change-data-catalogs" 
-        onClick={() => hookResult.handleDataCatalogsChange([{ value: '3', label: 'Data Catalog 1' }])}
+      <button
+        data-testid="change-data-catalogs"
+        onClick={() => hookResult.setSelectedDataCatalogs([{ value: '3', label: 'Data Catalog 1' }])}
       >
         Change Data Catalogs
       </button>
       
-      <button 
-        data-testid="change-tool-catalogs" 
-        onClick={() => hookResult.handleToolCatalogsChange([{ value: '5', label: 'Tool Catalog 1' }])}
+      <button
+        data-testid="change-tool-catalogs"
+        onClick={() => hookResult.setSelectedToolCatalogs([{ value: '5', label: 'Tool Catalog 1' }])}
       >
         Change Tool Catalogs
       </button>
