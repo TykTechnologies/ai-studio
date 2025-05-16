@@ -41,18 +41,6 @@ export const useCatalogsSelection = (
     }
   }, []);
 
-  const handleCatalogsChange = useCallback((newSelectedCatalogs) => {
-    setSelectedCatalogs(newSelectedCatalogs);
-  }, []);
-
-  const handleDataCatalogsChange = useCallback((newSelectedDataCatalogs) => {
-    setSelectedDataCatalogs(newSelectedDataCatalogs);
-  }, []);
-
-  const handleToolCatalogsChange = useCallback((newSelectedToolCatalogs) => {
-    setSelectedToolCatalogs(newSelectedToolCatalogs);
-  }, []);
-
   const formatCatalogsForSelect = useCallback((catalogItems) => {
     if (!Array.isArray(catalogItems)) {
       return [];
@@ -75,15 +63,15 @@ export const useCatalogsSelection = (
   return {
     catalogs: formatCatalogsForSelect(catalogs),
     selectedCatalogs,
-    handleCatalogsChange,
+    setSelectedCatalogs,
     
     dataCatalogs: formatCatalogsForSelect(dataCatalogs),
     selectedDataCatalogs,
-    handleDataCatalogsChange,
+    setSelectedDataCatalogs,
     
     toolCatalogs: formatCatalogsForSelect(toolCatalogs),
     selectedToolCatalogs,
-    handleToolCatalogsChange,
+    setSelectedToolCatalogs,
     
     loading,
     error,
