@@ -1,10 +1,10 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import EmptyStateWidget from './EmptyStateWidget';
+import EmptyStateWidget from '../EmptyStateWidget';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Mock the imported image
-jest.mock('./empty-state.png', () => 'mocked-empty-state.png');
+jest.mock('../empty-state.png', () => 'mocked-empty-state.png');
 
 // Mock theme for testing
 const theme = createTheme({

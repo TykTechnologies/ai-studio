@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import DataTable from './DataTable';
+import { render, screen, fireEvent } from '@testing-library/react';
+import DataTable from '../DataTable';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Mock theme for testing
@@ -30,7 +30,7 @@ const theme = createTheme({
 });
 
 // Mock PaginationControls component
-jest.mock('./PaginationControls', () => {
+jest.mock('../PaginationControls', () => {
   return function MockPaginationControls(props) {
     return (
       <div data-testid="pagination-controls">

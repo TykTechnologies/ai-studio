@@ -70,61 +70,401 @@ func TestGroupService(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
 
-	// Test CreateGroup
-	group, err := service.CreateGroup("Test Group")
-	assert.NoError(t, err)
-	assert.NotNil(t, group)
-	assert.NotZero(t, group.ID)
+	// Test CreateGroup with empty associations
+	t.Run("CreateGroup with empty associations", func(t *testing.T) {
+		group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		assert.NotNil(t, group)
+		assert.NotZero(t, group.ID)
+		assert.Equal(t, "Test Group", group.Name)
 
-	// Test GetGroupByID
-	fetchedGroup, err := service.GetGroupByID(group.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, group.Name, fetchedGroup.Name)
+		// Verify associations are empty
+		fetchedGroup, err := service.GetGroupByID(group.ID, "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
+		assert.Empty(t, fetchedGroup.Users)
+		assert.Empty(t, fetchedGroup.Catalogues)
+		assert.Empty(t, fetchedGroup.DataCatalogues)
+		assert.Empty(t, fetchedGroup.ToolCatalogues)
+	})
+
+	// Test CreateGroup with associations
+	t.Run("CreateGroup with associations", func(t *testing.T) {
+		// Create user, catalogue, data catalogue and tool catalogue
+		user1, err := service.CreateUser("test1@example.com", "Test User 1", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
+		user2, err := service.CreateUser("test2@example.com", "Test User 2", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
+
+		catalogue, err := service.CreateCatalogue("Test Catalogue")
+		assert.NoError(t, err)
+
+		dataCatalogue, err := service.CreateDataCatalogue("Test Data Catalogue", "description", "long description", "icon-name")
+		assert.NoError(t, err)
+
+		toolCatalogue, err := service.CreateToolCatalogue("Test Tool Catalogue", "description", "long description", "icon-name")
+		assert.NoError(t, err)
+
+		// Create group with associations
+		group, err := service.CreateGroup(
+			"Associated Group",
+			[]uint{user1.ID, user2.ID},
+			[]uint{catalogue.ID},
+			[]uint{dataCatalogue.ID},
+			[]uint{toolCatalogue.ID},
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, group)
+		assert.NotZero(t, group.ID)
+
+		// Verify associations
+		fetchedGroup, err := service.GetGroupByID(group.ID, "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
+		assert.Len(t, fetchedGroup.Users, 2)
+		assert.Len(t, fetchedGroup.Catalogues, 1)
+		assert.Len(t, fetchedGroup.DataCatalogues, 1)
+		assert.Len(t, fetchedGroup.ToolCatalogues, 1)
+	})
+
+	// Test GetGroupByID with different preload options
+	t.Run("GetGroupByID with preloads", func(t *testing.T) {
+		// Create a group with a user
+		user, err := service.CreateUser("preload@example.com", "Preload User", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
+
+		group, err := service.CreateGroup("Preload Group", []uint{user.ID}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Test with no preloads
+		fetchedGroup, err := service.GetGroupByID(group.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, group.Name, fetchedGroup.Name)
+		assert.Empty(t, fetchedGroup.Users) // Users not preloaded
+
+		// Test with Users preload
+		fetchedGroupWithUsers, err := service.GetGroupByID(group.ID, "Users")
+		assert.NoError(t, err)
+		assert.Equal(t, group.Name, fetchedGroupWithUsers.Name)
+		assert.Len(t, fetchedGroupWithUsers.Users, 1)
+		assert.Equal(t, user.ID, fetchedGroupWithUsers.Users[0].ID)
+
+		// Test with invalid ID
+		_, err = service.GetGroupByID(9999)
+		assert.Error(t, err)
+	})
 
 	// Test UpdateGroup
-	updatedGroup, err := service.UpdateGroup(group.ID, "Updated Group")
-	assert.NoError(t, err)
-	assert.Equal(t, "Updated Group", updatedGroup.Name)
+	t.Run("UpdateGroup", func(t *testing.T) {
+		// Create users
+		user1, err := service.CreateUser("update1@example.com", "Update User 1", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
+		user2, err := service.CreateUser("update2@example.com", "Update User 2", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
+		user3, err := service.CreateUser("update3@example.com", "Update User 3", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
 
-	// Test GetAllGroups
-	groups, _, _, err := service.GetAllGroups(10, 1, true)
-	assert.NoError(t, err)
-	assert.Len(t, groups, 1)
+		// Create catalogues
+		catalogue1, err := service.CreateCatalogue("Update Catalogue 1")
+		assert.NoError(t, err)
+		catalogue2, err := service.CreateCatalogue("Update Catalogue 2")
+		assert.NoError(t, err)
 
-	// Test SearchGroupsByNameStub
-	searchedGroups, err := service.SearchGroupsByNameStub("Update")
-	assert.NoError(t, err)
-	assert.Len(t, searchedGroups, 1)
-	assert.Equal(t, "Updated Group", searchedGroups[0].Name)
+		// Create data catalogues
+		dataCatalogue1, err := service.CreateDataCatalogue("Update Data Catalogue 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+		dataCatalogue2, err := service.CreateDataCatalogue("Update Data Catalogue 2", "desc2", "long desc2", "icon2")
+		assert.NoError(t, err)
 
-	// Test AddUserToGroup
-	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
-	assert.NoError(t, err)
+		// Create tool catalogues
+		toolCatalogue1, err := service.CreateToolCatalogue("Update Tool Catalogue 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+		toolCatalogue2, err := service.CreateToolCatalogue("Update Tool Catalogue 2", "desc2", "long desc2", "icon2")
+		assert.NoError(t, err)
 
-	err = service.AddUserToGroup(user.ID, group.ID)
-	assert.NoError(t, err)
+		// Create initial group with some associations
+		group, err := service.CreateGroup(
+			"Initial Group",
+			[]uint{user1.ID},
+			[]uint{catalogue1.ID},
+			[]uint{dataCatalogue1.ID},
+			[]uint{toolCatalogue1.ID},
+		)
+		assert.NoError(t, err)
 
-	// Test GetGroupUsers
-	groupUsers, err := service.GetGroupUsers(group.ID)
-	assert.NoError(t, err)
-	assert.Len(t, groupUsers, 1)
-	assert.Equal(t, user.ID, groupUsers[0].ID)
+		// Update the group with different name and associations
+		updatedGroup, err := service.UpdateGroup(
+			group.ID,
+			"Updated Group",
+			[]uint{user2.ID, user3.ID},                   // Replace user1 with user2 and user3
+			[]uint{catalogue1.ID, catalogue2.ID},         // Add catalogue2
+			[]uint{dataCatalogue2.ID},                    // Replace dataCatalogue1 with dataCatalogue2
+			[]uint{toolCatalogue1.ID, toolCatalogue2.ID}, // Add toolCatalogue2
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, "Updated Group", updatedGroup.Name)
 
-	// Test RemoveUserFromGroup
-	err = service.RemoveUserFromGroup(user.ID, group.ID)
-	assert.NoError(t, err)
+		// Verify updated associations
+		fetchedGroup, err := service.GetGroupByID(group.ID, "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
 
-	groupUsers, err = service.GetGroupUsers(group.ID)
-	assert.NoError(t, err)
-	assert.Len(t, groupUsers, 0)
+		// Verify name is updated
+		assert.Equal(t, "Updated Group", fetchedGroup.Name)
+
+		// Verify users (user1 is replaced with user2 and user3)
+		assert.Len(t, fetchedGroup.Users, 2)
+		userIDs := []uint{fetchedGroup.Users[0].ID, fetchedGroup.Users[1].ID}
+		assert.Contains(t, userIDs, user2.ID)
+		assert.Contains(t, userIDs, user3.ID)
+		assert.NotContains(t, userIDs, user1.ID)
+
+		// Verify catalogues (catalogue2 is added)
+		assert.Len(t, fetchedGroup.Catalogues, 2)
+		catalogueIDs := []uint{fetchedGroup.Catalogues[0].ID, fetchedGroup.Catalogues[1].ID}
+		assert.Contains(t, catalogueIDs, catalogue1.ID)
+		assert.Contains(t, catalogueIDs, catalogue2.ID)
+
+		// Verify data catalogues (dataCatalogue1 is replaced with dataCatalogue2)
+		assert.Len(t, fetchedGroup.DataCatalogues, 1)
+		assert.Equal(t, dataCatalogue2.ID, fetchedGroup.DataCatalogues[0].ID)
+
+		// Verify tool catalogues (toolCatalogue2 is added)
+		assert.Len(t, fetchedGroup.ToolCatalogues, 2)
+		toolCatalogueIDs := []uint{fetchedGroup.ToolCatalogues[0].ID, fetchedGroup.ToolCatalogues[1].ID}
+		assert.Contains(t, toolCatalogueIDs, toolCatalogue1.ID)
+		assert.Contains(t, toolCatalogueIDs, toolCatalogue2.ID)
+
+		// Test updating non-existent group
+		_, err = service.UpdateGroup(9999, "Non-existent", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+	})
+
+	// Test Error Cases
+	t.Run("GroupService_ErrorCases", func(t *testing.T) {
+		db := setupTestDB(t)
+		service := NewService(db)
+
+		// Test GetGroupByID with non-existent ID
+		_, err := service.GetGroupByID(9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test UpdateGroup with non-existent ID
+		_, err = service.UpdateGroup(9999, "Non-existent", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test DeleteGroup with non-existent ID
+		err = service.DeleteGroup(9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test AddUserToGroup with non-existent user
+		err = service.AddUserToGroup(9999, 1) // Assuming group ID 1 exists
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Create a group to test errors with
+		group, err := service.CreateGroup("Error Test Group", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Test AddUserToGroup with non-existent user
+		err = service.AddUserToGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test RemoveUserFromGroup with non-existent user
+		err = service.RemoveUserFromGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test RemoveUserFromGroup with non-existent group
+		user, err := service.CreateUser("error@example.com", "Error User", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
+
+		err = service.RemoveUserFromGroup(user.ID, 9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test GetGroupUsers with non-existent group
+		_, err = service.GetGroupUsers(9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Additional association error tests
+
+		// Test AddCatalogueToGroup with non-existent catalogue
+		err = service.AddCatalogueToGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test RemoveCatalogueFromGroup with non-existent catalogue
+		err = service.RemoveCatalogueFromGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test RemoveCatalogueFromGroup with non-existent group
+		catalogue, err := service.CreateCatalogue("Error Test Catalogue")
+		assert.NoError(t, err)
+
+		err = service.RemoveCatalogueFromGroup(catalogue.ID, 9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test GetGroupCatalogues with non-existent group
+		_, err = service.GetGroupCatalogues(9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test Data Catalogue association errors
+		err = service.AddDataCatalogueToGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		err = service.RemoveDataCatalogueFromGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Create a data catalogue for testing
+		dataCatalogue, err := service.CreateDataCatalogue("Error Data Catalogue", "short", "long", "icon")
+		assert.NoError(t, err)
+
+		err = service.RemoveDataCatalogueFromGroup(dataCatalogue.ID, 9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		_, err = service.GetGroupDataCatalogues(9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Test Tool Catalogue association errors
+		err = service.AddToolCatalogueToGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		err = service.RemoveToolCatalogueFromGroup(9999, group.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Create a tool catalogue for testing
+		toolCatalogue, err := service.CreateToolCatalogue("Error Tool Catalogue", "short", "long", "icon")
+		assert.NoError(t, err)
+
+		err = service.RemoveToolCatalogueFromGroup(toolCatalogue.ID, 9999)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		_, _, _, err = service.GetGroupToolCatalogues(9999, 10, 1, true)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+
+		// Clean up
+		err = service.DeleteGroup(group.ID)
+		assert.NoError(t, err)
+		err = service.DeleteUser(user.ID)
+		assert.NoError(t, err)
+		err = service.DeleteCatalogue(catalogue.ID)
+		assert.NoError(t, err)
+		err = service.DeleteDataCatalogue(dataCatalogue.ID)
+		assert.NoError(t, err)
+		err = service.DeleteToolCatalogue(toolCatalogue.ID)
+		assert.NoError(t, err)
+	})
 
 	// Test DeleteGroup
-	err = service.DeleteGroup(group.ID)
-	assert.NoError(t, err)
+	t.Run("DeleteGroup", func(t *testing.T) {
+		// Create a group with associations
+		user, err := service.CreateUser("delete@example.com", "Delete User", "password123", true, true, true, true, true, true)
+		assert.NoError(t, err)
 
-	// Verify group is deleted
-	_, err = service.GetGroupByID(group.ID)
-	assert.Error(t, err)
+		catalogue, err := service.CreateCatalogue("Delete Catalogue")
+		assert.NoError(t, err)
+
+		group, err := service.CreateGroup("Delete Group", []uint{user.ID}, []uint{catalogue.ID}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Verify group exists with associations
+		fetchedGroup, err := service.GetGroupByID(group.ID, "Users", "Catalogues")
+		assert.NoError(t, err)
+		assert.Len(t, fetchedGroup.Users, 1)
+		assert.Len(t, fetchedGroup.Catalogues, 1)
+
+		// Delete the group
+		err = service.DeleteGroup(group.ID)
+		assert.NoError(t, err)
+
+		// Verify group is deleted
+		_, err = service.GetGroupByID(group.ID)
+		assert.Error(t, err)
+
+		// But user and catalogue should still exist
+		fetchedUser, err := service.GetUserByID(user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, user.ID, fetchedUser.ID)
+
+		fetchedCatalogue, err := service.GetCatalogueByID(catalogue.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, catalogue.ID, fetchedCatalogue.ID)
+
+		// Test deleting non-existent group
+		err = service.DeleteGroup(9999)
+		assert.Error(t, err)
+	})
+
+	// Test other group functionality
+	t.Run("Group search and listing", func(t *testing.T) {
+		// Create an isolated test DB for this specific test to avoid interference from other tests
+		testDB := setupTestDB(t)
+		testService := NewService(testDB)
+
+		// Create groups with different names
+		group1, err := testService.CreateGroup("Alpha Group", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		group2, err := testService.CreateGroup("Beta Group", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		group3, err := testService.CreateGroup("Gamma Group", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Test GetAllGroups
+		groups, count, pages, err := testService.GetAllGroups(10, 1, true)
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, len(groups), 3) // We created 3 groups in this test
+		assert.GreaterOrEqual(t, count, int64(3))
+		assert.GreaterOrEqual(t, pages, 1)
+
+		// Test pagination
+		groupsPage1, _, _, err := testService.GetAllGroups(2, 1, false)
+		assert.NoError(t, err)
+		assert.Len(t, groupsPage1, 2)
+
+		groupsPage2, _, _, err := testService.GetAllGroups(2, 2, false)
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, len(groupsPage2), 1)
+
+		// Test SearchGroupsByNameStub
+		// Test search for a specific group
+		alphaGroups, err := testService.SearchGroupsByNameStub("Alpha")
+		assert.NoError(t, err)
+		assert.Len(t, alphaGroups, 1)
+		assert.Equal(t, "Alpha Group", alphaGroups[0].Name)
+
+		// Test search functionality works (not testing exact counts)
+		betaGroups, err := testService.SearchGroupsByNameStub("Beta")
+		assert.NoError(t, err)
+		assert.NotEmpty(t, betaGroups)
+		assert.Equal(t, "Beta Group", betaGroups[0].Name)
+
+		gammaGroups, err := testService.SearchGroupsByNameStub("Gamma")
+		assert.NoError(t, err)
+		assert.NotEmpty(t, gammaGroups)
+		assert.Equal(t, "Gamma Group", gammaGroups[0].Name)
+
+		// Clean up
+		_ = testService.DeleteGroup(group1.ID)
+		_ = testService.DeleteGroup(group2.ID)
+		_ = testService.DeleteGroup(group3.ID)
+		_ = testService.DeleteGroup(group1.ID)
+		_ = testService.DeleteGroup(group2.ID)
+		_ = testService.DeleteGroup(group3.ID)
+	})
 }
 
 func TestLLMService(t *testing.T) {
@@ -443,9 +783,9 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create groups
-	group1, err := service.CreateGroup("Group 1")
+	group1, err := service.CreateGroup("Group 1", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
-	group2, err := service.CreateGroup("Group 2")
+	group2, err := service.CreateGroup("Group 2", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Add user to groups
@@ -490,7 +830,7 @@ func TestGroupCatalogueAssociation(t *testing.T) {
 	service := NewService(db)
 
 	// Create a group
-	group, err := service.CreateGroup("Test Group")
+	group, err := service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Create catalogues
