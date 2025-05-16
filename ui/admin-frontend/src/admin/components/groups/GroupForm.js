@@ -66,18 +66,6 @@ const GroupForm = () => {
   } = useCatalogsSelection(selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs);
 
   
-  const handleCatalogsChange = useCallback((newSelectedCatalogs) => {
-    setSelectedCatalogs(newSelectedCatalogs);
-  }, [setSelectedCatalogs]);
-  
-  const handleDataCatalogsChange = useCallback((newSelectedDataCatalogs) => {
-    setSelectedDataCatalogs(newSelectedDataCatalogs);
-  }, [setSelectedDataCatalogs]);
-  
-  const handleToolCatalogsChange = useCallback((newSelectedToolCatalogs) => {
-    setSelectedToolCatalogs(newSelectedToolCatalogs);
-  }, [setSelectedToolCatalogs]);
-
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
@@ -132,13 +120,13 @@ const GroupForm = () => {
           <GroupCatalogsSection
             catalogs={catalogs}
             selectedCatalogs={selectedCatalogs}
-            onCatalogsChange={handleCatalogsChange}
+            onCatalogsChange={setSelectedCatalogs}
             dataCatalogs={dataCatalogs}
             selectedDataCatalogs={selectedDataCatalogs}
-            onDataCatalogsChange={handleDataCatalogsChange}
+            onDataCatalogsChange={setSelectedDataCatalogs}
             toolCatalogs={toolCatalogs}
             selectedToolCatalogs={selectedToolCatalogs}
-            onToolCatalogsChange={handleToolCatalogsChange}
+            onToolCatalogsChange={setSelectedToolCatalogs}
             loading={catalogsLoading}
           />
 
