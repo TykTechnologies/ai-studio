@@ -89,7 +89,7 @@ func TestGroup_GroupsGetAll(t *testing.T) {
 
 	// Test GetAll
 	var fetchedGroups Groups
-	_, _, err := fetchedGroups.GetAll(db, 10, 1, true)
+	_, _, err := fetchedGroups.GetAll(db, 10, 1, true, "id")
 	assert.NoError(t, err)
 	assert.Len(t, fetchedGroups, 3)
 	assert.Equal(t, "Group 1", fetchedGroups[0].Name)

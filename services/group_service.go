@@ -34,10 +34,12 @@ func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataC
 
 	tx := s.DB.Begin()
 
-	group.Name = name
-	if err := group.Update(tx); err != nil {
-		tx.Rollback()
-		return nil, err
+	if name != "" && name != group.Name {
+		group.Name = name
+		if err := group.Update(tx); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 
 	associations := group.GetAssociationsToUpdate(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
@@ -123,9 +125,18 @@ func (s *Service) GetGroupUsers(groupID uint) (models.Users, error) {
 	return group.Users, nil
 }
 
-func (s *Service) GetAllGroups(pageSize int, pageNumber int, all bool) (models.Groups, int64, int, error) {
+func (s *Service) GetAllGroups(pageSize int, pageNumber int, all bool, sort string) (models.Groups, int64, int, error) {
 	var groups models.Groups
-	totalCount, totalPages, err := groups.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := groups.GetAll(s.DB, pageSize, pageNumber, all, sort, "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return groups, totalCount, totalPages, nil
+}
+
+func (s *Service) SearchGroups(term string, pageSize int, pageNumber int, all bool, sort string) (models.Groups, int64, int, error) {
+	var groups models.Groups
+	totalCount, totalPages, err := groups.SearchByTerm(s.DB, term, pageSize, pageNumber, all, sort, "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		return nil, 0, 0, err
 	}

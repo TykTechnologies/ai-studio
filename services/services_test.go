@@ -424,18 +424,18 @@ func TestGroupService(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Test GetAllGroups
-		groups, count, pages, err := testService.GetAllGroups(10, 1, true)
+		groups, count, pages, err := testService.GetAllGroups(10, 1, true, "id")
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(groups), 3) // We created 3 groups in this test
 		assert.GreaterOrEqual(t, count, int64(3))
 		assert.GreaterOrEqual(t, pages, 1)
 
 		// Test pagination
-		groupsPage1, _, _, err := testService.GetAllGroups(2, 1, false)
+		groupsPage1, _, _, err := testService.GetAllGroups(2, 1, false, "id")
 		assert.NoError(t, err)
 		assert.Len(t, groupsPage1, 2)
 
-		groupsPage2, _, _, err := testService.GetAllGroups(2, 2, false)
+		groupsPage2, _, _, err := testService.GetAllGroups(2, 2, false, "id")
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(groupsPage2), 1)
 

@@ -193,8 +193,34 @@ func (a *API) deleteGroup(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) listGroups(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	searchTerm := c.Query("search")
+	sort := c.Query("sort")
+	if sort == "" {
+		sort = "id"
+	}
 
-	groups, totalCount, totalPages, err := a.service.GetAllGroups(pageSize, pageNumber, all)
+	var groups models.Groups
+	var totalCount int64
+	var totalPages int
+	var err error
+
+	if searchTerm != "" {
+		groups, totalCount, totalPages, err = a.service.SearchGroups(searchTerm, pageSize, pageNumber, all, sort)
+	} else {
+		groups, totalCount, totalPages, err = a.service.GetAllGroups(pageSize, pageNumber, all, sort)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	memberCounts, err := groups.GetGroupsMemberCounts(a.service.DB)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -207,7 +233,7 @@ func (a *API) listGroups(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeGroupsForList(groups, memberCounts)})
 }
 
 // @Summary Add a user to a group
@@ -354,6 +380,63 @@ func (a *API) listGroupUsers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
+}
+
+// GroupListResponse is a simplified response for group listings
+type GroupListResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name               string   `json:"name"`
+		UserCount          int      `json:"user_count"`
+		CatalogueCount     int      `json:"catalogue_count"`
+		DataCatalogueCount int      `json:"data_catalogue_count"`
+		ToolCatalogueCount int      `json:"tool_catalogue_count"`
+		CatalogueNames     []string `json:"catalogue_names"`
+		DataCatalogueNames []string `json:"data_catalogue_names"`
+		ToolCatalogueNames []string `json:"tool_catalogue_names"`
+	} `json:"attributes"`
+}
+
+func serializeGroupForList(group *models.Group, memberCounts []models.GroupMemberCount) GroupListResponse {
+	response := GroupListResponse{
+		Type: "groups",
+		ID:   strconv.FormatUint(uint64(group.ID), 10),
+	}
+
+	response.Attributes.Name = group.Name
+	response.Attributes.UserCount = group.GetMembersCount(memberCounts)
+	response.Attributes.CatalogueCount = group.GetCataloguesCount()
+	response.Attributes.DataCatalogueCount = group.GetDataCataloguesCount()
+	response.Attributes.ToolCatalogueCount = group.GetToolCataloguesCount()
+
+	catalogueNames := make([]string, len(group.Catalogues))
+	for i, cat := range group.Catalogues {
+		catalogueNames[i] = cat.Name
+	}
+	response.Attributes.CatalogueNames = catalogueNames
+
+	dataCatalogueNames := make([]string, len(group.DataCatalogues))
+	for i, cat := range group.DataCatalogues {
+		dataCatalogueNames[i] = cat.Name
+	}
+	response.Attributes.DataCatalogueNames = dataCatalogueNames
+
+	toolCatalogueNames := make([]string, len(group.ToolCatalogues))
+	for i, cat := range group.ToolCatalogues {
+		toolCatalogueNames[i] = cat.Name
+	}
+	response.Attributes.ToolCatalogueNames = toolCatalogueNames
+
+	return response
+}
+
+func serializeGroupsForList(groups models.Groups, memberCounts []models.GroupMemberCount) []GroupListResponse {
+	result := make([]GroupListResponse, len(groups))
+	for i, group := range groups {
+		result[i] = serializeGroupForList(&group, memberCounts)
+	}
+	return result
 }
 
 func serializeGroup(group *models.Group) GroupResponse {

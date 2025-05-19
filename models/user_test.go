@@ -651,7 +651,7 @@ func TestSearchByTerm(t *testing.T) {
 	assert.Len(t, results, 11)             // But should return ALL matching results, not just the first page
 }
 
-func TestPaginateAndSort(t *testing.T) {
+func TestPaginationAndSorting(t *testing.T) {
 	db := setupTestDB(t)
 
 	// Create test users
@@ -667,7 +667,7 @@ func TestPaginateAndSort(t *testing.T) {
 	var users Users
 
 	// Test default sorting (ASC by ID)
-	totalCount, totalPages, err := users.paginateAndSort(db.Model(&User{}), 5, 1, false, "")
+	totalCount, totalPages, err := users.GetAll(db, 5, 1, false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(15), totalCount)
 	assert.Equal(t, 3, totalPages)
@@ -677,7 +677,7 @@ func TestPaginateAndSort(t *testing.T) {
 
 	// Test second page
 	users = Users{}
-	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 2, false, "")
+	totalCount, totalPages, err = users.GetAll(db, 5, 2, false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(15), totalCount)
 	assert.Equal(t, 3, totalPages)
@@ -687,7 +687,7 @@ func TestPaginateAndSort(t *testing.T) {
 
 	// Test explicit ascending sort by email
 	users = Users{}
-	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 1, false, "email")
+	totalCount, totalPages, err = users.GetAll(db, 5, 1, false, "email")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(15), totalCount)
 	assert.Equal(t, 3, totalPages)
@@ -698,7 +698,7 @@ func TestPaginateAndSort(t *testing.T) {
 
 	// Test descending sort by email
 	users = Users{}
-	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 1, false, "-email")
+	totalCount, totalPages, err = users.GetAll(db, 5, 1, false, "-email")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(15), totalCount)
 	assert.Equal(t, 3, totalPages)
@@ -710,7 +710,7 @@ func TestPaginateAndSort(t *testing.T) {
 
 	// Test skip pagination
 	users = Users{}
-	totalCount, totalPages, err = users.paginateAndSort(db.Model(&User{}), 5, 1, true, "")
+	totalCount, totalPages, err = users.GetAll(db, 5, 1, true, "")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(15), totalCount)
 	assert.Equal(t, 3, totalPages)
