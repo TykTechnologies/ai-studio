@@ -199,28 +199,7 @@ func (a *API) listGroups(c *gin.Context) {
 		sort = "id"
 	}
 
-	var groups models.Groups
-	var totalCount int64
-	var totalPages int
-	var err error
-
-	if searchTerm != "" {
-		groups, totalCount, totalPages, err = a.service.SearchGroups(searchTerm, pageSize, pageNumber, all, sort)
-	} else {
-		groups, totalCount, totalPages, err = a.service.GetAllGroups(pageSize, pageNumber, all, sort)
-	}
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	memberCounts, err := groups.GetGroupsMemberCounts(a.service.DB)
+	groups, memberCounts, totalCount, totalPages, err := a.service.GetGroupsWithMemberCounts(searchTerm, pageSize, pageNumber, all, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -382,7 +361,6 @@ func (a *API) listGroupUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
 }
 
-// GroupListResponse is a simplified response for group listings
 type GroupListResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
