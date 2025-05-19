@@ -4,8 +4,10 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 var HashPassword func(password string) (string, error) = hashPassword
@@ -109,4 +111,51 @@ func SameIDs(a, b []uint) bool {
 	}
 
 	return true
+}
+
+// IsValidEmail checks if an email address is valid
+func IsValidEmail(email string) bool {
+	if len(email) == 0 {
+		return false
+	}
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
+}
+
+// PaginateAndSort prepares a query with pagination and sorting
+func PaginateAndSort(query *gorm.DB, pageSize int, pageNumber int, skipPagination bool, sort string) (*gorm.DB, int64, int, error) {
+	var totalCount int64
+
+	// Apply sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC")
+	}
+
+	// Count total records
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	// Calculate total pages
+	var totalPages int
+	if pageSize > 0 {
+		totalPages = int(totalCount) / pageSize
+		if int(totalCount)%pageSize != 0 {
+			totalPages++
+		}
+	}
+
+	// Apply pagination
+	if !skipPagination && pageSize > 0 {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	return query, totalCount, totalPages, nil
 }

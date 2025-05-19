@@ -78,25 +78,19 @@ func (g *Group) GetGroupUsers(db *gorm.DB) error {
 	return db.Model(g).Association("Users").Find(&g.Users)
 }
 
-func (g *Groups) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
-	var totalCount int64
+func (g *Groups) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string, preloads ...string) (int64, int, error) {
 	query := db.Model(&Group{})
 
-	if err := query.Count(&totalCount).Error; err != nil {
+	for _, preload := range preloads {
+		query = query.Preload(preload)
+	}
+
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, sort)
+	if err != nil {
 		return 0, 0, err
 	}
 
-	totalPages := int(totalCount) / pageSize
-	if int(totalCount)%pageSize != 0 {
-		totalPages++
-	}
-
-	if !all {
-		offset := (pageNumber - 1) * pageSize
-		query = query.Offset(offset).Limit(pageSize)
-	}
-
-	err := query.Find(g).Error
+	err = query.Find(g).Error
 	return totalCount, totalPages, err
 }
 
@@ -289,4 +283,73 @@ func (g *Group) ClearAssociations(db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+func (g *Groups) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber int, all bool, sort string, preloads ...string) (int64, int, error) {
+	query := db.Model(&Group{})
+
+	if term != "" {
+		searchTerm := "%" + term + "%"
+		query = query.Where("name LIKE ?", searchTerm)
+	}
+
+	for _, preload := range preloads {
+		query = query.Preload(preload)
+	}
+
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, sort)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = query.Find(g).Error
+	return totalCount, totalPages, err
+}
+
+type GroupMemberCount struct {
+	GroupID uint
+	Count   int64
+}
+
+func (gs *Groups) GetGroupsMemberCounts(db *gorm.DB) ([]GroupMemberCount, error) {
+	var results []GroupMemberCount
+
+	groupIDs := make([]uint, len(*gs))
+	for i, group := range *gs {
+		groupIDs[i] = group.ID
+	}
+
+	err := db.Table("user_groups").
+		Select("group_id, COUNT(*) as count").
+		Where("group_id IN ?", groupIDs).
+		Group("group_id").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (g *Group) GetMembersCount(memberCounts []GroupMemberCount) int {
+	for _, mc := range memberCounts {
+		if mc.GroupID == g.ID {
+			return int(mc.Count)
+		}
+	}
+
+	return len(g.Users)
+}
+
+func (g *Group) GetCataloguesCount() int {
+	return len(g.Catalogues)
+}
+
+func (g *Group) GetDataCataloguesCount() int {
+	return len(g.DataCatalogues)
+}
+
+func (g *Group) GetToolCataloguesCount() int {
+	return len(g.ToolCatalogues)
 }
