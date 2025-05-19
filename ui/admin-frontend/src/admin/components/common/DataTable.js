@@ -7,13 +7,18 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  InputAdornment,
+  Box,
+  Typography
 } from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   StyledPaper,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
+  StyledTextField
 } from "../../styles/sharedStyles";
 import PaginationControls from "./PaginationControls";
 
@@ -25,9 +30,13 @@ const DataTable = ({
   onRowClick,
   sortConfig,
   onSortChange,
+  onSearch,
+  searchPlaceholder = "Search...",
+  enableSearch = false,
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const handleMenuOpen = (event, item) => {
     event.stopPropagation();
@@ -55,7 +64,37 @@ const DataTable = ({
     onSortChange({ field: column.field, direction });
   };
 
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    if (onSearch) {
+      onSearch(value);
+    }
+  };
+
   return (
+    <>
+    {enableSearch && (
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
+          Table Search
+        </Typography>
+        <StyledTextField
+          placeholder={searchPlaceholder}
+          variant="outlined"
+          fullWidth
+          value={searchTerm}
+          onChange={handleSearchChange}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
+    )}
     <StyledPaper>
       <Table>
         <TableHead>
@@ -65,7 +104,7 @@ const DataTable = ({
                 key={column.field}
                 align={column.align || "left"}
                 onClick={() => handleHeaderClick(column)}
-                sx={{ cursor: column.sortable ? 'pointer' : 'default' }}
+                sx={{ cursor: column.sortable ? 'pointer' : 'default', ...column.sx }}
               >
                 {column.headerName} 
                 {column.sortable && sortConfig?.field === column.field && 
@@ -78,16 +117,17 @@ const DataTable = ({
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map((item) => (
+          {data?.map((item) => (
             <StyledTableRow
               key={item.id || item.key}
               onClick={() => onRowClick?.(item)}
               sx={{ cursor: onRowClick ? "pointer" : "default" }}
             >
               {columns.map((column) => (
-                <StyledTableCell 
+                <StyledTableCell
                   key={`${item.id || item.key}-${column.field}`}
                   align={column.align || "left"}
+                  sx={column.sx}
                 >
                   {column.renderCell 
                     ? column.renderCell(item) 
@@ -133,6 +173,7 @@ const DataTable = ({
         ))}
       </Menu>
     </StyledPaper>
+    </>
   );
 };
 
