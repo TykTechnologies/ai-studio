@@ -106,11 +106,6 @@ func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort
 	return totalCount, totalPages, err
 }
 
-func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
-	query := db.Model(&User{})
-	return u.paginateAndSort(query, pageSize, pageNumber, all, sort)
-}
-
 func (u *Users) GetByGroupID(db *gorm.DB, groupID uint) error {
 	return db.Joins("JOIN user_groups ON user_groups.user_id = users.id").Where("user_groups.group_id = ?", groupID).Find(u).Error
 }
