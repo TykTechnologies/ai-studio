@@ -143,6 +143,30 @@ func (s *Service) SearchGroups(term string, pageSize int, pageNumber int, all bo
 	return groups, totalCount, totalPages, nil
 }
 
+func (s *Service) GetGroupsWithMemberCounts(term string, pageSize int, pageNumber int, all bool, sort string) (models.Groups, []models.GroupMemberCount, int64, int, error) {
+	var groups models.Groups
+	var totalCount int64
+	var totalPages int
+	var err error
+
+	if term != "" {
+		groups, totalCount, totalPages, err = s.SearchGroups(term, pageSize, pageNumber, all, sort)
+	} else {
+		groups, totalCount, totalPages, err = s.GetAllGroups(pageSize, pageNumber, all, sort)
+	}
+
+	if err != nil {
+		return nil, nil, 0, 0, err
+	}
+
+	memberCounts, err := groups.GetGroupsMemberCounts(s.DB)
+	if err != nil {
+		return nil, nil, 0, 0, err
+	}
+
+	return groups, memberCounts, totalCount, totalPages, nil
+}
+
 func (s *Service) SearchGroupsByNameStub(stub string) (models.Groups, error) {
 	var groups models.Groups
 	if err := groups.GetByNameStub(s.DB, stub); err != nil {
