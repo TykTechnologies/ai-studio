@@ -392,18 +392,21 @@ func serializeGroupForList(group *models.Group, memberCounts []models.GroupMembe
 	for i, cat := range group.Catalogues {
 		catalogueNames[i] = cat.Name
 	}
+
 	response.Attributes.CatalogueNames = catalogueNames
 
 	dataCatalogueNames := make([]string, len(group.DataCatalogues))
 	for i, cat := range group.DataCatalogues {
 		dataCatalogueNames[i] = cat.Name
 	}
+
 	response.Attributes.DataCatalogueNames = dataCatalogueNames
 
 	toolCatalogueNames := make([]string, len(group.ToolCatalogues))
 	for i, cat := range group.ToolCatalogues {
 		toolCatalogueNames[i] = cat.Name
 	}
+
 	response.Attributes.ToolCatalogueNames = toolCatalogueNames
 
 	return response
@@ -414,6 +417,7 @@ func serializeGroupsForList(groups models.Groups, memberCounts []models.GroupMem
 	for i, group := range groups {
 		result[i] = serializeGroupForList(&group, memberCounts)
 	}
+
 	return result
 }
 
