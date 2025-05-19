@@ -11,10 +11,10 @@ export const teamsService = {
     }
   },
   
-  getTeams: async () => {
+  getTeams: async (params) => {
     try {
-      const response = await apiClient.get("/groups");
-      return response.data;
+      const response = await apiClient.get("/groups", { params });
+      return response;
     } catch (error) {
       console.error("Error fetching teams:", error);
       throw error;
