@@ -5,7 +5,7 @@ import CollapsibleSection from "../common/CollapsibleSection";
 import TeamMembersTable from "./components/TeamMembersTable";
 import { useNavigate, Link } from "react-router-dom";
 import useGroupDetail from "./hooks/useGroupDetail";
-import { CATALOG_ROWS, borderStyle, lastRowStyle, TEAM_MEMBERS_COLUMNS } from "./utils/groupDetailConfig";
+import { CATALOG_ROWS, borderStyle, lastRowStyle, TEAM_MEMBERS_COLUMNS_FOR_TABLE } from "./utils/groupDetailConfig";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import EditIcon from "@mui/icons-material/Edit";
 
@@ -83,7 +83,7 @@ const GroupDetail = () => {
 
         {/* Section 2: Team Members */}
         <CollapsibleSection title="Team members" defaultExpanded>
-          <TeamMembersTable columns={TEAM_MEMBERS_COLUMNS} rows={userRows} />
+          <TeamMembersTable columns={TEAM_MEMBERS_COLUMNS_FOR_TABLE} rows={userRows} />
         </CollapsibleSection>
 
         {/* Section 3: Catalogs */}
@@ -99,19 +99,7 @@ const GroupDetail = () => {
             return (
               <Box
                 key={row.label}
-                sx={idx < CATALOG_ROWS.length - 1 ? {
-                  ...borderStyle,
-                  display: "flex",
-                  flexDirection: { xs: "column", md: "row" },
-                  alignItems: { xs: "flex-start", md: "center" },
-                  gap: { xs: 1, md: 2 },
-                } : {
-                  ...lastRowStyle,
-                  display: "flex",
-                  flexDirection: { xs: "column", md: "row" },
-                  alignItems: { xs: "flex-start", md: "center" },
-                  gap: { xs: 1, md: 2 },
-                }}
+                sx={idx < CATALOG_ROWS.length - 1 ? borderStyle : lastRowStyle}
               >
                 <Typography
                   variant="bodyLargeBold"
