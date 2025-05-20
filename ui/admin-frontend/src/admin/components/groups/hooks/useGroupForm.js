@@ -118,6 +118,7 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
           timestamp: Date.now()
         }));
       }
+      navigate("/admin/groups");
     } catch (error) {
       console.error("Error saving group", error);
       setError("Failed to save group");
@@ -128,7 +129,6 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
       });
     } finally {
       setLoading(false);
-      navigate("/admin/groups")
     }
   };
 
@@ -149,6 +149,7 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
         message: "Team deleted successfully",
         timestamp: Date.now()
       }));
+      navigate("/admin/groups");
     } catch (error) {
       console.error("Error deleting team:", error);
       setSnackbar({
@@ -159,7 +160,6 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     } finally {
       setWarningDialogOpen(false);
       setLoading(false);
-      navigate("/admin/groups")
     }
   };
 

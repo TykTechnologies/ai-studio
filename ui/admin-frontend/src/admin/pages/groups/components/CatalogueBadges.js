@@ -5,9 +5,9 @@ import catalogueBadgeConfigs from "../utils/catalogueBadgeConfig";
 
 const CatalogueBadges = ({ catalogues, dataCatalogues, toolCatalogues }) => {
   const allCatalogues = [
-    ...catalogues.map(name => ({ type: 'llm', name })),
-    ...dataCatalogues.map(name => ({ type: 'data', name })),
-    ...toolCatalogues.map(name => ({ type: 'tool', name }))
+    ...catalogues?.map(name => ({ type: 'llm', name })),
+    ...dataCatalogues?.map(name => ({ type: 'data', name })),
+    ...toolCatalogues?.map(name => ({ type: 'tool', name }))
   ];
 
   const totalCount = allCatalogues.length;

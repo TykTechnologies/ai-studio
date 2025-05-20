@@ -50,12 +50,6 @@ const GroupsTable = ({
 
   const actions = [
     {
-      label: "Manage catalogues",
-    },
-    {
-      label: "Manage team members",
-    },
-    {
       label: "Edit team",
       onClick: handleEdit
     },
