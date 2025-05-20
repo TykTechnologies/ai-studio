@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { teamsService } from "../../../services/teamsService";
+import { CACHE_KEYS } from "../../../utils/constants";
 
 export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
   const [name, setName] = useState("");
@@ -102,21 +103,21 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     try {
       if (id) {
         await teamsService.updateTeam(id, groupData);
-        setSnackbar({
-          open: true,
+
+        localStorage.setItem(CACHE_KEYS.GROUP_NOTIFICATION, JSON.stringify({
+          operation: "update",
           message: "Team updated successfully",
-          severity: "success",
-        });
+          timestamp: Date.now()
+        }));
       } else {
         await teamsService.createTeam(groupData);
-        setSnackbar({
-          open: true,
-          message: "Team created successfully",
-          severity: "success",
-        });
-      }
 
-      setTimeout(() => navigate("/admin/groups"), 2000);
+        localStorage.setItem(CACHE_KEYS.GROUP_NOTIFICATION, JSON.stringify({
+          operation: "create",
+          message: "Team created successfully",
+          timestamp: Date.now()
+        }));
+      }
     } catch (error) {
       console.error("Error saving group", error);
       setError("Failed to save group");
@@ -125,7 +126,9 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
         message: "Failed to save team. Please try again.",
         severity: "error",
       });
+    } finally {
       setLoading(false);
+      navigate("/admin/groups")
     }
   };
 
@@ -141,12 +144,11 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     try {
       setLoading(true);
       await teamsService.deleteTeam(id);
-      setSnackbar({
-        open: true,
+      localStorage.setItem(CACHE_KEYS.GROUP_NOTIFICATION, JSON.stringify({
+        operation: "delete",
         message: "Team deleted successfully",
-        severity: "success",
-      });
-      setTimeout(() => navigate("/admin/groups"), 2000);
+        timestamp: Date.now()
+      }));
     } catch (error) {
       console.error("Error deleting team:", error);
       setSnackbar({
@@ -157,6 +159,7 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
     } finally {
       setWarningDialogOpen(false);
       setLoading(false);
+      navigate("/admin/groups")
     }
   };
 
