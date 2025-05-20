@@ -200,9 +200,12 @@ func TestGroupEndpoints(t *testing.T) {
 	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/groups/%s/users", groupID), addUserToGroupInput)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
-	// Test List Group Users
+	// Test List Group Users with pagination
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/users", groupID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
+	// Verify pagination headers are present
+	assert.NotEmpty(t, w.Header().Get("X-Total-Count"))
+	assert.NotEmpty(t, w.Header().Get("X-Total-Pages"))
 
 	// Test Remove User from Group
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s/users/%s", groupID, userID), nil)
