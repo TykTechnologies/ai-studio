@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Typography,
@@ -16,6 +16,7 @@ import useGroups from "./hooks/useGroups";
 import useGroupActions from "./hooks/useGroupActions";
 import GroupsTable from "./components/GroupsTable";
 import GroupDeleteDialog from "./components/GroupDeleteDialog";
+import { CACHE_KEYS } from "../../utils/constants";
 
 const Groups = () => {
   const [snackbar, setSnackbar] = useState({
@@ -55,6 +56,28 @@ const Groups = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
+
+  useEffect(() => {
+    const notificationData = localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION);
+    if (notificationData) {
+      try {
+        const notification = JSON.parse(notificationData);
+        const isStillRelevant = Date.now() - notification.timestamp < 5 * 60 * 1000; 
+
+        if (isStillRelevant) {
+          setSnackbar({
+            open: true,
+            message: notification.message,
+            severity: "success", 
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing group notification data', error);
+      }
+
+      localStorage.removeItem(CACHE_KEYS.GROUP_NOTIFICATION);
+    }
+  }, []);
 
   if (loading && groups.length === 0) {
     return <CircularProgress />;
