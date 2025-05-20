@@ -1,11 +1,13 @@
 import { Typography, CircularProgress, Box, Chip } from "@mui/material";
-import { TitleBox, ContentBox, SecondaryLinkButton } from "../../styles/sharedStyles";
+import { TitleBox, ContentBox, SecondaryLinkButton, ResponsiveTitleBox, TitleContentBox, ActionButtonsBox, PrimaryButton } from "../../styles/sharedStyles";
 import Section from "../common/Section";
 import CollapsibleSection from "../common/CollapsibleSection";
 import TeamMembersTable from "./components/TeamMembersTable";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import useGroupDetail from "./hooks/useGroupDetail";
 import { CATALOG_ROWS, borderStyle, lastRowStyle, TEAM_MEMBERS_COLUMNS } from "./utils/groupDetailConfig";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import EditIcon from "@mui/icons-material/Edit";
 
 const GroupDetail = () => {
   const navigate = useNavigate();
@@ -32,16 +34,41 @@ const GroupDetail = () => {
 
   return (
     <>
-      <TitleBox top="64px">
-        <Typography variant="headingXLarge">User group details</Typography>
-        <SecondaryLinkButton
-          color="inherit"
-          onClick={() => navigate("/admin/groups")}
-        >
-          Back to user groups
-        </SecondaryLinkButton>
+      <TitleBox>
+        <ResponsiveTitleBox>
+          <TitleContentBox>
+            <SecondaryLinkButton
+              component={Link}
+              to="/admin/groups"
+              color="inherit"
+              sx={{ mb: 1, px: 0 }}
+              startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
+            >
+              back to teams
+            </SecondaryLinkButton>
+            <Typography variant="headingXLarge">
+              Team details
+            </Typography>
+          </TitleContentBox>
+          <ActionButtonsBox>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/groups/edit/${group.id}`)}
+            >
+              Edit team
+            </PrimaryButton>
+          </ActionButtonsBox>
+        </ResponsiveTitleBox>
       </TitleBox>
-      <ContentBox>
+      <ContentBox sx={{
+        maxWidth: {
+          xs: '100%',
+          sm: '100%',
+          md: '100%',
+          lg: '75%'
+        }
+      }}>
         {/* Section 1: Name */}
         <Section>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -72,7 +99,19 @@ const GroupDetail = () => {
             return (
               <Box
                 key={row.label}
-                sx={idx < CATALOG_ROWS.length - 1 ? borderStyle : lastRowStyle}
+                sx={idx < CATALOG_ROWS.length - 1 ? {
+                  ...borderStyle,
+                  display: "flex",
+                  flexDirection: { xs: "column", md: "row" },
+                  alignItems: { xs: "flex-start", md: "center" },
+                  gap: { xs: 1, md: 2 },
+                } : {
+                  ...lastRowStyle,
+                  display: "flex",
+                  flexDirection: { xs: "column", md: "row" },
+                  alignItems: { xs: "flex-start", md: "center" },
+                  gap: { xs: 1, md: 2 },
+                }}
               >
                 <Typography
                   variant="bodyLargeBold"
@@ -81,7 +120,7 @@ const GroupDetail = () => {
                 >
                   {row.label}
                 </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "flex-start" }}>
                   {items && items.length > 0 ? (
                     items.map((item) => (
                       <Chip
@@ -89,12 +128,14 @@ const GroupDetail = () => {
                         label={item.attributes?.name}
                         size="small"
                         sx={{
-                          fontWeight: 500,
-                          fontSize: "1rem",
-                          background: "background.neutralDefault",
-                          color: "text.primary",
-                          borderRadius: "8px",
-                          height: "28px",
+                          bgcolor: theme => theme.palette.background.buttonPrimaryOutlineHover,
+                          borderRadius: '6px',
+                          maxHeight: 'fit-content',
+                          '& .MuiChip-label': {
+                            color: theme => theme.palette.text.defaultSubdued,
+                            padding: '2px 6px',
+                            marginRight: '6px',
+                          },
                         }}
                       />
                     ))

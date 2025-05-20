@@ -19,14 +19,12 @@ export const borderStyle = {
   padding: "16px 0",
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
 };
 
 export const lastRowStyle = {
   padding: "16px 0",
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
 };
 
 export const TEAM_MEMBERS_COLUMNS = [
