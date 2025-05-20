@@ -289,3 +289,17 @@ func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber 
 	err = query.Find(u).Error
 	return totalCount, totalPages, err
 }
+
+func (u *Users) GetGroupUsersPaginated(db *gorm.DB, groupID uint, pageSize, pageNumber int, all bool) (int64, int, error) {
+	query := db.Model(&User{}).
+		Joins("JOIN user_groups ON user_groups.user_id = users.id").
+		Where("user_groups.group_id = ?", groupID)
+
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, "id")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = query.Find(u).Error
+	return totalCount, totalPages, err
+}

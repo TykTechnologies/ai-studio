@@ -75,7 +75,7 @@ func (a *API) getGroup(c *gin.Context) {
 		return
 	}
 
-	group, err := a.service.GetGroupByID(uint(id), "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
+	group, err := a.service.GetGroupByID(uint(id), "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -347,7 +347,9 @@ func (a *API) listGroupUsers(c *gin.Context) {
 		return
 	}
 
-	users, err := a.service.GetGroupUsers(uint(groupID))
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	users, totalCount, totalPages, err := a.service.GetGroupUsers(uint(groupID), pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -358,6 +360,8 @@ func (a *API) listGroupUsers(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
 }
 

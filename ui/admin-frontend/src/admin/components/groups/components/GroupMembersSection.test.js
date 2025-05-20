@@ -57,6 +57,8 @@ jest.mock('../../common/transfer-list/TransferList', () => ({
       <div data-right-title={props.rightTitle}></div>
       <div data-has-more={props.hasMore.toString()}></div>
       <div data-is-loading-more={props.isLoadingMore.toString()}></div>
+      <div data-has-more-selected={props.hasMoreSelected?.toString()}></div>
+      <div data-is-loading-more-selected={props.isLoadingMoreSelected?.toString()}></div>
       <div data-columns={JSON.stringify(props.columns)}></div>
     </div>
   ))
@@ -103,6 +105,7 @@ describe('GroupMembersSection Component', () => {
   const mockHandleUsersChange = jest.fn();
   const mockHandleSearch = jest.fn();
   const mockHandleLoadMore = jest.fn();
+  const mockOnLoadMoreSelected = jest.fn();
   
   beforeEach(() => {
     jest.clearAllMocks();
@@ -119,6 +122,9 @@ describe('GroupMembersSection Component', () => {
         currentPage={1}
         totalPages={3}
         isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
       />
     );
     
@@ -154,6 +160,9 @@ describe('GroupMembersSection Component', () => {
         currentPage={1}
         totalPages={3}
         isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
       />
     );
     
@@ -186,6 +195,9 @@ describe('GroupMembersSection Component', () => {
         currentPage={1}
         totalPages={3}
         isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
       />
     );
     
@@ -212,6 +224,9 @@ describe('GroupMembersSection Component', () => {
         currentPage={1}
         totalPages={3}
         isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
       />
     );
     
@@ -237,6 +252,9 @@ describe('GroupMembersSection Component', () => {
         currentPage={3}
         totalPages={3}
         isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
       />
     );
     
@@ -259,6 +277,9 @@ describe('GroupMembersSection Component', () => {
         currentPage={1}
         totalPages={3}
         isLoadingMore={true}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
       />
     );
     
@@ -268,5 +289,76 @@ describe('GroupMembersSection Component', () => {
     
     // Check isLoadingMore value
     expect(isLoadingMoreProp).toBe(true);
+  });
+  
+  test('passes hasMoreSelected prop to TransferList', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
+      />
+    );
+    
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const hasMoreSelectedProp = mockCalls[mockCalls.length - 1][0].hasMoreSelected;
+    
+    expect(hasMoreSelectedProp).toBe(true);
+  });
+  
+  test('passes isLoadingMoreSelected prop to TransferList', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={false}
+        isLoadingMoreSelected={true}
+      />
+    );
+    
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const isLoadingMoreSelectedProp = mockCalls[mockCalls.length - 1][0].isLoadingMoreSelected;
+    
+    expect(isLoadingMoreSelectedProp).toBe(true);
+  });
+  
+  test('calls onLoadMoreSelected when handler is triggered', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
+        onLoadMoreSelected={mockOnLoadMoreSelected}
+        hasMoreSelected={true}
+        isLoadingMoreSelected={false}
+      />
+    );
+    
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const onLoadMoreSelectedProp = mockCalls[mockCalls.length - 1][0].onLoadMoreSelected;
+    
+    onLoadMoreSelectedProp();
+    
+    expect(mockOnLoadMoreSelected).toHaveBeenCalledTimes(1);
   });
 });
