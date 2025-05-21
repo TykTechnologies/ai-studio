@@ -21,10 +21,10 @@ export const teamsService = {
     }
   },
   
-  getTeamUsers: async (id, page = 1) => {
+  getTeamUsers: async (id, queryParams) => {
     try {
       const response = await apiClient.get(`/groups/${id}/users`, {
-        params: { page }
+        params: queryParams
       });
       return {
         data: response.data.data,

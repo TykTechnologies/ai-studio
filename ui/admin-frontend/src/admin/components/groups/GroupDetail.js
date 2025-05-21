@@ -8,24 +8,37 @@ import useGroupDetail from "./hooks/useGroupDetail";
 import { CATALOG_ROWS, borderStyle, lastRowStyle, TEAM_MEMBERS_COLUMNS_FOR_TABLE } from "./utils/groupDetailConfig";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import EditIcon from "@mui/icons-material/Edit";
+import useTeamMembers from "./hooks/useTeamMembers";
 
 const GroupDetail = () => {
   const navigate = useNavigate();
   const {
     group,
-    users,
     catalogues,
     dataCatalogues,
     toolCatalogues,
-    loading,
-    error,
+    loading: groupLoading,
+    error: groupError,
   } = useGroupDetail();
+
+  const {
+    users,
+    error: usersError,
+    loading: usersLoading,
+    isLoadingMore,
+    hasMore,
+    handleLoadMore,
+    containerRef,
+  } = useTeamMembers(group?.id);
+
+  const loading = groupLoading;
+  const error = groupError || usersError;
 
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!group) return <Typography>Group not found</Typography>;
 
-  const userRows = users.map((u) => ({
+  const userRows = users?.map((u) => ({
     id: u.id,
     name: u.attributes?.name,
     email: u.attributes?.email,
@@ -83,7 +96,15 @@ const GroupDetail = () => {
 
         {/* Section 2: Team Members */}
         <CollapsibleSection title="Team members" defaultExpanded>
-          <TeamMembersTable columns={TEAM_MEMBERS_COLUMNS_FOR_TABLE} rows={userRows} />
+        <TeamMembersTable 
+          columns={TEAM_MEMBERS_COLUMNS_FOR_TABLE} 
+          rows={userRows} 
+          loading={usersLoading}
+          isLoadingMore={isLoadingMore}
+          hasMore={hasMore}
+          onLoadMore={handleLoadMore}
+          containerRef={containerRef}
+        />
         </CollapsibleSection>
 
         {/* Section 3: Catalogs */}
@@ -109,7 +130,7 @@ const GroupDetail = () => {
                   {row.label}
                 </Typography>
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "flex-start" }}>
-                  {items && items.length > 0 ? (
+                  {items && items?.length > 0 ? (
                     items.map((item) => (
                       <Chip
                         key={item.id}
