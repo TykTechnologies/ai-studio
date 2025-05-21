@@ -4,9 +4,11 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import GroupDetail from './GroupDetail';
 import useGroupDetail from './hooks/useGroupDetail';
+import useTeamMembers from './hooks/useTeamMembers';
 
-// Mock the custom hook
+// Mock the custom hooks
 jest.mock('./hooks/useGroupDetail');
+jest.mock('./hooks/useTeamMembers');
 
 // Mock react-router-dom's useNavigate
 const mockedNavigate = jest.fn();
@@ -122,6 +124,19 @@ describe('GroupDetail', () => {
     expect(screen.getByText('Group not found')).toBeInTheDocument();
   });
 
+  // Default mock for useTeamMembers for tests outside 'with group data'
+  beforeEach(() => {
+    useTeamMembers.mockReturnValue({
+      users: [],
+      error: null,
+      loading: false,
+      isLoadingMore: false,
+      hasMore: false,
+      handleLoadMore: jest.fn(),
+      containerRef: { current: null },
+    });
+  });
+
   // Test 4: Successful data rendering
   describe('with group data', () => {
     const mockGroup = {
@@ -130,7 +145,7 @@ describe('GroupDetail', () => {
     };
     const mockUsers = [
       { id: 'user1', attributes: { name: 'User One', email: 'user1@example.com', role: 'Admin' } },
-      { id: 'user2', attributes: { name: 'User Two', email: 'user2@example.com', role: 'Member' } },
+      { id: 'user2', attributes: { name: 'User Two', email: 'user2@example.com', role: 'Chat user' } },
     ];
     const mockCatalogues = [{ id: 'cat1', attributes: { name: 'Catalogue One' } }];
     const mockDataCatalogues = [{ id: 'dataCat1', attributes: { name: 'Data Catalogue One' } }];
@@ -139,12 +154,20 @@ describe('GroupDetail', () => {
     beforeEach(() => {
       useGroupDetail.mockReturnValue({
         group: mockGroup,
-        users: mockUsers,
         catalogues: mockCatalogues,
         dataCatalogues: mockDataCatalogues,
         toolCatalogues: mockToolCatalogues,
         loading: false,
         error: null,
+      });
+      useTeamMembers.mockReturnValue({
+        users: mockUsers,
+        error: null,
+        loading: false,
+        isLoadingMore: false,
+        hasMore: false,
+        handleLoadMore: jest.fn(),
+        containerRef: { current: null },
       });
     });
 
