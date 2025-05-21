@@ -148,3 +148,45 @@ describe('teamsService', () => {
     });
   });
 });
+
+describe('getTeamUsers', () => {
+  it('should fetch users for a team successfully with pagination, search, and sort parameters', async () => {
+    const teamId = 'team-123';
+    const mockUserItems = [
+      { id: 'user-1', username: 'userone' },
+      { id: 'user-2', username: 'usertwo' }
+    ];
+    const mockHeaders = {
+      'x-total-count': '2',
+      'x-total-pages': '1'
+    };
+    const mockApiResponse = {
+        data: mockUserItems,
+        totalCount: parseInt(mockHeaders['x-total-count']),
+        totalPages: parseInt(mockHeaders['x-total-pages'])
+    };
+
+    apiClient.get.mockResolvedValueOnce({ data: { data: mockUserItems }, headers: mockHeaders });
+
+    const testParams = {
+      page: 1,
+      page_size: 10,
+      search: 'user',
+      sort: 'username'
+    };
+
+    const result = await teamsService.getTeamUsers(teamId, testParams);
+
+    expect(apiClient.get).toHaveBeenCalledWith(`/groups/${teamId}/users`, { params: testParams });
+    expect(result).toEqual(mockApiResponse);
+  });
+
+  it('should throw error when fetch fails', async () => {
+    const teamId = 'team-123';
+    const error = new Error('API Error');
+    apiClient.get.mockRejectedValueOnce(error);
+
+    await expect(teamsService.getTeamUsers(teamId)).rejects.toThrow('API Error');
+    expect(console.error).toHaveBeenCalledWith('Error fetching team users:', error);
+  });
+});
