@@ -32,13 +32,9 @@ const TransferList = ({
   onLoadMore,
   hasMore = true,
   isLoadingMore = false,
-  onLoadMoreSelected,
-  hasMoreSelected = false,
-  isLoadingMoreSelected = false,
 }) => {
   const {
     rightBoxRef,
-    leftBoxRef,
     filteredAvailable,
     selected,
     searchTerm,
@@ -55,14 +51,11 @@ const TransferList = ({
     onLoadMore,
     hasMore,
     isLoadingMore,
-    onLoadMoreSelected,
-    hasMoreSelected,
-    isLoadingMoreSelected,
   });
 
   return (
     <TransferListContainer>
-      <TransferBox ref={leftBoxRef}>
+      <TransferBox>
         <HeaderBox>
           <Typography variant="headingSmall" color="text.primary">
             {leftTitle}
@@ -78,13 +71,6 @@ const TransferList = ({
           isLeftSide={true}
           onRemoveItem={handleRemoveItem}
         />
-        {isLoadingMoreSelected && (
-          <Box display="flex" justifyContent="center" p={2}>
-            <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-              Loading more members...
-            </Typography>
-          </Box>
-        )}
       </TransferBox>
 
       <TransferBox ref={rightBoxRef}>

@@ -13,11 +13,8 @@ const GroupMembersSection = ({
   handleLoadMore,
   currentPage,
   totalPages,
-  isLoadingMore,
-  onLoadMoreSelected,
-  hasMoreSelected,
-  isLoadingMoreSelected
-}) => {
+  isLoadingMore
+}) => {  
   return (
     <CollapsibleSection title="Manage team members" defaultExpanded={false}>
       <TransferList
@@ -81,9 +78,6 @@ const GroupMembersSection = ({
         onLoadMore={handleLoadMore}
         hasMore={currentPage < totalPages}
         isLoadingMore={isLoadingMore}
-        onLoadMoreSelected={onLoadMoreSelected}
-        hasMoreSelected={hasMoreSelected}
-        isLoadingMoreSelected={isLoadingMoreSelected}
       />
     </CollapsibleSection>
   );

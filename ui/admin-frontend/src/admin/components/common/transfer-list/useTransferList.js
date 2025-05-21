@@ -9,12 +9,8 @@ const useTransferList = ({
   onLoadMore,
   hasMore = true,
   isLoadingMore = false,
-  onLoadMoreSelected,
-  hasMoreSelected = false,
-  isLoadingMoreSelected = false,
 }) => {
   const rightBoxRef = useRef(null);
-  const leftBoxRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [filteredAvailable, setFilteredAvailable] = useState([]);
@@ -51,29 +47,6 @@ const useTransferList = ({
     
     return () => {}; 
   }, [onLoadMore, hasMore, isLoadingMore]);
-
-  useEffect(() => {
-    const leftBox = leftBoxRef?.current;
-    const handleLeftScroll = () => {
-      if (!leftBox || !onLoadMoreSelected || !hasMoreSelected || isLoadingMoreSelected) return;
-
-      const { scrollTop, scrollHeight, clientHeight } = leftBox;
-
-      if (scrollHeight - scrollTop - clientHeight < 50) {
-        onLoadMoreSelected();
-      }
-    };
-
-    if (leftBox) {
-      leftBox.addEventListener('scroll', handleLeftScroll);
-      
-      return () => {
-        leftBox.removeEventListener('scroll', handleLeftScroll);
-      };
-    }
-    
-    return () => {};
-  }, [onLoadMoreSelected, hasMoreSelected, isLoadingMoreSelected]);
 
   const handleSearchChange = useCallback((e) => {
     const value = e.target.value;
@@ -115,7 +88,6 @@ const useTransferList = ({
 
   return {
     rightBoxRef,
-    leftBoxRef,
     available,
     selected,
     filteredAvailable,

@@ -1,19 +1,30 @@
-import React from "react";
+import React, { memo } from "react";
 import {
   Table,
   TableBody,
   Typography,
   TableHead,
   Box,
+  CircularProgress,
 } from "@mui/material";
 import { StyledTableCell, StyledTableRow } from "../../../styles/sharedStyles";
-import CustomSelectBadge from "../../common/CustomSelectBadge";
-import { roleBadgeConfigs } from "../utils/roleBadgeConfig";
 import { TransferBox, HeaderBox, TableHeaderRow } from "../../common/transfer-list/styles";
 
-const TeamMembersTable = ({ rows, columns }) => {
+const TeamMembersTable = memo(({ 
+  rows, 
+  columns, 
+  loading, 
+  isLoadingMore, 
+  containerRef 
+}) => {
+
   return (
-    <TransferBox sx={{ border: "none" }}>
+    <TransferBox 
+      ref={containerRef} 
+      sx={{ 
+        border: "none", 
+      }}
+    >
       <HeaderBox>
         <Typography variant="bodyLargeBold" color="text.primary">
           Current members
@@ -22,28 +33,39 @@ const TeamMembersTable = ({ rows, columns }) => {
           Users currently on this team
         </Typography>
       </HeaderBox>
-      <Table style={{ width: "100%", tableLayout: "fixed" }}>
+      <Table 
+        style={{ 
+          width: "100%", 
+          tableLayout: "fixed" 
+        }}
+      >
         <TableHead>
-            <TableHeaderRow>
-                {columns.map((column) => (
-                <StyledTableCell
-                    key={column.field}
-                    sx={{
-                    width: column.width,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    }}
-                >
-                    <Typography variant="bodyMediumSemiBold" color="text.defaultSubdued">
-                    {column.headerName}
-                    </Typography>
-                </StyledTableCell>
-                ))}
-            </TableHeaderRow>
+          <TableHeaderRow>
+            {columns.map((column) => (
+              <StyledTableCell
+                key={column.field}
+                sx={{
+                  width: column.width,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <Typography variant="bodyMediumSemiBold" color="text.defaultSubdued">
+                  {column.headerName}
+                </Typography>
+              </StyledTableCell>
+            ))}
+          </TableHeaderRow>
         </TableHead>
         <TableBody>
-          {rows.length > 0 ? (
+          {loading && rows?.length === 0 ? (
+            <StyledTableRow>
+              <StyledTableCell colSpan={columns.length} align="center">
+                <CircularProgress size={24} />
+              </StyledTableCell>
+            </StyledTableRow>
+          ) : rows?.length > 0 ? (
             rows.map((row) => (
               <StyledTableRow key={row.id}>
                 {columns.map((column) => (
@@ -71,8 +93,16 @@ const TeamMembersTable = ({ rows, columns }) => {
           )}
         </TableBody>
       </Table>
+      
+      {isLoadingMore && (
+        <Box display="flex" justifyContent="center" p={2}>
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+            Loading more users...
+          </Typography>
+        </Box>
+      )}
     </TransferBox>
   );
-};
+});
 
 export default TeamMembersTable;
