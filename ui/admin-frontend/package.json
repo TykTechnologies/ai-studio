@@ -33,6 +33,7 @@
     "remark-gfm": "^4.0.0",
     "remark-react": "^9.0.1",
     "unist-util-visit": "^5.0.0",
+    "use-debounce": "^10.0.4",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
