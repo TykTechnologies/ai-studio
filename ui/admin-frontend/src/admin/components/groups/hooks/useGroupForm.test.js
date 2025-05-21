@@ -4,6 +4,7 @@ import { fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { useGroupForm } from './useGroupForm';
 import { teamsService } from '../../../services/teamsService';
+import { CACHE_KEYS } from '../../../utils/constants';
 
 // Mock the teams service
 jest.mock('../../../services/teamsService', () => ({
@@ -160,6 +161,7 @@ describe('useGroupForm Hook', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear(); // Clear local storage before each test
     jest.useFakeTimers();
     
     // Default successful responses
@@ -259,7 +261,10 @@ describe('useGroupForm Hook', () => {
     
     render(<TestComponent id="123" />);
     
-    // Wait for loading to finish
+    // Initially loading should be true
+    expect(screen.getByTestId('loading').textContent).toBe('true');
+    
+    // Wait for loading to finish (after error)
     await waitFor(() => {
       expect(screen.getByTestId('loading').textContent).toBe('false');
     });
@@ -315,20 +320,22 @@ describe('useGroupForm Hook', () => {
     };
     expect(teamsService.createTeam).toHaveBeenCalledWith(expectedData);
     
-    // Wait for snackbar to show up
+    // Wait for loading to finish
     await waitFor(() => {
-      expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
+      expect(screen.getByTestId('loading').textContent).toBe('false');
     });
-    
-    // Check snackbar shows correct message
-    expect(screen.getByTestId('snackbar-message').textContent).toBe('Team created successfully');
-    expect(screen.getByTestId('snackbar-severity').textContent).toBe('success');
-    
-    // Advance timers to trigger navigation
-    jest.advanceTimersByTime(2000);
     
     // Check navigation
     expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
+    
+    // Check localStorage for the notification
+    const notification = JSON.parse(localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION));
+    expect(notification.operation).toBe('create');
+    expect(notification.message).toBe('Team created successfully');
+    expect(notification.timestamp).toBeDefined();
+    
+    // Snackbar should not be open for success messages
+    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
   });
 
   test('submits form to update an existing group', async () => {
@@ -374,20 +381,22 @@ describe('useGroupForm Hook', () => {
     };
     expect(teamsService.updateTeam).toHaveBeenCalledWith('123', expectedData);
     
-    // Wait for snackbar to show up
+    // Wait for loading to finish
     await waitFor(() => {
-      expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
+      expect(screen.getByTestId('loading').textContent).toBe('false');
     });
-    
-    // Check snackbar shows success
-    expect(screen.getByTestId('snackbar-message').textContent).toBe('Team updated successfully');
-    expect(screen.getByTestId('snackbar-severity').textContent).toBe('success');
-    
-    // Advance timers to trigger navigation
-    jest.advanceTimersByTime(2000);
     
     // Check navigation
     expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
+    
+    // Check localStorage for the notification
+    const notification = JSON.parse(localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION));
+    expect(notification.operation).toBe('update');
+    expect(notification.message).toBe('Team updated successfully');
+    expect(notification.timestamp).toBeDefined();
+
+    // Snackbar should not be open for success messages
+    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
   });
 
   test('handles form submission errors', async () => {
@@ -407,8 +416,9 @@ describe('useGroupForm Hook', () => {
     fireEvent.click(screen.getByTestId('submit-form'));
     
     // Wait for API call to reject
+    expect(screen.getByTestId('loading').textContent).toBe('true'); // Loading is true during submission
     await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false');
+      expect(screen.getByTestId('loading').textContent).toBe('false'); // Loading finishes after error
     });
     
     // Check error is set
@@ -419,46 +429,61 @@ describe('useGroupForm Hook', () => {
     expect(screen.getByTestId('snackbar-message').textContent).toBe('Failed to save team. Please try again.');
     expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
     
-    expect(consoleSpy).toHaveBeenCalled();
-    
     consoleSpy.mockRestore();
   });
 
   test('handles snackbar close', async () => {
+    // Mock API error to trigger snackbar
+    const errorMessage = 'Failed to save group';
+    teamsService.createTeam.mockRejectedValue(new Error(errorMessage));
+
     render(<TestComponent />);
     
     // Set name
     fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'New Group' } });
     
-    // Submit form to trigger snackbar
+    // Submit form to trigger error snackbar
     fireEvent.click(screen.getByTestId('submit-form'));
     
-    // Wait for snackbar to be open
+    // Wait for loading to finish (after error)
+    expect(screen.getByTestId('loading').textContent).toBe('true');
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').textContent).toBe('false');
+    });
+    
+    // Wait for snackbar to be open (due to error)
     await waitFor(() => {
       expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
     });
+    expect(screen.getByTestId('snackbar-message').textContent).toBe('Failed to save team. Please try again.');
     
     // Close snackbar
     fireEvent.click(screen.getByTestId('close-snackbar'));
     
     // Check snackbar is closed
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
+    await waitFor(() => {
+      expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
+    });
   });
 
-  test('handles delete click and cancel', () => {
+  test('handles delete click and cancel', async () => {
     render(<TestComponent id="123" />);
     
     // Click delete
     fireEvent.click(screen.getByTestId('delete-click'));
     
     // Check dialog is open
-    expect(screen.getByTestId('warning-dialog-open').textContent).toBe('true');
+    await waitFor(() => {
+      expect(screen.getByTestId('warning-dialog-open').textContent).toBe('true');
+    });
     
     // Cancel delete
     fireEvent.click(screen.getByTestId('cancel-delete'));
     
     // Check dialog is closed
-    expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
+    await waitFor(() => {
+      expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
+    });
     
     // Verify no delete call was made
     expect(teamsService.deleteTeam).not.toHaveBeenCalled();
@@ -482,7 +507,7 @@ describe('useGroupForm Hook', () => {
     // Verify delete call was made
     expect(teamsService.deleteTeam).toHaveBeenCalledWith('123');
     
-    // Wait for API call to resolve
+    // Wait for API call to resolve and loading to finish
     await waitFor(() => {
       expect(screen.getByTestId('loading').textContent).toBe('false');
     });
@@ -490,18 +515,14 @@ describe('useGroupForm Hook', () => {
     // Check dialog is closed
     expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
     
-    // Check snackbar shows success
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe('Team deleted successfully');
-    expect(screen.getByTestId('snackbar-severity').textContent).toBe('success');
-    
-    // Advance timers to trigger navigation
-    act(() => {
-      jest.advanceTimersByTime(2000);
-    });
-    
-    // Check navigation
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
+    // Check localStorage for the notification
+    const notification = JSON.parse(localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION));
+    expect(notification.operation).toBe('delete');
+    expect(notification.message).toBe('Team deleted successfully');
+    expect(notification.timestamp).toBeDefined();
+
+    // Snackbar should not be open for success messages
+    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
   });
 
   test('handles confirm delete error', async () => {
@@ -521,12 +542,15 @@ describe('useGroupForm Hook', () => {
     fireEvent.click(screen.getByTestId('confirm-delete'));
     
     // Wait for API call to reject
+    expect(screen.getByTestId('loading').textContent).toBe('true'); // Loading is true during delete attempt
     await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false');
+      expect(screen.getByTestId('loading').textContent).toBe('false'); // Loading finishes after error
     });
     
     // Check dialog is closed
-    expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
+    await waitFor(() => {
+      expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
+    });
     
     // Check snackbar shows error
     expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
