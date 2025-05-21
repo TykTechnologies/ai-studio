@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -446,4 +447,230 @@ func TestGroupCoreEndpointsErrors(t *testing.T) {
 	// Now test with malformed JSON
 	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/groups/%s", groupID), []byte(`{malformed json`))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSerializeGroupsForList(t *testing.T) {
+	_, db := setupTestAPI(t)
+
+	// Create test groups directly in DB
+	group1 := &models.Group{Name: "Group A"}
+	group2 := &models.Group{Name: "Group B"}
+	group3 := &models.Group{Name: "Group C"}
+
+	err := db.Create(group1).Error
+	assert.NoError(t, err)
+	err = db.Create(group2).Error
+	assert.NoError(t, err)
+	err = db.Create(group3).Error
+	assert.NoError(t, err)
+
+	// Create member counts directly
+	memberCounts := []models.GroupMemberCount{
+		{GroupID: group1.ID, Count: 2},
+		{GroupID: group2.ID, Count: 1},
+		{GroupID: group3.ID, Count: 3},
+	}
+
+	// Create catalogues directly
+	catalogue1 := &models.Catalogue{Name: "Catalogue 1"}
+	catalogue2 := &models.Catalogue{Name: "Catalogue 2"}
+	dataCatalogue1 := &models.DataCatalogue{Name: "Data Catalogue 1", ShortDescription: "Short Desc", LongDescription: "Long Desc", Icon: "icon.png"}
+	dataCatalogue2 := &models.DataCatalogue{Name: "Data Catalogue 2", ShortDescription: "Short Desc", LongDescription: "Long Desc", Icon: "icon.png"}
+	dataCatalogue3 := &models.DataCatalogue{Name: "Data Catalogue 3", ShortDescription: "Short Desc", LongDescription: "Long Desc", Icon: "icon.png"}
+	toolCatalogue1 := &models.ToolCatalogue{Name: "Tool Catalogue 1", ShortDescription: "Short Desc", LongDescription: "Long Desc", Icon: "icon.png"}
+
+	err = db.Create(catalogue1).Error
+	assert.NoError(t, err)
+	err = db.Create(catalogue2).Error
+	assert.NoError(t, err)
+	err = db.Create(dataCatalogue1).Error
+	assert.NoError(t, err)
+	err = db.Create(dataCatalogue2).Error
+	assert.NoError(t, err)
+	err = db.Create(dataCatalogue3).Error
+	assert.NoError(t, err)
+	err = db.Create(toolCatalogue1).Error
+	assert.NoError(t, err)
+
+	// Create associations directly
+	err = db.Model(group1).Association("Catalogues").Append(catalogue1, catalogue2)
+	assert.NoError(t, err)
+	err = db.Model(group1).Association("DataCatalogues").Append(dataCatalogue1)
+	assert.NoError(t, err)
+	err = db.Model(group1).Association("ToolCatalogues").Append(toolCatalogue1)
+	assert.NoError(t, err)
+
+	err = db.Model(group2).Association("DataCatalogues").Append(dataCatalogue2, dataCatalogue3)
+	assert.NoError(t, err)
+
+	// Reload groups with associations
+	var groups models.Groups
+	err = db.Preload("Catalogues").Preload("DataCatalogues").Preload("ToolCatalogues").Find(&groups).Error
+	assert.NoError(t, err)
+
+	// Test cases
+	tests := []struct {
+		name         string
+		groups       models.Groups
+		memberCounts []models.GroupMemberCount
+		expected     []GroupListResponse
+	}{
+		{
+			name:         "empty groups list",
+			groups:       models.Groups{},
+			memberCounts: []models.GroupMemberCount{},
+			expected:     []GroupListResponse{},
+		},
+		{
+			name:         "multiple groups with varying members and catalogues",
+			groups:       groups,
+			memberCounts: memberCounts,
+			expected: []GroupListResponse{
+				{
+					Type: "groups",
+					ID:   strconv.FormatUint(uint64(group1.ID), 10),
+					Attributes: struct {
+						Name               string   `json:"name"`
+						UserCount          int      `json:"user_count"`
+						CatalogueCount     int      `json:"catalogue_count"`
+						DataCatalogueCount int      `json:"data_catalogue_count"`
+						ToolCatalogueCount int      `json:"tool_catalogue_count"`
+						CatalogueNames     []string `json:"catalogue_names"`
+						DataCatalogueNames []string `json:"data_catalogue_names"`
+						ToolCatalogueNames []string `json:"tool_catalogue_names"`
+					}{
+						Name:               "Group A",
+						UserCount:          2,
+						CatalogueCount:     2,
+						DataCatalogueCount: 1,
+						ToolCatalogueCount: 1,
+						CatalogueNames:     []string{"Catalogue 1", "Catalogue 2"},
+						DataCatalogueNames: []string{"Data Catalogue 1"},
+						ToolCatalogueNames: []string{"Tool Catalogue 1"},
+					},
+				},
+				{
+					Type: "groups",
+					ID:   strconv.FormatUint(uint64(group2.ID), 10),
+					Attributes: struct {
+						Name               string   `json:"name"`
+						UserCount          int      `json:"user_count"`
+						CatalogueCount     int      `json:"catalogue_count"`
+						DataCatalogueCount int      `json:"data_catalogue_count"`
+						ToolCatalogueCount int      `json:"tool_catalogue_count"`
+						CatalogueNames     []string `json:"catalogue_names"`
+						DataCatalogueNames []string `json:"data_catalogue_names"`
+						ToolCatalogueNames []string `json:"tool_catalogue_names"`
+					}{
+						Name:               "Group B",
+						UserCount:          1,
+						CatalogueCount:     0,
+						DataCatalogueCount: 2,
+						ToolCatalogueCount: 0,
+						CatalogueNames:     []string{},
+						DataCatalogueNames: []string{"Data Catalogue 2", "Data Catalogue 3"},
+						ToolCatalogueNames: []string{},
+					},
+				},
+				{
+					Type: "groups",
+					ID:   strconv.FormatUint(uint64(group3.ID), 10),
+					Attributes: struct {
+						Name               string   `json:"name"`
+						UserCount          int      `json:"user_count"`
+						CatalogueCount     int      `json:"catalogue_count"`
+						DataCatalogueCount int      `json:"data_catalogue_count"`
+						ToolCatalogueCount int      `json:"tool_catalogue_count"`
+						CatalogueNames     []string `json:"catalogue_names"`
+						DataCatalogueNames []string `json:"data_catalogue_names"`
+						ToolCatalogueNames []string `json:"tool_catalogue_names"`
+					}{
+						Name:               "Group C",
+						UserCount:          3,
+						CatalogueCount:     0,
+						DataCatalogueCount: 0,
+						ToolCatalogueCount: 0,
+						CatalogueNames:     []string{},
+						DataCatalogueNames: []string{},
+						ToolCatalogueNames: []string{},
+					},
+				},
+			},
+		},
+		{
+			name: "group with no members or catalogues",
+			groups: models.Groups{
+				{
+					ID:   4,
+					Name: "Group D",
+				},
+			},
+			memberCounts: []models.GroupMemberCount{
+				{GroupID: 4, Count: 0},
+			},
+			expected: []GroupListResponse{
+				{
+					Type: "groups",
+					ID:   "4",
+					Attributes: struct {
+						Name               string   `json:"name"`
+						UserCount          int      `json:"user_count"`
+						CatalogueCount     int      `json:"catalogue_count"`
+						DataCatalogueCount int      `json:"data_catalogue_count"`
+						ToolCatalogueCount int      `json:"tool_catalogue_count"`
+						CatalogueNames     []string `json:"catalogue_names"`
+						DataCatalogueNames []string `json:"data_catalogue_names"`
+						ToolCatalogueNames []string `json:"tool_catalogue_names"`
+					}{
+						Name:               "Group D",
+						UserCount:          0,
+						CatalogueCount:     0,
+						DataCatalogueCount: 0,
+						ToolCatalogueCount: 0,
+						CatalogueNames:     []string{},
+						DataCatalogueNames: []string{},
+						ToolCatalogueNames: []string{},
+					},
+				},
+			},
+		},
+	}
+
+	// Run test cases
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := serializeGroupsForList(tt.groups, tt.memberCounts)
+
+			// Check if both slices have same length
+			assert.Equal(t, len(tt.expected), len(result))
+
+			// For empty group list, just check equality
+			if len(tt.expected) == 0 {
+				assert.Equal(t, tt.expected, result)
+				return
+			}
+
+			// For each expected group, find matching group in result by ID and verify its properties
+			for _, expected := range tt.expected {
+				var found bool
+				for _, actual := range result {
+					if expected.ID == actual.ID {
+						found = true
+						// Check non-slice fields for exact equality
+						assert.Equal(t, expected.Type, actual.Type)
+						assert.Equal(t, expected.Attributes.Name, actual.Attributes.Name)
+						assert.Equal(t, expected.Attributes.UserCount, actual.Attributes.UserCount)
+						assert.Equal(t, expected.Attributes.CatalogueCount, actual.Attributes.CatalogueCount)
+						assert.Equal(t, expected.Attributes.DataCatalogueCount, actual.Attributes.DataCatalogueCount)
+						assert.Equal(t, expected.Attributes.ToolCatalogueCount, actual.Attributes.ToolCatalogueCount)
+						assert.Equal(t, expected.Attributes.CatalogueNames, actual.Attributes.CatalogueNames)
+						assert.Equal(t, expected.Attributes.DataCatalogueNames, actual.Attributes.DataCatalogueNames)
+						assert.Equal(t, expected.Attributes.ToolCatalogueNames, actual.Attributes.ToolCatalogueNames)
+						break
+					}
+				}
+				assert.True(t, found, "Expected group with ID %s not found in result", expected.ID)
+			}
+		})
+	}
 }

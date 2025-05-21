@@ -38,17 +38,35 @@ describe('teamsService', () => {
   });
 
   describe('getTeams', () => {
-    it('should fetch all teams successfully', async () => {
-      const mockTeams = [
+    it('should fetch teams successfully with pagination, search, and sort parameters', async () => {
+      const mockTeamItems = [
         { id: 'team-1', name: 'Engineering' },
         { id: 'team-2', name: 'Product' }
       ];
-      apiClient.get.mockResolvedValueOnce({ data: mockTeams });
+      const mockHeaders = {
+        'x-total-count': '2',
+        'x-total-pages': '1'
+      };
+      const mockFullApiResponse = {
+        data: { // API response body
+          data: mockTeamItems 
+        },
+        headers: mockHeaders
+      };
 
-      const result = await teamsService.getTeams();
+      apiClient.get.mockResolvedValueOnce(mockFullApiResponse);
 
-      expect(apiClient.get).toHaveBeenCalledWith('/groups');
-      expect(result).toEqual(mockTeams);
+      const testParams = {
+        page: 1,
+        page_size: 10,
+        search: 'Eng',
+        sort: 'name'
+      };
+
+      const result = await teamsService.getTeams(testParams);
+
+      expect(apiClient.get).toHaveBeenCalledWith('/groups', { params: testParams });
+      expect(result).toEqual(mockFullApiResponse);
     });
 
     it('should throw error when fetch fails', async () => {

@@ -4,7 +4,7 @@ import Users from "./pages/Users";
 import UserDetails from "./components/users/UserDetails";
 import UserForm from "./components/users/UserForm";
 
-import Groups from "./pages/Groups";
+import Groups from "./pages/groups/Groups";
 import GroupDetail from "./components/groups/GroupDetail";
 import GroupForm from "./components/groups/GroupForm";
 
