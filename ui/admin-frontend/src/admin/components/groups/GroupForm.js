@@ -15,6 +15,7 @@ import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 import { useGroupForm } from "./hooks/useGroupForm";
 import { useUserSelection } from "./hooks/useUserSelection";
 import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
+import { useGroupMembers } from "./hooks/useGroupMembers";
 
 import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
 import GroupMembersSection from "./components/GroupMembersSection";
@@ -59,6 +60,28 @@ const GroupForm = () => {
   } = useUserSelection(selectedUsers, setSelectedUsers);
 
   const {
+    members,
+    currentPage: membersPage,
+    totalPages: membersTotalPages,
+    isLoadingMore: isLoadingMoreMembers,
+    loading: membersLoading,
+    handleLoadMore: handleLoadMoreMembers,
+    fetchGroupMembers
+  } = useGroupMembers(id, selectedUsers);
+
+  useEffect(() => {
+    if (id) {
+      fetchGroupMembers();
+    }
+  }, [id, fetchGroupMembers]);
+
+  useEffect(() => {
+    if (id && members.length > 0 && selectedUsers.length === 0) {
+      setSelectedUsers(members);
+    }
+  }, [id, members, selectedUsers.length, setSelectedUsers]);
+
+  const {
     catalogs,
     dataCatalogs,
     toolCatalogs,
@@ -70,7 +93,7 @@ const GroupForm = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  if (formLoading || usersLoading || catalogsLoading) return <CircularProgress />;
+  if (formLoading || usersLoading || catalogsLoading || membersLoading) return <CircularProgress />;
 
   return (
     <>
@@ -115,6 +138,9 @@ const GroupForm = () => {
             currentPage={currentPage}
             totalPages={totalPages}
             isLoadingMore={isLoadingMore}
+            onLoadMoreSelected={handleLoadMoreMembers}
+            hasMoreSelected={membersPage < membersTotalPages}
+            isLoadingMoreSelected={isLoadingMoreMembers}
           />
 
           <GroupCatalogsSection
