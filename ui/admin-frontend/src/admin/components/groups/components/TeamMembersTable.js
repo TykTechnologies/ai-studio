@@ -23,6 +23,7 @@ const TeamMembersTable = memo(({
       ref={containerRef} 
       sx={{ 
         border: "none", 
+        p: 0,
       }}
     >
       <HeaderBox>
