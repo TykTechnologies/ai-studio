@@ -94,43 +94,16 @@ func (u *User) SetPassword(password string) error {
 	return nil
 }
 
-func (u *Users) paginateAndSort(query *gorm.DB, pageSize int, pageNumber int, skipPagination bool, sort string) (int64, int, error) {
-	var totalCount int64
+func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
+	query := db.Model(&User{})
 
-	if sort != "" {
-		if sort[0] == '-' {
-			query = query.Order(sort[1:] + " DESC")
-		} else {
-			query = query.Order(sort + " ASC")
-		}
-	} else {
-		query = query.Order("id ASC")
-	}
-
-	if err := query.Count(&totalCount).Error; err != nil {
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, sort)
+	if err != nil {
 		return 0, 0, err
 	}
 
-	var totalPages int
-	if pageSize > 0 {
-		totalPages = int(totalCount) / pageSize
-		if int(totalCount)%pageSize != 0 {
-			totalPages++
-		}
-	}
-
-	if !skipPagination && pageSize > 0 {
-		offset := (pageNumber - 1) * pageSize
-		query = query.Offset(offset).Limit(pageSize)
-	}
-
-	err := query.Find(u).Error
+	err = query.Find(u).Error
 	return totalCount, totalPages, err
-}
-
-func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
-	query := db.Model(&User{})
-	return u.paginateAndSort(query, pageSize, pageNumber, all, sort)
 }
 
 func (u *Users) GetByGroupID(db *gorm.DB, groupID uint) error {
@@ -308,5 +281,11 @@ func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber 
 		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
 	}
 
-	return u.paginateAndSort(query, pageSize, pageNumber, all, sort)
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, sort)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = query.Find(u).Error
+	return totalCount, totalPages, err
 }
