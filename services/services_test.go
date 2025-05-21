@@ -285,7 +285,7 @@ func TestGroupService(t *testing.T) {
 		assert.Contains(t, err.Error(), "record not found")
 
 		// Test GetGroupUsers with non-existent group
-		_, err = service.GetGroupUsers(9999)
+		_, _, _, err = service.GetGroupUsers(9999, 10, 1, false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "record not found")
 
