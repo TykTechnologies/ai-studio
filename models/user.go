@@ -94,18 +94,6 @@ func (u *User) SetPassword(password string) error {
 	return nil
 }
 
-func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
-	query := db.Model(&User{})
-
-	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, sort)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	err = query.Find(u).Error
-	return totalCount, totalPages, err
-}
-
 func (u *Users) GetByGroupID(db *gorm.DB, groupID uint) error {
 	return db.Joins("JOIN user_groups ON user_groups.user_id = users.id").Where("user_groups.group_id = ?", groupID).Find(u).Error
 }
@@ -273,15 +261,12 @@ func (u *User) GetRole() string {
 	}
 }
 
-func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
-	query := db.Model(&User{})
+func (u *Users) GetGroupUsersPaginated(db *gorm.DB, groupID uint, pageSize, pageNumber int, all bool) (int64, int, error) {
+	query := db.Model(&User{}).
+		Joins("JOIN user_groups ON user_groups.user_id = users.id").
+		Where("user_groups.group_id = ?", groupID)
 
-	if term != "" {
-		searchTerm := "%" + term + "%"
-		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
-	}
-
-	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, sort)
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, "id")
 	if err != nil {
 		return 0, 0, err
 	}
@@ -290,12 +275,29 @@ func (u *Users) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber 
 	return totalCount, totalPages, err
 }
 
-func (u *Users) GetGroupUsersPaginated(db *gorm.DB, groupID uint, pageSize, pageNumber int, all bool) (int64, int, error) {
-	query := db.Model(&User{}).
-		Joins("JOIN user_groups ON user_groups.user_id = users.id").
-		Where("user_groups.group_id = ?", groupID)
+type UserQueryParams struct {
+	Search         string
+	ExcludeGroupID uint
+	PageSize       int
+	PageNumber     int
+	All            bool
+	Sort           string
+}
 
-	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, "id")
+func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, error) {
+	query := db.Model(&User{})
+
+	if params.Search != "" {
+		searchTerm := "%" + params.Search + "%"
+		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
+	}
+
+	if params.ExcludeGroupID > 0 {
+		query = query.Joins("LEFT JOIN user_groups ON user_groups.user_id = users.id AND user_groups.group_id = ?", params.ExcludeGroupID).
+			Where("user_groups.group_id IS NULL")
+	}
+
+	query, totalCount, totalPages, err := PaginateAndSort(query, params.PageSize, params.PageNumber, params.All, params.Sort)
 	if err != nil {
 		return 0, 0, err
 	}

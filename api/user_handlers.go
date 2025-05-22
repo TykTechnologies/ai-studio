@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -244,17 +245,26 @@ func (a *API) listUsers(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 	sort := c.Query("sort")
 	searchTerm := c.Query("search")
+	excludeGroupID := c.Query("exclude_group_id")
 
-	var users models.Users
-	var totalCount int64
-	var totalPages int
-	var err error
-
-	if searchTerm != "" {
-		users, totalCount, totalPages, err = a.service.SearchUsers(searchTerm, pageSize, pageNumber, all, sort)
-	} else {
-		users, totalCount, totalPages, err = a.service.GetAllUsers(pageSize, pageNumber, all, sort)
+	var excludeGroupIDInt int
+	if excludeGroupID != "" {
+		id, err := strconv.Atoi(excludeGroupID)
+		if err == nil {
+			excludeGroupIDInt = id
+		}
 	}
+
+	params := services.ListUsersParams{
+		Search:         searchTerm,
+		ExcludeGroupID: excludeGroupIDInt,
+		PageSize:       pageSize,
+		PageNumber:     pageNumber,
+		All:            all,
+		Sort:           sort,
+	}
+
+	users, totalCount, totalPages, err := a.service.ListUsers(params)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -263,7 +273,6 @@ func (a *API) listUsers(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
-
 		return
 	}
 

@@ -145,17 +145,6 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	return user, nil
 }
 
-func (s *Service) GetAllUsers(pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
-	var users models.Users
-
-	totalCount, totalPages, err := users.GetAll(s.DB, pageSize, pageNumber, all, sort)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-
-	return users, totalCount, totalPages, nil
-}
-
 func (s *Service) SearchUsersByEmailStub(stub string) (models.Users, error) {
 	var users models.Users
 	if err := users.SearchByEmailStub(s.DB, stub); err != nil {
@@ -314,10 +303,28 @@ func (s *Service) SkipQuickStartForUser(userID uint) error {
 	return models.SetSkipQuickStartForUser(s.DB, userID)
 }
 
-func (s *Service) SearchUsers(term string, pageSize, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
+type ListUsersParams struct {
+	Search         string
+	ExcludeGroupID int
+	PageSize       int
+	PageNumber     int
+	All            bool
+	Sort           string
+}
+
+func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, error) {
 	var users models.Users
 
-	totalCount, totalPages, err := users.SearchByTerm(s.DB, term, pageSize, pageNumber, all, sort)
+	modelParams := models.UserQueryParams{
+		Search:         params.Search,
+		ExcludeGroupID: uint(params.ExcludeGroupID),
+		PageSize:       params.PageSize,
+		PageNumber:     params.PageNumber,
+		All:            params.All,
+		Sort:           params.Sort,
+	}
+
+	totalCount, totalPages, err := users.QueryUsers(s.DB, modelParams)
 	if err != nil {
 		return nil, 0, 0, err
 	}
