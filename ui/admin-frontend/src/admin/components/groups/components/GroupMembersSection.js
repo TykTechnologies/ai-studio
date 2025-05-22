@@ -13,7 +13,9 @@ const GroupMembersSection = ({
   handleLoadMore,
   currentPage,
   totalPages,
-  isLoadingMore
+  isLoadingMore,
+  onUserAdded,
+  onUserRemoved,
 }) => {  
   return (
     <CollapsibleSection title="Manage team members" defaultExpanded={false}>
@@ -78,6 +80,8 @@ const GroupMembersSection = ({
         onLoadMore={handleLoadMore}
         hasMore={currentPage < totalPages}
         isLoadingMore={isLoadingMore}
+        onItemAdded={onUserAdded}
+        onItemRemoved={onUserRemoved}
       />
     </CollapsibleSection>
   );

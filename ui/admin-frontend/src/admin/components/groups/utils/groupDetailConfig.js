@@ -1,0 +1,89 @@
+import { Box, Typography } from "@mui/material";
+import CustomSelectBadge from "../../common/CustomSelectBadge";
+import { roleBadgeConfigs } from "./roleBadgeConfig";
+
+export const CATALOG_ROWS = [
+    {
+      label: "LLM providers",
+      itemsKey: "catalogues",
+    },
+    {
+      label: "Data sources",
+      itemsKey: "dataCatalogues",
+    },
+    {
+      label: "Tools",
+      itemsKey: "toolCatalogues",
+    },
+  ];
+
+export const borderStyle = {
+  borderBottom: "2px solid",
+  borderColor: "border.neutralDefaultSubdued",
+  padding: "16px 0",
+  display: "flex",
+  alignItems: "center",
+};
+
+export const lastRowStyle = {
+  padding: "16px 0",
+  display: "flex",
+  alignItems: "center",
+};
+
+export const TEAM_MEMBERS_COLUMNS = [
+  { field: "name", headerName: "Name", width: "30%" },
+  { field: "email", headerName: "Email", width: "40%" },
+  { field: "role", headerName: "Role", width: "30%" },
+];
+
+export const TEAM_MEMBERS_COLUMNS_FOR_TABLE = [
+  {
+    field: "name",
+    headerName: "Name",
+    width: { md: '35%', lg: '40%' },
+    renderCell: (row) => (
+      (
+        <Box sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          pr: 1
+        }}>
+          <Typography
+            variant="bodyMediumMedium"
+            color="text.defaultSubdued"
+            sx={{
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              width: '100%'
+            }}
+          >
+            {row.name}
+          </Typography>
+          <Typography
+            variant="bodySmallDefault"
+            color="text.defaultSubdued"
+            sx={{
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              width: '100%'
+            }}
+          >
+            {row.email}
+          </Typography>
+        </Box>
+      )
+    )
+  },
+  {
+    field: "role",
+    headerName: "Role",
+    width: { md: '45%', lg: '35%' },
+    renderCell: (row) => (
+      <CustomSelectBadge config={roleBadgeConfigs[row.role] || roleBadgeConfigs["Chat user"]} />
+    )
+  }
+];

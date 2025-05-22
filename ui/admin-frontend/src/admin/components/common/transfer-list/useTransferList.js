@@ -9,21 +9,15 @@ const useTransferList = ({
   onLoadMore,
   hasMore = true,
   isLoadingMore = false,
+  onItemAdded,
+  onItemRemoved,
 }) => {
   const rightBoxRef = useRef(null);
+  const leftBoxRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [filteredAvailable, setFilteredAvailable] = useState([]);
   const available = availableItems;
   const selected = selectedItems;
-
-  useEffect(() => {
-    const filtered = available.filter(
-      item => selected.every(s => s[idField] !== item[idField])
-    );
-    
-    setFilteredAvailable(filtered);
-  }, [available, selected, idField]);
 
   useEffect(() => {
     const rightBox = rightBoxRef?.current;
@@ -67,10 +61,13 @@ const useTransferList = ({
       const newAvailable = available.filter(
         (i) => i[idField] !== item[idField]
       );
-      const newSelected = [...selected, item];
+      const newSelected = [item, ...selected];
       
       onChange({ selected: newSelected, available: newAvailable });
-
+      
+      if (onItemAdded) {
+        onItemAdded(item);
+      }
     }
   };
 
@@ -79,18 +76,21 @@ const useTransferList = ({
       const newSelected = selected.filter(
         (i) => i[idField] !== item[idField]
       );
-      const newAvailable = [...available, item];
+      const newAvailable = [item, ...available];
       
       onChange({ selected: newSelected, available: newAvailable });
-
+      
+      if (onItemRemoved) {
+        onItemRemoved(item);
+      }
     }
   };
 
   return {
+    leftBoxRef,
     rightBoxRef,
     available,
     selected,
-    filteredAvailable,
     searchTerm,
     isSearching,
     handleSearchChange,

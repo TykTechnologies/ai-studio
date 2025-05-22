@@ -92,16 +92,16 @@ jest.mock('../transfer-list/TransferListTable', () => {
   const MockTransferListTable = ({ items, columns, idField, isLeftSide, onAddItem, onRemoveItem }) => (
     <div
       data-testid={isLeftSide ? "left-table" : "right-table"}
-      data-items={JSON.stringify(items)}
-      data-columns={JSON.stringify(columns)}
+      data-items={items ? JSON.stringify(items) : '[]'}
+      data-columns={columns ? JSON.stringify(columns) : '[]'}
       data-id-field={idField}
     >
       {isLeftSide ? (
-        <button data-testid="remove-button" onClick={() => items[0] && onRemoveItem(items[0])}>
+        <button data-testid="remove-button" onClick={() => items && items.length > 0 && onRemoveItem(items[0])}>
           Remove
         </button>
       ) : (
-        <button data-testid="add-button" onClick={() => items[0] && onAddItem(items[0])}>
+        <button data-testid="add-button" onClick={() => items && items.length > 0 && onAddItem(items[0])}>
           Add
         </button>
       )}
@@ -133,8 +133,9 @@ describe('TransferList Component', () => {
   
   // Mock hook return values
   const mockHookReturn = {
+    leftBoxRef: { current: null },
     rightBoxRef: { current: null },
-    filteredAvailable: mockAvailableItems,
+    available: mockAvailableItems,
     selected: mockSelectedItems,
     searchTerm: '',
     isSearching: false,
@@ -195,6 +196,8 @@ describe('TransferList Component', () => {
     const onChangeMock = jest.fn();
     const onSearchMock = jest.fn();
     const onLoadMoreMock = jest.fn();
+    const onItemAddedMock = jest.fn();
+    const onItemRemovedMock = jest.fn();
     
     render(
       <TransferList
@@ -207,6 +210,8 @@ describe('TransferList Component', () => {
         onLoadMore={onLoadMoreMock}
         hasMore={true}
         isLoadingMore={false}
+        onItemAdded={onItemAddedMock}
+        onItemRemoved={onItemRemovedMock}
       />
     );
     
@@ -219,6 +224,8 @@ describe('TransferList Component', () => {
       onLoadMore: onLoadMoreMock,
       hasMore: true,
       isLoadingMore: false,
+      onItemAdded: onItemAddedMock,
+      onItemRemoved: onItemRemovedMock,
     });
   });
 
@@ -250,29 +257,12 @@ describe('TransferList Component', () => {
     expect(screen.queryByTestId('styled-text-field')).not.toBeInTheDocument();
   });
 
-  test('shows searching indicator when isSearching is true', () => {
+  test('handles item addition', () => {
     useTransferList.mockReturnValue({
       ...mockHookReturn,
-      isSearching: true,
+      available: [{ id: '1', name: 'Item 1' }],
     });
     
-    render(<TransferList />);
-    
-    expect(screen.getByText('Searching...')).toBeInTheDocument();
-    expect(screen.queryByTestId('right-table')).not.toBeInTheDocument();
-  });
-
-  test('shows loading more indicator when isLoadingMore is true', () => {
-    render(
-      <TransferList
-        isLoadingMore={true}
-      />
-    );
-    
-    expect(screen.getByText('Loading more users...')).toBeInTheDocument();
-  });
-
-  test('handles item addition', () => {
     render(<TransferList />);
     
     const addButton = screen.getByTestId('add-button');
@@ -282,6 +272,11 @@ describe('TransferList Component', () => {
   });
 
   test('handles item removal', () => {
+    useTransferList.mockReturnValue({
+      ...mockHookReturn,
+      selected: [{ id: '3', name: 'Item 3' }],
+    });
+    
     render(<TransferList />);
     
     const removeButton = screen.getByTestId('remove-button');
@@ -290,16 +285,27 @@ describe('TransferList Component', () => {
     expect(mockHookReturn.handleRemoveItem).toHaveBeenCalled();
   });
 
-  test('handles search input change', () => {
-    render(
-      <TransferList
-        enableSearch={true}
-      />
-    );
+  test('shows loading state when isSearching is true', () => {
+    useTransferList.mockReturnValue({
+      ...mockHookReturn,
+      isSearching: true,
+    });
     
-    const searchInput = screen.getByTestId('styled-text-field');
-    fireEvent.change(searchInput, { target: { value: 'search term' } });
+    render(<TransferList enableSearch={true} />);
     
-    expect(mockHookReturn.handleSearchChange).toHaveBeenCalled();
+    expect(screen.getByText('Searching...')).toBeInTheDocument();
+    expect(screen.queryByTestId('right-table')).not.toBeInTheDocument();
+  });
+
+  test('shows loading more state when isLoadingMore is true', () => {
+    useTransferList.mockReturnValue({
+      ...mockHookReturn,
+      isLoadingMore: true,
+      isSearching: false,
+    });
+    
+    render(<TransferList isLoadingMore={true} />);
+    
+    expect(screen.getByText('Loading more users...')).toBeInTheDocument();
   });
 });

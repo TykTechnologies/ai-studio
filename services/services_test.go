@@ -17,6 +17,16 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	err = models.InitModels(db)
 	assert.NoError(t, err)
 
+	// Auto-migrate schema
+	err = db.AutoMigrate(
+		&models.User{}, &models.Group{}, &models.Catalogue{}, &models.LLM{},
+		&models.DataCatalogue{}, &models.ToolCatalogue{}, &models.Datasource{},
+		&models.Tool{}, &models.Tag{}, &models.Chat{}, // Removed ChatMessage and ChatInteraction
+	)
+	if err != nil {
+		t.Fatalf("Failed to auto-migrate schema: %v", err)
+	}
+
 	return db
 }
 
@@ -46,8 +56,14 @@ func TestUserService(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, authenticatedUser)
 
-	// Test GetAllUsers
-	users, _, _, err := service.GetAllUsers(10, 1, true, "id")
+	// Test ListUsers
+	params := ListUsersParams{
+		PageSize:   10,
+		PageNumber: 1,
+		All:        true,
+		Sort:       "id",
+	}
+	users, _, _, err := service.ListUsers(params)
 	assert.NoError(t, err)
 	assert.Len(t, users, 1)
 
@@ -285,9 +301,11 @@ func TestGroupService(t *testing.T) {
 		assert.Contains(t, err.Error(), "record not found")
 
 		// Test GetGroupUsers with non-existent group
-		_, err = service.GetGroupUsers(9999)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "record not found")
+		users, totalCount, totalPages, err := service.GetGroupUsers(9999, 10, 1, false)
+		assert.NoError(t, err)
+		assert.Empty(t, users)
+		assert.Equal(t, int64(0), totalCount)
+		assert.Equal(t, 0, totalPages)
 
 		// Additional association error tests
 
