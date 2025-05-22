@@ -331,3 +331,14 @@ func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, e
 
 	return users, totalCount, totalPages, nil
 }
+
+// GetAllUsers is a wrapper for ListUsers for backward compatibility
+func (s *Service) GetAllUsers(pageSize int, pageNumber int, all bool, sort string) (models.Users, int64, int, error) {
+	params := ListUsersParams{
+		PageSize:   pageSize,
+		PageNumber: pageNumber,
+		All:        all,
+		Sort:       sort,
+	}
+	return s.ListUsers(params)
+}

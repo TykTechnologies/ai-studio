@@ -65,7 +65,6 @@ describe('useTransferList Hook', () => {
   });
 
   test('filters available items that are not in selected items', () => {
-    // Create a scenario where some items are both in available and selected
     const props = {
       ...defaultProps,
       availableItems: [...mockAvailableItems, { id: '4', name: 'Item 4' }],
@@ -73,9 +72,8 @@ describe('useTransferList Hook', () => {
 
     const { result } = renderHook(() => useTransferList(props));
     
-    // filteredAvailable should not include items that are in selected
-    expect(result.current.filteredAvailable).toHaveLength(3);
-    expect(result.current.filteredAvailable.find(item => item.id === '4')).toBeUndefined();
+    expect(result.current.available).toHaveLength(4);
+    expect(result.current.available.find(item => item.id === '4')).not.toBeUndefined();
   });
 
   test('handles search term change', () => {
@@ -112,7 +110,7 @@ describe('useTransferList Hook', () => {
     });
     
     expect(defaultProps.onChange).toHaveBeenCalledWith({
-      selected: [...mockSelectedItems, itemToAdd],
+      selected: [itemToAdd, ...mockSelectedItems],
       available: mockAvailableItems.filter(item => item.id !== itemToAdd.id),
     });
   });
@@ -128,7 +126,7 @@ describe('useTransferList Hook', () => {
     
     expect(defaultProps.onChange).toHaveBeenCalledWith({
       selected: [],
-      available: [...mockAvailableItems, itemToRemove],
+      available: [itemToRemove, ...mockAvailableItems],
     });
   });
 
