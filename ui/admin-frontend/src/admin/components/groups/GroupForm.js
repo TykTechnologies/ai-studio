@@ -55,8 +55,10 @@ const GroupForm = () => {
     fetchUsers,
     handleUsersChange,
     handleLoadMore,
-    handleSearch
-  } = useUserSelection(selectedUsers, setSelectedUsers);
+    handleSearch,
+    handleUserAdded,
+    handleUserRemoved,
+  } = useUserSelection(id, selectedUsers, setSelectedUsers);
 
   const {
     catalogs,
@@ -115,6 +117,8 @@ const GroupForm = () => {
             currentPage={currentPage}
             totalPages={totalPages}
             isLoadingMore={isLoadingMore}
+            onUserAdded={handleUserAdded}
+            onUserRemoved={handleUserRemoved}
           />
 
           <GroupCatalogsSection

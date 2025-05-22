@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
-import { getUsers, searchUsers } from "../../../services/userService";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { getUsers } from "../../../services/userService";
+import { teamsService } from "../../../services/teamsService";
 
-export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUsers = null) => {
+export const useUserSelection = (groupId, initialSelectedUsers = [], parentSetSelectedUsers = null) => {
   const [users, setUsers] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState(initialSelectedUsers);
+  const newlySelectedIdsRef = useRef([]);
+  const [recentlyRemovedUsers, setRecentlyRemovedUsers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -12,12 +15,45 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
   const [lastSearchResults, setLastSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const idField = "id";
+
+  const fetchGroupMembers = useCallback(async () => {
+    if (!groupId) return; 
+    try {
+      setLoading(true);
+      
+      const response = await teamsService.getTeamUsers(groupId, { all: true });
+      
+      setSelectedUsers(response.data || []);
+      newlySelectedIdsRef.current = [];
+      setRecentlyRemovedUsers([]);
+      
+      if (parentSetSelectedUsers) {
+        parentSetSelectedUsers(response.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching group members:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [groupId, parentSetSelectedUsers]);
+
+  useEffect(() => {
+    if (groupId) {
+      fetchGroupMembers();
+    }
+  }, [groupId, fetchGroupMembers]);
+
   const updateAvailableUsers = useCallback((userList) => {
-    const filtered = userList.filter(
-      user => !selectedUsers.find(selected => selected.id === user.id)
-    );
-    setAvailableUsers(filtered);
-  }, [selectedUsers]);
+    if (currentSearchTerm) {
+      setAvailableUsers(userList);
+    } else {
+      const filteredList = userList.filter(
+        user => !recentlyRemovedUsers.some(removedUser => removedUser[idField] === user[idField])
+      );
+      setAvailableUsers([...recentlyRemovedUsers, ...filteredList]);
+    }
+  }, [recentlyRemovedUsers, idField, currentSearchTerm]);
 
   useEffect(() => {
     if (currentSearchTerm) {
@@ -25,7 +61,7 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
     } else {
       updateAvailableUsers(users);
     }
-  }, [users, selectedUsers, updateAvailableUsers, currentSearchTerm, lastSearchResults]);
+  }, [users, updateAvailableUsers, currentSearchTerm, lastSearchResults]);
 
   const fetchUsers = useCallback(async (page = 1) => {
     try {
@@ -35,12 +71,16 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
         setIsLoadingMore(true);
       }
 
-      const response = await getUsers(page);
+      const options = groupId ? { exclude_group_id: groupId } : {};
+      const response = await getUsers(page, options);
+
+      const responseData = response.data || [];
+      const filteredData = responseData.filter(user => !newlySelectedIdsRef.current.includes(user[idField]));
 
       if (page === 1) {
-        setUsers(response.data || []);
+        setUsers(filteredData);
       } else {
-        setUsers(prevUsers => [...prevUsers, ...(response.data || [])]);
+        setUsers(prevUsers => [...prevUsers, ...filteredData]);
       }
 
       setTotalPages(response.totalPages);
@@ -56,24 +96,41 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
       setLoading(false);
       setIsLoadingMore(false);
     }
-  }, [setLoading, setIsLoadingMore, setUsers, setTotalPages, setCurrentPage]);
+  }, [groupId, idField]);
 
-  const handleUsersChange = useCallback(({ selected }) => {
+  const handleUserAdded = (item) => {
+    newlySelectedIdsRef.current = [...newlySelectedIdsRef.current, item[idField]];
+    setRecentlyRemovedUsers(prev => prev.filter(user => user[idField] !== item[idField]));
+  };
+
+  const handleUserRemoved = (item) => {
+    newlySelectedIdsRef.current = newlySelectedIdsRef.current.filter(id => id !== item[idField]);
+    setRecentlyRemovedUsers(prev => {
+      if (!prev.some(user => user[idField] === item[idField])) {
+        return [item, ...prev];
+      }
+      return prev;
+    });
+  };
+
+  const handleUsersChange = useCallback(({ selected, available }) => {
     setSelectedUsers(selected);
+    
+    if (available) {
+      if (currentSearchTerm) {
+        setLastSearchResults(available);
+      } else {
+        setUsers(available);
+      }
+    }
     
     if (parentSetSelectedUsers) {
       parentSetSelectedUsers(selected);
     }
-  }, [setSelectedUsers, parentSetSelectedUsers]);
+  }, [setSelectedUsers, parentSetSelectedUsers, currentSearchTerm]);
 
   const handleSearch = useCallback(async (searchTerm, page = 1) => {
     try {
-      if (!searchTerm.trim()) {
-        setCurrentSearchTerm("");
-        updateAvailableUsers(users);
-        return;
-      }
-
       setCurrentSearchTerm(searchTerm);
 
       if (page === 1) {
@@ -82,19 +139,25 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
         setIsLoadingMore(true);
       }
 
-      const response = await searchUsers(searchTerm, page);
-
+      const options = groupId ? { exclude_group_id: groupId, search: searchTerm } : { search: searchTerm };
+      const response = await getUsers(page, options);
+      
       const searchResults = response.data || [];
+      const filteredResults = searchResults.filter(user => !newlySelectedIdsRef.current.includes(user[idField]));
 
-      if (page === 1) {
-        setLastSearchResults(searchResults);
+      if (searchTerm) {
+        if (page === 1) {
+          setLastSearchResults(filteredResults);
+        } else {
+          setLastSearchResults(prev => [...prev, ...filteredResults]);
+        }
       } else {
-        setLastSearchResults(prevResults => {
-          const newResults = searchResults.filter(
-            sr => !prevResults.some(pr => pr.id === sr.id)
-          );
-          return [...prevResults, ...newResults];
-        });
+        setLastSearchResults([]);
+        if (page === 1) {
+          setUsers(filteredResults);
+        } else {
+          setUsers(prev => [...prev, ...filteredResults]);
+        }
       }
       
       setTotalPages(response.totalPages);
@@ -104,7 +167,7 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
       console.error("Error searching users", error);
       setIsLoadingMore(false);
     }
-  }, [users, updateAvailableUsers, setCurrentSearchTerm, setIsLoadingMore, setTotalPages, setCurrentPage, setLastSearchResults]);
+  }, [groupId, idField]);
 
   const handleLoadMore = useCallback(() => {
     if (currentPage < totalPages && !isLoadingMore) {
@@ -129,6 +192,9 @@ export const useUserSelection = (initialSelectedUsers = [], parentSetSelectedUse
     handleUsersChange,
     handleLoadMore,
     handleSearch,
-    currentSearchTerm
+    currentSearchTerm,
+    fetchGroupMembers,
+    handleUserAdded,
+    handleUserRemoved,
   };
 };

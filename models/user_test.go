@@ -110,25 +110,6 @@ func TestUser_SetPassword(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "hashed_new_password", user.Password)
 }
-
-func TestGetAll(t *testing.T) {
-	db := setupTestDB(t)
-
-	users := []User{
-		{Email: "user1@example.com"},
-		{Email: "user2@example.com"},
-	}
-	for _, u := range users {
-		err := db.Create(&u).Error
-		assert.NoError(t, err)
-	}
-
-	var fetchedUsers Users
-	_, _, err := fetchedUsers.GetAll(db, 10, 1, true, "id")
-	assert.NoError(t, err)
-	assert.Len(t, fetchedUsers, 2)
-}
-
 func TestUser_SearchByEmailStub(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -561,97 +542,6 @@ func TestGetRole(t *testing.T) {
 	assert.Equal(t, "Chat user", user.GetRole())
 }
 
-func TestSearchByTerm(t *testing.T) {
-	db := setupTestDB(t)
-
-	// Create test users with different names and emails
-	users := []User{
-		{Email: "johndoe@example.com", Name: "John Doe"},
-		{Email: "janedoe@example.com", Name: "Jane Doe"},
-		{Email: "bobsmith@example.com", Name: "Bob Smith"},
-		{Email: "alicejones@example.com", Name: "Alice Jones"},
-		{Email: "charliebrown@example.com", Name: "Charlie Brown"},
-	}
-
-	for _, user := range users {
-		err := db.Create(&user).Error
-		assert.NoError(t, err)
-	}
-
-	var results Users
-
-	// Test search by email fragment
-	totalCount, totalPages, err := results.SearchByTerm(db, "doe", 10, 1, false, "")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(2), totalCount)
-	assert.Equal(t, 1, totalPages)
-	assert.Len(t, results, 2)
-
-	emails := []string{results[0].Email, results[1].Email}
-	assert.Contains(t, emails, "johndoe@example.com")
-	assert.Contains(t, emails, "janedoe@example.com")
-
-	// Test search by name fragment
-	results = Users{}
-	totalCount, totalPages, err = results.SearchByTerm(db, "Smith", 10, 1, false, "")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(1), totalCount)
-	assert.Equal(t, 1, totalPages)
-	assert.Len(t, results, 1)
-	assert.Equal(t, "bobsmith@example.com", results[0].Email)
-
-	// Test pagination
-	// Add more users to ensure pagination
-	for i := 0; i < 10; i++ {
-		user := User{
-			Email: fmt.Sprintf("brown%d@example.com", i),
-			Name:  fmt.Sprintf("Brown %d", i),
-		}
-		err := db.Create(&user).Error
-		assert.NoError(t, err)
-	}
-
-	results = Users{}
-	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 5, 1, false, "")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(11), totalCount) // 10 "brown" + 1 "Charlie Brown"
-	assert.Equal(t, 3, totalPages)
-	assert.Len(t, results, 5)
-
-	// Test second page
-	results = Users{}
-	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 5, 2, false, "")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(11), totalCount)
-	assert.Equal(t, 3, totalPages)
-	assert.Len(t, results, 5)
-
-	// Test with empty search term (should return all users)
-	results = Users{}
-	totalCount, totalPages, err = results.SearchByTerm(db, "", 20, 1, false, "")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(15), totalCount) // 5 original + 10 additional
-	assert.Equal(t, 1, totalPages)
-	assert.Len(t, results, 15)
-
-	// Test sorting
-	results = Users{}
-	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 20, 1, false, "-email")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(11), totalCount)
-	assert.Equal(t, 1, totalPages)
-	assert.Len(t, results, 11)
-	// First should be charliebrown@example.com when sorting by email DESC
-	assert.Equal(t, "charliebrown@example.com", results[0].Email)
-	// Test with all=true parameter (should return all results regardless of pagination)
-	results = Users{}
-	totalCount, totalPages, err = results.SearchByTerm(db, "brown", 3, 1, true, "email")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(11), totalCount) // Should still report the correct total count
-	assert.Equal(t, 4, totalPages)         // Should still calculate the correct page count
-	assert.Len(t, results, 11)             // But should return ALL matching results, not just the first page
-}
-
 func TestGetGroupUsersPaginated(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -820,4 +710,203 @@ func (users Users) toEmails() []string {
 		emails[i] = u.Email
 	}
 	return emails
+}
+
+func TestUsers_QueryUsers(t *testing.T) {
+	db := setupTestDB(t)
+
+	createTestUsers := func() []User {
+		users := []User{
+			{Email: "alice@example.com", Name: "Alice Smith", ShowPortal: true},
+			{Email: "bob@example.com", Name: "Bob Johnson", IsAdmin: true},
+			{Email: "charlie@example.com", Name: "Charlie Brown", ShowPortal: true},
+			{Email: "dave@example.com", Name: "Dave Miller", ShowChat: true},
+			{Email: "emma@example.com", Name: "Emma Davis", IsAdmin: true},
+		}
+		for i := range users {
+			err := db.Create(&users[i]).Error
+			assert.NoError(t, err)
+		}
+		return users
+	}
+
+	t.Run("Basic pagination", func(t *testing.T) {
+		db = setupTestDB(t)
+		expectedUsers := createTestUsers()
+
+		var users Users
+		count, totalPages, err := users.QueryUsers(db, UserQueryParams{
+			PageSize:   2,
+			PageNumber: 1,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), count)
+		assert.Equal(t, 3, totalPages)
+		assert.Len(t, users, 2)
+		assert.Equal(t, expectedUsers[0].Email, users[0].Email)
+		assert.Equal(t, expectedUsers[1].Email, users[1].Email)
+
+		var usersPage2 Users
+		count, totalPages, err = usersPage2.QueryUsers(db, UserQueryParams{
+			PageSize:   2,
+			PageNumber: 2,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), count)
+		assert.Equal(t, 3, totalPages)
+		assert.Len(t, usersPage2, 2)
+		assert.Equal(t, expectedUsers[2].Email, usersPage2[0].Email)
+		assert.Equal(t, expectedUsers[3].Email, usersPage2[1].Email)
+	})
+
+	t.Run("Search by email", func(t *testing.T) {
+		db = setupTestDB(t)
+		createTestUsers()
+
+		var users Users
+		count, totalPages, err := users.QueryUsers(db, UserQueryParams{
+			Search:     "alice",
+			PageSize:   10,
+			PageNumber: 1,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, users, 1)
+		assert.Equal(t, "alice@example.com", users[0].Email)
+	})
+
+	t.Run("Search by name", func(t *testing.T) {
+		db = setupTestDB(t)
+		createTestUsers()
+
+		var users Users
+		count, totalPages, err := users.QueryUsers(db, UserQueryParams{
+			Search:     "Smith",
+			PageSize:   10,
+			PageNumber: 1,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, users, 1)
+		assert.Equal(t, "Alice Smith", users[0].Name)
+	})
+
+	t.Run("Exclude users from group", func(t *testing.T) {
+		db = setupTestDB(t)
+		users := createTestUsers()
+
+		group := &Group{Name: "Test Group"}
+		err := group.Create(db)
+		assert.NoError(t, err)
+
+		err = group.AddUser(db, &users[0])
+		assert.NoError(t, err)
+		err = group.AddUser(db, &users[1])
+		assert.NoError(t, err)
+
+		var queriedUsers Users
+		count, totalPages, err := queriedUsers.QueryUsers(db, UserQueryParams{
+			ExcludeGroupID: group.ID,
+			PageSize:       10,
+			PageNumber:     1,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), count)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, queriedUsers, 3)
+
+		emails := queriedUsers.toEmails()
+		assert.Contains(t, emails, "charlie@example.com")
+		assert.Contains(t, emails, "dave@example.com")
+		assert.Contains(t, emails, "emma@example.com")
+		assert.NotContains(t, emails, "alice@example.com")
+		assert.NotContains(t, emails, "bob@example.com")
+	})
+
+	t.Run("Get all users", func(t *testing.T) {
+		db = setupTestDB(t)
+		createTestUsers()
+
+		var users Users
+		count, totalPages, err := users.QueryUsers(db, UserQueryParams{
+			PageSize:   2,
+			PageNumber: 1,
+			All:        true,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), count)
+		assert.Equal(t, 3, totalPages)
+		assert.Len(t, users, 5)
+	})
+
+	t.Run("Sort users", func(t *testing.T) {
+		db = setupTestDB(t)
+		createTestUsers()
+
+		var users Users
+		count, totalPages, err := users.QueryUsers(db, UserQueryParams{
+			PageSize:   10,
+			PageNumber: 1,
+			Sort:       "email",
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), count)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, users, 5)
+		assert.Equal(t, "alice@example.com", users[0].Email)
+		assert.Equal(t, "emma@example.com", users[4].Email)
+	})
+
+	t.Run("Combined filters", func(t *testing.T) {
+		db = setupTestDB(t)
+		users := createTestUsers()
+
+		group := &Group{Name: "Test Group"}
+		err := group.Create(db)
+		assert.NoError(t, err)
+
+		err = group.AddUser(db, &users[0])
+		assert.NoError(t, err)
+
+		var queriedUsers Users
+		count, totalPages, err := queriedUsers.QueryUsers(db, UserQueryParams{
+			Search:         "son", // This will match "Bob Johnson"
+			ExcludeGroupID: group.ID,
+			PageSize:       10,
+			PageNumber:     1,
+			Sort:           "email",
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+		assert.Equal(t, 1, totalPages)
+		assert.Len(t, queriedUsers, 1)
+		assert.Equal(t, "bob@example.com", queriedUsers[0].Email)
+	})
+
+	t.Run("Empty results", func(t *testing.T) {
+		db = setupTestDB(t)
+		createTestUsers()
+
+		var users Users
+		count, totalPages, err := users.QueryUsers(db, UserQueryParams{
+			Search:     "nonexistent",
+			PageSize:   10,
+			PageNumber: 1,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+		assert.Equal(t, 0, totalPages)
+		assert.Len(t, users, 0)
+	})
 }
