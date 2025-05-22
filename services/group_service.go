@@ -112,17 +112,13 @@ func (s *Service) RemoveUserFromGroup(userID, groupID uint) error {
 	return group.RemoveUser(s.DB, user)
 }
 
-func (s *Service) GetGroupUsers(groupID uint) (models.Users, error) {
-	group, err := s.GetGroupByID(groupID)
+func (s *Service) GetGroupUsers(groupID uint, pageSize int, pageNumber int, all bool) (models.Users, int64, int, error) {
+	var users models.Users
+	totalCount, totalPages, err := users.GetGroupUsersPaginated(s.DB, groupID, pageSize, pageNumber, all)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
-
-	if err := group.GetGroupUsers(s.DB); err != nil {
-		return nil, err
-	}
-
-	return group.Users, nil
+	return users, totalCount, totalPages, nil
 }
 
 func (s *Service) GetAllGroups(pageSize int, pageNumber int, all bool, sort string) (models.Groups, int64, int, error) {
