@@ -56,8 +56,14 @@ func TestUserService(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, authenticatedUser)
 
-	// Test GetAllUsers
-	users, _, _, err := service.GetAllUsers(10, 1, true, "id")
+	// Test ListUsers
+	params := ListUsersParams{
+		PageSize:   10,
+		PageNumber: 1,
+		All:        true,
+		Sort:       "id",
+	}
+	users, _, _, err := service.ListUsers(params)
 	assert.NoError(t, err)
 	assert.Len(t, users, 1)
 
