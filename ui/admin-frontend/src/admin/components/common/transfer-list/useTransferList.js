@@ -65,7 +65,6 @@ const useTransferList = ({
       
       onChange({ selected: newSelected, available: newAvailable });
       
-      // Call onItemAdded handler if provided
       if (onItemAdded) {
         onItemAdded(item);
       }
@@ -81,7 +80,6 @@ const useTransferList = ({
       
       onChange({ selected: newSelected, available: newAvailable });
       
-      // Call onItemRemoved handler if provided
       if (onItemRemoved) {
         onItemRemoved(item);
       }
