@@ -32,10 +32,13 @@ const TransferList = ({
   onLoadMore,
   hasMore = true,
   isLoadingMore = false,
+  onItemAdded,
+  onItemRemoved,
 }) => {
   const {
+    leftBoxRef,
     rightBoxRef,
-    filteredAvailable,
+    available,
     selected,
     searchTerm,
     isSearching,
@@ -51,11 +54,13 @@ const TransferList = ({
     onLoadMore,
     hasMore,
     isLoadingMore,
+    onItemAdded,
+    onItemRemoved,
   });
 
   return (
     <TransferListContainer>
-      <TransferBox>
+      <TransferBox ref={leftBoxRef}>
         <HeaderBox>
           <Typography variant="headingSmall" color="text.primary">
             {leftTitle}
@@ -108,7 +113,7 @@ const TransferList = ({
           </Box>
         ) : (
           <TransferListTable
-            items={filteredAvailable}
+            items={available}
             columns={columns}
             idField={idField}
             isLeftSide={false}
