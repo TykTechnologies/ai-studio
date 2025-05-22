@@ -21,6 +21,22 @@ export const teamsService = {
     }
   },
   
+  getTeamUsers: async (id, queryParams) => {
+    try {
+      const response = await apiClient.get(`/groups/${id}/users`, {
+        params: queryParams
+      });
+      return {
+        data: response.data.data,
+        totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
+        totalPages: parseInt(response.headers['x-total-pages'] || '0', 10)
+      };
+    } catch (error) {
+      console.error("Error fetching team users:", error);
+      throw error;
+    }
+  },
+  
   createTeam: async (teamData) => {
     try {
       const response = await apiClient.post("/groups", teamData);
