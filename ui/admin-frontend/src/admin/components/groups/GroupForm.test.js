@@ -222,7 +222,10 @@ describe('GroupForm Component', () => {
     fetchUsers: mockFetchUsers,
     handleUsersChange: mockHandleUsersChange,
     handleLoadMore: mockHandleLoadMore,
-    handleSearch: mockHandleSearch
+    handleSearch: mockHandleSearch,
+    handleUserAdded: jest.fn(),
+    handleUserRemoved: jest.fn(),
+    resetState: jest.fn()
   };
   
   const defaultCatalogsSelectionValues = {

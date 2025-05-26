@@ -342,3 +342,24 @@ func (s *Service) GetAllUsers(pageSize int, pageNumber int, all bool, sort strin
 	}
 	return s.ListUsers(params)
 }
+
+func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
+	group, err := s.GetGroupByID(id, "Users")
+	if err != nil {
+		return err
+	}
+
+	tx := s.DB.Begin()
+
+	users := make([]models.User, 0, len(userIDs))
+	for _, userID := range userIDs {
+		users = append(users, models.User{ID: userID})
+	}
+
+	if err := group.ReplaceAssociation(tx, "Users", users); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}

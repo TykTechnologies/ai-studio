@@ -1138,3 +1138,12 @@ type PromptTemplateResponse struct {
 		ChatID uint   `json:"chat_id"`
 	} `json:"attributes"`
 }
+
+type GroupUsersInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Members []uint `json:"members"`
+		} `json:"attributes"`
+	} `json:"data"`
+}

@@ -22,7 +22,7 @@ export const TransferBox = styled(Paper)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
   boxShadow: "none",
-  maxHeight: BOX_MAX_HEIGHT,
+  height: BOX_MAX_HEIGHT,
   width: "100%",
 }));
 
