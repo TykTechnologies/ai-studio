@@ -4,7 +4,7 @@ import TransferList from "../../../components/common/transfer-list/TransferList"
 import { Box, CircularProgress } from "@mui/material";
 import { TEAM_MEMBERS_TRANSFER_LIST_COLUMNS } from "../utils/transferListConfig";
 import { teamsService } from "../../../services/teamsService";
-import { useTeamMembersModal } from "../utils/useTeamMembersModal";
+import { useTeamMembersModal } from "../hooks/useTeamMembersModal";
 
 const ManageTeamMembersModal = ({ 
   open, 

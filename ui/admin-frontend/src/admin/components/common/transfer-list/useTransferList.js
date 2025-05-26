@@ -15,7 +15,7 @@ const useTransferList = ({
 }) => {
   const rightBoxRef = useRef(null);
   const leftBoxRef = useRef(null);
-  const onSearchRef = useRef(onSearch);
+  const onSearchRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const available = availableItems;
@@ -23,7 +23,9 @@ const useTransferList = ({
   const prevAvailableItemsRef = useRef(availableItems);
 
   useEffect(() => {
-    onSearchRef.current = onSearch;
+    if (onSearch) {
+      onSearchRef.current = onSearch;
+    }
   }, [onSearch]);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ const useTransferList = ({
   }, [onLoadMore, hasMore, isLoadingMore]);
 
   const debouncedSearchExecutor = useDebouncedCallback(async (value) => {
-    if (!onSearchRef.current) {
+    if (!onSearchRef?.current) {
       setIsSearching(false);
       return;
     }
