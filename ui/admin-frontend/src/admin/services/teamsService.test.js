@@ -237,7 +237,7 @@ describe('updateGroupCatalogs', () => {
       data: {
         type: "groups",
         attributes: {
-          catalogs: [1, 2, 3]
+          catalogues: [1, 2, 3]
         }
       }
     };
@@ -252,7 +252,7 @@ describe('updateGroupCatalogs', () => {
 
     const result = await teamsService.updateGroupCatalogs(teamId, catalogData);
 
-    expect(apiClient.put).toHaveBeenCalledWith(`/groups/${teamId}/catalogs`, catalogData);
+    expect(apiClient.put).toHaveBeenCalledWith(`/groups/${teamId}/catalogues`, catalogData);
     expect(result).toEqual(mockResponse.data);
   });
 
@@ -262,7 +262,7 @@ describe('updateGroupCatalogs', () => {
       data: {
         type: "groups",
         attributes: {
-          catalogs: [1, 2, 3]
+          catalogues: [1, 2, 3]
         }
       }
     };
