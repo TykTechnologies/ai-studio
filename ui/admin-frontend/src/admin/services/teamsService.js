@@ -81,5 +81,15 @@ export const teamsService = {
       console.error("Error updating team users:", error);
       throw error;
     }
+  },
+
+  updateGroupCatalogs: async (id, catalogData) => {
+    try {
+      const response = await apiClient.put(`/groups/${id}/catalogs`, catalogData);
+      return response.data;
+    } catch (error) {
+      console.error("Error updating team catalogs:", error);
+      throw error;
+    }
   }
 };

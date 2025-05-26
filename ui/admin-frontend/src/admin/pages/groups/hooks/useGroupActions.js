@@ -54,7 +54,7 @@ const useGroupActions = (refreshGroups, setSnackbar) => {
     navigate(`/admin/groups/${group.id}`);
   };
 
-  const handleManageMembers = (group) => {
+  const handleSelectedGroup = (group) => {
     if (group) {
       setSelectedGroup(group);
     }
@@ -68,7 +68,8 @@ const useGroupActions = (refreshGroups, setSnackbar) => {
     handleCancelDelete,
     handleConfirmDelete,
     handleGroupClick,
-    handleManageMembers,
+    handleManageMembers: handleSelectedGroup,
+    handleManageCatalogs: handleSelectedGroup,
   };
 };
 

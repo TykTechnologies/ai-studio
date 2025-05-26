@@ -1147,3 +1147,29 @@ type GroupUsersInput struct {
 		} `json:"attributes"`
 	} `json:"data"`
 }
+
+type GroupListResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name               string   `json:"name"`
+		UserCount          int      `json:"user_count"`
+		CatalogueCount     int      `json:"catalogue_count"`
+		DataCatalogueCount int      `json:"data_catalogue_count"`
+		ToolCatalogueCount int      `json:"tool_catalogue_count"`
+		CatalogueNames     []string `json:"catalogue_names"`
+		DataCatalogueNames []string `json:"data_catalogue_names"`
+		ToolCatalogueNames []string `json:"tool_catalogue_names"`
+	} `json:"attributes"`
+}
+
+type GroupCatalogsRequest struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Catalogues     []uint `json:"catalogues"`
+			DataCatalogues []uint `json:"data_catalogues"`
+			ToolCatalogues []uint `json:"tool_catalogues"`
+		} `json:"attributes"`
+	} `json:"data"`
+}

@@ -17,6 +17,7 @@ import useGroupActions from "./hooks/useGroupActions";
 import GroupsTable from "./components/GroupsTable";
 import GroupDeleteDialog from "./components/GroupDeleteDialog";
 import ManageTeamMembersModal from "./components/ManageTeamMembersModal";
+import ManageGroupCatalogsModal from "./components/ManageGroupCatalogsModal";
 import { CACHE_KEYS } from "../../utils/constants";
 
 const Groups = () => {
@@ -27,6 +28,7 @@ const Groups = () => {
   });
   
   const [manageTeamMembersOpen, setManageTeamMembersOpen] = useState(false);
+  const [manageCatalogsOpen, setManageCatalogsOpen] = useState(false);
 
   const {
     groups,
@@ -52,6 +54,7 @@ const Groups = () => {
     handleConfirmDelete,
     handleGroupClick,
     handleManageMembers,
+    handleManageCatalogs,
   } = useGroupActions(refreshGroups, setSnackbar);
 
   const handleCloseSnackbar = (event, reason) => {
@@ -125,6 +128,10 @@ const Groups = () => {
             handleManageMembers(group);
             setManageTeamMembersOpen(true);
           }}
+          handleManageCatalogs={(group) => {
+            handleManageCatalogs(group);
+            setManageCatalogsOpen(true);
+          }}
         />
       </Box>
 
@@ -153,6 +160,27 @@ const Groups = () => {
       <ManageTeamMembersModal
         open={manageTeamMembersOpen}
         onClose={() => setManageTeamMembersOpen(false)}
+        group={selectedGroup}
+        onSuccess={(message) => {
+          setSnackbar({
+            open: true,
+            message,
+            severity: "success",
+          });
+          refreshGroups();
+        }}
+        onError={(message) => {
+          setSnackbar({
+            open: true,
+            message,
+            severity: "error",
+          });
+        }}
+      />
+
+      <ManageGroupCatalogsModal
+        open={manageCatalogsOpen}
+        onClose={() => setManageCatalogsOpen(false)}
         group={selectedGroup}
         onSuccess={(message) => {
           setSnackbar({
