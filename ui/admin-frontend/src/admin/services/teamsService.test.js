@@ -229,3 +229,48 @@ describe('updateGroupUsers', () => {
     expect(console.error).toHaveBeenCalledWith('Error updating team users:', error);
   });
 });
+
+describe('updateGroupCatalogs', () => {
+  it('should update team catalogs successfully', async () => {
+    const teamId = 'team-123';
+    const catalogData = {
+      data: {
+        type: "groups",
+        attributes: {
+          catalogs: [1, 2, 3]
+        }
+      }
+    };
+    const mockResponse = {
+      data: {
+        success: true,
+        message: 'Team catalogs updated successfully'
+      }
+    };
+    
+    apiClient.put.mockResolvedValueOnce(mockResponse);
+
+    const result = await teamsService.updateGroupCatalogs(teamId, catalogData);
+
+    expect(apiClient.put).toHaveBeenCalledWith(`/groups/${teamId}/catalogs`, catalogData);
+    expect(result).toEqual(mockResponse.data);
+  });
+
+  it('should throw error when updating team catalogs fails', async () => {
+    const teamId = 'team-123';
+    const catalogData = {
+      data: {
+        type: "groups",
+        attributes: {
+          catalogs: [1, 2, 3]
+        }
+      }
+    };
+    const error = new Error('API Error');
+    
+    apiClient.put.mockRejectedValueOnce(error);
+
+    await expect(teamsService.updateGroupCatalogs(teamId, catalogData)).rejects.toThrow('API Error');
+    expect(console.error).toHaveBeenCalledWith('Error updating team catalogs:', error);
+  });
+});
