@@ -46,6 +46,21 @@ const createApiClient = () => {
       throw error;
     }
   };
+  
+  // Add similar logging for other methods if needed (e.g., put, patch, delete)
+  const originalDelete = instance.delete;
+  instance.delete = async function(url, config) {
+    console.log(`API DELETE ${url}`);
+    try {
+      const response = await originalDelete.call(this, url, config);
+      console.log(`API DELETE ${url} response:`, response);
+      return response;
+    } catch (error) {
+      console.error(`API DELETE ${url} error:`, error);
+      throw error;
+    }
+  };
+
 
   return instance;
 };
@@ -61,6 +76,17 @@ export const providerAPI = {
   }),
   getProviderSpecs: (providerId) => apiClientInstance.get(`/providers/${providerId}/specs`),
 };
+
+// App-Tool API endpoints
+export const appToolAPI = {
+  getAppTools: (appId) => apiClientInstance.get(`/apps/${appId}/tools`),
+  addToolToApp: (appId, toolId) => apiClientInstance.post(`/apps/${appId}/tools/${toolId}`),
+  removeToolFromApp: (appId, toolId) => apiClientInstance.delete(`/apps/${appId}/tools/${toolId}`),
+  // Assuming a general endpoint to get all available tools for selection
+  // Adjust if tools are fetched differently (e.g., from tool-catalogues)
+  listAvailableTools: (params) => apiClientInstance.get('/tools', { params: { all: true, ...params } }),
+};
+
 
 // Function to reinitialize the API client with new configuration
 export const reinitializeApiClient = () => {

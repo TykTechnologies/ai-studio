@@ -3,15 +3,30 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
 )
 
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDsStrings, llmIDsStrings, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+	datasourceIDs, err := s.convertIDs(datasourceIDsStrings)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datasource IDs: %w", err)
+	}
+	llmIDs, err := s.convertIDs(llmIDsStrings)
+	if err != nil {
+		return nil, fmt.Errorf("invalid LLM IDs: %w", err)
+	}
+	toolIDs, err := s.convertIDs(toolIDsStrings)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Tool IDs: %w", err)
+	}
+
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
 		return nil, err
@@ -51,6 +66,17 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		}
 	}
 
+	// Add Tools to the app
+	for _, toolID := range toolIDs {
+		tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
+		}
+		if err := app.AddTool(s.DB, tool); err != nil {
+			return nil, fmt.Errorf("failed to add tool %d to app: %w", toolID, err)
+		}
+	}
+
 	// Get the user who created the app
 	user, err := s.GetUserByID(userID)
 	if err != nil {
@@ -75,15 +101,32 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 			fmt.Printf("Error sending admin notification: %v\n", err)
 		}
 	}
-
+	// Reload app to get all associations
+	err = app.Get(s.DB, app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload app: %w", err)
+	}
 	return app, nil
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs, llmIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDsStrings, llmIDsStrings, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
+	}
+
+	datasourceIDs, err := s.convertIDs(datasourceIDsStrings)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datasource IDs: %w", err)
+	}
+	llmIDs, err := s.convertIDs(llmIDsStrings)
+	if err != nil {
+		return nil, fmt.Errorf("invalid LLM IDs: %w", err)
+	}
+	toolIDs, err := s.convertIDs(toolIDsStrings)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Tool IDs: %w", err)
 	}
 
 	// Check if datasources have higher privacy score than LLMs
@@ -107,21 +150,53 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 		return nil, err
 	}
 
+	// Update Tools
+	if err := s.updateAppTools(app, toolIDs); err != nil {
+		return nil, fmt.Errorf("failed to update app tools: %w", err)
+	}
+
 	if err := app.Update(s.DB); err != nil {
 		return nil, err
 	}
-
+	// Reload app to get all associations
+	err = app.Get(s.DB, app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload app: %w", err)
+	}
 	return app, nil
+}
+
+// Helper function to convert string IDs to uint IDs
+func (s *Service) convertIDs(idStrings []string) ([]uint, error) {
+	if idStrings == nil {
+		return []uint{}, nil // Return empty slice if input is nil
+	}
+	ids := make([]uint, len(idStrings))
+	for i, idStr := range idStrings {
+		id, err := strconv.ParseUint(idStr, 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		ids[i] = uint(id)
+	}
+	return ids, nil
 }
 
 // validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
 func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
-	var maxLLMScore int
-	var maxDatasourceScore int = 0 // Initialize with a value higher than the maximum possible score
+	var maxLLMScore int = -1 // Initialize with a value lower than any possible score
+	var maxDatasourceScore int = -1 // Initialize with a value lower than any possible score
 
 	if len(llmIDs) == 0 && len(datasourceIDs) == 0 {
 		return nil
 	}
+	if len(llmIDs) == 0 && len(datasourceIDs) > 0 { // If only datasources are present, LLM score is effectively 0
+		maxLLMScore = 0
+	}
+	if len(datasourceIDs) == 0 && len(llmIDs) > 0 { // If only llms are present, datasource score is effectively 0
+		maxDatasourceScore = 0
+	}
+
 
 	for _, llmID := range llmIDs {
 		llm, err := s.GetLLMByID(llmID)
@@ -142,58 +217,103 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 			maxDatasourceScore = ds.PrivacyScore
 		}
 	}
-
-	if maxDatasourceScore > maxLLMScore {
+	
+	// Only enforce if both types of entities are present or if one type is present and the other is not (implicit score of 0)
+	if maxDatasourceScore > -1 && maxLLMScore > -1 && maxDatasourceScore > maxLLMScore {
 		return ERRPrivacyScoreMismatch
 	}
+
 
 	return nil
 }
 
 // updateAppDatasources updates the datasources associated with an app
 func (s *Service) updateAppDatasources(app *models.App, datasourceIDs []uint) error {
-	// Remove existing datasources
-	for _, ds := range app.Datasources {
-		if err := app.RemoveDatasource(s.DB, &ds); err != nil {
-			return err
-		}
+	// Load existing datasources to ensure we have the current state
+	s.DB.Model(app).Association("Datasources").Find(&app.Datasources)
+
+	// Create a map of new datasource IDs for efficient lookup
+	newDatasourceIDsMap := make(map[uint]bool)
+	for _, dsID := range datasourceIDs {
+		newDatasourceIDsMap[dsID] = true
 	}
 
-	// Add new datasources
-	for _, dsID := range datasourceIDs {
+	// Remove datasources that are no longer in the list
+	var datasourcesToKeep []models.Datasource
+	for _, existingDS := range app.Datasources {
+		if _, found := newDatasourceIDsMap[existingDS.ID]; found {
+			datasourcesToKeep = append(datasourcesToKeep, existingDS)
+			delete(newDatasourceIDsMap, existingDS.ID) // Remove from map as it's already associated
+		}
+	}
+	app.Datasources = datasourcesToKeep
+
+	// Add new datasources that were not previously associated
+	for dsID := range newDatasourceIDsMap {
 		ds, err := s.GetDatasourceByID(dsID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get datasource %d: %w", dsID, err)
 		}
-		if err := app.AddDatasource(s.DB, ds); err != nil {
-			return err
-		}
+		app.Datasources = append(app.Datasources, *ds)
 	}
-
-	return nil
+	
+	return s.DB.Model(app).Association("Datasources").Replace(app.Datasources)
 }
 
 // updateAppLLMs updates the LLMs associated with an app
 func (s *Service) updateAppLLMs(app *models.App, llmIDs []uint) error {
-	// Remove existing LLMs
-	for _, llm := range app.LLMs {
-		if err := app.RemoveLLM(s.DB, &llm); err != nil {
-			return err
-		}
+	s.DB.Model(app).Association("LLMs").Find(&app.LLMs)
+	newLLMIDsMap := make(map[uint]bool)
+	for _, llmID := range llmIDs {
+		newLLMIDsMap[llmID] = true
 	}
 
-	// Add new LLMs
-	for _, llmID := range llmIDs {
+	var llmsToKeep []models.LLM
+	for _, existingLLM := range app.LLMs {
+		if _, found := newLLMIDsMap[existingLLM.ID]; found {
+			llmsToKeep = append(llmsToKeep, existingLLM)
+			delete(newLLMIDsMap, existingLLM.ID)
+		}
+	}
+	app.LLMs = llmsToKeep
+
+	for llmID := range newLLMIDsMap {
 		llm, err := s.GetLLMByID(llmID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get llm %d: %w", llmID, err)
 		}
-		if err := app.AddLLM(s.DB, llm); err != nil {
-			return err
-		}
+		app.LLMs = append(app.LLMs, *llm)
+	}
+	return s.DB.Model(app).Association("LLMs").Replace(app.LLMs)
+}
+
+// updateAppTools updates the Tools associated with an app
+func (s *Service) updateAppTools(app *models.App, toolIDs []uint) error {
+	s.DB.Model(app).Association("Tools").Find(&app.Tools) // Load existing tools
+	newToolIDsMap := make(map[uint]bool)
+	for _, toolID := range toolIDs {
+		newToolIDsMap[toolID] = true
 	}
 
-	return nil
+	var toolsToKeep []models.Tool
+	for _, existingTool := range app.Tools {
+		if _, found := newToolIDsMap[existingTool.ID]; found {
+			toolsToKeep = append(toolsToKeep, existingTool)
+			delete(newToolIDsMap, existingTool.ID) // Remove from map
+		}
+	}
+	app.Tools = toolsToKeep // Assign tools to keep
+
+	// Add new tools
+	for toolID := range newToolIDsMap {
+		tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
+		if err != nil {
+			return fmt.Errorf("failed to get tool %d: %w", toolID, err)
+		}
+		app.Tools = append(app.Tools, *tool)
+	}
+	// Replace the association with the final list of tools
+	return s.DB.Model(app).Association("Tools").Replace(app.Tools)
 }
 
 // GetAppByID retrieves an app by its ID
@@ -226,6 +346,16 @@ func (s *Service) DeleteApp(id uint) error {
 		if err := s.DeleteCredential(app.CredentialID); err != nil {
 			return err
 		}
+	}
+	// Clear associations before deleting the app
+	if err := s.DB.Model(app).Association("Datasources").Clear(); err != nil {
+		return fmt.Errorf("failed to clear app datasources association: %w", err)
+	}
+	if err := s.DB.Model(app).Association("LLMs").Clear(); err != nil {
+		return fmt.Errorf("failed to clear app LLMs association: %w", err)
+	}
+	if err := s.DB.Model(app).Association("Tools").Clear(); err != nil {
+		return fmt.Errorf("failed to clear app tools association: %w", err)
 	}
 
 	return app.Delete(s.DB)
@@ -355,6 +485,75 @@ func (s *Service) GetAppLLMs(appID uint, pageSize int, pageNumber int, all bool)
 	return llms, totalCount, totalPages, nil
 }
 
+// AddToolToApp adds a tool to an app
+func (s *Service) AddToolToApp(appID, toolID uint) (*models.App, error) {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get app %d: %w", appID, err)
+	}
+
+	tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
+	}
+
+	// Check if the tool is already associated to prevent duplicates if necessary,
+	// though GORM's Append usually handles this for many2many.
+	// For explicit control or error messaging:
+	// for _, t := range app.Tools {
+	// 	if t.ID == toolID {
+	// 		return app, errors.New("tool already associated with this app")
+	// 	}
+	// }
+
+	if err := app.AddTool(s.DB, tool); err != nil {
+		return nil, fmt.Errorf("failed to add tool %d to app %d: %w", toolID, appID, err)
+	}
+	// Reload app to get all associations, including the newly added tool.
+	err = app.Get(s.DB, app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload app %d: %w", appID, err)
+	}
+	return app, nil
+}
+
+// RemoveToolFromApp removes a tool from an app
+func (s *Service) RemoveToolFromApp(appID, toolID uint) error {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return fmt.Errorf("failed to get app %d: %w", appID, err)
+	}
+
+	tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
+	if err != nil {
+		return fmt.Errorf("failed to get tool %d: %w", toolID, err)
+	}
+
+	if err := app.RemoveTool(s.DB, tool); err != nil {
+		// Check if the error is because the association does not exist
+		if errors.Is(err, gorm.ErrRecordNotFound) || err.Error() == "record not found" { // GORM might return different error types/messages
+			return fmt.Errorf("tool %d not associated with app %d or not found: %w", toolID, appID, err)
+		}
+		return fmt.Errorf("failed to remove tool %d from app %d: %w", toolID, appID, err)
+	}
+	return nil
+}
+
+// GetAppTools retrieves all tools associated with an app
+func (s *Service) GetAppTools(appID uint) ([]models.Tool, error) {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get app %d: %w", appID, err)
+	}
+
+	// The GetTools method was added to models.App
+	tools, err := app.GetTools(s.DB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tools for app %d: %w", appID, err)
+	}
+	return tools, nil
+}
+
 // ListApps returns all apps
 func (s *Service) ListApps() (models.Apps, error) {
 	app := models.NewApp()
@@ -392,4 +591,14 @@ func (s *Service) CountApps() (int64, error) {
 func (s *Service) CountAppsByUserID(userID uint) (int64, error) {
 	app := models.NewApp()
 	return app.CountByUserID(s.DB, userID)
+}
+
+// GetToolByID retrieves a tool by its ID - Placeholder, ensure this exists or is implemented in tool_service.go
+func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
+	tool := models.NewTool()
+	// Assuming a Get method similar to other services
+	if err := tool.Get(s.DB, id); err != nil {
+		return nil, err
+	}
+	return tool, nil
 }

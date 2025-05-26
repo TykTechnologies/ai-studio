@@ -46,6 +46,7 @@ func InitModels(db *gorm.DB) error {
 		&LLMChatRecord{},
 		&Notification{}, // For storing notifications
 		&PromptTemplate{}, // For storing prompt templates
+		&AppTool{},       // Join table for Apps and Tools
 	)
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {

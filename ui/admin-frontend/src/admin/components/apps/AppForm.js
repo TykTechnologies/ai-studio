@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import apiClient from "../../utils/apiClient";
+import React, { useState, useEffect, useCallback } from "react";
+import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import {
   TextField,
   Box,
@@ -17,6 +17,7 @@ import {
   Switch,
   FormControlLabel,
   InputAdornment,
+  CircularProgress,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -28,6 +29,7 @@ import {
   PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
+import CustomSelectMany from "../common/CustomSelectMany"; // Assuming this is suitable
 
 const AppForm = () => {
   const [app, setApp] = useState({
@@ -36,6 +38,7 @@ const AppForm = () => {
     user_id: "",
     llm_ids: [],
     datasource_ids: [],
+    tool_ids: [], // Added for tools
     monthly_budget: null,
     budget_start_date: null,
   });
@@ -43,6 +46,8 @@ const AppForm = () => {
   const [users, setUsers] = useState([]);
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
+  const [availableTools, setAvailableTools] = useState([]); // Added for available tools
+  const [loading, setLoading] = useState(false); // Added loading state
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -52,45 +57,58 @@ const AppForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  useEffect(() => {
-    fetchUsers();
-    fetchLLMs();
-    fetchDatasources();
-    if (id) {
-      fetchApp();
+  const fetchAppData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [usersRes, llmsRes, datasourcesRes, toolsRes] = await Promise.all([
+        apiClient.get("/users", { params: { all: true } }),
+        apiClient.get("/llms", { params: { all: true } }),
+        apiClient.get("/datasources", { params: { all: true } }),
+        appToolAPI.listAvailableTools(), // Fetch available tools
+      ]);
+      setUsers(usersRes.data.data || []);
+      setLLMs(llmsRes.data.data || []);
+      setDatasources(datasourcesRes.data.data || []);
+      setAvailableTools(toolsRes.data.data || []);
+
+      if (id) {
+        const appRes = await apiClient.get(`/apps/${id}`);
+        const appData = appRes.data.data.attributes;
+        setApp({
+          name: appData.name || "",
+          description: appData.description || "",
+          user_id: appData.user_id ? String(appData.user_id) : "",
+          // Ensure these are arrays of strings for the Select component
+          llm_ids: Array.isArray(appData.llms) ? appData.llms.map(item => String(item.id)) : [],
+          datasource_ids: Array.isArray(appData.datasources) ? appData.datasources.map(item => String(item.id)) : [],
+          tool_ids: Array.isArray(appData.tools) ? appData.tools.map(item => String(item.id)) : [],
+          monthly_budget: appData.monthly_budget,
+          budget_start_date: appData.budget_start_date,
+        });
+        if (appData.credential_id) {
+          fetchCredential(appData.credential_id);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching initial data for app form", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to load required data for the form.",
+        severity: "error",
+      });
+    } finally {
+      setLoading(false);
     }
   }, [id]);
 
-  const fetchApp = async () => {
-    try {
-      const response = await apiClient.get(`/apps/${id}`);
-      const appData = response.data.data.attributes;
-      setApp({
-        ...appData,
-        llm_ids: Array.isArray(appData.llm_ids)
-          ? appData.llm_ids.map(String)
-          : [],
-        datasource_ids: Array.isArray(appData.datasource_ids)
-          ? appData.datasource_ids.map(String)
-          : [],
-      });
-      if (appData.credential_id) {
-        fetchCredential(appData.credential_id);
-      }
-    } catch (error) {
-      console.error("Error fetching app", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to fetch app details",
-        severity: "error",
-      });
-    }
-  };
-
+  useEffect(() => {
+    fetchAppData();
+  }, [fetchAppData]);
+  
   const fetchCredential = async (credentialId) => {
     try {
       const response = await apiClient.get(`/credentials/${credentialId}`);
-      setCredential(response.data.data); // Store the full data object
+      setCredential(response.data.data); 
     } catch (error) {
       console.error("Error fetching credential", error);
     }
@@ -98,6 +116,7 @@ const AppForm = () => {
 
   const handleCredentialActiveToggle = async (event) => {
     const newActiveState = event.target.checked;
+    if (!credential) return;
 
     try {
       const credentialInput = {
@@ -108,17 +127,11 @@ const AppForm = () => {
           },
         },
       };
-
       await apiClient.patch(`/credentials/${credential.id}`, credentialInput);
-
       setCredential((prevState) => ({
         ...prevState,
-        attributes: {
-          ...prevState.attributes,
-          active: newActiveState,
-        },
+        attributes: { ...prevState.attributes, active: newActiveState },
       }));
-
       setSnackbar({
         open: true,
         message: `Credential ${newActiveState ? "activated" : "deactivated"} successfully`,
@@ -128,42 +141,15 @@ const AppForm = () => {
       console.error("Error updating credential active state", error);
       setSnackbar({
         open: true,
-        message: "Failed to update credential state. Please try again.",
+        message: "Failed to update credential state.",
         severity: "error",
       });
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await apiClient.get("/users");
-      setUsers(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching users", error);
-    }
-  };
-
-  const fetchLLMs = async () => {
-    try {
-      const response = await apiClient.get("/llms");
-      setLLMs(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching LLMs", error);
-    }
-  };
-
-  const fetchDatasources = async () => {
-    try {
-      const response = await apiClient.get("/datasources");
-      setDatasources(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching datasources", error);
-    }
-  };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setApp({ ...app, [name]: value });
+    setApp((prevApp) => ({ ...prevApp, [name]: value }));
   };
 
   const handleBudgetChange = (e) => {
@@ -171,24 +157,24 @@ const AppForm = () => {
     setApp(prev => ({
       ...prev,
       monthly_budget: value,
-      budget_start_date: value ? prev.budget_start_date || new Date().toISOString() : null
+      budget_start_date: value ? prev.budget_start_date || new Date().toISOString().split('T')[0] : null
     }));
   };
 
   const handleBudgetStartDateChange = (e) => {
-    const value = e.target.value ? new Date(e.target.value).toISOString() : null;
+    const value = e.target.value ? new Date(e.target.value).toISOString().split('T')[0] : null;
     setApp(prev => ({ ...prev, budget_start_date: value }));
   };
 
-  const handleMultiSelectChange = (e) => {
-    const { name, value } = e.target;
-    setApp({ ...app, [name]: value });
+
+  const handleMultiSelectChange = (name, selectedIds) => {
+    setApp((prevApp) => ({ ...prevApp, [name]: selectedIds }));
   };
 
   const validateForm = () => {
     const newErrors = {};
     if (!app.name.trim()) newErrors.name = "Name is required";
-    if (!app.user_id) newErrors.user_id = "User ID is required";
+    if (!app.user_id) newErrors.user_id = "User is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -197,48 +183,60 @@ const AppForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const appData = {
+    // Ensure IDs are sent as strings, as expected by the backend's convertIDs
+    const appPayload = {
+      ...app,
+      user_id: parseInt(app.user_id, 10), // user_id is typically an integer
+      // llm_ids, datasource_ids, tool_ids are already string arrays from CustomSelectMany
+    };
+    
+    // Remove null budget_start_date if monthly_budget is null
+    if (appPayload.monthly_budget === null) {
+      appPayload.budget_start_date = null;
+    }
+
+
+    const appDataRequest = {
       data: {
-        type: "apps",
-        attributes: {
-          ...app,
-          user_id: parseInt(app.user_id, 10),
-          llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
-          datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
-        },
+        type: "app", // Corrected type to "app" from "apps"
+        attributes: appPayload,
       },
     };
 
     try {
+      setLoading(true);
       if (id) {
-        await apiClient.patch(`/apps/${id}`, appData);
+        await apiClient.patch(`/apps/${id}`, appDataRequest);
       } else {
-        await apiClient.post("/apps", appData);
+        await apiClient.post("/apps", appDataRequest);
       }
-
       setSnackbar({
         open: true,
         message: id ? "App updated successfully" : "App created successfully",
         severity: "success",
       });
-
-      setTimeout(() => navigate("/admin/apps"), 2000);
+      setTimeout(() => navigate("/admin/apps"), 1000);
     } catch (error) {
       console.error("Error saving app", error);
       setSnackbar({
         open: true,
-        message: "Failed to save app. Please try again.",
+        message: error.response?.data?.errors?.[0]?.detail || "Failed to save app.",
         severity: "error",
       });
+    } finally {
+      setLoading(false);
     }
   };
-
+  
   const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
+    if (reason === "clickaway") return;
     setSnackbar({ ...snackbar, open: false });
   };
+
+  if (loading && !id) { // Show loader only on initial load for new app form
+    return <CircularProgress />;
+  }
+
 
   return (
     <>
@@ -254,9 +252,10 @@ const AppForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs, data sources, and tools in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs, access the data source API to search data, or utilize configured tools.</Typography>  
       </Box>
       <ContentBox>
+        {loading && id && <CircularProgress sx={{ display: 'block', margin: 'auto', mb: 2 }} />} 
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             <Grid item xs={12}>
@@ -283,55 +282,49 @@ const AppForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.user_id}>
+              <FormControl fullWidth error={!!errors.user_id} required>
                 <InputLabel>User</InputLabel>
-                <Select
-                  name="user_id"
-                  value={app.user_id}
-                  onChange={handleChange}
-                  required
-                >
+                <Select name="user_id" value={app.user_id} onChange={handleChange}>
                   {users.map((user) => (
-                    <MenuItem key={user.id} value={user.id}>
-                      {user.attributes.name}
+                    <MenuItem key={user.id} value={user.id.toString()}>
+                      {user.attributes.name} ({user.attributes.email})
                     </MenuItem>
                   ))}
                 </Select>
-                {errors.user_id && (
-                  <Typography color="error">{errors.user_id}</Typography>
-                )}
+                {errors.user_id && <Typography color="error" sx={{ fontSize: '0.75rem', mt: 0.5, ml: 2}}>{errors.user_id}</Typography>}
               </FormControl>
             </Grid>
+            
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>LLMs</InputLabel>
-                <Select
-                  multiple
-                  name="llm_ids"
-                  value={app.llm_ids}
-                  onChange={handleMultiSelectChange}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const llm = llms.find((l) => l.id === value);
-                        return (
-                          <Chip
-                            key={value}
-                            label={llm ? llm.attributes.name : value}
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {llms.map((llm) => (
-                    <MenuItem key={llm.id} value={llm.id.toString()}>
-                      {llm.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <CustomSelectMany
+                label="LLMs"
+                name="llm_ids"
+                value={app.llm_ids}
+                options={llms.map(llm => ({ id: llm.id.toString(), name: llm.attributes.name }))}
+                onChange={(selectedIds) => handleMultiSelectChange("llm_ids", selectedIds)}
+              />
             </Grid>
+
+            <Grid item xs={12}>
+               <CustomSelectMany
+                label="Datasources"
+                name="datasource_ids"
+                value={app.datasource_ids}
+                options={datasources.map(ds => ({ id: ds.id.toString(), name: ds.attributes.name }))}
+                onChange={(selectedIds) => handleMultiSelectChange("datasource_ids", selectedIds)}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+               <CustomSelectMany
+                label="Tools"
+                name="tool_ids"
+                value={app.tool_ids}
+                options={availableTools.map(tool => ({ id: tool.id.toString(), name: tool.attributes.name }))}
+                onChange={(selectedIds) => handleMultiSelectChange("tool_ids", selectedIds)}
+              />
+            </Grid>
+
             <Grid item xs={12}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
@@ -340,15 +333,10 @@ const AppForm = () => {
                     label="Monthly Budget"
                     name="monthly_budget"
                     type="number"
-                    inputProps={{
-                      step: "0.01",
-                      min: "0"
-                    }}
-                    value={app.monthly_budget || ''}
+                    inputProps={{ step: "0.01", min: "0" }}
+                    value={app.monthly_budget === null ? '' : app.monthly_budget}
                     onChange={handleBudgetChange}
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                    }}
+                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
                     helperText="Leave empty for no budget limit"
                   />
                 </Grid>
@@ -360,56 +348,17 @@ const AppForm = () => {
                     type="date"
                     value={app.budget_start_date ? app.budget_start_date.split('T')[0] : ''}
                     onChange={handleBudgetStartDateChange}
-                    disabled={!app.monthly_budget}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    helperText="Budget cycle start date"
+                    disabled={app.monthly_budget === null}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Budget cycle start date. Required if budget is set."
                   />
                 </Grid>
               </Grid>
             </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Datasources</InputLabel>
-                <Select
-                  multiple
-                  name="datasource_ids"
-                  value={app.datasource_ids}
-                  onChange={handleMultiSelectChange}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const datasource = datasources.find(
-                          (ds) => ds.id === value,
-                        );
-                        return (
-                          <Chip
-                            key={value}
-                            label={
-                              datasource ? datasource.attributes.name : value
-                            }
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {datasources.map((datasource) => (
-                    <MenuItem
-                      key={datasource.id}
-                      value={datasource.id.toString()}
-                    >
-                      {datasource.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
           </Grid>
 
           {credential && (
-            <StyledAccordion>
+            <StyledAccordion sx={{ mt: 3 }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>Credential Information</Typography>
               </AccordionSummary>
@@ -420,20 +369,16 @@ const AppForm = () => {
                       fullWidth
                       label="Key ID"
                       value={credential.attributes.key_id}
-                      InputProps={{
-                        readOnly: true,
-                      }}
+                      InputProps={{ readOnly: true }}
                     />
                   </Grid>
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
                       label="Secret"
-                      value={credential.attributes.secret}
-                      InputProps={{
-                        readOnly: true,
-                      }}
-                      type="password"
+                      value="********************************" // Masked
+                      InputProps={{ readOnly: true }}
+                      helperText="Secret is only shown on creation. If lost, a new credential must be generated."
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -446,7 +391,7 @@ const AppForm = () => {
                           color="primary"
                         />
                       }
-                      label="Active"
+                      label="Credential Active"
                     />
                   </Grid>
                 </Grid>
@@ -455,8 +400,8 @@ const AppForm = () => {
           )}
 
           <Box mt={4}>
-            <PrimaryButton variant="contained" type="submit">
-              {id ? "Update app" : "Add app"}
+            <PrimaryButton variant="contained" type="submit" disabled={loading}>
+              {loading ? <CircularProgress size={24} /> : (id ? "Update app" : "Add app")}
             </PrimaryButton>
           </Box>
         </Box>
@@ -467,11 +412,7 @@ const AppForm = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: "100%" }}>
           {snackbar.message}
         </Alert>
       </Snackbar>

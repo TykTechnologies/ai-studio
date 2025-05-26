@@ -201,11 +201,11 @@ func (a *API) Run(addr string, certFile string, keyFile string) error {
 
 // Helper function to create a sub-filesystem
 func sub(fsys embed.FS, dir string) http.FileSystem {
-	sub, err := fs.Sub(fsys, dir)
+	subFS, err := fs.Sub(fsys, dir)
 	if err != nil {
 		panic(err)
 	}
-	return http.FS(sub)
+	return http.FS(subFS)
 }
 
 // getPaginationParams extracts pagination parameters from the request
@@ -487,14 +487,19 @@ func (a *API) setupRoutes() {
 	v1.GET("/apps/:id", licensing.ActionHandler(a.getApp, "Get App"))
 	v1.PATCH("/apps/:id", licensing.ActionHandler(a.updateApp, "Update App"))
 	v1.DELETE("/apps/:id", licensing.ActionHandler(a.deleteApp, "Delete App"))
-	v1.GET("/users/:id/apps", a.getAppsByUserID)
+	v1.GET("/users/:id/apps", a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
 	v1.GET("/apps", a.listApps)
 	v1.GET("/apps/search", a.searchApps)
 	v1.GET("/apps/count", a.countApps)
-	v1.GET("/users/:id/apps/count", a.countAppsByUserID)
+	v1.GET("/users/:id/apps/count", a.countAppsByUserID) // Note: Param is "id" here
+
+	// App-Tool routes
+	v1.POST("/apps/:app_id/tools/:tool_id", licensing.ActionHandler(a.addToolToApp, "Add Tool to App"))
+	v1.DELETE("/apps/:app_id/tools/:tool_id", licensing.ActionHandler(a.removeToolFromApp, "Remove Tool from App"))
+	v1.GET("/apps/:app_id/tools", licensing.ActionHandler(a.getAppTools, "Get App Tools"))
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)
