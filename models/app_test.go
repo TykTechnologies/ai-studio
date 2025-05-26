@@ -2,8 +2,10 @@ package models
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 )
 
 func TestApp_NewApp(t *testing.T) {
@@ -42,6 +44,7 @@ func TestApp_Create(t *testing.T) {
 	assert.Equal(t, credential.ID, appWithCredential.CredentialID)
 	assert.Empty(t, app.Datasources)
 	assert.Empty(t, app.LLMs)
+	assert.Empty(t, app.Tools)
 }
 
 func TestApp_Get(t *testing.T) {
@@ -66,6 +69,7 @@ func TestApp_Get(t *testing.T) {
 	assert.NotNil(t, fetchedApp.Credential)
 	assert.Empty(t, app.Datasources)
 	assert.Empty(t, app.LLMs)
+	assert.Empty(t, app.Tools)
 }
 
 func TestApp_Update(t *testing.T) {
@@ -90,7 +94,7 @@ func TestApp_Update(t *testing.T) {
 	assert.Equal(t, "Updated App Name", fetchedApp.Name)
 	assert.Equal(t, "Updated description", fetchedApp.Description)
 
-	// Add a datasource and LLM to the app
+	// Add a datasource, LLM and Tool to the app
 	datasource := &Datasource{Name: "Test Datasource"}
 	err = datasource.Create(db)
 	assert.NoError(t, err)
@@ -103,12 +107,18 @@ func TestApp_Update(t *testing.T) {
 	err = app.AddLLM(db, llm)
 	assert.NoError(t, err)
 
+	tool := &Tool{Name: "Test Tool", ToolType: "REST"}
+	err = tool.Create(db)
+	assert.NoError(t, err)
+	err = app.AddTool(db, tool)
+	assert.NoError(t, err)
+
 	// Fetch the updated app
 	updatedApp := &App{}
 	err = updatedApp.Get(db, app.ID)
 	assert.NoError(t, err)
 
-	// Check if the datasource and LLM were added correctly
+	// Check if the datasource, LLM and Tool were added correctly
 	err = updatedApp.GetDatasources(db)
 	assert.NoError(t, err)
 	assert.Len(t, updatedApp.Datasources, 1)
@@ -118,6 +128,11 @@ func TestApp_Update(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, updatedApp.LLMs, 1)
 	assert.Equal(t, llm.ID, updatedApp.LLMs[0].ID)
+
+	_, err = updatedApp.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, updatedApp.Tools, 1)
+	assert.Equal(t, tool.ID, updatedApp.Tools[0].ID)
 
 	// Update the app again
 	updatedApp.Name = "Final App Name"
@@ -140,6 +155,11 @@ func TestApp_Update(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, finalApp.LLMs, 1)
 	assert.Equal(t, llm.ID, finalApp.LLMs[0].ID)
+
+	_, err = finalApp.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, finalApp.Tools, 1)
+	assert.Equal(t, tool.ID, finalApp.Tools[0].ID)
 }
 
 func TestApp_Delete(t *testing.T) {
@@ -163,32 +183,45 @@ func TestApp_Delete(t *testing.T) {
 
 func TestApp_GetByUserID(t *testing.T) {
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
+
+	user1 := User{Name: "User 1", Email: "user1@example.com", Password: "password"}
+	user1.Create(db)
+	user2 := User{Name: "User 2", Email: "user2@example.com", Password: "password"}
+	user2.Create(db)
 
 	// Create some test apps
 	apps := []App{
-		{Name: "App 1", Description: "Description 1", UserID: 1},
-		{Name: "App 2", Description: "Description 2", UserID: 1},
-		{Name: "App 3", Description: "Description 3", UserID: 2},
+		{Name: "App 1", Description: "Description 1", UserID: user1.ID},
+		{Name: "App 2", Description: "Description 2", UserID: user1.ID},
+		{Name: "App 3", Description: "Description 3", UserID: user2.ID},
 	}
 	for i := range apps {
 		err := apps[i].Create(db)
 		assert.NoError(t, err)
 	}
 
-	fetchedApps, err := (&App{}).GetByUserID(db, 1)
+	fetchedApps, err := (&App{}).GetByUserID(db, user1.ID)
 	assert.NoError(t, err)
 	assert.Len(t, fetchedApps, 2)
-	assert.Equal(t, "App 1", fetchedApps[0].Name)
-	assert.Equal(t, "App 2", fetchedApps[1].Name)
+
+	// Check names, order might not be guaranteed
+	appNames := []string{fetchedApps[0].Name, fetchedApps[1].Name}
+	assert.Contains(t, appNames, "App 1")
+	assert.Contains(t, appNames, "App 2")
 }
 
 func TestApp_GetByName(t *testing.T) {
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
+
+	user := User{Name: "Test User", Email: "testuser@example.com", Password: "password"}
+	user.Create(db)
 
 	app := &App{
 		Name:        "Unique App Name",
 		Description: "This is a unique app",
-		UserID:      1,
+		UserID:      user.ID,
 	}
 	err := app.Create(db)
 	assert.NoError(t, err)
@@ -203,11 +236,14 @@ func TestApp_GetByName(t *testing.T) {
 
 func TestApp_ActivateCredential(t *testing.T) {
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
+	user := User{Name: "Test User", Email: "test@example.com", Password: "password"}
+	user.Create(db)
 
 	app := &App{
 		Name:        "Test App",
 		Description: "This is a test app",
-		UserID:      1,
+		UserID:      user.ID,
 	}
 	err := app.Create(db)
 	assert.NoError(t, err)
@@ -223,11 +259,14 @@ func TestApp_ActivateCredential(t *testing.T) {
 
 func TestApp_DeactivateCredential(t *testing.T) {
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
+	user := User{Name: "Test User", Email: "test@example.com", Password: "password"}
+	user.Create(db)
 
 	app := &App{
 		Name:        "Test App",
 		Description: "This is a test app",
-		UserID:      1,
+		UserID:      user.ID,
 	}
 	err := app.Create(db)
 	assert.NoError(t, err)
@@ -246,16 +285,19 @@ func TestApp_DeactivateCredential(t *testing.T) {
 
 func TestApp_DatasourceAssociation(t *testing.T) {
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
+	user := User{Name: "Test User", Email: "test@example.com", Password: "password"}
+	user.Create(db)
 
 	app := &App{
 		Name:        "Test App",
 		Description: "This is a test app",
-		UserID:      1,
+		UserID:      user.ID,
 	}
 	err := app.Create(db)
 	assert.NoError(t, err)
 
-	datasource := &Datasource{Name: "Test Datasource"}
+	datasource := &Datasource{Name: "Test Datasource", UserID: user.ID}
 	err = datasource.Create(db)
 	assert.NoError(t, err)
 
@@ -280,16 +322,19 @@ func TestApp_DatasourceAssociation(t *testing.T) {
 
 func TestApp_LLMAssociation(t *testing.T) {
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
+	user := User{Name: "Test User", Email: "test@example.com", Password: "password"}
+	user.Create(db)
 
 	app := &App{
 		Name:        "Test App",
 		Description: "This is a test app",
-		UserID:      1,
+		UserID:      user.ID,
 	}
 	err := app.Create(db)
 	assert.NoError(t, err)
 
-	llm := &LLM{Name: "Test LLM"}
+	llm := &LLM{Name: "Test LLM", Vendor: "OpenAI", ModelID: "gpt-4"}
 	err = llm.Create(db)
 	assert.NoError(t, err)
 
@@ -307,73 +352,164 @@ func TestApp_LLMAssociation(t *testing.T) {
 	err = app.RemoveLLM(db, llm)
 	assert.NoError(t, err)
 
+	// Reload app associations
+	app.LLMs = []LLM{} // Clear existing loaded LLMs
 	_, _, _, err = app.GetLLMs(db, 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, app.LLMs, 0)
 }
 
-// func TestCreate100Apps(t *testing.T) {
-// 	// Create a temporary database file
-// 	dbFile := "../midsommar.db"
+func TestApp_ToolAssociation(t *testing.T) {
+	db := setupTestDB(t)
+	defer cleanTestDB(db) // Ensure database is cleaned up
 
-// 	// Open a connection to the SQLite database
-// 	db, err := gorm.Open(sqlite.Open(dbFile), &gorm.Config{})
-// 	if err != nil {
-// 		t.Fatalf("Failed to connect to database: %v", err)
-// 	}
+	// Create a user for the app
+	user := &User{Name: "Test User for App-Tool", Email: "apptool@example.com", Password: "password"}
+	err := user.Create(db)
+	assert.NoError(t, err)
 
-// 	// Auto-migrate the App model and related models
-// 	err = db.AutoMigrate(&App{}, &Credential{}, &Datasource{}, &LLM{})
-// 	if err != nil {
-// 		t.Fatalf("Failed to migrate database: %v", err)
-// 	}
+	// Create an app
+	app := &App{Name: "Tool Test App", UserID: user.ID}
+	err = app.Create(db)
+	assert.NoError(t, err)
 
-// 	// Create 100 App entries
-// 	for i := 1; i <= 100; i++ {
-// 		app := App{
-// 			Name:        fmt.Sprintf("App %d", i),
-// 			Description: fmt.Sprintf("Description for App %d", i),
-// 			UserID:      uint(i%10 + 1), // Cycle through 10 user IDs
-// 		}
+	// Create a tool
+	tool1 := &Tool{Name: "Test Tool 1", ToolType: "REST"}
+	err = tool1.Create(db)
+	assert.NoError(t, err)
 
-// 		err := app.Create(db)
-// 		if err != nil {
-// 			t.Errorf("Failed to create App %d: %v", i, err)
-// 		}
-// 	}
+	// 1. Test AddTool
+	err = app.AddTool(db, tool1)
+	assert.NoError(t, err)
 
-// 	// Verify that 100 Apps were created
-// 	var count int64
-// 	db.Model(&App{}).Count(&count)
-// 	if count != 100 {
-// 		t.Errorf("Expected 100 Apps, but found %d", count)
-// 	}
+	// Verify association by fetching the app again and checking its Tools field
+	fetchedApp := &App{}
+	err = db.Preload("Tools").First(fetchedApp, app.ID).Error
+	assert.NoError(t, err)
+	assert.Len(t, fetchedApp.Tools, 1, "App should have 1 tool associated")
+	assert.Equal(t, tool1.ID, fetchedApp.Tools[0].ID, "Associated tool ID should match")
 
-// 	t.Logf("Successfully created 100 App entries in the database")
-// }
+	// 2. Test GetTools
+	retrievedTools, err := app.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedTools, 1, "GetTools should return 1 tool")
+	assert.Equal(t, tool1.ID, retrievedTools[0].ID, "Retrieved tool ID should match")
+
+	// Add another tool
+	tool2 := &Tool{Name: "Test Tool 2", ToolType: "REST"}
+	err = tool2.Create(db)
+	assert.NoError(t, err)
+	err = app.AddTool(db, tool2)
+	assert.NoError(t, err)
+
+	retrievedTools, err = app.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedTools, 2, "GetTools should return 2 tools")
+
+	// 3. Test RemoveTool
+	err = app.RemoveTool(db, tool1)
+	assert.NoError(t, err)
+
+	retrievedTools, err = app.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedTools, 1, "GetTools should return 1 tool after removal")
+	assert.Equal(t, tool2.ID, retrievedTools[0].ID, "Remaining tool ID should be tool2's ID")
+
+	// Test removing a tool not associated (should not error, GORM handles this gracefully)
+	nonAssociatedTool := &Tool{Name: "Non Associated Tool"}
+	nonAssociatedTool.ID = 999 // Non-existent or not associated
+	err = app.RemoveTool(db, nonAssociatedTool)
+	assert.NoError(t, err) // GORM's Delete for associations doesn't error if the target isn't found
+
+	// Test GetTools on an app with no tools
+	appWithNoTools := &App{Name: "No Tools App", UserID: user.ID}
+	err = appWithNoTools.Create(db)
+	assert.NoError(t, err)
+	retrievedNoTools, err := appWithNoTools.GetTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedNoTools, 0, "GetTools should return 0 tools for an app with no associations")
+
+	// Test adding a tool that doesn't exist in DB (should fail at tool.Create or app.AddTool if tool is not persisted)
+	// This is more of a service layer concern, model layer expects valid *Tool object.
+	// For AddTool, GORM might try to create the association if the tool object has an ID,
+	// but if the tool itself is not in the 'tools' table, foreign key constraints would typically fail.
+	// However, GORM's behavior can vary. Let's assume tool must exist.
+	nonExistentTool := &Tool{Name: "Ghost Tool"} // No ID, not created
+	err = app.AddTool(db, nonExistentTool)
+	// GORM might allow adding a non-persisted object to an association if cascade save is on.
+	// For many2many, it usually expects existing records.
+	// Let's check the count, it should not increase if the tool isn't valid for association.
+	currentToolCount := len(retrievedTools)
+	retrievedToolsAfterGhost, _ := app.GetTools(db)
+	assert.Len(t, retrievedToolsAfterGhost, currentToolCount, "Adding a non-persisted tool should not change association count without cascade")
+
+}
+
 
 func TestApps_GetAppCount(t *testing.T) {
-	// Set up the test database
 	db := setupTestDB(t)
+	defer cleanTestDB(db)
 
-	// Create some test apps
+	user := User{Name: "Test User", Email: "test@example.com", Password: "password"}
+	user.Create(db)
+
 	testApps := []App{
-		{Name: "App 1", Description: "Description 1", UserID: 1},
-		{Name: "App 2", Description: "Description 2", UserID: 1},
-		{Name: "App 3", Description: "Description 3", UserID: 2},
+		{Name: "App 1", Description: "Description 1", UserID: user.ID},
+		{Name: "App 2", Description: "Description 2", UserID: user.ID},
+		{Name: "App 3", Description: "Description 3", UserID: user.ID},
 	}
 
-	// Insert the test apps into the database
 	for i := range testApps {
 		err := testApps[i].Create(db)
 		assert.NoError(t, err)
 	}
 
-	// Call the GetAppCount method
 	var apps Apps
 	count, err := apps.GetAppCount(db)
 
-	// Verify the results
 	assert.NoError(t, err)
 	assert.Equal(t, int64(len(testApps)), count)
+}
+
+// setupTestDB initializes an in-memory SQLite database for testing
+// and migrates the schema.
+func setupTestDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Auto-migrate all necessary models
+	err = db.AutoMigrate(
+		&User{}, &Group{}, &LLM{}, &Catalogue{}, &Tags{},
+		&Datasource{}, &DataCatalogue{}, &Credential{}, &App{},
+		&LLMSettings{}, &Chat{}, &CMessage{}, &Tool{}, &ModelPrice{},
+		&Filter{}, &ChatHistoryRecord{}, &ToolCatalogue{}, &AppTool{}, // Added AppTool
+	)
+	if err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+	return db
+}
+
+// cleanTestDB drops all tables from the test database.
+func cleanTestDB(db *gorm.DB) {
+	// Order matters due to foreign key constraints
+	tables := []string{
+		"app_tools", "app_llms", "app_datasources", // Join tables first
+		"tool_dependencies", "tool_filters", "tool_filestores",
+		"group_tool_catalogues", "group_data_catalogues", "group_catalogues", "user_groups",
+		"catalogue_llms", "catalogue_tags", "data_catalogue_datasources", "data_catalogue_tags",
+		"tool_catalogue_tools", "tool_catalogue_tags",
+		"tools", "filters", "filestores", "datasources", "llms", "secrets",
+		"credentials", "apps", "users", "groups", "catalogues", "tags",
+		"data_catalogues", "tool_catalogues", "llm_settings",
+		"model_prices", "chat_history_records", "c_messages", "chats", "notifications", "prompt_templates",
+		"llm_chat_records",
+	}
+	for _, table := range tables {
+		if err := db.Migrator().DropTable(table); err != nil {
+			// t.Logf("Failed to drop table %s: %v", table, err) // Log instead of fail for cleanup
+		}
+	}
 }
