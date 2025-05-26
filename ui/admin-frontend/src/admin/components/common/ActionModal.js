@@ -12,6 +12,14 @@ const ActionModal = ({
   onPrimaryAction,
   onSecondaryAction,
 }) => {
+  const responsiveWidths = {
+    xs: '95%',  
+    sm: '85%',  
+    md: '80%',  
+    lg: '60%',  
+    xl: '50%',  
+  };
+
   return (
     <Dialog
       open={open}
@@ -21,20 +29,8 @@ const ActionModal = ({
           border: "1px solid",
           borderColor: "border.neutralDefault",
           borderRadius: 2,
-          maxWidth: {
-            xs: '95%',  
-            sm: '85%',  
-            md: '80%',  
-            lg: '60%',  
-            xl: '50%',  
-          },
-          width: {
-            xs: '95%',  
-            sm: '85%',  
-            md: '80%',  
-            lg: '60%',  
-            xl: '50%',  
-          },
+          maxWidth: responsiveWidths,
+          width: responsiveWidths,
         },
       }}
     >
