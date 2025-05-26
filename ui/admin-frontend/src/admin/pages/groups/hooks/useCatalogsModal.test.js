@@ -151,9 +151,9 @@ describe("useCatalogsModal", () => {
       expect(result.current.loading).toBe(false);
     });
     
-    expect(mockSetSelectedCatalogs).not.toHaveBeenCalled();
-    expect(mockSetSelectedDataCatalogs).not.toHaveBeenCalled();
-    expect(mockSetSelectedToolCatalogs).not.toHaveBeenCalled();
+    expect(mockSetSelectedCatalogs).toHaveBeenCalledWith([]);
+    expect(mockSetSelectedDataCatalogs).toHaveBeenCalledWith([]);
+    expect(mockSetSelectedToolCatalogs).toHaveBeenCalledWith([]);
   });
 
   it("handles API errors when fetching group catalogs", async () => {
