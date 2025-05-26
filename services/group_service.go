@@ -303,3 +303,44 @@ func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber 
 
 	return group.ToolCatalogues, totalCount, totalPages, nil
 }
+
+func (s *Service) UpdateGroupCatalogs(id uint, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) error {
+	group, err := s.GetGroupByID(id, "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		return err
+	}
+
+	tx := s.DB.Begin()
+
+	catalogues := make([]models.Catalogue, 0, len(catalogueIDs))
+	for _, catID := range catalogueIDs {
+		catalogues = append(catalogues, models.Catalogue{ID: catID})
+	}
+
+	if err := group.ReplaceAssociation(tx, "Catalogues", catalogues); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	dataCatalogues := make([]models.DataCatalogue, 0, len(dataCatalogueIDs))
+	for _, catID := range dataCatalogueIDs {
+		dataCatalogues = append(dataCatalogues, models.DataCatalogue{ID: catID})
+	}
+
+	if err := group.ReplaceAssociation(tx, "DataCatalogues", dataCatalogues); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	toolCatalogues := make([]models.ToolCatalogue, 0, len(toolCatalogueIDs))
+	for _, catID := range toolCatalogueIDs {
+		toolCatalogues = append(toolCatalogues, models.ToolCatalogue{ID: catID})
+	}
+
+	if err := group.ReplaceAssociation(tx, "ToolCatalogues", toolCatalogues); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}

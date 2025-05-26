@@ -399,7 +399,8 @@ func (a *API) setupRoutes() {
 	v1.POST("/groups/:id/tool-catalogues", a.addToolCatalogueToGroup)
 	v1.DELETE("/groups/:id/tool-catalogues/:toolCatalogueId", a.removeToolCatalogueFromGroup)
 	v1.GET("/groups/:id/tool-catalogues", a.listGroupToolCatalogues)
-	v1.PUT("/groups/:id/users", licensing.ActionHandler(a.updateGroupUsers, "Update Group Users"))
+	v1.PUT("/groups/:id/users", a.updateGroupUsers)
+	v1.PUT("/groups/:id/catalogs", a.updateGroupCatalogs)
 
 	// LLM routes
 	v1.POST("/llms", licensing.ActionHandler(a.createLLM, "Create LLM"))
