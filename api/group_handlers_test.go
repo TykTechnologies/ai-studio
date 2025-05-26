@@ -824,7 +824,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
-func TestUpdateGroupCatalogs(t *testing.T) {
+func TestUpdateGroupCatalogues(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a test group
@@ -847,7 +847,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 				DataCatalogues []uint `json:"data_catalogues"`
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			}{
-				Name:           "Test Group for updateGroupCatalogs",
+				Name:           "Test Group for updateGroupCatalogues",
 				Members:        []uint{},
 				Catalogues:     []uint{},
 				DataCatalogues: []uint{},
@@ -864,7 +864,6 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 	assert.NoError(t, err)
 	groupID := createResponse["data"].ID
 
-	// Create test catalogs
 	catalogue, err := api.service.CreateCatalogue("Test Catalogue")
 	assert.NoError(t, err)
 
@@ -874,8 +873,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 	toolCatalogue, err := api.service.CreateToolCatalogue("Test Tool Catalogue", "Short Desc", "Long Desc", "icon.png")
 	assert.NoError(t, err)
 
-	// Test updating catalogs
-	updateGroupCatalogsInput := GroupCatalogsRequest{
+	updateGroupCataloguesInput := GroupCataloguesRequest{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -884,7 +882,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
-			Type: "group-catalogs",
+			Type: "group-catalogues",
 			Attributes: struct {
 				Catalogues     []uint `json:"catalogues"`
 				DataCatalogues []uint `json:"data_catalogues"`
@@ -897,7 +895,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 		},
 	}
 
-	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogs", groupID), updateGroupCatalogsInput)
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var updateResponse map[string]interface{}
@@ -905,7 +903,6 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "success", updateResponse["status"])
 
-	// Verify the group has the catalogs
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -916,11 +913,10 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 1)
 	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 1)
 
-	// Test updating with different catalogs
 	catalogue2, err := api.service.CreateCatalogue("Test Catalogue 2")
 	assert.NoError(t, err)
 
-	updateGroupCatalogsInput = GroupCatalogsRequest{
+	updateGroupCataloguesInput = GroupCataloguesRequest{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -929,7 +925,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
-			Type: "group-catalogs",
+			Type: "group-catalogues",
 			Attributes: struct {
 				Catalogues     []uint `json:"catalogues"`
 				DataCatalogues []uint `json:"data_catalogues"`
@@ -942,7 +938,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 		},
 	}
 
-	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogs", groupID), updateGroupCatalogsInput)
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
@@ -961,19 +957,19 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 0)
 
 	// Test error cases - invalid group ID
-	w = performRequest(api.router, "PUT", "/api/v1/groups/invalid/catalogs", updateGroupCatalogsInput)
+	w = performRequest(api.router, "PUT", "/api/v1/groups/invalid/catalogues", updateGroupCataloguesInput)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// Test error cases - non-existent group ID
-	w = performRequest(api.router, "PUT", "/api/v1/groups/999999/catalogs", updateGroupCatalogsInput)
+	w = performRequest(api.router, "PUT", "/api/v1/groups/999999/catalogues", updateGroupCataloguesInput)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 	// Test error cases - malformed request body
-	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogs", groupID), []byte(`{malformed json`))
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), []byte(`{malformed json`))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// Test updating with empty catalog lists
-	updateGroupCatalogsInput = GroupCatalogsRequest{
+	updateGroupCataloguesInput = GroupCataloguesRequest{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -982,7 +978,7 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
-			Type: "group-catalogs",
+			Type: "group-catalogues",
 			Attributes: struct {
 				Catalogues     []uint `json:"catalogues"`
 				DataCatalogues []uint `json:"data_catalogues"`
@@ -995,10 +991,9 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 		},
 	}
 
-	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogs", groupID), updateGroupCatalogsInput)
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify the group has no catalogs
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -1008,7 +1003,6 @@ func TestUpdateGroupCatalogs(t *testing.T) {
 	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 0)
 	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 0)
 
-	// Cleanup - delete the test group
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }

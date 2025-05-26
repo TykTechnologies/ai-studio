@@ -1163,7 +1163,7 @@ type GroupListResponse struct {
 	} `json:"attributes"`
 }
 
-type GroupCatalogsRequest struct {
+type GroupCataloguesRequest struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {

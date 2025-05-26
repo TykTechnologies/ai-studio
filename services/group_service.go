@@ -304,7 +304,7 @@ func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber 
 	return group.ToolCatalogues, totalCount, totalPages, nil
 }
 
-func (s *Service) UpdateGroupCatalogs(id uint, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) error {
+func (s *Service) UpdateGroupCatalogues(id uint, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) error {
 	group, err := s.GetGroupByID(id, "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		return err
