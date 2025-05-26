@@ -3,7 +3,7 @@ import { teamsService } from "../../../services/teamsService";
 import { useCatalogsSelection } from "../../../components/groups/hooks/useCatalogsSelection";
 
 export const useCatalogsModal = (groupId) => {
-  const [loading, setLoading] = useState(false);
+  const [loadingGroupData, setLoadingGroupData] = useState(false);
   
   const {
     catalogs,
@@ -15,7 +15,7 @@ export const useCatalogsModal = (groupId) => {
     toolCatalogs,
     selectedToolCatalogs,
     setSelectedToolCatalogs,
-    loading: catalogsLoading,
+    loading: loadingCatalogs,
     error,
     fetchCatalogs
   } = useCatalogsSelection([], [], []);
@@ -23,7 +23,7 @@ export const useCatalogsModal = (groupId) => {
   const fetchGroupCatalogs = useCallback(async () => {
     if (!groupId) return;
     
-    setLoading(true);
+    setLoadingGroupData(true);
     try {
       const response = await teamsService.getTeam(groupId);
       const { attributes } = response.data;
@@ -51,7 +51,7 @@ export const useCatalogsModal = (groupId) => {
     } catch (error) {
       console.error("Error fetching group catalogs:", error);
     } finally {
-      setLoading(false);
+      setLoadingGroupData(false);
     }
   }, [groupId, setSelectedCatalogs, setSelectedDataCatalogs, setSelectedToolCatalogs]);
 
@@ -71,7 +71,7 @@ export const useCatalogsModal = (groupId) => {
     toolCatalogs,
     selectedToolCatalogs,
     setSelectedToolCatalogs,
-    loading: loading || catalogsLoading,
+    loading: loadingCatalogs || loadingGroupData,
     error,
     fetchCatalogs,
     fetchGroupCatalogs
