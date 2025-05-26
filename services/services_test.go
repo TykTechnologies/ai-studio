@@ -879,3 +879,198 @@ func TestGroupCatalogueAssociation(t *testing.T) {
 	assert.Len(t, groupCatalogues, 1)
 	assert.Equal(t, "Catalogue 2", groupCatalogues[0].Name)
 }
+
+func TestUpdateGroupCatalogs(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	t.Run("Success case - full update", func(t *testing.T) {
+		// Create initial catalogs
+		catalogue1, err := service.CreateCatalogue("Catalog 1")
+		assert.NoError(t, err)
+		catalogue2, err := service.CreateCatalogue("Catalog 2")
+		assert.NoError(t, err)
+
+		dataCatalogue1, err := service.CreateDataCatalogue("Data Catalog 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+		dataCatalogue2, err := service.CreateDataCatalogue("Data Catalog 2", "desc2", "long desc2", "icon2")
+		assert.NoError(t, err)
+
+		toolCatalogue1, err := service.CreateToolCatalogue("Tool Catalog 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+		toolCatalogue2, err := service.CreateToolCatalogue("Tool Catalog 2", "desc2", "long desc2", "icon2")
+		assert.NoError(t, err)
+
+		// Create a group with initial catalogs
+		group, err := service.CreateGroup(
+			"Test Group",
+			[]uint{}, // No users
+			[]uint{catalogue1.ID},
+			[]uint{dataCatalogue1.ID},
+			[]uint{toolCatalogue1.ID},
+		)
+		assert.NoError(t, err)
+
+		// Verify initial catalogs
+		fetchedGroup, err := service.GetGroupByID(group.ID, "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
+		assert.Len(t, fetchedGroup.Catalogues, 1)
+		assert.Equal(t, catalogue1.ID, fetchedGroup.Catalogues[0].ID)
+		assert.Len(t, fetchedGroup.DataCatalogues, 1)
+		assert.Equal(t, dataCatalogue1.ID, fetchedGroup.DataCatalogues[0].ID)
+		assert.Len(t, fetchedGroup.ToolCatalogues, 1)
+		assert.Equal(t, toolCatalogue1.ID, fetchedGroup.ToolCatalogues[0].ID)
+
+		// Create new catalogs for the update
+		catalogue3, err := service.CreateCatalogue("Catalog 3")
+		assert.NoError(t, err)
+		dataCatalogue3, err := service.CreateDataCatalogue("Data Catalog 3", "desc3", "long desc3", "icon3")
+		assert.NoError(t, err)
+		toolCatalogue3, err := service.CreateToolCatalogue("Tool Catalog 3", "desc3", "long desc3", "icon3")
+		assert.NoError(t, err)
+
+		// Update the group catalogs
+		err = service.UpdateGroupCatalogs(
+			group.ID,
+			[]uint{catalogue2.ID, catalogue3.ID}, // Replace catalogue1 with catalogue2 and catalogue3
+			[]uint{dataCatalogue2.ID, dataCatalogue3.ID}, // Replace dataCatalogue1 with dataCatalogue2 and dataCatalogue3
+			[]uint{toolCatalogue2.ID, toolCatalogue3.ID}, // Replace toolCatalogue1 with toolCatalogue2 and toolCatalogue3
+		)
+		assert.NoError(t, err)
+
+		// Verify the updates
+		updatedGroup, err := service.GetGroupByID(group.ID, "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
+
+		// Verify Catalogues are updated
+		assert.Len(t, updatedGroup.Catalogues, 2)
+		catalogueIDs := []uint{updatedGroup.Catalogues[0].ID, updatedGroup.Catalogues[1].ID}
+		assert.Contains(t, catalogueIDs, catalogue2.ID)
+		assert.Contains(t, catalogueIDs, catalogue3.ID)
+		assert.NotContains(t, catalogueIDs, catalogue1.ID)
+
+		// Verify DataCatalogues are updated
+		assert.Len(t, updatedGroup.DataCatalogues, 2)
+		dataCatalogueIDs := []uint{updatedGroup.DataCatalogues[0].ID, updatedGroup.DataCatalogues[1].ID}
+		assert.Contains(t, dataCatalogueIDs, dataCatalogue2.ID)
+		assert.Contains(t, dataCatalogueIDs, dataCatalogue3.ID)
+		assert.NotContains(t, dataCatalogueIDs, dataCatalogue1.ID)
+
+		// Verify ToolCatalogues are updated
+		assert.Len(t, updatedGroup.ToolCatalogues, 2)
+		toolCatalogueIDs := []uint{updatedGroup.ToolCatalogues[0].ID, updatedGroup.ToolCatalogues[1].ID}
+		assert.Contains(t, toolCatalogueIDs, toolCatalogue2.ID)
+		assert.Contains(t, toolCatalogueIDs, toolCatalogue3.ID)
+		assert.NotContains(t, toolCatalogueIDs, toolCatalogue1.ID)
+	})
+
+	t.Run("Partial updates", func(t *testing.T) {
+		// Create initial catalogs
+		catalogue1, err := service.CreateCatalogue("Partial Catalog 1")
+		assert.NoError(t, err)
+		catalogue2, err := service.CreateCatalogue("Partial Catalog 2")
+		assert.NoError(t, err)
+
+		dataCatalogue1, err := service.CreateDataCatalogue("Partial Data Catalog 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+
+		toolCatalogue1, err := service.CreateToolCatalogue("Partial Tool Catalog 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+		toolCatalogue2, err := service.CreateToolCatalogue("Partial Tool Catalog 2", "desc2", "long desc2", "icon2")
+		assert.NoError(t, err)
+
+		// Create a group with initial catalogs
+		group, err := service.CreateGroup(
+			"Partial Test Group",
+			[]uint{}, // No users
+			[]uint{catalogue1.ID},
+			[]uint{dataCatalogue1.ID},
+			[]uint{toolCatalogue1.ID},
+		)
+		assert.NoError(t, err)
+
+		// Update only the Catalogues and ToolCatalogues, leave DataCatalogues unchanged
+		err = service.UpdateGroupCatalogs(
+			group.ID,
+			[]uint{catalogue2.ID},     // Replace catalogue1 with catalogue2
+			[]uint{dataCatalogue1.ID}, // Keep the same dataCatalogue1
+			[]uint{toolCatalogue2.ID}, // Replace toolCatalogue1 with toolCatalogue2
+		)
+		assert.NoError(t, err)
+
+		// Verify the updates
+		updatedGroup, err := service.GetGroupByID(group.ID, "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
+
+		// Verify Catalogues are updated
+		assert.Len(t, updatedGroup.Catalogues, 1)
+		assert.Equal(t, catalogue2.ID, updatedGroup.Catalogues[0].ID)
+
+		// Verify DataCatalogues are unchanged
+		assert.Len(t, updatedGroup.DataCatalogues, 1)
+		assert.Equal(t, dataCatalogue1.ID, updatedGroup.DataCatalogues[0].ID)
+
+		// Verify ToolCatalogues are updated
+		assert.Len(t, updatedGroup.ToolCatalogues, 1)
+		assert.Equal(t, toolCatalogue2.ID, updatedGroup.ToolCatalogues[0].ID)
+	})
+
+	t.Run("No updates needed", func(t *testing.T) {
+		// Create initial catalogs
+		catalogue1, err := service.CreateCatalogue("No Update Catalog 1")
+		assert.NoError(t, err)
+
+		dataCatalogue1, err := service.CreateDataCatalogue("No Update Data Catalog 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+
+		toolCatalogue1, err := service.CreateToolCatalogue("No Update Tool Catalog 1", "desc1", "long desc1", "icon1")
+		assert.NoError(t, err)
+
+		// Create a group with initial catalogs
+		group, err := service.CreateGroup(
+			"No Update Test Group",
+			[]uint{}, // No users
+			[]uint{catalogue1.ID},
+			[]uint{dataCatalogue1.ID},
+			[]uint{toolCatalogue1.ID},
+		)
+		assert.NoError(t, err)
+
+		// Call UpdateGroupCatalogs with the same IDs
+		err = service.UpdateGroupCatalogs(
+			group.ID,
+			[]uint{catalogue1.ID},     // Same catalogue1
+			[]uint{dataCatalogue1.ID}, // Same dataCatalogue1
+			[]uint{toolCatalogue1.ID}, // Same toolCatalogue1
+		)
+		assert.NoError(t, err)
+
+		// Verify nothing changed
+		updatedGroup, err := service.GetGroupByID(group.ID, "Catalogues", "DataCatalogues", "ToolCatalogues")
+		assert.NoError(t, err)
+
+		// Verify Catalogues are unchanged
+		assert.Len(t, updatedGroup.Catalogues, 1)
+		assert.Equal(t, catalogue1.ID, updatedGroup.Catalogues[0].ID)
+
+		// Verify DataCatalogues are unchanged
+		assert.Len(t, updatedGroup.DataCatalogues, 1)
+		assert.Equal(t, dataCatalogue1.ID, updatedGroup.DataCatalogues[0].ID)
+
+		// Verify ToolCatalogues are unchanged
+		assert.Len(t, updatedGroup.ToolCatalogues, 1)
+		assert.Equal(t, toolCatalogue1.ID, updatedGroup.ToolCatalogues[0].ID)
+	})
+
+	t.Run("Non-existent group", func(t *testing.T) {
+		// Call UpdateGroupCatalogs with a non-existent group ID
+		err := service.UpdateGroupCatalogs(
+			9999, // Non-existent ID
+			[]uint{1, 2},
+			[]uint{3, 4},
+			[]uint{5, 6},
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "record not found")
+	})
+}
