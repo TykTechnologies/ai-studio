@@ -70,7 +70,7 @@ export const teamsService = {
     try {
       const response = await apiClient.put(`/groups/${id}/users`, {
         data: {
-          type: "groups",
+          type: "Group",
           attributes: {
             members: userIds
           }

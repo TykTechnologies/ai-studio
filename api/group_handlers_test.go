@@ -882,7 +882,7 @@ func TestUpdateGroupCatalogues(t *testing.T) {
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
-			Type: "group-catalogues",
+			Type: "Group",
 			Attributes: struct {
 				Catalogues     []uint `json:"catalogues"`
 				DataCatalogues []uint `json:"data_catalogues"`
@@ -925,7 +925,7 @@ func TestUpdateGroupCatalogues(t *testing.T) {
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
-			Type: "group-catalogues",
+			Type: "Group",
 			Attributes: struct {
 				Catalogues     []uint `json:"catalogues"`
 				DataCatalogues []uint `json:"data_catalogues"`
@@ -978,7 +978,7 @@ func TestUpdateGroupCatalogues(t *testing.T) {
 				ToolCatalogues []uint `json:"tool_catalogues"`
 			} `json:"attributes"`
 		}{
-			Type: "group-catalogues",
+			Type: "Group",
 			Attributes: struct {
 				Catalogues     []uint `json:"catalogues"`
 				DataCatalogues []uint `json:"data_catalogues"`

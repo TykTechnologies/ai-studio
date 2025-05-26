@@ -209,7 +209,7 @@ describe('updateGroupUsers', () => {
 
     expect(apiClient.put).toHaveBeenCalledWith(`/groups/${teamId}/users`, {
       data: {
-        type: "groups",
+        type: "Group",
         attributes: {
           members: userIds
         }
@@ -235,7 +235,7 @@ describe('updateGroupCatalogs', () => {
     const teamId = 'team-123';
     const catalogData = {
       data: {
-        type: "groups",
+        type: "Group",
         attributes: {
           catalogues: [1, 2, 3]
         }
@@ -260,7 +260,7 @@ describe('updateGroupCatalogs', () => {
     const teamId = 'team-123';
     const catalogData = {
       data: {
-        type: "groups",
+        type: "Group",
         attributes: {
           catalogues: [1, 2, 3]
         }
