@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -363,6 +364,40 @@ func (a *API) listGroupUsers(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
+}
+
+// @Summary Update group users
+// @Description Update the users in a specific group
+// @Tags groups
+// @Accept json
+// @Produce json
+// @Param id path int true "Group ID"
+// @Param users body GroupUsersInput true "Users to update"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /groups/{id}/users [put]
+// @Security BearerAuth
+func (a *API) updateGroupUsers(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid group ID"))
+		return
+	}
+
+	var input GroupUsersInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Malformed request body"))
+		return
+	}
+
+	err = a.service.UpdateGroupUsers(uint(id), input.Data.Attributes.Members)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group users: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 type GroupListResponse struct {
