@@ -21,30 +21,44 @@ const ActionModal = ({
           border: "1px solid",
           borderColor: "border.neutralDefault",
           borderRadius: 2,
-          maxWidth: 800,
+          maxWidth: {
+            xs: '95%',  
+            sm: '85%',  
+            md: '80%',  
+            lg: '60%',  
+            xl: '50%',  
+          },
         },
       }}
     >
       <Box sx={{ 
-        p: 3, 
-        borderBottom: "2px solid",
-        borderColor: "border.neutralDefault",
+        p: 2
       }}>
         <Typography variant="headingMedium" color="text.primary">
           {title}
         </Typography>
       </Box>
       
-      <DialogContent>
+      <Box sx={{ 
+        mx: 2,
+        borderBottom: "1px solid",
+        borderColor: "border.neutralDefault",
+      }} />
+      
+      <DialogContent sx={{ px: 2 }}>
         {children}
       </DialogContent>
       
-      <DialogActions sx={{ 
-        borderTop: "2px solid", 
+      <Box sx={{ 
+        mx: 2,
+        borderTop: "1px solid", 
         borderColor: "border.neutralDefault",
+      }} />
+      
+      <DialogActions sx={{ 
         justifyContent: "flex-end",
         p: 2,
-        gap: 2,
+        gap: 1,
       }}>
         <SecondaryOutlineButton onClick={onSecondaryAction || onClose}>
           {secondaryButtonLabel}

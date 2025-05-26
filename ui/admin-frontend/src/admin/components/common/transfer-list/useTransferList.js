@@ -17,11 +17,11 @@ const useTransferList = ({
   const leftBoxRef = useRef(null);
   const onSearchRef = useRef(onSearch);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isPerformingSearchQuery, setIsPerformingSearchQuery] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const available = availableItems;
   const selected = selectedItems;
+  const prevAvailableItemsRef = useRef(availableItems);
 
-  // Update the ref when onSearch changes
   useEffect(() => {
     onSearchRef.current = onSearch;
   }, [onSearch]);
@@ -50,25 +50,23 @@ const useTransferList = ({
   }, [onLoadMore, hasMore, isLoadingMore]);
 
   const debouncedSearchExecutor = useDebouncedCallback(async (value) => {
-    if (onSearchRef.current) {
-      setIsPerformingSearchQuery(true);
-      console.log('[useTransferList] Debounced search: START, isPerformingSearchQuery: true');
-      try {
-        await onSearchRef.current(value);
-        console.log('[useTransferList] Debounced search: API call FINISHED');
-      } catch (error) {
-        console.error('[useTransferList] Debounced search error:', error);
-      } finally {
-        setIsPerformingSearchQuery(false);
-        console.log('[useTransferList] Debounced search: END, isPerformingSearchQuery: false');
-      }
+    if (!onSearchRef.current) {
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      await onSearchRef.current(value);
+    } catch (error) {
+      console.error('[useTransferList] Debounced search error:', error);
     }
   }, 500);
 
   const handleSearchChange = useCallback((e) => {
     const value = e.target.value;
     setSearchTerm(value);
-    console.log('[useTransferList] handleSearchChange: searchTerm set to', value, 'calling debouncedSearchExecutor');
+    setIsSearching(true);
     debouncedSearchExecutor(value);
   }, [debouncedSearchExecutor]);
 
@@ -102,17 +100,23 @@ const useTransferList = ({
     }
   };
 
+  useEffect(() => {
+    const availableChanged = prevAvailableItemsRef.current !== availableItems;
+
+    if (isSearching && availableChanged) {
+      setIsSearching(false);
+    }
+
+    prevAvailableItemsRef.current = availableItems;
+  }, [availableItems, isSearching]);
+
   return {
     leftBoxRef,
     rightBoxRef,
     available,
     selected,
     searchTerm,
-    isSearching: (() => {
-      const searching = isPerformingSearchQuery || debouncedSearchExecutor.isPending();
-      console.log('[useTransferList] isSearching calculated:', searching, { isPerformingSearchQuery, pending: debouncedSearchExecutor.isPending() });
-      return searching;
-    })(),
+    isSearching,
     handleSearchChange,
     handleAddItem,
     handleRemoveItem,
