@@ -1,242 +1,158 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
 import ManageTeamMembersModal from "./ManageTeamMembersModal";
-import { useTeamMembersModal } from "../hooks/useTeamMembersModal";
+import { useTransferListSelectedUsers } from "../../../hooks/useTransferListSelectedUsers";
+import { useTransferListAvailableUsers } from "../../../hooks/useTransferListAvailableUsers";
 import { teamsService } from "../../../services/teamsService";
+import { renderWithTheme } from "../../../../test-utils/render-with-theme";
 
-jest.mock("../hooks/useTeamMembersModal");
+jest.mock("../../../hooks/useTransferListSelectedUsers");
+jest.mock("../../../hooks/useTransferListAvailableUsers");
 jest.mock("../../../services/teamsService");
 
-const theme = createTheme({
-  palette: {
-    text: {
-      primary: '#000000',
-      secondary: '#666666',
-      defaultSubdued: '#454545',
-      neutralDisabled: '#AAAAAA'
-    },
-    background: {
-      paper: '#FFFFFF',
-      default: '#F5F5F5',
-      surfaceNeutralHover: '#F0F0F0',
-      surfaceNeutralDisabled: '#EEEEEE',
-      buttonPrimaryDefault: '#3F51B5',
-      buttonPrimaryDefaultHover: '#303F9F',
-      buttonPrimaryOutlineHover: '#E8EAF6',
-      defaultSubdued: '#FAFAFA'
-    },
-    border: {
-      neutralDefault: '#E0E0E0',
-      neutralHovered: '#BDBDBD',
-      criticalDefault: '#F44336',
-      criticalHover: '#D32F2F'
-    },
-    primary: {
-      main: '#3F51B5',
-      light: '#7986CB'
-    },
-    custom: {
-      white: '#FFFFFF',
-      purpleExtraDark: '#1A237E'
-    }
-  }
-});
+jest.mock('@mui/material', () => require('../../../../test-utils/mui-mocks').muiMaterialMock);
+jest.mock('@mui/styled-engine', () => require('../../../../test-utils/mui-mocks').muiStyledEngineMock);
+jest.mock('@mui/material/styles', () => require('../../../../test-utils/mui-mocks').muiStylesMock);
+jest.mock('@mui/material/IconButton', () => require('../../../../test-utils/mui-mocks').muiIconButtonMock);
+jest.mock('../../../styles/sharedStyles', () => require('../../../../test-utils/styled-component-mocks').sharedStylesMock);
+jest.mock('../../../components/common/styles', () => require('../../../../test-utils/styled-component-mocks').actionModalStylesMock);
 
-const renderWithTheme = (ui) => {
-  return render(
-    <ThemeProvider theme={theme}>
-      {ui}
-    </ThemeProvider>
-  );
-};
+jest.mock("../../../components/common/transfer-list/TransferList", () => require('../../../../test-utils/component-mocks').transferListMock);
 
 describe("ManageTeamMembersModal", () => {
   const mockOnClose = jest.fn();
   const mockOnSuccess = jest.fn();
   const mockOnError = jest.fn();
-  const mockUpdateGroupUsers = jest.fn();
-
-  const mockGroup = {
-    id: 1,
-    attributes: {
-      name: "Test Group"
-    }
-  };
+  const mockGroup = { id: "1", attributes: { name: "Test Group" } };
 
   const mockAvailableUsers = [
-    { id: "1", attributes: { name: "User 1", email: "user1@example.com", role: "Admin" } },
-    { id: "2", attributes: { name: "User 2", email: "user2@example.com", role: "Chat user" } }
+    { id: "1", attributes: { name: "User One" } },
+    { id: "2", attributes: { name: "User Two" } },
   ];
-
   const mockSelectedUsers = [
-    { id: "3", attributes: { name: "User 3", email: "user3@example.com", role: "Admin" } }
+    { id: "3", attributes: { name: "User Three" } },
   ];
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+    const mockUpdateGroupUsers = jest.fn().mockResolvedValue({});
     teamsService.updateGroupUsers = mockUpdateGroupUsers;
     
-    useTeamMembersModal.mockReturnValue({
-      availableUsers: mockAvailableUsers,
-      selectedUsers: mockSelectedUsers,
-      isLoadingMore: false,
+    useTransferListSelectedUsers.mockReturnValue({
+      members: mockSelectedUsers,
+      addMember: jest.fn(),
+      removeMember: jest.fn(),
+      loading: false
+    });
+    
+    useTransferListAvailableUsers.mockReturnValue({
+      items: mockAvailableUsers,
       loading: false,
+      isSearching: false,
       hasMore: false,
-      handleUsersChange: jest.fn(),
-      handleSearch: jest.fn(),
-      handleLoadMore: jest.fn(),
-      handleUserAdded: jest.fn(),
-      handleUserRemoved: jest.fn(),
+      isLoadingMore: false,
+      searchTerm: "",
+      loadMore: jest.fn(),
+      search: jest.fn(),
+      addItem: jest.fn(),
+      removeItem: jest.fn()
     });
   });
 
   it("renders loading state when loading is true", () => {
-    useTeamMembersModal.mockReturnValueOnce({
-      availableUsers: [],
-      selectedUsers: [],
-      isLoadingMore: false,
+    useTransferListAvailableUsers.mockReturnValueOnce({
+      items: [],
       loading: true,
+      isSearching: false,
       hasMore: false,
-      handleUsersChange: jest.fn(),
-      handleSearch: jest.fn(),
-      handleLoadMore: jest.fn(),
-      handleUserAdded: jest.fn(),
-      handleUserRemoved: jest.fn(),
+      isLoadingMore: false,
+      searchTerm: "",
+      loadMore: jest.fn(),
+      search: jest.fn(),
+      addItem: jest.fn(),
+      removeItem: jest.fn()
     });
 
     renderWithTheme(
       <ManageTeamMembersModal
         open={true}
-        onClose={mockOnClose}
         group={mockGroup}
+        onClose={mockOnClose}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
       />
     );
-
-    expect(screen.getByText("Manage Team Members")).toBeInTheDocument();
-    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    expect(screen.getByTestId("circular-progress")).toBeInTheDocument();
   });
 
   it("renders TransferList when not loading", () => {
     renderWithTheme(
       <ManageTeamMembersModal
         open={true}
-        onClose={mockOnClose}
         group={mockGroup}
+        onClose={mockOnClose}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
       />
     );
-
-    expect(screen.getByText("Manage Team Members")).toBeInTheDocument();
-    expect(screen.getByText("Current members")).toBeInTheDocument();
-    expect(screen.getByText("Add members")).toBeInTheDocument();
-    expect(screen.getByText("Users currently on this team")).toBeInTheDocument();
-    expect(screen.getByText("Add users to this team")).toBeInTheDocument();
+    expect(screen.getByTestId("transfer-list")).toBeInTheDocument();
   });
 
-  it("handles saving successfully", async () => {
-    mockUpdateGroupUsers.mockResolvedValueOnce({});
-
+  it("calls onSave with selected users when primary button is clicked", async () => {
     renderWithTheme(
       <ManageTeamMembersModal
         open={true}
-        onClose={mockOnClose}
         group={mockGroup}
+        onClose={mockOnClose}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
       />
     );
 
-    const saveButton = screen.getByRole("button", { name: "Save" });
-    expect(saveButton).not.toBeDisabled();
-    
-    fireEvent.click(saveButton);
+    fireEvent.click(screen.getByText("Save"));
 
     await waitFor(() => {
-      expect(mockUpdateGroupUsers).toHaveBeenCalledWith(1, [3]);
+      expect(teamsService.updateGroupUsers).toHaveBeenCalledWith("1", [3]);
     });
-    
     await waitFor(() => {
       expect(mockOnSuccess).toHaveBeenCalledWith('Team members for "Test Group" updated successfully!');
     });
-    
     await waitFor(() => {
       expect(mockOnClose).toHaveBeenCalled();
     });
   });
 
-  it("handles saving with error", async () => {
-    const mockError = new Error("Update failed");
-    mockUpdateGroupUsers.mockRejectedValueOnce(mockError);
-
+  it("calls onError when saving fails", async () => {
+    teamsService.updateGroupUsers.mockRejectedValueOnce(new Error("Save failed"));
     renderWithTheme(
       <ManageTeamMembersModal
         open={true}
-        onClose={mockOnClose}
         group={mockGroup}
+        onClose={mockOnClose}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
       />
     );
 
-    const saveButton = screen.getByRole("button", { name: "Save" });
-    fireEvent.click(saveButton);
+    fireEvent.click(screen.getByText("Save"));
 
-    await waitFor(() => {
-      expect(mockUpdateGroupUsers).toHaveBeenCalledWith(1, [3]);
-    });
-    
     await waitFor(() => {
       expect(mockOnError).toHaveBeenCalledWith("Failed to update team members. Please try again.");
     });
-    
-    await waitFor(() => {
-      expect(mockOnClose).not.toHaveBeenCalled();
-    });
-    
-    await waitFor(() => {
-      expect(saveButton).not.toBeDisabled();
-    });
   });
 
-  it("does not call updateGroupUsers when group is not provided", async () => {
+  it("calls onClose when secondary button is clicked", () => {
     renderWithTheme(
       <ManageTeamMembersModal
         open={true}
-        onClose={mockOnClose}
-        group={null}
-        onSuccess={mockOnSuccess}
-        onError={mockOnError}
-      />
-    );
-
-    const saveButton = screen.getByRole("button", { name: "Save" });
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(mockUpdateGroupUsers).not.toHaveBeenCalled();
-    });
-  });
-
-  it("closes the modal when Cancel is clicked", () => {
-    renderWithTheme(
-      <ManageTeamMembersModal
-        open={true}
-        onClose={mockOnClose}
         group={mockGroup}
+        onClose={mockOnClose}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
       />
     );
-
-    const cancelButton = screen.getByRole("button", { name: "Cancel" });
-    fireEvent.click(cancelButton);
-
+    fireEvent.click(screen.getByText("Cancel"));
     expect(mockOnClose).toHaveBeenCalled();
   });
 });

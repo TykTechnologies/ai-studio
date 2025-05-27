@@ -1,6 +1,13 @@
 import React from "react";
-import { Dialog, DialogContent, DialogActions, Typography, Box } from "@mui/material";
+import { Typography } from "@mui/material";
 import { PrimaryButton, SecondaryOutlineButton } from "../../styles/sharedStyles";
+import {
+  StyledActionDialog,
+  TitleBox,
+  DialogDivider,
+  StyledDialogContent,
+  StyledDialogActions
+} from "./styles";
 
 const ActionModal = ({
   open,
@@ -21,56 +28,30 @@ const ActionModal = ({
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      PaperProps={{
-        sx: {
-          border: "1px solid",
-          borderColor: "border.neutralDefault",
-          borderRadius: 2,
-          maxWidth: responsiveWidths,
-          width: responsiveWidths,
-        },
-      }}
-    >
-      <Box sx={{ 
-        p: 2
-      }}>
+    <StyledActionDialog open={open} onClose={onClose}>
+      <TitleBox>
         <Typography variant="headingMedium" color="text.primary">
           {title}
         </Typography>
-      </Box>
+      </TitleBox>
       
-      <Box sx={{ 
-        mx: 2,
-        borderBottom: "1px solid",
-        borderColor: "border.neutralDefault",
-      }} />
+      <DialogDivider />
       
-      <DialogContent sx={{ px: 2 }}>
+      <StyledDialogContent>
         {children}
-      </DialogContent>
+      </StyledDialogContent>
       
-      <Box sx={{ 
-        mx: 2,
-        borderTop: "1px solid", 
-        borderColor: "border.neutralDefault",
-      }} />
+      <DialogDivider />
       
-      <DialogActions sx={{ 
-        justifyContent: "flex-end",
-        p: 2,
-        gap: 1,
-      }}>
+      <StyledDialogActions>
         <SecondaryOutlineButton onClick={onSecondaryAction || onClose}>
           {secondaryButtonLabel}
         </SecondaryOutlineButton>
         <PrimaryButton onClick={onPrimaryAction}>
           {primaryButtonLabel}
         </PrimaryButton>
-      </DialogActions>
-    </Dialog>
+      </StyledDialogActions>
+    </StyledActionDialog>
   );
 };
 
