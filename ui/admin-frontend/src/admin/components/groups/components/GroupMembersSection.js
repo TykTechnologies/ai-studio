@@ -1,20 +1,55 @@
-import React from "react";
+import React, { useCallback, useEffect } from "react";
 import CollapsibleSection from "../../common/CollapsibleSection";
 import TransferList from "../../common/transfer-list/TransferList";
 import { TEAM_MEMBERS_TRANSFER_LIST_COLUMNS } from "../../../pages/groups/utils/transferListConfig";
+import { useTransferListSelectedUsers } from "../../../hooks/useTransferListSelectedUsers";
+import { useTransferListAvailableUsers } from "../../../hooks/useTransferListAvailableUsers";
 
 const GroupMembersSection = ({
-  availableUsers,
-  selectedUsers,
-  handleUsersChange,
-  handleSearch,
-  handleLoadMore,
-  currentPage,
-  totalPages,
-  isLoadingMore,
-  onUserAdded,
-  onUserRemoved,
-}) => {  
+  groupId,
+  onSelectedUsersChange,
+}) => {
+  const {
+    members: selectedUsers,
+    addMember: addUser,
+    removeMember: removeUser,
+  } = useTransferListSelectedUsers({ groupId });
+
+  const { 
+    items: availableUsers, 
+    isSearching, 
+    hasMore, 
+    isLoadingMore,
+    searchTerm,
+    loadMore, 
+    search,
+    addItem,
+    removeItem
+  } = useTransferListAvailableUsers({
+    groupId,
+    pageSize: 10,
+    searchDebounceMs: 500,
+    excludeIds: selectedUsers.map(u => u.id)
+  });
+
+  const handleSearchChange = useCallback((searchTerm) => {
+    search(searchTerm);
+  }, [search]);
+
+  const handleAddUser = useCallback((user) => {
+    addUser(user);
+    removeItem(user);
+  }, [addUser, removeItem]);
+
+  const handleRemoveUser = useCallback((user) => {
+    removeUser(user);
+    addItem(user);
+  }, [removeUser, addItem]);
+
+  useEffect(() => {
+    onSelectedUsersChange?.(selectedUsers);
+  }, [selectedUsers, onSelectedUsersChange]);
+
   return (
     <CollapsibleSection title="Manage team members" defaultExpanded={false}>
       <TransferList
@@ -25,14 +60,15 @@ const GroupMembersSection = ({
         leftSubtitle="Users currently on this team"
         rightTitle="Add members"
         rightSubtitle="Add users to this team"
-        onChange={handleUsersChange}
         enableSearch={true}
-        onSearch={(term) => handleSearch(term, 1)}
-        onLoadMore={handleLoadMore}
-        hasMore={currentPage < totalPages}
+        searchTerm={searchTerm}
+        onSearchTermChange={handleSearchChange}
+        isSearching={isSearching}
+        onAdd={handleAddUser}
+        onRemove={handleRemoveUser}
+        onLoadMore={loadMore}
+        hasMore={hasMore}
         isLoadingMore={isLoadingMore}
-        onItemAdded={onUserAdded}
-        onItemRemoved={onUserRemoved}
       />
     </CollapsibleSection>
   );

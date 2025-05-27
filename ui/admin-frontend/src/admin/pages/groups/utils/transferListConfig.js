@@ -1,6 +1,6 @@
-import { Box, Typography } from "@mui/material";
 import CustomSelectBadge from "../../../components/common/CustomSelectBadge";
 import { roleBadgeConfigs } from "../../../components/groups/utils/roleBadgeConfig";
+import { MemberInfoContainer, TruncatedTypography } from "../../../components/common/styles";
 
 export const TEAM_MEMBERS_TRANSFER_LIST_COLUMNS = [
   {
@@ -8,37 +8,20 @@ export const TEAM_MEMBERS_TRANSFER_LIST_COLUMNS = [
     headerName: "Name",
     width: { md: '35%', lg: '40%' },
     renderCell: (item) => (
-      <Box sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%',
-        pr: 1
-      }}>
-        <Typography
+      <MemberInfoContainer>
+        <TruncatedTypography
           variant="bodyMediumMedium"
           color="text.defaultSubdued"
-          sx={{
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            width: '100%'
-          }}
         >
           {item.attributes?.name}
-        </Typography>
-        <Typography
+        </TruncatedTypography>
+        <TruncatedTypography
           variant="bodySmallDefault"
           color="text.defaultSubdued"
-          sx={{
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            width: '100%'
-          }}
         >
           {item.attributes?.email}
-        </Typography>
-      </Box>
+        </TruncatedTypography>
+      </MemberInfoContainer>
     )
   },
   {
