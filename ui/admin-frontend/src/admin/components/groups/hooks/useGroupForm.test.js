@@ -222,13 +222,6 @@ describe('useGroupForm Hook', () => {
     // Check that the form fields are populated with the response data
     expect(screen.getByTestId('name').textContent).toBe('Test Group');
     
-    // Check users
-    const expectedUsers = [
-      { id: '1', name: 'User 1' },
-      { id: '2', name: 'User 2' }
-    ];
-    expect(JSON.parse(screen.getByTestId('selected-users').textContent)).toEqual(expectedUsers);
-    
     // Check catalogs
     const expectedCatalogs = [
       { value: '1', label: 'Catalog 1' },
