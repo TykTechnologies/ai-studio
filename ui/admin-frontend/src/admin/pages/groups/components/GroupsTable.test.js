@@ -92,7 +92,7 @@ describe('GroupsTable', () => {
     expect(screen.getByText('Enable Search: true')).toBeInTheDocument();
     expect(screen.getByText('Search Placeholder: Search by name')).toBeInTheDocument();
     expect(screen.getByText('Sort Config: id-asc')).toBeInTheDocument();
-    expect(screen.getByText('Actions: Edit team,Manage team members,Delete team')).toBeInTheDocument();
+    expect(screen.getByText('Actions: Edit team,Delete team')).toBeInTheDocument();
   });
 
   test('renders group names and member counts correctly', () => {

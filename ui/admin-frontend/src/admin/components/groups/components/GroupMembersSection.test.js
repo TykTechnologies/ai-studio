@@ -1,114 +1,272 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GroupMembersSection from './GroupMembersSection';
 
-jest.mock('@mui/styled-engine', () => require('../../../../test-utils/mui-mocks').muiStyledEngineMock);
-jest.mock('@mui/material/styles', () => require('../../../../test-utils/mui-mocks').muiStylesMock);
-
-jest.mock('@mui/material', () => require('../../../../test-utils/mui-mocks').muiMaterialMock);
-jest.mock('../../common/CollapsibleSection', () => require('../../../../test-utils/component-mocks').collapsibleSectionMock);
-jest.mock('../../common/CustomSelectBadge', () => require('../../../../test-utils/component-mocks').customSelectBadgeMock);
-jest.mock('../../common/transfer-list/TransferList', () => require('../../../../test-utils/component-mocks').transferListMock);
-
-jest.mock('../../../hooks/useTransferListSelectedUsers', () => ({
-  useTransferListSelectedUsers: ({ groupId }) => ({
-    members: [{ id: '3', attributes: { name: 'Bob Johnson', email: 'bob@example.com', role: 'Chat user' } }],
-    addMember: jest.fn(),
-    removeMember: jest.fn()
-  })
+// Mock Material-UI components
+jest.mock('@mui/material', () => ({
+  Box: ({ children, sx, ...props }) => (
+    <div data-testid="box" data-sx={JSON.stringify(sx)} {...props}>
+      {children}
+    </div>
+  ),
+  Typography: ({ children, variant, color, sx, ...props }) => (
+    <div data-testid="typography" data-variant={variant} data-color={color} data-sx={JSON.stringify(sx)} {...props}>
+      {children}
+    </div>
+  ),
 }));
 
-jest.mock('../../../hooks/useTransferListAvailableUsers', () => ({
-  useTransferListAvailableUsers: () => {
-    return {
-      items: [
-        { id: '1', attributes: { name: 'John Doe', email: 'john@example.com', role: 'Admin' } },
-        { id: '2', attributes: { name: 'Jane Smith', email: 'jane@example.com', role: 'Developer' } }
-      ],
-      isSearching: false,
-      hasMore: true,
-      isLoadingMore: false,
-      searchTerm: '',
-      loadMore: jest.fn(),
-      search: jest.fn(),
-      addItem: jest.fn(),
-      removeItem: jest.fn()
-    };
-  }
+// Mock CollapsibleSection component
+jest.mock('../../common/CollapsibleSection', () => ({
+  __esModule: true,
+  default: ({ children, title, defaultExpanded, ...props }) => (
+    <div data-testid="collapsible-section" data-title={title} data-default-expanded={defaultExpanded.toString()} {...props}>
+      {children}
+    </div>
+  )
 }));
 
-jest.mock('../../../pages/groups/utils/transferListConfig', () => ({
-  TEAM_MEMBERS_TRANSFER_LIST_COLUMNS: [
-    { field: 'attributes.name', headerName: 'Name', width: '40%' },
-    { field: 'attributes.email', headerName: 'Email', width: '35%' },
-    { field: 'attributes.role', headerName: 'Role', width: '25%' }
-  ]
+// Mock TransferList component
+jest.mock('../../common/transfer-list/TransferList', () => ({
+  __esModule: true,
+  default: jest.fn(props => (
+    <div data-testid="transfer-list">
+      <button 
+        data-testid="mock-transfer-button" 
+        onClick={() => props.onChange && props.onChange({
+          selected: [...props.selectedItems, props.availableItems[0]],
+          available: props.availableItems.slice(1)
+        })}
+      >
+        Transfer Item
+      </button>
+      <button 
+        data-testid="mock-search-button" 
+        onClick={() => props.onSearch && props.onSearch('test search')}
+      >
+        Search
+      </button>
+      <button 
+        data-testid="mock-load-more-button" 
+        onClick={() => props.onLoadMore && props.onLoadMore()}
+      >
+        Load More
+      </button>
+      <div data-left-title={props.leftTitle}></div>
+      <div data-right-title={props.rightTitle}></div>
+      <div data-has-more={props.hasMore.toString()}></div>
+      <div data-is-loading-more={props.isLoadingMore.toString()}></div>
+      <div data-columns={JSON.stringify(props.columns)}></div>
+    </div>
+  ))
 }));
 
+// Mock CustomSelectBadge component
+jest.mock('../../common/CustomSelectBadge', () => ({
+  __esModule: true,
+  default: jest.fn(({ config }) => (
+    <div data-testid="custom-select-badge" data-config={JSON.stringify(config)}></div>
+  ))
+}));
+
+// Mock roleBadgeConfigs
 jest.mock('../utils/roleBadgeConfig', () => ({
   roleBadgeConfigs: {
     'Admin': { color: 'primary', label: 'Admin' },
-    'Developer': { color: 'secondary', label: 'Developer' },
-    'Chat user': { color: 'info', label: 'Chat user' }
+    'Chat user': { color: 'info', label: 'Chat user' },
+    'Developer': { color: 'secondary', label: 'Developer' }
   }
 }));
 
 describe('GroupMembersSection Component', () => {
-  const mockOnSelectedUsersChange = jest.fn();
+  // Test data
+  const mockAvailableUsers = [
+    { 
+      id: '1', 
+      attributes: { name: 'John Doe', email: 'john@example.com', role: 'Admin' } 
+    },
+    { 
+      id: '2', 
+      attributes: { name: 'Jane Smith', email: 'jane@example.com', role: 'Developer' } 
+    }
+  ];
+  
+  const mockSelectedUsers = [
+    { 
+      id: '3', 
+      attributes: { name: 'Bob Johnson', email: 'bob@example.com', role: 'Chat user' } 
+    }
+  ];
+  
+  // Mock functions
+  const mockHandleUsersChange = jest.fn();
+  const mockHandleSearch = jest.fn();
+  const mockHandleLoadMore = jest.fn();
   
   beforeEach(() => {
     jest.clearAllMocks();
-    require('../../../../test-utils/component-mocks').transferListMock.clearLastProps();
   });
   
-  test('renders TransferList with correct props', () => {
-    render(
+  test('renders GroupMembersSection component with correct props', () => {
+    const { container } = render(
       <GroupMembersSection
-        groupId="group-123"
-        onSelectedUsersChange={mockOnSelectedUsersChange}
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
       />
     );
     
-    const lastProps = require('../../../../test-utils/component-mocks').transferListMock.getLastProps();
-    expect(lastProps.leftTitle).toBe("Current members");
-    expect(lastProps.rightTitle).toBe("Add members");
-    expect(lastProps.enableSearch).toBe(true);
-    expect(lastProps.columns).toBeDefined();
-  });
-  
-  test('renders CollapsibleSection with correct title', () => {
-    render(
-      <GroupMembersSection
-        groupId="group-123"
-        onSelectedUsersChange={mockOnSelectedUsersChange}
-      />
-    );
-    
+    // Check that CollapsibleSection is rendered with correct props
     const collapsibleSection = screen.getByTestId('collapsible-section');
+    expect(collapsibleSection).toBeInTheDocument();
     expect(collapsibleSection).toHaveAttribute('data-title', 'Manage team members');
     expect(collapsibleSection).toHaveAttribute('data-default-expanded', 'false');
+    
+    // Since we can't directly test the TransferList rendering due to the mock structure,
+    // let's verify key props passed to TransferList via the mock implementation
+    const mockTransferList = require('../../common/transfer-list/TransferList').default;
+    expect(mockTransferList).toHaveBeenCalled();
+    
+    const lastCall = mockTransferList.mock.calls[mockTransferList.mock.calls.length - 1][0];
+    expect(lastCall.availableItems).toEqual(mockAvailableUsers);
+    expect(lastCall.selectedItems).toEqual(mockSelectedUsers);
+    expect(lastCall.leftTitle).toBe("Current members");
+    expect(lastCall.rightTitle).toBe("Add members");
+    expect(lastCall.enableSearch).toBe(true);
+    expect(lastCall.hasMore).toBe(true);
+    expect(lastCall.isLoadingMore).toBe(false);
   });
   
-  test('receives items from hooks and passes them to TransferList', () => {
+  test('calls handleUsersChange when users are transferred', () => {
     render(
       <GroupMembersSection
-        groupId="group-123"
-        onSelectedUsersChange={mockOnSelectedUsersChange}
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
       />
     );
     
-    const expectedAvailableItems = [
-      { id: '1', attributes: { name: 'John Doe', email: 'john@example.com', role: 'Admin' } },
-      { id: '2', attributes: { name: 'Jane Smith', email: 'jane@example.com', role: 'Developer' } }
-    ];
+    // Extract the onChange handler that was passed to TransferList
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const onChangeProp = mockCalls[mockCalls.length - 1][0].onChange;
     
-    const expectedSelectedItems = [
-      { id: '3', attributes: { name: 'Bob Johnson', email: 'bob@example.com', role: 'Chat user' } }
-    ];
+    // Create mock data to simulate what TransferList would pass to onChange
+    const mockChangeData = {
+      selected: [...mockSelectedUsers, mockAvailableUsers[0]],
+      available: mockAvailableUsers.slice(1)
+    };
     
-    const lastProps = require('../../../../test-utils/component-mocks').transferListMock.getLastProps();
-    expect(lastProps.availableItems).toEqual(expectedAvailableItems);
-    expect(lastProps.selectedItems).toEqual(expectedSelectedItems);
+    // Call the onChange handler directly
+    onChangeProp(mockChangeData);
+    
+    // Check that handleUsersChange was called with the expected parameters
+    expect(mockHandleUsersChange).toHaveBeenCalledTimes(1);
+    expect(mockHandleUsersChange).toHaveBeenCalledWith(mockChangeData);
+  });
+  
+  test('calls handleSearch when search is performed', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
+      />
+    );
+    
+    // Extract the onSearch handler that was passed to TransferList
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const onSearchProp = mockCalls[mockCalls.length - 1][0].onSearch;
+    
+    // Call the onSearch handler directly with a test term
+    onSearchProp('test search');
+    
+    // Check that handleSearch was called with the expected parameters
+    expect(mockHandleSearch).toHaveBeenCalledTimes(1);
+    expect(mockHandleSearch).toHaveBeenCalledWith('test search', 1);
+  });
+  
+  test('calls handleLoadMore when loading more users', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={false}
+      />
+    );
+    
+    // Extract the onLoadMore handler that was passed to TransferList
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const onLoadMoreProp = mockCalls[mockCalls.length - 1][0].onLoadMore;
+    
+    // Call the onLoadMore handler directly
+    onLoadMoreProp();
+    
+    // Check that handleLoadMore was called
+    expect(mockHandleLoadMore).toHaveBeenCalledTimes(1);
+  });
+  
+  test('sets hasMore to false when currentPage equals totalPages', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={3}
+        totalPages={3}
+        isLoadingMore={false}
+      />
+    );
+    
+    // Extract the hasMore prop that was passed to TransferList
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const hasMoreProp = mockCalls[mockCalls.length - 1][0].hasMore;
+    
+    // Check hasMore value
+    expect(hasMoreProp).toBe(false);
+  });
+  
+  test('passes isLoadingMore prop to TransferList', () => {
+    render(
+      <GroupMembersSection
+        availableUsers={mockAvailableUsers}
+        selectedUsers={mockSelectedUsers}
+        handleUsersChange={mockHandleUsersChange}
+        handleSearch={mockHandleSearch}
+        handleLoadMore={mockHandleLoadMore}
+        currentPage={1}
+        totalPages={3}
+        isLoadingMore={true}
+      />
+    );
+    
+    // Extract the isLoadingMore prop that was passed to TransferList
+    const mockCalls = require('../../common/transfer-list/TransferList').default.mock.calls;
+    const isLoadingMoreProp = mockCalls[mockCalls.length - 1][0].isLoadingMore;
+    
+    // Check isLoadingMore value
+    expect(isLoadingMoreProp).toBe(true);
   });
 });

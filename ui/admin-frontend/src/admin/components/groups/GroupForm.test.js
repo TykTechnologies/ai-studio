@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GroupForm from './GroupForm';
 import { useGroupForm } from './hooks/useGroupForm';
+import { useUserSelection } from './hooks/useUserSelection';
 import { useCatalogsSelection } from './hooks/useCatalogsSelection';
 
 // Mock React Router
@@ -19,6 +20,10 @@ jest.mock('react-router-dom', () => ({
 // Mock the hooks
 jest.mock('./hooks/useGroupForm', () => ({
   useGroupForm: jest.fn()
+}));
+
+jest.mock('./hooks/useUserSelection', () => ({
+  useUserSelection: jest.fn()
 }));
 
 jest.mock('./hooks/useCatalogsSelection', () => ({
@@ -217,10 +222,7 @@ describe('GroupForm Component', () => {
     fetchUsers: mockFetchUsers,
     handleUsersChange: mockHandleUsersChange,
     handleLoadMore: mockHandleLoadMore,
-    handleSearch: mockHandleSearch,
-    handleUserAdded: jest.fn(),
-    handleUserRemoved: jest.fn(),
-    resetState: jest.fn()
+    handleSearch: mockHandleSearch
   };
   
   const defaultCatalogsSelectionValues = {
@@ -235,6 +237,7 @@ describe('GroupForm Component', () => {
     
     // Setup default mock hook implementations for all tests
     useGroupForm.mockImplementation(() => defaultGroupFormValues);
+    useUserSelection.mockImplementation(() => defaultUserSelectionValues);
     useCatalogsSelection.mockImplementation(() => defaultCatalogsSelectionValues);
     
     // Set default mock for useParams (create mode) for all tests
@@ -284,9 +287,16 @@ describe('GroupForm Component', () => {
   });
 
   test('shows loading spinner when form data is loading', () => {
+    // Set only formLoading state to true
     useGroupForm.mockImplementation(() => ({
       ...defaultGroupFormValues,
-      loading: true
+      loading: true  // This becomes formLoading in the component
+    }));
+    
+    // Make sure others are not loading
+    useUserSelection.mockImplementation(() => ({
+      ...defaultUserSelectionValues,
+      loading: false
     }));
     
     useCatalogsSelection.mockImplementation(() => ({
@@ -302,15 +312,20 @@ describe('GroupForm Component', () => {
   });
 
   test('shows loading spinner when users are loading', () => {
-    // Set only formLoading state to true
+    // Set only usersLoading state to true
     useGroupForm.mockImplementation(() => ({
       ...defaultGroupFormValues,
       loading: false
     }));
     
+    useUserSelection.mockImplementation(() => ({
+      ...defaultUserSelectionValues,
+      loading: true  // This becomes usersLoading in the component
+    }));
+    
     useCatalogsSelection.mockImplementation(() => ({
       ...defaultCatalogsSelectionValues,
-      loading: true
+      loading: false
     }));
     
     render(<GroupForm />);
@@ -320,14 +335,20 @@ describe('GroupForm Component', () => {
   });
 
   test('shows loading spinner when catalogs are loading', () => {
+    // Set only catalogsLoading state to true
     useGroupForm.mockImplementation(() => ({
       ...defaultGroupFormValues,
       loading: false
     }));
     
+    useUserSelection.mockImplementation(() => ({
+      ...defaultUserSelectionValues,
+      loading: false
+    }));
+    
     useCatalogsSelection.mockImplementation(() => ({
       ...defaultCatalogsSelectionValues,
-      loading: true
+      loading: true  // This becomes catalogsLoading in the component
     }));
     
     render(<GroupForm />);
@@ -456,19 +477,34 @@ describe('GroupForm Component', () => {
     expect(mockHandleCancelDelete).toHaveBeenCalled();
   });
 
-  test('renders the component properly', () => {
+  test('calls fetchUsers when component mounts', () => {
+    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
-    
-    useGroupForm.mockImplementation(() => ({
-      ...defaultGroupFormValues,
-      selectedUsers: [{ id: '1', name: 'User 1' }]
-    }));
     
     render(<GroupForm />);
     
-    expect(screen.getByTestId('mock-basic-info')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-members-section')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-catalogs-section')).toBeInTheDocument();
+    expect(mockFetchUsers).toHaveBeenCalled();
+  });
+
+  test('handles user selection changes', () => {
+    // Mock handlers to ensure they're properly called
+    const mockHandleUsersChange = jest.fn();
+    useUserSelection.mockImplementation(() => ({
+      ...defaultUserSelectionValues,
+      handleUsersChange: mockHandleUsersChange
+    }));
+    
+    // Make sure useParams returns empty object
+    require('react-router-dom').useParams.mockImplementation(() => ({}));
+    
+    render(<GroupForm />);
+    
+    // Click the "Add User" button in the mock GroupMembersSection
+    const addUserButton = screen.getByTestId('mock-change-users');
+    fireEvent.click(addUserButton);
+    
+    // Check if handleUsersChange was called
+    expect(mockHandleUsersChange).toHaveBeenCalled();
   });
 
   test('handles catalog selection changes', () => {
