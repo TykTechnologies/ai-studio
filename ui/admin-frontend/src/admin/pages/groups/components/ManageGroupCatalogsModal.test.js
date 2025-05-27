@@ -1,56 +1,13 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
 import ManageGroupCatalogsModal from "./ManageGroupCatalogsModal";
 import { useCatalogsModal } from "../hooks/useCatalogsModal";
 import { teamsService } from "../../../services/teamsService";
+import { renderWithTheme } from "../../../../test-utils/render-with-theme";
 
 jest.mock("../hooks/useCatalogsModal");
 jest.mock("../../../services/teamsService");
-
-const theme = createTheme({
-  palette: {
-    text: {
-      primary: '#000000',
-      secondary: '#666666',
-      defaultSubdued: '#454545',
-      neutralDisabled: '#AAAAAA'
-    },
-    background: {
-      paper: '#FFFFFF',
-      default: '#F5F5F5',
-      surfaceNeutralHover: '#F0F0F0',
-      surfaceNeutralDisabled: '#EEEEEE',
-      buttonPrimaryDefault: '#3F51B5',
-      buttonPrimaryDefaultHover: '#303F9F',
-      buttonPrimaryOutlineHover: '#E8EAF6',
-      defaultSubdued: '#FAFAFA'
-    },
-    border: {
-      neutralDefault: '#E0E0E0',
-      neutralHovered: '#BDBDBD',
-      criticalDefault: '#F44336',
-      criticalHover: '#D32F2F'
-    },
-    primary: {
-      main: '#3F51B5',
-      light: '#7986CB'
-    },
-    custom: {
-      white: '#FFFFFF',
-      purpleExtraDark: '#1A237E'
-    }
-  }
-});
-
-const renderWithTheme = (ui) => {
-  return render(
-    <ThemeProvider theme={theme}>
-      {ui}
-    </ThemeProvider>
-  );
-};
 
 describe("ManageGroupCatalogsModal", () => {
   const mockOnClose = jest.fn();
