@@ -19,7 +19,6 @@ const ActionModal = ({
   onPrimaryAction,
   onSecondaryAction,
 }) => {
-  
   return (
     <StyledActionDialog open={open} onClose={onClose}>
       <TitleBox>
