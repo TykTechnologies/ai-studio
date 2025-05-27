@@ -19,14 +19,7 @@ const ActionModal = ({
   onPrimaryAction,
   onSecondaryAction,
 }) => {
-  const responsiveWidths = {
-    xs: '95%',  
-    sm: '85%',  
-    md: '80%',  
-    lg: '60%',  
-    xl: '50%',  
-  };
-
+  
   return (
     <StyledActionDialog open={open} onClose={onClose}>
       <TitleBox>
