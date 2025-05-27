@@ -54,12 +54,6 @@ const useGroupActions = (refreshGroups, setSnackbar) => {
     navigate(`/admin/groups/${group.id}`);
   };
 
-  const handleManageMembers = (group) => {
-    if (group) {
-      setSelectedGroup(group);
-    }
-  };
-
   return {
     selectedGroup,
     warningDialogOpen,
@@ -68,7 +62,6 @@ const useGroupActions = (refreshGroups, setSnackbar) => {
     handleCancelDelete,
     handleConfirmDelete,
     handleGroupClick,
-    handleManageMembers,
   };
 };
 

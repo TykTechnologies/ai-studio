@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Typography, CircularProgress, Box, Snackbar, Alert } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -13,6 +13,7 @@ import {
 import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 
 import { useGroupForm } from "./hooks/useGroupForm";
+import { useUserSelection } from "./hooks/useUserSelection";
 import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
 
 import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
@@ -27,6 +28,7 @@ const GroupForm = () => {
     setName,
     loading: formLoading,
     error,
+    selectedUsers,
     setSelectedUsers,
     selectedCatalogs,
     setSelectedCatalogs,
@@ -43,6 +45,21 @@ const GroupForm = () => {
     handleConfirmDelete
   } = useGroupForm(id, []);
 
+
+  const {
+    availableUsers,
+    currentPage,
+    totalPages,
+    isLoadingMore,
+    loading: usersLoading,
+    fetchUsers,
+    handleUsersChange,
+    handleLoadMore,
+    handleSearch,
+    handleUserAdded,
+    handleUserRemoved,
+  } = useUserSelection(id, selectedUsers, setSelectedUsers);
+
   const {
     catalogs,
     dataCatalogs,
@@ -50,7 +67,12 @@ const GroupForm = () => {
     loading: catalogsLoading
   } = useCatalogsSelection(selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs);
 
-  if (formLoading || catalogsLoading) return <CircularProgress />;
+  
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  if (formLoading || usersLoading || catalogsLoading) return <CircularProgress />;
 
   return (
     <>
@@ -87,8 +109,16 @@ const GroupForm = () => {
           />
 
           <GroupMembersSection
-            groupId={id}
-            onSelectedUsersChange={setSelectedUsers}
+            availableUsers={availableUsers}
+            selectedUsers={selectedUsers}
+            handleUsersChange={handleUsersChange}
+            handleSearch={handleSearch}
+            handleLoadMore={handleLoadMore}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            isLoadingMore={isLoadingMore}
+            onUserAdded={handleUserAdded}
+            onUserRemoved={handleUserRemoved}
           />
 
           <GroupCatalogsSection

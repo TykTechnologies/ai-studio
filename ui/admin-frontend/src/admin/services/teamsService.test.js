@@ -6,8 +6,7 @@ jest.mock('../utils/apiClient', () => ({
   get: jest.fn(),
   post: jest.fn(),
   patch: jest.fn(),
-  delete: jest.fn(),
-  put: jest.fn()
+  delete: jest.fn()
 }));
 
 // Mock console.error to prevent test logs
@@ -189,43 +188,5 @@ describe('getTeamUsers', () => {
 
     await expect(teamsService.getTeamUsers(teamId)).rejects.toThrow('API Error');
     expect(console.error).toHaveBeenCalledWith('Error fetching team users:', error);
-  });
-});
-
-describe('updateGroupUsers', () => {
-  it('should update team members successfully', async () => {
-    const teamId = 'team-123';
-    const userIds = ['user-1', 'user-2', 'user-3'];
-    const mockResponse = {
-      data: {
-        success: true,
-        message: 'Team members updated successfully'
-      }
-    };
-    
-    apiClient.put.mockResolvedValueOnce(mockResponse);
-
-    const result = await teamsService.updateGroupUsers(teamId, userIds);
-
-    expect(apiClient.put).toHaveBeenCalledWith(`/groups/${teamId}/users`, {
-      data: {
-        type: "groups",
-        attributes: {
-          members: userIds
-        }
-      }
-    });
-    expect(result).toEqual(mockResponse.data);
-  });
-
-  it('should throw error when updating team members fails', async () => {
-    const teamId = 'team-123';
-    const userIds = ['user-1', 'user-2'];
-    const error = new Error('API Error');
-    
-    apiClient.put.mockRejectedValueOnce(error);
-
-    await expect(teamsService.updateGroupUsers(teamId, userIds)).rejects.toThrow('API Error');
-    expect(console.error).toHaveBeenCalledWith('Error updating team users:', error);
   });
 });

@@ -16,7 +16,6 @@ const GroupsTable = ({
   handleGroupClick,
   handleEdit,
   handleDelete,
-  handleManageMembers,
 }) => {
   const columns = [
     { field: "id", headerName: "ID", sortable: true },
@@ -53,10 +52,6 @@ const GroupsTable = ({
     {
       label: "Edit team",
       onClick: handleEdit
-    },
-    {
-      label: "Manage team members",
-      onClick: handleManageMembers
     },
     {
       label: "Delete team",

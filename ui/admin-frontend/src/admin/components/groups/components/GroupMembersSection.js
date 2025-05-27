@@ -1,74 +1,87 @@
-import React, { useCallback, useEffect } from "react";
+import React from "react";
 import CollapsibleSection from "../../common/CollapsibleSection";
 import TransferList from "../../common/transfer-list/TransferList";
-import { TEAM_MEMBERS_TRANSFER_LIST_COLUMNS } from "../../../pages/groups/utils/transferListConfig";
-import { useTransferListSelectedUsers } from "../../../hooks/useTransferListSelectedUsers";
-import { useTransferListAvailableUsers } from "../../../hooks/useTransferListAvailableUsers";
+import { Box, Typography } from "@mui/material";
+import CustomSelectBadge from "../../common/CustomSelectBadge";
+import { roleBadgeConfigs } from "../utils/roleBadgeConfig";
 
 const GroupMembersSection = ({
-  groupId,
-  onSelectedUsersChange,
-}) => {
-  const {
-    members: selectedUsers,
-    addMember: addUser,
-    removeMember: removeUser,
-  } = useTransferListSelectedUsers({ groupId });
-
-  const { 
-    items: availableUsers, 
-    isSearching, 
-    hasMore, 
-    isLoadingMore,
-    searchTerm,
-    loadMore, 
-    search,
-    addItem,
-    removeItem
-  } = useTransferListAvailableUsers({
-    groupId,
-    pageSize: 10,
-    searchDebounceMs: 500,
-    excludeIds: selectedUsers.map(u => u.id)
-  });
-
-  const handleSearchChange = useCallback((searchTerm) => {
-    search(searchTerm);
-  }, [search]);
-
-  const handleAddUser = useCallback((user) => {
-    addUser(user);
-    removeItem(user);
-  }, [addUser, removeItem]);
-
-  const handleRemoveUser = useCallback((user) => {
-    removeUser(user);
-    addItem(user);
-  }, [removeUser, addItem]);
-
-  useEffect(() => {
-    onSelectedUsersChange?.(selectedUsers);
-  }, [selectedUsers, onSelectedUsersChange]);
-
+  availableUsers,
+  selectedUsers,
+  handleUsersChange,
+  handleSearch,
+  handleLoadMore,
+  currentPage,
+  totalPages,
+  isLoadingMore,
+  onUserAdded,
+  onUserRemoved,
+}) => {  
   return (
     <CollapsibleSection title="Manage team members" defaultExpanded={false}>
       <TransferList
         availableItems={availableUsers}
         selectedItems={selectedUsers}
-        columns={TEAM_MEMBERS_TRANSFER_LIST_COLUMNS}
+        columns={[
+          {
+            field: "name",
+            headerName: "Name",
+            width: { md: '35%', lg: '40%' },
+            renderCell: (item) => (
+              <Box sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                width: '100%',
+                pr: 1
+              }}>
+                <Typography
+                  variant="bodyMediumMedium"
+                  color="text.defaultSubdued"
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    width: '100%'
+                  }}
+                >
+                  {item.attributes?.name}
+                </Typography>
+                <Typography
+                  variant="bodySmallDefault"
+                  color="text.defaultSubdued"
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    width: '100%'
+                  }}
+                >
+                  {item.attributes?.email}
+                </Typography>
+              </Box>
+            )
+          },
+          {
+            field: "role",
+            headerName: "Role",
+            width: { md: '45%', lg: '35%' },
+            renderCell: (item) => (
+              <CustomSelectBadge config={roleBadgeConfigs[item.attributes?.role] || roleBadgeConfigs["Chat user"]} />
+            )
+          }
+        ]}
         leftTitle="Current members"
         leftSubtitle="Users currently on this team"
         rightTitle="Add members"
         rightSubtitle="Add users to this team"
+        onChange={handleUsersChange}
         enableSearch={true}
-        searchTerm={searchTerm}
-        onSearchTermChange={handleSearchChange}
-        isSearching={isSearching}
-        onAdd={handleAddUser}
-        onRemove={handleRemoveUser}
-        onLoadMore={loadMore}
-        hasMore={hasMore}
+        onSearch={(term) => handleSearch(term, 1)}
+        onLoadMore={handleLoadMore}
+        hasMore={currentPage < totalPages}
         isLoadingMore={isLoadingMore}
+        onItemAdded={onUserAdded}
+        onItemRemoved={onUserRemoved}
       />
     </CollapsibleSection>
   );

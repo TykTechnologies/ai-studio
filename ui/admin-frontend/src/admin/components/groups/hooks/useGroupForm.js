@@ -30,7 +30,10 @@ export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = []
       const response = await teamsService.getTeam(id);
       setName(response.data.attributes.name);
       
-      const { catalogues, data_catalogues, tool_catalogues } = response.data.attributes;
+      const { users, catalogues, data_catalogues, tool_catalogues } = response.data.attributes;
+      if (users) {
+        setSelectedUsers(users);
+      }
       
       if (catalogues) {
         setSelectedCatalogs(catalogues.map(cat => ({
