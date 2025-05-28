@@ -26,14 +26,12 @@ jest.mock('react-router-dom', () => ({
 // Create a test component that uses the hook
 const TestComponent = ({ 
   id = null,
-  initialSelectedUsers = [], 
   initialCatalogs = [], 
   initialDataCatalogs = [], 
   initialToolCatalogs = [] 
 }) => {
   const hookResult = useGroupForm(
     id,
-    initialSelectedUsers,
     initialCatalogs,
     initialDataCatalogs,
     initialToolCatalogs
@@ -154,7 +152,6 @@ describe('useGroupForm Hook', () => {
     }
   };
 
-  const initialSelectedUsers = [{ id: '1', name: 'User 1' }];
   const initialCatalogs = [{ value: '1', label: 'Catalog 1' }];
   const initialDataCatalogs = [{ value: '3', label: 'Data Catalog 1' }];
   const initialToolCatalogs = [{ value: '5', label: 'Tool Catalog 1' }];
@@ -192,14 +189,12 @@ describe('useGroupForm Hook', () => {
   test('initializes with provided values', () => {
     render(
       <TestComponent 
-        initialSelectedUsers={initialSelectedUsers}
         initialCatalogs={initialCatalogs}
         initialDataCatalogs={initialDataCatalogs}
         initialToolCatalogs={initialToolCatalogs}
       />
     );
     
-    expect(JSON.parse(screen.getByTestId('selected-users').textContent)).toEqual(initialSelectedUsers);
     expect(JSON.parse(screen.getByTestId('selected-catalogs').textContent)).toEqual(initialCatalogs);
     expect(JSON.parse(screen.getByTestId('selected-data-catalogs').textContent)).toEqual(initialDataCatalogs);
     expect(JSON.parse(screen.getByTestId('selected-tool-catalogs').textContent)).toEqual(initialToolCatalogs);
