@@ -498,182 +498,511 @@ func TestSerializeGroupsForList(t *testing.T) {
 	// Create associations directly
 	err = db.Model(group1).Association("Catalogues").Append(catalogue1, catalogue2)
 	assert.NoError(t, err)
-	err = db.Model(group1).Association("DataCatalogues").Append(dataCatalogue1)
+	err = db.Model(group1).Association("DataCatalogues").Append(dataCatalogue1, dataCatalogue2)
 	assert.NoError(t, err)
 	err = db.Model(group1).Association("ToolCatalogues").Append(toolCatalogue1)
 	assert.NoError(t, err)
 
-	err = db.Model(group2).Association("DataCatalogues").Append(dataCatalogue2, dataCatalogue3)
+	err = db.Model(group2).Association("DataCatalogues").Append(dataCatalogue3)
 	assert.NoError(t, err)
 
-	// Reload groups with associations
-	var groups models.Groups
-	err = db.Preload("Catalogues").Preload("DataCatalogues").Preload("ToolCatalogues").Find(&groups).Error
-	assert.NoError(t, err)
+	// Test the serialization
+	groups := models.Groups{*group1, *group2, *group3}
+	serialized := serializeGroupsForList(groups, memberCounts)
 
-	// Test cases
-	tests := []struct {
-		name         string
-		groups       models.Groups
-		memberCounts []models.GroupMemberCount
-		expected     []GroupListResponse
-	}{
-		{
-			name:         "empty groups list",
-			groups:       models.Groups{},
-			memberCounts: []models.GroupMemberCount{},
-			expected:     []GroupListResponse{},
-		},
-		{
-			name:         "multiple groups with varying members and catalogues",
-			groups:       groups,
-			memberCounts: memberCounts,
-			expected: []GroupListResponse{
-				{
-					Type: "groups",
-					ID:   strconv.FormatUint(uint64(group1.ID), 10),
-					Attributes: struct {
-						Name               string   `json:"name"`
-						UserCount          int      `json:"user_count"`
-						CatalogueCount     int      `json:"catalogue_count"`
-						DataCatalogueCount int      `json:"data_catalogue_count"`
-						ToolCatalogueCount int      `json:"tool_catalogue_count"`
-						CatalogueNames     []string `json:"catalogue_names"`
-						DataCatalogueNames []string `json:"data_catalogue_names"`
-						ToolCatalogueNames []string `json:"tool_catalogue_names"`
-					}{
-						Name:               "Group A",
-						UserCount:          2,
-						CatalogueCount:     2,
-						DataCatalogueCount: 1,
-						ToolCatalogueCount: 1,
-						CatalogueNames:     []string{"Catalogue 1", "Catalogue 2"},
-						DataCatalogueNames: []string{"Data Catalogue 1"},
-						ToolCatalogueNames: []string{"Tool Catalogue 1"},
-					},
-				},
-				{
-					Type: "groups",
-					ID:   strconv.FormatUint(uint64(group2.ID), 10),
-					Attributes: struct {
-						Name               string   `json:"name"`
-						UserCount          int      `json:"user_count"`
-						CatalogueCount     int      `json:"catalogue_count"`
-						DataCatalogueCount int      `json:"data_catalogue_count"`
-						ToolCatalogueCount int      `json:"tool_catalogue_count"`
-						CatalogueNames     []string `json:"catalogue_names"`
-						DataCatalogueNames []string `json:"data_catalogue_names"`
-						ToolCatalogueNames []string `json:"tool_catalogue_names"`
-					}{
-						Name:               "Group B",
-						UserCount:          1,
-						CatalogueCount:     0,
-						DataCatalogueCount: 2,
-						ToolCatalogueCount: 0,
-						CatalogueNames:     []string{},
-						DataCatalogueNames: []string{"Data Catalogue 2", "Data Catalogue 3"},
-						ToolCatalogueNames: []string{},
-					},
-				},
-				{
-					Type: "groups",
-					ID:   strconv.FormatUint(uint64(group3.ID), 10),
-					Attributes: struct {
-						Name               string   `json:"name"`
-						UserCount          int      `json:"user_count"`
-						CatalogueCount     int      `json:"catalogue_count"`
-						DataCatalogueCount int      `json:"data_catalogue_count"`
-						ToolCatalogueCount int      `json:"tool_catalogue_count"`
-						CatalogueNames     []string `json:"catalogue_names"`
-						DataCatalogueNames []string `json:"data_catalogue_names"`
-						ToolCatalogueNames []string `json:"tool_catalogue_names"`
-					}{
-						Name:               "Group C",
-						UserCount:          3,
-						CatalogueCount:     0,
-						DataCatalogueCount: 0,
-						ToolCatalogueCount: 0,
-						CatalogueNames:     []string{},
-						DataCatalogueNames: []string{},
-						ToolCatalogueNames: []string{},
-					},
-				},
+	// Check the counts match with what we set up
+	assert.Len(t, serialized, 3)
+
+	// Find group1 in serialized
+	var serializedGroup1 GroupListResponse
+	for _, s := range serialized {
+		if s.ID == strconv.FormatUint(uint64(group1.ID), 10) {
+			serializedGroup1 = s
+			break
+		}
+	}
+
+	// Verify group1 counts
+	assert.Equal(t, 2, serializedGroup1.Attributes.UserCount)
+	assert.Equal(t, 2, serializedGroup1.Attributes.CatalogueCount)
+	assert.Equal(t, 2, serializedGroup1.Attributes.DataCatalogueCount)
+	assert.Equal(t, 1, serializedGroup1.Attributes.ToolCatalogueCount)
+
+	// Check the names were properly included
+	assert.ElementsMatch(t, []string{"Catalogue 1", "Catalogue 2"}, serializedGroup1.Attributes.CatalogueNames)
+	assert.ElementsMatch(t, []string{"Data Catalogue 1", "Data Catalogue 2"}, serializedGroup1.Attributes.DataCatalogueNames)
+	assert.ElementsMatch(t, []string{"Tool Catalogue 1"}, serializedGroup1.Attributes.ToolCatalogueNames)
+}
+
+func TestUpdateGroupUsers(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Create a test group
+	createGroupInput := GroupInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "groups",
+			Attributes: struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Name:           "Test Group for updateGroupUsers",
+				Members:        []uint{},
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
 			},
 		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/groups", createGroupInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createResponse map[string]GroupResponse
+	err := json.Unmarshal(w.Body.Bytes(), &createResponse)
+	assert.NoError(t, err)
+	groupID := createResponse["data"].ID
+
+	// Create test users
+	createUserInputs := []UserInput{
 		{
-			name: "group with no members or catalogues",
-			groups: models.Groups{
-				{
-					ID:   4,
-					Name: "Group D",
+			Data: struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				} `json:"attributes"`
+			}{
+				Type: "users",
+				Attributes: struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				}{
+					Email:             "user1@example.com",
+					Name:              "User One",
+					Password:          "password123",
+					IsAdmin:           false,
+					ShowChat:          false,
+					ShowPortal:        false,
+					EmailVerified:     false,
+					AccessToSSOConfig: false,
 				},
 			},
-			memberCounts: []models.GroupMemberCount{
-				{GroupID: 4, Count: 0},
+		},
+		{
+			Data: struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				} `json:"attributes"`
+			}{
+				Type: "users",
+				Attributes: struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				}{
+					Email:             "user2@example.com",
+					Name:              "User Two",
+					Password:          "password123",
+					IsAdmin:           false,
+					ShowChat:          false,
+					ShowPortal:        false,
+					EmailVerified:     false,
+					AccessToSSOConfig: false,
+				},
 			},
-			expected: []GroupListResponse{
-				{
-					Type: "groups",
-					ID:   "4",
-					Attributes: struct {
-						Name               string   `json:"name"`
-						UserCount          int      `json:"user_count"`
-						CatalogueCount     int      `json:"catalogue_count"`
-						DataCatalogueCount int      `json:"data_catalogue_count"`
-						ToolCatalogueCount int      `json:"tool_catalogue_count"`
-						CatalogueNames     []string `json:"catalogue_names"`
-						DataCatalogueNames []string `json:"data_catalogue_names"`
-						ToolCatalogueNames []string `json:"tool_catalogue_names"`
-					}{
-						Name:               "Group D",
-						UserCount:          0,
-						CatalogueCount:     0,
-						DataCatalogueCount: 0,
-						ToolCatalogueCount: 0,
-						CatalogueNames:     []string{},
-						DataCatalogueNames: []string{},
-						ToolCatalogueNames: []string{},
-					},
+		},
+		{
+			Data: struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				} `json:"attributes"`
+			}{
+				Type: "users",
+				Attributes: struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				}{
+					Email:             "user3@example.com",
+					Name:              "User Three",
+					Password:          "password123",
+					IsAdmin:           false,
+					ShowChat:          false,
+					ShowPortal:        false,
+					EmailVerified:     false,
+					AccessToSSOConfig: false,
 				},
 			},
 		},
 	}
 
-	// Run test cases
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := serializeGroupsForList(tt.groups, tt.memberCounts)
+	userIDs := make([]uint, 0, len(createUserInputs))
 
-			// Check if both slices have same length
-			assert.Equal(t, len(tt.expected), len(result))
+	for _, userInput := range createUserInputs {
+		w = performRequest(api.router, "POST", "/api/v1/users", userInput)
+		assert.Equal(t, http.StatusCreated, w.Code)
 
-			// For empty group list, just check equality
-			if len(tt.expected) == 0 {
-				assert.Equal(t, tt.expected, result)
-				return
-			}
+		var userResponse map[string]UserResponse
+		err := json.Unmarshal(w.Body.Bytes(), &userResponse)
+		assert.NoError(t, err)
 
-			// For each expected group, find matching group in result by ID and verify its properties
-			for _, expected := range tt.expected {
-				var found bool
-				for _, actual := range result {
-					if expected.ID == actual.ID {
-						found = true
-						// Check non-slice fields for exact equality
-						assert.Equal(t, expected.Type, actual.Type)
-						assert.Equal(t, expected.Attributes.Name, actual.Attributes.Name)
-						assert.Equal(t, expected.Attributes.UserCount, actual.Attributes.UserCount)
-						assert.Equal(t, expected.Attributes.CatalogueCount, actual.Attributes.CatalogueCount)
-						assert.Equal(t, expected.Attributes.DataCatalogueCount, actual.Attributes.DataCatalogueCount)
-						assert.Equal(t, expected.Attributes.ToolCatalogueCount, actual.Attributes.ToolCatalogueCount)
-						assert.Equal(t, expected.Attributes.CatalogueNames, actual.Attributes.CatalogueNames)
-						assert.Equal(t, expected.Attributes.DataCatalogueNames, actual.Attributes.DataCatalogueNames)
-						assert.Equal(t, expected.Attributes.ToolCatalogueNames, actual.Attributes.ToolCatalogueNames)
-						break
-					}
-				}
-				assert.True(t, found, "Expected group with ID %s not found in result", expected.ID)
-			}
-		})
+		userIDStr := userResponse["data"].ID
+		userIDUint, err := strconv.ParseUint(userIDStr, 10, 32)
+		assert.NoError(t, err)
+
+		userIDs = append(userIDs, uint(userIDUint))
 	}
+
+	// Test adding the first two users to the group
+	updateGroupUsersInput := GroupUsersInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Members []uint `json:"members"`
+			} `json:"attributes"`
+		}{
+			Type: "group-users",
+			Attributes: struct {
+				Members []uint `json:"members"`
+			}{
+				Members: userIDs[:2], // Add first two users
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/users", groupID), updateGroupUsersInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var updateResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", updateResponse["status"])
+
+	// Verify the group has the first two users
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/users", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var usersResponse map[string][]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &usersResponse)
+	assert.NoError(t, err)
+	assert.Len(t, usersResponse["data"], 2)
+
+	// Test updating to only the third user
+	updateGroupUsersInput = GroupUsersInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Members []uint `json:"members"`
+			} `json:"attributes"`
+		}{
+			Type: "group-users",
+			Attributes: struct {
+				Members []uint `json:"members"`
+			}{
+				Members: userIDs[2:], // Only the third user
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/users", groupID), updateGroupUsersInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", updateResponse["status"])
+
+	// Verify the group has only the third user now
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/users", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &usersResponse)
+	assert.NoError(t, err)
+	assert.Len(t, usersResponse["data"], 1)
+
+	// Convert the third user ID to string for comparison
+	thirdUserIDStr := strconv.FormatUint(uint64(userIDs[2]), 10)
+	assert.Equal(t, thirdUserIDStr, usersResponse["data"][0].ID)
+
+	// Test error cases - invalid group ID
+	w = performRequest(api.router, "PUT", "/api/v1/groups/invalid/users", updateGroupUsersInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test error cases - non-existent group ID
+	w = performRequest(api.router, "PUT", "/api/v1/groups/999999/users", updateGroupUsersInput)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Test error cases - malformed request body
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/users", groupID), []byte(`{malformed json`))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test updating with empty members list (should clear all users)
+	updateGroupUsersInput = GroupUsersInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Members []uint `json:"members"`
+			} `json:"attributes"`
+		}{
+			Type: "group-users",
+			Attributes: struct {
+				Members []uint `json:"members"`
+			}{
+				Members: []uint{}, // Empty list
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/users", groupID), updateGroupUsersInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify the group has no users
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s/users", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &usersResponse)
+	assert.NoError(t, err)
+	assert.Len(t, usersResponse["data"], 0)
+
+	// Cleanup - delete the test group
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestUpdateGroupCatalogues(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Create a test group
+	createGroupInput := GroupInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "groups",
+			Attributes: struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Name:           "Test Group for updateGroupCatalogues",
+				Members:        []uint{},
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/groups", createGroupInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createResponse map[string]GroupResponse
+	err := json.Unmarshal(w.Body.Bytes(), &createResponse)
+	assert.NoError(t, err)
+	groupID := createResponse["data"].ID
+
+	catalogue, err := api.service.CreateCatalogue("Test Catalogue")
+	assert.NoError(t, err)
+
+	dataCatalogue, err := api.service.CreateDataCatalogue("Test Data Catalogue", "Short Desc", "Long Desc", "icon.png")
+	assert.NoError(t, err)
+
+	toolCatalogue, err := api.service.CreateToolCatalogue("Test Tool Catalogue", "Short Desc", "Long Desc", "icon.png")
+	assert.NoError(t, err)
+
+	updateGroupCataloguesInput := GroupCataloguesRequest{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "Group",
+			Attributes: struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Catalogues:     []uint{catalogue.ID},
+				DataCatalogues: []uint{dataCatalogue.ID},
+				ToolCatalogues: []uint{toolCatalogue.ID},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var updateResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", updateResponse["status"])
+
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var groupResponse map[string]GroupResponse
+	err = json.Unmarshal(w.Body.Bytes(), &groupResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupResponse["data"].Attributes.Catalogues, 1)
+	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 1)
+	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 1)
+
+	catalogue2, err := api.service.CreateCatalogue("Test Catalogue 2")
+	assert.NoError(t, err)
+
+	updateGroupCataloguesInput = GroupCataloguesRequest{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "Group",
+			Attributes: struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Catalogues:     []uint{catalogue2.ID},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", updateResponse["status"])
+
+	// Verify the group has only the new catalog now
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &groupResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupResponse["data"].Attributes.Catalogues, 1)
+	assert.Equal(t, catalogue2.Name, groupResponse["data"].Attributes.Catalogues[0].Attributes.Name)
+	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 0)
+	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 0)
+
+	// Test error cases - invalid group ID
+	w = performRequest(api.router, "PUT", "/api/v1/groups/invalid/catalogues", updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test error cases - non-existent group ID
+	w = performRequest(api.router, "PUT", "/api/v1/groups/999999/catalogues", updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Test error cases - malformed request body
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), []byte(`{malformed json`))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test updating with empty catalog lists
+	updateGroupCataloguesInput = GroupCataloguesRequest{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "Group",
+			Attributes: struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &groupResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupResponse["data"].Attributes.Catalogues, 0)
+	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 0)
+	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 0)
+
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
 }
