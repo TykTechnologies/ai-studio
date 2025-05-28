@@ -303,3 +303,25 @@ func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber 
 
 	return group.ToolCatalogues, totalCount, totalPages, nil
 }
+
+func (s *Service) UpdateGroupCatalogues(id uint, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) error {
+	group, err := s.GetGroupByID(id, "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		return err
+	}
+
+	associations := group.GetAssociationsToUpdate([]uint{}, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
+
+	tx := s.DB.Begin()
+
+	for _, assoc := range associations {
+		if assoc.Name != "Users" && assoc.NeedsUpdate {
+			if err := group.ReplaceAssociation(tx, assoc.Name, assoc.GetValue()); err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	return tx.Commit().Error
+}
