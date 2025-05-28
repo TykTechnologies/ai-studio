@@ -64,5 +64,32 @@ export const teamsService = {
       console.error("Error deleting team:", error);
       throw error;
     }
+  },
+
+  updateGroupUsers: async (id, userIds) => {
+    try {
+      const response = await apiClient.put(`/groups/${id}/users`, {
+        data: {
+          type: "Group",
+          attributes: {
+            members: userIds
+          }
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error updating team users:", error);
+      throw error;
+    }
+  },
+
+  updateGroupCatalogs: async (id, catalogData) => {
+    try {
+      const response = await apiClient.put(`/groups/${id}/catalogues`, catalogData);
+      return response.data;
+    } catch (error) {
+      console.error("Error updating team catalogs:", error);
+      throw error;
+    }
   }
 };
