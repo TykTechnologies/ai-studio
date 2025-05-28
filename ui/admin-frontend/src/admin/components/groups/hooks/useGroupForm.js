@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { teamsService } from "../../../services/teamsService";
 import { CACHE_KEYS } from "../../../utils/constants";
 
-export const useGroupForm = (id, initialSelectedUsers = [], initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
+export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedUsers, setSelectedUsers] = useState(initialSelectedUsers);
+  const [selectedUsers, setSelectedUsers] = useState([]);
   
   const [selectedCatalogs, setSelectedCatalogs] = useState(initialCatalogs);
   const [selectedDataCatalogs, setSelectedDataCatalogs] = useState(initialDataCatalogs);
