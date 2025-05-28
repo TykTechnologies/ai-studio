@@ -400,21 +400,6 @@ func (a *API) updateGroupUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
-type GroupListResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
-		Name               string   `json:"name"`
-		UserCount          int      `json:"user_count"`
-		CatalogueCount     int      `json:"catalogue_count"`
-		DataCatalogueCount int      `json:"data_catalogue_count"`
-		ToolCatalogueCount int      `json:"tool_catalogue_count"`
-		CatalogueNames     []string `json:"catalogue_names"`
-		DataCatalogueNames []string `json:"data_catalogue_names"`
-		ToolCatalogueNames []string `json:"tool_catalogue_names"`
-	} `json:"attributes"`
-}
-
 func serializeGroupForList(group *models.Group, memberCounts []models.GroupMemberCount) GroupListResponse {
 	response := GroupListResponse{
 		Type: "groups",
@@ -1022,6 +1007,45 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues, a.config.DB)})
+}
+
+// @Summary Update group catalogues
+// @Description Update the catalogues in a specific group
+// @Tags groups
+// @Accept json
+// @Produce json
+// @Param id path int true "Group ID"
+// @Param catalogues body GroupCataloguesRequest true "Catalogues to update"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /groups/{id}/catalogues [put]
+// @Security BearerAuth
+func (a *API) updateGroupCatalogues(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid group ID"))
+		return
+	}
+
+	var req GroupCataloguesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Malformed request body"))
+		return
+	}
+
+	err = a.service.UpdateGroupCatalogues(
+		uint(id),
+		req.Data.Attributes.Catalogues,
+		req.Data.Attributes.DataCatalogues,
+		req.Data.Attributes.ToolCatalogues,
+	)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group catalogues: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 // Helper function to serialize ToolCatalogues

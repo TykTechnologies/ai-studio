@@ -823,3 +823,186 @@ func TestUpdateGroupUsers(t *testing.T) {
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
+
+func TestUpdateGroupCatalogues(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	// Create a test group
+	createGroupInput := GroupInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "groups",
+			Attributes: struct {
+				Name           string `json:"name"`
+				Members        []uint `json:"members"`
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Name:           "Test Group for updateGroupCatalogues",
+				Members:        []uint{},
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/groups", createGroupInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createResponse map[string]GroupResponse
+	err := json.Unmarshal(w.Body.Bytes(), &createResponse)
+	assert.NoError(t, err)
+	groupID := createResponse["data"].ID
+
+	catalogue, err := api.service.CreateCatalogue("Test Catalogue")
+	assert.NoError(t, err)
+
+	dataCatalogue, err := api.service.CreateDataCatalogue("Test Data Catalogue", "Short Desc", "Long Desc", "icon.png")
+	assert.NoError(t, err)
+
+	toolCatalogue, err := api.service.CreateToolCatalogue("Test Tool Catalogue", "Short Desc", "Long Desc", "icon.png")
+	assert.NoError(t, err)
+
+	updateGroupCataloguesInput := GroupCataloguesRequest{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "Group",
+			Attributes: struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Catalogues:     []uint{catalogue.ID},
+				DataCatalogues: []uint{dataCatalogue.ID},
+				ToolCatalogues: []uint{toolCatalogue.ID},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var updateResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", updateResponse["status"])
+
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var groupResponse map[string]GroupResponse
+	err = json.Unmarshal(w.Body.Bytes(), &groupResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupResponse["data"].Attributes.Catalogues, 1)
+	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 1)
+	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 1)
+
+	catalogue2, err := api.service.CreateCatalogue("Test Catalogue 2")
+	assert.NoError(t, err)
+
+	updateGroupCataloguesInput = GroupCataloguesRequest{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "Group",
+			Attributes: struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Catalogues:     []uint{catalogue2.ID},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "success", updateResponse["status"])
+
+	// Verify the group has only the new catalog now
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &groupResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupResponse["data"].Attributes.Catalogues, 1)
+	assert.Equal(t, catalogue2.Name, groupResponse["data"].Attributes.Catalogues[0].Attributes.Name)
+	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 0)
+	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 0)
+
+	// Test error cases - invalid group ID
+	w = performRequest(api.router, "PUT", "/api/v1/groups/invalid/catalogues", updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test error cases - non-existent group ID
+	w = performRequest(api.router, "PUT", "/api/v1/groups/999999/catalogues", updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Test error cases - malformed request body
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), []byte(`{malformed json`))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Test updating with empty catalog lists
+	updateGroupCataloguesInput = GroupCataloguesRequest{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			} `json:"attributes"`
+		}{
+			Type: "Group",
+			Attributes: struct {
+				Catalogues     []uint `json:"catalogues"`
+				DataCatalogues []uint `json:"data_catalogues"`
+				ToolCatalogues []uint `json:"tool_catalogues"`
+			}{
+				Catalogues:     []uint{},
+				DataCatalogues: []uint{},
+				ToolCatalogues: []uint{},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PUT", fmt.Sprintf("/api/v1/groups/%s/catalogues", groupID), updateGroupCataloguesInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &groupResponse)
+	assert.NoError(t, err)
+	assert.Len(t, groupResponse["data"].Attributes.Catalogues, 0)
+	assert.Len(t, groupResponse["data"].Attributes.DataCatalogues, 0)
+	assert.Len(t, groupResponse["data"].Attributes.ToolCatalogues, 0)
+
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s", groupID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}

@@ -7,17 +7,22 @@ export const StyledActionDialog = styled(Dialog)(({ theme }) => ({
     borderColor: theme.palette.border.neutralDefault,
     borderRadius: 16,
     maxWidth: '95%',
+    width: '95%',
     [theme.breakpoints.up('sm')]: {
-      maxWidth: '85%',
+        maxWidth: '85%',
+        width: '85%',
     },
     [theme.breakpoints.up('md')]: {
-      maxWidth: '80%',
+        maxWidth: '80%',
+        width: '80%',
     },
     [theme.breakpoints.up('lg')]: {
-      maxWidth: '60%',
+        maxWidth: '60%',
+        width: '60%',
     },
     [theme.breakpoints.up('xl')]: {
-      maxWidth: '50%',
+        maxWidth: '50%',
+        width: '50%',
     },
   }
 }));
