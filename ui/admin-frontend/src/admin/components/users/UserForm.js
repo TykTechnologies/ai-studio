@@ -3,36 +3,22 @@ import { Switch, FormControlLabel } from "@mui/material";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Alert,
   Typography,
   Grid,
   Snackbar,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  IconButton,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
   PrimaryButton,
-  StyledTableRow,
-  StyledTableHeaderCell,
-  StyledTableCell,
-  SecondaryLinkButton
+  SecondaryLinkButton,
+  TitleContentBox,
+  DangerOutlineButton,
 } from "../../styles/sharedStyles";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
 const UserForm = () => {
   const [name, setName] = useState("");
@@ -52,7 +38,6 @@ const UserForm = () => {
   });
   const navigate = useNavigate();
   const { id } = useParams();
-  const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -193,121 +178,33 @@ const UserForm = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const handleAddNewGroup = async () => {
-    if (!newGroupName.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Group name cannot be empty",
-        severity: "warning",
-      });
-      return;
-    }
-
-    try {
-      const response = await apiClient.post("/groups", {
-        data: {
-          type: "Group",
-          attributes: {
-            name: newGroupName,
-          },
-        },
-      });
-      const newGroup = response.data.data;
-      setGroups([...groups, newGroup]);
-      setSelectedGroup(newGroup.id);
-      setNewGroupName("");
-      setIsAddingGroup(false);
-      setSnackbar({
-        open: true,
-        message: "New group added successfully",
-        severity: "success",
-      });
-    } catch (error) {
-      console.error("Error adding new group", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to add new group",
-        severity: "error",
-      });
-    }
-  };
-
-  const handleAddToGroup = async () => {
-    if (!selectedGroup) {
-      setSnackbar({
-        open: true,
-        message: "Please select a group",
-        severity: "warning",
-      });
-      return;
-    }
-
-    try {
-      await apiClient.post(`/groups/${selectedGroup}/users`, {
-        data: {
-          id: id,
-          type: "users",
-        },
-      });
-      setSnackbar({
-        open: true,
-        message: "User added to group successfully",
-        severity: "success",
-      });
-      fetchUserGroups();
-      setSelectedGroup("");
-    } catch (error) {
-      console.error("Error adding user to group", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to add user to group",
-        severity: "error",
-      });
-    }
-  };
-
-  const handleRemoveFromGroup = async (groupId) => {
-    if (userGroups.length <= 1) {
-      setSnackbar({
-        open: true,
-        message: "User must be in at least one group",
-        severity: "warning",
-      });
-      return;
-    }
-
-    try {
-      await apiClient.delete(`/groups/${groupId}/users/${id}`);
-      setSnackbar({
-        open: true,
-        message: "User removed from group successfully",
-        severity: "success",
-      });
-      fetchUserGroups();
-    } catch (error) {
-      console.error("Error removing user from group", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to remove user from group",
-        severity: "error",
-      });
-    }
-  };
-
   return (
     <>
-      <TitleBox top="64px">
-        <Typography variant="headingXLarge">{id ? "Edit user" : "Add user"}</Typography>
-        <SecondaryLinkButton
-          startIcon={<ArrowBackIcon />}
-          component={Link}
-          color="inherit"
-          to="/admin/users"
-        >
-          Back to users
-        </SecondaryLinkButton>
+      <TitleBox>
+        <TitleContentBox>
+          <SecondaryLinkButton
+            component={Link}
+            to="/admin/users"
+            color="inherit"
+            sx={{ mb: 1, px: 0 }}
+            startIcon={<ChevronLeftIcon sx={{ mr: -1 }} />}
+          >
+            back to users
+          </SecondaryLinkButton>
+          <Typography variant="headingXLarge">
+            {id ? "Edit user" : "Create user"}
+          </Typography>
+        </TitleContentBox>
       </TitleBox>
-      <ContentBox>
+      <ContentBox sx={{
+        maxWidth: {
+          xs: '100%',
+          sm: '100%',
+          md: '100%',
+          lg: '75%'
+        }
+      }}
+      >
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             <Grid item xs={12}>
@@ -429,82 +326,20 @@ const UserForm = () => {
                 </Grid>
               </Grid>
             </Grid>
-            <Grid item xs={12}>
-              <PrimaryButton
-                variant="contained"
-                type="submit"
-                disabled={!isFormValid()}
-              >
-                {id ? "Update user" : "Add user"}
+            <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3, gap: 2 }}>
+              <PrimaryButton type="submit" disabled={!isFormValid()}>
+                {id ? "Update user" : "Save user"}
               </PrimaryButton>
-            </Grid>
+              {id && (
+                <DangerOutlineButton
+                  //onClick={handleDeleteClick}
+                >
+                  Delete user
+                </DangerOutlineButton>
+              )}
+            </Box>
           </Grid>
         </Box>
-        {id && (
-          <Box mt={4}>
-            <Typography variant="h6" gutterBottom>
-              User Groups
-            </Typography>
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell>Group Name</StyledTableHeaderCell>
-                    {userGroups.length > 1 && (
-                      <StyledTableHeaderCell align="right">Action</StyledTableHeaderCell>
-                    )}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {userGroups.map((group) => (
-                    <StyledTableRow key={group.id}>
-                      <StyledTableCell>{group.attributes.name}</StyledTableCell>
-                      {userGroups.length > 1 && (
-                        <StyledTableCell align="right">
-                          <IconButton
-                            edge="end"
-                            aria-label="delete"
-                            onClick={() => handleRemoveFromGroup(group.id)}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </StyledTableCell>
-                      )}
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-                </Table>
-            </StyledPaper>
-            <Box display="flex" alignItems="center" mt={3}>
-              <FormControl fullWidth>
-                <InputLabel>Add to Group</InputLabel>
-                <Select
-                  value={selectedGroup}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
-                >
-                  {groups
-                    .filter(
-                      (group) =>
-                        !userGroups.some((ug) => ug.id === group.id),
-                    )
-                    .map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {group.attributes.name}
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
-              <Button
-                onClick={handleAddToGroup}
-                startIcon={<AddIcon />}
-                variant="contained"
-                sx={{ ml: 2 }}
-              >
-                Add
-              </Button>
-            </Box>
-          </Box>
-        )}
       </ContentBox>
       <Snackbar
         open={snackbar.open}

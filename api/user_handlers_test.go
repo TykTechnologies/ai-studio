@@ -27,6 +27,7 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -40,11 +41,18 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
-				Email:    "test@example.com",
-				Name:     "Test User",
-				Password: "password123",
-				IsAdmin:  true,
+				Email:                "test@example.com",
+				Name:                 "Test User",
+				Password:             "password123",
+				IsAdmin:              true,
+				ShowChat:             true,
+				ShowPortal:           true,
+				EmailVerified:        true,
+				NotificationsEnabled: true,
+				AccessToSSOConfig:    true,
+				Groups:               []uint{},
 			},
 		},
 	}
@@ -77,6 +85,7 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -90,12 +99,14 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
 				Email:                "updated@example.com",
 				Name:                 "Updated User",
 				IsAdmin:              true,
 				NotificationsEnabled: true,
 				AccessToSSOConfig:    true,
+				Groups:               []uint{},
 			},
 		},
 	}
@@ -153,6 +164,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -166,11 +178,13 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
 				Email:    "test@example.com",
 				Name:     "Test User",
 				Password: "password123",
 				IsAdmin:  true,
+				Groups:   []uint{},
 			},
 		},
 	}
@@ -218,6 +232,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -231,10 +246,12 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
 				Email:   "test@example.com",
 				Name:    "Updated User",
 				IsAdmin: true,
+				Groups:  []uint{},
 			},
 		},
 	}
@@ -316,6 +333,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				} `json:"attributes"`
 			}{
 				Type: "users",
@@ -329,11 +347,13 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				}{
 					Email:    userData.email,
 					Name:     userData.name,
 					Password: userData.password,
 					IsAdmin:  userData.isAdmin,
+					Groups:   []uint{},
 				},
 			},
 		}

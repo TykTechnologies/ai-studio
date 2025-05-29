@@ -53,17 +53,18 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.CreateUser(
-		input.Data.Attributes.Email,
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Password,
-		input.Data.Attributes.IsAdmin,
-		input.Data.Attributes.ShowChat,
-		input.Data.Attributes.ShowPortal,
-		input.Data.Attributes.EmailVerified,
-		input.Data.Attributes.NotificationsEnabled,
-		input.Data.Attributes.AccessToSSOConfig,
-	)
+	user, err := a.service.CreateUser(services.UserDTO{
+		Email:                input.Data.Attributes.Email,
+		Name:                 input.Data.Attributes.Name,
+		Password:             input.Data.Attributes.Password,
+		IsAdmin:              input.Data.Attributes.IsAdmin,
+		ShowChat:             input.Data.Attributes.ShowChat,
+		ShowPortal:           input.Data.Attributes.ShowPortal,
+		EmailVerified:        input.Data.Attributes.EmailVerified,
+		NotificationsEnabled: input.Data.Attributes.NotificationsEnabled,
+		AccessToSSOConfig:    input.Data.Attributes.AccessToSSOConfig,
+		Groups:               input.Data.Attributes.Groups,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -100,7 +101,7 @@ func (a *API) getUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.GetUserByID(uint(id))
+	user, err := a.service.GetUserByID(uint(id), "Groups")
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -172,14 +173,17 @@ func (a *API) updateUser(c *gin.Context) {
 
 	user, err := a.service.UpdateUser(
 		uint(id),
-		input.Data.Attributes.Email,
-		input.Data.Attributes.Name,
-		input.Data.Attributes.IsAdmin,
-		input.Data.Attributes.ShowChat,
-		input.Data.Attributes.ShowPortal,
-		input.Data.Attributes.EmailVerified,
-		input.Data.Attributes.NotificationsEnabled,
-		input.Data.Attributes.AccessToSSOConfig,
+		services.UserDTO{
+			Email:                input.Data.Attributes.Email,
+			Name:                 input.Data.Attributes.Name,
+			IsAdmin:              input.Data.Attributes.IsAdmin,
+			ShowChat:             input.Data.Attributes.ShowChat,
+			ShowPortal:           input.Data.Attributes.ShowPortal,
+			EmailVerified:        input.Data.Attributes.EmailVerified,
+			NotificationsEnabled: input.Data.Attributes.NotificationsEnabled,
+			AccessToSSOConfig:    input.Data.Attributes.AccessToSSOConfig,
+			Groups:               input.Data.Attributes.Groups,
+		},
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -282,20 +286,21 @@ func (a *API) listUsers(c *gin.Context) {
 }
 
 func serializeUser(user *models.User) UserResponse {
-	return UserResponse{
+	response := UserResponse{
 		Type: "users",
 		ID:   strconv.FormatUint(uint64(user.ID), 10),
 		Attributes: struct {
-			Email                string `json:"email"`
-			Name                 string `json:"name"`
-			IsAdmin              bool   `json:"is_admin"`
-			ShowChat             bool   `json:"show_chat"`
-			ShowPortal           bool   `json:"show_portal"`
-			EmailVerified        bool   `json:"email_verified"`
-			APIKey               string `json:"api_key"`
-			NotificationsEnabled bool   `json:"notifications_enabled"`
-			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
-			Role                 string `json:"role"`
+			Email                string          `json:"email"`
+			Name                 string          `json:"name"`
+			IsAdmin              bool            `json:"is_admin"`
+			ShowChat             bool            `json:"show_chat"`
+			ShowPortal           bool            `json:"show_portal"`
+			EmailVerified        bool            `json:"email_verified"`
+			APIKey               string          `json:"api_key"`
+			NotificationsEnabled bool            `json:"notifications_enabled"`
+			AccessToSSOConfig    bool            `json:"access_to_sso_config"`
+			Role                 string          `json:"role"`
+			Groups               []GroupResponse `json:"groups,omitempty"`
 		}{
 			Email:                user.Email,
 			Name:                 user.Name,
@@ -309,6 +314,12 @@ func serializeUser(user *models.User) UserResponse {
 			Role:                 user.GetRole(),
 		},
 	}
+
+	if len(user.Groups) > 0 {
+		response.Attributes.Groups = serializeGroups(user.Groups)
+	}
+
+	return response
 }
 
 func serializeUsers(users models.Users) []UserResponse {
@@ -390,7 +401,6 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 		return
 	}
 
-	// Generate new API key
 	err = a.service.GenerateAPIKeyForUser(uint(id))
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -406,7 +416,6 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 		return
 	}
 
-	// Fetch updated user
 	user, err := a.service.GetUserByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

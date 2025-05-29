@@ -93,7 +93,7 @@ func TestCreateApp(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	ds2, _ := service.CreateDatasource("DS2", "Short2", "Long2", "icon2.png", "https://ds2.com", 70, user.ID, []string{}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
@@ -120,7 +120,7 @@ func TestGetApp(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
@@ -151,7 +151,7 @@ func TestUpdateApp(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 	llm2, _ := service.CreateLLM("LLM2", "key2", "https://api2.com", 90, "Short2", "Long2", "https://logo2.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
@@ -179,7 +179,7 @@ func TestAppCredentialActivation(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
@@ -204,7 +204,7 @@ func TestAppDatasourceOperations(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
@@ -235,7 +235,7 @@ func TestAppLLMOperations(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
@@ -280,7 +280,7 @@ func TestDeleteApp(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
 	llm1, _ := service.CreateLLM("LLM1", "key1", "https://api1.com", 80, "Short1", "Long1", "https://logo1.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 
@@ -302,7 +302,7 @@ func TestAppServiceErrorCases(t *testing.T) {
 	}
 
 	// Create a test user and app
-	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
 	app, err := service.CreateApp("Test App", "Description", user.ID, nil, nil, nil, nil)
@@ -358,8 +358,8 @@ func TestAppService_MultipleApps(t *testing.T) {
 	}
 
 	// Create test users
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true, true)
+	user1, _ := service.CreateUser(UserDTO{Email: "user1@example.com", Name: "User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+	user2, _ := service.CreateUser(UserDTO{Email: "user2@example.com", Name: "User 2", Password: "password456", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create datasources and LLMs
 	ds1, _ := service.CreateDatasource("DS1", "Short1", "Long1", "icon1.png", "https://ds1.com", 60, user1.ID, []string{}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
@@ -420,8 +420,8 @@ func TestListApps(t *testing.T) {
 	}
 
 	// Create test users
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true, true)
+	user1, _ := service.CreateUser(UserDTO{Email: "user1@example.com", Name: "User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+	user2, _ := service.CreateUser(UserDTO{Email: "user2@example.com", Name: "User 2", Password: "password456", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create multiple apps
 	app1, _ := service.CreateApp("App 1", "Description 1", user1.ID, nil, nil, nil, nil)
@@ -443,7 +443,7 @@ func TestListAppsWithPagination(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "user@example.com", Name: "User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
@@ -485,8 +485,8 @@ func TestListAppsByUserID(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true, true)
+	user1, _ := service.CreateUser(UserDTO{Email: "user1@example.com", Name: "User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+	user2, _ := service.CreateUser(UserDTO{Email: "user2@example.com", Name: "User 2", Password: "password456", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {
@@ -531,7 +531,7 @@ func TestSearchApps(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "user@example.com", Name: "User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create apps with different names and descriptions
 	_, _ = service.CreateApp("Test App", "This is a test app", user.ID, nil, nil, nil, nil)
@@ -596,7 +596,7 @@ func TestCountApps(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user, _ := service.CreateUser("user@example.com", "User", "password123", true, true, true, true, true, true)
+	user, _ := service.CreateUser(UserDTO{Email: "user@example.com", Name: "User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create 5 apps
 	for i := 1; i <= 5; i++ {
@@ -617,8 +617,8 @@ func TestCountAppsByUserID(t *testing.T) {
 		NotificationService: notificationService,
 	}
 
-	user1, _ := service.CreateUser("user1@example.com", "User 1", "password123", true, true, true, true, true, true)
-	user2, _ := service.CreateUser("user2@example.com", "User 2", "password456", true, true, true, true, true, true)
+	user1, _ := service.CreateUser(UserDTO{Email: "user1@example.com", Name: "User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+	user2, _ := service.CreateUser(UserDTO{Email: "user2@example.com", Name: "User 2", Password: "password456", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create 3 apps for user1 and 2 apps for user2
 	for i := 1; i <= 3; i++ {

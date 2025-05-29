@@ -54,7 +54,13 @@ func (u *User) GenerateAPIKey() error {
 	return nil
 }
 
-func (u *User) Get(db *gorm.DB, id uint) error {
+func (u *User) Get(db *gorm.DB, id uint, preloads ...string) error {
+	query := db.Model(u)
+
+	for _, preload := range preloads {
+		query = query.Preload(preload)
+	}
+
 	return db.First(u, id).Error
 }
 
@@ -198,6 +204,40 @@ func (u *User) UpdateGroupMemberships(db *gorm.DB, groupIDs ...string) error {
 	}
 
 	return nil
+}
+
+func (u *User) ParseGroupAssociations(groupIDs []uint) {
+	u.Groups = make([]Group, 0, len(groupIDs))
+
+	for _, groupID := range groupIDs {
+		u.Groups = append(u.Groups, Group{ID: groupID})
+	}
+}
+
+func (u *User) ExtractGroupIDs() []uint {
+	groupIDs := make([]uint, len(u.Groups))
+
+	for i, group := range u.Groups {
+		groupIDs[i] = group.ID
+	}
+
+	return groupIDs
+}
+
+func (u *User) GetGroupsToUpdate(groupIDs []uint) []Group {
+	currentGroupIDs := u.ExtractGroupIDs()
+
+	if SameIDs(currentGroupIDs, groupIDs) {
+		return nil
+	}
+
+	u.ParseGroupAssociations(groupIDs)
+
+	return u.Groups
+}
+
+func (u *User) ReplaceGroupAssociation(db *gorm.DB, groups []Group) error {
+	return db.Model(u).Association("Groups").Replace(groups)
 }
 
 func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
