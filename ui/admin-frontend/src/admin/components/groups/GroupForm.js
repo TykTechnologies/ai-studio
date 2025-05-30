@@ -26,7 +26,6 @@ const GroupForm = () => {
     name,
     setName,
     loading: formLoading,
-    error,
     setSelectedUsers,
     selectedCatalogs,
     setSelectedCatalogs,
@@ -83,7 +82,6 @@ const GroupForm = () => {
           <GroupFormBasicInfo
             name={name}
             setName={setName}
-            error={error}
           />
 
           <GroupMembersSection
