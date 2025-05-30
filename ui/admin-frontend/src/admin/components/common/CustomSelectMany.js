@@ -3,11 +3,12 @@ import {
   MenuItem,
   Typography,
   Box,
-  Chip,
   InputLabel,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import ClearIcon from '@mui/icons-material/Clear';
-import { StyledFormControl, StyledSelectMany } from '../../styles/sharedStyles';
+import { StyledFormControl, StyledSelectMany, StyledChip } from '../../styles/sharedStyles';
+import { getColorsForVariant } from '../groups/components/styles';
 
 const CustomSelectMany = ({
   label,
@@ -18,8 +19,10 @@ const CustomSelectMany = ({
   error = false,
   helperText = '',
   renderOption,
+  chipVariant = 'default',
   ...props
 }) => {
+  const theme = useTheme();
   const safeValue = value || [];
   const selectValues = safeValue.map(val =>
     val ? val.value : val
@@ -40,6 +43,8 @@ const CustomSelectMany = ({
     onChange(newSelectedObjects);
   };
 
+  const { bgColor, textColor } = getColorsForVariant(theme, chipVariant);
+
   return (
     <Box sx={{ width: '100%' }}>
       <StyledFormControl fullWidth required={required} error={error ? "true" : undefined}>
@@ -58,25 +63,11 @@ const CustomSelectMany = ({
                   const displayLabel = option ? option.label : (valueObj ? valueObj.label : String(val));
                   
                   return (
-                    <Chip
+                    <StyledChip
                       key={val}
                       label={displayLabel}
-                      sx={{
-                        bgcolor: theme => theme.palette.background.buttonPrimaryOutlineHover,
-                        borderRadius: '6px',
-                        maxHeight: 'fit-content',
-                        '& .MuiChip-label': {
-                          color: theme => theme.palette.text.defaultSubdued,
-                          padding: '2px 6px',
-                          marginRight: '6px',
-                        },
-                        '& .MuiChip-deleteIcon': {
-                          color: theme => theme.palette.text.defaultSubdued,
-                          '&:hover': {
-                            color: theme => theme.palette.text.defaultSubdued,
-                          }
-                        },
-                      }}
+                      bgColor={bgColor}
+                      textColor={textColor}
                       deleteIcon={<ClearIcon />}
                       onMouseDown={(e) => e.stopPropagation()}
                       onDelete={(e) => {
