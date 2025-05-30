@@ -14,6 +14,7 @@ import {
   TextField,
   Select,
   FormControl,
+  Chip,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import { NavLink } from "react-router-dom";
@@ -463,3 +464,25 @@ export const SectionHeader = styled(Box)(({ theme, isExpanded, isCollapsible = t
 export const SectionContent = styled(Box)(({ theme }) => ({
   padding: theme.spacing(3),
 }));
+
+export const StyledChip = styled(Chip)(({ theme, bgColor, textColor }) => {
+  const backgroundColor = bgColor || theme.palette.background.buttonPrimaryOutlineHover;
+  const color = textColor || theme.palette.text.defaultSubdued;
+
+  return {
+    backgroundColor,
+    borderRadius: '6px',
+    maxHeight: 'fit-content',
+    '& .MuiChip-label': {
+      color,
+      padding: '2px 6px',
+      marginRight: '6px',
+    },
+    '& .MuiChip-deleteIcon': {
+      color,
+      '&:hover': {
+        color,
+      }
+    },
+  };
+});
