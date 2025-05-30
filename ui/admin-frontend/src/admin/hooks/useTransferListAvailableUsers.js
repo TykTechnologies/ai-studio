@@ -26,8 +26,6 @@ export function useTransferListAvailableUsers({ groupId, excludeIds = [], pageSi
 
 
   const internalFetch = useCallback(async (targetPage = 1, term = '') => {
-    if (!groupId) return;
-
     const firstPage = targetPage === 1;
 
     const params = {
@@ -73,8 +71,9 @@ export function useTransferListAvailableUsers({ groupId, excludeIds = [], pageSi
   useEffect(() => {
     if (groupId) {
         resetAll();
-        internalFetch(1, '');
     }
+
+    internalFetch(1, '');
   }, [groupId, internalFetch, resetAll]);
 
   const debouncedSearch = useDebouncedCallback((value) => {
