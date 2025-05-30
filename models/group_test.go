@@ -746,6 +746,28 @@ func TestGroups_GetGroupsMemberCounts(t *testing.T) {
 	assert.Equal(t, int64(3), countMap[groups[0].ID])
 	assert.Equal(t, int64(1), countMap[groups[1].ID])
 	assert.NotContains(t, countMap, groups[2].ID) // Group 3 has no members
+
+	err = db.Delete(&users[1]).Error
+	assert.NoError(t, err)
+	err = db.Delete(&users[2]).Error
+	assert.NoError(t, err)
+
+	var associationCount int64
+	err = db.Table("user_groups").Where("group_id = ? AND user_id IN ?", groups[0].ID, []uint{users[1].ID, users[2].ID}).Count(&associationCount).Error
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), associationCount)
+
+	memberCounts, err = fetchedGroups.GetGroupsMemberCounts(db)
+	assert.NoError(t, err)
+
+	countMap = make(map[uint]int64)
+	for _, mc := range memberCounts {
+		countMap[mc.GroupID] = mc.Count
+	}
+
+	assert.Equal(t, int64(1), countMap[groups[0].ID])
+	assert.Equal(t, int64(1), countMap[groups[1].ID])
+	assert.NotContains(t, countMap, groups[2].ID)
 }
 
 func TestGroup_GetMembersCount(t *testing.T) {
