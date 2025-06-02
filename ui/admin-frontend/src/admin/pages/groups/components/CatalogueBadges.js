@@ -11,7 +11,7 @@ const CatalogueBadges = ({ catalogues, dataCatalogues, toolCatalogues }) => {
   ];
 
   const totalCount = allCatalogues.length;
-  const MAX_BADGES = 3;
+  const MAX_BADGES = 2;
   const visibleCatalogues = allCatalogues.slice(0, MAX_BADGES);
   const hasMore = totalCount > MAX_BADGES;
 

@@ -41,6 +41,7 @@ const TestComponent = ({
     <div>
       <div data-testid="name">{hookResult.name}</div>
       <div data-testid="loading">{hookResult.loading.toString()}</div>
+      <div data-testid="error">{hookResult.error || 'no-error'}</div>
       
       <div data-testid="selected-users">{JSON.stringify(hookResult.selectedUsers)}</div>
       <div data-testid="selected-catalogs">{JSON.stringify(hookResult.selectedCatalogs)}</div>
@@ -176,6 +177,7 @@ describe('useGroupForm Hook', () => {
     
     expect(screen.getByTestId('name').textContent).toBe('');
     expect(screen.getByTestId('loading').textContent).toBe('false');
+    expect(screen.getByTestId('error').textContent).toBe('no-error');
     expect(screen.getByTestId('selected-users').textContent).toBe('[]');
     expect(screen.getByTestId('selected-catalogs').textContent).toBe('[]');
     expect(screen.getByTestId('selected-data-catalogs').textContent).toBe('[]');
@@ -239,7 +241,7 @@ describe('useGroupForm Hook', () => {
 
   test('handles API fetch errors', async () => {
     // Mock API error
-    const errorMessage = 'Failed to fetch team details';
+    const errorMessage = 'Failed to fetch group';
     teamsService.getTeam.mockRejectedValue(new Error(errorMessage));
     
     // Spy on console.error
@@ -255,9 +257,12 @@ describe('useGroupForm Hook', () => {
       expect(screen.getByTestId('loading').textContent).toBe('false');
     });
     
+    // Check error is set
+    expect(screen.getByTestId('error').textContent).toBe('Failed to fetch group');
+    
     // Check snackbar shows error
     expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
+    expect(screen.getByTestId('snackbar-message').textContent).toBe('Failed to fetch team details');
     expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
     
     expect(consoleSpy).toHaveBeenCalled();
@@ -384,7 +389,7 @@ describe('useGroupForm Hook', () => {
 
   test('handles form submission errors', async () => {
     // Mock API error
-    const errorMessage = 'Failed to save team. Please try again.';
+    const errorMessage = 'Failed to save group';
     teamsService.createTeam.mockRejectedValue(new Error(errorMessage));
     
     // Spy on console.error
@@ -404,9 +409,12 @@ describe('useGroupForm Hook', () => {
       expect(screen.getByTestId('loading').textContent).toBe('false'); // Loading finishes after error
     });
     
+    // Check error is set
+    expect(screen.getByTestId('error').textContent).toBe('Failed to save group');
+    
     // Check snackbar shows error
     expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
+    expect(screen.getByTestId('snackbar-message').textContent).toBe('Failed to save team. Please try again.');
     expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
     
     consoleSpy.mockRestore();
@@ -414,7 +422,7 @@ describe('useGroupForm Hook', () => {
 
   test('handles snackbar close', async () => {
     // Mock API error to trigger snackbar
-    const errorMessage = 'Failed to save team. Please try again.';
+    const errorMessage = 'Failed to save group';
     teamsService.createTeam.mockRejectedValue(new Error(errorMessage));
 
     render(<TestComponent />);
@@ -435,7 +443,7 @@ describe('useGroupForm Hook', () => {
     await waitFor(() => {
       expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
     });
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
+    expect(screen.getByTestId('snackbar-message').textContent).toBe('Failed to save team. Please try again.');
     
     // Close snackbar
     fireEvent.click(screen.getByTestId('close-snackbar'));
@@ -507,7 +515,7 @@ describe('useGroupForm Hook', () => {
 
   test('handles confirm delete error', async () => {
     // Mock API error
-    const errorMessage = 'Failed to delete team. Please try again.';
+    const errorMessage = 'Failed to delete team';
     teamsService.deleteTeam.mockRejectedValue(new Error(errorMessage));
     
     // Spy on console.error
@@ -534,7 +542,7 @@ describe('useGroupForm Hook', () => {
     
     // Check snackbar shows error
     expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
+    expect(screen.getByTestId('snackbar-message').textContent).toBe('Failed to delete team. Please try again.');
     expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
     
     expect(consoleSpy).toHaveBeenCalled();

@@ -1,18 +1,15 @@
 const catalogueBadgeConfigs = {
   llm: {
     textColor: "text.primary",
-    bgColor: "background.buttonPrimaryOutlineHover",
-    chipTextColor: "text.defaultSubdued",
+    bgColor: "background.buttonPrimaryOutlineHover"
   },
   data: {
     textColor: "text.primary",
-    bgColor: "background.surfaceBrandDefaultDashboard",
-    chipTextColor: "text.defaultSubdued",
+    bgColor: "background.surfaceBrandDefaultDashboard"
   },
   tool: {
     textColor: "text.primary",
-    bgColor: "background.surfaceBrandDefaultPortal",
-    chipTextColor: "text.defaultSubdued",
+    bgColor: "background.surfaceBrandDefaultPortal"
   }
 };
 
