@@ -867,3 +867,30 @@ func TestGroup_GetToolCataloguesCount(t *testing.T) {
 		assert.Equal(t, 0, count)
 	})
 }
+func TestIsGroupNameUnique(t *testing.T) {
+	db := setupTestDB(t)
+
+	group1 := &Group{Name: "Existing Group 1"}
+	err := group1.Create(db)
+	assert.NoError(t, err)
+
+	group2 := &Group{Name: "Existing Group 2"}
+	err = group2.Create(db)
+	assert.NoError(t, err)
+
+	isUnique, err := IsGroupNameUnique(db, "New Unique Group", 0)
+	assert.NoError(t, err)
+	assert.True(t, isUnique)
+
+	isUnique, err = IsGroupNameUnique(db, "Existing Group 1", 0)
+	assert.NoError(t, err)
+	assert.False(t, isUnique)
+
+	isUnique, err = IsGroupNameUnique(db, "Existing Group 1", group1.ID)
+	assert.NoError(t, err)
+	assert.True(t, isUnique)
+
+	isUnique, err = IsGroupNameUnique(db, "Existing Group 1", group2.ID)
+	assert.NoError(t, err)
+	assert.False(t, isUnique)
+}

@@ -33,7 +33,7 @@ const Groups = () => {
   
   const [manageTeamMembersOpen, setManageTeamMembersOpen] = useState(false);
   const [manageCatalogsOpen, setManageCatalogsOpen] = useState(false);
-  const { features } = useSystemFeatures();
+  const { features = {} } = useSystemFeatures();
   const { getDocsLink } = useOverviewData();
 
   const {

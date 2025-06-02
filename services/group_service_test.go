@@ -322,14 +322,13 @@ func TestUpdateGroupNameValidation(t *testing.T) {
 		assert.Contains(t, errorResp.Message, "group name already exists")
 	})
 
-	t.Run("UpdateGroup with empty name should keep existing name", func(t *testing.T) {
-		// When name is empty, it should not change the name
-		originalGroup, err := service.GetGroupByID(group2.ID)
-		assert.NoError(t, err)
-		originalName := originalGroup.Name
-
-		updatedGroup, err := service.UpdateGroup(group2.ID, "", []uint{}, []uint{}, []uint{}, []uint{})
-		assert.NoError(t, err)
-		assert.Equal(t, originalName, updatedGroup.Name)
+	t.Run("UpdateGroup with empty name should fail", func(t *testing.T) {
+		// When name is empty, it should return an error
+		_, err := service.UpdateGroup(group2.ID, "", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+		assert.IsType(t, helpers.ErrorResponse{}, err)
+		errorResp := err.(helpers.ErrorResponse)
+		assert.Equal(t, 400, errorResp.StatusCode)
+		assert.Contains(t, errorResp.Message, "group name is required")
 	})
 }
