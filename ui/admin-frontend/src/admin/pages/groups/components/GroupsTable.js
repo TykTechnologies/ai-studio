@@ -19,7 +19,7 @@ const GroupsTable = ({
   handleDelete,
   handleManageMembers,
   handleManageCatalogs,
-  features,
+  features = {},
 }) => {
   const { isGatewayOnly } = getFeatureFlags(features);
 
