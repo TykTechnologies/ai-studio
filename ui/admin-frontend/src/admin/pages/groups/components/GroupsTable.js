@@ -21,7 +21,7 @@ const GroupsTable = ({
   handleManageCatalogs,
   features = {},
 }) => {
-  const { isGatewayOnly } = getFeatureFlags(features);
+  const { isPortalOnly, isChatOnly, isGatewayOnly } = getFeatureFlags(features);
 
   const baseColumns = [
     { field: "id", headerName: "ID", sortable: true },
@@ -45,14 +45,25 @@ const GroupsTable = ({
   const cataloguesColumn = {
     field: "attributes.catalogues",
     headerName: "Catalogues",
-    renderCell: (item) => (
-      <CatalogueBadges
-        catalogues={item.attributes.catalogue_names || []}
-        dataCatalogues={item.attributes.data_catalogue_names || []}
-        toolCatalogues={item.attributes.tool_catalogue_names || []}
-        features={features}
-      />
-    ),
+    renderCell: (item) => {
+      const catalogues = (isPortalOnly || !isChatOnly) 
+        ? item.attributes.catalogue_names || []
+        : [];
+      
+      const dataCatalogues = item.attributes.data_catalogue_names || [];
+      
+      const toolCatalogues = (isChatOnly || !isPortalOnly)
+        ? item.attributes.tool_catalogue_names || []
+        : [];
+
+      return (
+        <CatalogueBadges
+          catalogues={catalogues}
+          dataCatalogues={dataCatalogues}
+          toolCatalogues={toolCatalogues}
+        />
+      );
+    },
     sx: { width: '35%' }
   };
 
