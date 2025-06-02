@@ -15,9 +15,11 @@ import {
   Select,
   FormControl,
   Chip,
+  Link,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import { NavLink } from "react-router-dom";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
@@ -486,3 +488,25 @@ export const StyledChip = styled(Chip)(({ theme, bgColor, textColor }) => {
     },
   };
 });
+
+export const LearnMoreLink = styled(({ ...props }) => (
+  <Link {...props}>
+    Learn more
+    <OpenInNewIcon />
+  </Link>
+))(({ theme }) => ({
+  display: "inline-flex",
+  alignItems: "center",
+  textDecoration: "none",
+  color: theme.palette.text.linkDefault,
+  fontFamily: 'Inter-Medium',
+  cursor: 'pointer',
+  marginLeft: theme.spacing(0.5),
+  whiteSpace: 'nowrap',
+  '& svg': {
+    marginLeft: theme.spacing(0.5),
+    color: 'inherit',
+    width: '14px',
+    height: '14px'
+  }
+}));

@@ -16,6 +16,7 @@ import { useGroupForm } from "./hooks/useGroupForm";
 import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
 import { getFeatureFlags } from "../../utils/featureUtils";
+import useOverviewData from "../../hooks/useOverviewData";
 
 import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
 import GroupMembersSection from "./components/GroupMembersSection";
@@ -24,6 +25,7 @@ import GroupCatalogsSection from "./components/GroupCatalogsSection";
 const GroupForm = () => {
   const { id } = useParams();
   const { features } = useSystemFeatures();
+  const { getDocsLink } = useOverviewData();
 
   const {
     name,
@@ -92,6 +94,7 @@ const GroupForm = () => {
           <GroupFormBasicInfo
             name={name}
             setName={setName}
+            getDocsLink={getDocsLink}
           />
 
           <GroupMembersSection

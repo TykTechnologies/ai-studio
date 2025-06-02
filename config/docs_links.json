@@ -8,6 +8,7 @@
   "apps": "https://tyk.io/docs/ai-management/ai-studio/ai-portal//",
   "chats": "https://tyk.io/docs/ai-management/ai-studio/chat-interface/",
   "catalogs": "https://tyk.io/docs/ai-management/ai-studio/core-concepts/",
+  "teams" : "https://tyk.io/docs/ai-management/ai-studio/user-management/#team-management-admin",
   "demo_video": "https://www.youtube.com/embed/J2BY7NYRk7U?si=tpxmeSBFcMfKPEuV&controls=0&modestbranding=1&showinfo=0&rel=0&fs=0",
   "demo_video_hqdefault": "https://i.ytimg.com/vi/J2BY7NYRk7U/maxresdefault.jpg",
   "get_intouch_form": "https://tyk.io/ai-demo/"
