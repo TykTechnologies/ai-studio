@@ -16,7 +16,7 @@ export const getColorsForVariant = (theme, variant) => {
   if (catalogueBadgeConfigs[variant]) {
     return {
       bgColor: getPaletteColor(theme, catalogueBadgeConfigs[variant].bgColor),
-      textColor: getPaletteColor(theme, catalogueBadgeConfigs[variant].textColor)
+      textColor: getPaletteColor(theme, catalogueBadgeConfigs[variant].chipTextColor)
     };
   }
   
