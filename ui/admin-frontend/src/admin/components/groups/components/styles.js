@@ -1,8 +1,7 @@
 import { styled } from "@mui/material/styles";
-import { Box } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import catalogueBadgeConfigs from '../../../pages/groups/utils/catalogueBadgeConfig';
 
-// Helper function to safely access nested palette properties
 export const getPaletteColor = (theme, colorPath) => {
   const path = colorPath.split('.');
   let color = theme.palette;
@@ -13,10 +12,6 @@ export const getPaletteColor = (theme, colorPath) => {
   return color;
 };
 
-// Export the catalog badge configs for easy access
-export { catalogueBadgeConfigs };
-
-// Helper function to get colors for a catalog variant
 export const getColorsForVariant = (theme, variant) => {
   if (catalogueBadgeConfigs[variant]) {
     return {
@@ -25,13 +20,10 @@ export const getColorsForVariant = (theme, variant) => {
     };
   }
   
-  // No fallback needed - StyledChip handles defaults
   return {};
 };
 
-// For catalog display in lists/tables
 export const CatalogBadge = styled(Box)(({ theme, variant = 'default' }) => {
-  // Get colors from catalogueBadgeConfigs if available
   const getColors = () => {
     if (catalogueBadgeConfigs[variant]) {
       return {
@@ -40,7 +32,6 @@ export const CatalogBadge = styled(Box)(({ theme, variant = 'default' }) => {
       };
     }
     
-    // Default fallback
     return {
       bgColor: theme.palette.background.buttonPrimaryOutlineHover,
       textColor: theme.palette.text.defaultSubdued
@@ -55,15 +46,36 @@ export const CatalogBadge = styled(Box)(({ theme, variant = 'default' }) => {
     borderRadius: '6px',
     padding: '2px 8px',
     color: textColor,
-    fontSize: '0.75rem',
-    fontWeight: 500,
   };
 });
 
-// Styled component for catalog container to replace inline sx prop
-export const CatalogContainer = styled(Box)({
+export const CatalogContainer = styled(Box)(({ theme }) => ({
   display: "flex", 
   flexWrap: "wrap", 
-  gap: 1, 
-  justifyContent: "flex-start"
-}); 
+  gap: 5, 
+  justifyContent: "flex-start",
+  gridColumn: 2,
+  alignSelf: "center",
+  marginLeft: theme.spacing(6),
+}));
+
+export const CatalogsWrapper = styled(Box)(({ theme }) => ({
+  display: "grid",
+  gridTemplateColumns: "max-content 1fr",
+  gap: theme.spacing(2.5),
+}));
+
+export const CatalogTypeContainer = styled(Box)({
+  display: "contents",
+});
+
+export const CatalogBorderLine = styled(Box)(({ theme }) => ({
+  gridColumn: "1 / -1",
+  borderBottom: "1px solid",
+  borderColor: theme.palette.border?.neutralDefaultSubdued,
+}));
+
+export const CatalogTypeLabel = styled(Typography)({
+  gridColumn: 1,
+  alignSelf: "center",
+});

@@ -10,6 +10,7 @@ import {
 import {
   TitleBox,
   PrimaryButton,
+  LearnMoreLink,
 } from "../../styles/sharedStyles";
 import AddIcon from "@mui/icons-material/Add";
 import useGroups from "./hooks/useGroups";
@@ -18,7 +19,10 @@ import GroupsTable from "./components/GroupsTable";
 import GroupDeleteDialog from "./components/GroupDeleteDialog";
 import ManageTeamMembersModal from "./components/ManageTeamMembersModal";
 import ManageGroupCatalogsModal from "./components/ManageGroupCatalogsModal";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
 import { CACHE_KEYS } from "../../utils/constants";
+import useOverviewData from "../../hooks/useOverviewData";
+import { createDocsLinkHandler } from "../../utils/docsLinkUtils";
 
 const Groups = () => {
   const [snackbar, setSnackbar] = useState({
@@ -29,6 +33,8 @@ const Groups = () => {
   
   const [manageTeamMembersOpen, setManageTeamMembersOpen] = useState(false);
   const [manageCatalogsOpen, setManageCatalogsOpen] = useState(false);
+  const { features } = useSystemFeatures();
+  const { getDocsLink } = useOverviewData();
 
   const {
     groups,
@@ -108,7 +114,10 @@ const Groups = () => {
         </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.</Typography>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+          Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.{' '}
+          <LearnMoreLink onClick={createDocsLinkHandler(getDocsLink, 'teams')} />
+        </Typography>
       </Box>
       <Box sx={{ p: 3 }}>
         <GroupsTable
@@ -132,6 +141,7 @@ const Groups = () => {
             handleManageCatalogs(group);
             setManageCatalogsOpen(true);
           }}
+          features={features}
         />
       </Box>
 
@@ -182,6 +192,7 @@ const Groups = () => {
         open={manageCatalogsOpen}
         onClose={() => setManageCatalogsOpen(false)}
         group={selectedGroup}
+        features={features}
         onSuccess={(message) => {
           setSnackbar({
             open: true,
