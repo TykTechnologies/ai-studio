@@ -5,18 +5,15 @@ import CustomSelectMany from "../../../components/common/CustomSelectMany";
 import { useCatalogsModal } from "../hooks/useCatalogsModal";
 import { teamsService } from "../../../services/teamsService";
 import { calculateGroupCatalogPayload } from "../../../services/utils/teamsServiceUtils";
-import { getFeatureFlags } from "../../../utils/featureUtils";
 
 const ManageGroupCatalogsModal = ({ 
   open, 
   onClose, 
   group, 
   onSuccess,
-  onError,
-  features
+  onError 
 }) => {
   const [saving, setSaving] = useState(false);
-  const { isPortalOnly, isChatOnly, isGatewayOnly } = getFeatureFlags(features);
   
   const {
     catalogs,
@@ -29,11 +26,7 @@ const ManageGroupCatalogsModal = ({
     selectedToolCatalogs,
     setSelectedToolCatalogs,
     loading
-  } = useCatalogsModal(group?.id, features);
-
-  if (isGatewayOnly) {
-    return null;
-  }
+  } = useCatalogsModal(group?.id);
 
   const handleSave = async () => {
     if (!group) return;
@@ -77,20 +70,17 @@ const ManageGroupCatalogsModal = ({
             </Typography>
           </Box>
           
-          {(isPortalOnly || !isChatOnly) && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-                LLM providers catalogs
-              </Typography>
-              <CustomSelectMany
-                value={selectedCatalogs}
-                onChange={setSelectedCatalogs}
-                options={catalogs}
-                disabled={saving}
-                chipVariant="llm"
-              />
-            </Box>
-          )}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
+              LLM providers catalogs
+            </Typography>
+            <CustomSelectMany
+              value={selectedCatalogs}
+              onChange={setSelectedCatalogs}
+              options={catalogs}
+              disabled={saving}
+            />
+          </Box>
           
           <Box sx={{ mb: 3 }}>
             <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
@@ -101,24 +91,20 @@ const ManageGroupCatalogsModal = ({
               onChange={setSelectedDataCatalogs}
               options={dataCatalogs}
               disabled={saving}
-              chipVariant="data"
             />
           </Box>
           
-          {(isChatOnly || !isPortalOnly) && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-                Tools catalogs
-              </Typography>
-              <CustomSelectMany
-                value={selectedToolCatalogs}
-                onChange={setSelectedToolCatalogs}
-                options={toolCatalogs}
-                disabled={saving}
-                chipVariant="tool"
-              />
-            </Box>
-          )}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
+              Tools catalogs
+            </Typography>
+            <CustomSelectMany
+              value={selectedToolCatalogs}
+              onChange={setSelectedToolCatalogs}
+              options={toolCatalogs}
+              disabled={saving}
+            />
+          </Box>
         </>
       )}
     </ActionModal>

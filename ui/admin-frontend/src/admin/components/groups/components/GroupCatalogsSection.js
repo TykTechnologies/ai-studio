@@ -3,7 +3,6 @@ import { Typography, Box } from "@mui/material";
 import CollapsibleSection from "../../common/CollapsibleSection";
 import CustomSelectMany from "../../common/CustomSelectMany";
 import CustomNote from "../../common/CustomNote";
-import { getFeatureFlags } from "../../../utils/featureUtils";
 
 const GroupCatalogsSection = ({
   catalogs,
@@ -18,10 +17,8 @@ const GroupCatalogsSection = ({
   selectedToolCatalogs,
   onToolCatalogsChange,
   
-  loading,
-  features
+  loading
 }) => {
-  const { isPortalOnly, isChatOnly } = getFeatureFlags(features);
   const hasNoCatalogs = (!catalogs || catalogs.length === 0) &&
                         (!dataCatalogs || dataCatalogs.length === 0) &&
                         (!toolCatalogs || toolCatalogs.length === 0);
@@ -39,21 +36,17 @@ const GroupCatalogsSection = ({
             Select one or more catalogs to make available to this team
           </Typography>
         </Box>
-        
-        {(isPortalOnly || !isChatOnly) && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-              LLM providers catalogs
-            </Typography>
-            <CustomSelectMany
-              value={selectedCatalogs}
-              onChange={onCatalogsChange}
-              options={catalogs}
-              disabled={loading}
-              chipVariant="llm"
-            />
-          </Box>
-        )}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
+            LLM providers catalogs
+          </Typography>
+          <CustomSelectMany
+            value={selectedCatalogs}
+            onChange={onCatalogsChange}
+            options={catalogs}
+            disabled={loading}
+          />
+        </Box>
         
         <Box sx={{ mb: 2 }}>
           <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
@@ -64,24 +57,20 @@ const GroupCatalogsSection = ({
             onChange={onDataCatalogsChange}
             options={dataCatalogs}
             disabled={loading}
-            chipVariant="data"
           />
         </Box>
         
-        {(isChatOnly || !isPortalOnly) && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-              Tools catalogs
-            </Typography>
-            <CustomSelectMany
-              value={selectedToolCatalogs}
-              onChange={onToolCatalogsChange}
-              options={toolCatalogs}
-              disabled={loading}
-              chipVariant="tool"
-            />
-          </Box>
-        )}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
+            Tools catalogs
+          </Typography>
+          <CustomSelectMany
+            value={selectedToolCatalogs}
+            onChange={onToolCatalogsChange}
+            options={toolCatalogs}
+            disabled={loading}
+          />
+        </Box>
         </>
       )}
     </CollapsibleSection>

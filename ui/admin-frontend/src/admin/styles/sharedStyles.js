@@ -14,12 +14,9 @@ import {
   TextField,
   Select,
   FormControl,
-  Chip,
-  Link,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import { NavLink } from "react-router-dom";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
@@ -465,48 +462,4 @@ export const SectionHeader = styled(Box)(({ theme, isExpanded, isCollapsible = t
 
 export const SectionContent = styled(Box)(({ theme }) => ({
   padding: theme.spacing(3),
-}));
-
-export const StyledChip = styled(Chip)(({ theme, bgColor, textColor }) => {
-  const backgroundColor = bgColor || theme.palette.background.buttonPrimaryOutlineHover;
-  const color = textColor || theme.palette.text.defaultSubdued;
-
-  return {
-    backgroundColor,
-    borderRadius: '6px',
-    maxHeight: 'fit-content',
-    '& .MuiChip-label': {
-      color,
-      padding: '2px 6px',
-      marginRight: '6px',
-    },
-    '& .MuiChip-deleteIcon': {
-      color,
-      '&:hover': {
-        color,
-      }
-    },
-  };
-});
-
-export const LearnMoreLink = styled(({ ...props }) => (
-  <Link {...props}>
-    Learn more
-    <OpenInNewIcon />
-  </Link>
-))(({ theme }) => ({
-  display: "inline-flex",
-  alignItems: "center",
-  textDecoration: "none",
-  color: theme.palette.text.linkDefault,
-  fontFamily: 'Inter-Medium',
-  cursor: 'pointer',
-  marginLeft: theme.spacing(0.5),
-  whiteSpace: 'nowrap',
-  '& svg': {
-    marginLeft: theme.spacing(0.5),
-    color: 'inherit',
-    width: '14px',
-    height: '14px'
-  }
 }));
