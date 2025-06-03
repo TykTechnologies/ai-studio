@@ -24,12 +24,7 @@ import (
 func (a *API) createGroup(c *gin.Context) {
 	var input GroupInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("malformed request body: "+err.Error()))
 		return
 	}
 
@@ -41,12 +36,7 @@ func (a *API) createGroup(c *gin.Context) {
 		input.Data.Attributes.ToolCatalogues,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
@@ -105,23 +95,13 @@ func (a *API) getGroup(c *gin.Context) {
 func (a *API) updateGroup(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid group ID"}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("invalid group ID"))
 		return
 	}
 
 	var input GroupInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("malformed request body: "+err.Error()))
 		return
 	}
 
@@ -134,12 +114,7 @@ func (a *API) updateGroup(c *gin.Context) {
 		input.Data.Attributes.ToolCatalogues,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 

@@ -1,10 +1,32 @@
 package services
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
+func (s *Service) validateGroupName(name string, groupID uint) error {
+	if name == "" {
+		return helpers.NewBadRequestError("group name is required")
+	}
+
+	isUnique, err := models.IsGroupNameUnique(s.DB, name, groupID)
+	if err != nil {
+		return helpers.NewInternalServerError("error checking group name uniqueness: " + err.Error())
+	}
+
+	if !isUnique {
+		return helpers.NewBadRequestError("group name already exists")
+	}
+
+	return nil
+}
+
 func (s *Service) CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
+	if err := s.validateGroupName(name, 0); err != nil {
+		return nil, err
+	}
+
 	group := &models.Group{
 		Name: name,
 	}
@@ -27,6 +49,10 @@ func (s *Service) GetGroupByID(id uint, preloads ...string) (*models.Group, erro
 }
 
 func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
+	if err := s.validateGroupName(name, id); err != nil {
+		return nil, err
+	}
+
 	group, err := s.GetGroupByID(id, "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		return nil, err
