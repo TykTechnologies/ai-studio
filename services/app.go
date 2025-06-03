@@ -13,11 +13,8 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
-	toolIDs, err := s.convertIDs(toolIDsStrings)
-	if err != nil {
-		return nil, fmt.Errorf("invalid Tool IDs: %w", err)
-	}
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
@@ -102,16 +99,13 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	toolIDs, err := s.convertIDs(toolIDsStrings)
-	if err != nil {
-		return nil, fmt.Errorf("invalid Tool IDs: %w", err)
-	}
+	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {

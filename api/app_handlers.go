@@ -11,40 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// AppInput defines the expected input structure for creating or updating an app.
-type AppInput struct {
-	Data struct {
-		Type       string `json:"type" binding:"required,eq=app"`
-		Attributes struct {
-			Name            string     `json:"name"`
-			Description     string     `json:"description"`
-			UserID          uint       `json:"user_id"`
-			DatasourceIDs   []uint     `json:"datasource_ids"`
-			LLMIDs          []uint     `json:"llm_ids"`
-			ToolIDs         []string   `json:"tool_ids"`       // Added for tools
-			MonthlyBudget   *float64   `json:"monthly_budget"`
-			BudgetStartDate *time.Time `json:"budget_start_date"`
-		} `json:"attributes" binding:"required"`
-	} `json:"data" binding:"required"`
-}
-
-// AppResponse defines the structure for app-related API responses.
-type AppResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
-		Name            string     `json:"name"`
-		Description     string     `json:"description"`
-		UserID          uint       `json:"user_id"`
-		CredentialID    uint       `json:"credential_id"`
-		DatasourceIDs   []uint     `json:"datasource_ids"`
-		LLMIDs          []uint     `json:"llm_ids"`
-		ToolIDs         []uint     `json:"tool_ids"`
-		MonthlyBudget   *float64   `json:"monthly_budget"`
-		BudgetStartDate *time.Time `json:"budget_start_date"`
-	} `json:"attributes"`
-}
-
 // @Summary Create a new app
 // @Description Create a new app with the provided information
 // @Tags apps
