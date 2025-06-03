@@ -14,6 +14,9 @@ import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 
 import { useGroupForm } from "./hooks/useGroupForm";
 import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
+import { getFeatureFlags } from "../../utils/featureUtils";
+import useOverviewData from "../../hooks/useOverviewData";
 
 import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
 import GroupMembersSection from "./components/GroupMembersSection";
@@ -21,12 +24,13 @@ import GroupCatalogsSection from "./components/GroupCatalogsSection";
 
 const GroupForm = () => {
   const { id } = useParams();
+  const { features } = useSystemFeatures();
+  const { getDocsLink } = useOverviewData();
 
   const {
     name,
     setName,
     loading: formLoading,
-    error,
     setSelectedUsers,
     selectedCatalogs,
     setSelectedCatalogs,
@@ -48,7 +52,14 @@ const GroupForm = () => {
     dataCatalogs,
     toolCatalogs,
     loading: catalogsLoading
-  } = useCatalogsSelection(selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs);
+  } = useCatalogsSelection(
+    selectedCatalogs,
+    selectedDataCatalogs,
+    selectedToolCatalogs,
+    features
+  );
+
+  const { isGatewayOnly } = getFeatureFlags(features);
 
   if (formLoading || catalogsLoading) return <CircularProgress />;
 
@@ -83,7 +94,7 @@ const GroupForm = () => {
           <GroupFormBasicInfo
             name={name}
             setName={setName}
-            error={error}
+            getDocsLink={getDocsLink}
           />
 
           <GroupMembersSection
@@ -91,18 +102,21 @@ const GroupForm = () => {
             onSelectedUsersChange={setSelectedUsers}
           />
 
-          <GroupCatalogsSection
-            catalogs={catalogs}
-            selectedCatalogs={selectedCatalogs}
-            onCatalogsChange={setSelectedCatalogs}
-            dataCatalogs={dataCatalogs}
-            selectedDataCatalogs={selectedDataCatalogs}
-            onDataCatalogsChange={setSelectedDataCatalogs}
-            toolCatalogs={toolCatalogs}
-            selectedToolCatalogs={selectedToolCatalogs}
-            onToolCatalogsChange={setSelectedToolCatalogs}
-            loading={catalogsLoading}
-          />
+          {!isGatewayOnly && (
+            <GroupCatalogsSection
+              catalogs={catalogs}
+              selectedCatalogs={selectedCatalogs}
+              onCatalogsChange={setSelectedCatalogs}
+              dataCatalogs={dataCatalogs}
+              selectedDataCatalogs={selectedDataCatalogs}
+              onDataCatalogsChange={setSelectedDataCatalogs}
+              toolCatalogs={toolCatalogs}
+              selectedToolCatalogs={selectedToolCatalogs}
+              onToolCatalogsChange={setSelectedToolCatalogs}
+              loading={catalogsLoading}
+              features={features}
+            />
+          )}
 
           <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3, gap: 2 }}>
             <PrimaryButton type="submit" disabled={formLoading || !name.trim()}>
