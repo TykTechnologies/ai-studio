@@ -372,6 +372,225 @@ func getToolIDs(tools []models.Tool) []uint {
 	}
 	return ids
 }
+
+func serializeApps(apps []models.App) []AppResponse {
+	result := make([]AppResponse, len(apps))
+	for i, app := range apps {
+		result[i] = serializeApp(&app)
+	}
+	return result
+}
+
+// @Summary Get app by name
+// @Description Get details of an app by its name
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param name query string true "App name"
+// @Success 200 {object} AppResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /apps/by-name [get]
+// @Security BearerAuth
+func (a *API) getAppByName(c *gin.Context) {
+	name := c.Query("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "App name is required"}},
+		})
+		return
+	}
+
+	app, err := a.service.GetAppByName(name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "App not found"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+}
+
+// @Summary Activate app credential
+// @Description Activate the credential associated with an app
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param id path int true "App ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/{id}/activate-credential [post]
+// @Security BearerAuth
+func (a *API) activateAppCredential(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid app ID"}},
+		})
+		return
+	}
+
+	err = a.service.ActivateAppCredential(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary Deactivate app credential
+// @Description Deactivate the credential associated with an app
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param id path int true "App ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/{id}/deactivate-credential [post]
+// @Security BearerAuth
+func (a *API) deactivateAppCredential(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid app ID"}},
+		})
+		return
+	}
+
+	err = a.service.DeactivateAppCredential(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary List all apps
+// @Description Get a list of all apps
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number"
+// @Param page_size query int false "Page size"
+// @Success 200 {array} AppResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps [get]
+// @Security BearerAuth
+func (a *API) listApps(c *gin.Context) {
+	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
+
+	apps, totalCount, totalPages, err := a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
+	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+}
+
+// @Summary Search apps
+// @Description Search for apps based on a search term
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param search_term query string true "Search term"
+// @Param page query int false "Page number"
+// @Param page_size query int false "Page size"
+// @Success 200 {array} AppResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/search [get]
+// @Security BearerAuth
+func (a *API) searchApps(c *gin.Context) {
+	searchTerm := c.Query("search_term")
+	if searchTerm == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Search term is required"}},
+		})
+		return
+	}
+
+	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
+
+	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
+	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+}
+
+// @Summary Count all apps
+// @Description Get the total number of apps
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]int64
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/count [get]
+// @Security BearerAuth
+func (a *API) countApps(c *gin.Context) {
+	count, err := a.service.CountApps()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
 // @Summary Add a tool to an app
 // @Description Associate a tool with an app
 // @Tags apps
