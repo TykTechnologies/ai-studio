@@ -1,12 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { teamsService } from "../../../services/teamsService";
+import { handleApiError } from "../../../services/utils/errorHandler";
 import { CACHE_KEYS } from "../../../utils/constants";
 
 export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [selectedUsers, setSelectedUsers] = useState([]);
   
   const [selectedCatalogs, setSelectedCatalogs] = useState(initialCatalogs);
@@ -56,10 +56,10 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
       setLoading(false);
     } catch (error) {
       console.error("Error fetching group", error);
-      setError("Failed to fetch group");
+      const apiError = handleApiError(error);
       setSnackbar({
         open: true,
-        message: "Failed to fetch team details",
+        message: apiError.message,
         severity: "error",
       });
       setLoading(false);
@@ -72,17 +72,16 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     }
   }, [id, fetchGroup]);
 
-  const handleCloseSnackbar = (event, reason) => {
+  const handleCloseSnackbar = useCallback((_, reason) => {
     if (reason === "clickaway") {
       return;
     }
-    setSnackbar({ ...snackbar, open: false });
-  };
+    setSnackbar(prev => ({ ...prev, open: false }));
+  }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
 
     const groupData = {
       data: {
@@ -118,26 +117,26 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
       navigate("/admin/groups");
     } catch (error) {
       console.error("Error saving group", error);
-      setError("Failed to save group");
+      const apiError = handleApiError(error);
       setSnackbar({
         open: true,
-        message: "Failed to save team. Please try again.",
+        message: apiError.message,
         severity: "error",
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, navigate]);
 
-  const handleDeleteClick = () => {
+  const handleDeleteClick = useCallback(() => {
     setWarningDialogOpen(true);
-  };
+  }, []);
 
-  const handleCancelDelete = () => {
+  const handleCancelDelete = useCallback(() => {
     setWarningDialogOpen(false);
-  };
+  }, []);
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = useCallback(async () => {
     try {
       setLoading(true);
       await teamsService.deleteTeam(id);
@@ -149,22 +148,22 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
       navigate("/admin/groups");
     } catch (error) {
       console.error("Error deleting team:", error);
+      const apiError = handleApiError(error);
       setSnackbar({
         open: true,
-        message: "Failed to delete team. Please try again.",
+        message: apiError.message,
         severity: "error",
       });
     } finally {
       setWarningDialogOpen(false);
       setLoading(false);
     }
-  };
+  }, [id, navigate]);
 
-  return {
+  return useMemo(() => ({
     name,
     setName,
     loading,
-    error,
     selectedUsers,
     setSelectedUsers,
     selectedCatalogs,
@@ -180,5 +179,19 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     handleDeleteClick,
     handleCancelDelete,
     handleConfirmDelete
-  };
+  }), [
+    name,
+    loading,
+    selectedUsers,
+    selectedCatalogs,
+    selectedDataCatalogs,
+    selectedToolCatalogs,
+    snackbar,
+    warningDialogOpen,
+    handleSubmit,
+    handleCloseSnackbar,
+    handleDeleteClick,
+    handleCancelDelete,
+    handleConfirmDelete
+  ]);
 };

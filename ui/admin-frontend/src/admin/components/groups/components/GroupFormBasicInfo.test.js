@@ -3,6 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GroupFormBasicInfo from './GroupFormBasicInfo';
 
+jest.mock('../../../utils/docsLinkUtils', () => ({
+  createDocsLinkHandler: jest.fn().mockImplementation((getDocsLink, section) => () => {})
+}));
+
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
   Typography: ({ children, variant, color, ...props }) => (
@@ -33,6 +37,11 @@ jest.mock('../../../styles/sharedStyles', () => ({
       {...props}
     />
   ),
+  LearnMoreLink: ({ onClick, ...props }) => (
+    <a data-testid="learn-more-link" onClick={onClick} {...props}>
+      Learn More
+    </a>
+  ),
 }));
 
 // Mock Section component
@@ -48,6 +57,7 @@ jest.mock('../../common/Section', () => ({
 describe('GroupFormBasicInfo Component', () => {
   const mockName = 'Test Team';
   const mockSetName = jest.fn();
+  const mockGetDocsLink = jest.fn();
   
   beforeEach(() => {
     jest.clearAllMocks();
@@ -58,6 +68,7 @@ describe('GroupFormBasicInfo Component', () => {
       <GroupFormBasicInfo
         name={mockName}
         setName={mockSetName}
+        getDocsLink={mockGetDocsLink}
       />
     );
     
@@ -68,6 +79,8 @@ describe('GroupFormBasicInfo Component', () => {
     // Check that the descriptive text is rendered
     const description = screen.getByText(/Teams help you organize users and easily manage their access/i);
     expect(description).toBeInTheDocument();
+    const learnMoreLink = screen.getByTestId('learn-more-link');
+    expect(learnMoreLink).toBeInTheDocument();
   });
 
   test('renders team name field with correct props', () => {
@@ -75,6 +88,7 @@ describe('GroupFormBasicInfo Component', () => {
       <GroupFormBasicInfo
         name={mockName}
         setName={mockSetName}
+        getDocsLink={mockGetDocsLink}
       />
     );
     
@@ -97,6 +111,7 @@ describe('GroupFormBasicInfo Component', () => {
       <GroupFormBasicInfo
         name={mockName}
         setName={mockSetName}
+        getDocsLink={mockGetDocsLink}
       />
     );
     
@@ -115,6 +130,7 @@ describe('GroupFormBasicInfo Component', () => {
         name={mockName}
         setName={mockSetName}
         error={errorMessage}
+        getDocsLink={mockGetDocsLink}
       />
     );
     
@@ -128,11 +144,12 @@ describe('GroupFormBasicInfo Component', () => {
       <GroupFormBasicInfo
         name={mockName}
         setName={mockSetName}
+        getDocsLink={mockGetDocsLink}
       />
     );
     
     const textField = screen.getByTestId('styled-text-field');
     expect(textField).toHaveAttribute('data-error', 'false');
-    expect(textField).not.toHaveAttribute('data-helper-text');
+    expect(textField.getAttribute('data-helper-text')).toBeFalsy();
   });
 });
