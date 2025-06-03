@@ -184,7 +184,7 @@ func (s *Service) convertIDs(idStrings []string) ([]uint, error) {
 
 // validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
 func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
-	var maxLLMScore int = -1 // Initialize with a value lower than any possible score
+	var maxLLMScore int = -1        // Initialize with a value lower than any possible score
 	var maxDatasourceScore int = -1 // Initialize with a value lower than any possible score
 
 	if len(llmIDs) == 0 && len(datasourceIDs) == 0 {
@@ -196,7 +196,6 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 	if len(datasourceIDs) == 0 && len(llmIDs) > 0 { // If only llms are present, datasource score is effectively 0
 		maxDatasourceScore = 0
 	}
-
 
 	for _, llmID := range llmIDs {
 		llm, err := s.GetLLMByID(llmID)
@@ -217,12 +216,11 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 			maxDatasourceScore = ds.PrivacyScore
 		}
 	}
-	
+
 	// Only enforce if both types of entities are present or if one type is present and the other is not (implicit score of 0)
 	if maxDatasourceScore > -1 && maxLLMScore > -1 && maxDatasourceScore > maxLLMScore {
 		return ERRPrivacyScoreMismatch
 	}
-
 
 	return nil
 }
@@ -256,7 +254,7 @@ func (s *Service) updateAppDatasources(app *models.App, datasourceIDs []uint) er
 		}
 		app.Datasources = append(app.Datasources, *ds)
 	}
-	
+
 	return s.DB.Model(app).Association("Datasources").Replace(app.Datasources)
 }
 
@@ -591,14 +589,4 @@ func (s *Service) CountApps() (int64, error) {
 func (s *Service) CountAppsByUserID(userID uint) (int64, error) {
 	app := models.NewApp()
 	return app.CountByUserID(s.DB, userID)
-}
-
-// GetToolByID retrieves a tool by its ID - Placeholder, ensure this exists or is implemented in tool_service.go
-func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
-	tool := models.NewTool()
-	// Assuming a Get method similar to other services
-	if err := tool.Get(s.DB, id); err != nil {
-		return nil, err
-	}
-	return tool, nil
 }
