@@ -1,17 +1,22 @@
-import { Typography, CircularProgress, Box, Chip } from "@mui/material";
+import { Typography, CircularProgress } from "@mui/material";
 import { TitleBox, ContentBox, SecondaryLinkButton, ResponsiveTitleBox, TitleContentBox, ActionButtonsBox, PrimaryButton } from "../../styles/sharedStyles";
 import Section from "../common/Section";
 import CollapsibleSection from "../common/CollapsibleSection";
 import TeamMembersTable from "./components/TeamMembersTable";
 import { useNavigate, Link } from "react-router-dom";
 import useGroupDetail from "./hooks/useGroupDetail";
-import { CATALOG_ROWS, borderStyle, lastRowStyle, TEAM_MEMBERS_COLUMNS_FOR_TABLE } from "./utils/groupDetailConfig";
+import { TEAM_MEMBERS_COLUMNS_FOR_TABLE } from "./utils/groupDetailConfig";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import EditIcon from "@mui/icons-material/Edit";
 import useTeamMembers from "./hooks/useTeamMembers";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
+import GroupCatalogsDisplay from "./components/GroupCatalogsDisplay";
+import { getFeatureFlags } from "../../utils/featureUtils";
 
 const GroupDetail = () => {
   const navigate = useNavigate();
+  const { features } = useSystemFeatures();
+  
   const {
     group,
     catalogues,
@@ -44,6 +49,8 @@ const GroupDetail = () => {
     email: u.attributes?.email,
     role: u.attributes?.role,
   }));
+
+  const { isGatewayOnly } = getFeatureFlags(features);
 
   return (
     <>
@@ -107,57 +114,17 @@ const GroupDetail = () => {
         />
         </CollapsibleSection>
 
-        {/* Section 3: Catalogs */}
-        <CollapsibleSection title="Catalogs" defaultExpanded>
-          {CATALOG_ROWS.map((row, idx) => {
-            const items =
-              row.itemsKey === "catalogues"
-                ? catalogues
-                : row.itemsKey === "dataCatalogues"
-                ? dataCatalogues
-                : toolCatalogues;
-
-            return (
-              <Box
-                key={row.label}
-                sx={idx < CATALOG_ROWS.length - 1 ? borderStyle : lastRowStyle}
-              >
-                <Typography
-                  variant="bodyLargeBold"
-                  color="text.primary"
-                  sx={{ minWidth: 140 }}
-                >
-                  {row.label}
-                </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "flex-start" }}>
-                  {items && items?.length > 0 ? (
-                    items.map((item) => (
-                      <Chip
-                        key={item.id}
-                        label={item.attributes?.name}
-                        size="small"
-                        sx={{
-                          bgcolor: theme => theme.palette.background.buttonPrimaryOutlineHover,
-                          borderRadius: '6px',
-                          maxHeight: 'fit-content',
-                          '& .MuiChip-label': {
-                            color: theme => theme.palette.text.defaultSubdued,
-                            padding: '2px 6px',
-                            marginRight: '6px',
-                          },
-                        }}
-                      />
-                    ))
-                  ) : (
-                    <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-                      None
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            );
-          })}
-        </CollapsibleSection>
+        {/* Section 3: Catalogs - Only show if not gateway only */}
+        {!isGatewayOnly && (
+          <GroupCatalogsDisplay
+            catalogues={catalogues}
+            dataCatalogues={dataCatalogues}
+            toolCatalogues={toolCatalogues}
+            features={features}
+            title="Catalogs"
+            defaultExpanded={true}
+          />
+        )}
       </ContentBox>
     </>
   );

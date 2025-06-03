@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { teamsService } from "../../../services/teamsService";
 import { useCatalogsSelection } from "../../../components/groups/hooks/useCatalogsSelection";
 
-export const useCatalogsModal = (groupId) => {
+export const useCatalogsModal = (groupId, features) => {
   const [loadingGroupData, setLoadingGroupData] = useState(false);
   
   const {
@@ -18,7 +18,7 @@ export const useCatalogsModal = (groupId) => {
     loading: loadingCatalogs,
     error,
     fetchCatalogs
-  } = useCatalogsSelection([], [], []);
+  } = useCatalogsSelection([], [], [], features);
 
   const fetchGroupCatalogs = useCallback(async () => {
     if (!groupId) return;
