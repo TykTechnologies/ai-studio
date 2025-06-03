@@ -324,11 +324,16 @@ describe('useTransferListAvailableUsers Hook', () => {
     consoleSpy.mockRestore();
   });
   
-  test('does not fetch if groupId is not provided', async () => {
+  test('fetches with null exclude_group_id when groupId is not provided', async () => {
     render(<TestComponent groupId={null} />);
     
     expect(screen.getByTestId('loading').textContent).toBe('true');
-    expect(getUsers).not.toHaveBeenCalled();
+    expect(getUsers).toHaveBeenCalledWith(1, {
+      exclude_group_id: null,
+      page: 1,
+      page_size: 10,
+      search: ''
+    });
   });
   
   test('does not show recentlyRemoved items when searching', async () => {

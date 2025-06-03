@@ -97,17 +97,18 @@ describe('CatalogueBadges', () => {
     expect(getMockTooltipImplementation()).not.toHaveBeenCalled();
   });
 
-  test('renders correctly with MAX_BADGES (2) catalogues', () => {
+  test('renders correctly with MAX_BADGES (3) catalogues', () => {
     render(
       <CatalogueBadges
         {...baseProps}
-        catalogues={['LLM1', 'LLM2']}
+        catalogues={['LLM1', 'LLM2', 'LLM3']}
       />
     );
     const badges = screen.getAllByTestId('custom-select-badge');
-    expect(badges).toHaveLength(2);
+    expect(badges).toHaveLength(3);
     expect(badges[0]).toHaveTextContent('LLM1 (blue)');
     expect(badges[1]).toHaveTextContent('LLM2 (blue)');
+    expect(badges[2]).toHaveTextContent('LLM3 (blue)');
     expect(screen.queryByText(/\+/)).not.toBeInTheDocument();
     expect(getMockTooltipImplementation()).not.toHaveBeenCalled();
   });
@@ -116,15 +117,16 @@ describe('CatalogueBadges', () => {
     render(
       <CatalogueBadges
         {...baseProps}
-        catalogues={['LLM1', 'LLM2']}
+        catalogues={['LLM1', 'LLM2', 'LLM3']}
         dataCatalogues={['Data1']}
-        toolCatalogues={['Tool1']} // Total 4, MAX_BADGES = 2, so +2
+        toolCatalogues={['Tool1']} // Total 5, MAX_BADGES = 3, so +2
       />
     );
     const badges = screen.getAllByTestId('custom-select-badge');
-    expect(badges).toHaveLength(2); // MAX_BADGES
+    expect(badges).toHaveLength(3); // MAX_BADGES
     expect(badges[0]).toHaveTextContent('LLM1 (blue)');
     expect(badges[1]).toHaveTextContent('LLM2 (blue)');
+    expect(badges[2]).toHaveTextContent('LLM3 (blue)');
 
     const tooltipElement = screen.getByTestId('mock-tooltip');
     expect(within(tooltipElement).getByText('+2')).toBeInTheDocument();
@@ -144,13 +146,14 @@ describe('CatalogueBadges', () => {
         {...baseProps}
         catalogues={['Gemini']}
         dataCatalogues={['Snowflake']}
-        toolCatalogues={['Calculator']} // Total 3, MAX_BADGES = 2, so +1
+        toolCatalogues={['Calculator', 'Translator']} // Total 4, MAX_BADGES = 3, so +1
       />
     );
     const badges = screen.getAllByTestId('custom-select-badge');
-    expect(badges).toHaveLength(2); // Only two should be visible
+    expect(badges).toHaveLength(3); // Three should be visible
     expect(badges[0]).toHaveTextContent('Gemini (blue)');
     expect(badges[1]).toHaveTextContent('Snowflake (green)');
+    expect(badges[2]).toHaveTextContent('Calculator (orange)');
 
     const tooltipElement = screen.getByTestId('mock-tooltip');
     expect(within(tooltipElement).getByText('+1')).toBeInTheDocument();
@@ -166,14 +169,15 @@ describe('CatalogueBadges', () => {
     render(
       <CatalogueBadges
         {...baseProps}
-        dataCatalogues={['Data1', 'Data2']}
-        toolCatalogues={['Tool1']} // Total 3, MAX_BADGES = 2, so +1
+        dataCatalogues={['Data1', 'Data2', 'Data3']}
+        toolCatalogues={['Tool1']} // Total 4, MAX_BADGES = 3, so +1
       />
     );
     const badges = screen.getAllByTestId('custom-select-badge');
-    expect(badges).toHaveLength(2);
+    expect(badges).toHaveLength(3);
     expect(badges[0]).toHaveTextContent('Data1 (green)');
     expect(badges[1]).toHaveTextContent('Data2 (green)');
+    expect(badges[2]).toHaveTextContent('Data3 (green)');
 
     const tooltipElement = screen.getByTestId('mock-tooltip');
     expect(within(tooltipElement).getByText('+1')).toBeInTheDocument();

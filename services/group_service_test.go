@@ -3,6 +3,7 @@ package services
 import (
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -249,5 +250,85 @@ func TestGroupService_SearchFunctions_Errors(t *testing.T) {
 		assert.Nil(t, memberCounts)
 		assert.Equal(t, int64(0), totalCount)
 		assert.Equal(t, 0, totalPages)
+	})
+}
+
+func TestCreateGroupNameValidation(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	t.Run("CreateGroup with empty name should fail", func(t *testing.T) {
+		_, err := service.CreateGroup("", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+		assert.IsType(t, helpers.ErrorResponse{}, err)
+		errorResp := err.(helpers.ErrorResponse)
+		assert.Equal(t, 400, errorResp.StatusCode)
+		assert.Contains(t, errorResp.Message, "group name is required")
+	})
+
+	t.Run("CreateGroup with unique name should succeed", func(t *testing.T) {
+		group, err := service.CreateGroup("Unique Group Name", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		assert.NotNil(t, group)
+		assert.Equal(t, "Unique Group Name", group.Name)
+	})
+
+	t.Run("CreateGroup with duplicate name should fail", func(t *testing.T) {
+		// First create a group
+		_, err := service.CreateGroup("Duplicate Name", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Try to create another group with the same name
+		_, err = service.CreateGroup("Duplicate Name", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+		assert.IsType(t, helpers.ErrorResponse{}, err)
+		errorResp := err.(helpers.ErrorResponse)
+		assert.Equal(t, 400, errorResp.StatusCode)
+		assert.Contains(t, errorResp.Message, "group name already exists")
+	})
+}
+
+func TestUpdateGroupNameValidation(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	// Create initial groups
+	group1, err := service.CreateGroup("Original Group 1", []uint{}, []uint{}, []uint{}, []uint{})
+	assert.NoError(t, err)
+
+	group2, err := service.CreateGroup("Original Group 2", []uint{}, []uint{}, []uint{}, []uint{})
+	assert.NoError(t, err)
+
+	t.Run("UpdateGroup with same name should succeed", func(t *testing.T) {
+		// Update group with its current name should not fail
+		updatedGroup, err := service.UpdateGroup(group1.ID, "Original Group 1", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		assert.Equal(t, "Original Group 1", updatedGroup.Name)
+	})
+
+	t.Run("UpdateGroup with unique new name should succeed", func(t *testing.T) {
+		updatedGroup, err := service.UpdateGroup(group1.ID, "Updated Unique Name", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		assert.Equal(t, "Updated Unique Name", updatedGroup.Name)
+	})
+
+	t.Run("UpdateGroup with existing name should fail", func(t *testing.T) {
+		// Try to update group1 to have the same name as group2
+		_, err := service.UpdateGroup(group1.ID, "Original Group 2", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+		assert.IsType(t, helpers.ErrorResponse{}, err)
+		errorResp := err.(helpers.ErrorResponse)
+		assert.Equal(t, 400, errorResp.StatusCode)
+		assert.Contains(t, errorResp.Message, "group name already exists")
+	})
+
+	t.Run("UpdateGroup with empty name should fail", func(t *testing.T) {
+		// When name is empty, it should return an error
+		_, err := service.UpdateGroup(group2.ID, "", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.Error(t, err)
+		assert.IsType(t, helpers.ErrorResponse{}, err)
+		errorResp := err.(helpers.ErrorResponse)
+		assert.Equal(t, 400, errorResp.StatusCode)
+		assert.Contains(t, errorResp.Message, "group name is required")
 	})
 }
