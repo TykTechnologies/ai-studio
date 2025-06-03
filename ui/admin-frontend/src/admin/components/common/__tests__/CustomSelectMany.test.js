@@ -1,29 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
 import CustomSelectMany from '../CustomSelectMany';
-import { ThemeProvider } from '@mui/material/styles';
-import { createTheme } from '@mui/material';
-
-// Create a mock theme to provide to the component
-const theme = createTheme({
-  palette: {
-    background: {
-      buttonPrimaryOutlineHover: '#f5f5f5',
-      surfaceNeutralHover: '#f5f5f5',
-      paper: '#ffffff',
-    },
-    text: {
-      defaultSubdued: '#666666',
-      primary: '#000000',
-    },
-    border: {
-      neutralDefault: '#dddddd',
-    },
-    custom: {
-      white: '#ffffff',
-    },
-  },
-});
+import { renderWithTheme } from '../../../../test-utils/render-with-theme';
 
 // Mock styled components
 jest.mock('../../../styles/sharedStyles', () => ({
@@ -41,8 +19,8 @@ jest.mock('../../../styles/sharedStyles', () => ({
 
     return (
       <div data-testid="styled-select-many" {...props}>
-        <select 
-          data-testid="select-element" 
+        <select
+          data-testid="select-element"
           multiple
           value={props.value || []}
           onChange={handleChange}
@@ -57,6 +35,10 @@ jest.mock('../../../styles/sharedStyles', () => ({
       </div>
     );
   },
+  StyledChip: ({ label, onDelete, onMouseDown, deleteIcon, ...props }) => {
+    const { chipStylesMock } = jest.requireActual('../../../../test-utils/styled-component-mocks');
+    return chipStylesMock.StyledChip({ label, onDelete, onMouseDown, deleteIcon, ...props });
+  },
 }));
 
 // Mock Material UI components
@@ -65,19 +47,6 @@ jest.mock('@mui/material', () => ({
   MenuItem: ({ children, ...props }) => <option data-testid="menu-item" {...props}>{children}</option>,
   Typography: ({ children, ...props }) => <span data-testid="typography" {...props}>{children}</span>,
   Box: ({ children, ...props }) => <div data-testid="box" {...props}>{children}</div>,
-  Chip: ({ label, onDelete, ...props }) => (
-    <div data-testid="chip" {...props}>
-      {label}
-      {onDelete && (
-        <button 
-          data-testid="chip-delete-button" 
-          onClick={(e) => onDelete(e)}
-        >
-          ×
-        </button>
-      )}
-    </div>
-  ),
   InputLabel: ({ children, ...props }) => <label data-testid="input-label" {...props}>{children}</label>,
 }));
 
@@ -86,13 +55,13 @@ jest.mock('@mui/icons-material/Clear', () => ({
   default: () => <span data-testid="clear-icon">×</span>,
 }));
 
-const renderWithTheme = (ui) => {
-  return render(
-    <ThemeProvider theme={theme}>
-      {ui}
-    </ThemeProvider>
-  );
-};
+jest.mock('../../groups/components/styles', () => ({
+  getColorsForVariant: () => ({
+    bgColor: '#f5f5f5',
+    textColor: '#666666',
+  }),
+}));
+
 
 describe('CustomSelectMany Component', () => {
   const defaultProps = {
@@ -195,15 +164,27 @@ describe('CustomSelectMany Component', () => {
     ];
     
     renderWithTheme(
-      <CustomSelectMany 
-        {...defaultProps} 
-        value={selectedValues} 
+      <CustomSelectMany
+        {...defaultProps}
+        value={selectedValues}
       />
     );
     
     // Find and click the delete button on the first chip
     const deleteButtons = screen.getAllByTestId('chip-delete-button');
-    fireEvent.click(deleteButtons[0]);
+    
+    // Create a mock event with stopPropagation and target.closest
+    const mockEvent = {
+      stopPropagation: jest.fn(),
+      target: {
+        closest: jest.fn().mockReturnValue({
+          blur: jest.fn()
+        })
+      }
+    };
+    
+    // Use fireEvent.click with the mock event
+    fireEvent.click(deleteButtons[0], mockEvent);
     
     // Should call onChange with only the second option
     expect(defaultProps.onChange).toHaveBeenCalledWith([
@@ -213,8 +194,6 @@ describe('CustomSelectMany Component', () => {
 
   test('handles selection with string values correctly', () => {
     renderWithTheme(<CustomSelectMany {...defaultProps} />);
-    
-    const selectElement = screen.getByTestId('select-element');
     
     // Directly call the component's handleChange function
     // Instead of using fireEvent which doesn't work well with our mock

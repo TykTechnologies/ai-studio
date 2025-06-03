@@ -39,8 +39,49 @@ const actionModalStylesMock = {
     React.createElement('div', { 'data-testid': 'styled-dialog-actions', ...props }, children),
 };
 
+const chipStylesMock = {
+  StyledChip: ({ 
+    label, 
+    size, 
+    bgColor, 
+    textColor, 
+    onDelete, 
+    onMouseDown, 
+    deleteIcon, 
+    ...props 
+  }) => {
+    const isSelectStyle = onDelete !== undefined;
+    
+    return React.createElement(
+      'div', 
+      { 
+        'data-testid': isSelectStyle ? 'chip' : 'styled-chip', 
+        'data-label': label,
+        'data-size': size,
+        'data-bg-color': bgColor,
+        'data-text-color': textColor,
+        ...props 
+      }, 
+      [
+        label,
+        isSelectStyle && onDelete && React.createElement(
+          'button',
+          { 
+            'data-testid': 'chip-delete-button',
+            'onClick': onDelete,
+            'className': 'MuiChip-root',
+            'key': 'delete-button'
+          },
+          deleteIcon
+        )
+      ].filter(Boolean)
+    );
+  }
+};
+
 module.exports = {
   transferListStylesMock,
   sharedStylesMock,
-  actionModalStylesMock
+  actionModalStylesMock,
+  chipStylesMock
 };
