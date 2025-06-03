@@ -1,11 +1,9 @@
 package models
 
-import "gorm.io/gorm"
-
 // AppTool represents the join table for the many-to-many relationship
 // between Apps and Tools.
 type AppTool struct {
-	AppID uint `json:"app_id" gorm:"primaryKey"`
+	AppID  uint `json:"app_id" gorm:"primaryKey"`
 	ToolID uint `json:"tool_id" gorm:"primaryKey"`
 }
 
