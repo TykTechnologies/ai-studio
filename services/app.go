@@ -13,15 +13,7 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDsStrings, llmIDsStrings, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
-	datasourceIDs, err := s.convertIDs(datasourceIDsStrings)
-	if err != nil {
-		return nil, fmt.Errorf("invalid datasource IDs: %w", err)
-	}
-	llmIDs, err := s.convertIDs(llmIDsStrings)
-	if err != nil {
-		return nil, fmt.Errorf("invalid LLM IDs: %w", err)
-	}
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	toolIDs, err := s.convertIDs(toolIDsStrings)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Tool IDs: %w", err)
@@ -110,20 +102,12 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDsStrings, llmIDsStrings, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDsStrings []string, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	datasourceIDs, err := s.convertIDs(datasourceIDsStrings)
-	if err != nil {
-		return nil, fmt.Errorf("invalid datasource IDs: %w", err)
-	}
-	llmIDs, err := s.convertIDs(llmIDsStrings)
-	if err != nil {
-		return nil, fmt.Errorf("invalid LLM IDs: %w", err)
-	}
 	toolIDs, err := s.convertIDs(toolIDsStrings)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Tool IDs: %w", err)
@@ -184,18 +168,8 @@ func (s *Service) convertIDs(idStrings []string) ([]uint, error) {
 
 // validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
 func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
-	var maxLLMScore int = -1        // Initialize with a value lower than any possible score
-	var maxDatasourceScore int = -1 // Initialize with a value lower than any possible score
-
-	if len(llmIDs) == 0 && len(datasourceIDs) == 0 {
-		return nil
-	}
-	if len(llmIDs) == 0 && len(datasourceIDs) > 0 { // If only datasources are present, LLM score is effectively 0
-		maxLLMScore = 0
-	}
-	if len(datasourceIDs) == 0 && len(llmIDs) > 0 { // If only llms are present, datasource score is effectively 0
-		maxDatasourceScore = 0
-	}
+	var maxLLMScore int = -1        // Default to -1 if no LLMs
+	var maxDatasourceScore int = -1 // Default to -1 if no datasources
 
 	for _, llmID := range llmIDs {
 		llm, err := s.GetLLMByID(llmID)
@@ -217,8 +191,8 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 		}
 	}
 
-	// Only enforce if both types of entities are present or if one type is present and the other is not (implicit score of 0)
-	if maxDatasourceScore > -1 && maxLLMScore > -1 && maxDatasourceScore > maxLLMScore {
+	// Check if datasources have higher privacy score than LLMs
+	if maxDatasourceScore > maxLLMScore {
 		return ERRPrivacyScoreMismatch
 	}
 
@@ -227,91 +201,80 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 
 // updateAppDatasources updates the datasources associated with an app
 func (s *Service) updateAppDatasources(app *models.App, datasourceIDs []uint) error {
-	// Load existing datasources to ensure we have the current state
+	// Load existing datasources
 	s.DB.Model(app).Association("Datasources").Find(&app.Datasources)
 
-	// Create a map of new datasource IDs for efficient lookup
-	newDatasourceIDsMap := make(map[uint]bool)
-	for _, dsID := range datasourceIDs {
-		newDatasourceIDsMap[dsID] = true
-	}
-
-	// Remove datasources that are no longer in the list
-	var datasourcesToKeep []models.Datasource
-	for _, existingDS := range app.Datasources {
-		if _, found := newDatasourceIDsMap[existingDS.ID]; found {
-			datasourcesToKeep = append(datasourcesToKeep, existingDS)
-			delete(newDatasourceIDsMap, existingDS.ID) // Remove from map as it's already associated
+	// Remove all existing datasources
+	for _, ds := range app.Datasources {
+		if err := app.RemoveDatasource(s.DB, &ds); err != nil {
+			return err
 		}
 	}
-	app.Datasources = datasourcesToKeep
 
-	// Add new datasources that were not previously associated
-	for dsID := range newDatasourceIDsMap {
+	// Add all new datasources
+	for _, dsID := range datasourceIDs {
 		ds, err := s.GetDatasourceByID(dsID)
 		if err != nil {
-			return fmt.Errorf("failed to get datasource %d: %w", dsID, err)
+			return err
 		}
-		app.Datasources = append(app.Datasources, *ds)
+		if err := app.AddDatasource(s.DB, ds); err != nil {
+			return err
+		}
 	}
 
-	return s.DB.Model(app).Association("Datasources").Replace(app.Datasources)
+	return nil
 }
 
 // updateAppLLMs updates the LLMs associated with an app
 func (s *Service) updateAppLLMs(app *models.App, llmIDs []uint) error {
+	// Load existing LLMs
 	s.DB.Model(app).Association("LLMs").Find(&app.LLMs)
-	newLLMIDsMap := make(map[uint]bool)
-	for _, llmID := range llmIDs {
-		newLLMIDsMap[llmID] = true
-	}
 
-	var llmsToKeep []models.LLM
-	for _, existingLLM := range app.LLMs {
-		if _, found := newLLMIDsMap[existingLLM.ID]; found {
-			llmsToKeep = append(llmsToKeep, existingLLM)
-			delete(newLLMIDsMap, existingLLM.ID)
+	// Remove all existing LLMs
+	for _, llm := range app.LLMs {
+		if err := app.RemoveLLM(s.DB, &llm); err != nil {
+			return err
 		}
 	}
-	app.LLMs = llmsToKeep
 
-	for llmID := range newLLMIDsMap {
+	// Add all new LLMs
+	for _, llmID := range llmIDs {
 		llm, err := s.GetLLMByID(llmID)
 		if err != nil {
-			return fmt.Errorf("failed to get llm %d: %w", llmID, err)
+			return err
 		}
-		app.LLMs = append(app.LLMs, *llm)
+		if err := app.AddLLM(s.DB, llm); err != nil {
+			return err
+		}
 	}
-	return s.DB.Model(app).Association("LLMs").Replace(app.LLMs)
+
+	return nil
 }
 
 // updateAppTools updates the Tools associated with an app
 func (s *Service) updateAppTools(app *models.App, toolIDs []uint) error {
-	s.DB.Model(app).Association("Tools").Find(&app.Tools) // Load existing tools
-	newToolIDsMap := make(map[uint]bool)
+	// Load existing Tools
+	s.DB.Model(app).Association("Tools").Find(&app.Tools)
+
+	// Remove all existing Tools
+	for _, tool := range app.Tools {
+		if err := app.RemoveTool(s.DB, &tool); err != nil {
+			return err
+		}
+	}
+
+	// Add all new Tools
 	for _, toolID := range toolIDs {
-		newToolIDsMap[toolID] = true
-	}
-
-	var toolsToKeep []models.Tool
-	for _, existingTool := range app.Tools {
-		if _, found := newToolIDsMap[existingTool.ID]; found {
-			toolsToKeep = append(toolsToKeep, existingTool)
-			delete(newToolIDsMap, existingTool.ID) // Remove from map
-		}
-	}
-	app.Tools = toolsToKeep // Assign tools to keep
-
-	// Add new tools
-	for toolID := range newToolIDsMap {
-		tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
+		tool, err := s.GetToolByID(toolID)
 		if err != nil {
-			return fmt.Errorf("failed to get tool %d: %w", toolID, err)
+			return err
 		}
-		app.Tools = append(app.Tools, *tool)
+		if err := app.AddTool(s.DB, tool); err != nil {
+			return err
+		}
 	}
-	// Replace the association with the final list of tools
-	return s.DB.Model(app).Association("Tools").Replace(app.Tools)
+
+	return nil
 }
 
 // GetAppByID retrieves an app by its ID

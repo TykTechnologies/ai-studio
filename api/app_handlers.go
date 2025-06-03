@@ -19,8 +19,8 @@ type AppInput struct {
 			Name            string     `json:"name"`
 			Description     string     `json:"description"`
 			UserID          uint       `json:"user_id"`
-			DatasourceIDs   []string   `json:"datasource_ids"` // Changed to []string
-			LLMIDs          []string   `json:"llm_ids"`        // Changed to []string
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
 			ToolIDs         []string   `json:"tool_ids"`       // Added for tools
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
@@ -33,15 +33,15 @@ type AppResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name            string              `json:"name"`
-		Description     string              `json:"description"`
-		UserID          uint                `json:"user_id"`
-		CredentialID    uint                `json:"credential_id"`
-		Datasources     []DatasourceResponse `json:"datasources"` // Using DatasourceResponse
-		LLMs            []LLMResponse        `json:"llms"`        // Using LLMResponse
-		Tools           []ToolResponse       `json:"tools"`       // Added for tools
-		MonthlyBudget   *float64            `json:"monthly_budget"`
-		BudgetStartDate *time.Time          `json:"budget_start_date"`
+		Name            string     `json:"name"`
+		Description     string     `json:"description"`
+		UserID          uint       `json:"user_id"`
+		CredentialID    uint       `json:"credential_id"`
+		DatasourceIDs   []uint     `json:"datasource_ids"`
+		LLMIDs          []uint     `json:"llm_ids"`
+		ToolIDs         []uint     `json:"tool_ids"`
+		MonthlyBudget   *float64   `json:"monthly_budget"`
+		BudgetStartDate *time.Time `json:"budget_start_date"`
 	} `json:"attributes"`
 }
 
@@ -288,10 +288,10 @@ func (a *API) deleteApp(c *gin.Context) {
 // @Success 200 {array} AppResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /users/{userId}/apps [get]
+// @Router /users/{user_id}/apps [get]
 // @Security BearerAuth
 func (a *API) getAppsByUserID(c *gin.Context) {
-	userID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Should be c.Param("userId") based on router
+	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -316,229 +316,19 @@ func (a *API) getAppsByUserID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
 }
 
-// @Summary Get app by name
-// @Description Get details of an app by its name
-// @Tags apps
-// @Accept json
-// @Produce json
-// @Param name query string true "App name"
-// @Success 200 {object} AppResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Router /apps/by-name [get]
-// @Security BearerAuth
-func (a *API) getAppByName(c *gin.Context) {
-	name := c.Query("name")
-	if name == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "App name is required"}},
-		})
-		return
-	}
-
-	app, err := a.service.GetAppByName(name)
-	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Not Found", Detail: "App not found"}},
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
-}
-
-// @Summary Activate app credential
-// @Description Activate the credential associated with an app
-// @Tags apps
-// @Accept json
-// @Produce json
-// @Param id path int true "App ID"
-// @Success 204 "No Content"
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /apps/{id}/activate-credential [post]
-// @Security BearerAuth
-func (a *API) activateAppCredential(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid app ID"}},
-		})
-		return
-	}
-
-	err = a.service.ActivateAppCredential(uint(id))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.Status(http.StatusNoContent)
-}
-
-// @Summary Deactivate app credential
-// @Description Deactivate the credential associated with an app
-// @Tags apps
-// @Accept json
-// @Produce json
-// @Param id path int true "App ID"
-// @Success 204 "No Content"
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /apps/{id}/deactivate-credential [post]
-// @Security BearerAuth
-func (a *API) deactivateAppCredential(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid app ID"}},
-		})
-		return
-	}
-
-	err = a.service.DeactivateAppCredential(uint(id))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.Status(http.StatusNoContent)
-}
-
-// @Summary List all apps
-// @Description Get a list of all apps
-// @Tags apps
-// @Accept json
-// @Produce json
-// @Param page query int false "Page number"
-// @Param page_size query int false "Page size"
-// @Success 200 {array} AppResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /apps [get]
-// @Security BearerAuth
-func (a *API) listApps(c *gin.Context) {
-	pageSize, pageNumber, all := getPaginationParams(c)
-	sort := c.Query("sort")
-
-	apps, totalCount, totalPages, err := a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
-	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
-}
-
-// @Summary Search apps
-// @Description Search for apps based on a search term
-// @Tags apps
-// @Accept json
-// @Produce json
-// @Param search_term query string true "Search term"
-// @Param page query int false "Page number"
-// @Param page_size query int false "Page size"
-// @Success 200 {array} AppResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /apps/search [get]
-// @Security BearerAuth
-func (a *API) searchApps(c *gin.Context) {
-	searchTerm := c.Query("search_term")
-	if searchTerm == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Search term is required"}},
-		})
-		return
-	}
-
-	pageSize, pageNumber, all := getPaginationParams(c)
-	sort := c.Query("sort")
-
-	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
-	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
-}
-
-// @Summary Count all apps
-// @Description Get the total number of apps
-// @Tags apps
-// @Accept json
-// @Produce json
-// @Success 200 {object} map[string]int64
-// @Failure 500 {object} ErrorResponse
-// @Router /apps/count [get]
-// @Security BearerAuth
-func (a *API) countApps(c *gin.Context) {
-	count, err := a.service.CountApps()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"count": count})
-}
-
 // @Summary Count apps by user ID
 // @Description Get the total number of apps for a specific user
 // @Tags apps
 // @Accept json
 // @Produce json
-// @Param userId path int true "User ID"
+// @Param user_id path int true "User ID"
 // @Success 200 {object} map[string]int64
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /users/{userId}/apps/count [get]
+// @Router /users/{user_id}/apps/count [get]
 // @Security BearerAuth
 func (a *API) countAppsByUserID(c *gin.Context) {
-	userID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Should be c.Param("userId")
+	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -563,78 +353,59 @@ func (a *API) countAppsByUserID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"count": count})
 }
 
-// --- Helper functions for serialization ---
+
 
 func serializeApp(app *models.App) AppResponse {
-	// Ensure app.Tools is loaded for serialization
-	// If app.Tools is nil and you try to iterate over it, it might cause a panic.
-	// GORM might not automatically populate Tools unless explicitly Preloaded or loaded via Association.
-	// Consider loading tools if they are not already:
-	// if app.Tools == nil {
-	// a.service.DB.Model(app).Association("Tools").Find(&app.Tools) // Example, adjust as per your service layer
-	// }
-
 	return AppResponse{
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name            string              `json:"name"`
-			Description     string              `json:"description"`
-			UserID          uint                `json:"user_id"`
-			CredentialID    uint                `json:"credential_id"`
-			Datasources     []DatasourceResponse `json:"datasources"`
-			LLMs            []LLMResponse        `json:"llms"`
-			Tools           []ToolResponse       `json:"tools"`
-			MonthlyBudget   *float64            `json:"monthly_budget"`
-			BudgetStartDate *time.Time          `json:"budget_start_date"`
+			Name            string     `json:"name"`
+			Description     string     `json:"description"`
+			UserID          uint       `json:"user_id"`
+			CredentialID    uint       `json:"credential_id"`
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
+			MonthlyBudget   *float64   `json:"monthly_budget"`
+			BudgetStartDate *time.Time `json:"budget_start_date"`
 		}{
 			Name:            app.Name,
 			Description:     app.Description,
 			UserID:          app.UserID,
 			CredentialID:    app.CredentialID,
-			Datasources:     toDatasourceResponses(app.Datasources), // Assuming toDatasourceResponses exists
-			LLMs:            toLLMResponses(app.LLMs),                // Assuming toLLMResponses exists
-			Tools:           toToolResponses(app.Tools),              // Use existing toToolResponses
+			DatasourceIDs:   getDatasourceIDs(app.Datasources),
+			LLMIDs:          getLLMIDs(app.LLMs),
+			ToolIDs:         getToolIDs(app.Tools),
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 		},
 	}
 }
 
-func serializeApps(apps []models.App) []AppResponse {
-	result := make([]AppResponse, len(apps))
-	for i, app := range apps {
-		result[i] = serializeApp(&app)
-	}
-	return result
-}
-
-func getDatasourceIDs(datasources []models.Datasource) []string { // Changed to return []string
-	ids := make([]string, len(datasources))
+func getDatasourceIDs(datasources []models.Datasource) []uint {
+	ids := make([]uint, len(datasources))
 	for i, ds := range datasources {
-		ids[i] = strconv.FormatUint(uint64(ds.ID), 10)
+		ids[i] = ds.ID
 	}
 	return ids
 }
 
-func getLLMIDs(llms []models.LLM) []string { // Changed to return []string
-	ids := make([]string, len(llms))
+func getLLMIDs(llms []models.LLM) []uint {
+	ids := make([]uint, len(llms))
 	for i, llm := range llms {
-		ids[i] = strconv.FormatUint(uint64(llm.ID), 10)
+		ids[i] = llm.ID
 	}
 	return ids
 }
 
-func getToolIDs(tools []models.Tool) []string { // Added for tools
-	ids := make([]string, len(tools))
+func getToolIDs(tools []models.Tool) []uint {
+	ids := make([]uint, len(tools))
 	for i, tool := range tools {
-		ids[i] = strconv.FormatUint(uint64(tool.ID), 10)
+		ids[i] = tool.ID
 	}
 	return ids
 }
-
-// --- New handlers for App-Tool relationships ---
-
 // @Summary Add a tool to an app
 // @Description Associate a tool with an app
 // @Tags apps
@@ -736,17 +507,7 @@ func (a *API) getAppTools(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Internal Server Error", err.Error()}}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": toToolResponses(tools)}) // Use toToolResponses
+	c.JSON(http.StatusOK, gin.H{"data": getToolIDs(tools)})
 }
 
-// Dummy toDatasourceResponses for compilation if not present - replace with actual if available
-func toDatasourceResponses(datasources []models.Datasource) []DatasourceResponse {
-	// Replace with actual implementation if it exists
-	return make([]DatasourceResponse, 0)
-}
 
-// Dummy toLLMResponses for compilation if not present - replace with actual if available
-func toLLMResponses(llms []models.LLM) []LLMResponse {
-	// Replace with actual implementation if it exists
-	return make([]LLMResponse, 0)
-}
