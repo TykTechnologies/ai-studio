@@ -183,11 +183,13 @@ const AppForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    // Ensure IDs are sent as strings, as expected by the backend's convertIDs
+    // Ensure IDs are converted to integers as expected by the backend
     const appPayload = {
       ...app,
       user_id: parseInt(app.user_id, 10), // user_id is typically an integer
-      // llm_ids, datasource_ids, tool_ids are already string arrays from CustomSelectMany
+      llm_ids: app.llm_ids.map(id => parseInt(id, 10)),
+      datasource_ids: app.datasource_ids.map(id => parseInt(id, 10)),
+      tool_ids: app.tool_ids.map(id => parseInt(id, 10))
     };
     
     // Remove null budget_start_date if monthly_budget is null

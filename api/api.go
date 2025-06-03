@@ -201,11 +201,11 @@ func (a *API) Run(addr string, certFile string, keyFile string) error {
 
 // Helper function to create a sub-filesystem
 func sub(fsys embed.FS, dir string) http.FileSystem {
-	subFS, err := fs.Sub(fsys, dir)
+	sub, err := fs.Sub(fsys, dir)
 	if err != nil {
 		panic(err)
 	}
-	return http.FS(subFS)
+	return http.FS(sub)
 }
 
 // getPaginationParams extracts pagination parameters from the request
