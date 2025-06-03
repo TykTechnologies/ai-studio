@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -374,11 +375,21 @@ func getToolIDs(tools []models.Tool) []uint {
 }
 
 func serializeApps(apps []models.App) []AppResponse {
-	result := make([]AppResponse, len(apps))
-	for i, app := range apps {
-		result[i] = serializeApp(&app)
+	responses := make([]AppResponse, 0, len(apps))
+	for _, app := range apps {
+		responses = append(responses, serializeApp(&app))
 	}
-	return result
+	return responses
+}
+
+// createErrorResponse is a helper function to create ErrorResponse structs
+func createErrorResponse(title, detail string) ErrorResponse {
+	return ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: title, Detail: detail}},
+	}
 }
 
 // @Summary Get app by name
@@ -607,23 +618,23 @@ func (a *API) countApps(c *gin.Context) {
 func (a *API) addToolToApp(c *gin.Context) {
 	appID, err := strconv.ParseUint(c.Param("app_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Bad Request", "Invalid App ID"}}})
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
 		return
 	}
 	toolID, err := strconv.ParseUint(c.Param("tool_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Bad Request", "Invalid Tool ID"}}})
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid Tool ID"))
 		return
 	}
 
 	app, err := a.service.AddToolToApp(uint(appID), uint(toolID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Not Found", "App or Tool not found"}}})
+			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App or Tool not found"))
 			return
 		}
 		// Consider other specific errors, e.g., if the tool is already added
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Internal Server Error", err.Error()}}})
+		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
@@ -644,22 +655,22 @@ func (a *API) addToolToApp(c *gin.Context) {
 func (a *API) removeToolFromApp(c *gin.Context) {
 	appID, err := strconv.ParseUint(c.Param("app_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Bad Request", "Invalid App ID"}}})
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
 		return
 	}
 	toolID, err := strconv.ParseUint(c.Param("tool_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Bad Request", "Invalid Tool ID"}}})
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid Tool ID"))
 		return
 	}
 
 	err = a.service.RemoveToolFromApp(uint(appID), uint(toolID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Not Found", "App or Tool not found, or tool not associated with app"}}})
+			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App or Tool not found, or tool not associated with app"))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Internal Server Error", err.Error()}}})
+		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -679,17 +690,17 @@ func (a *API) removeToolFromApp(c *gin.Context) {
 func (a *API) getAppTools(c *gin.Context) {
 	appID, err := strconv.ParseUint(c.Param("app_id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Bad Request", "Invalid App ID"}}})
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
 		return
 	}
 
 	tools, err := a.service.GetAppTools(uint(appID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Not Found", "App not found"}}})
+			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App not found"))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{ Title, Detail string }{{"Internal Server Error", err.Error()}}})
+		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": getToolIDs(tools)})
