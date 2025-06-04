@@ -128,7 +128,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 
 	// Record the chat record with retries
 	analytics.RecordChatRecord(rec)
-	time.Sleep(200 * time.Millisecond) // Initial sleep to allow processing
+	// time.Sleep(200 * time.Millisecond) // Removed: Unreliable fixed sleep. Test should handle waiting.
 
 	// Budget analysis
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
