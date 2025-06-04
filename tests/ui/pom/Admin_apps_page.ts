@@ -68,12 +68,12 @@ export class AdminAppsPage extends PageTemplate {
 
         if (params.llms && params.llms.length > 0) {
             for (const llmName of params.llms) {
-                await this.LlmDropDown.selectValue(llmName); // CustomSelectMany might need selectValue
+                await this.LlmDropDown.setValue(llmName); // CustomSelectMany might need selectValue
             }
         }
         if (params.tools && params.tools.length > 0) {
             for (const toolName of params.tools) {
-                await this.ToolDropDown.selectValue(toolName); // CustomSelectMany might need selectValue
+                await this.ToolDropDown.setValue(toolName); // CustomSelectMany might need selectValue
             }
         }
         if (params.monthlyBudget) {
@@ -97,13 +97,13 @@ export class AdminAppsPage extends PageTemplate {
             // May need to clear existing selections first if CustomSelectMany doesn't overwrite
             // await this.LlmDropDown.clear(); // Example, if a clear method exists
             for (const llmName of params.llms) {
-                await this.LlmDropDown.selectValue(llmName);
+                await this.LlmDropDown.setValue(llmName);
             }
         }
         if (params.tools) {
             // await this.ToolDropDown.clear(); // Example
             for (const toolName of params.tools) {
-                await this.ToolDropDown.selectValue(toolName);
+                await this.ToolDropDown.setValue(toolName);
             }
         }
 
