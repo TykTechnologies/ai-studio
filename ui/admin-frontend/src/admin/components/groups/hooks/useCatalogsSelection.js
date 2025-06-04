@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { getCatalogues, getDataCatalogues, getToolCatalogues } from "../../../services/catalogsService";
+import { getFeatureFlags } from "../../../utils/featureUtils";
 
 export const useCatalogsSelection = (
   initialCatalogs = [],
   initialDataCatalogs = [],
-  initialToolCatalogs = []
+  initialToolCatalogs = [],
+  features = { feature_gateway: false, feature_portal: false, feature_chat: false }
 ) => {
   const [catalogs, setCatalogs] = useState([]);
   const [selectedCatalogs, setSelectedCatalogs] = useState(initialCatalogs);
@@ -18,42 +20,41 @@ export const useCatalogsSelection = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const { isGatewayOnly, isPortalEnabled, isChatEnabled } = getFeatureFlags(features);
+
   const fetchCatalogs = useCallback(async () => {
+    if (isGatewayOnly) return;
+    
     setLoading(true);
     setError(null);
     
     try {
-      const [catalogsResponse, dataCatalogsResponse, toolCatalogsResponse] = await Promise.all([
-        getCatalogues(1, true),
-        getDataCatalogues(1, true),
-        getToolCatalogues(1, true)
+      const [catalogsRes, dataCatalogsRes, toolCatalogsRes] = await Promise.all([
+        isPortalEnabled ? getCatalogues(1, true) : [],
+        !isGatewayOnly ? getDataCatalogues(1, true) : [],
+        isChatEnabled ? getToolCatalogues(1, true) : []
       ]);
 
-      setCatalogs(catalogsResponse || []);
-      setDataCatalogs(dataCatalogsResponse || []);
-      setToolCatalogs(toolCatalogsResponse || []);
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching catalogs:", error);
+      setCatalogs(catalogsRes || []);
+      setDataCatalogs(dataCatalogsRes || []);
+      setToolCatalogs(toolCatalogsRes || []);
+      
+    } catch (err) {
       setError("Failed to load catalogs");
+    } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isGatewayOnly, isPortalEnabled, isChatEnabled]);
 
   const formatCatalogsForSelect = useCallback((catalogItems) => {
-    if (!Array.isArray(catalogItems)) {
-      return [];
-    }
+    if (!Array.isArray(catalogItems)) return [];
     
-    return catalogItems.map(catalog => {
-      if (!catalog) return null;
-      
-      return {
+    return catalogItems.map(catalog => 
+      catalog ? {
         value: catalog.id,
         label: catalog.attributes?.name || `Catalog ${catalog.id}`
-      };
-    }).filter(Boolean);
+      } : null
+    ).filter(Boolean);
   }, []);
 
   useEffect(() => {

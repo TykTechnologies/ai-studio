@@ -10,13 +10,19 @@ import {
 import {
   TitleBox,
   PrimaryButton,
+  LearnMoreLink,
 } from "../../styles/sharedStyles";
 import AddIcon from "@mui/icons-material/Add";
 import useGroups from "./hooks/useGroups";
 import useGroupActions from "./hooks/useGroupActions";
 import GroupsTable from "./components/GroupsTable";
 import GroupDeleteDialog from "./components/GroupDeleteDialog";
+import ManageTeamMembersModal from "./components/ManageTeamMembersModal";
+import ManageGroupCatalogsModal from "./components/ManageGroupCatalogsModal";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
 import { CACHE_KEYS } from "../../utils/constants";
+import useOverviewData from "../../hooks/useOverviewData";
+import { createDocsLinkHandler } from "../../utils/docsLinkUtils";
 
 const Groups = () => {
   const [snackbar, setSnackbar] = useState({
@@ -24,6 +30,11 @@ const Groups = () => {
     message: "",
     severity: "success",
   });
+  
+  const [manageTeamMembersOpen, setManageTeamMembersOpen] = useState(false);
+  const [manageCatalogsOpen, setManageCatalogsOpen] = useState(false);
+  const { features = {} } = useSystemFeatures();
+  const { getDocsLink } = useOverviewData();
 
   const {
     groups,
@@ -48,6 +59,8 @@ const Groups = () => {
     handleCancelDelete,
     handleConfirmDelete,
     handleGroupClick,
+    handleManageMembers,
+    handleManageCatalogs,
   } = useGroupActions(refreshGroups, setSnackbar);
 
   const handleCloseSnackbar = (event, reason) => {
@@ -101,7 +114,10 @@ const Groups = () => {
         </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.</Typography>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+          Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.{' '}
+          <LearnMoreLink onClick={createDocsLinkHandler(getDocsLink, 'teams')} />
+        </Typography>
       </Box>
       <Box sx={{ p: 3 }}>
         <GroupsTable
@@ -117,6 +133,15 @@ const Groups = () => {
           handleGroupClick={handleGroupClick}
           handleEdit={handleEdit}
           handleDelete={handleDelete}
+          handleManageMembers={(group) => {
+            handleManageMembers(group);
+            setManageTeamMembersOpen(true);
+          }}
+          handleManageCatalogs={(group) => {
+            handleManageCatalogs(group);
+            setManageCatalogsOpen(true);
+          }}
+          features={features}
         />
       </Box>
 
@@ -140,6 +165,49 @@ const Groups = () => {
         selectedGroup={selectedGroup}
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+      />
+
+      <ManageTeamMembersModal
+        open={manageTeamMembersOpen}
+        onClose={() => setManageTeamMembersOpen(false)}
+        group={selectedGroup}
+        onSuccess={(message) => {
+          setSnackbar({
+            open: true,
+            message,
+            severity: "success",
+          });
+          refreshGroups();
+        }}
+        onError={(message) => {
+          setSnackbar({
+            open: true,
+            message,
+            severity: "error",
+          });
+        }}
+      />
+
+      <ManageGroupCatalogsModal
+        open={manageCatalogsOpen}
+        onClose={() => setManageCatalogsOpen(false)}
+        group={selectedGroup}
+        features={features}
+        onSuccess={(message) => {
+          setSnackbar({
+            open: true,
+            message,
+            severity: "success",
+          });
+          refreshGroups();
+        }}
+        onError={(message) => {
+          setSnackbar({
+            open: true,
+            message,
+            severity: "error",
+          });
+        }}
       />
     </>
   );

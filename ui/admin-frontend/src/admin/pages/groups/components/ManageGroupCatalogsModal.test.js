@@ -1,0 +1,327 @@
+import React from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import ManageGroupCatalogsModal from "./ManageGroupCatalogsModal";
+import { useCatalogsModal } from "../hooks/useCatalogsModal";
+import { teamsService } from "../../../services/teamsService";
+import { getFeatureFlags } from "../../../utils/featureUtils";
+import { renderWithTheme } from "../../../../test-utils/render-with-theme";
+
+jest.mock("../hooks/useCatalogsModal");
+jest.mock("../../../services/teamsService");
+jest.mock("../../../utils/featureUtils");
+
+describe("ManageGroupCatalogsModal", () => {
+  const mockOnClose = jest.fn();
+  const mockOnSuccess = jest.fn();
+  const mockOnError = jest.fn();
+  const mockUpdateGroupCatalogs = jest.fn();
+
+  const mockFeatures = {
+    feature_portal: true,
+    feature_chat: true,
+    feature_gateway: false
+  };
+
+  const mockGroup = {
+    id: 1,
+    attributes: {
+      name: "Test Group"
+    }
+  };
+
+  const mockCatalogs = [
+    { value: "1", label: "Catalog 1" },
+    { value: "2", label: "Catalog 2" }
+  ];
+
+  const mockDataCatalogs = [
+    { value: "3", label: "Data Catalog 1" },
+    { value: "4", label: "Data Catalog 2" }
+  ];
+
+  const mockToolCatalogs = [
+    { value: "5", label: "Tool Catalog 1" },
+    { value: "6", label: "Tool Catalog 2" }
+  ];
+
+  const mockSelectedCatalogs = [mockCatalogs[0]];
+  const mockSelectedDataCatalogs = [mockDataCatalogs[0]];
+  const mockSelectedToolCatalogs = [mockToolCatalogs[0]];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    
+    teamsService.updateGroupCatalogs = mockUpdateGroupCatalogs;
+    
+    useCatalogsModal.mockReturnValue({
+      catalogs: mockCatalogs,
+      selectedCatalogs: mockSelectedCatalogs,
+      setSelectedCatalogs: jest.fn(),
+      dataCatalogs: mockDataCatalogs,
+      selectedDataCatalogs: mockSelectedDataCatalogs,
+      setSelectedDataCatalogs: jest.fn(),
+      toolCatalogs: mockToolCatalogs,
+      selectedToolCatalogs: mockSelectedToolCatalogs,
+      setSelectedToolCatalogs: jest.fn(),
+      loading: false
+    });
+
+    getFeatureFlags.mockReturnValue({
+      isPortalEnabled: true,
+      isChatEnabled: true,
+      isGatewayOnly: false
+    });
+  });
+
+  it("renders loading state when loading is true", () => {
+    useCatalogsModal.mockReturnValueOnce({
+      catalogs: [],
+      selectedCatalogs: [],
+      setSelectedCatalogs: jest.fn(),
+      dataCatalogs: [],
+      selectedDataCatalogs: [],
+      setSelectedDataCatalogs: jest.fn(),
+      toolCatalogs: [],
+      selectedToolCatalogs: [],
+      setSelectedToolCatalogs: jest.fn(),
+      loading: true
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={mockFeatures}
+      />
+    );
+
+    expect(screen.getByText("Manage Catalogs")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+  });
+
+  it("renders catalog selectors when not loading", () => {
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={mockFeatures}
+      />
+    );
+
+    expect(screen.getByText("Manage Catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Select one or more catalogs to make available to this team")).toBeInTheDocument();
+    expect(screen.getByText("LLM providers catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Tools catalogs")).toBeInTheDocument();
+  });
+
+  it("handles saving successfully", async () => {
+    mockUpdateGroupCatalogs.mockResolvedValueOnce({});
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={mockFeatures}
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).not.toBeDisabled();
+    
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockUpdateGroupCatalogs).toHaveBeenCalledWith(1, {
+        data: {
+          type: "Group",
+          attributes: {
+            catalogues: [1],
+            data_catalogues: [3],
+            tool_catalogues: [5]
+          }
+        }
+      });
+    });
+    
+    await waitFor(() => {
+      expect(mockOnSuccess).toHaveBeenCalledWith('Catalogs for "Test Group" updated successfully!');
+    });
+    
+    await waitFor(() => {
+      expect(mockOnClose).toHaveBeenCalled();
+    });
+  });
+
+  it("handles saving with error", async () => {
+    const mockError = new Error("Update failed");
+    mockUpdateGroupCatalogs.mockRejectedValueOnce(mockError);
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={mockFeatures}
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockUpdateGroupCatalogs).toHaveBeenCalledWith(1, {
+        data: {
+          type: "Group",
+          attributes: {
+            catalogues: [1],
+            data_catalogues: [3],
+            tool_catalogues: [5]
+          }
+        }
+      });
+    });
+    
+    await waitFor(() => {
+      expect(mockOnError).toHaveBeenCalledWith("Failed to update catalogs. Please try again.");
+    });
+    
+    await waitFor(() => {
+      expect(mockOnClose).not.toHaveBeenCalled();
+    });
+    
+    await waitFor(() => {
+      expect(saveButton).not.toBeDisabled();
+    });
+  });
+
+  it("does not call updateGroupCatalogs when group is not provided", async () => {
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={null}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={mockFeatures}
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockUpdateGroupCatalogs).not.toHaveBeenCalled();
+    });
+  });
+
+  it("closes the modal when Cancel is clicked", () => {
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={mockFeatures}
+      />
+    );
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    fireEvent.click(cancelButton);
+
+    expect(mockOnClose).toHaveBeenCalled();
+  });
+
+  it("returns null when isGatewayOnly is true", () => {
+    getFeatureFlags.mockReturnValueOnce({
+      isPortalEnabled: false,
+      isChatEnabled: false,
+      isGatewayOnly: true
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={{
+          feature_gateway: true,
+          feature_portal: false,
+          feature_chat: false
+        }}
+      />
+    );
+
+    expect(screen.queryByText("Manage Catalogs")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("hides LLM providers catalogs when portal is disabled", () => {
+    getFeatureFlags.mockReturnValueOnce({
+      isPortalEnabled: false,
+      isChatEnabled: true,
+      isGatewayOnly: false
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={{
+          feature_gateway: false,
+          feature_portal: false,
+          feature_chat: true
+        }}
+      />
+    );
+
+    expect(screen.queryByText("LLM providers catalogs")).not.toBeInTheDocument();
+    expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Tools catalogs")).toBeInTheDocument();
+  });
+
+  it("hides Tools catalogs when chat is disabled", () => {
+    getFeatureFlags.mockReturnValueOnce({
+      isPortalEnabled: true,
+      isChatEnabled: false,
+      isGatewayOnly: false
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={{
+          feature_gateway: false,
+          feature_portal: true,
+          feature_chat: false
+        }}
+      />
+    );
+
+    expect(screen.getByText("LLM providers catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
+    expect(screen.queryByText("Tools catalogs")).not.toBeInTheDocument();
+  });
+});

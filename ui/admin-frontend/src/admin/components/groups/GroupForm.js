@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { Typography, CircularProgress, Box, Snackbar, Alert } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -13,8 +13,10 @@ import {
 import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 
 import { useGroupForm } from "./hooks/useGroupForm";
-import { useUserSelection } from "./hooks/useUserSelection";
 import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
+import { getFeatureFlags } from "../../utils/featureUtils";
+import useOverviewData from "../../hooks/useOverviewData";
 
 import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
 import GroupMembersSection from "./components/GroupMembersSection";
@@ -22,13 +24,13 @@ import GroupCatalogsSection from "./components/GroupCatalogsSection";
 
 const GroupForm = () => {
   const { id } = useParams();
+  const { features } = useSystemFeatures();
+  const { getDocsLink } = useOverviewData();
 
   const {
     name,
     setName,
     loading: formLoading,
-    error,
-    selectedUsers,
     setSelectedUsers,
     selectedCatalogs,
     setSelectedCatalogs,
@@ -45,34 +47,21 @@ const GroupForm = () => {
     handleConfirmDelete
   } = useGroupForm(id, []);
 
-
-  const {
-    availableUsers,
-    currentPage,
-    totalPages,
-    isLoadingMore,
-    loading: usersLoading,
-    fetchUsers,
-    handleUsersChange,
-    handleLoadMore,
-    handleSearch,
-    handleUserAdded,
-    handleUserRemoved,
-  } = useUserSelection(id, selectedUsers, setSelectedUsers);
-
   const {
     catalogs,
     dataCatalogs,
     toolCatalogs,
     loading: catalogsLoading
-  } = useCatalogsSelection(selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs);
+  } = useCatalogsSelection(
+    selectedCatalogs,
+    selectedDataCatalogs,
+    selectedToolCatalogs,
+    features
+  );
 
-  
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  const { isGatewayOnly } = getFeatureFlags(features);
 
-  if (formLoading || usersLoading || catalogsLoading) return <CircularProgress />;
+  if (formLoading || catalogsLoading) return <CircularProgress />;
 
   return (
     <>
@@ -105,34 +94,29 @@ const GroupForm = () => {
           <GroupFormBasicInfo
             name={name}
             setName={setName}
-            error={error}
+            getDocsLink={getDocsLink}
           />
 
           <GroupMembersSection
-            availableUsers={availableUsers}
-            selectedUsers={selectedUsers}
-            handleUsersChange={handleUsersChange}
-            handleSearch={handleSearch}
-            handleLoadMore={handleLoadMore}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            isLoadingMore={isLoadingMore}
-            onUserAdded={handleUserAdded}
-            onUserRemoved={handleUserRemoved}
+            groupId={id}
+            onSelectedUsersChange={setSelectedUsers}
           />
 
-          <GroupCatalogsSection
-            catalogs={catalogs}
-            selectedCatalogs={selectedCatalogs}
-            onCatalogsChange={setSelectedCatalogs}
-            dataCatalogs={dataCatalogs}
-            selectedDataCatalogs={selectedDataCatalogs}
-            onDataCatalogsChange={setSelectedDataCatalogs}
-            toolCatalogs={toolCatalogs}
-            selectedToolCatalogs={selectedToolCatalogs}
-            onToolCatalogsChange={setSelectedToolCatalogs}
-            loading={catalogsLoading}
-          />
+          {!isGatewayOnly && (
+            <GroupCatalogsSection
+              catalogs={catalogs}
+              selectedCatalogs={selectedCatalogs}
+              onCatalogsChange={setSelectedCatalogs}
+              dataCatalogs={dataCatalogs}
+              selectedDataCatalogs={selectedDataCatalogs}
+              onDataCatalogsChange={setSelectedDataCatalogs}
+              toolCatalogs={toolCatalogs}
+              selectedToolCatalogs={selectedToolCatalogs}
+              onToolCatalogsChange={setSelectedToolCatalogs}
+              loading={catalogsLoading}
+              features={features}
+            />
+          )}
 
           <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3, gap: 2 }}>
             <PrimaryButton type="submit" disabled={formLoading || !name.trim()}>
