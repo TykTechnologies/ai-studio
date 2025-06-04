@@ -345,14 +345,6 @@ const AppBuilder = () => {
             </Alert>
             <PrimaryButton
               type="submit"
-              sources, and Tools are allowed to be used together in an app due
-              to data security, please ensure the data sources, LLMs, and Tools
-              you select are compatible. Once your App has been approved, you
-              will be able to start building your app using the credentials
-              provided.
-            </Alert>
-            <PrimaryButton
-              type="submit"
               variant="contained"
               color="primary"
               disabled={!isFormValid}
