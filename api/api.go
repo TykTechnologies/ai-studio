@@ -497,9 +497,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/users/:id/apps/count", a.countAppsByUserID) // Note: Param is "id" here
 
 	// App-Tool routes
-	v1.POST("/apps/:app_id/tools/:tool_id", licensing.ActionHandler(a.addToolToApp, "Add Tool to App"))
-	v1.DELETE("/apps/:app_id/tools/:tool_id", licensing.ActionHandler(a.removeToolFromApp, "Remove Tool from App"))
-	v1.GET("/apps/:app_id/tools", licensing.ActionHandler(a.getAppTools, "Get App Tools"))
+	v1.POST("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.addToolToApp, "Add Tool to App"))
+	v1.DELETE("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.removeToolFromApp, "Remove Tool from App"))
+	v1.GET("/apps/:id/tools", licensing.ActionHandler(a.getAppTools, "Get App Tools"))
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)

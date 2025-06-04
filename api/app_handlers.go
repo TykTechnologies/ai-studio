@@ -613,10 +613,10 @@ func (a *API) countApps(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /apps/{app_id}/tools/{tool_id} [post]
+// @Router /apps/{id}/tools/{tool_id} [post]
 // @Security BearerAuth
 func (a *API) addToolToApp(c *gin.Context) {
-	appID, err := strconv.ParseUint(c.Param("app_id"), 10, 32)
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Changed "app_id" to "id"
 	if err != nil {
 		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
 		return
@@ -650,10 +650,10 @@ func (a *API) addToolToApp(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /apps/{app_id}/tools/{tool_id} [delete]
+// @Router /apps/{id}/tools/{tool_id} [delete]
 // @Security BearerAuth
 func (a *API) removeToolFromApp(c *gin.Context) {
-	appID, err := strconv.ParseUint(c.Param("app_id"), 10, 32)
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Changed "app_id" to "id"
 	if err != nil {
 		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
 		return
@@ -685,10 +685,10 @@ func (a *API) removeToolFromApp(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /apps/{app_id}/tools [get]
+// @Router /apps/{id}/tools [get]
 // @Security BearerAuth
 func (a *API) getAppTools(c *gin.Context) {
-	appID, err := strconv.ParseUint(c.Param("app_id"), 10, 32)
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Changed "app_id" to "id"
 	if err != nil {
 		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
 		return
