@@ -81,12 +81,12 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await expect(page.getByRole('option', { name: 'Data Analyzer 5000' })).toBeVisible();
 
     await page.getByRole('option', { name: 'Super Search Tool' }).click();
-    await page.getByRole('button', { name: 'Add' }).nth(1).click(); // Assuming second "Add" button is for tools
+    await page.locator('div:has(label:text("Select Tool"))').getByRole('button', { name: 'Add' }).click();
     await expect(page.getByRole('chip', { name: 'Super Search Tool' })).toBeVisible();
 
     await page.getByLabel('Select Tool').click();
     await page.getByRole('option', { name: 'Data Analyzer 5000' }).click();
-    await page.getByRole('button', { name: 'Add' }).nth(1).click();
+    await page.locator('div:has(label:text("Select Tool"))').getByRole('button', { name: 'Add' }).click();
     await expect(page.getByRole('chip', { name: 'Data Analyzer 5000' })).toBeVisible();
 
     // Remove a tool
@@ -98,6 +98,7 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await expect(page.getByText('You must select at least one Data Source, one LLM, or one Tool for your app.')).toBeVisible();
 
     await aiPortalPage.CreateappButton.click();
+    await aiPortalPage.expectAppCreated(); // Wait for the "App created successfully" popup
 
     // Verify submitted payload
     expect(submittedPayload).not.toBeNull();

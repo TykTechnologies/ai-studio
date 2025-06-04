@@ -91,11 +91,18 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		}
 	}
 	// Reload app to get all associations
-	err = app.Get(s.DB, app.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to reload app: %w", err)
+	// err = app.Get(s.DB, app.ID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to reload app: %w", err)
+	// }
+	// return app, nil
+
+	// Fetch into a new instance before returning to ensure all associations are freshly loaded
+	finalApp := &models.App{}
+	if err := finalApp.Get(s.DB, app.ID); err != nil {
+		return nil, fmt.Errorf("failed to fetch final app state for app ID %d: %w", app.ID, err)
 	}
-	return app, nil
+	return finalApp, nil
 }
 
 // UpdateApp updates an existing app with validity checks
