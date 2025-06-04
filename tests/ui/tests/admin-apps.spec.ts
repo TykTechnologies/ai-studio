@@ -28,7 +28,6 @@ test('Apps on admin page - Full CRUD with Tools', async ({ page, loginPage, admi
     await adminAppsPage.NameInput.fill(unique_app_name);
     await adminAppsPage.DescriptionInput.fill(app_description);
     await adminAppsPage.UserDropDown.setValue('Test Admin'); // Assuming 'Test Admin' user exists
-    await adminAppsPage.MonthlyBudgetInput.fill(default_monthly_budget);
     
     // Select LLMs (optional, but good to include if part of the form)
     await adminAppsPage.LlmDropDown.selectValue('Anthropic LLM'); // Assuming this LLM exists
@@ -36,6 +35,11 @@ test('Apps on admin page - Full CRUD with Tools', async ({ page, loginPage, admi
     // Select Tools
     await adminAppsPage.ToolDropDown.selectValue(tool_alpha);
     await adminAppsPage.ToolDropDown.selectValue(tool_beta);
+
+    // Now interact with MonthlyBudgetInput
+    await adminAppsPage.page.waitForTimeout(1000); // Add a brief static pause
+    await adminAppsPage.MonthlyBudgetInput.waitFor({ state: 'editable', timeout: 15000 });
+    await adminAppsPage.MonthlyBudgetInput.fill(default_monthly_budget);
     
     await adminAppsPage.SaveButton.click(); // Changed from AddAppButton to SaveButton for consistency
     await adminAppsPage.expectPopupAppCreated();

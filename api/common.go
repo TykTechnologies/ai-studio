@@ -493,6 +493,14 @@ func (a *API) createUserApp(c *gin.Context) {
 		return
 	}
 
+	// Log the app.Tools right after receiving from service
+	slog.Info("App received from service", "appID", app.ID, "toolsCount", len(app.Tools))
+	if len(app.Tools) > 0 {
+		slog.Info("First tool name from service", "toolName", app.Tools[0].Name)
+	}
+
+	currentAppTools := app.Tools // Explicitly copy/reference before response construction
+
 	// Prepare the response
 	response := AppResponse{
 		Type: "app",
@@ -514,6 +522,13 @@ func (a *API) createUserApp(c *gin.Context) {
 			CredentialID:    app.CredentialID,
 			DatasourceIDs:   getDatasourceIDs(app.Datasources),
 			LLMIDs:          getLLMIDs(app.LLMs),
+			ToolIDs: func() []uint { // This was missing from the previous diff's Attributes block
+				ids := make([]uint, len(currentAppTools)) // Use the local variable
+				for i, tool := range currentAppTools {    // Use the local variable
+					ids[i] = tool.ID
+				}
+				return ids
+			}(),
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 		},
@@ -873,6 +888,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			CredentialID    uint             `json:"credential_id"`
 			DatasourceIDs   []uint           `json:"datasource_ids"`
 			LLMIDs          []uint           `json:"llm_ids"`
+			ToolIDs         []uint           `json:"tool_ids"`
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
 			Credential      CredentialDetail `json:"credential"`
@@ -885,6 +901,13 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 				ids := make([]uint, len(app.Datasources))
 				for i, ds := range app.Datasources {
 					ids[i] = ds.ID
+				}
+				return ids
+			}(),
+			ToolIDs: func() []uint {
+				ids := make([]uint, len(app.Tools))
+				for i, tool := range app.Tools {
+					ids[i] = tool.ID
 				}
 				return ids
 			}(),

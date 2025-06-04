@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv" // Added strconv
 	"testing"
 	"time"
 
@@ -316,25 +317,41 @@ func TestCommon_CreateUserAppWithTools(t *testing.T) {
 	// Create a tool catalogue
 	toolCatalogue := createTestToolCatalogue(t, service)
 
+	var err error // Define err for the test scope
+
 	// Add tools to the catalogue
-	err := service.AddToolToToolCatalogue(toolA.ID, toolCatalogue.ID)
+	err = service.AddToolToToolCatalogue(toolA.ID, toolCatalogue.ID)
 	assert.NoError(t, err)
 	err = service.AddToolToToolCatalogue(toolB.ID, toolCatalogue.ID)
 	assert.NoError(t, err)
 
-	// Create a group and add the user to it
-	group, err := service.CreateGroup("UserGroup", []uint{}, []uint{}, []uint{}, []uint{user.ID})
+	// Create LLM and catalogue
+	llm1 := createTestLLM(t, service, "LLMForApp")
+	llmCatalogueForAppList := createTestCatalogue(t, service)
+	err = service.AddLLMToCatalogue(llm1.ID, llmCatalogueForAppList.ID)
 	assert.NoError(t, err)
 
-	// Add the tool catalogue to the group
-	err = service.AddToolCatalogueToGroup(toolCatalogue.ID, group.ID)
+	// Create Datasource and data catalogue
+	ds1 := createTestDatasource(t, service, "DSForApp")
+	dataCatalogueForAppList := createTestDataCatalogue(t, service) // Renamed dataCatalogue
+	err = service.AddDatasourceToDataCatalogue(dataCatalogueForAppList.ID, ds1.ID)
+	assert.NoError(t, err)
+
+	// Create a group and add the user and catalogues to it
+	_, err = service.CreateGroup("UserGroup",
+		[]uint{user.ID},
+		[]uint{llmCatalogueForAppList.ID},
+		[]uint{dataCatalogueForAppList.ID},
+		[]uint{toolCatalogue.ID})
 	assert.NoError(t, err)
 
 	// Prepare request payload
 	createAppReq := CreateAppRequest{
-		Name:        "AppWithTools",
-		Description: "An app created with tools",
-		ToolIDs:     []uint{toolA.ID},
+		Name:          "AppWithTools",
+		Description:   "An app created with tools",
+		ToolIDs:       []uint{toolA.ID},
+		LLMIDs:        []uint{llm1.ID},
+		DataSourceIDs: []uint{ds1.ID},
 	}
 	payloadBytes, err := json.Marshal(createAppReq)
 	assert.NoError(t, err)
@@ -356,16 +373,33 @@ func TestCommon_CreateUserAppWithTools(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &appResp)
 	assert.NoError(t, err)
 	assert.Equal(t, "AppWithTools", appResp.Attributes.Name)
-	assert.Contains(t, appResp.Attributes.ToolIDs, toolA.ID)
-	assert.Len(t, appResp.Attributes.ToolIDs, 1)
+
+	// Log API response ToolIDs
+	t.Logf("API Response App ID: %s, ToolIDs: %v", appResp.ID, appResp.Attributes.ToolIDs)
 
 	// Verify in DB
-	var createdApp models.App
-	err = db.Preload("Tools").First(&createdApp, appResp.ID).Error
+	var fetchedApp models.App
+	appIDUint, _ := strconv.ParseUint(appResp.ID, 10, 64)
+	err = db.Preload("Tools").First(&fetchedApp, uint(appIDUint)).Error
 	assert.NoError(t, err)
-	assert.Equal(t, "AppWithTools", createdApp.Name)
-	assert.Len(t, createdApp.Tools, 1)
-	assert.Equal(t, toolA.ID, createdApp.Tools[0].ID)
+
+	// Log DB fetched Tools
+	dbToolIDs := make([]uint, len(fetchedApp.Tools))
+	for i, tool := range fetchedApp.Tools {
+		dbToolIDs[i] = tool.ID
+	}
+	t.Logf("DB Fetched App ID: %d, Tools: %v (IDs: %v)", fetchedApp.ID, fetchedApp.Tools, dbToolIDs)
+
+	// Assertions
+	assert.Contains(t, appResp.Attributes.ToolIDs, toolA.ID, "ToolID from API response should contain toolA.ID")
+	assert.Len(t, appResp.Attributes.ToolIDs, 1, "API response ToolIDs length should be 1")
+
+	assert.True(t, len(fetchedApp.Tools) > 0, "Fetched app from DB should have tools")
+	assert.Len(t, fetchedApp.Tools, 1, "Fetched app from DB should have 1 tool")
+	assert.Contains(t, dbToolIDs, toolA.ID, "ToolID from DB fetch should contain toolA.ID")
+	assert.Equal(t, toolA.ID, fetchedApp.Tools[0].ID, "First tool ID from DB fetch should be toolA.ID")
+
+	assert.Equal(t, "AppWithTools", fetchedApp.Name)
 }
 
 func TestCommon_GetUserAccessibleTools(t *testing.T) {
@@ -391,14 +425,13 @@ func TestCommon_GetUserAccessibleTools(t *testing.T) {
 	assert.NoError(t, service.AddToolToToolCatalogue(tool3.ID, catalogueB.ID))
 
 	// Create groups
-	groupA, err := service.CreateGroup("GroupA", []uint{}, []uint{}, []uint{}, []uint{user1.ID})
+	var err error // Define err once for the scope
+	_, err = service.CreateGroup("GroupA", []uint{user1.ID}, []uint{}, []uint{}, []uint{catalogueA.ID})
 	assert.NoError(t, err)
-	groupB, err := service.CreateGroup("GroupB", []uint{}, []uint{}, []uint{}, []uint{user2.ID})
+	_, err = service.CreateGroup("GroupB", []uint{user2.ID}, []uint{}, []uint{}, []uint{catalogueB.ID})
 	assert.NoError(t, err)
 
-	// Associate catalogues with groups
-	assert.NoError(t, service.AddToolCatalogueToGroup(catalogueA.ID, groupA.ID))
-	assert.NoError(t, service.AddToolCatalogueToGroup(catalogueB.ID, groupB.ID))
+	// Associate catalogues with groups - already done with CreateGroup
 
 	// Scenario 1: User1 access
 	w1 := httptest.NewRecorder()
@@ -406,7 +439,7 @@ func TestCommon_GetUserAccessibleTools(t *testing.T) {
 	c1, _ := gin.CreateTestContext(w1)
 	c1.Request = req1
 	c1.Set("user", user1)
-	api.getAccessibleTools(c1) // Assuming getAccessibleTools is the handler
+	api.getUserAccessibleTools(c1) // Assuming getAccessibleTools is the handler
 
 	assert.Equal(t, http.StatusOK, w1.Code)
 	var toolsUser1 []ToolResponse
@@ -432,7 +465,7 @@ func TestCommon_GetUserAccessibleTools(t *testing.T) {
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Request = req2
 	c2.Set("user", user2)
-	api.getAccessibleTools(c2)
+	api.getUserAccessibleTools(c2)
 
 	assert.Equal(t, http.StatusOK, w2.Code)
 	var toolsUser2 []ToolResponse
@@ -448,7 +481,7 @@ func TestCommon_GetUserAccessibleTools(t *testing.T) {
 	c3, _ := gin.CreateTestContext(w3)
 	c3.Request = req3
 	c3.Set("user", user3)
-	api.getAccessibleTools(c3)
+	api.getUserAccessibleTools(c3)
 
 	assert.Equal(t, http.StatusOK, w3.Code)
 	var toolsUser3 []ToolResponse
@@ -462,17 +495,36 @@ func TestCommon_GetUserAppsWithTools(t *testing.T) {
 
 	user := createTestUserWithSettings(t, service, "appuser@example.com", "App User", false, true, true, true, false)
 	toolA := createTestTool(t, service, "ToolForAppList")
-	toolCatalogue := createTestToolCatalogue(t, service)
-	assert.NoError(t, service.AddToolToToolCatalogue(toolA.ID, toolCatalogue.ID))
-	group, err := service.CreateGroup("AppUserGroup", []uint{}, []uint{}, []uint{}, []uint{user.ID})
+
+	// LLM and Datasource setup for app creation
+	llmForAppList := createTestLLM(t, service, "LLMForAppList")
+	dsForAppList := createTestDatasource(t, service, "DSForAppList")
+	llmCatalogueForAppList_apps := createTestCatalogue(t, service)
+	dataCatalogueForAppList_apps := createTestDataCatalogue(t, service)
+	var err error // Define err for this test scope
+	err = service.AddLLMToCatalogue(llmForAppList.ID, llmCatalogueForAppList_apps.ID)
 	assert.NoError(t, err)
-	assert.NoError(t, service.AddToolCatalogueToGroup(toolCatalogue.ID, group.ID))
+	err = service.AddDatasourceToDataCatalogue(dataCatalogueForAppList_apps.ID, dsForAppList.ID)
+	assert.NoError(t, err)
+
+	toolCatalogue_apps := createTestToolCatalogue(t, service)
+	err = service.AddToolToToolCatalogue(toolA.ID, toolCatalogue_apps.ID)
+	assert.NoError(t, err)
+
+	_, err = service.CreateGroup("AppUserGroup",
+		[]uint{user.ID},
+		[]uint{llmCatalogueForAppList_apps.ID}, // Corrected variable
+		[]uint{dataCatalogueForAppList_apps.ID}, // Corrected variable
+		[]uint{toolCatalogue_apps.ID})          // Corrected variable
+	assert.NoError(t, err)
 
 	// Create an app with ToolA for the user
 	appPayload := CreateAppRequest{
-		Name:        "AppInList",
-		Description: "Test app for list",
-		ToolIDs:     []uint{toolA.ID},
+		Name:          "AppInList",
+		Description:   "Test app for list",
+		ToolIDs:       []uint{toolA.ID},
+		LLMIDs:        []uint{llmForAppList.ID},
+		DataSourceIDs: []uint{dsForAppList.ID},
 	}
 	appPayloadBytes, _ := json.Marshal(appPayload)
 	wCreate := httptest.NewRecorder()
@@ -518,17 +570,36 @@ func TestCommon_GetUserAppDetailsWithTools(t *testing.T) {
 
 	user := createTestUserWithSettings(t, service, "detailuser@example.com", "Detail User", false, true, true, true, false)
 	toolB := createTestTool(t, service, "ToolForAppDetail")
-	toolCatalogue := createTestToolCatalogue(t, service)
-	assert.NoError(t, service.AddToolToToolCatalogue(toolB.ID, toolCatalogue.ID))
-	group, err := service.CreateGroup("DetailUserGroup", []uint{}, []uint{}, []uint{}, []uint{user.ID})
+
+	// LLM and Datasource setup for app creation
+	llmForAppDetail := createTestLLM(t, service, "LLMForAppDetail")
+	dsForAppDetail := createTestDatasource(t, service, "DSForAppDetail")
+	llmCatalogueForAppDetail_details := createTestCatalogue(t, service)
+	dataCatalogueForAppDetail_details := createTestDataCatalogue(t, service)
+	var err error // Define err for this test scope
+	err = service.AddLLMToCatalogue(llmForAppDetail.ID, llmCatalogueForAppDetail_details.ID)
 	assert.NoError(t, err)
-	assert.NoError(t, service.AddToolCatalogueToGroup(toolCatalogue.ID, group.ID))
+	err = service.AddDatasourceToDataCatalogue(dataCatalogueForAppDetail_details.ID, dsForAppDetail.ID)
+	assert.NoError(t, err)
+
+	toolCatalogue_details := createTestToolCatalogue(t, service)
+	err = service.AddToolToToolCatalogue(toolB.ID, toolCatalogue_details.ID)
+	assert.NoError(t, err)
+
+	_, err = service.CreateGroup("DetailUserGroup",
+		[]uint{user.ID},
+		[]uint{llmCatalogueForAppDetail_details.ID}, // Corrected variable
+		[]uint{dataCatalogueForAppDetail_details.ID}, // Corrected variable
+		[]uint{toolCatalogue_details.ID})          // Corrected variable
+	assert.NoError(t, err)
 
 	// Create an app with ToolB for the user
 	appPayload := CreateAppRequest{
-		Name:        "AppForDetail",
-		Description: "Test app for detail view",
-		ToolIDs:     []uint{toolB.ID},
+		Name:          "AppForDetail",
+		Description:   "Test app for detail view",
+		ToolIDs:       []uint{toolB.ID},
+		LLMIDs:        []uint{llmForAppDetail.ID},
+		DataSourceIDs: []uint{dsForAppDetail.ID},
 	}
 	appPayloadBytes, _ := json.Marshal(appPayload)
 	wCreate := httptest.NewRecorder()
