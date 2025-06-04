@@ -83,17 +83,17 @@ func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
 			if err == nil {
 				break
 			}
-			time.Sleep(50 * time.Millisecond) // Increased sleep interval for more stability
+			time.Sleep(100 * time.Millisecond) // Increased inner retry sleep
 		}
 		if err != nil {
 			continue
 		}
 
 		if count >= expectedCount {
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond) // Increased sleep before returning
 			return
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // Increased outer polling interval
 	}
 	t.Fatalf("Timeout waiting for analytics records. Expected at least: %d", expectedCount)
 }
