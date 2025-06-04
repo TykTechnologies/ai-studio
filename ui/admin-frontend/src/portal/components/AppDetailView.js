@@ -549,6 +549,72 @@ const AppDetailView = () => {
         )}
       </Paper>
 
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <SectionTitle>Tool Access Details</SectionTitle>
+        {appTools.length > 0 ? (
+          appTools.map((tool) => (
+            <Card key={tool.id} sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6">{tool.attributes.name}</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  {tool.attributes.short_description || "No description available"}
+                </Typography>
+
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: "bold",
+                    mt: 2,
+                    mb: 1,
+                  }}
+                >
+                  Endpoint
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Use the following URL to interact with this tool.
+                </Typography>
+
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <FieldLabel sx={{ minWidth: "100px" }}>Tool API:</FieldLabel>
+                  <Box>
+                    <Tooltip title="Use this endpoint to interact with the tool. Refer to the tool's specific documentation for API details.">
+                      <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                    </Tooltip>
+                  </Box>
+                  <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                    <Typography
+                      variant="body2"
+                      component="code"
+                      sx={{
+                        fontFamily: "monospace",
+                        bgcolor: "background.paper",
+                        p: 1,
+                        borderRadius: 1,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {generateEndpointUrl("/tools/", tool.attributes.name)}
+                    </Typography>
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(
+                          generateEndpointUrl("/tools/", tool.attributes.name)
+                        )
+                      }
+                      size="small"
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Typography variant="body1">No tools associated with this app.</Typography>
+        )}
+      </Paper>
+
       <Dialog
         open={deleteDialogOpen}
         onClose={handleDeleteCancel}
