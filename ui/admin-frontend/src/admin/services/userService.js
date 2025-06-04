@@ -77,3 +77,12 @@ export const getUsers = async (page = 1, options = {}) => {
     throw handleApiError(error);
   }
 };
+
+export const getUser = async (userId) => {
+  try {
+    const response = await apiClient.get(`/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};

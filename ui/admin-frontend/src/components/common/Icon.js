@@ -25,6 +25,7 @@ const iconComponents = {
   'circle-info': lazy(() => import('../../common/fontawesome/circle-info.svg').then(module => ({ default: module.ReactComponent }))),
   'circle-exclamation': lazy(() => import('../../common/fontawesome/circle-exclamation.svg').then(module => ({ default: module.ReactComponent }))),
   'circle-check': lazy(() => import('../../common/fontawesome/circle-check.svg').then(module => ({ default: module.ReactComponent }))),
+  'circle-question': lazy(() => import('../../common/fontawesome/circle-question.svg').then(module => ({ default: module.ReactComponent }))),
 };
 
 const Icon = ({ name, ...svgProps }) => {

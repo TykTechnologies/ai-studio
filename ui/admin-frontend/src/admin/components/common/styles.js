@@ -1,5 +1,6 @@
-import { styled } from "@mui/material/styles";
-import { Dialog, DialogContent, DialogActions, Box, Typography } from "@mui/material";
+import { styled, useTheme } from "@mui/material/styles";
+import { Dialog, DialogContent, DialogActions, Box, Typography, Tooltip } from "@mui/material";
+import Icon from "../../../components/common/Icon";
 
 export const StyledActionDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiPaper-root': {
@@ -66,4 +67,46 @@ export const ScrollContainer = styled(Box)(() => ({
   overflowX: 'hidden',
   height: '100%',
   flex: 1,
+}));
+
+const tooltipPopupSx = (theme) => ({
+  backgroundColor: theme.palette.background.buttonPrimaryDefaultHover, 
+  borderRadius: '8px',
+  '& .MuiTypography-root': { 
+    color: 'white',
+  },
+});
+
+const tooltipArrowSx = (theme) => ({
+  color: theme.palette.background.buttonPrimaryDefaultHover,
+});
+
+export const StyledTooltip = (props) => {
+  const theme = useTheme();
+  const { open, onClose, onClick, ...rest } = props;
+
+  return (
+    <Tooltip
+      {...rest}
+      open={open}
+      onClose={onClose}
+      onClick={onClick}
+      arrow
+      componentsProps={{
+        tooltip: {
+          sx: tooltipPopupSx(theme),
+        },
+        arrow: {
+          sx: tooltipArrowSx(theme),
+        },
+      }}
+    />
+  );
+};
+
+export const TooltipIcon = styled(Icon)(({ theme }) => ({
+  color: theme.palette.border.neutralPressed,
+  width: 16,
+  height: 16,
+  cursor: 'pointer',
 }));

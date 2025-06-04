@@ -44,7 +44,6 @@ export const TitleBox = styled(Box)(({ theme, top = '0px' }) => ({
 
 export const ContentBox = styled(Box)(({ theme }) => ({
   padding: theme.spacing(3),
-  maxWidth: '100%',
   overflowX: 'hidden',
 }));
 
@@ -510,3 +509,9 @@ export const LearnMoreLink = styled(({ ...props }) => (
     height: '14px'
   }
 }));
+
+export const StyledContentBox = styled(ContentBox)(({ theme }) => ({
+  [theme.breakpoints.up('lg')]: {
+    maxWidth: '75%',
+  }
+})); 

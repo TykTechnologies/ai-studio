@@ -1,6 +1,6 @@
 import React from "react";
 import { useParams, Link } from "react-router-dom";
-import { Typography, CircularProgress, Box, Snackbar, Alert } from "@mui/material";
+import { Typography, CircularProgress, Box } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   SecondaryLinkButton,
@@ -11,8 +11,10 @@ import {
   DangerOutlineButton
 } from "../../styles/sharedStyles";
 import ConfirmationDialog from "../../components/common/ConfirmationDialog";
+import AlertSnackbar from "../../components/common/AlertSnackbar";
 
 import { useGroupForm } from "./hooks/useGroupForm";
+import { useSnackbarState } from "../../hooks/useSnackbarState";
 import { useCatalogsSelection } from "./hooks/useCatalogsSelection";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
 import { getFeatureFlags } from "../../utils/featureUtils";
@@ -26,6 +28,7 @@ const GroupForm = () => {
   const { id } = useParams();
   const { features } = useSystemFeatures();
   const { getDocsLink } = useOverviewData();
+  const { snackbarState, showSnackbar, hideSnackbar } = useSnackbarState();
 
   const {
     name,
@@ -39,13 +42,11 @@ const GroupForm = () => {
     selectedToolCatalogs,
     setSelectedToolCatalogs,
     handleSubmit,
-    snackbar,
-    handleCloseSnackbar,
     warningDialogOpen,
     handleDeleteClick,
     handleCancelDelete,
     handleConfirmDelete
-  } = useGroupForm(id, []);
+  } = useGroupForm(id, showSnackbar, []);
 
   const {
     catalogs,
@@ -133,20 +134,12 @@ const GroupForm = () => {
         </form>
       </ContentBox>
       
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <AlertSnackbar
+        open={snackbarState.open}
+        message={snackbarState.message}
+        severity={snackbarState.severity}
+        onClose={hideSnackbar}
+      />
 
       <ConfirmationDialog
         open={warningDialogOpen}

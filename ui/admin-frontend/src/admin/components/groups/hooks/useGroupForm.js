@@ -4,7 +4,7 @@ import { teamsService } from "../../../services/teamsService";
 import { handleApiError } from "../../../services/utils/errorHandler";
 import { CACHE_KEYS } from "../../../utils/constants";
 
-export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
+export const useGroupForm = (id, showSnackbar, initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -13,11 +13,6 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
   const [selectedDataCatalogs, setSelectedDataCatalogs] = useState(initialDataCatalogs);
   const [selectedToolCatalogs, setSelectedToolCatalogs] = useState(initialToolCatalogs);
   
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
   const [warningDialogOpen, setWarningDialogOpen] = useState(false);
   
   const navigate = useNavigate();
@@ -57,14 +52,10 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     } catch (error) {
       console.error("Error fetching group", error);
       const apiError = handleApiError(error);
-      setSnackbar({
-        open: true,
-        message: apiError.message,
-        severity: "error",
-      });
+      showSnackbar(apiError.message, "error");
       setLoading(false);
     }
-  }, [id]);
+  }, [id, showSnackbar]);
 
   useEffect(() => {
     if (id) {
@@ -72,16 +63,9 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     }
   }, [id, fetchGroup]);
 
-  const handleCloseSnackbar = useCallback((_, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar(prev => ({ ...prev, open: false }));
-  }, []);
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    setLoading(true);
 
     const groupData = {
       data: {
@@ -118,15 +102,9 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     } catch (error) {
       console.error("Error saving group", error);
       const apiError = handleApiError(error);
-      setSnackbar({
-        open: true,
-        message: apiError.message,
-        severity: "error",
-      });
-    } finally {
-      setLoading(false);
+      showSnackbar(apiError.message, "error");
     }
-  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, navigate]);
+  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, navigate, showSnackbar]);
 
   const handleDeleteClick = useCallback(() => {
     setWarningDialogOpen(true);
@@ -138,7 +116,6 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
 
   const handleConfirmDelete = useCallback(async () => {
     try {
-      setLoading(true);
       await teamsService.deleteTeam(id);
       localStorage.setItem(CACHE_KEYS.GROUP_NOTIFICATION, JSON.stringify({
         operation: "delete",
@@ -149,16 +126,11 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     } catch (error) {
       console.error("Error deleting team:", error);
       const apiError = handleApiError(error);
-      setSnackbar({
-        open: true,
-        message: apiError.message,
-        severity: "error",
-      });
+      showSnackbar(apiError.message, "error");
     } finally {
       setWarningDialogOpen(false);
-      setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, showSnackbar]);
 
   return useMemo(() => ({
     name,
@@ -173,8 +145,6 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     selectedToolCatalogs,
     setSelectedToolCatalogs,
     handleSubmit,
-    snackbar,
-    handleCloseSnackbar,
     warningDialogOpen,
     handleDeleteClick,
     handleCancelDelete,
@@ -186,10 +156,8 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     selectedCatalogs,
     selectedDataCatalogs,
     selectedToolCatalogs,
-    snackbar,
     warningDialogOpen,
     handleSubmit,
-    handleCloseSnackbar,
     handleDeleteClick,
     handleCancelDelete,
     handleConfirmDelete
