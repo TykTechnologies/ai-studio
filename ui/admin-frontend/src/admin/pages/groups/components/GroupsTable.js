@@ -21,7 +21,7 @@ const GroupsTable = ({
   handleManageCatalogs,
   features = {},
 }) => {
-  const { isPortalOnly, isChatOnly, isGatewayOnly } = getFeatureFlags(features);
+  const { isPortalEnabled, isChatEnabled, isGatewayOnly } = getFeatureFlags(features);
 
   const baseColumns = [
     { field: "id", headerName: "ID", sortable: true },
@@ -46,13 +46,13 @@ const GroupsTable = ({
     field: "attributes.catalogues",
     headerName: "Catalogues",
     renderCell: (item) => {
-      const catalogues = (isPortalOnly || !isChatOnly) 
+      const catalogues = isPortalEnabled
         ? item.attributes.catalogue_names || []
         : [];
       
       const dataCatalogues = item.attributes.data_catalogue_names || [];
       
-      const toolCatalogues = (isChatOnly || !isPortalOnly)
+      const toolCatalogues = isChatEnabled
         ? item.attributes.tool_catalogue_names || []
         : [];
 
