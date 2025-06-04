@@ -1,12 +1,12 @@
 import { getFeatureFlags } from './featureUtils';
 
 describe('getFeatureFlags', () => {
-  test('returns all flags as undefined when no features are provided', () => {
+  test('returns all flags as false when no features are provided', () => {
     const result = getFeatureFlags();
     expect(result).toEqual({
-      isGatewayOnly: undefined,
-      isPortalOnly: undefined,
-      isChatOnly: undefined
+      isGatewayOnly: false,
+      isPortalEnabled: false,
+      isChatEnabled: false
     });
   });
 
@@ -19,12 +19,12 @@ describe('getFeatureFlags', () => {
     const result = getFeatureFlags(features);
     expect(result).toEqual({
       isGatewayOnly: true,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: false,
+      isChatEnabled: false
     });
   });
 
-  test('returns isPortalOnly as true when only portal feature is enabled', () => {
+  test('returns isPortalEnabled as true when portal feature is enabled', () => {
     const features = {
       feature_gateway: false,
       feature_portal: true,
@@ -33,12 +33,12 @@ describe('getFeatureFlags', () => {
     const result = getFeatureFlags(features);
     expect(result).toEqual({
       isGatewayOnly: false,
-      isPortalOnly: true,
-      isChatOnly: false
+      isPortalEnabled: true,
+      isChatEnabled: false
     });
   });
 
-  test('returns isChatOnly as true when only chat feature is enabled', () => {
+  test('returns isChatEnabled as true when chat feature is enabled', () => {
     const features = {
       feature_gateway: false,
       feature_portal: false,
@@ -47,12 +47,12 @@ describe('getFeatureFlags', () => {
     const result = getFeatureFlags(features);
     expect(result).toEqual({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: true
+      isPortalEnabled: false,
+      isChatEnabled: true
     });
   });
 
-  test('returns all flags as false when multiple features are enabled', () => {
+  test('returns correct flags when gateway and portal features are enabled', () => {
     const features = {
       feature_gateway: true,
       feature_portal: true,
@@ -61,12 +61,12 @@ describe('getFeatureFlags', () => {
     const result = getFeatureFlags(features);
     expect(result).toEqual({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: true,
+      isChatEnabled: false
     });
   });
 
-  test('returns all flags as false when all features are enabled', () => {
+  test('returns correct flags when all features are enabled', () => {
     const features = {
       feature_gateway: true,
       feature_portal: true,
@@ -75,8 +75,8 @@ describe('getFeatureFlags', () => {
     const result = getFeatureFlags(features);
     expect(result).toEqual({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: true,
+      isChatEnabled: true
     });
   });
 
@@ -87,8 +87,8 @@ describe('getFeatureFlags', () => {
     const result = getFeatureFlags(features);
     expect(result).toEqual({
       isGatewayOnly: true,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: false,
+      isChatEnabled: false
     });
   });
 
@@ -96,9 +96,61 @@ describe('getFeatureFlags', () => {
     const features = {};
     const result = getFeatureFlags(features);
     expect(result).toEqual({
-      isGatewayOnly: undefined,
-      isPortalOnly: undefined,
-      isChatOnly: undefined
+      isGatewayOnly: false,
+      isPortalEnabled: false,
+      isChatEnabled: false
+    });
+  });
+
+  test('returns correct flags when gateway and chat features are enabled', () => {
+    const features = {
+      feature_gateway: true,
+      feature_portal: false,
+      feature_chat: true
+    };
+    const result = getFeatureFlags(features);
+    expect(result).toEqual({
+      isGatewayOnly: false,
+      isPortalEnabled: false,
+      isChatEnabled: true
+    });
+  });
+
+  test('returns correct flags when portal and chat features are enabled', () => {
+    const features = {
+      feature_gateway: false,
+      feature_portal: true,
+      feature_chat: true
+    };
+    const result = getFeatureFlags(features);
+    expect(result).toEqual({
+      isGatewayOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: true
+    });
+  });
+
+  test('returns isPortalEnabled as true when only portal property exists and is true', () => {
+    const features = {
+      feature_portal: true
+    };
+    const result = getFeatureFlags(features);
+    expect(result).toEqual({
+      isGatewayOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: false
+    });
+  });
+
+  test('returns isChatEnabled as true when only chat property exists and is true', () => {
+    const features = {
+      feature_chat: true
+    };
+    const result = getFeatureFlags(features);
+    expect(result).toEqual({
+      isGatewayOnly: false,
+      isPortalEnabled: false,
+      isChatEnabled: true
     });
   });
 });

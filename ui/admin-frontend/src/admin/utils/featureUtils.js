@@ -1,11 +1,13 @@
 export const getFeatureFlags = (features = {}) => {
-  const isGatewayOnly = features.feature_gateway && !features.feature_portal && !features.feature_chat;
-  const isPortalOnly = !features.feature_gateway && features.feature_portal && !features.feature_chat;
-  const isChatOnly = !features.feature_gateway && !features.feature_portal && features.feature_chat;
-
+  const hasGateway = !!features.feature_gateway;
+  const hasPortal = !!features.feature_portal;
+  const hasChat = !!features.feature_chat;
+  
+  const isGatewayOnly = hasGateway && !hasPortal && !hasChat;
+  
   return {
     isGatewayOnly,
-    isPortalOnly,
-    isChatOnly
+    isPortalEnabled: hasPortal,
+    isChatEnabled: hasChat,
   };
-}; 
+};

@@ -16,7 +16,7 @@ const ManageGroupCatalogsModal = ({
   features
 }) => {
   const [saving, setSaving] = useState(false);
-  const { isPortalOnly, isChatOnly, isGatewayOnly } = getFeatureFlags(features);
+  const { isPortalEnabled, isChatEnabled, isGatewayOnly } = getFeatureFlags(features);
   
   const {
     catalogs,
@@ -77,7 +77,7 @@ const ManageGroupCatalogsModal = ({
             </Typography>
           </Box>
           
-          {(isPortalOnly || !isChatOnly) && (
+          {isPortalEnabled && (
             <Box sx={{ mb: 3 }}>
               <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
                 LLM providers catalogs
@@ -105,7 +105,7 @@ const ManageGroupCatalogsModal = ({
             />
           </Box>
           
-          {(isChatOnly || !isPortalOnly) && (
+          {isChatEnabled && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
                 Tools catalogs
