@@ -24,10 +24,13 @@ const AppBuilder = () => {
   const [description, setDescription] = useState("");
   const [dataSources, setDataSources] = useState([]);
   const [llms, setLLMs] = useState([]);
+  const [tools, setTools] = useState([]);
   const [selectedDataSources, setSelectedDataSources] = useState([]);
   const [selectedLLMs, setSelectedLLMs] = useState([]);
+  const [selectedTools, setSelectedTools] = useState([]);
   const [currentDataSource, setCurrentDataSource] = useState("");
   const [currentLLM, setCurrentLLM] = useState("");
+  const [currentTool, setCurrentTool] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -38,17 +41,21 @@ const AppBuilder = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataSourcesResponse, llmsResponse] = await Promise.all([
-          pubClient.get("/common/accessible-datasources"),
-          pubClient.get("/common/accessible-llms"),
-        ]);
+        const [dataSourcesResponse, llmsResponse, toolsResponse] =
+          await Promise.all([
+            pubClient.get("/common/accessible-datasources"),
+            pubClient.get("/common/accessible-llms"),
+            pubClient.get("/common/accessible-tools"),
+          ]);
         setDataSources(dataSourcesResponse.data);
         setLLMs(llmsResponse.data);
+        setTools(toolsResponse.data);
 
         // Parse query parameters
         const params = new URLSearchParams(location.search);
         const dataSourceId = params.get("datasource");
         const llmId = params.get("llm");
+        const toolId = params.get("tool");
 
         if (dataSourceId) {
           const dataSource = dataSourcesResponse.data.find(
@@ -60,6 +67,11 @@ const AppBuilder = () => {
         if (llmId) {
           const llm = llmsResponse.data.find((l) => l.id === llmId);
           if (llm) setSelectedLLMs([llm]);
+        }
+
+        if (toolId) {
+          const tool = toolsResponse.data.find((t) => t.id === toolId);
+          if (tool) setSelectedTools([tool]);
         }
 
         setIsLoading(false);
@@ -100,6 +112,18 @@ const AppBuilder = () => {
     setSelectedLLMs(selectedLLMs.filter((llm) => llm.id !== id));
   };
 
+  const handleAddTool = () => {
+    if (currentTool && !selectedTools.some((tool) => tool.id === currentTool)) {
+      const tool = tools.find((t) => t.id === currentTool);
+      setSelectedTools([...selectedTools, tool]);
+      setCurrentTool("");
+    }
+  };
+
+  const handleRemoveTool = (id) => {
+    setSelectedTools(selectedTools.filter((tool) => tool.id !== id));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -109,6 +133,7 @@ const AppBuilder = () => {
         description,
         data_source_ids: selectedDataSources.map((ds) => parseInt(ds.id, 10)),
         llm_ids: selectedLLMs.map((llm) => parseInt(llm.id, 10)),
+        tool_ids: selectedTools.map((tool) => parseInt(tool.id, 10)),
       });
       setIsSubmitted(true);
     } catch (err) {
@@ -121,18 +146,22 @@ const AppBuilder = () => {
     const isValid =
       appName.trim() !== "" &&
       description.trim() !== "" &&
-      (selectedDataSources.length > 0 || selectedLLMs.length > 0);
+      (selectedDataSources.length > 0 ||
+        selectedLLMs.length > 0 ||
+        selectedTools.length > 0);
 
     console.log("Form Validation:", {
       appName: appName.trim() !== "",
       description: description.trim() !== "",
-      dataSourcesOrLLMs:
-        selectedDataSources.length > 0 || selectedLLMs.length > 0,
+      dataSourcesOrLLMsOrTools:
+        selectedDataSources.length > 0 ||
+        selectedLLMs.length > 0 ||
+        selectedTools.length > 0,
       isValid: isValid,
     });
 
     return isValid;
-  }, [appName, description, selectedDataSources, selectedLLMs]);
+  }, [appName, description, selectedDataSources, selectedLLMs, selectedTools]);
 
   if (isLoading)
     return (
@@ -271,14 +300,56 @@ const AppBuilder = () => {
                 ))}
               </Box>
             </Box>
+            <Box sx={{ mt: 3, mb: 2 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Tools (Optional)
+              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                <FormControl fullWidth sx={{ mr: 1 }}>
+                  <InputLabel>Select Tool</InputLabel>
+                  <Select
+                    value={currentTool}
+                    onChange={(e) => setCurrentTool(e.target.value)}
+                    label="Select Tool"
+                  >
+                    {tools.map((tool) => (
+                      <MenuItem key={tool.id} value={tool.id}>
+                        {tool.attributes.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button onClick={handleAddTool} variant="outlined">
+                  Add
+                </Button>
+              </Box>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                {selectedTools.map((tool) => (
+                  <Chip
+                    key={tool.id}
+                    label={tool.attributes.name}
+                    onDelete={() => handleRemoveTool(tool.id)}
+                  />
+                ))}
+              </Box>
+            </Box>
             <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-              You must select at least one Data Source or one LLM for your app.
-              You can add multiple of each if needed. You will not be able to
-              add more later without admin support. Not all LLMs and Data
-              sources are allowed to be used together in an app due to data
-              security, please ensure the data sources and LLMs you select are
-              compatible. Once your App has been approved, you will be able to
-              start building your app using the credentials provided.
+              You must select at least one Data Source, one LLM, or one Tool
+              for your app. You can add multiple of each if needed. You will
+              not be able to add more later without admin support. Not all LLMs,
+              Data sources, and Tools are allowed to be used together in an app
+              due to data security, please ensure the data sources, LLMs, and
+              Tools you select are compatible. Once your App has been approved,
+              you will be able to start building your app using the credentials
+              provided.
+            </Alert>
+            <PrimaryButton
+              type="submit"
+              sources, and Tools are allowed to be used together in an app due
+              to data security, please ensure the data sources, LLMs, and Tools
+              you select are compatible. Once your App has been approved, you
+              will be able to start building your app using the credentials
+              provided.
             </Alert>
             <PrimaryButton
               type="submit"

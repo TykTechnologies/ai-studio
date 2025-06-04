@@ -50,6 +50,7 @@ const AppDetailView = () => {
   const [app, setApp] = useState(null);
   const [accessibleLLMs, setAccessibleLLMs] = useState([]);
   const [accessibleDatasources, setAccessibleDatasources] = useState([]);
+  const [accessibleTools, setAccessibleTools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -74,10 +75,18 @@ const AppDetailView = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [appResponse, llmsResponse, datasourcesResponse, usageResponse, budgetResponse] = await Promise.all([
+        const [
+          appResponse,
+          llmsResponse,
+          datasourcesResponse,
+          toolsResponse,
+          usageResponse,
+          budgetResponse,
+        ] = await Promise.all([
           pubClient.get(`/common/apps/${id}`),
           pubClient.get("/common/accessible-llms"),
           pubClient.get("/common/accessible-datasources"),
+          pubClient.get("/common/accessible-tools"),
           pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
             params: { start_date: startDate, end_date: endDate, app_id: id },
           }),
@@ -94,6 +103,7 @@ const AppDetailView = () => {
         setApp(appResponse.data);
         setAccessibleLLMs(llmsResponse.data);
         setAccessibleDatasources(datasourcesResponse.data);
+        setAccessibleTools(toolsResponse.data);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -157,11 +167,15 @@ const AppDetailView = () => {
   if (!app) return <Typography>App not found</Typography>;
 
   const appLLMs = accessibleLLMs.filter((llm) =>
-    app.attributes.llm_ids.includes(Number(llm.id)),
+    (app.attributes.llm_ids || []).includes(Number(llm.id)),
   );
-  
+
   const appDatasources = accessibleDatasources.filter((datasource) =>
-    app.attributes.datasource_ids.includes(Number(datasource.id)),
+    (app.attributes.datasource_ids || []).includes(Number(datasource.id)),
+  );
+
+  const appTools = accessibleTools.filter((tool) =>
+    (app.attributes.tool_ids || []).includes(Number(tool.id)),
   );
 
   return (
@@ -203,9 +217,9 @@ const AppDetailView = () => {
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
-              {app.attributes.datasource_ids.map((id) => (
-                <Chip key={id} label={`Data Source ${id}`} />
-              ))}
+              {appDatasources.length > 0 ? appDatasources.map((ds) => (
+                <Chip key={ds.id} label={ds.attributes.name} />
+              )) : <Typography variant="body2">No data sources associated.</Typography>}
             </Box>
           </Grid>
           <Grid item xs={3}>
@@ -213,9 +227,19 @@ const AppDetailView = () => {
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
-              {app.attributes.llm_ids.map((id) => (
-                <Chip key={id} label={`LLM ${id}`} />
-              ))}
+              {appLLMs.length > 0 ? appLLMs.map((llm) => (
+                <Chip key={llm.id} label={llm.attributes.name} />
+              )) : <Typography variant="body2">No LLMs associated.</Typography>}
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Tools:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              {appTools.length > 0 ? appTools.map((tool) => (
+                <Chip key={tool.id} label={tool.attributes.name} />
+              )) : <Typography variant="body2">No tools associated.</Typography>}
             </Box>
           </Grid>
           <Grid item xs={3}>
