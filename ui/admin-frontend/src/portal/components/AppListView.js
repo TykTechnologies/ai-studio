@@ -139,6 +139,7 @@ const AppListView = () => {
                 <StyledTableHeaderCell>Description</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Data Sources</StyledTableHeaderCell>
                 <StyledTableHeaderCell>LLMs</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Tools</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
               </TableRow>
             </TableHead>
@@ -153,8 +154,9 @@ const AppListView = () => {
                     {app.attributes.name}
                   </StyledTableCell>
                   <StyledTableCell>{app.attributes.description}</StyledTableCell>
-                  <StyledTableCell>{app.attributes.datasource_ids.length}</StyledTableCell>
-                  <StyledTableCell>{app.attributes.llm_ids.length}</StyledTableCell>
+                  <StyledTableCell>{app.attributes.datasource_ids ? app.attributes.datasource_ids.length : 0}</StyledTableCell>
+                  <StyledTableCell>{app.attributes.llm_ids ? app.attributes.llm_ids.length : 0}</StyledTableCell>
+                  <StyledTableCell>{app.attributes.tool_ids ? app.attributes.tool_ids.length : 0}</StyledTableCell>
                   <StyledTableCell>
                     <IconButton
                       aria-label="delete"
