@@ -11,11 +11,16 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/gin-gonic/gin"
+	// "github.com/gin-gonic/gin" // Not directly used in this file
 	"github.com/stretchr/testify/assert"
 )
 
-// Redefine AppInput for tests to include ToolIDs as []string
+// Dummy assignments to satisfy "imported and not used" error for packages
+// used by performRequest (defined in api_test.go).
+var _ = bytes.NewBufferString("")
+var _ = httptest.NewRecorder()
+
+// TestAppInput defines the structure for app creation/update payloads in tests.
 type TestAppInput struct {
 	Data struct {
 		Type       string `json:"type" binding:"required,eq=app"`
@@ -23,9 +28,9 @@ type TestAppInput struct {
 			Name            string     `json:"name"`
 			Description     string     `json:"description"`
 			UserID          uint       `json:"user_id"`
-			DatasourceIDs   []string   `json:"datasource_ids"`
-			LLMIDs          []string   `json:"llm_ids"`
-			ToolIDs         []string   `json:"tool_ids"` // Added for tools
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
 		} `json:"attributes" binding:"required"`
@@ -33,14 +38,12 @@ type TestAppInput struct {
 }
 
 func TestAppEndpointsWithTools(t *testing.T) {
-	api, db := setupTestAPI(t) // setupTestAPI should handle DB migrations including AppTool
+	api, db := setupTestAPI(t)
 
-	// 1. Create a User
 	user := &models.User{Email: "apphandlertest@example.com", Name: "AppHandler User", IsAdmin: true, EmailVerified: true}
 	err := user.Create(db)
 	assert.NoError(t, err)
 
-	// 2. Create Tools
 	tool1 := &models.Tool{Name: "Handler Tool 1", Description: "Desc 1", ToolType: "REST"}
 	err = tool1.Create(db)
 	assert.NoError(t, err)
@@ -49,7 +52,6 @@ func TestAppEndpointsWithTools(t *testing.T) {
 	err = tool2.Create(db)
 	assert.NoError(t, err)
 
-	// 3. Test Create App with ToolIDs
 	createAppPayload := TestAppInput{
 		Data: struct {
 			Type       string `json:"type" binding:"required,eq=app"`
@@ -57,79 +59,9 @@ func TestAppEndpointsWithTools(t *testing.T) {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
-				MonthlyBudget   *float64   `json:"monthly_budget"`
-				BudgetStartDate *time.Time `json:"budget_start_date"`
-			} `json:"attributes" binding:"required"`
-		}{
-			Type: "app", // Ensure this matches the binding in AppInput struct
-			Attributes: struct {
-				Name            string     `json:"name"`
-				Description     string     `json:"description"`
-				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
-				MonthlyBudget   *float64   `json:"monthly_budget"`
-				BudgetStartDate *time.Time `json:"budget_start_date"`
-			}{
-				Name:        "App With Tools Handler Test",
-				Description: "Test app creation with tools",
-				UserID:      user.ID,
-				ToolIDs:     []string{strconv.Itoa(int(tool1.ID))},
-			},
-		},
-	}
-	w := performRequest(api.router, "POST", "/api/v1/apps", createAppPayload)
-	assert.Equal(t, http.StatusCreated, w.Code)
-
-	var createAppResponse AppResponseWrapper // Use a wrapper if response is { "data": AppResponse }
-	err = json.Unmarshal(w.Body.Bytes(), &createAppResponse)
-	assert.NoError(t, err)
-	createdAppID, _ := strconv.ParseUint(createAppResponse.Data.ID, 10, 32)
-	assert.NotZero(t, createdAppID)
-	assert.Len(t, createAppResponse.Data.Attributes.Tools, 1, "Should have 1 tool associated on create")
-	if len(createAppResponse.Data.Attributes.Tools) > 0 {
-		assert.Equal(t, strconv.Itoa(int(tool1.ID)), createAppResponse.Data.Attributes.Tools[0].ID)
-	}
-
-	// 4. Test Get App Tools
-	wGetTools := performRequest(api.router, "GET", fmt.Sprintf("/api/v1/apps/%d/tools", createdAppID), nil)
-	assert.Equal(t, http.StatusOK, wGetTools.Code)
-	var getToolsResponse ToolsResponseWrapper // Assuming { "data": []ToolResponse }
-	err = json.Unmarshal(wGetTools.Body.Bytes(), &getToolsResponse)
-	assert.NoError(t, err)
-	assert.Len(t, getToolsResponse.Data, 1)
-	assert.Equal(t, strconv.Itoa(int(tool1.ID)), getToolsResponse.Data[0].ID)
-
-	// 5. Test Add Tool to App
-	wAddTool := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/apps/%d/tools/%d", createdAppID, tool2.ID), nil)
-	assert.Equal(t, http.StatusOK, wAddTool.Code)
-	var addToolResponse AppResponseWrapper
-	err = json.Unmarshal(wAddTool.Body.Bytes(), &addToolResponse)
-	assert.NoError(t, err)
-	assert.Len(t, addToolResponse.Data.Attributes.Tools, 2, "Should have 2 tools after adding another")
-
-	// Verify by getting tools again
-	wGetToolsAfterAdd := performRequest(api.router, "GET", fmt.Sprintf("/api/v1/apps/%d/tools", createdAppID), nil)
-	assert.Equal(t, http.StatusOK, wGetToolsAfterAdd.Code)
-	err = json.Unmarshal(wGetToolsAfterAdd.Body.Bytes(), &getToolsResponse)
-	assert.NoError(t, err)
-	assert.Len(t, getToolsResponse.Data, 2)
-
-	// 6. Test Update App with new ToolIDs (remove tool1, keep tool2)
-	updateAppPayload := TestAppInput{
-		Data: struct {
-			Type       string `json:"type" binding:"required,eq=app"`
-			Attributes struct {
-				Name            string     `json:"name"`
-				Description     string     `json:"description"`
-				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			} `json:"attributes" binding:"required"`
@@ -139,16 +71,86 @@ func TestAppEndpointsWithTools(t *testing.T) {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
+				MonthlyBudget   *float64   `json:"monthly_budget"`
+				BudgetStartDate *time.Time `json:"budget_start_date"`
+			}{
+				Name:        "App With Tools Handler Test",
+				Description: "Test app creation with tools",
+				UserID:      user.ID,
+				ToolIDs:     []uint{tool1.ID},
+			},
+		},
+	}
+	w := performRequest(api.router, "POST", "/api/v1/apps", createAppPayload)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createAppResponse AppResponseWrapper
+	err = json.Unmarshal(w.Body.Bytes(), &createAppResponse)
+	assert.NoError(t, err)
+	createdAppID, _ := strconv.ParseUint(createAppResponse.Data.ID, 10, 32)
+	assert.NotZero(t, createdAppID)
+	assert.Len(t, createAppResponse.Data.Attributes.ToolIDs, 1)
+	if len(createAppResponse.Data.Attributes.ToolIDs) > 0 {
+		assert.Equal(t, tool1.ID, createAppResponse.Data.Attributes.ToolIDs[0])
+	}
+
+	wGetTools := performRequest(api.router, "GET", fmt.Sprintf("/api/v1/apps/%d/tools", createdAppID), nil)
+	assert.Equal(t, http.StatusOK, wGetTools.Code)
+	var getToolsResponse struct {
+		Data []uint `json:"data"`
+	}
+	err = json.Unmarshal(wGetTools.Body.Bytes(), &getToolsResponse)
+	assert.NoError(t, err)
+	assert.Len(t, getToolsResponse.Data, 1)
+	assert.Contains(t, getToolsResponse.Data, tool1.ID)
+
+	wAddTool := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/apps/%d/tools/%d", createdAppID, tool2.ID), nil)
+	assert.Equal(t, http.StatusOK, wAddTool.Code)
+	var addToolResponse AppResponseWrapper
+	err = json.Unmarshal(wAddTool.Body.Bytes(), &addToolResponse)
+	assert.NoError(t, err)
+	assert.Len(t, addToolResponse.Data.Attributes.ToolIDs, 2)
+
+	wGetToolsAfterAdd := performRequest(api.router, "GET", fmt.Sprintf("/api/v1/apps/%d/tools", createdAppID), nil)
+	assert.Equal(t, http.StatusOK, wGetToolsAfterAdd.Code)
+	err = json.Unmarshal(wGetToolsAfterAdd.Body.Bytes(), &getToolsResponse)
+	assert.NoError(t, err)
+	assert.Len(t, getToolsResponse.Data, 2)
+	assert.Contains(t, getToolsResponse.Data, tool1.ID)
+	assert.Contains(t, getToolsResponse.Data, tool2.ID)
+
+	updateAppPayload := TestAppInput{
+		Data: struct {
+			Type       string `json:"type" binding:"required,eq=app"`
+			Attributes struct {
+				Name            string     `json:"name"`
+				Description     string     `json:"description"`
+				UserID          uint       `json:"user_id"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
+				MonthlyBudget   *float64   `json:"monthly_budget"`
+				BudgetStartDate *time.Time `json:"budget_start_date"`
+			} `json:"attributes" binding:"required"`
+		}{
+			Type: "app",
+			Attributes: struct {
+				Name            string     `json:"name"`
+				Description     string     `json:"description"`
+				UserID          uint       `json:"user_id"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
 				Name:        "App With Tools Handler Test Updated",
 				Description: "Test app update with tools",
 				UserID:      user.ID,
-				ToolIDs:     []string{strconv.Itoa(int(tool2.ID))}, // Only tool2
+				ToolIDs:     []uint{tool2.ID},
 			},
 		},
 	}
@@ -157,50 +159,33 @@ func TestAppEndpointsWithTools(t *testing.T) {
 	var updateAppResponse AppResponseWrapper
 	err = json.Unmarshal(wUpdate.Body.Bytes(), &updateAppResponse)
 	assert.NoError(t, err)
-	assert.Len(t, updateAppResponse.Data.Attributes.Tools, 1, "Should have 1 tool after update")
-	if len(updateAppResponse.Data.Attributes.Tools) > 0 {
-		assert.Equal(t, strconv.Itoa(int(tool2.ID)), updateAppResponse.Data.Attributes.Tools[0].ID)
+	assert.Len(t, updateAppResponse.Data.Attributes.ToolIDs, 1)
+	if len(updateAppResponse.Data.Attributes.ToolIDs) > 0 {
+		assert.Equal(t, tool2.ID, updateAppResponse.Data.Attributes.ToolIDs[0])
 	}
 
-	// 7. Test Remove Tool from App
 	wRemoveTool := performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/apps/%d/tools/%d", createdAppID, tool2.ID), nil)
 	assert.Equal(t, http.StatusNoContent, wRemoveTool.Code)
 
-	// Verify by getting tools again
 	wGetToolsAfterRemove := performRequest(api.router, "GET", fmt.Sprintf("/api/v1/apps/%d/tools", createdAppID), nil)
 	assert.Equal(t, http.StatusOK, wGetToolsAfterRemove.Code)
 	err = json.Unmarshal(wGetToolsAfterRemove.Body.Bytes(), &getToolsResponse)
 	assert.NoError(t, err)
-	assert.Len(t, getToolsResponse.Data, 0, "Should have 0 tools after removal")
+	assert.Len(t, getToolsResponse.Data, 0)
 
-	// 8. Error case: Get tools for non-existent app
 	wGetToolsNonExistentApp := performRequest(api.router, "GET", "/api/v1/apps/99999/tools", nil)
 	assert.Equal(t, http.StatusNotFound, wGetToolsNonExistentApp.Code)
 
-	// 9. Error case: Add tool to non-existent app
 	wAddToolNonExistentApp := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/apps/99999/tools/%d", tool1.ID), nil)
 	assert.Equal(t, http.StatusNotFound, wAddToolNonExistentApp.Code)
 
-	// 10. Error case: Add non-existent tool to app
 	wAddNonExistentTool := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/apps/%d/tools/88888", createdAppID), nil)
-	assert.Equal(t, http.StatusNotFound, wAddNonExistentTool.Code) // Service should return error if tool not found
+	assert.Equal(t, http.StatusNotFound, wAddNonExistentTool.Code)
 }
 
-// AppResponseWrapper is used if the actual response is nested under a "data" key.
 type AppResponseWrapper struct {
 	Data AppResponse `json:"data"`
 }
-
-// ToolsResponseWrapper for GET /apps/:id/tools
-type ToolsResponseWrapper struct {
-	Data []ToolResponse `json:"data"`
-}
-
-
-// TestAppEndpoints and TestAppPagination are existing tests.
-// I need to update their AppInput to use TestAppInput (with string IDs) if they create apps.
-// For brevity, I'm showing the new test function above and assuming modifications to existing tests
-// like TestAppEndpoints and TestAppPagination to use TestAppInput for consistency.
 
 func TestAppEndpoints(t *testing.T) {
 	api, db := setupTestAPI(t)
@@ -209,7 +194,6 @@ func TestAppEndpoints(t *testing.T) {
 	err := user.Create(db)
 	assert.NoError(t, err)
 
-	// Use TestAppInput which expects string IDs for LLMs/Datasources/Tools
 	createAppInput := TestAppInput{
 		Data: struct {
 			Type       string `json:"type" binding:"required,eq=app"`
@@ -217,9 +201,9 @@ func TestAppEndpoints(t *testing.T) {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			} `json:"attributes" binding:"required"`
@@ -229,18 +213,18 @@ func TestAppEndpoints(t *testing.T) {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
 				Name:            "Test App Old",
 				Description:     "Test Description Old",
 				UserID:          user.ID,
-				DatasourceIDs:   []string{}, // Empty string slices
-				LLMIDs:          []string{},
-				ToolIDs:         []string{}, // Important: provide empty slice for new field
+				DatasourceIDs:   []uint{},
+				LLMIDs:          []uint{},
+				ToolIDs:         []uint{},
 				MonthlyBudget:   nil,
 				BudgetStartDate: nil,
 			},
@@ -257,7 +241,7 @@ func TestAppEndpoints(t *testing.T) {
 
 	assert.Equal(t, "app", response.Data.Type)
 	assert.Equal(t, "Test App Old", response.Data.Attributes.Name)
-	assert.Empty(t, response.Data.Attributes.Tools) // Expect empty tools
+	assert.Empty(t, response.Data.Attributes.ToolIDs)
 }
 
 func TestAppPagination(t *testing.T) {
@@ -267,34 +251,34 @@ func TestAppPagination(t *testing.T) {
 	assert.NoError(t, err)
 
 	for i := 0; i < 10; i++ {
-		createAppInput := TestAppInput{ // Use TestAppInput
+		createAppInput := TestAppInput{
 			Data: struct {
 				Type       string `json:"type" binding:"required,eq=app"`
 				Attributes struct {
 					Name            string     `json:"name"`
 					Description     string     `json:"description"`
 					UserID          uint       `json:"user_id"`
-					DatasourceIDs   []string   `json:"datasource_ids"`
-					LLMIDs          []string   `json:"llm_ids"`
-					ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 					MonthlyBudget   *float64   `json:"monthly_budget"`
 					BudgetStartDate *time.Time `json:"budget_start_date"`
 				} `json:"attributes" binding:"required"`
 			}{
 				Type: "app",
-				Attributes: struct {
+			Attributes: struct {
 					Name            string     `json:"name"`
 					Description     string     `json:"description"`
 					UserID          uint       `json:"user_id"`
-					DatasourceIDs   []string   `json:"datasource_ids"`
-					LLMIDs          []string   `json:"llm_ids"`
-					ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 					MonthlyBudget   *float64   `json:"monthly_budget"`
 					BudgetStartDate *time.Time `json:"budget_start_date"`
 				}{
 					Name:            fmt.Sprintf("Test App %d", i),
 					UserID:          user.ID,
-					ToolIDs:         []string{}, // Add empty ToolIDs
+				ToolIDs:         []uint{},
 				},
 			},
 		}
@@ -304,19 +288,12 @@ func TestAppPagination(t *testing.T) {
 
 	w := performRequest(api.router, "GET", "/api/v1/apps?page=2&page_size=5", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
-	var response AppListResponse // Assuming AppListResponse is defined for list views
+	var response AppListResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
 	assert.Len(t, response.Data, 5)
 }
-
-// Assuming AppListResponse is similar to this:
-type AppListResponse struct {
-	Data []AppResponse `json:"data"`
-	// Meta map[string]int `json:"meta"` // If you have meta for pagination
-}
-
 
 func TestCreateAppPrivacyScoreMismatch(t *testing.T) {
 	api, db := setupTestAPI(t)
@@ -324,7 +301,7 @@ func TestCreateAppPrivacyScoreMismatch(t *testing.T) {
 	err := user.Create(db)
 	assert.NoError(t, err)
 
-	llm := &models.LLM{Name: "Low Privacy LLM", PrivacyScore: 1, Vendor: "Test", ModelID: "test"}
+	llm := &models.LLM{Name: "Low Privacy LLM", PrivacyScore: 1, Vendor: "Test", DefaultModel: "test"}
 	err = db.Create(llm).Error
 	assert.NoError(t, err)
 
@@ -332,16 +309,16 @@ func TestCreateAppPrivacyScoreMismatch(t *testing.T) {
 	err = db.Create(datasource).Error
 	assert.NoError(t, err)
 
-	createAppInput := TestAppInput{ // Use TestAppInput
+	createAppInput := TestAppInput{
 		Data: struct {
 			Type       string `json:"type" binding:"required,eq=app"`
 			Attributes struct {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			} `json:"attributes" binding:"required"`
@@ -351,24 +328,24 @@ func TestCreateAppPrivacyScoreMismatch(t *testing.T) {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
 				Name:          "Privacy Mismatch App",
 				UserID:        user.ID,
-				DatasourceIDs: []string{strconv.Itoa(int(datasource.ID))},
-				LLMIDs:        []string{strconv.Itoa(int(llm.ID))},
-				ToolIDs:       []string{},
+				DatasourceIDs: []uint{datasource.ID},
+				LLMIDs:        []uint{llm.ID},
+				ToolIDs:       []uint{},
 			},
 		},
 	}
 
 	w := performRequest(api.router, "POST", "/api/v1/apps", createAppInput)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	var errorResponse ErrorResponse // Use the global ErrorResponse
+	var errorResponse ErrorResponse
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
 	assert.Len(t, errorResponse.Errors, 1)
@@ -381,7 +358,7 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 	err := user.Create(db)
 	assert.NoError(t, err)
 
-	llm := &models.LLM{Name: "Low Privacy LLM Update", PrivacyScore: 1, Vendor: "Test", ModelID: "test-update"}
+	llm := &models.LLM{Name: "Low Privacy LLM Update", PrivacyScore: 1, Vendor: "Test", DefaultModel: "test-update"}
 	err = db.Create(llm).Error
 	assert.NoError(t, err)
 
@@ -392,20 +369,20 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 	app := &models.App{Name: "App to Update Privacy", UserID: user.ID}
 	err = db.Create(app).Error
 	assert.NoError(t, err)
-	err = db.Model(app).Association("LLMs").Append(llm) // Associate LLM first
+	err = db.Model(app).Association("LLMs").Append(llm)
 	assert.NoError(t, err)
 
 
-	updateAppInput := TestAppInput{ // Use TestAppInput
+	updateAppInput := TestAppInput{
 		Data: struct {
 			Type       string `json:"type" binding:"required,eq=app"`
 			Attributes struct {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			} `json:"attributes" binding:"required"`
@@ -415,17 +392,17 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 				Name            string     `json:"name"`
 				Description     string     `json:"description"`
 				UserID          uint       `json:"user_id"`
-				DatasourceIDs   []string   `json:"datasource_ids"`
-				LLMIDs          []string   `json:"llm_ids"`
-				ToolIDs         []string   `json:"tool_ids"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
 				Name:          "Updated App Privacy",
 				UserID:        user.ID,
-				DatasourceIDs: []string{strconv.Itoa(int(datasource.ID))},
-				LLMIDs:        []string{strconv.Itoa(int(llm.ID))},
-				ToolIDs:       []string{},
+				DatasourceIDs: []uint{datasource.ID},
+				LLMIDs:        []uint{llm.ID},
+				ToolIDs:       []uint{},
 			},
 		},
 	}
@@ -439,29 +416,7 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 	assert.Contains(t, errorResponse.Errors[0].Detail, "Datasources have higher privacy requirements than the selected LLMs")
 }
 
-// performRequest is a helper function from the existing test file.
-// Ensure it's available or define it.
-func performRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
-	var req *http.Request
-	var err error
-	if body != nil {
-		payload, _ := json.Marshal(body)
-		req, err = http.NewRequest(method, path, bytes.NewBuffer(payload))
-		req.Header.Set("Content-Type", "application/json")
-	} else {
-		req, err = http.NewRequest(method, path, nil)
-	}
-	if err != nil {
-		panic(err)
-	}
-	// Add dummy auth token if needed by middleware
-	// req.Header.Set("Authorization", "Bearer testtoken")
-
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	return w
-}
-
+// performRequest is removed as it's defined in api_test.go
 // setupTestAPI is a helper from existing tests.
 // Ensure it initializes the DB and API correctly.
 // It's assumed that setupTestAPI internally calls models.InitModels(db)
@@ -486,3 +441,4 @@ func performRequest(r http.Handler, method, path string, body interface{}) *http
 // 		Detail string `json:"detail"`
 // 	} `json:"errors"`
 // }
+// performRequest is defined in api_test.go
