@@ -230,10 +230,22 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     // This step might fail if the keyID and restUrl are fully mocked and don't point to a real proxy.
     // For UI testing of tool integration, this step's success is secondary.
     // If a live proxy with these mock credentials is not available, we can skip or mock the actual SDK call.
-    console.log("Skipping LLM request for UI tool test to avoid dependency on live proxy with mock credentials.");
-    // const resposne = await sendRequestToAnthropicLLMWithSDK(keyID, restUrl, prompt);
-    // expect(resposne).not.toBeNull();
-    // console.log(`Response from LLM: ${resposne}`);
+
+    // Mock the network request made by sendRequestToAnthropicLLMWithSDK
+    await page.route(restUrl, async route => {
+      // Assuming sendRequestToAnthropicLLMWithSDK expects a plain text response
+      // based on the jest.fn().mockResolvedValue("Mocked LLM response") example.
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/plain',
+        body: "Mocked LLM response"
+      });
+    });
+
+    const resposne = await sendRequestToAnthropicLLMWithSDK(keyID, restUrl, prompt);
+    expect(resposne).not.toBeNull();
+    expect(resposne).toBe("Mocked LLM response"); // Add assertion for the mocked response
+    console.log(`Response from LLM: ${resposne}`);
   });
 
   await test.step('Delete app', async () => {
@@ -264,11 +276,6 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await aiPortalPage.DeleteAppButton.click();
     await aiPortalPage.ConfirmDeleteButton.click();
     await aiPortalPage.Table.expectRowWithTextNotExists(app_name);
-  });
-})
-    const resposne = await sendRequestToAnthropicLLMWithSDK(keyID, restUrl, prompt);
-    expect(resposne).not.toBeNull();
-    console.log(`Response from LLM: ${resposne}`);
   });
 
   await test.step('Delete app', async () => {
