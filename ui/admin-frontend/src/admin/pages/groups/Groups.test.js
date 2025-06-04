@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { screen, waitFor } from '@testing-library/react';
 import Groups from './Groups';
 import { CACHE_KEYS } from '../../utils/constants';
+import { renderWithTheme } from '../../../test-utils/render-with-theme';
 
 jest.mock('./hooks/useGroups', () => ({
   __esModule: true,
@@ -15,11 +15,11 @@ jest.mock('./hooks/useGroupActions', () => ({
 }));
 
 jest.mock('react-router-dom', () => {
-  const React = jest.requireActual('react');
+  const ReactRouter = jest.requireActual('react-router-dom');
+  const ActualReact = jest.requireActual('react');
   return {
-    ...jest.requireActual('react-router-dom'),
-    // eslint-disable-next-line react/display-name
-    Link: React.forwardRef((props, ref) => (
+    ...ReactRouter,
+    Link: ActualReact.forwardRef((props, ref) => (
       <a ref={ref} {...props}>
         {props.children}
       </a>
@@ -27,44 +27,60 @@ jest.mock('react-router-dom', () => {
   };
 });
 
-const mockUseGroups = require('./hooks/useGroups').default;
-const mockUseGroupActions = require('./hooks/useGroupActions').default;
+jest.mock('./components/ManageTeamMembersModal', () => ({
+  __esModule: true,
+  default: jest.fn(() => <div data-testid="mock-team-members-modal" />)
+}));
 
-const mockTheme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    custom: {
-      white: '#ffffff',
-    },
-    background: {
-      buttonPrimaryDefault: '#007bff',
-    },
-    text: {
-      defaultSubdued: '#6c757d',
-      neutralDefault: '#495057',
-      primary: '#212529',
-    },
-    border: {
-      neutralDefault: '#cccccc',
-    },
-  },
-  typography: {
-    headingXLarge: { fontSize: '2rem' },
-    bodyLargeDefault: { fontSize: '1rem' },
-  },
+jest.mock('./components/ManageGroupCatalogsModal', () => ({
+  __esModule: true,
+  default: jest.fn(() => <div data-testid="mock-catalogs-modal" />)
+}));
+
+jest.mock('../../hooks/useSystemFeatures', () => {
+  const mockSystemFeaturesFn = jest.fn(() => {
+    return {
+      features: { feature_portal: false, feature_chat: false, feature_gateway: false },
+      loading: false,
+      error: null,
+      fetchFeatures: jest.fn().mockResolvedValue({
+        feature_portal: true, feature_chat: true, feature_gateway: true,
+      }),
+    };
+  });
+  return {
+    __esModule: true,
+    default: mockSystemFeaturesFn,
+  };
 });
 
-const renderWithTheme = (component) => {
-  return render(<ThemeProvider theme={mockTheme}>{component}</ThemeProvider>);
-};
+jest.mock('../../hooks/useOverviewData', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+const mockUseGroups = require('./hooks/useGroups').default;
+const mockUseGroupActions = require('./hooks/useGroupActions').default;
+const mockUseOverviewData = require('../../hooks/useOverviewData').default;
+const mockUseSystemFeatures = require('../../hooks/useSystemFeatures').default;
 
 describe('Groups Component', () => {
   beforeEach(() => {
+    mockUseSystemFeatures.mockReturnValue({
+      features: {
+        feature_portal: false,
+        feature_chat: false,
+        feature_gateway: false,
+      },
+      loading: false,
+      error: null,
+      fetchFeatures: jest.fn().mockResolvedValue({
+        feature_portal: true,
+        feature_chat: true,
+        feature_gateway: true,
+      }),
+    });
+
     mockUseGroups.mockReturnValue({
       groups: [],
       loading: false,
@@ -87,6 +103,11 @@ describe('Groups Component', () => {
       handleCancelDelete: jest.fn(),
       handleConfirmDelete: jest.fn(),
       handleGroupClick: jest.fn(),
+      handleManageMembers: jest.fn(),
+      handleManageCatalogs: jest.fn(),
+    });
+    mockUseOverviewData.mockReturnValue({
+      getDocsLink: jest.fn().mockReturnValue('https://example.com'),
     });
   });
 
@@ -170,7 +191,6 @@ describe('Groups Component', () => {
     localStorage.setItem(CACHE_KEYS.GROUP_NOTIFICATION, JSON.stringify(notification));
 
     renderWithTheme(<Groups />);
-
     expect(await screen.findByText('Group created successfully')).toBeInTheDocument();
     
     await waitFor(() => {
@@ -178,4 +198,36 @@ describe('Groups Component', () => {
     });
   });
 
-}); 
+  test('renders team members management modal when closed', () => {
+    const ManageTeamMembersModal = require('./components/ManageTeamMembersModal').default;
+
+    renderWithTheme(<Groups />);
+    
+    expect(ManageTeamMembersModal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        open: false,
+        group: null
+      }),
+      {}
+    );
+  });
+
+  test('renders catalogs management modal when closed', () => {
+    const ManageGroupCatalogsModal = require('./components/ManageGroupCatalogsModal').default;
+
+    renderWithTheme(<Groups />);
+    
+    expect(ManageGroupCatalogsModal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        open: false,
+        group: null,
+        features: {
+          feature_portal: false,
+          feature_chat: false,
+          feature_gateway: false,
+        }
+      }),
+      {}
+    );
+  });
+});

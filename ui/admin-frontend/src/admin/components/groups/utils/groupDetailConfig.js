@@ -1,6 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import CustomSelectBadge from "../../common/CustomSelectBadge";
 import { roleBadgeConfigs } from "./roleBadgeConfig";
+import { getFeatureFlags } from "../../../utils/featureUtils";
 
 export const CATALOG_ROWS = [
     {
@@ -87,3 +88,50 @@ export const TEAM_MEMBERS_COLUMNS_FOR_TABLE = [
     )
   }
 ];
+
+export const CATALOG_DISPLAY_STYLES = {
+  borderStyle: {
+    borderBottom: "2px solid",
+    borderColor: "border.neutralDefaultSubdued",
+    padding: "16px 0",
+    display: "flex",
+    alignItems: "center",
+  },
+  
+  lastRowStyle: {
+    padding: "16px 0",
+    display: "flex",
+    alignItems: "center",
+  }
+};
+
+export const getCatalogTypes = (features, catalogues, dataCatalogues, toolCatalogues) => {
+  const { isPortalEnabled, isChatEnabled } = getFeatureFlags(features);
+  
+  return [
+    {
+      label: "LLM providers",
+      items: catalogues,
+      show: isPortalEnabled,
+      variant: "llm"
+    },
+    {
+      label: "Data sources", 
+      items: dataCatalogues,
+      show: true,
+      variant: "data"
+    },
+    {
+      label: "Tools",
+      items: toolCatalogues,
+      show: isChatEnabled,
+      variant: "tool"
+    }
+  ];
+};
+
+export const GROUP_CATALOGS_DEFAULTS = {
+  title: "Catalogs",
+  defaultExpanded: true,
+  emptyMessage: "No catalogs are currently assigned to this team."
+}; 

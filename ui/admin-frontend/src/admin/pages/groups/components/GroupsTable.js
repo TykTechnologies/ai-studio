@@ -2,6 +2,7 @@ import React from "react";
 import DataTable from "../../../components/common/DataTable";
 import { Typography } from "@mui/material";
 import CatalogueBadges from "./CatalogueBadges";
+import { getFeatureFlags } from "../../../utils/featureUtils";
 
 const GroupsTable = ({
   groups,
@@ -16,8 +17,13 @@ const GroupsTable = ({
   handleGroupClick,
   handleEdit,
   handleDelete,
+  handleManageMembers,
+  handleManageCatalogs,
+  features = {},
 }) => {
-  const columns = [
+  const { isPortalEnabled, isChatEnabled, isGatewayOnly } = getFeatureFlags(features);
+
+  const baseColumns = [
     { field: "id", headerName: "ID", sortable: true },
     {
       field: "attributes.name",
@@ -33,31 +39,60 @@ const GroupsTable = ({
           {item.attributes.user_count || 0}
         </Typography>
       )
-    },
-    {
-      field: "attributes.catalogues",
-      headerName: "Catalogues",
-      renderCell: (item) => (
-        <CatalogueBadges
-          catalogues={item.attributes.catalogue_names || []}
-          dataCatalogues={item.attributes.data_catalogue_names || []}
-          toolCatalogues={item.attributes.tool_catalogue_names || []}
-        />
-      ),
-      sx: { width: '35%' }
     }
   ];
 
-  const actions = [
+  const cataloguesColumn = {
+    field: "attributes.catalogues",
+    headerName: "Catalogues",
+    renderCell: (item) => {
+      const catalogues = isPortalEnabled
+        ? item.attributes.catalogue_names || []
+        : [];
+      
+      const dataCatalogues = item.attributes.data_catalogue_names || [];
+      
+      const toolCatalogues = isChatEnabled
+        ? item.attributes.tool_catalogue_names || []
+        : [];
+
+      return (
+        <CatalogueBadges
+          catalogues={catalogues}
+          dataCatalogues={dataCatalogues}
+          toolCatalogues={toolCatalogues}
+        />
+      );
+    },
+    sx: { width: '35%' }
+  };
+
+  const columns = isGatewayOnly ? baseColumns : [...baseColumns, cataloguesColumn];
+
+  const baseActions = [
     {
       label: "Edit team",
       onClick: handleEdit
     },
     {
-      label: "Delete team",
-      onClick: handleDelete
+      label: "Manage team members",
+      onClick: handleManageMembers
     }
   ];
+
+  const catalogsAction = {
+    label: "Manage catalogs",
+    onClick: handleManageCatalogs
+  };
+
+  const deleteAction = {
+    label: "Delete team",
+    onClick: handleDelete
+  };
+
+  const actions = isGatewayOnly 
+    ? [...baseActions, deleteAction]
+    : [...baseActions, catalogsAction, deleteAction];
 
   return (
     <DataTable

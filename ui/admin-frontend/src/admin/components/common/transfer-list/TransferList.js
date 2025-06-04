@@ -9,7 +9,7 @@ import {
   StyledTextField,
 } from "../../../styles/sharedStyles";
 import TransferListTable from "./TransferListTable";
-import useTransferList from "./useTransferList";
+import InfiniteScrollContainer from "../InfiniteScrollContainer";
 import {
   TransferListContainer,
   TransferBox,
@@ -25,42 +25,33 @@ const TransferList = ({
   leftSubtitle,
   rightTitle,
   rightSubtitle,
-  onChange,
   idField = "id",
-  onSearch,
   enableSearch = false,
+  searchTerm = "",
+  onSearchTermChange,
+  isSearching = false,
+  onAdd,
+  onRemove,
   onLoadMore,
-  hasMore = true,
+  hasMore = false,
   isLoadingMore = false,
-  onItemAdded,
-  onItemRemoved,
 }) => {
-  const {
-    leftBoxRef,
-    rightBoxRef,
-    available,
-    selected,
-    searchTerm,
-    isSearching,
-    handleSearchChange,
-    handleAddItem,
-    handleRemoveItem,
-  } = useTransferList({
-    availableItems,
-    selectedItems,
-    idField,
-    onChange,
-    onSearch,
-    onLoadMore,
-    hasMore,
-    isLoadingMore,
-    onItemAdded,
-    onItemRemoved,
-  });
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    onSearchTermChange?.(value);
+  };
+
+  const handleAddItem = (item) => {
+    onAdd?.(item);
+  };
+
+  const handleRemoveItem = (item) => {
+    onRemove?.(item);
+  };
 
   return (
     <TransferListContainer>
-      <TransferBox ref={leftBoxRef}>
+      <TransferBox>
         <HeaderBox>
           <Typography variant="headingSmall" color="text.primary">
             {leftTitle}
@@ -70,7 +61,7 @@ const TransferList = ({
           </Typography>
         </HeaderBox>
         <TransferListTable
-          items={selected}
+          items={selectedItems}
           columns={columns}
           idField={idField}
           isLeftSide={true}
@@ -78,7 +69,7 @@ const TransferList = ({
         />
       </TransferBox>
 
-      <TransferBox ref={rightBoxRef}>
+      <TransferBox>
         <HeaderBox>
           <Typography variant="headingSmall" color="text.primary">
             {rightTitle}
@@ -112,13 +103,19 @@ const TransferList = ({
             </Typography>
           </Box>
         ) : (
-          <TransferListTable
-            items={available}
-            columns={columns}
-            idField={idField}
-            isLeftSide={false}
-            onAddItem={handleAddItem}
-          />
+          <InfiniteScrollContainer
+            onLoadMore={onLoadMore}
+            hasMore={hasMore}
+            isLoading={isLoadingMore}
+          >
+            <TransferListTable
+              items={availableItems}
+              columns={columns}
+              idField={idField}
+              isLeftSide={false}
+              onAddItem={handleAddItem}
+            />
+          </InfiniteScrollContainer>
         )}
         
         {isLoadingMore && !isSearching && (

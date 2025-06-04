@@ -320,9 +320,10 @@ func (gs *Groups) GetGroupsMemberCounts(db *gorm.DB) ([]GroupMemberCount, error)
 	}
 
 	err := db.Table("user_groups").
-		Select("group_id, COUNT(*) as count").
-		Where("group_id IN ?", groupIDs).
-		Group("group_id").
+		Select("user_groups.group_id, COUNT(*) as count").
+		Joins("JOIN users ON users.id = user_groups.user_id").
+		Where("user_groups.group_id IN ? AND users.deleted_at IS NULL", groupIDs).
+		Group("user_groups.group_id").
 		Scan(&results).Error
 
 	if err != nil {
@@ -352,4 +353,19 @@ func (g *Group) GetDataCataloguesCount() int {
 
 func (g *Group) GetToolCataloguesCount() int {
 	return len(g.ToolCatalogues)
+}
+
+func IsGroupNameUnique(db *gorm.DB, name string, groupID uint) (bool, error) {
+	var count int64
+	query := db.Model(&Group{}).Where("name = ?", name)
+
+	if groupID != 0 {
+		query = query.Where("id != ?", groupID)
+	}
+
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count == 0, nil
 }
