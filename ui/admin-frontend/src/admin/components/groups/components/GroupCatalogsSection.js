@@ -21,7 +21,7 @@ const GroupCatalogsSection = ({
   loading,
   features
 }) => {
-  const { isPortalOnly, isChatOnly } = getFeatureFlags(features);
+  const { isPortalEnabled, isChatEnabled } = getFeatureFlags(features);
   const hasNoCatalogs = (!catalogs || catalogs.length === 0) &&
                         (!dataCatalogs || dataCatalogs.length === 0) &&
                         (!toolCatalogs || toolCatalogs.length === 0);
@@ -40,7 +40,7 @@ const GroupCatalogsSection = ({
           </Typography>
         </Box>
         
-        {(isPortalOnly || !isChatOnly) && (
+        {isPortalEnabled && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
               LLM providers catalogs
@@ -68,7 +68,7 @@ const GroupCatalogsSection = ({
           />
         </Box>
         
-        {(isChatOnly || !isPortalOnly) && (
+        {isChatEnabled && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
               Tools catalogs

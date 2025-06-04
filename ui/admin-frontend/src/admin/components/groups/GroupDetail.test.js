@@ -60,8 +60,8 @@ describe('GroupDetail', () => {
 
     getFeatureFlags.mockReturnValue({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: true,
     });
 
     mockUseTeamMembers.mockReturnValue({
@@ -179,8 +179,8 @@ describe('GroupDetail', () => {
     test('renders group details without catalogs in gateway-only mode', () => {
       getFeatureFlags.mockReturnValue({
         isGatewayOnly: true,
-        isPortalOnly: false,
-        isChatOnly: false,
+        isPortalEnabled: false,
+        isChatEnabled: false,
       });
       
       renderWithRouterAndTheme(<GroupDetail />);

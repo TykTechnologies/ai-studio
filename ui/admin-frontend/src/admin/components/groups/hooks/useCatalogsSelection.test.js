@@ -103,8 +103,8 @@ describe('useCatalogsSelection Hook', () => {
     
     getFeatureFlags.mockReturnValue({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: false,
+      isChatEnabled: false
     });
   });
 
@@ -141,6 +141,12 @@ describe('useCatalogsSelection Hook', () => {
   });
 
   test('fetches catalogs on load and updates state', async () => {
+    getFeatureFlags.mockReturnValue({
+      isGatewayOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: true
+    });
+
     render(<TestComponent />);
     
     expect(screen.getByTestId('loading').textContent).toBe('true');
@@ -228,6 +234,12 @@ describe('useCatalogsSelection Hook', () => {
   });
 
   test('formats catalogs correctly for select component', async () => {
+    getFeatureFlags.mockReturnValue({
+      isGatewayOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: true
+    });
+    
     render(<TestComponent />);
     
     await waitFor(() => {
@@ -254,6 +266,12 @@ describe('useCatalogsSelection Hook', () => {
   });
 
   test('handles non-array catalog data', async () => {
+    getFeatureFlags.mockReturnValue({
+      isGatewayOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: false
+    });
+    
     getCatalogues.mockResolvedValue(null);
     
     render(<TestComponent />);
@@ -266,6 +284,12 @@ describe('useCatalogsSelection Hook', () => {
   });
 
   test('provides fetchCatalogs method to manually refresh data', async () => {
+    getFeatureFlags.mockReturnValue({
+      isGatewayOnly: false,
+      isPortalEnabled: true,
+      isChatEnabled: true
+    });
+    
     render(<TestComponent />);
     
     await waitFor(() => {
@@ -290,8 +314,8 @@ describe('useCatalogsSelection Hook', () => {
   test('does not fetch catalogs when in Gateway-only mode', async () => {
     getFeatureFlags.mockReturnValue({
       isGatewayOnly: true,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: false,
+      isChatEnabled: false
     });
 
     render(<TestComponent features={{ feature_gateway: true }} />);
@@ -308,8 +332,8 @@ describe('useCatalogsSelection Hook', () => {
   test('fetches only portal catalogs in Portal-only mode', async () => {
     getFeatureFlags.mockReturnValue({
       isGatewayOnly: false,
-      isPortalOnly: true,
-      isChatOnly: false
+      isPortalEnabled: true,
+      isChatEnabled: false
     });
 
     render(<TestComponent features={{ feature_portal: true }} />);
@@ -326,8 +350,8 @@ describe('useCatalogsSelection Hook', () => {
   test('fetches only chat catalogs in Chat-only mode', async () => {
     getFeatureFlags.mockReturnValue({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: true
+      isPortalEnabled: false,
+      isChatEnabled: true
     });
 
     render(<TestComponent features={{ feature_chat: true }} />);
@@ -344,8 +368,8 @@ describe('useCatalogsSelection Hook', () => {
   test('fetches all catalogs in mixed mode', async () => {
     getFeatureFlags.mockReturnValue({
       isGatewayOnly: false,
-      isPortalOnly: false,
-      isChatOnly: false
+      isPortalEnabled: true,
+      isChatEnabled: true
     });
 
     render(<TestComponent features={{ feature_portal: true, feature_chat: true }} />);
