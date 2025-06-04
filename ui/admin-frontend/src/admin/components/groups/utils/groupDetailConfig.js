@@ -106,13 +106,13 @@ export const CATALOG_DISPLAY_STYLES = {
 };
 
 export const getCatalogTypes = (features, catalogues, dataCatalogues, toolCatalogues) => {
-  const { isPortalOnly, isChatOnly } = getFeatureFlags(features);
+  const { isPortalEnabled, isChatEnabled } = getFeatureFlags(features);
   
   return [
     {
       label: "LLM providers",
       items: catalogues,
-      show: isPortalOnly || !isChatOnly,
+      show: isPortalEnabled,
       variant: "llm"
     },
     {
@@ -124,7 +124,7 @@ export const getCatalogTypes = (features, catalogues, dataCatalogues, toolCatalo
     {
       label: "Tools",
       items: toolCatalogues,
-      show: isChatOnly || !isPortalOnly,
+      show: isChatEnabled,
       variant: "tool"
     }
   ];

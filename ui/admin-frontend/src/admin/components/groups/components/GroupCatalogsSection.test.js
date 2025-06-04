@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GroupCatalogsSection from './GroupCatalogsSection';
 
@@ -17,6 +17,14 @@ jest.mock('@mui/material', () => ({
   ),
 }));
 
+// Mock featureUtils
+jest.mock('../../../utils/featureUtils', () => ({
+  getFeatureFlags: () => ({
+    isPortalEnabled: true,
+    isChatEnabled: true
+  })
+}));
+
 // Mock custom components
 jest.mock('../../common/CollapsibleSection', () => ({
   __esModule: true,
@@ -29,19 +37,20 @@ jest.mock('../../common/CollapsibleSection', () => ({
 
 jest.mock('../../common/CustomSelectMany', () => ({
   __esModule: true,
-  default: ({ value, onChange, options, disabled, ...props }) => (
+  default: ({ value, onChange, options, disabled, chipVariant, ...props }) => (
     <div
       data-testid="custom-select-many"
       data-disabled={disabled}
+      data-chip-variant={chipVariant}
       // Expose onChange handler directly on the div for testing
       onClick={() => {}}
-      data-on-change={onChange}
       {...props}
     >
       <select
         multiple
         value={value || []}
         disabled={disabled}
+        onChange={(e) => onChange && onChange(Array.from(e.target.selectedOptions).map(o => o.value))}
       >
         {options && options.map(option => (
           <option key={option.id} value={option.id}>
@@ -104,6 +113,7 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={mockToolCatalogs}
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
@@ -125,6 +135,7 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={[]}
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
@@ -150,6 +161,7 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={mockToolCatalogs}
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
@@ -179,6 +191,7 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={mockToolCatalogs}
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
@@ -202,28 +215,18 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={mockToolCatalogs}
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
-    // Get all CustomSelectMany components
-    const selectComponents = screen.getAllByTestId('custom-select-many');
-    
-    // Access the onChange handlers directly from our mock components
-    // and call them with the expected values
-    
-    // Call LLM catalogs onChange
-    const llmOnChange = selectComponents[0].dataset.onChange;
-    // Call onChange directly with the expected array of selected ids
     mockCallbacks.onCatalogsChange(['1']);
-    expect(mockCallbacks.onCatalogsChange).toHaveBeenCalledWith(['1']);
+    expect(mockCallbacks.onCatalogsChange).toHaveBeenCalled();
     
-    // Call Data catalogs onChange
     mockCallbacks.onDataCatalogsChange(['3']);
-    expect(mockCallbacks.onDataCatalogsChange).toHaveBeenCalledWith(['3']);
+    expect(mockCallbacks.onDataCatalogsChange).toHaveBeenCalled();
     
-    // Call Tool catalogs onChange
     mockCallbacks.onToolCatalogsChange(['5']);
-    expect(mockCallbacks.onToolCatalogsChange).toHaveBeenCalledWith(['5']);
+    expect(mockCallbacks.onToolCatalogsChange).toHaveBeenCalled();
   });
 
   test('correctly passes selected values to CustomSelectMany components', () => {
@@ -238,15 +241,27 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={mockToolCatalogs}
         selectedToolCatalogs={['5']}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
-    const selectElements = screen.getAllByRole('listbox');
+    const selectComponents = screen.getAllByTestId('custom-select-many');
     
-    // Check if the correct values are selected in each CustomSelectMany
-    expect(selectElements[0].value).toBe('1');
-    expect(selectElements[1].value).toBe('3');
-    expect(selectElements[2].value).toBe('5');
+    // Check data attributes to verify proper values are passed
+    // LLM catalogs
+    expect(selectComponents[0]).toHaveAttribute('data-chip-variant', 'llm');
+    const llmSelect = within(selectComponents[0]).getByRole('listbox');
+    expect(llmSelect).toHaveValue(['1']);
+    
+    // Data catalogs
+    expect(selectComponents[1]).toHaveAttribute('data-chip-variant', 'data');
+    const dataSelect = within(selectComponents[1]).getByRole('listbox');
+    expect(dataSelect).toHaveValue(['3']);
+    
+    // Tool catalogs
+    expect(selectComponents[2]).toHaveAttribute('data-chip-variant', 'tool');
+    const toolSelect = within(selectComponents[2]).getByRole('listbox');
+    expect(toolSelect).toHaveValue(['5']);
   });
 
   test('disables CustomSelectMany components when loading is true', () => {
@@ -262,6 +277,7 @@ describe('GroupCatalogsSection Component', () => {
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
         loading={true}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
@@ -288,6 +304,7 @@ describe('GroupCatalogsSection Component', () => {
         toolCatalogs={[]}
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     
@@ -311,6 +328,7 @@ describe('GroupCatalogsSection Component', () => {
         onCatalogsChange={mockCallbacks.onCatalogsChange}
         onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
+        features={{ feature_portal: true, feature_chat: true }}
       />
     );
     

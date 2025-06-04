@@ -4,16 +4,24 @@ import "@testing-library/jest-dom";
 import ManageGroupCatalogsModal from "./ManageGroupCatalogsModal";
 import { useCatalogsModal } from "../hooks/useCatalogsModal";
 import { teamsService } from "../../../services/teamsService";
+import { getFeatureFlags } from "../../../utils/featureUtils";
 import { renderWithTheme } from "../../../../test-utils/render-with-theme";
 
 jest.mock("../hooks/useCatalogsModal");
 jest.mock("../../../services/teamsService");
+jest.mock("../../../utils/featureUtils");
 
 describe("ManageGroupCatalogsModal", () => {
   const mockOnClose = jest.fn();
   const mockOnSuccess = jest.fn();
   const mockOnError = jest.fn();
   const mockUpdateGroupCatalogs = jest.fn();
+
+  const mockFeatures = {
+    feature_portal: true,
+    feature_chat: true,
+    feature_gateway: false
+  };
 
   const mockGroup = {
     id: 1,
@@ -58,6 +66,12 @@ describe("ManageGroupCatalogsModal", () => {
       setSelectedToolCatalogs: jest.fn(),
       loading: false
     });
+
+    getFeatureFlags.mockReturnValue({
+      isPortalEnabled: true,
+      isChatEnabled: true,
+      isGatewayOnly: false
+    });
   });
 
   it("renders loading state when loading is true", () => {
@@ -81,6 +95,7 @@ describe("ManageGroupCatalogsModal", () => {
         group={mockGroup}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
+        features={mockFeatures}
       />
     );
 
@@ -96,6 +111,7 @@ describe("ManageGroupCatalogsModal", () => {
         group={mockGroup}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
+        features={mockFeatures}
       />
     );
 
@@ -116,6 +132,7 @@ describe("ManageGroupCatalogsModal", () => {
         group={mockGroup}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
+        features={mockFeatures}
       />
     );
 
@@ -157,6 +174,7 @@ describe("ManageGroupCatalogsModal", () => {
         group={mockGroup}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
+        features={mockFeatures}
       />
     );
 
@@ -197,6 +215,7 @@ describe("ManageGroupCatalogsModal", () => {
         group={null}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
+        features={mockFeatures}
       />
     );
 
@@ -216,6 +235,7 @@ describe("ManageGroupCatalogsModal", () => {
         group={mockGroup}
         onSuccess={mockOnSuccess}
         onError={mockOnError}
+        features={mockFeatures}
       />
     );
 
@@ -223,5 +243,85 @@ describe("ManageGroupCatalogsModal", () => {
     fireEvent.click(cancelButton);
 
     expect(mockOnClose).toHaveBeenCalled();
+  });
+
+  it("returns null when isGatewayOnly is true", () => {
+    getFeatureFlags.mockReturnValueOnce({
+      isPortalEnabled: false,
+      isChatEnabled: false,
+      isGatewayOnly: true
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={{
+          feature_gateway: true,
+          feature_portal: false,
+          feature_chat: false
+        }}
+      />
+    );
+
+    expect(screen.queryByText("Manage Catalogs")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("hides LLM providers catalogs when portal is disabled", () => {
+    getFeatureFlags.mockReturnValueOnce({
+      isPortalEnabled: false,
+      isChatEnabled: true,
+      isGatewayOnly: false
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={{
+          feature_gateway: false,
+          feature_portal: false,
+          feature_chat: true
+        }}
+      />
+    );
+
+    expect(screen.queryByText("LLM providers catalogs")).not.toBeInTheDocument();
+    expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Tools catalogs")).toBeInTheDocument();
+  });
+
+  it("hides Tools catalogs when chat is disabled", () => {
+    getFeatureFlags.mockReturnValueOnce({
+      isPortalEnabled: true,
+      isChatEnabled: false,
+      isGatewayOnly: false
+    });
+
+    renderWithTheme(
+      <ManageGroupCatalogsModal
+        open={true}
+        onClose={mockOnClose}
+        group={mockGroup}
+        onSuccess={mockOnSuccess}
+        onError={mockOnError}
+        features={{
+          feature_gateway: false,
+          feature_portal: true,
+          feature_chat: false
+        }}
+      />
+    );
+
+    expect(screen.getByText("LLM providers catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
+    expect(screen.queryByText("Tools catalogs")).not.toBeInTheDocument();
   });
 });
