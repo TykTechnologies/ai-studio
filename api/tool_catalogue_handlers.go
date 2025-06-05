@@ -1,16 +1,19 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"encoding/json" // Retain for gin.H if it relies on it, or if other funcs use it.
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
-	"github.com/getkin/kin-openapi/openapi3" // Assuming this is the correct package for openapi3.Operation
 	"github.com/gin-gonic/gin"
+	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	// Using orderedmap indirectly through the pb33f API
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"gorm.io/gorm"
 )
 
@@ -583,7 +586,17 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 
 	// Assuming GetToolByID takes string ID and returns a models.Tool object.
 	// The previous TODO about ID parsing is still relevant if the service layer expects a different type.
-	tool, err := a.service.GetToolByID(toolID)
+	// Convert string ID to uint as required by service
+	idUint, err := strconv.ParseUint(toolID, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid tool ID: " + err.Error()}}})
+		return
+	}
+
+	tool, err := a.service.GetToolByID(uint(idUint))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
@@ -613,8 +626,8 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 		return
 	}
 
-	// Assuming universalclient.DefaultHTTPClient is suitable or can be configured if necessary.
-	client, err := universalclient.NewClient(universalclient.DefaultHTTPClient, decodedSpec, "")
+	// Create client using the universalclient package
+	client, err := universalclient.NewClient([]byte(decodedSpec), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -635,88 +648,18 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 	var operationDetailsList []OperationDetail
 
 	for _, opID := range operationIDs {
-		// findOperation is not public, let's try to get the operation directly if possible
-		// Assuming client.Spec is accessible and is an *openapi3.T object
-		// This part is speculative based on common library structures.
-		// If client.Spec or client.GetOperation is not available, this needs rethinking.
 
-		// Universal Client does not directly expose findOperation or getOperationDescription.
-		// It seems universal client is more about *making* calls rather than inspecting the spec.
-		// Let's try to parse the spec directly with getkin/kin-openapi
-		loader := openapi3.NewLoader()
-		doc, err := loader.LoadFromData([]byte(decodedSpec))
+		// Use our new helper function that leverages universalclient's AsTool method
+		operationDetail, err := getOperationDetailFromSpec([]byte(decodedSpec), opID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{
 				Title string `json:"title"`
 				Detail string `json:"detail"`
-			}{{"Internal Server Error", "Failed to parse OAS spec with getkin: " + err.Error()}}})
+			}{{"Internal Server Error", "Failed to get operation details: " + err.Error()}}})
 			return
 		}
-		err = doc.Validate(loader.Context)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{
-				Title string `json:"title"`
-				Detail string `json:"detail"`
-			}{{"Bad Request", "OAS validation failed: " + err.Error()}}})
-			return
-		}
-
-
-		// Iterate through paths and operations to find the one matching opID (if opID is standard)
-		// Or, more directly, iterate all operations from the parsed 'doc'.
-		for path, pathItem := range doc.Paths {
-			for method, operation := range pathItem.Operations() {
-				if operation.OperationID == opID {
-					opDetail := OperationDetail{
-						OperationID: operation.OperationID,
-						Method:      method,
-						Path:        path,
-						Description: operation.Description, // Or operation.Summary
-					}
-
-					// Parameters
-					for _, paramRef := range operation.Parameters {
-						param := paramRef.Value
-						if param == nil {
-							// Handle error or skip if parameter reference is invalid
-							continue
-						}
-						schemaMap, err := client.SchemaToMap(param.Schema.Value) // Assuming client.SchemaToMap is still usable
-						if err != nil {
-							// Log error or handle, maybe return an error response
-							// For now, sending an empty map for schema if conversion fails
-							schemaMap = gin.H{}
-						}
-						opDetail.Parameters = append(opDetail.Parameters, ParameterDetail{
-							Name:        param.Name,
-							In:          param.In,
-							Description: param.Description,
-							Required:    param.Required,
-							Schema:      schemaMap,
-						})
-					}
-
-					// RequestBody
-					if operation.RequestBody != nil && operation.RequestBody.Value != nil {
-						rb := operation.RequestBody.Value
-						if mediaType, ok := rb.Content["application/json"]; ok && mediaType.Schema != nil && mediaType.Schema.Value != nil {
-							schemaMap, err := client.SchemaToMap(mediaType.Schema.Value)
-							if err != nil {
-								schemaMap = gin.H{}
-							}
-							opDetail.RequestBody = RequestBodyDetail{
-								Description: rb.Description,
-								Required:    rb.Required,
-								Schema:      schemaMap,
-								ContentType: "application/json",
-							}
-						}
-					}
-					operationDetailsList = append(operationDetailsList, opDetail)
-					break // Found operation by ID for this path/method
-				}
-			}
-		}
+		
+		operationDetailsList = append(operationDetailsList, operationDetail)
 	}
 
 	if len(operationDetailsList) == 0 && len(operationIDs) > 0 {
@@ -861,4 +804,150 @@ func (a *API) getToolCatalogueTags(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, toTagResponses(tags))
+}
+
+// getOperationDetailFromSpec converts an OpenAPI operation to an OperationDetail format
+// It leverages the universalclient package for consistency between UI rendering and execution
+func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDetail, error) {
+	// Create a universal client to leverage its AsTool functionality
+	// Pass empty baseURL as we only need the schema functionality
+	client, err := universalclient.NewClient(oasSpec, "")
+	if err != nil {
+		return OperationDetail{}, fmt.Errorf("failed to create universal client: %w", err)
+	}
+	
+	// First get the tool definition using the existing AsTool method
+	tools, err := client.AsTool(operationID)
+	if err != nil || len(tools) == 0 {
+		return OperationDetail{}, fmt.Errorf("failed to get tool definition: %w", err)
+	}
+	
+	// Find the operation in the OpenAPI spec
+	doc, err := libopenapi.NewDocument(oasSpec)
+	if err != nil {
+		return OperationDetail{}, fmt.Errorf("failed to parse OAS spec: %w", err)
+	}
+	
+	// Build a V3 model
+	model, errs := doc.BuildV3Model()
+	if len(errs) > 0 {
+		return OperationDetail{}, fmt.Errorf("failed to build V3 model: %v", errs)
+	}
+	
+	// Find the operation by ID
+	var foundPath string
+	var foundMethod string
+	var foundOperation *v3.Operation
+	
+	// Iterate through all paths and operations to find the one with matching ID
+	for pair := model.Model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
+		path := pair.Key()
+		pathItem := pair.Value()
+		
+		operationsMap := pathItem.GetOperations()
+		
+		// Use a for loop with known methods since GetOperations doesn't return a standard Go map
+		for _, method := range []string{"get", "post", "put", "delete", "options", "head", "patch", "trace"} {
+			// Access the operation from the operationsMap using the Get method
+			operation, exists := operationsMap.Get(method)
+			if !exists {
+				continue
+			}
+			if operation.OperationId == operationID {
+				foundPath = path
+				foundMethod = method
+				foundOperation = operation
+				break
+			}
+		}
+		
+		if foundOperation != nil {
+			break
+		}
+	}
+	
+	if foundOperation == nil {
+		return OperationDetail{}, fmt.Errorf("operation %s not found in spec", operationID)
+	}
+	
+	// Create the OperationDetail
+	opDetail := OperationDetail{
+		OperationID: operationID,
+		Method:      foundMethod,
+		Path:        foundPath,
+		Description: foundOperation.Description,
+		Parameters:  []ParameterDetail{},
+	}
+	
+	// Add parameters
+	for _, param := range foundOperation.Parameters {
+		schemaMap := convertSchemaToGinH(param.Schema.Schema())
+		
+		opDetail.Parameters = append(opDetail.Parameters, ParameterDetail{
+			Name:        param.Name,
+			In:          param.In,
+			Description: param.Description,
+			Required:    param.Required != nil && *param.Required,
+			Schema:      schemaMap,
+		})
+	}
+	
+	// Add request body if present
+	if foundOperation.RequestBody != nil && foundOperation.RequestBody.Content != nil {
+		if mediaType, ok := foundOperation.RequestBody.Content.Get("application/json"); ok {
+			schemaMap := convertSchemaToGinH(mediaType.Schema.Schema())
+			
+			opDetail.RequestBody = RequestBodyDetail{
+				Description: foundOperation.RequestBody.Description,
+				Required:    foundOperation.RequestBody.Required != nil && *foundOperation.RequestBody.Required,
+				Schema:      schemaMap,
+				ContentType: "application/json",
+			}
+		}
+	}
+	
+	return opDetail, nil
+}
+
+// convertSchemaToGinH converts a pb33f Schema to gin.H format for consistent JSON serialization
+func convertSchemaToGinH(schema *base.Schema) gin.H {
+	if schema == nil {
+		return gin.H{}
+	}
+	
+	result := gin.H{}
+	
+	if len(schema.Type) > 0 {
+		result["type"] = schema.Type[0]
+	}
+	
+	if schema.Description != "" {
+		result["description"] = schema.Description
+	}
+	
+	if len(schema.Enum) > 0 {
+		result["enum"] = schema.Enum
+	}
+	
+	// Handle Properties
+	if schema.Properties != nil && schema.Properties.Len() > 0 {
+		properties := gin.H{}
+		for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
+			properties[pair.Key()] = convertSchemaToGinH(pair.Value().Schema())
+		}
+		if len(properties) > 0 {
+			result["properties"] = properties
+		}
+	}
+	
+	if len(schema.Required) > 0 {
+		result["required"] = schema.Required
+	}
+	
+	// Add format if present
+	if schema.Format != "" {
+		result["format"] = schema.Format
+	}
+	
+	return result
 }

@@ -99,13 +99,24 @@ func TestAppEndpointsWithTools(t *testing.T) {
 
 	wGetTools := performRequest(api.router, "GET", fmt.Sprintf("/api/v1/apps/%d/tools", createdAppID), nil)
 	assert.Equal(t, http.StatusOK, wGetTools.Code)
+	// Use a more complex structure to match the API response
 	var getToolsResponse struct {
-		Data []uint `json:"data"`
+		Data []struct {
+			Type       string `json:"type"`
+			ID         uint   `json:"id"`
+			Attributes struct {
+				Name        string    `json:"name"`
+				Description string    `json:"description"`
+				ToolType    string    `json:"tool_type"`
+				CreatedAt   time.Time `json:"created_at"`
+				UpdatedAt   time.Time `json:"updated_at"`
+			} `json:"attributes"`
+		} `json:"data"`
 	}
 	err = json.Unmarshal(wGetTools.Body.Bytes(), &getToolsResponse)
 	assert.NoError(t, err)
 	assert.Len(t, getToolsResponse.Data, 1)
-	assert.Contains(t, getToolsResponse.Data, tool1.ID)
+	assert.Equal(t, tool1.ID, getToolsResponse.Data[0].ID)
 
 	wAddTool := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/apps/%d/tools/%d", createdAppID, tool2.ID), nil)
 	assert.Equal(t, http.StatusOK, wAddTool.Code)
@@ -119,8 +130,16 @@ func TestAppEndpointsWithTools(t *testing.T) {
 	err = json.Unmarshal(wGetToolsAfterAdd.Body.Bytes(), &getToolsResponse)
 	assert.NoError(t, err)
 	assert.Len(t, getToolsResponse.Data, 2)
-	assert.Contains(t, getToolsResponse.Data, tool1.ID)
-	assert.Contains(t, getToolsResponse.Data, tool2.ID)
+	
+	// Extract tool IDs from response for easier assertion
+	toolIDs := make([]uint, len(getToolsResponse.Data))
+	for i, toolData := range getToolsResponse.Data {
+		toolIDs[i] = toolData.ID
+	}
+	
+	// Check that both tool IDs are in the response
+	assert.Contains(t, toolIDs, tool1.ID)
+	assert.Contains(t, toolIDs, tool2.ID)
 
 	updateAppPayload := TestAppInput{
 		Data: struct {
