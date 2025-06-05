@@ -358,6 +358,8 @@ func (a *API) setupRoutes() {
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
 	// Use secure version for portal users that hides sensitive fields like auth_key and oas_spec
 	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
+	// Route for tool documentation page
+	authed.GET("/tools/:id/docs", a.GetToolDocumentation)
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)

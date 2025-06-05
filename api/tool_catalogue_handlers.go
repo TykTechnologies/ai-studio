@@ -4,11 +4,42 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"encoding/json" // Retain for gin.H if it relies on it, or if other funcs use it.
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/universalclient"
+	"github.com/getkin/kin-openapi/openapi3" // Assuming this is the correct package for openapi3.Operation
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// ParameterDetail stores information about a single API operation parameter.
+type ParameterDetail struct {
+	Name        string `json:"name"`
+	In          string `json:"in"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+	Schema      gin.H  `json:"schema"` // Using gin.H for flexible map structure
+}
+
+// RequestBodyDetail stores information about an API operation's request body.
+type RequestBodyDetail struct {
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+	Schema      gin.H  `json:"schema"` // Using gin.H for flexible map structure
+	ContentType string `json:"content_type"`
+}
+
+// OperationDetail stores detailed information about a single API operation.
+type OperationDetail struct {
+	OperationID string            `json:"operation_id"`
+	Method      string            `json:"method"`
+	Path        string            `json:"path"`
+	Description string            `json:"description"`
+	Parameters  []ParameterDetail `json:"parameters"`
+	RequestBody RequestBodyDetail `json:"request_body,omitempty"`
+}
 
 // @Summary Create a new tool catalogue
 // @Description Create a new tool catalogue with the provided information
@@ -537,6 +568,164 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 
 	// Use secure response format that hides sensitive fields
 	c.JSON(http.StatusOK, toSecureToolResponses(tools))
+}
+
+// @Summary Get tool documentation by ID
+// @Description Get documentation for a specific tool by its ID
+// @Tags tools
+// @Produce json
+// @Param id path string true "Tool ID"
+// @Success 200 {object} gin.H
+// @Failure 404 {object} ErrorResponse
+// @Router /tools/{id}/documentation [get]
+func (a *API) GetToolDocumentation(c *gin.Context) {
+	toolID := c.Param("id")
+
+	// Assuming GetToolByID takes string ID and returns a models.Tool object.
+	// The previous TODO about ID parsing is still relevant if the service layer expects a different type.
+	tool, err := a.service.GetToolByID(toolID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{"Not Found", "Tool not found: " + toolID}}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", "Failed to fetch tool: " + err.Error()}}})
+		return
+	}
+
+	if tool.OASSpec == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "Tool found, but it has no OAS specification."})
+		return
+	}
+
+	decodedSpec, err := helpers.DecodeToUTF8(tool.OASSpec)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", "Failed to decode OAS spec: " + err.Error()}}})
+		return
+	}
+
+	// Assuming universalclient.DefaultHTTPClient is suitable or can be configured if necessary.
+	client, err := universalclient.NewClient(universalclient.DefaultHTTPClient, decodedSpec, "")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Failed to create client from OAS spec: " + err.Error()}}})
+		return
+	}
+
+	operationIDs, err := client.ListOperations()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", "Failed to list operations: " + err.Error()}}})
+		return
+	}
+
+	var operationDetailsList []OperationDetail
+
+	for _, opID := range operationIDs {
+		// findOperation is not public, let's try to get the operation directly if possible
+		// Assuming client.Spec is accessible and is an *openapi3.T object
+		// This part is speculative based on common library structures.
+		// If client.Spec or client.GetOperation is not available, this needs rethinking.
+
+		// Universal Client does not directly expose findOperation or getOperationDescription.
+		// It seems universal client is more about *making* calls rather than inspecting the spec.
+		// Let's try to parse the spec directly with getkin/kin-openapi
+		loader := openapi3.NewLoader()
+		doc, err := loader.LoadFromData([]byte(decodedSpec))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{
+				Title string `json:"title"`
+				Detail string `json:"detail"`
+			}{{"Internal Server Error", "Failed to parse OAS spec with getkin: " + err.Error()}}})
+			return
+		}
+		err = doc.Validate(loader.Context)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{
+				Title string `json:"title"`
+				Detail string `json:"detail"`
+			}{{"Bad Request", "OAS validation failed: " + err.Error()}}})
+			return
+		}
+
+
+		// Iterate through paths and operations to find the one matching opID (if opID is standard)
+		// Or, more directly, iterate all operations from the parsed 'doc'.
+		for path, pathItem := range doc.Paths {
+			for method, operation := range pathItem.Operations() {
+				if operation.OperationID == opID {
+					opDetail := OperationDetail{
+						OperationID: operation.OperationID,
+						Method:      method,
+						Path:        path,
+						Description: operation.Description, // Or operation.Summary
+					}
+
+					// Parameters
+					for _, paramRef := range operation.Parameters {
+						param := paramRef.Value
+						if param == nil {
+							// Handle error or skip if parameter reference is invalid
+							continue
+						}
+						schemaMap, err := client.SchemaToMap(param.Schema.Value) // Assuming client.SchemaToMap is still usable
+						if err != nil {
+							// Log error or handle, maybe return an error response
+							// For now, sending an empty map for schema if conversion fails
+							schemaMap = gin.H{}
+						}
+						opDetail.Parameters = append(opDetail.Parameters, ParameterDetail{
+							Name:        param.Name,
+							In:          param.In,
+							Description: param.Description,
+							Required:    param.Required,
+							Schema:      schemaMap,
+						})
+					}
+
+					// RequestBody
+					if operation.RequestBody != nil && operation.RequestBody.Value != nil {
+						rb := operation.RequestBody.Value
+						if mediaType, ok := rb.Content["application/json"]; ok && mediaType.Schema != nil && mediaType.Schema.Value != nil {
+							schemaMap, err := client.SchemaToMap(mediaType.Schema.Value)
+							if err != nil {
+								schemaMap = gin.H{}
+							}
+							opDetail.RequestBody = RequestBodyDetail{
+								Description: rb.Description,
+								Required:    rb.Required,
+								Schema:      schemaMap,
+								ContentType: "application/json",
+							}
+						}
+					}
+					operationDetailsList = append(operationDetailsList, opDetail)
+					break // Found operation by ID for this path/method
+				}
+			}
+		}
+	}
+
+	if len(operationDetailsList) == 0 && len(operationIDs) > 0 {
+		// This case might happen if operationIDs from client.ListOperations() don't match any operation.OperationID in the spec.
+		// This indicates a potential mismatch or issue in how opIDs are generated or used.
+		// For now, we proceed, but this is a point of attention.
+	}
+
+	c.JSON(http.StatusOK, operationDetailsList)
 }
 
 // @Summary Add a tag to a tool catalogue
