@@ -574,7 +574,7 @@ const AppDetails = () => {
             <Box display="flex" flexWrap="wrap" gap={1}>
               {tools.length > 0 ? (
                 tools.map((tool) => (
-                  <Chip key={tool.id} label={tool.attributes.name} />
+                  <Chip key={tool.id || `tool-${Math.random()}`} label={tool.attributes?.name || 'Unnamed tool'} />
                 ))
               ) : (
                 <Typography variant="body2">No tools associated.</Typography>
