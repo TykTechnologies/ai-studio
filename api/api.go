@@ -359,6 +359,11 @@ func (a *API) setupRoutes() {
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
 
+	// Analytics routes for portal users
+	authed.GET("/analytics/token-usage-and-cost-for-app", a.getUserAppTokenUsageAndCost)
+	authed.GET("/analytics/budget-usage-for-app", a.getUserAppBudgetUsage)
+	authed.GET("/analytics/app-interactions-over-time", a.getUserAppInteractionsOverTime)
+
 	// Notification routes
 	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
 	authed.GET("/api/v1/notifications", notificationHandlers.ListNotifications)
