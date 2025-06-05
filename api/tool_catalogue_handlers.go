@@ -281,6 +281,46 @@ func toToolResponses(tools []models.Tool) []ToolResponse {
 	return responses
 }
 
+// Same as toToolResponses but uses toSecureToolResponse to hide sensitive fields
+func toSecureToolResponses(tools []models.Tool) []ToolResponse {
+	responses := make([]ToolResponse, len(tools))
+	for i, tool := range tools {
+		responses[i] = toSecureToolResponse(&tool)
+	}
+	return responses
+}
+
+// toSecureToolResponse creates a tool response without sensitive fields for portal users
+func toSecureToolResponse(tool *models.Tool) ToolResponse {
+	ops := strings.Split(tool.AvailableOperations, ",")
+	return ToolResponse{
+		Type: "tools",
+		ID:   strconv.FormatUint(uint64(tool.ID), 10),
+		Attributes: struct {
+			Name           string              `json:"name"`
+			Description    string              `json:"description"`
+			ToolType       string              `json:"tool_type"`
+			OASSpec        string              `json:"oas_spec"`
+			PrivacyScore   int                 `json:"privacy_score"`
+			Operations     []string            `json:"operations"`
+			AuthKey        string              `json:"auth_key"`
+			AuthSchemaName string              `json:"auth_schema_name"`
+			FileStores     []FileStoreResponse `json:"file_stores"`
+			Filters        []FilterResponse    `json:"filters"`
+			Dependencies   []ToolResponse      `json:"dependencies"`
+		}{
+			Name:           tool.Name,
+			Description:    tool.Description,
+			ToolType:       tool.ToolType,
+			OASSpec:        "", // Hide OAS spec for security
+			PrivacyScore:   tool.PrivacyScore,
+			Operations:     ops,
+			AuthKey:        "", // Hide auth key for security
+			AuthSchemaName: tool.AuthSchemaName,
+		},
+	}
+}
+
 func toToolResponse(tool *models.Tool) ToolResponse {
 	ops := strings.Split(tool.AvailableOperations, ",")
 	return ToolResponse{
@@ -464,6 +504,39 @@ func (a *API) getToolCatalogueTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, toToolResponses(tools))
+}
+
+// @Summary Get tools in a tool catalogue (secure version for portal users)
+// @Description Get all tools in a specified tool catalogue with sensitive fields hidden
+// @Tags tool-catalogues
+// @Produce json
+// @Param id path int true "Tool Catalogue ID"
+// @Success 200 {array} ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/tool-catalogues/{id}/tools [get]
+func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	tools, err := a.service.GetToolCatalogueTools(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", err.Error()}}})
+		return
+	}
+
+	// Use secure response format that hides sensitive fields
+	c.JSON(http.StatusOK, toSecureToolResponses(tools))
 }
 
 // @Summary Add a tag to a tool catalogue

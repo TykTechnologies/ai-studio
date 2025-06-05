@@ -83,6 +83,28 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 	return tool, nil
 }
 
+// GetToolBySlug retrieves a tool by its slug (derived from name)
+func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
+	// Get all tools and find the one with a matching slug
+	var tools models.Tools
+	if err := s.DB.Find(&tools).Error; err != nil {
+		return nil, fmt.Errorf("error retrieving tools: %w", err)
+	}
+
+	for _, tool := range tools {
+		// Convert name to slug format (lowercase, replace spaces with hyphens)
+		toolSlug := strings.ToLower(strings.ReplaceAll(tool.Name, " ", "-"))
+		if toolSlug == slug {
+			// Found the tool with matching slug
+			toolCopy := tool // Create a copy to avoid issues with slice references
+			toolCopy.AuthKey = secrets.GetValue(toolCopy.AuthKey, true) // preserve reference for API responses
+			return &toolCopy, nil
+		}
+	}
+
+	return nil, fmt.Errorf("tool not found with slug: %s", slug)
+}
+
 // GetAllTools retrieves all tools
 func (s *Service) GetAllTools(pageSize int, pageNumber int, all bool) ([]models.Tool, int64, int, error) {
 	var tools models.Tools

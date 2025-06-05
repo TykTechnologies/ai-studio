@@ -37,7 +37,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		var llmSlug, dsSlug, routeID string
+		var llmSlug, dsSlug, routeID, toolSlug string
 		switch pathParts[1] {
 		case "llm":
 			if len(pathParts) > 3 {
@@ -49,13 +49,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			dsSlug = pathParts[2]
 		case "ai":
 			routeID = pathParts[2]
+		case "tools":
+			toolSlug = pathParts[2] // For /tools/{toolSlug}
 		default:
-			respondWithError(w, http.StatusBadRequest, "invalid request path, options are llm or datasource", nil)
+			respondWithError(w, http.StatusBadRequest, "invalid request path, options are llm, datasource, or tools", nil)
 			return
 		}
 
-		if llmSlug == "" && dsSlug == "" && routeID == "" {
-			respondWithError(w, http.StatusBadRequest, "no LLM, datasource, or interface specified", nil)
+		if llmSlug == "" && dsSlug == "" && routeID == "" && toolSlug == "" {
+			respondWithError(w, http.StatusBadRequest, "no LLM, datasource, tool, or interface specified", nil)
 			return
 		}
 
@@ -86,6 +88,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				respondWithError(w, http.StatusUnauthorized, "invalid credential for llm pass through", err)
 				return
 			}
+		} else if toolSlug != "" {
+			// For tool requests, extract bearer token from authorization header
+			token = r.Header.Get("Authorization")
+			if token == "" {
+				respondWithError(w, http.StatusUnauthorized, "missing authorization header for tool request", nil)
+				return
+			}
+			// Strip Bearer prefix if present
+			token = strings.TrimPrefix(token, "Bearer ")
 		} else if routeID != "" {
 			hVal := r.Header.Get("Authorization")
 			parts := strings.Split(hVal, "Bearer ")
@@ -98,6 +109,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				respondWithError(w, http.StatusUnauthorized, "missing or malformed authorization header", nil)
 				return
 			}
+		}
+
+		// If this is a tool request, store the tool slug in the context
+		if toolSlug != "" {
+			ctx := context.WithValue(r.Context(), "toolSlug", toolSlug)
+			r = r.WithContext(ctx)
 		}
 
 		var ok bool
@@ -113,6 +130,13 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 }
 
 func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID string, r *http.Request) (bool, *http.Request) {
+	// Get toolSlug from context if it exists
+	toolSlug := ""
+	if val := r.Context().Value("toolSlug"); val != nil {
+		if ts, ok := val.(string); ok {
+			toolSlug = ts
+		}
+	}
 	cred, err := cv.service.GetCredentialBySecret(token)
 	if err != nil || !cred.Active {
 		return false, r
@@ -167,6 +191,26 @@ func (cv *CredentialValidator) CheckCredential(token, dsSlug, llmSlug, routeID s
 			}
 		}
 
+		return false, r
+	}
+
+	// Validate tool access if toolSlug is provided
+	if toolSlug != "" {
+		// Find tool by slug
+		tool, err := cv.service.GetToolBySlug(toolSlug)
+		if err != nil {
+			return false, r
+		}
+		
+		// Check if the app has access to this tool
+		for _, t := range app.Tools {
+			if t.ID == tool.ID {
+				// Store the tool in the context for later use
+				ctx := context.WithValue(r.Context(), "tool", tool)
+				r = r.WithContext(ctx)
+				return true, r
+			}
+		}
 		return false, r
 	}
 
