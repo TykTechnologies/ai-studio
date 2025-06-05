@@ -35,6 +35,7 @@ import (
 const (
 	LLMPRefix        = "/llm/"
 	DatasourcePrefix = "/datasource/"
+	ToolPrefix       = "/tools/"
 )
 
 type EndpointMap struct {
@@ -259,6 +260,9 @@ func (p *Proxy) createHandler() http.Handler {
 		Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
+
+	// Add support for tool proxy
+	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 
 	// Create the handler chain, adding cloudflareHeadersMiddleware as the outermost wrapper
 	return p.cloudflareHeadersMiddleware(
@@ -517,16 +521,67 @@ func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	return switches.SetVendorAuthHeader(r, llm)
 }
 
-func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	dsSlug := vars["dsSlug"]
-
-	ds, ok := p.datasources[dsSlug]
+// handleToolRequest handles proxying to tool endpoints
+func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
+	toolSlug := mux.Vars(r)["toolSlug"]
+	
+	// Log the request
+	log.Printf("Received tool proxy request for slug: %s", toolSlug)
+	
+	// Get the tool from the context (already validated and loaded by middleware)
+	toolCtx := r.Context().Value("tool")
+	if toolCtx == nil {
+		respondWithError(w, http.StatusInternalServerError, "tool not found in context, this is likely a bug", nil)
+		return
+	}
+	
+	tool, ok := toolCtx.(*models.Tool)
 	if !ok {
-		respondWithError(w, http.StatusNotFound, "datasource not found", nil)
+		respondWithError(w, http.StatusInternalServerError, "invalid tool type in context", nil)
+		return
+	}
+	
+	// Parse the simplified request body
+	var input struct {
+		OperationID string                 `json:"operation_id"`
+		Parameters  map[string][]string    `json:"parameters"`
+		Payload     map[string]interface{} `json:"payload"`
+		Headers     map[string][]string    `json:"headers"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body", err)
 		return
 	}
 
+	// Call the tool operation
+	result, err := p.service.CallToolOperation(
+		tool.ID,
+		input.OperationID,
+		input.Parameters,
+		input.Payload,
+		input.Headers,
+	)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to call tool operation", err)
+		return
+	}
+
+	// Return the result directly without nesting
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
+	dsSlug := mux.Vars(r)["dsSlug"]
+	
+	ds, ok := p.GetDatasource(dsSlug)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil)
+		return
+	}
+	
 	in := map[uint]*models.Datasource{
 		ds.ID: ds,
 	}

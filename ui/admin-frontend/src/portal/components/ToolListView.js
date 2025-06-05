@@ -5,18 +5,43 @@ import {
   Grid,
   Card,
   CardContent,
-  CardMedia,
   Typography,
   Button,
+  Chip,
   CircularProgress,
   Container,
+  Divider,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
 import DetailModal from "./DetailModal";
-import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
-const defaultLogo = "/generic-tool-logo.png";
+// Function to get color based on tool type
+const getToolTypeColor = (type) => {
+  if (!type) return { bg: 'primary.light', color: 'primary.contrastText' };
+  
+  const typeLC = type.toLowerCase();
+  
+  switch(typeLC) {
+    case 'rest':
+      return { bg: '#3f51b5', color: '#fff' };
+    case 'graphql':
+      return { bg: '#e535ab', color: '#fff' };
+    case 'grpc':
+      return { bg: '#244c5a', color: '#fff' };
+    case 'websocket':
+      return { bg: '#4caf50', color: '#fff' };
+    case 'function':
+    case 'functions':
+      return { bg: '#ff9800', color: '#fff' };
+    case 'ai':
+    case 'ml':
+    case 'llm':
+      return { bg: '#9c27b0', color: '#fff' };
+    default:
+      return { bg: '#607d8b', color: '#fff' };
+  }
+};
 
 const ToolListView = () => {
   const [tools, setTools] = useState([]);
@@ -31,7 +56,7 @@ const ToolListView = () => {
     const fetchTools = async () => {
       try {
         const response = await pubClient.get(
-          `/common/catalogues/${catalogueId}/tools`,
+          `/common/tool-catalogues/${catalogueId}/tools`,
         );
         setTools(response.data);
         setLoading(false);
@@ -93,39 +118,56 @@ const ToolListView = () => {
             <Card
               sx={{ height: "100%", display: "flex", flexDirection: "column" }}
             >
-              <CardMedia
-                component="img"
-                sx={{ height: 140, objectFit: "contain" }}
-                image={tool.attributes.logoURL || defaultLogo}
-                alt={`${tool.attributes.name} logo`}
-              />
               <CardContent sx={{ flexGrow: 1 }}>
-                <Typography gutterBottom variant="h6" component="div">
-                  {tool.attributes.name}
-                </Typography>
-                <Typography variant="body2" color="text.defaultSubdued">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="h6" component="div">
+                    {tool.attributes.name}
+                  </Typography>
+                  {tool.attributes.tool_type && (
+                    <Chip
+                      label={tool.attributes.tool_type}
+                      size="small"
+                      sx={{ 
+                        bgcolor: getToolTypeColor(tool.attributes.tool_type).bg,
+                        color: getToolTypeColor(tool.attributes.tool_type).color,
+                        fontWeight: 'bold',
+                        fontSize: '0.7rem',
+                      }}
+                    />
+                  )}
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   {tool.attributes.short_description}
                 </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
-                  <img
-                    src={getVendorLogo(tool.attributes.vendor)}
-                    alt={getVendorName(tool.attributes.vendor)}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      marginRight: 8,
-                      objectFit: "contain",
-                    }}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src =
-                        process.env.PUBLIC_URL + "/images/placeholder-logo.png";
-                    }}
-                  />
-                  <Typography variant="body2" color="text.defaultSubdued">
-                    {getVendorName(tool.attributes.vendor)}
-                  </Typography>
-                </Box>
+                <Typography variant="body2" color="text.defaultSubdued" sx={{ mb: 2 }}>
+                  {tool.attributes.description}
+                </Typography>
+                
+                {tool.attributes.operations && tool.attributes.operations.length > 0 && (
+                  <>
+                    <Divider sx={{ my: 1 }} />
+                    <Typography variant="body2" fontWeight="bold" sx={{ mt: 1, mb: 1 }}>
+                      Operations:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {tool.attributes.operations.map((op, index) => (
+                        <Chip 
+                          key={index} 
+                          label={op.name || op} 
+                          size="small" 
+                          color="default" 
+                          variant="outlined"
+                          sx={{ 
+                            mb: 0.5, 
+                            bgcolor: 'rgba(0,0,0,0.05)',
+                            borderColor: 'rgba(0,0,0,0.2)',
+                            color: 'text.secondary' 
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </>
+                )}
               </CardContent>
               <Box
                 sx={{ p: 2, display: "flex", justifyContent: "space-between" }}
@@ -150,26 +192,63 @@ const ToolListView = () => {
           handleClose={handleCloseModal}
           title={selectedTool.attributes.name}
         >
-          <Typography variant="body1" sx={{ mt: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              Description
+            </Typography>
+            {selectedTool.attributes.tool_type && (
+              <Chip
+                label={selectedTool.attributes.tool_type}
+                size="small"
+                sx={{ 
+                  ml: 2,
+                  bgcolor: getToolTypeColor(selectedTool.attributes.tool_type).bg,
+                  color: getToolTypeColor(selectedTool.attributes.tool_type).color,
+                  fontWeight: 'bold',
+                  fontSize: '0.7rem',
+                }}
+              />
+            )}
+          </Box>
+          <Typography variant="body1" sx={{ mt: 1, mb: 2 }}>
+            {selectedTool.attributes.description || selectedTool.attributes.long_description}
+          </Typography>
+          
+          <Typography variant="subtitle1" fontWeight="bold">
+            Details
+          </Typography>
+          <Typography variant="body1" sx={{ mt: 1, mb: 2 }}>
             {selectedTool.attributes.long_description}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
-            <Typography variant="subtitle1">Vendor:</Typography>
-            <img
-              src={getVendorLogo(selectedTool.attributes.vendor)}
-              alt={getVendorName(selectedTool.attributes.vendor)}
-              style={{
-                width: 24,
-                height: 24,
-                marginLeft: 8,
-                marginRight: 8,
-                objectFit: "contain",
-              }}
-            />
-            <Typography>
-              {getVendorName(selectedTool.attributes.vendor)}
-            </Typography>
-          </Box>
+          
+          {selectedTool.attributes.operations && selectedTool.attributes.operations.length > 0 && (
+            <>
+              <Typography variant="subtitle1" fontWeight="bold">
+                Operations
+              </Typography>
+              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {selectedTool.attributes.operations.map((op, index) => (
+                  <Box key={index} sx={{ 
+                    mb: 1, 
+                    p: 1.5, 
+                    bgcolor: 'rgba(0,0,0,0.05)', 
+                    border: '1px solid rgba(0,0,0,0.1)',
+                    borderRadius: 1,
+                    width: 'calc(50% - 8px)'
+                  }}>
+                    <Typography variant="body2" fontWeight="bold" color="text.primary">
+                      {op.name || op}
+                    </Typography>
+                    {op.description && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        {op.description}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            </>
+          )}
         </DetailModal>
       )}
     </Container>
