@@ -199,12 +199,20 @@ const AppDetailView = () => {
             <FieldValue>{app.attributes.description}</FieldValue>
           </Grid>
           <Grid item xs={3}>
+            <FieldLabel>Status:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {app.attributes.credential.active ? "Active" : "Inactive"}
+            </FieldValue>
+          </Grid>
+          <Grid item xs={3}>
             <FieldLabel>Data Sources:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
-              {app.attributes.datasource_ids.map((id) => (
-                <Chip key={id} label={`Data Source ${id}`} />
+              {appDatasources.map((datasource) => (
+                <Chip key={datasource.id} label={datasource.attributes.name} />
               ))}
             </Box>
           </Grid>
@@ -213,8 +221,8 @@ const AppDetailView = () => {
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
-              {app.attributes.llm_ids.map((id) => (
-                <Chip key={id} label={`LLM ${id}`} />
+              {appLLMs.map((llm) => (
+                <Chip key={llm.id} label={llm.attributes.name} />
               ))}
             </Box>
           </Grid>
