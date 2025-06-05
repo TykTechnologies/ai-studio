@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Typography,
   CircularProgress,
@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import DescriptionIcon from "@mui/icons-material/Description";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -807,6 +808,19 @@ const AppDetailView = () => {
                       <ContentCopyIcon />
                     </IconButton>
                   </Box>
+                </Box>
+                
+                <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+                  <Button
+                    component={Link}
+                    to={`/portal/tools/${tool.id}/docs`}
+                    variant="outlined"
+                    color="primary"
+                    size="small"
+                    startIcon={<DescriptionIcon />}
+                  >
+                    View Documentation
+                  </Button>
                 </Box>
               </CardContent>
             </Card>

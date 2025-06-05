@@ -570,7 +570,15 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 	// Return the result directly without nesting
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(result)
+	
+	// Check if result is already a JSON string to avoid double-encoding
+	if str, ok := result.(string); ok && (strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[")) {
+		// Result appears to be a JSON string already, write it directly
+		w.Write([]byte(str))
+	} else {
+		// Otherwise, encode it as JSON
+		json.NewEncoder(w).Encode(result)
+	}
 }
 
 func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
