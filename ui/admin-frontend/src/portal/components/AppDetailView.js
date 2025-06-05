@@ -28,7 +28,34 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { getConfig } from "../../config"; // Add this import
 import { DangerButton, SecondaryLinkButton } from "../../admin/styles/sharedStyles";
 
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+  ArcElement,
+} from 'chart.js';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
+
 import pubClient from "../../admin/utils/pubClient";
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  ChartTooltip,
+  Legend,
+  ArcElement
+);
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -57,6 +84,7 @@ const AppDetailView = () => {
   const [baseUrl, setBaseUrl] = useState("");
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
+  const [appInteractionsData, setAppInteractionsData] = useState(null);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -74,21 +102,25 @@ const AppDetailView = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [appResponse, llmsResponse, datasourcesResponse, usageResponse, budgetResponse] = await Promise.all([
+        const [appResponse, llmsResponse, datasourcesResponse, usageResponse, budgetResponse, interactionsResponse] = await Promise.all([
           pubClient.get(`/common/apps/${id}`),
           pubClient.get("/common/accessible-llms"),
           pubClient.get("/common/accessible-datasources"),
-          pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
+          pubClient.get(`/common/analytics/token-usage-and-cost-for-app`, {
             params: { start_date: startDate, end_date: endDate, app_id: id },
           }),
-          pubClient.get(`/analytics/budget-usage-for-app`, {
+          pubClient.get(`/common/analytics/budget-usage-for-app`, {
             params: { app_id: id },
+          }),
+          pubClient.get(`/common/analytics/app-interactions-over-time`, {
+            params: { start_date: startDate, end_date: endDate, app_id: id },
           }),
         ]);
 
         const config = getConfig();
         setTokenUsageAndCostData(usageResponse.data);
         setBudgetUsageData(budgetResponse.data);
+        setAppInteractionsData(interactionsResponse.data);
         setBaseUrl(config.proxyURL || `//${currentHost}:9090`);
 
         setApp(appResponse.data);
@@ -150,6 +182,123 @@ const AppDetailView = () => {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
+  };
+
+  // Chart data preparation functions
+  const prepareTokenUsageChart = () => {
+    if (!tokenUsageAndCostData || !tokenUsageAndCostData.length) return null;
+
+    const labels = tokenUsageAndCostData.map(item => item.date);
+    const tokenData = tokenUsageAndCostData.map(item => item.total_tokens);
+    const costData = tokenUsageAndCostData.map(item => item.total_cost);
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Total Tokens',
+          data: tokenData,
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          yAxisID: 'y',
+        },
+        {
+          label: 'Total Cost ($)',
+          data: costData,
+          borderColor: 'rgb(255, 99, 132)',
+          backgroundColor: 'rgba(255, 99, 132, 0.2)',
+          yAxisID: 'y1',
+        },
+      ],
+    };
+  };
+
+  const prepareBudgetChart = () => {
+    if (!budgetUsageData) return null;
+
+    const used = budgetUsageData.current_usage || 0;
+    const budget = budgetUsageData.budget || 0;
+    const remaining = Math.max(0, budget - used);
+
+    return {
+      labels: ['Used', 'Remaining'],
+      datasets: [
+        {
+          data: [used, remaining],
+          backgroundColor: [
+            'rgba(255, 99, 132, 0.8)',
+            'rgba(75, 192, 192, 0.8)',
+          ],
+          borderColor: [
+            'rgba(255, 99, 132, 1)',
+            'rgba(75, 192, 192, 1)',
+          ],
+          borderWidth: 1,
+        },
+      ],
+    };
+  };
+
+  const prepareInteractionsChart = () => {
+    if (!appInteractionsData || !appInteractionsData.length) return null;
+
+    const labels = appInteractionsData.map(item => item.date);
+    const interactions = appInteractionsData.map(item => item.interaction_count);
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Interactions',
+          data: interactions,
+          backgroundColor: 'rgba(54, 162, 235, 0.8)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1,
+        },
+      ],
+    };
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+    },
+    scales: {
+      y: {
+        type: 'linear',
+        display: true,
+        position: 'left',
+      },
+      y1: {
+        type: 'linear',
+        display: true,
+        position: 'right',
+        grid: {
+          drawOnChartArea: false,
+        },
+      },
+    },
+  };
+
+  const barChartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+    },
+  };
+
+  const doughnutOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+    },
   };
 
   if (loading) return <CircularProgress />;
@@ -523,6 +672,70 @@ const AppDetailView = () => {
         ) : (
           <Typography variant="body1">No datasources associated with this app.</Typography>
         )}
+      </Paper>
+
+      {/* Analytics Section */}
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <SectionTitle>Analytics</SectionTitle>
+        
+        <Grid container spacing={3}>
+          {/* Token Usage and Cost Chart */}
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Token Usage and Cost Over Time
+                </Typography>
+                {prepareTokenUsageChart() ? (
+                  <Line data={prepareTokenUsageChart()} options={chartOptions} />
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No token usage data available for the selected period.
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Budget Usage Chart */}
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Budget Usage
+                </Typography>
+                {prepareBudgetChart() && budgetUsageData?.budget ? (
+                  <Doughnut data={prepareBudgetChart()} options={doughnutOptions} />
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {budgetUsageData?.budget ? 
+                      "No budget usage data available." : 
+                      "No budget limit set for this app."
+                    }
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* App Interactions Chart */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  App Interactions Over Time
+                </Typography>
+                {prepareInteractionsChart() ? (
+                  <Bar data={prepareInteractionsChart()} options={barChartOptions} />
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No interaction data available for the selected period.
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Paper>
 
       <Dialog
