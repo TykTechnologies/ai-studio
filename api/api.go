@@ -615,6 +615,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 	v1.GET("/analytics/budget-usage", a.getBudgetUsage)
 	v1.GET("/analytics/budget-usage-for-app", a.getBudgetUsageForApp)
+	v1.GET("/analytics/app-interactions-over-time", a.getAppInteractionsOverTime)
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)

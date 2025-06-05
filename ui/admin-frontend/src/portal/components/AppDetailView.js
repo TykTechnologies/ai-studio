@@ -406,6 +406,14 @@ const AppDetailView = () => {
             <FieldValue>{app.attributes.description}</FieldValue>
           </Grid>
           <Grid item xs={3}>
+            <FieldLabel>Status:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {app.attributes.credential.active ? "Active" : "Inactive"}
+            </FieldValue>
+          </Grid>
+          <Grid item xs={3}>
             <FieldLabel>Data Sources:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
