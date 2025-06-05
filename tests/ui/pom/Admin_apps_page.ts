@@ -65,6 +65,7 @@ export class AdminAppsPage extends PageTemplate {
         await this.NameInput.fill(params.name);
         await this.DescriptionInput.fill(params.description);
         await this.UserDropDown.setValue(params.user);
+        await this.page.keyboard.press('Escape');
 
         if (params.llms && params.llms.length > 0) {
             for (const llmName of params.llms) {
@@ -88,7 +89,10 @@ export class AdminAppsPage extends PageTemplate {
     async updateApp(params: Partial<AppParams>) {
         if (params.name) await this.NameInput.fill(params.name);
         if (params.description) await this.DescriptionInput.fill(params.description);
-        if (params.user) await this.UserDropDown.setValue(params.user);
+        if (params.user) {
+            await this.UserDropDown.setValue(params.user);
+            await this.page.keyboard.press('Escape');
+        }
         
         // For multi-select, clearing existing and adding new ones might be needed
         // This depends on how CustomSelectMany handles updates.
