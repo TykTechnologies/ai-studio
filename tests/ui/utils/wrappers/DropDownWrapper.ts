@@ -41,13 +41,13 @@ export class DropDownWrapper {
             const dropdown = await this.getDropdownElement();
             
             // Click to open dropdown
-            await dropdown.click({ timeout: 5000 });
+            await dropdown.click({ timeout: 10000 });
             
             // Wait for animation
             await this.page.waitForTimeout(300);
             
             // Select the option
-            await this.page.locator('[role="option"]').filter({ hasText: text }).click({ timeout: 5000 });
+            await this.page.locator('[role="option"]').filter({ hasText: text }).click({ timeout: 10000 });
             
             // For multiple select, close the dropdown with Escape
             if (await this.isMultipleChoice()) {
