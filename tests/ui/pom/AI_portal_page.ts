@@ -55,7 +55,7 @@ export class AIPortalPage extends PageTemplate {
         this.CreateappButton = this.page.getByRole('button', { name: 'Create app' });
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
-        this.LlmDropDown = new DropDownWrapper(this.page.locator('form div').filter({ hasText: 'LLMs (Optional)Select' }).getByRole('combobox'), page);
+        this.LlmDropDown = new DropDownWrapper('#mui-component-select-llm_ids', page);
         this.AddLlmButton = this.page.locator('form div:has-text("LLMs (Optional)Select")').getByRole('button', { name: 'Add' });
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.CreateAppButton = this.page.getByRole('button', { name: 'Create app' });

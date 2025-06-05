@@ -40,8 +40,8 @@ export class AdminAppsPage extends PageTemplate {
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
         this.UserDropDown = new DropDownWrapper('#mui-component-select-user_id', page); // Assuming specific ID, adjust if needed
-        this.LlmDropDown = new DropDownWrapper('input[name="llm_ids"]', page); // More robust selector for CustomSelectMany
-        this.ToolDropDown = new DropDownWrapper('input[name="tool_ids"]', page); // More robust selector for CustomSelectMany
+        this.LlmDropDown = new DropDownWrapper('#mui-component-select-llm_ids', page); // More robust selector for CustomSelectMany
+        this.ToolDropDown = new DropDownWrapper('#mui-component-select-tool_ids', page); // More robust selector for CustomSelectMany
         this.MonthlyBudgetInput = this.page.getByRole('textbox', { name: 'Monthly Budget' }); // Changed from spinbutton for flexibility
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
         this.SaveButton = this.page.getByRole('button', { name: /Add app|Update app/i }); // Regex for Add or Update app button
