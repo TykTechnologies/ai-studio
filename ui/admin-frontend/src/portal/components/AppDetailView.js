@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Typography,
   CircularProgress,
@@ -19,16 +19,42 @@ import {
   CardContent,
   Tooltip,
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import { getConfig } from "../../config"; // Add this import
+import { getConfig } from "../../config";
 import { DangerButton, SecondaryLinkButton } from "../../admin/styles/sharedStyles";
-
 import pubClient from "../../admin/utils/pubClient";
+import { Line } from "react-chartjs-2";
+import DateRangePicker from "../../admin/components/common/DateRangePicker";
+
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+  TimeScale,
+} from "chart.js";
+import "chartjs-adapter-date-fns";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  ChartTooltip,
+  Legend,
+  TimeScale
+);
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -69,51 +95,74 @@ const AppDetailView = () => {
 
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
+
+  const fetchAnalyticsData = useCallback(async (start, end) => {
+    try {
+      const [usageResponse, budgetResponse] = await Promise.all([
+        pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
+          params: { start_date: start, end_date: end, app_id: id },
+        }),
+        pubClient.get(`/analytics/budget-usage-for-app`, {
+          params: { app_id: id },
+        }),
+      ]);
+      setTokenUsageAndCostData(usageResponse.data);
+      setBudgetUsageData(budgetResponse.data);
+    } catch (error) {
+      console.error("Error fetching usage and budget data", error);
+    }
+  }, [id]);
   const currentHost = window.location.hostname;
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [
-          appResponse,
-          llmsResponse,
-          datasourcesResponse,
-          toolsResponse,
-          usageResponse,
-          budgetResponse,
-        ] = await Promise.all([
+        const [appResponse, llmsResponse, datasourcesResponse, toolsResponse] = await Promise.all([
           pubClient.get(`/common/apps/${id}`),
-          pubClient.get("/common/accessible-llms"),
-          pubClient.get("/common/accessible-datasources"),
-          pubClient.get("/common/accessible-tools"),
-          pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
-            params: { start_date: startDate, end_date: endDate, app_id: id },
-          }),
-          pubClient.get(`/analytics/budget-usage-for-app`, {
-            params: { app_id: id },
-          }),
+          pubClient.get('/common/accessible-llms'),
+          pubClient.get('/common/accessible-datasources'),
+          pubClient.get('/common/accessible-tools'),
         ]);
 
+        // Set the base URL for API endpoints
         const config = getConfig();
-        setTokenUsageAndCostData(usageResponse.data);
-        setBudgetUsageData(budgetResponse.data);
-        setBaseUrl(config.proxyURL || `//${currentHost}:9090`);
+        const apiHost = config.api_host || window.location.origin;
+        setBaseUrl(apiHost);
 
-        setApp(appResponse.data);
-        setAccessibleLLMs(llmsResponse.data);
-        setAccessibleDatasources(datasourcesResponse.data);
-        setAccessibleTools(toolsResponse.data);
+        const app = appResponse.data;
+        setApp(app);
+
+        // Filter accessible LLMs that are associated with the app
+        const accessibleLLMs = llmsResponse.data;
+        const appLLMIds = app.attributes.llm_ids || [];
+        const filteredLLMs = accessibleLLMs.filter((llm) => appLLMIds.includes(parseInt(llm.id)));
+        setAccessibleLLMs(filteredLLMs);
+
+        // Filter accessible datasources that are associated with the app
+        const accessibleDatasources = datasourcesResponse.data;
+        const appDatasourceIds = app.attributes.datasource_ids || [];
+        const filteredDatasources = accessibleDatasources.filter((ds) => appDatasourceIds.includes(parseInt(ds.id)));
+        setAccessibleDatasources(filteredDatasources);
+
+        // Filter accessible tools that are associated with the app
+        const accessibleTools = toolsResponse.data;
+        const appToolIds = app.attributes.tool_ids || [];
+        const filteredTools = accessibleTools.filter((tool) => appToolIds.includes(parseInt(tool.id)));
+        setAccessibleTools(filteredTools);
+
+        // Fetch analytics data
+        await fetchAnalyticsData(startDate, endDate);
+
         setLoading(false);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to load data. Please try again later.");
+      } catch (error) {
+        console.error("Error:", error);
+        setError("Failed to load app details");
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [id]);
+  }, [id, currentHost, startDate, endDate, fetchAnalyticsData]);
 
   const toggleSecretVisibility = () => {
     setShowSecret(!showSecret);
@@ -165,11 +214,10 @@ const AppDetailView = () => {
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!app) return <Typography>App not found</Typography>;
-
+  
   const appLLMs = accessibleLLMs.filter((llm) =>
-    (app.attributes.llm_ids || []).includes(Number(llm.id)),
+    (app.attributes.llm_ids || []).includes(Number(llm.id))
   );
-
   const appDatasources = accessibleDatasources.filter((datasource) =>
     (app.attributes.datasource_ids || []).includes(Number(datasource.id)),
   );
@@ -180,6 +228,157 @@ const AppDetailView = () => {
 
   return (
     <Box sx={{p: 4}}>
+      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between" }}>
+        <Box>
+          <Typography variant="h4" component="h1">
+            {app.attributes.name}
+          </Typography>
+          <Typography variant="body1" color="textSecondary">
+            {app.attributes.description}
+          </Typography>
+        </Box>
+        <Box>
+          <SecondaryLinkButton onClick={() => navigate("/portal/apps")}>
+            Back to Apps
+          </SecondaryLinkButton>
+        </Box>
+      </Box>
+      
+      {/* Analytics Charts */}
+      <SectionTitle>Token Usage</SectionTitle>
+      <Box height={300} mb={4}>
+        <Line options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              type: "time",
+              time: {
+                unit: "day",
+              },
+              title: {
+                display: true,
+                text: "Date",
+              },
+              stacked: true,
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "Token Usage",
+              },
+              stacked: true,
+            },
+          },
+          plugins: {
+            legend: {
+              position: "top",
+            },
+            title: {
+              display: true,
+              text: "Token Usage Over Time",
+            },
+            tooltip: {
+              mode: 'index',
+            },
+          },
+        }} data={{
+          labels: tokenUsageAndCostData?.labels || [],
+          datasets: [
+            {
+              label: "Prompt Tokens",
+              data: tokenUsageAndCostData?.datasets?.[2]?.data || [],
+              borderColor: "rgb(53, 162, 235)",
+              backgroundColor: "rgba(53, 162, 235, 0.5)",
+              fill: true,
+            },
+            {
+              label: "Response Tokens",
+              data: tokenUsageAndCostData?.datasets?.[3]?.data || [],
+              borderColor: "rgb(75, 192, 192)",
+              backgroundColor: "rgba(75, 192, 192, 0.5)",
+              fill: true,
+            },
+            {
+              label: "Cache Write Tokens",
+              data: tokenUsageAndCostData?.datasets?.[4]?.data || [],
+              borderColor: "rgb(255, 159, 64)",
+              backgroundColor: "rgba(255, 159, 64, 0.5)",
+              fill: true,
+            },
+            {
+              label: "Cache Read Tokens",
+              data: tokenUsageAndCostData?.datasets?.[5]?.data || [],
+              borderColor: "rgb(153, 102, 255)",
+              backgroundColor: "rgba(153, 102, 255, 0.5)",
+              fill: true,
+            },
+          ],
+        }} />
+      </Box>
+
+      <SectionTitle>Cost</SectionTitle>
+      <Box height={300} mb={4}>
+        <Line options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              type: "time",
+              time: {
+                unit: "day",
+              },
+              title: {
+                display: true,
+                text: "Date",
+              },
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "Cost ($)",
+              },
+            },
+          },
+          plugins: {
+            legend: {
+              position: "top",
+            },
+            title: {
+              display: true,
+              text: "Cost Over Time",
+            },
+          },
+        }} data={{
+          labels: tokenUsageAndCostData?.labels || [],
+          datasets: [
+            {
+              label: "Cost",
+              data: tokenUsageAndCostData?.datasets?.[1]?.data || [],
+              borderColor: "rgb(255, 99, 132)",
+              tension: 0.1,
+            },
+          ],
+        }} />
+      </Box>
+      <Box mt={2} mb={4}>
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={(newDate) => {
+            setStartDate(newDate);
+            fetchAnalyticsData(newDate, endDate);
+          }}
+          onEndDateChange={(newDate) => {
+            setEndDate(newDate);
+            fetchAnalyticsData(startDate, newDate);
+          }}
+        />
+      </Box>
+
+      {/* Main App Details Paper */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box
           display="flex"
@@ -190,12 +389,6 @@ const AppDetailView = () => {
           <Typography variant="h5" sx={{ color: "black" }}>
             App Details
           </Typography>
-          <SecondaryLinkButton
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate("/portal/apps")}
-          >
-            Back to Apps
-          </SecondaryLinkButton>
         </Box>
 
         <SectionTitle>App Information</SectionTitle>

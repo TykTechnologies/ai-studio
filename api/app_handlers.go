@@ -703,7 +703,25 @@ func (a *API) getAppTools(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": getToolIDs(tools)})
+
+	// Convert tools to response format with full details
+	response := make([]gin.H, len(tools))
+	for i, tool := range tools {
+		response[i] = gin.H{
+			"type": "tools",
+			"id": tool.ID,
+			"attributes": gin.H{
+				"name": tool.Name,
+				"description": tool.Description,
+				"tool_type": tool.ToolType,
+				"privacy_score": tool.PrivacyScore,
+				"created_at": tool.CreatedAt,
+				"updated_at": tool.UpdatedAt,
+			},
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
 

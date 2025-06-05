@@ -320,6 +320,12 @@ func (a *API) setupRoutes() {
 		c.Status(http.StatusOK)
 	})
 
+	// Analytics endpoints for portal users
+	portalAnalytics := a.router.Group("/analytics")
+	portalAnalytics.Use(a.auth.AuthMiddleware())
+	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
+	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
+
 	public := a.router.Group("/")
 
 	// Public routes
