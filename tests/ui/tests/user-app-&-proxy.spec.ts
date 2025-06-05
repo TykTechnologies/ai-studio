@@ -71,8 +71,9 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await aiPortalPage.LlmDropDown.click();
     await expect(page.getByRole('option', { name: 'Env Anthropic LLM' })).toBeVisible();
     await page.getByRole('option', { name: 'Env Anthropic LLM' }).click();
+    await page.keyboard.press('Escape');
     await aiPortalPage.AddLlmButton.click();
-    await expect(page.getByRole('chip', { name: 'Env Anthropic LLM' })).toBeVisible();
+    await expect(page.getByRole('chip', { name: 'Env Anthropic LLM' })).toBeVisible({ timeout: 7000 });
 
     // Verify Tools section and select tools
     await expect(page.getByText('Tools (Optional)')).toBeVisible();
