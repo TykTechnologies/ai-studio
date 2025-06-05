@@ -30,11 +30,11 @@ test('Apps on admin page - Full CRUD with Tools', async ({ page, loginPage, admi
     await adminAppsPage.UserDropDown.setValue('Test Admin'); // Assuming 'Test Admin' user exists
     
     // Select LLMs (optional, but good to include if part of the form)
-    await adminAppsPage.LlmDropDown.selectValue('Anthropic LLM'); // Assuming this LLM exists
+    await adminAppsPage.LlmDropDown.setValue('Anthropic LLM'); // Assuming this LLM exists
 
     // Select Tools
-    await adminAppsPage.ToolDropDown.selectValue(tool_alpha);
-    await adminAppsPage.ToolDropDown.selectValue(tool_beta);
+    await adminAppsPage.ToolDropDown.setValue(tool_alpha);
+    await adminAppsPage.ToolDropDown.setValue(tool_beta);
 
     // Now interact with MonthlyBudgetInput
     await adminAppsPage.page.waitForTimeout(1000); // Add a brief static pause
@@ -89,7 +89,7 @@ test('Apps on admin page - Full CRUD with Tools', async ({ page, loginPage, admi
     // How CustomSelectMany handles removal needs to be known.
     // If it's by clicking the chip's delete icon:
     await adminAppsPage.ToolDropDown.removeValue(tool_beta); // Assuming removeValue deselects/clicks remove icon
-    await adminAppsPage.ToolDropDown.selectValue(tool_gamma);
+    await adminAppsPage.ToolDropDown.setValue(tool_gamma);
     
     await adminAppsPage.SaveButton.click(); // Name of button might be "Update app" now
     await adminAppsPage.expectPopupAppUpdated();
