@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Box,
   Grid,
@@ -220,6 +220,19 @@ const ToolListView = () => {
           <Typography variant="body1" sx={{ mt: 1, mb: 2 }}>
             {selectedTool.attributes.long_description}
           </Typography>
+
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <Button
+              component={Link}
+              to={`/common/tools/${selectedTool.id}/docs`}
+              variant="contained"
+              color="info" // Using 'info' or another appropriate color
+              target="_blank" // Optional: Open in new tab
+              rel="noopener noreferrer" // Optional: For security when using target="_blank"
+            >
+              View Full API Documentation
+            </Button>
+          </Box>
           
           {selectedTool.attributes.operations && selectedTool.attributes.operations.length > 0 && (
             <>
