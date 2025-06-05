@@ -459,6 +459,37 @@ func GetChatInteractionsForChat(db *gorm.DB, startDate, endDate time.Time, chatI
 	return chartData, nil
 }
 
+// GetAppInteractionsOverTime returns the number of LLM interactions for a specific app over time
+func GetAppInteractionsOverTime(db *gorm.DB, startDate, endDate time.Time, appID uint) (*ChartData, error) {
+	var results []struct {
+		Date         string
+		Interactions int64
+	}
+
+	err := db.Model(&models.LLMChatRecord{}).
+		Select("DATE(time_stamp) as date, COUNT(*) as interactions").
+		Where("time_stamp BETWEEN ? AND ? AND app_id = ?", startDate, endDate, appID).
+		Group("DATE(time_stamp)").
+		Order("date").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	chartData := &ChartData{
+		Labels: make([]string, len(results)),
+		Data:   make([]float64, len(results)),
+	}
+
+	for i, result := range results {
+		chartData.Labels[i] = result.Date
+		chartData.Data[i] = float64(result.Interactions)
+	}
+
+	return chartData, nil
+}
+
 // GetModelUsage returns the usage statistics for a specific model over time
 func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) (*ChartData, error) {
 	var results []struct {
