@@ -121,6 +121,7 @@ const AppDetails = () => {
   const [loading, setLoading] = useState(true);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
+  const [appInteractionsData, setAppInteractionsData] = useState(null);
   const [proxyLogs, setProxyLogs] = useState([]);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -235,16 +236,20 @@ const AppDetails = () => {
 
   const fetchTokenUsageAndCost = async () => {
     try {
-      const [usageResponse, budgetResponse] = await Promise.all([
+      const [usageResponse, budgetResponse, interactionsResponse] = await Promise.all([
         apiClient.get(`/analytics/usage`, {
           params: { start_date: startDate, end_date: endDate, app_id: id },
         }),
         apiClient.get(`/analytics/budget-usage-for-app`, {
           params: { app_id: id },
         }),
+        apiClient.get(`/analytics/app-interactions-over-time`, {
+          params: { start_date: startDate, end_date: endDate, app_id: id },
+        }),
       ]);
       setTokenUsageAndCostData(usageResponse.data);
       setBudgetUsageData(budgetResponse.data);
+      setAppInteractionsData(interactionsResponse.data);
     } catch (error) {
       console.error("Error fetching usage and budget data", error);
     }
@@ -385,6 +390,39 @@ const AppDetails = () => {
     },
   };
 
+  const interactionsChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "day",
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: "Interactions Count",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      title: {
+        display: true,
+        text: "App Interactions Over Time",
+      },
+    },
+  };
+
   const tokenChartData = {
     labels: tokenUsageAndCostData?.labels || [],
     datasets: [
@@ -431,6 +469,20 @@ const AppDetails = () => {
     ],
   };
 
+  const interactionsChartData = {
+    labels: appInteractionsData?.labels || [],
+    datasets: [
+      {
+        label: "LLM Interactions",
+        data: appInteractionsData?.data || [],
+        borderColor: "rgb(54, 162, 235)",
+        backgroundColor: "rgba(54, 162, 235, 0.2)",
+        tension: 0.1,
+        fill: true,
+      },
+    ],
+  };
+
   const handleStartDateChange = (newDate) => {
     setStartDate(newDate);
   };
@@ -460,6 +512,11 @@ const AppDetails = () => {
         <SectionTitle>Cost</SectionTitle>
         <Box height={300} mb={4}>
           <Line options={costChartOptions} data={costChartData} />
+        </Box>
+
+        <SectionTitle>App Interactions</SectionTitle>
+        <Box height={300} mb={4}>
+          <Line options={interactionsChartOptions} data={interactionsChartData} />
         </Box>
         <Box mt={2} mb={4}>
           <DateRangePicker
