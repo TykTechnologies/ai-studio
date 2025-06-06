@@ -14,13 +14,15 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
     await adminMainPage.dismissQuickStartModal();
 
     await adminMainPage.navigateToApps();
-    await adminAppsPage.AddAppButton.click();
-    await adminAppsPage.NameInput.fill(app_name);
-    await adminAppsPage.DescriptionInput.fill(app_description);
-    await adminAppsPage.UserDropDown.setValue('Test Admin');
-    await adminAppsPage.MonthlyBudgetInput.fill('10');
-    await adminAppsPage.LlmDropDown.setValue('Anthropic LLM');
-    await adminAppsPage.AddAppButton.click();
+    await adminAppsPage.addApp({
+      name: app_name,
+      description: app_description,
+      user: 'Test Admin',
+      llm: 'Anthropic LLM',
+      monthlyBudget: '10',
+      budgetStartDate: '2024-01-01'
+    });
+    await adminAppsPage.expectPopupAppCreated();
     await adminAppsPage.Table.expectRowWithTextExists(app_name);
   });
 

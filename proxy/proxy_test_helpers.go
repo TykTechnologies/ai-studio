@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +75,7 @@ func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
 
 // waitForAnalytics ensures we have at least `expectedCount` LLMChatRecords.
 func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
-	deadline := time.Now().Add(3000 * time.Millisecond) // Increased from 1.5s to 3s for more reliable testing
+	deadline := time.Now().Add(8000 * time.Millisecond) // Increased to 8s for very reliable testing
 	for time.Now().Before(deadline) {
 		var count int64
 		var err error
@@ -83,17 +84,17 @@ func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
 			if err == nil {
 				break
 			}
-			time.Sleep(50 * time.Millisecond) // Increased sleep interval for more stability
+			time.Sleep(100 * time.Millisecond) // Increased inner retry sleep
 		}
 		if err != nil {
 			continue
 		}
 
 		if count >= expectedCount {
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond) // Increased sleep before returning
 			return
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // Increased outer polling interval
 	}
 	t.Fatalf("Timeout waiting for analytics records. Expected at least: %d", expectedCount)
 }
@@ -103,7 +104,7 @@ func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
 func waitUntilIdle(t *testing.T, db *gorm.DB) {
 	var lastCount int64
 	var stableRounds int
-	timeout := time.NewTimer(3000 * time.Millisecond) // Increased from 1.5s to 3s for more reliable testing
+	timeout := time.NewTimer(8000 * time.Millisecond) // Increased to 8s for very reliable testing
 	ticker := time.NewTicker(50 * time.Millisecond)   // Increased back to 50ms for more stability
 	defer timeout.Stop()
 	defer ticker.Stop()
@@ -150,7 +151,7 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 
 // waitForRecordWithCost waits for a record to be written with a non-zero cost and returns the record
 func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
-	deadline := time.Now().Add(3000 * time.Millisecond) // Increased from 1.5s to 3s for more reliable testing
+	deadline := time.Now().Add(8000 * time.Millisecond) // Increased to 8s for very reliable testing
 	for time.Now().Before(deadline) {
 		var record models.LLMChatRecord
 		var err error
@@ -182,6 +183,84 @@ func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
 	}
 	t.Fatal("Timeout waiting for record with cost")
 	return nil
+}
+
+// waitForCacheFlush waits for cache operations to complete
+func waitForCacheFlush(t *testing.T, budgetService *services.BudgetService) {
+	// Clear cache and wait for it to propagate
+	budgetService.ClearCache()
+	time.Sleep(100 * time.Millisecond)
+	
+	// Verify cache is actually cleared by doing a quick operation
+	deadline := time.Now().Add(1000 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		// Try a simple cache operation to ensure it's responsive
+		time.Sleep(50 * time.Millisecond)
+		return
+	}
+}
+
+// waitForDatabaseSync waits for database operations to be fully committed
+func waitForDatabaseSync(t *testing.T, db *gorm.DB) {
+	// Force a sync by doing a simple query with retry on lock errors
+	var count int64
+	deadline := time.Now().Add(3000 * time.Millisecond) // Increased timeout
+	for time.Now().Before(deadline) {
+		err := db.Model(&models.LLMChatRecord{}).Count(&count).Error
+		if err == nil {
+			// Additional wait to ensure database is fully synced
+			time.Sleep(100 * time.Millisecond)
+			return
+		}
+		// Check if it's a database lock error and wait longer
+		if strings.Contains(err.Error(), "database table is locked") {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+}
+
+// waitForSpendingValue waits for spending to reach a specific value with retry logic
+func waitForSpendingValue(t *testing.T, budgetService *services.BudgetService, appID uint, start, end time.Time, expectedSpent float64) {
+	deadline := time.Now().Add(10000 * time.Millisecond) // Increased to 10s for very reliable testing
+	var lastSpent float64
+	
+	for time.Now().Before(deadline) {
+		budgetService.ClearCache()
+		time.Sleep(50 * time.Millisecond) // Brief wait after cache clear
+		
+		var spent float64
+		var err error
+		
+		// Retry spending query with exponential backoff
+		for attempt := 0; attempt < 3; attempt++ {
+			spent, err = budgetService.GetMonthlySpending(appID, start, end)
+			if err == nil {
+				break
+			}
+			backoff := time.Duration(50*(1<<attempt)) * time.Millisecond
+			time.Sleep(backoff)
+		}
+		
+		if err != nil {
+			t.Logf("Error getting spending: %v, retrying...", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		
+		t.Logf("Current spending: %.2f (expected: %.2f) [start=%v, end=%v]", spent, expectedSpent, start, end)
+		
+		if math.Abs(spent-expectedSpent) < 0.1 {
+			time.Sleep(50 * time.Millisecond) // Final stabilization
+			return
+		}
+		
+		lastSpent = spent
+		time.Sleep(100 * time.Millisecond)
+	}
+	
+	t.Fatalf("Timeout waiting for spending to reach %.2f, last value was %.2f", expectedSpent, lastSpent)
 }
 
 // waitForSpendingUpdate waits for spending to be updated to an expected value

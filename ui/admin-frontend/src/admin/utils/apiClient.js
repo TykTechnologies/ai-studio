@@ -33,19 +33,8 @@ const createApiClient = () => {
     }
   );
 
-  // Override the post method to add logging
-  const originalPost = instance.post;
-  instance.post = async function(url, data, config) {
-    console.log(`API POST ${url}`, data);
-    try {
-      const response = await originalPost.call(this, url, data, config);
-      console.log(`API POST ${url} response:`, response);
-      return response;
-    } catch (error) {
-      console.error(`API POST ${url} error:`, error);
-      throw error;
-    }
-  };
+  // No method overrides
+
 
   return instance;
 };
@@ -61,6 +50,17 @@ export const providerAPI = {
   }),
   getProviderSpecs: (providerId) => apiClientInstance.get(`/providers/${providerId}/specs`),
 };
+
+// App-Tool API endpoints
+export const appToolAPI = {
+  getAppTools: (appId) => apiClientInstance.get(`/apps/${appId}/tools`),
+  addToolToApp: (appId, toolId) => apiClientInstance.post(`/apps/${appId}/tools/${toolId}`),
+  removeToolFromApp: (appId, toolId) => apiClientInstance.delete(`/apps/${appId}/tools/${toolId}`),
+  // Assuming a general endpoint to get all available tools for selection
+  // Adjust if tools are fetched differently (e.g., from tool-catalogues)
+  listAvailableTools: (params) => apiClientInstance.get('/tools', { params: { all: true, ...params } }),
+};
+
 
 // Function to reinitialize the API client with new configuration
 export const reinitializeApiClient = () => {

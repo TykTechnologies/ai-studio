@@ -35,6 +35,7 @@ import Register from "./portal/pages/Register";
 import ForgotPassword from "./portal/pages/ForgotPassword";
 import ResetPassword from "./portal/pages/ResetPassword";
 import NotificationsPage from "./pages/NotificationsPage";
+import ToolDocumentationPage from "./portal/pages/ToolDocumentationPage"; // Import the new page
 import { NotificationProvider } from "./admin/context/NotificationContext";
 
 function App() {
@@ -205,6 +206,7 @@ function App() {
 
               {/* Common Routes */}
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/common/tools/:id/docs" element={<ToolDocumentationPage />} /> {/* Add new route here */}
 
               {/* Default redirect */}
               <Route
