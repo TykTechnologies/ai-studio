@@ -627,45 +627,30 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 		return
 	}
 
-	// Create client using the universalclient package
-	client, err := universalclient.NewClient([]byte(decodedSpec), "")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{"Bad Request", "Failed to create client from OAS spec: " + err.Error()}}})
-		return
-	}
-
-	operationIDs, err := client.ListOperations()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		}{{"Internal Server Error", "Failed to list operations: " + err.Error()}}})
+	// Get whitelisted operations from the tool configuration
+	whitelistedOperations := tool.GetOperations()
+	if len(whitelistedOperations) == 0 {
+		c.JSON(http.StatusOK, []OperationDetail{})
 		return
 	}
 
 	var operationDetailsList []OperationDetail
 
-	for _, opID := range operationIDs {
-
+	// Only process operations that are whitelisted in the tool configuration
+	for _, opID := range whitelistedOperations {
 		// Use our new helper function that leverages universalclient's AsTool method
 		operationDetail, err := getOperationDetailFromSpec([]byte(decodedSpec), opID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{
-				Title string `json:"title"`
-				Detail string `json:"detail"`
-			}{{"Internal Server Error", "Failed to get operation details: " + err.Error()}}})
-			return
+			// Skip operations that can't be found in the spec (log warning but don't fail)
+			continue
 		}
 		
 		operationDetailsList = append(operationDetailsList, operationDetail)
 	}
 
-	if len(operationDetailsList) == 0 && len(operationIDs) > 0 {
-		// This case might happen if operationIDs from client.ListOperations() don't match any operation.OperationID in the spec.
-		// This indicates a potential mismatch or issue in how opIDs are generated or used.
+	if len(operationDetailsList) == 0 && len(whitelistedOperations) > 0 {
+		// This case might happen if whitelisted operations don't match any operation.OperationID in the spec.
+		// This indicates a potential mismatch between tool configuration and OpenAPI spec.
 		// For now, we proceed, but this is a point of attention.
 	}
 
