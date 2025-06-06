@@ -448,14 +448,15 @@ func TestBudgetCheck(t *testing.T) {
 	t.Run("Budget periods", func(t *testing.T) {
 		// Wait for any pending operations to complete
 		waitUntilIdle(t, db)
-		time.Sleep(2 * time.Second)
 
 		// Clear cache and all records before starting
-		budgetService.ClearCache()
+		waitForCacheFlush(t, budgetService)
 		err = db.Where("1 = 1").Delete(&models.Notification{}).Error
 		require.NoError(t, err)
 		err = db.Where("1 = 1").Delete(&models.LLMChatRecord{}).Error
 		require.NoError(t, err)
+		// Wait for database deletions to complete
+		waitForDatabaseSync(t, db)
 
 		// Set budget start date to January 15th
 		budgetStart := time.Date(2025, 1, 15, 0, 0, 0, 0, loc)
@@ -485,6 +486,9 @@ func TestBudgetCheck(t *testing.T) {
 			return nil
 		})
 		require.NoError(t, err)
+
+		// Wait for transaction to complete
+		waitForDatabaseSync(t, db)
 
 		// Reload app and llm
 		err = db.First(&app, app.ID).Error
@@ -526,9 +530,14 @@ func TestBudgetCheck(t *testing.T) {
 		}
 		err = db.Create(pastRecord2).Error
 		require.NoError(t, err)
+		// Wait for record creation to complete
+		waitForDatabaseSync(t, db)
 
 		// Create notification for past period (Jan 15 - Feb 14)
-		pastMonthOffset := int(budgetStart.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
+		// Use more reliable month calculation
+		years := budgetStart.Year() - 2024
+		months := int(budgetStart.Month()) - 1
+		pastMonthOffset := years*12 + months
 		pastNotification := &models.Notification{
 			NotificationID: fmt.Sprintf("budget_app_%d_%d_%d_%d_owner",
 				app.ID,
@@ -544,6 +553,8 @@ func TestBudgetCheck(t *testing.T) {
 		}
 		err = db.Create(pastNotification).Error
 		require.NoError(t, err)
+		// Wait for notification creation to complete
+		waitForDatabaseSync(t, db)
 
 		// Wait for analytics to process the past records
 		waitForAnalytics(t, db, 2)
@@ -554,9 +565,7 @@ func TestBudgetCheck(t *testing.T) {
 		// Record 1: 250000 (stored value) = $25.00 after division
 		// Record 2: 250000 (stored value) = $25.00 after division
 		// Total: 500000 (stored value) = $50.00 after division
-		pastSpent, err := budgetService.GetMonthlySpending(app.ID, budgetStart, budgetStart.AddDate(0, 1, -1))
-		require.NoError(t, err)
-		assert.InDelta(t, 50.0, pastSpent, 0.1, "Past period spending should be $50.00 (500000/10000)")
+		waitForSpendingValue(t, budgetService, app.ID, budgetStart, budgetStart.AddDate(0, 1, -1), 50.0)
 
 		// Set current time and budget start dates to Feb 15th (new period)
 		now = time.Date(2025, 2, 15, 23, 59, 59, 0, loc)
@@ -603,12 +612,10 @@ func TestBudgetCheck(t *testing.T) {
 		}
 		err = db.Create(currentPeriodRecord).Error
 		require.NoError(t, err)
+		// Wait for record creation to complete
+		waitForDatabaseSync(t, db)
 		
-		// Clear cache before the final assertion to ensure fresh data
-		budgetService.ClearCache()
-		
-		currentSpent, err := budgetService.GetMonthlySpending(app.ID, newPeriodStart, periodEnd)
-		require.NoError(t, err)
-		assert.InDelta(t, 25.0, currentSpent, 0.1, "Current period spending should be $25.00")
+		// Verify current period spending using reliable waiting
+		waitForSpendingValue(t, budgetService, app.ID, newPeriodStart, periodEnd, 25.0)
 	})
 }
