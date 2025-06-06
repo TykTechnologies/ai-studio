@@ -115,18 +115,32 @@ const ToolListView = () => {
                   <Typography variant="h6" component="div">
                     {tool.attributes.name}
                   </Typography>
-                  {tool.attributes.tool_type && (
-                    <Chip
-                      label={tool.attributes.tool_type}
-                      size="small"
-                      sx={{ 
-                        bgcolor: getToolTypeColor(tool.attributes.tool_type).bg,
-                        color: getToolTypeColor(tool.attributes.tool_type).color,
-                        fontWeight: 'bold',
-                        fontSize: '0.7rem',
-                      }}
-                    />
-                  )}
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    {tool.attributes.tool_type && (
+                      <Chip
+                        label={tool.attributes.tool_type}
+                        size="small"
+                        sx={{ 
+                          bgcolor: getToolTypeColor(tool.attributes.tool_type).bg,
+                          color: getToolTypeColor(tool.attributes.tool_type).color,
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem',
+                        }}
+                      />
+                    )}
+                    {tool.attributes.tool_type && tool.attributes.tool_type.toLowerCase() === 'rest' && (
+                      <Chip
+                        label="MCP"
+                        size="small"
+                        sx={{ 
+                          bgcolor: '#00BCD4',
+                          color: '#fff',
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem',
+                        }}
+                      />
+                    )}
+                  </Box>
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   {tool.attributes.short_description}

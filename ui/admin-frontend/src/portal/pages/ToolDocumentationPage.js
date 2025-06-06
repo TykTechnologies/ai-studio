@@ -286,6 +286,204 @@ const ToolDocumentationPage = () => {
           {toolDetails.attributes.description}
         </Typography>
       )}
+
+      {/* MCP Support Section */}
+      <Paper sx={{ p: 3, mb: 3, backgroundColor: '#f8f9fa', border: '1px solid #e9ecef' }} elevation={1}>
+        <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+          🔗 MCP (Model Context Protocol) Support
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 2 }}>
+          This tool is available through the Model Context Protocol (MCP), enabling seamless integration with MCP-compatible clients 
+          such as Claude Desktop, Zed, and other AI applications.
+        </Typography>
+        
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+            MCP Connection Endpoint
+          </Typography>
+          <Paper sx={{ p: 2, backgroundColor: '#292929', borderRadius: 1 }}>
+            <Typography sx={{ fontFamily: 'monospace', color: 'white', fontSize: '0.9rem' }}>
+              {(() => {
+                const config = getConfig();
+                const currentHost = window.location.hostname;
+                const protocol = window.location.protocol;
+                const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+                const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
+                return `${baseUrl}/tools/${toolSlug}/mcp?apiKey=YOUR_API_TOKEN_HERE`;
+              })()}
+            </Typography>
+          </Paper>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Simply replace <code>YOUR_API_TOKEN_HERE</code> with your actual API token.
+          </Typography>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Authentication
+          </Typography>
+          
+          <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', mb: 1 }}>
+            Method 1: Query Parameter (Recommended)
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Add your API token directly to the URL:
+          </Typography>
+          <Paper sx={{ p: 2, backgroundColor: '#292929', borderRadius: 1, mb: 3 }}>
+            <Typography sx={{ fontFamily: 'monospace', color: 'white', fontSize: '0.9rem' }}>
+              ?apiKey=YOUR_API_TOKEN_HERE
+            </Typography>
+          </Paper>
+
+          <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', mb: 1 }}>
+            Method 2: Authorization Header (Alternative)
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Include your API token in the Authorization header:
+          </Typography>
+          <Paper sx={{ p: 2, backgroundColor: '#292929', borderRadius: 1 }}>
+            <Typography sx={{ fontFamily: 'monospace', color: 'white', fontSize: '0.9rem' }}>
+              Authorization: Bearer YOUR_API_TOKEN_HERE
+            </Typography>
+          </Paper>
+        </Box>
+
+        <Accordion sx={{ mb: 2 }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              Client Integration Examples
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                Claude Desktop Configuration
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Add this tool to your Claude Desktop configuration. Simply replace the API token in the URL:
+              </Typography>
+              <Paper sx={{ p: 2, backgroundColor: '#292929', borderRadius: 1 }}>
+                <Typography sx={{ fontFamily: 'monospace', color: 'white', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
+{`{
+  "mcpServers": {
+    "${toolDetails?.attributes?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'tool_name'}": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sse",
+        "${(() => {
+          const config = getConfig();
+          const currentHost = window.location.hostname;
+          const protocol = window.location.protocol;
+          const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+          const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
+          return `${baseUrl}/tools/${toolSlug}/mcp?apiKey=YOUR_API_TOKEN_HERE`;
+        })()}"
+      ]
+    }
+  }
+}`}
+                </Typography>
+              </Paper>
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Easy Setup:</strong> Just replace <code>YOUR_API_TOKEN_HERE</code> in the URL with your actual API token. 
+                  No additional environment variables or headers needed!
+                </Typography>
+              </Alert>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                MCP Client Connection (Node.js)
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Connect to this tool programmatically using the MCP SDK. Two authentication methods are supported:
+              </Typography>
+              
+              <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                Method 1: Query Parameter (Recommended)
+              </Typography>
+              <Paper sx={{ p: 2, backgroundColor: '#292929', borderRadius: 1, mb: 2 }}>
+                <Typography sx={{ fontFamily: 'monospace', color: 'white', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
+{`import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+
+// Create transport with API key in URL (simplest method)
+const transport = new SSEClientTransport(
+  new URL('${(() => {
+    const config = getConfig();
+    const currentHost = window.location.hostname;
+    const protocol = window.location.protocol;
+    const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+    const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
+    return `${baseUrl}/tools/${toolSlug}/mcp?apiKey=YOUR_API_TOKEN_HERE`;
+  })()}')
+);
+
+const client = new Client({
+  name: "my-client",
+  version: "1.0.0"
+}, {
+  capabilities: {
+    tools: {}
+  }
+});
+
+await client.connect(transport);
+
+// List available tools
+const result = await client.listTools();
+console.log('Available tools:', result.tools);
+
+// Call a tool
+const response = await client.callTool({
+  name: "operation_name",
+  arguments: {
+    // your parameters here
+  }
+});`}
+                </Typography>
+              </Paper>
+
+              <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                Method 2: Authorization Header
+              </Typography>
+              <Paper sx={{ p: 2, backgroundColor: '#292929', borderRadius: 1 }}>
+                <Typography sx={{ fontFamily: 'monospace', color: 'white', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
+{`// Alternative: Use Authorization header
+const transport = new SSEClientTransport(
+  new URL('${(() => {
+    const config = getConfig();
+    const currentHost = window.location.hostname;
+    const protocol = window.location.protocol;
+    const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+    const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
+    return `${baseUrl}/tools/${toolSlug}/mcp`;
+  })()}'),
+  {
+    headers: {
+      'Authorization': 'Bearer YOUR_API_TOKEN_HERE'
+    }
+  }
+);`}
+                </Typography>
+              </Paper>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>Note:</strong> MCP support allows this tool to be used directly within AI applications that support the Model Context Protocol. 
+            The tool's operations are automatically converted to MCP-compatible schemas. Authentication is handled via simple API tokens in the URL query parameter - 
+            no OAuth or complex header configuration required.
+          </Typography>
+        </Alert>
+      </Paper>
+
+      <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2, mt: 4 }}>
+        📋 API Operations
+      </Typography>
       {documentationData.map((operation, index) => (
         <Accordion
           key={operation.operation_id || index}
@@ -320,7 +518,7 @@ const ToolDocumentationPage = () => {
           <AccordionDetails sx={{ backgroundColor: '#f9f9f9' }}>
             <Box sx={{ py: 2 }}>
               {operation.description && (
-                <Typography variant="body1" paragraph sx={{mb: 2}}>
+                <Typography variant="body1" sx={{mb: 2}}>
                   {operation.description}
                 </Typography>
               )}

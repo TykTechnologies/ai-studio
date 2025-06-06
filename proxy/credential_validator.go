@@ -89,14 +89,19 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				return
 			}
 		} else if toolSlug != "" {
-			// For tool requests, extract bearer token from authorization header
+			// For tool requests, extract token from authorization header or apiKey query parameter
 			token = r.Header.Get("Authorization")
-			if token == "" {
-				respondWithError(w, http.StatusUnauthorized, "missing authorization header for tool request", nil)
-				return
+			if token != "" {
+				// Strip Bearer prefix if present
+				token = strings.TrimPrefix(token, "Bearer ")
+			} else {
+				// Check for apiKey query parameter as alternative
+				token = r.URL.Query().Get("apiKey")
+				if token == "" {
+					respondWithError(w, http.StatusUnauthorized, "missing authorization header or apiKey query parameter for tool request", nil)
+					return
+				}
 			}
-			// Strip Bearer prefix if present
-			token = strings.TrimPrefix(token, "Bearer ")
 		} else if routeID != "" {
 			hVal := r.Header.Get("Authorization")
 			parts := strings.Split(hVal, "Bearer ")
