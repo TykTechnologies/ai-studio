@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gin-gonic/gin"
 	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	// Using orderedmap indirectly through the pb33f API
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -823,7 +824,13 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 	}
 	
 	// Find the operation in the OpenAPI spec
-	doc, err := libopenapi.NewDocument(oasSpec)
+	config := &datamodel.DocumentConfiguration{
+		AllowFileReferences:   false,
+		AllowRemoteReferences: false,
+		BaseURL:              nil,
+		RemoteURLHandler:     nil,
+	}
+	doc, err := libopenapi.NewDocumentWithConfiguration(oasSpec, config)
 	if err != nil {
 		return OperationDetail{}, fmt.Errorf("failed to parse OAS spec: %w", err)
 	}
@@ -836,7 +843,6 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 	
 	// Find the operation by ID
 	var foundPath string
-	var foundMethod string
 	var foundOperation *v3.Operation
 	
 	// Iterate through all paths and operations to find the one with matching ID
@@ -855,7 +861,6 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 			}
 			if operation.OperationId == operationID {
 				foundPath = path
-				foundMethod = method
 				foundOperation = operation
 				break
 			}
@@ -873,7 +878,7 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 	// Create the OperationDetail
 	opDetail := OperationDetail{
 		OperationID: operationID,
-		Method:      foundMethod,
+		Method:      "POST", // Always show POST since all tool calls go through the proxy as POST requests
 		Path:        foundPath,
 		Description: foundOperation.Description,
 		Parameters:  []ParameterDetail{},
