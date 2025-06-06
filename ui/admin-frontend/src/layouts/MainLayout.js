@@ -164,6 +164,7 @@ const MainLayout = () => {
             <PortalDrawer
               catalogues={entitlements.catalogues}
               dataCatalogues={entitlements.data_catalogues}
+              toolCatalogues={entitlements.tool_catalogues}
               open
             />
           )}

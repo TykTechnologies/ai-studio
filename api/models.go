@@ -351,6 +351,7 @@ type AppInput struct {
 			UserID          uint       `json:"user_id"`
 			DatasourceIDs   []uint     `json:"datasource_ids"`
 			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
 		} `json:"attributes"`
@@ -369,6 +370,7 @@ type AppResponse struct {
 		CredentialID    uint       `json:"credential_id"`
 		DatasourceIDs   []uint     `json:"datasource_ids"`
 		LLMIDs          []uint     `json:"llm_ids"`
+		ToolIDs         []uint     `json:"tool_ids"`
 		MonthlyBudget   *float64   `json:"monthly_budget"`
 		BudgetStartDate *time.Time `json:"budget_start_date"`
 	} `json:"attributes"`
@@ -881,6 +883,7 @@ type AppDetailResponse struct {
 		CredentialID    uint             `json:"credential_id"`
 		DatasourceIDs   []uint           `json:"datasource_ids"`
 		LLMIDs          []uint           `json:"llm_ids"`
+		ToolIDs         []uint           `json:"tool_ids"`
 		MonthlyBudget   *float64         `json:"monthly_budget"`
 		BudgetStartDate *time.Time       `json:"budget_start_date"`
 		Credential      CredentialDetail `json:"credential"`

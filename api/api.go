@@ -320,6 +320,12 @@ func (a *API) setupRoutes() {
 		c.Status(http.StatusOK)
 	})
 
+	// Analytics endpoints for portal users
+	portalAnalytics := a.router.Group("/analytics")
+	portalAnalytics.Use(a.auth.AuthMiddleware())
+	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
+	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
+
 	public := a.router.Group("/")
 
 	// Public routes
@@ -350,7 +356,12 @@ func (a *API) setupRoutes() {
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
-	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
+	// Use secure version for portal users that hides sensitive fields like auth_key and oas_spec
+	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
+	// Route for tool documentation page
+	authed.GET("/tools/:id/docs", a.GetToolDocumentation)
+	// Route to get user apps that have access to a tool
+	authed.GET("/tools/:id/user-apps", a.getToolUserApps)
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
@@ -489,14 +500,19 @@ func (a *API) setupRoutes() {
 	v1.GET("/apps/:id", licensing.ActionHandler(a.getApp, "Get App"))
 	v1.PATCH("/apps/:id", licensing.ActionHandler(a.updateApp, "Update App"))
 	v1.DELETE("/apps/:id", licensing.ActionHandler(a.deleteApp, "Delete App"))
-	v1.GET("/users/:id/apps", a.getAppsByUserID)
+	v1.GET("/users/:id/apps", a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
 	v1.GET("/apps", a.listApps)
 	v1.GET("/apps/search", a.searchApps)
 	v1.GET("/apps/count", a.countApps)
-	v1.GET("/users/:id/apps/count", a.countAppsByUserID)
+	v1.GET("/users/:id/apps/count", a.countAppsByUserID) // Note: Param is "id" here
+
+	// App-Tool routes
+	v1.POST("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.addToolToApp, "Add Tool to App"))
+	v1.DELETE("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.removeToolFromApp, "Remove Tool from App"))
+	v1.GET("/apps/:id/tools", licensing.ActionHandler(a.getAppTools, "Get App Tools"))
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)

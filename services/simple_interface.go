@@ -26,4 +26,7 @@ type ServiceInterface interface {
 	GetUserByAPIKey(apiKey string) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
 	AddUserToGroup(userID, groupID uint) error
+	// Tool
+	GetToolByID(id uint) (*models.Tool, error)
+	GetToolBySlug(slug string) (*models.Tool, error)
 }

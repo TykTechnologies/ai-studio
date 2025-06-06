@@ -159,6 +159,7 @@ flowchart TD
       FileStores         []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
       Filters            []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
       Dependencies       []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
+      Apps               []App       `gorm:"many2many:app_tools;" json:"apps"`  // New relationship with Apps
   }
   ```
 
@@ -197,6 +198,17 @@ flowchart TD
   * Filters are applied before tool operations are executed.
   * Filters can validate inputs, transform data, or block operations.
   * Filter hierarchy: Tool filters → LLM Provider filters → Chat Room filters.
+
+* **App Integration:**
+  * Tools can now be subscribed to by applications, similar to how applications can subscribe to LLMs and Data Sources.
+  * Many-to-many relationship between Apps and Tools via the `app_tools` join table.
+  * Apps can subscribe to multiple Tools, and Tools can be used by multiple Apps.
+  * Tool access controlled by permissions and privacy settings.
+  * New API endpoints for managing app-tool relationships:
+    * `GET /apps/{app_id}/tools`: Get all tools associated with an app.
+    * `POST /apps/{app_id}/tools/{tool_id}`: Associate a tool with an app.
+    * `DELETE /apps/{app_id}/tools/{tool_id}`: Disassociate a tool from an app.
+  * UI components for selecting and managing tool subscriptions in the App Form and App Details views.
 
 **4. UI Components & Interactions**
 
@@ -255,7 +267,56 @@ flowchart TD
   * `POST /chat-sessions/{session_id}/tools`: Add a tool to a chat session.
   * `DELETE /chat-sessions/{session_id}/tools/{tool_id}`: Remove a tool from a chat session.
 
-**6. Potential Considerations & Future Enhancements**
+* **Model Context Protocol (MCP) Integration:**
+  * `POST /tools/{toolSlug}/mcp`: StreamableHTTP endpoint for modern MCP clients.
+  * `GET /tools/{toolSlug}/mcp/sse`: SSE endpoint for legacy MCP clients.
+  * `POST /tools/{toolSlug}/mcp/message`: Message endpoint for legacy MCP clients.
+
+**6. Model Context Protocol (MCP) Support**
+
+The Tool System provides native integration with the Model Context Protocol (MCP), enabling seamless connectivity with MCP-compatible AI clients such as Claude Desktop, VS Code, Zed, and other AI applications.
+
+* **Dual Transport Support:**
+  * **StreamableHTTP Transport:** Modern, efficient single-endpoint transport (`/tools/{toolSlug}/mcp`) recommended for new integrations.
+  * **SSE Transport:** Legacy dual-endpoint transport (`/tools/{toolSlug}/mcp/sse` + `/tools/{toolSlug}/mcp/message`) for backward compatibility.
+
+* **Automatic Tool Conversion:**
+  * Tools with OpenAPI specifications are automatically converted to MCP-compatible tool definitions.
+  * Parameter types, descriptions, and requirements are mapped from OpenAPI schemas to MCP parameter formats.
+  * Tool dependencies and filters are preserved in the MCP context.
+
+* **Authentication & Security:**
+  * MCP endpoints use Bearer token authentication via the `Authorization` header.
+  * Same authentication and authorization model as regular tool API endpoints.
+  * Tool access is controlled through user app permissions and group memberships.
+
+* **MCP Server Implementation:**
+  ```go
+  type MCPServerCache struct {
+      SSEServer         *server.SSEServer           // SSE transport server
+      StreamableServer  *server.StreamableHTTPServer // StreamableHTTP transport server
+      MCPServer         *server.MCPServer           // Underlying MCP server
+      ToolVersion       int64                       // Tool version for cache invalidation
+      OperationHash     string                      // Hash of operations for change detection
+  }
+  ```
+
+* **Dynamic Server Management:**
+  * MCP servers are created on-demand when tools are first accessed.
+  * Servers are cached and automatically invalidated when tools are updated.
+  * Operation hash detection ensures MCP schemas stay synchronized with tool changes.
+
+* **Client Integration Examples:**
+  * **Claude Desktop:** Uses `mcp-remote` with Bearer authentication for secure connection.
+  * **VS Code:** Supports StreamableHTTP transport for improved performance.
+  * **Custom Clients:** Can use standard MCP SDK with either transport method.
+
+* **Tool Operation Mapping:**
+  * OpenAPI operations become MCP tools with matching names and descriptions.
+  * Request parameters are mapped to MCP tool arguments with proper typing.
+  * Tool responses are formatted as MCP text content with JSON serialization when appropriate.
+
+**7. Potential Considerations & Future Enhancements**
 
 * **Additional Tool Types:** Support for non-REST tool types (e.g., database queries, custom functions).
 * **Enhanced Privacy Controls:** More granular privacy scoring system and per-operation privacy scores.
