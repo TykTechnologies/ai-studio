@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"sort"
 	"strconv"
 	"time"
 
@@ -270,6 +271,84 @@ func GetToolUsageStatistics(db *gorm.DB, startDate, endDate time.Time) (*ChartDa
 	for i, result := range results {
 		chartData.Labels[i] = result.Name
 		chartData.Data[i] = float64(result.Count)
+	}
+
+	return chartData, nil
+}
+
+// GetToolOperationsUsageOverTime returns the usage count for each operation of a specific tool over time
+func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate time.Time) (*models.MultiAxisChartData, error) {
+	// Get all operations for this tool with their usage over time
+	var results []struct {
+		Date string
+		Name string
+		Count int64
+	}
+
+	err := db.Model(&models.ToolCallRecord{}).
+		Select("DATE(time_stamp) as date, name, COUNT(*) as count").
+		Where("tool_id = ? AND time_stamp BETWEEN ? AND ?", toolID, startDate, endDate).
+		Group("DATE(time_stamp), name").
+		Order("date ASC, name ASC").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Build unique date labels and operation names
+	dateSet := make(map[string]bool)
+	operationSet := make(map[string]bool)
+	
+	for _, result := range results {
+		dateSet[result.Date] = true
+		operationSet[result.Name] = true
+	}
+
+	// Convert to sorted slices
+	var dates []string
+	for date := range dateSet {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+	
+	var operations []string
+	for op := range operationSet {
+		operations = append(operations, op)
+	}
+	sort.Strings(operations)
+
+	// Create a map for quick lookup
+	dataMap := make(map[string]map[string]int64)
+	for _, result := range results {
+		if dataMap[result.Date] == nil {
+			dataMap[result.Date] = make(map[string]int64)
+		}
+		dataMap[result.Date][result.Name] = result.Count
+	}
+
+	// Build datasets for each operation
+	var datasets []models.Dataset
+	for _, operation := range operations {
+		data := make([]float64, len(dates))
+		for i, date := range dates {
+			if count, exists := dataMap[date][operation]; exists {
+				data[i] = float64(count)
+			} else {
+				data[i] = 0
+			}
+		}
+		
+		datasets = append(datasets, models.Dataset{
+			Label: operation,
+			Data:  data,
+			Yaxis: "y",
+		})
+	}
+
+	chartData := &models.MultiAxisChartData{
+		Labels:   dates,
+		Datasets: datasets,
 	}
 
 	return chartData, nil
