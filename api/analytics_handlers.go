@@ -296,6 +296,67 @@ func (a *API) getToolUsageStatistics(c *gin.Context) {
 	c.JSON(http.StatusOK, chartData)
 }
 
+// getToolOperationsUsageOverTime godoc
+// @Summary Get tool operations usage over time for a specific tool
+// @Description Get the usage count for each operation of a specific tool over time
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param tool_id query string true "Tool ID"
+// @Success 200 {object} models.MultiAxisChartData
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/tool-operations-usage-over-time [get]
+func (a *API) getToolOperationsUsageOverTime(c *gin.Context) {
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	toolIDStr := c.Query("tool_id")
+	if toolIDStr == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "tool_id parameter is required"}},
+		})
+		return
+	}
+
+	toolID, err := strconv.ParseUint(toolIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid tool_id parameter"}},
+		})
+		return
+	}
+
+	chartData, err := analytics.GetToolOperationsUsageOverTime(a.service.DB, uint(toolID), startDate, endDate)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get tool operations usage over time"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
+}
+
 // getUniqueUsersPerDay godoc
 // @Summary Get unique users per day
 // @Description Get the number of unique users per day

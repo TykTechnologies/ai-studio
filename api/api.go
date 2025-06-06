@@ -607,6 +607,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/cost-analysis", a.getCostAnalysis)
 	v1.GET("/analytics/most-used-llm-models", a.getMostUsedLLMModels)
 	v1.GET("/analytics/tool-usage-statistics", a.getToolUsageStatistics)
+	v1.GET("/analytics/tool-operations-usage-over-time", a.getToolOperationsUsageOverTime)
 	v1.GET("/analytics/unique-users-per-day", a.getUniqueUsersPerDay)
 	v1.GET("/analytics/token-usage-per-user", a.getTokenUsagePerUser)
 	v1.GET("/analytics/token-usage-per-app", a.getTokenUsagePerApp)
