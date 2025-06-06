@@ -4,7 +4,9 @@
       "Bash(rg:*)",
       "Bash(go build:*)",
       "Bash(go test:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(grep:*)",
+      "Bash(gofmt:*)"
     ],
     "deny": []
   }

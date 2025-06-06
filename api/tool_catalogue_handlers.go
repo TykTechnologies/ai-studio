@@ -951,3 +951,108 @@ func convertSchemaToGinH(schema *base.Schema) gin.H {
 	
 	return result
 }
+
+// @Summary Get user apps that have access to a tool
+// @Description Get list of user's apps that have been granted access to a specific tool
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param id path string true "Tool ID"
+// @Success 200 {object} gin.H
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tools/{id}/user-apps [get]
+func (a *API) getToolUserApps(c *gin.Context) {
+	toolID := c.Param("id")
+	
+	// Convert string ID to uint
+	idUint, err := strconv.ParseUint(toolID, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", "Invalid tool ID: " + err.Error()}}})
+		return
+	}
+
+	// Get current user from context
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Unauthorized", "User not found in context"}}})
+		return
+	}
+
+	currentUser, ok := user.(*models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", "Invalid user type in context"}}})
+		return
+	}
+
+	// Verify tool exists and user has access to it
+	tool, err := a.service.GetToolByID(uint(idUint))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{"Not Found", "Tool not found: " + toolID}}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", "Failed to fetch tool: " + err.Error()}}})
+		return
+	}
+
+	// Get user's apps that have access to this tool
+	var userApps []models.App
+	err = a.config.DB.Table("apps").
+		Joins("JOIN app_tools ON app_tools.app_id = apps.id").
+		Where("apps.user_id = ? AND app_tools.tool_id = ?", currentUser.ID, uint(idUint)).
+		Preload("Credential").
+		Find(&userApps).Error
+		
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Internal Server Error", "Failed to fetch user apps: " + err.Error()}}})
+		return
+	}
+
+	// Serialize the apps for response
+	var appResponses []map[string]interface{}
+	for _, app := range userApps {
+		appResponse := map[string]interface{}{
+			"id":          app.ID,
+			"name":        app.Name,
+			"description": app.Description,
+		}
+		
+		// Include API secret if credential exists and is loaded
+		if app.CredentialID != 0 && app.Credential.Secret != "" {
+			appResponse["api_secret"] = app.Credential.Secret
+		} else if app.CredentialID != 0 {
+			// Fallback: if credential is not loaded properly, fetch it manually
+			var credential models.Credential
+			if err := a.config.DB.First(&credential, app.CredentialID).Error; err == nil {
+				appResponse["api_secret"] = credential.Secret
+			}
+		}
+		
+		appResponses = append(appResponses, appResponse)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": appResponses,
+		"tool_name": tool.Name,
+	})
+}

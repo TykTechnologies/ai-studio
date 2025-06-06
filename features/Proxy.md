@@ -151,6 +151,12 @@ graph TD
     *   `POST /llm/stream/{llmSlug}/{rest:.*}`: For streaming LLM API calls.
     *   `{llmSlug}`: URL slug generated from the `llm.Name` configured in the database.
     *   `{rest:.*}`: Captures the remaining path to be forwarded to the vendor API.
+    *   **Tool Proxying:**
+        *   `GET/POST/PUT/DELETE /tools/{toolSlug}`: Direct tool operation calls with simplified request format.
+        *   **MCP (Model Context Protocol) Support:**
+            *   `POST /tools/{toolSlug}/mcp`: StreamableHTTP transport for modern MCP clients.
+            *   `GET /tools/{toolSlug}/mcp/sse`: SSE transport endpoint for legacy MCP clients.
+            *   `POST /tools/{toolSlug}/mcp/message`: Message endpoint for legacy MCP clients.
 *   **Configuration:** LLM endpoints, credentials (API keys, often App-specific), allowed models, filters, and vendor types are stored in the `llms` table, managed via **LLM Management** API/UI. Active LLMs are loaded into the proxy's memory map (`p.llms`) by `loadResources`. Filters are stored in the `filters` table. Pricing in `model_prices`.
 *   **Authentication:** Relies on `CredentialValidator` middleware. Expects credentials in the format required by the *target vendor* (e.g., `Authorization: Bearer <app_key>` for OpenAI-like vendors, `x-api-key: <app_key>` for Anthropic). The validator checks this `<app_key>` against the `apps` table via the `service`.
 *   **Model Validation:** `ModelValidator` checks the `model` field within the request *body* against the `llm.AllowedModels` string array. Vendor-specific extractors handle different request body structures.
@@ -161,7 +167,14 @@ graph TD
     *   `LLMChatRecord`: Records detailed LLM usage (LLMID, Model, Vendor, Tokens (Prompt/Response/Cache), Cost, Timestamp, AppID, UserID, InteractionType=Proxy). Recorded by `AnalyzeCompletionResponse`.
 *   **Vendor Abstraction:** The `switches` package uses the `VendorMap` and `models.LLMVendorProvider` interface to decouple the core proxy logic from vendor specifics.
 *   **Streaming Implementation:** Uses `http.Client` for forwarding, copies headers, streams chunks back while aggregating the full response in memory for final analysis. Includes timeouts and keep-alive settings.
-*   **Concurrency:** Response analysis and logging happen in goroutines. Uses `sync.RWMutex` (`p.mu`) to protect access to shared resources like `p.llms` during reloads or lookups.
+*   **Tool Proxying Implementation:** Handles tool operation calls with simplified request format (`operation_id`, `parameters`, `payload`, `headers`) and forwards to external APIs via the Universal Client.
+*   **MCP Server Implementation:** 
+    *   Creates on-demand MCP servers for tools with OpenAPI specifications.
+    *   Supports both StreamableHTTP (modern, single endpoint) and SSE (legacy, dual endpoint) transports.
+    *   Automatically converts OpenAPI operations to MCP tool definitions with proper parameter mapping.
+    *   Caches MCP servers with version tracking and operation hash validation for automatic invalidation.
+    *   Uses Bearer token authentication consistent with other API endpoints.
+*   **Concurrency:** Response analysis and logging happen in goroutines. Uses `sync.RWMutex` (`p.mu`) to protect access to shared resources like `p.llms` during reloads or lookups. MCP server cache uses separate mutex (`p.mcpServersMu`) for thread-safe access.
 
 **4. Use Cases & Behavior**
 
@@ -189,6 +202,20 @@ graph TD
 *   **Client Violates Filter:** Request reaches step 5, "PII Check" filter script rejects the request body. Proxy returns HTTP 403 to "MyApp".
 *   **Client Uses Invalid Key:** Request reaches step 2, `CredentialValidator` fails. Proxy returns HTTP 401 to "MyApp".
 
+*   **MCP Client Connects to Tool:**
+    1. MCP client (e.g., Claude Desktop, VS Code) sends POST request to `/tools/my-api-tool/mcp` with Bearer token.
+    2. Proxy validates the token and checks tool access permissions.
+    3. Proxy creates or retrieves cached MCP server for the tool.
+    4. MCP server converts OpenAPI operations to MCP tool definitions.
+    5. Client receives MCP-formatted tool list and can invoke tool operations.
+    6. Tool calls are forwarded to external APIs and responses returned in MCP format.
+
+*   **Tool Updated - MCP Cache Invalidation:**
+    1. Admin updates a tool's OpenAPI specification via the UI/API.
+    2. Next MCP client request detects version/hash mismatch in cache.
+    3. Proxy automatically recreates MCP server with updated tool definitions.
+    4. Client receives updated tool schemas reflecting the changes.
+
 **5. Potential Considerations & Future Enhancements**
 
 *   **Filter Execution Point:** Filters currently run *before* vendor-specific screening (`ProxyScreenRequest`). The order might need adjustment depending on desired behavior. Global filters are not implemented.
@@ -197,4 +224,13 @@ graph TD
 *   **Streaming Analysis Memory:** Aggregating full streaming responses in memory could be problematic for very large outputs.
 *   **OpenAI Translation Layer:** Consider clarifying the distinction or potential unification with the direct proxy endpoints.
 *   **Datasource Proxying:** This spec focuses on LLM proxying, but the `/datasource/...` endpoint provides similar proxying for internal search, which could be documented separately.
+*   **MCP Enhancements:** 
+    *   Resource support for file-based tools and data sources.
+    *   Prompt support for structured interactions.
+    *   Advanced parameter validation and type conversion.
+    *   MCP client capability negotiation.
+*   **Tool Proxy Improvements:**
+    *   Enhanced error mapping from external APIs to tool responses.
+    *   Request/response transformation capabilities.
+    *   Tool usage analytics and monitoring.
 *   **Error Handling:** Improve mapping of vendor errors to client-facing HTTP errors.

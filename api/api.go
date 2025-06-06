@@ -360,6 +360,8 @@ func (a *API) setupRoutes() {
 	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
 	// Route for tool documentation page
 	authed.GET("/tools/:id/docs", a.GetToolDocumentation)
+	// Route to get user apps that have access to a tool
+	authed.GET("/tools/:id/user-apps", a.getToolUserApps)
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
