@@ -582,6 +582,9 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record start time for analytics
+	t0 := time.Now()
+	
 	// Call the tool operation
 	result, err := p.service.CallToolOperation(
 		tool.ID,
@@ -590,10 +593,29 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		input.Payload,
 		input.Headers,
 	)
+	
+	// Record end time and log analytics
+	t1 := time.Now()
+	
 	if err != nil {
+		// Record failed tool call
+		analytics.RecordToolCall(
+			input.OperationID,
+			time.Now(),
+			int(t1.Sub(t0).Milliseconds()),
+			tool.ID,
+		)
 		respondWithError(w, http.StatusInternalServerError, "failed to call tool operation", err)
 		return
 	}
+	
+	// Record successful tool call
+	analytics.RecordToolCall(
+		input.OperationID,
+		time.Now(),
+		int(t1.Sub(t0).Milliseconds()),
+		tool.ID,
+	)
 
 	// Return the result directly without nesting
 	w.Header().Set("Content-Type", "application/json")
@@ -1242,6 +1264,9 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 		// Create a handler that forwards the call to our existing tool operation
 		mcpServer.AddTool(mcpTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Record start time for analytics
+			t0 := time.Now()
+			
 			// Convert MCP request parameters to CallToolOperation format
 			params := make(map[string][]string)
 			payload := make(map[string]interface{})
@@ -1290,10 +1315,28 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 				payload,
 				nil, // No headers for MCP calls
 			)
-
+			
+			// Record end time and log analytics
+			t1 := time.Now()
+			
 			if err != nil {
+				// Record failed tool call
+				analytics.RecordToolCall(
+					operationID,
+					time.Now(),
+					int(t1.Sub(t0).Milliseconds()),
+					toolModel.ID,
+				)
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+			
+			// Record successful tool call
+			analytics.RecordToolCall(
+				operationID,
+				time.Now(),
+				int(t1.Sub(t0).Milliseconds()),
+				toolModel.ID,
+			)
 
 			// Convert the result to MCP format
 			switch res := result.(type) {
