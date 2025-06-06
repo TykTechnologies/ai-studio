@@ -427,6 +427,16 @@ func (m *mockService) AddUserToGroup(userID, groupID uint) error {
 	return nil
 }
 
+// GetToolByID implements the services.ServiceInterface method
+func (m *mockService) GetToolByID(id uint) (*models.Tool, error) {
+	return &models.Tool{}, nil
+}
+
+// GetToolBySlug implements the services.ServiceInterface method
+func (m *mockService) GetToolBySlug(slug string) (*models.Tool, error) {
+	return &models.Tool{}, nil
+}
+
 // Ensure mockService implements both ServiceInterface and EmailSender
 var _ services.ServiceInterface = (*mockService)(nil)
 var _ models.EmailSender = (*mockService)(nil)

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import apiClient from "../../utils/apiClient";
+import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 import {
   Alert,
@@ -16,6 +16,9 @@ import {
   TableHead,
   TableRow,
   Snackbar,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -118,6 +121,7 @@ const AppDetails = () => {
   const [user, setUser] = useState(null);
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
+  const [tools, setTools] = useState([]); // Added state for tools
   const [loading, setLoading] = useState(true);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
@@ -148,11 +152,102 @@ const AppDetails = () => {
     updatePaginationData,
   } = usePagination();
 
+  const fetchAppDetails = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.get(`/apps/${id}`);
+      const appData = response.data.data;
+      setApp(appData);
+
+      if (appData.attributes.credential_id) {
+        fetchCredential(appData.attributes.credential_id);
+      }
+
+      fetchUser(appData.attributes.user_id);
+      
+      // Use the tools from the app response directly if available
+      if (appData.attributes.tools && Array.isArray(appData.attributes.tools)) {
+        setTools(appData.attributes.tools);
+      } else {
+        // Fallback to fetching tools separately if not in the main app response
+        fetchAppTools(id);
+      }
+      
+      // Assuming LLM and Datasource IDs are still part of the main app response
+      // and you have separate functions to fetch their details by IDs.
+      // If LLM/Datasource details are now part of AppResponse.Attributes like Tools, adjust accordingly.
+      if (appData.attributes.llm_ids && Array.isArray(appData.attributes.llm_ids)) {
+         fetchLLMsDetails(appData.attributes.llm_ids);
+      } else if (appData.attributes.llms && Array.isArray(appData.attributes.llms)) {
+         setLLMs(appData.attributes.llms); // If full LLM objects are now in AppResponse
+      }
+
+      if (appData.attributes.datasource_ids && Array.isArray(appData.attributes.datasource_ids)) {
+        fetchDatasourcesDetails(appData.attributes.datasource_ids);
+      } else if (appData.attributes.datasources && Array.isArray(appData.attributes.datasources)) {
+        setDatasources(appData.attributes.datasources); // If full Datasource objects are now in AppResponse
+      }
+
+
+    } catch (error) {
+      console.error("Error fetching app details", error);
+      setSnackbar({ open: true, message: "Failed to load app details.", severity: "error" });
+    } finally {
+      setLoading(false);
+    }
+  }, [id]); // Removed fetchAppTools from here as it's called conditionally
+
+  const fetchAppTools = useCallback(async (appId) => {
+    try {
+      const response = await appToolAPI.getAppTools(appId);
+      setTools(response.data.data || []); // Assuming response.data.data is the array of tools
+    } catch (error) {
+      console.error("Error fetching app tools", error);
+      setSnackbar({ open: true, message: "Failed to load tools for the app.", severity: "error" });
+      setTools([]); // Set to empty array on error
+    }
+  }, []);
+  
+  // Adjust fetchLLMs and fetchDatasources if they now expect full objects or just IDs
+  const fetchLLMsDetails = async (llmIds) => {
+    if (!llmIds || llmIds.length === 0) {
+        setLLMs([]);
+        return;
+    }
+    try {
+      const llmPromises = llmIds.map((llmId) => apiClient.get(`/llms/${llmId}`));
+      const llmResponses = await Promise.all(llmPromises);
+      setLLMs(llmResponses.map((response) => response.data.data));
+    } catch (error) {
+      console.error("Error fetching LLMs", error);
+      setLLMs([]);
+    }
+  };
+
+  const fetchDatasourcesDetails = async (datasourceIds) => {
+    if (!datasourceIds || datasourceIds.length === 0) {
+        setDatasources([]);
+        return;
+    }
+    try {
+      const datasourcePromises = datasourceIds.map((dsId) =>
+        apiClient.get(`/datasources/${dsId}`),
+      );
+      const datasourceResponses = await Promise.all(datasourcePromises);
+      setDatasources(datasourceResponses.map((response) => response.data.data));
+    } catch (error) {
+      console.error("Error fetching datasources", error);
+      setDatasources([]);
+    }
+  };
+
+
   useEffect(() => {
     fetchAppDetails();
     fetchTokenUsageAndCost();
     fetchProxyLogs();
-  }, [id, startDate, endDate, page, pageSize]);
+  }, [id, startDate, endDate, page, pageSize, fetchAppDetails]); // Added fetchAppDetails
+
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === "clickaway") {
@@ -214,26 +309,6 @@ const AppDetails = () => {
     }
   };
 
-  const fetchAppDetails = async () => {
-    try {
-      const response = await apiClient.get(`/apps/${id}`);
-      setApp(response.data.data);
-
-      if (response.data.data.attributes.credential_id) {
-        fetchCredential(response.data.data.attributes.credential_id);
-      }
-
-      fetchUser(response.data.data.attributes.user_id);
-      fetchLLMs(response.data.data.attributes.llm_ids);
-      fetchDatasources(response.data.data.attributes.datasource_ids);
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching app details", error);
-      setLoading(false);
-    }
-  };
-
   const fetchTokenUsageAndCost = async () => {
     try {
       const [usageResponse, budgetResponse, interactionsResponse] = await Promise.all([
@@ -266,10 +341,10 @@ const AppDetails = () => {
           page_size: pageSize,
         },
       });
-      setProxyLogs(response.data.data);
+      setProxyLogs(response.data.data || []);
       updatePaginationData(
-        response.data.meta.total_count,
-        response.data.meta.total_pages,
+        response.data.meta?.total_count || 0,
+        response.data.meta?.total_pages || 0,
       );
     } catch (error) {
       console.error("Error fetching proxy logs", error);
@@ -291,28 +366,6 @@ const AppDetails = () => {
       setUser(response.data.data);
     } catch (error) {
       console.error("Error fetching user", error);
-    }
-  };
-
-  const fetchLLMs = async (llmIds) => {
-    try {
-      const llmPromises = llmIds.map((id) => apiClient.get(`/llms/${id}`));
-      const llmResponses = await Promise.all(llmPromises);
-      setLLMs(llmResponses.map((response) => response.data.data));
-    } catch (error) {
-      console.error("Error fetching LLMs", error);
-    }
-  };
-
-  const fetchDatasources = async (datasourceIds) => {
-    try {
-      const datasourcePromises = datasourceIds.map((id) =>
-        apiClient.get(`/datasources/${id}`),
-      );
-      const datasourceResponses = await Promise.all(datasourcePromises);
-      setDatasources(datasourceResponses.map((response) => response.data.data));
-    } catch (error) {
-      console.error("Error fetching datasources", error);
     }
   };
 
@@ -572,6 +625,20 @@ const AppDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
+            <FieldLabel>Tools:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              {tools.length > 0 ? (
+                tools.map((tool) => (
+                  <Chip key={tool.id || `tool-${Math.random()}`} label={tool.attributes?.name || 'Unnamed tool'} />
+                ))
+              ) : (
+                <Typography variant="body2">No tools associated.</Typography>
+              )}
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
             <FieldLabel>Monthly Budget:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
@@ -681,7 +748,7 @@ const AppDetails = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {proxyLogs.map((log) => (
+              {(proxyLogs && proxyLogs.length > 0) ? proxyLogs.map((log) => (
                 <StyledTableRow key={log.id}>
                   <StyledTableCell sx={{ verticalAlign: "top" }}>
                     {new Date(log.attributes.time_stamp).toLocaleString()}
@@ -711,7 +778,13 @@ const AppDetails = () => {
                     </pre>
                   </StyledTableCell>
                 </StyledTableRow>
-              ))}
+              )) : (
+                <StyledTableRow>
+                  <StyledTableCell colSpan={5} align="center">
+                    No proxy logs available for the selected period.
+                  </StyledTableCell>
+                </StyledTableRow>
+              )}
             </TableBody>
           </Table>
           <PaginationControls

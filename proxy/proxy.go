@@ -3,6 +3,8 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,12 +16,15 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gosimple/slug"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/tmc/langchaingo/schema"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
@@ -30,11 +35,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
+	"github.com/TykTechnologies/midsommar/v2/universalclient"
 )
 
 const (
 	LLMPRefix        = "/llm/"
 	DatasourcePrefix = "/datasource/"
+	ToolPrefix       = "/tools/"
+	MCPSuffix        = "/mcp"
 )
 
 type EndpointMap struct {
@@ -57,6 +65,15 @@ type SearchResults struct {
 	Documents []schema.Document `json:"documents"`
 }
 
+// MCPServerCache stores an MCP server and its metadata
+type MCPServerCache struct {
+	SSEServer        *server.SSEServer
+	StreamableServer *server.StreamableHTTPServer
+	MCPServer        *server.MCPServer // The underlying MCP server used by both transports
+	ToolVersion      int64             // Using UpdatedAt as version
+	OperationHash    string            // Hash of operations to detect changes
+}
+
 type Proxy struct {
 	service        *services.Service
 	server         *http.Server
@@ -69,6 +86,10 @@ type Proxy struct {
 	filters        []*models.Filter
 	budgetService  *services.BudgetService
 	authService    *auth.AuthService
+
+	// MCP related fields
+	mcpServers   map[string]*MCPServerCache
+	mcpServersMu sync.RWMutex
 }
 
 type Config struct {
@@ -83,6 +104,7 @@ func NewProxy(service *services.Service, config *Config, budgetService *services
 		config:        config,
 		filters:       make([]*models.Filter, 0),
 		budgetService: budgetService,
+		mcpServers:    make(map[string]*MCPServerCache),
 	}
 
 	val := NewCredentialValidator(service, p)
@@ -260,6 +282,16 @@ func (p *Proxy) createHandler() http.Handler {
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 
+	// Add support for tool proxy
+	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
+
+	// Add support for MCP tools
+	// StreamableHTTP (single endpoint, recommended)
+	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
+	// SSE (dual endpoint, legacy)
+	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
+	r.HandleFunc("/tools/{toolSlug}/mcp/message", p.handleMCPToolMessage).Methods("POST")
+
 	// Create the handler chain, adding cloudflareHeadersMiddleware as the outermost wrapper
 	return p.cloudflareHeadersMiddleware(
 		p.outboundRequestMiddleware(
@@ -308,15 +340,15 @@ func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
 
 // cloudflareHeadersMiddleware adds headers that help with Cloudflare proxying
 func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Add these headers before passing to the next handler
-        w.Header().Set("Connection", "keep-alive")
-        w.Header().Set("Keep-Alive", "timeout=300")
-        w.Header().Set("X-Accel-Buffering", "no")
-        
-        // Continue to the next handler
-        next.ServeHTTP(w, r)
-    })
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add these headers before passing to the next handler
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Keep-Alive", "timeout=300")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		// Continue to the next handler
+		next.ServeHTTP(w, r)
+	})
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error) {
@@ -394,7 +426,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if bodyReadDuration > 100*time.Millisecond {
 		log.Printf("SLOW BODY READ: Request body read took %v", bodyReadDuration)
 	}
-	
+
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err)
 		return
@@ -517,13 +549,72 @@ func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	return switches.SetVendorAuthHeader(r, llm)
 }
 
-func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	dsSlug := vars["dsSlug"]
+// handleToolRequest handles proxying to tool endpoints
+func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
+	toolSlug := mux.Vars(r)["toolSlug"]
 
-	ds, ok := p.datasources[dsSlug]
+	// Log the request
+	log.Printf("Received tool proxy request for slug: %s", toolSlug)
+
+	// Get the tool from the context (already validated and loaded by middleware)
+	toolCtx := r.Context().Value("tool")
+	if toolCtx == nil {
+		respondWithError(w, http.StatusInternalServerError, "tool not found in context, this is likely a bug", nil)
+		return
+	}
+
+	tool, ok := toolCtx.(*models.Tool)
 	if !ok {
-		respondWithError(w, http.StatusNotFound, "datasource not found", nil)
+		respondWithError(w, http.StatusInternalServerError, "invalid tool type in context", nil)
+		return
+	}
+
+	// Parse the simplified request body
+	var input struct {
+		OperationID string                 `json:"operation_id"`
+		Parameters  map[string][]string    `json:"parameters"`
+		Payload     map[string]interface{} `json:"payload"`
+		Headers     map[string][]string    `json:"headers"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body", err)
+		return
+	}
+
+	// Call the tool operation
+	result, err := p.service.CallToolOperation(
+		tool.ID,
+		input.OperationID,
+		input.Parameters,
+		input.Payload,
+		input.Headers,
+	)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to call tool operation", err)
+		return
+	}
+
+	// Return the result directly without nesting
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	// Check if result is already a JSON string to avoid double-encoding
+	if str, ok := result.(string); ok && (strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[")) {
+		// Result appears to be a JSON string already, write it directly
+		w.Write([]byte(str))
+	} else {
+		// Otherwise, encode it as JSON
+		json.NewEncoder(w).Encode(result)
+	}
+}
+
+func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
+	dsSlug := mux.Vars(r)["dsSlug"]
+
+	ds, ok := p.GetDatasource(dsSlug)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil)
 		return
 	}
 
@@ -633,7 +724,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if bodyReadDuration > 100*time.Millisecond {
 		log.Printf("SLOW BODY READ: Streaming request body read took %v", bodyReadDuration)
 	}
-	
+
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err)
 		return
@@ -720,7 +811,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			MaxIdleConnsPerHost: 20,
 		},
 	}
-	
+
 	upstreamStart := time.Now()
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
@@ -728,7 +819,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer resp.Body.Close()
-	
+
 	upstreamDuration := time.Since(upstreamStart)
 	if upstreamDuration > 1*time.Second {
 		log.Printf("SLOW UPSTREAM CONNECTION: Initial streaming connection took %v for llm %d",
@@ -775,7 +866,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			isErr = true
 			break
 		}
-		
+
 		// Log if we're experiencing slow chunks
 		now := time.Now()
 		chunkDuration := now.Sub(lastChunkTime)
@@ -785,7 +876,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 		lastChunkTime = now
 	}
-	
+
 	totalStreamDuration := time.Since(streamStart)
 	if totalStreamDuration > 10*time.Second {
 		log.Printf("SLOW STREAMING: Total streaming took %v for llm %d",
@@ -828,4 +919,502 @@ func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	}
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
 	return body, nil
+}
+
+// generateOperationHash creates a hash representing the tool operations structure
+// This allows us to detect if operations have been added, removed, or changed
+func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
+	// If no OAS spec, return empty hash
+	if toolModel.OASSpec == "" {
+		return ""
+	}
+
+	// Decode the Base64 OAS spec
+	decodedSpec, err := base64.StdEncoding.DecodeString(toolModel.OASSpec)
+	if err != nil {
+		log.Printf("Failed to decode Base64 OpenAPI spec: %v", err)
+		return ""
+	}
+
+	// Create universalclient to get structured tool definitions
+	client, err := universalclient.NewClient(decodedSpec, "")
+	if err != nil {
+		log.Printf("Failed to create universalclient: %v", err)
+		return ""
+	}
+
+	// Get all operations from the spec
+	operations, err := client.ListOperations()
+	if err != nil {
+		log.Printf("Failed to list operations: %v", err)
+		return ""
+	}
+
+	// If no operations, return empty hash
+	if len(operations) == 0 {
+		return ""
+	}
+
+	// Get tool definitions using AsTool
+	tools, err := client.AsTool(operations...)
+	if err != nil {
+		log.Printf("Failed to convert operations to tools: %v", err)
+		return ""
+	}
+
+	// Marshal tool definitions to JSON and hash
+	toolsJSON, err := json.Marshal(tools)
+	if err != nil {
+		log.Printf("Failed to marshal tools to JSON: %v", err)
+		return ""
+	}
+
+	// Create a hash of the JSON string
+	h := sha256.New()
+	h.Write(toolsJSON)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// parseNumber tries to parse a string as a number (int or float)
+func parseNumber(val string) (interface{}, error) {
+	// Try to parse as integer first
+	if intVal, err := strconv.Atoi(val); err == nil {
+		return intVal, nil
+	}
+	
+	// Try to parse as float
+	if floatVal, err := strconv.ParseFloat(val, 64); err == nil {
+		return floatVal, nil
+	}
+	
+	return nil, fmt.Errorf("not a number")
+}
+
+// convertMCPParameterValue converts a string value to the appropriate type based on schema
+func convertMCPParameterValue(val string, paramType string) interface{} {
+	switch paramType {
+	case "number", "integer":
+		if num, err := parseNumber(val); err == nil {
+			return num
+		}
+		return val
+	case "boolean":
+		if val == "true" || val == "1" {
+			return true
+		} else if val == "false" || val == "0" {
+			return false
+		}
+		return val
+	default:
+		return val
+	}
+}
+
+// flattenSchemaProperties recursively flattens nested object properties for MCP exposure
+// Returns a map of parameter names to their schema definitions
+func flattenSchemaProperties(properties map[string]interface{}, required []string, prefix string) (map[string]map[string]interface{}, []string) {
+	flattened := make(map[string]map[string]interface{})
+	flattenedRequired := []string{}
+	requiredSet := make(map[string]bool)
+	
+	for _, req := range required {
+		requiredSet[req] = true
+	}
+
+	for key, paramDef := range properties {
+		if paramDefMap, ok := paramDef.(map[string]interface{}); ok {
+			paramType, _ := paramDefMap["type"].(string)
+			description, _ := paramDefMap["description"].(string)
+			
+			paramName := key
+			if prefix != "" {
+				paramName = prefix + "_" + key
+			}
+
+			if paramType == "object" {
+				// Recursively flatten nested objects
+				if nestedProps, ok := paramDefMap["properties"].(map[string]interface{}); ok {
+					var nestedRequired []string
+					if reqList, ok := paramDefMap["required"].([]interface{}); ok {
+						for _, req := range reqList {
+							if reqStr, ok := req.(string); ok {
+								nestedRequired = append(nestedRequired, reqStr)
+							}
+						}
+					}
+					
+					nestedFlattened, nestedFlattenedRequired := flattenSchemaProperties(nestedProps, nestedRequired, paramName)
+					for k, v := range nestedFlattened {
+						flattened[k] = v
+					}
+					
+					// If parent is required, all required children become required
+					if requiredSet[key] {
+						flattenedRequired = append(flattenedRequired, nestedFlattenedRequired...)
+					}
+				}
+			} else {
+				// Add regular parameter
+				flattened[paramName] = map[string]interface{}{
+					"type":        paramType,
+					"description": description,
+				}
+				
+				if requiredSet[key] {
+					flattenedRequired = append(flattenedRequired, paramName)
+				}
+			}
+		}
+	}
+	
+	return flattened, flattenedRequired
+}
+
+// addMCPToolParameter adds a parameter to MCP tool options based on schema
+func addMCPToolParameter(paramName string, paramSchema map[string]interface{}, isRequired bool) mcp.ToolOption {
+	paramType, _ := paramSchema["type"].(string)
+	description, _ := paramSchema["description"].(string)
+	
+	switch paramType {
+	case "string":
+		if isRequired {
+			return mcp.WithString(paramName, mcp.Required(), mcp.Description(description))
+		}
+		return mcp.WithString(paramName, mcp.Description(description))
+	case "number", "integer":
+		if isRequired {
+			return mcp.WithNumber(paramName, mcp.Required(), mcp.Description(description))
+		}
+		return mcp.WithNumber(paramName, mcp.Description(description))
+	case "boolean":
+		if isRequired {
+			return mcp.WithBoolean(paramName, mcp.Required(), mcp.Description(description))
+		}
+		return mcp.WithBoolean(paramName, mcp.Description(description))
+	default:
+		if isRequired {
+			return mcp.WithString(paramName, mcp.Required(), mcp.Description(description))
+		}
+		return mcp.WithString(paramName, mcp.Description(description))
+	}
+}
+
+// reconstructNestedObject reconstructs a nested object from flattened MCP parameters
+func reconstructNestedObject(request mcp.CallToolRequest, prefix string, schema map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	if properties, ok := schema["properties"].(map[string]interface{}); ok {
+		for key, paramDef := range properties {
+			if paramDefMap, ok := paramDef.(map[string]interface{}); ok {
+				paramType, _ := paramDefMap["type"].(string)
+				paramName := prefix + "_" + key
+				
+				if paramType == "object" {
+					// Recursively reconstruct nested objects
+					nestedObj := reconstructNestedObject(request, paramName, paramDefMap)
+					if len(nestedObj) > 0 {
+						result[key] = nestedObj
+					}
+				} else {
+					// Try to get the parameter value
+					if val, err := request.RequireString(paramName); err == nil {
+						result[key] = convertMCPParameterValue(val, paramType)
+					}
+				}
+			}
+		}
+	}
+	
+	return result
+}
+
+// getMCPServerForTool creates or retrieves a cached MCP server for a tool
+func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*MCPServerCache, error) {
+	// Create a hash of the tool operations to detect changes
+	currentOpHash := p.generateOperationHash(toolModel)
+
+	// Use slug.Make to create cache key from tool name
+	cacheKey := slug.Make(toolModel.Name)
+
+	p.mcpServersMu.RLock()
+	cache, exists := p.mcpServers[cacheKey]
+	p.mcpServersMu.RUnlock()
+
+	// Check if we have a valid cached server
+	if exists {
+		// Compare cache.ToolVersion with toolModel.UpdatedAt.UnixNano() to fix type mismatch
+		if cache.ToolVersion == toolModel.UpdatedAt.UnixNano() && cache.OperationHash == currentOpHash {
+			// Tool hasn't changed, return cached server
+			return cache, nil
+		}
+		// Tool has changed, we'll recreate the server below
+		log.Printf("Tool %s (ID: %d) has changed, recreating MCP server", toolModel.Name, toolModel.ID)
+	}
+
+	// Create new MCP server if it doesn't exist or if tool has changed
+	p.mcpServersMu.Lock()
+	defer p.mcpServersMu.Unlock()
+
+	// Check again in case another goroutine updated it
+	cache, exists = p.mcpServers[cacheKey]
+	if exists && cache.ToolVersion == toolModel.UpdatedAt.UnixNano() && cache.OperationHash == currentOpHash {
+		return cache, nil
+	}
+
+	// If no OAS spec, return error
+	if toolModel.OASSpec == "" {
+		return nil, fmt.Errorf("tool has no OpenAPI specification")
+	}
+
+	// Decode the Base64 OAS spec
+	decodedSpec, err := base64.StdEncoding.DecodeString(toolModel.OASSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+	}
+
+	// Create universalclient to get structured tool definitions
+	client, err := universalclient.NewClient(decodedSpec, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create universalclient: %w", err)
+	}
+
+	// Get all operations from the spec
+	operations, err := client.ListOperations()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list operations: %w", err)
+	}
+
+	// If no operations, return error
+	if len(operations) == 0 {
+		return nil, fmt.Errorf("tool has no operations defined")
+	}
+
+	// Get tool definitions using AsTool
+	tools, err := client.AsTool(operations...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert operations to tools: %w", err)
+	}
+
+	// Create a new MCP server for this tool
+	mcpServer := server.NewMCPServer(
+		toolModel.Name,
+		"1.0.0", // Version could be pulled from the tool if available
+		server.WithToolCapabilities(true),
+	)
+
+	// Convert each llms.Tool to MCP tool
+	for i, llmsTool := range tools {
+		operationID := operations[i]
+
+		// Create a new MCP tool with the operation name and description
+		toolOptions := []mcp.ToolOption{
+			mcp.WithDescription(llmsTool.Function.Description),
+		}
+
+		// Add parameters based on the function definition
+		if parametersSchema, ok := llmsTool.Function.Parameters.(map[string]interface{}); ok {
+			if properties, ok := parametersSchema["properties"].(map[string]interface{}); ok {
+				var required []string
+				if reqList, ok := parametersSchema["required"].([]interface{}); ok {
+					for _, req := range reqList {
+						if reqStr, ok := req.(string); ok {
+							required = append(required, reqStr)
+						}
+					}
+				}
+				
+				// Flatten all properties (including nested objects) for MCP exposure
+				flattenedParams, flattenedRequired := flattenSchemaProperties(properties, required, "")
+				flattenedRequiredSet := make(map[string]bool)
+				for _, req := range flattenedRequired {
+					flattenedRequiredSet[req] = true
+				}
+				
+				// Add each flattened parameter to MCP tool options
+				for paramName, paramSchema := range flattenedParams {
+					isRequired := flattenedRequiredSet[paramName]
+					toolOptions = append(toolOptions, addMCPToolParameter(paramName, paramSchema, isRequired))
+				}
+			}
+		}
+
+		mcpTool := mcp.NewTool(llmsTool.Function.Name, toolOptions...)
+
+		// Create a handler that forwards the call to our existing tool operation
+		mcpServer.AddTool(mcpTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Convert MCP request parameters to CallToolOperation format
+			params := make(map[string][]string)
+			payload := make(map[string]interface{})
+
+			// Get parameters from the request using the correct MCP API
+			// Reconstruct original parameter structure from flattened MCP parameters
+			if parametersSchema, ok := llmsTool.Function.Parameters.(map[string]interface{}); ok {
+				if properties, ok := parametersSchema["properties"].(map[string]interface{}); ok {
+					
+					// Process all top-level properties
+					for key, paramDef := range properties {
+						if paramDefMap, ok := paramDef.(map[string]interface{}); ok {
+							paramType, _ := paramDefMap["type"].(string)
+							
+							if paramType == "object" {
+								// Reconstruct nested object from flattened parameters
+								reconstructed := reconstructNestedObject(request, key, paramDefMap)
+								if len(reconstructed) > 0 {
+									if key == "body" {
+										// Body parameters go to payload
+										payload = reconstructed
+									} else {
+										// Other objects might be complex query parameters (rare, but possible)
+										// For now, just try to get them as strings
+										if val, err := request.RequireString(key); err == nil {
+											params[key] = []string{val}
+										}
+									}
+								}
+							} else {
+								// Regular parameter - try to get it directly
+								if val, err := request.RequireString(key); err == nil {
+									params[key] = []string{val}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Call the operation using our existing service
+			result, err := p.service.CallToolOperation(
+				toolModel.ID,
+				operationID,
+				params,
+				payload,
+				nil, // No headers for MCP calls
+			)
+
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			// Convert the result to MCP format
+			switch res := result.(type) {
+			case string:
+				return mcp.NewToolResultText(res), nil
+			case map[string]interface{}, []interface{}:
+				return mcp.NewToolResultText(fmt.Sprintf("%v", res)), nil
+			default:
+				// Try to marshal any other type to JSON
+				jsonData, err := json.Marshal(result)
+				if err != nil {
+					return mcp.NewToolResultText(fmt.Sprintf("%v", result)), nil
+				}
+				// Check if it's a JSON object or array
+				if len(jsonData) > 0 && (jsonData[0] == '{' || jsonData[0] == '[') {
+					var obj interface{}
+					if err := json.Unmarshal(jsonData, &obj); err == nil {
+						return mcp.NewToolResultText(string(jsonData)), nil
+					}
+				}
+				return mcp.NewToolResultText(string(jsonData)), nil
+			}
+		})
+	}
+
+	// Create both SSE and StreamableHTTP servers that will handle this tool's MCP format
+	// We need to get the host from the request to properly configure the servers
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+
+	host := r.Host
+	baseURL := fmt.Sprintf("%s://%s", scheme, host)
+
+	// Create SSE server for legacy support
+	sseServer := server.NewSSEServer(mcpServer,
+		server.WithBaseURL(baseURL),
+		server.WithDynamicBasePath(func(req *http.Request, sessionID string) string {
+			// This tells the server that its base path is /tools/{toolSlug}/mcp
+			return fmt.Sprintf("/tools/%s/mcp", cacheKey)
+		}),
+	)
+
+	// Create StreamableHTTP server for modern support
+	streamableServer := server.NewStreamableHTTPServer(mcpServer)
+
+	// Store in cache with version information
+	p.mcpServers[cacheKey] = &MCPServerCache{
+		SSEServer:        sseServer,
+		StreamableServer: streamableServer,
+		MCPServer:        mcpServer,
+		ToolVersion:      toolModel.UpdatedAt.UnixNano(),
+		OperationHash:    currentOpHash,
+	}
+
+	return p.mcpServers[cacheKey], nil
+}
+
+// handleMCPToolSSE handles the SSE connection for MCP tools
+func (p *Proxy) handleMCPToolSSE(w http.ResponseWriter, r *http.Request) {
+	toolSlug := mux.Vars(r)["toolSlug"]
+
+	// Get the tool from the service
+	tool, err := p.service.GetToolBySlug(toolSlug)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "tool not found", err)
+		return
+	}
+
+	// Get or create MCP server for this tool
+	cache, err := p.getMCPServerForTool(tool, r)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to initialize MCP server", err)
+		return
+	}
+
+	// Handle SSE connection
+	cache.SSEServer.SSEHandler().ServeHTTP(w, r)
+}
+
+// handleMCPToolMessage handles the message endpoint for MCP tools
+func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
+	toolSlug := mux.Vars(r)["toolSlug"]
+
+	// Get the tool from the service
+	tool, err := p.service.GetToolBySlug(toolSlug)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "tool not found", err)
+		return
+	}
+
+	// Get or create MCP server for this tool
+	cache, err := p.getMCPServerForTool(tool, r)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to initialize MCP server", err)
+		return
+	}
+
+	// Handle message
+	cache.SSEServer.MessageHandler().ServeHTTP(w, r)
+}
+
+// handleMCPToolStreamable handles the StreamableHTTP connection for MCP tools
+func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) {
+	toolSlug := mux.Vars(r)["toolSlug"]
+
+	// Get the tool from the service
+	tool, err := p.service.GetToolBySlug(toolSlug)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "tool not found", err)
+		return
+	}
+
+	// Get or create MCP server for this tool
+	cache, err := p.getMCPServerForTool(tool, r)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to initialize MCP server", err)
+		return
+	}
+
+	// Handle StreamableHTTP connection
+	cache.StreamableServer.ServeHTTP(w, r)
 }
