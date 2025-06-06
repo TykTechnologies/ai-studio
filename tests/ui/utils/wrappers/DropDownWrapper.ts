@@ -10,10 +10,19 @@ export class DropDownWrapper {
     }
 
     async isMultipleChoice(): Promise<boolean> {
-        // Get the dropdown element
-        const dropdown = await this.getDropdownElement();
-        const ariaMultiselectable = await dropdown.getAttribute('aria-multiselectable');
-        return ariaMultiselectable === 'true';
+        try {
+            // Get the dropdown element
+            const dropdown = await this.getDropdownElement();
+            const ariaMultiselectable = await dropdown.getAttribute('aria-multiselectable');
+            
+            // Also check for MUI's multiple class or data attributes
+            const hasMultipleClass = await dropdown.evaluate(el => el.classList.contains('MuiSelect-multiple'));
+            
+            return ariaMultiselectable === 'true' || hasMultipleClass;
+        } catch {
+            // If we can't determine, assume single select for safety
+            return false;
+        }
     }
 
     private async getDropdownElement(): Promise<Locator> {
@@ -37,27 +46,59 @@ export class DropDownWrapper {
         console.log(`Selecting option: ${text}`);
         
         try {
+            // Close any existing modal/dropdown that might be open
+            await this.closeAnyOpenDropdowns();
+            
             // Get the dropdown element
             const dropdown = await this.getDropdownElement();
             
-            // Click to open dropdown
-            await dropdown.click({ timeout: 10000 });
+            // Wait for dropdown to be visible and interactable
+            await dropdown.waitFor({ state: 'visible', timeout: 10000 });
+            
+            // Click to open dropdown - use force click to bypass backdrop
+            await dropdown.click({ force: true, timeout: 10000 });
+            
+            // Wait for options to appear
+            await this.page.waitForSelector('[role="option"]', { timeout: 10000 });
             
             // Wait for animation
             await this.page.waitForTimeout(300);
             
-            // Select the option
-            await this.page.locator('[role="option"]').filter({ hasText: text }).click({ timeout: 10000 });
+            // Find and click the option
+            const option = this.page.locator('[role="option"]').filter({ hasText: text });
+            await option.waitFor({ state: 'visible', timeout: 10000 });
+            
+            // Scroll option into view if needed and click
+            await option.scrollIntoViewIfNeeded();
+            await option.click({ force: true, timeout: 10000 });
             
             // For multiple select, close the dropdown with Escape
             if (await this.isMultipleChoice()) {
                 await this.page.keyboard.press('Escape');
-                // Wait for animation
-                await this.page.waitForTimeout(300);
+                // Wait for animation and verify dropdown is closed
+                await this.waitForDropdownToClose();
             }
         } catch (error) {
             console.error(`Failed to select option "${text}":`, error);
             throw error;
+        }
+    }
+
+    private async closeAnyOpenDropdowns() {
+        // Press escape a couple times to ensure any existing dropdowns are closed
+        await this.page.keyboard.press('Escape');
+        await this.page.waitForTimeout(200);
+        await this.page.keyboard.press('Escape');
+        await this.page.waitForTimeout(200);
+    }
+
+    private async waitForDropdownToClose() {
+        // Wait for the dropdown menu to close
+        try {
+            await this.page.waitForSelector('[role="listbox"]', { state: 'hidden', timeout: 3000 });
+        } catch {
+            // If listbox doesn't exist or timeout, just wait a bit more
+            await this.page.waitForTimeout(300);
         }
     }
 
@@ -82,5 +123,26 @@ export class DropDownWrapper {
         }
         
         return values;
+    }
+
+    async removeValue(text: string) {
+        console.log(`Removing option: ${text}`);
+        
+        try {
+            // Find the chip with the specified text and click its delete icon
+            const chip = this.page.locator('.MuiChip-root').filter({ hasText: text });
+            await chip.waitFor({ state: 'visible', timeout: 10000 });
+            
+            // Look for the delete icon (typically a CancelIcon or similar)
+            const deleteIcon = chip.locator('[data-testid="CancelIcon"], .MuiChip-deleteIcon');
+            await deleteIcon.waitFor({ state: 'visible', timeout: 10000 });
+            await deleteIcon.click({ force: true });
+            
+            // Wait for animation
+            await this.page.waitForTimeout(300);
+        } catch (error) {
+            console.error(`Failed to remove option "${text}":`, error);
+            throw error;
+        }
     }
 }
