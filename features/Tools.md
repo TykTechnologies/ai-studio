@@ -159,6 +159,7 @@ flowchart TD
       FileStores         []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
       Filters            []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
       Dependencies       []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
+      Apps               []App       `gorm:"many2many:app_tools;" json:"apps"`  // New relationship with Apps
   }
   ```
 
@@ -197,6 +198,17 @@ flowchart TD
   * Filters are applied before tool operations are executed.
   * Filters can validate inputs, transform data, or block operations.
   * Filter hierarchy: Tool filters → LLM Provider filters → Chat Room filters.
+
+* **App Integration:**
+  * Tools can now be subscribed to by applications, similar to how applications can subscribe to LLMs and Data Sources.
+  * Many-to-many relationship between Apps and Tools via the `app_tools` join table.
+  * Apps can subscribe to multiple Tools, and Tools can be used by multiple Apps.
+  * Tool access controlled by permissions and privacy settings.
+  * New API endpoints for managing app-tool relationships:
+    * `GET /apps/{app_id}/tools`: Get all tools associated with an app.
+    * `POST /apps/{app_id}/tools/{tool_id}`: Associate a tool with an app.
+    * `DELETE /apps/{app_id}/tools/{tool_id}`: Disassociate a tool from an app.
+  * UI components for selecting and managing tool subscriptions in the App Form and App Details views.
 
 **4. UI Components & Interactions**
 
