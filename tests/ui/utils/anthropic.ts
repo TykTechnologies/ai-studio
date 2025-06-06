@@ -23,8 +23,20 @@ export async function sendRequestToAnthropicLLMWithSDK(
             max_tokens: maxTokens
         });
 
-        // Return the response content
-        return response.content.map(item => item.text).join('');
+        // Log the response for debugging
+        console.log('Response structure:', JSON.stringify(response, null, 2));
+        
+        // Handle different response structures
+        if (response.content && Array.isArray(response.content)) {
+            return response.content.map(item => item.text).join('');
+        } else if (response.content && response.content.text) {
+            return response.content.text;
+        } else if (typeof response.content === 'string') {
+            return response.content;
+        } else {
+            console.error('Unexpected response structure:', response);
+            return JSON.stringify(response);
+        }
     } catch (error) {
         console.error('Error sending request to Anthropic LLM:', error);
         throw error;
