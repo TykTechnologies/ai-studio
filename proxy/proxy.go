@@ -36,6 +36,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
+	"github.com/pb33f/libopenapi"
 )
 
 const (
@@ -65,6 +66,14 @@ type SearchResults struct {
 	Documents []schema.Document `json:"documents"`
 }
 
+// OpenAPICache stores parsed OpenAPI specs to avoid repeated parsing
+type OpenAPICache struct {
+	Document     libopenapi.Document
+	Operations   []string
+	ToolVersion  int64
+	CreatedAt    time.Time
+}
+
 // MCPServerCache stores an MCP server and its metadata
 type MCPServerCache struct {
 	SSEServer        *server.SSEServer
@@ -90,6 +99,10 @@ type Proxy struct {
 	// MCP related fields
 	mcpServers   map[string]*MCPServerCache
 	mcpServersMu sync.RWMutex
+	
+	// OpenAPI spec cache to avoid repeated parsing
+	openAPICache   map[string]*OpenAPICache
+	openAPICacheMu sync.RWMutex
 }
 
 type Config struct {
@@ -105,6 +118,7 @@ func NewProxy(service *services.Service, config *Config, budgetService *services
 		filters:       make([]*models.Filter, 0),
 		budgetService: budgetService,
 		mcpServers:    make(map[string]*MCPServerCache),
+		openAPICache:  make(map[string]*OpenAPICache),
 	}
 
 	val := NewCredentialValidator(service, p)
@@ -943,57 +957,94 @@ func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
-// generateOperationHash creates a hash representing the tool operations structure
-// This allows us to detect if operations have been added, removed, or changed
-func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
-	// If no OAS spec, return empty hash
+// getParsedOpenAPISpec returns a cached parsed OpenAPI spec or creates a new one
+func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.Client, []string, error) {
 	if toolModel.OASSpec == "" {
-		return ""
+		return nil, nil, fmt.Errorf("tool has no OpenAPI specification")
 	}
 
-	// Decode the Base64 OAS spec
+	cacheKey := fmt.Sprintf("tool_%d", toolModel.ID)
+	
+	// Check cache first
+	p.openAPICacheMu.RLock()
+	cache, exists := p.openAPICache[cacheKey]
+	p.openAPICacheMu.RUnlock()
+	
+	// Check if cache is valid (tool version matches and cache is recent)
+	cacheExpiry := 30 * time.Minute
+	if exists && cache.ToolVersion == toolModel.UpdatedAt.UnixNano() && 
+		time.Since(cache.CreatedAt) < cacheExpiry {
+		// Create client from cached document
+		decodedSpec, err := base64.StdEncoding.DecodeString(toolModel.OASSpec)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+		}
+		
+		client, err := universalclient.NewClient(decodedSpec, "")
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create universalclient: %w", err)
+		}
+		
+		return client, cache.Operations, nil
+	}
+
+	// Cache miss or expired - parse the spec
 	decodedSpec, err := base64.StdEncoding.DecodeString(toolModel.OASSpec)
 	if err != nil {
-		log.Printf("Failed to decode Base64 OpenAPI spec: %v", err)
-		return ""
+		return nil, nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
 	}
 
-	// Create universalclient to get structured tool definitions
 	client, err := universalclient.NewClient(decodedSpec, "")
 	if err != nil {
-		log.Printf("Failed to create universalclient: %v", err)
-		return ""
+		return nil, nil, fmt.Errorf("failed to create universalclient: %w", err)
 	}
 
-	// Get all operations from the spec
 	operations, err := client.ListOperations()
 	if err != nil {
-		log.Printf("Failed to list operations: %v", err)
-		return ""
+		return nil, nil, fmt.Errorf("failed to list operations: %w", err)
 	}
 
-	// If no operations, return empty hash
-	if len(operations) == 0 {
+	// Update cache
+	p.openAPICacheMu.Lock()
+	p.openAPICache[cacheKey] = &OpenAPICache{
+		Operations:  operations,
+		ToolVersion: toolModel.UpdatedAt.UnixNano(),
+		CreatedAt:   time.Now(),
+	}
+	
+	// Clean up old cache entries to prevent memory leaks
+	if len(p.openAPICache) > 100 { // Limit cache size
+		oldestKey := ""
+		oldestTime := time.Now()
+		for k, v := range p.openAPICache {
+			if v.CreatedAt.Before(oldestTime) {
+				oldestTime = v.CreatedAt
+				oldestKey = k
+			}
+		}
+		if oldestKey != "" {
+			delete(p.openAPICache, oldestKey)
+		}
+	}
+	p.openAPICacheMu.Unlock()
+
+	return client, operations, nil
+}
+
+// generateOperationHash creates a hash representing the tool operations structure
+// This is now much more efficient as it uses the operations list instead of parsing the entire spec
+func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
+	// Use a simple hash of the tool version and allowed operations
+	// This is much faster than parsing the entire spec
+	allowedOps := toolModel.GetOperations()
+	if len(allowedOps) == 0 {
 		return ""
 	}
-
-	// Get tool definitions using AsTool
-	tools, err := client.AsTool(operations...)
-	if err != nil {
-		log.Printf("Failed to convert operations to tools: %v", err)
-		return ""
-	}
-
-	// Marshal tool definitions to JSON and hash
-	toolsJSON, err := json.Marshal(tools)
-	if err != nil {
-		log.Printf("Failed to marshal tools to JSON: %v", err)
-		return ""
-	}
-
-	// Create a hash of the JSON string
+	
+	// Create hash from tool version + allowed operations
+	hashData := fmt.Sprintf("%d:%s", toolModel.UpdatedAt.UnixNano(), strings.Join(allowedOps, ","))
 	h := sha256.New()
-	h.Write(toolsJSON)
+	h.Write([]byte(hashData))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
@@ -1183,32 +1234,34 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 		return cache, nil
 	}
 
-	// If no OAS spec, return error
-	if toolModel.OASSpec == "" {
-		return nil, fmt.Errorf("tool has no OpenAPI specification")
-	}
-
-	// Decode the Base64 OAS spec
-	decodedSpec, err := base64.StdEncoding.DecodeString(toolModel.OASSpec)
+	// Use cached parsing for better performance
+	client, allOperations, err := p.getParsedOpenAPISpec(toolModel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+		return nil, err
 	}
 
-	// Create universalclient to get structured tool definitions
-	client, err := universalclient.NewClient(decodedSpec, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create universalclient: %w", err)
+	// Filter to only allowed operations
+	allowedOps := toolModel.GetOperations()
+	if len(allowedOps) == 0 {
+		return nil, fmt.Errorf("tool has no whitelisted operations")
 	}
 
-	// Get all operations from the spec
-	operations, err := client.ListOperations()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list operations: %w", err)
+	// Create a set for fast lookup
+	allowedSet := make(map[string]bool)
+	for _, op := range allowedOps {
+		allowedSet[op] = true
 	}
 
-	// If no operations, return error
+	// Filter operations to only those that are whitelisted
+	var operations []string
+	for _, op := range allOperations {
+		if allowedSet[op] {
+			operations = append(operations, op)
+		}
+	}
+
 	if len(operations) == 0 {
-		return nil, fmt.Errorf("tool has no operations defined")
+		return nil, fmt.Errorf("no whitelisted operations found in swagger spec")
 	}
 
 	// Get tool definitions using AsTool
