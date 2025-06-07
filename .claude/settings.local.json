@@ -7,7 +7,8 @@
       "mcp__ide__getDiagnostics",
       "Bash(grep:*)",
       "Bash(gofmt:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(go run:*)"
     ],
     "deny": []
   }
