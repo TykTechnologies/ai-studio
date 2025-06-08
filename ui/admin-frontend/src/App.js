@@ -21,6 +21,9 @@ import pubClient from "./admin/utils/pubClient";
 // Themes
 import adminTheme from "./admin/theme";
 
+// Pages (add OAuthConsentPage)
+import OAuthConsentPage from "./portal/pages/OAuthConsentPage";
+
 // Components
 
 // Layouts
@@ -184,6 +187,10 @@ function App() {
               path="/auth/reset-password"
               element={<Navigate to="/reset-password" replace state={{ preserveQuery: true }} />}
             />
+
+            {/* OAuth Consent Page Route - public layout, backend handles auth check */}
+            <Route path="/oauth/consent" element={<OAuthConsentPage />} />
+
 
             {/* Protected Routes with MainLayout */}
             <Route

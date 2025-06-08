@@ -370,6 +370,24 @@ func (a *API) setupRoutes() {
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
 
+	// OAuth 2.0 Authorization Server Endpoints
+	oauthGroup := public.Group("/oauth")
+	{
+		// Dynamic Client Registration - requires user authentication (e.g., developer registering their app)
+		oauthGroup.POST("/register_client", a.auth.AuthMiddleware(), a.handleRegisterOAuthClient)
+		// Authorization Endpoint - requires user authentication (user logs in to grant access)
+		// This endpoint will now redirect to a consent page if needed.
+		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), a.handleOAuthAuthorize)
+		// Token Endpoint - typically requires client authentication
+		oauthGroup.POST("/token", a.handleOAuthToken)
+
+		// Endpoints for consent screen flow - require user authentication
+		oauthGroup.GET("/consent_details", a.auth.AuthMiddleware(), a.handleGetConsentDetails)
+		oauthGroup.POST("/submit_consent", a.auth.AuthMiddleware(), a.handleSubmitConsent)
+	}
+	// AS Metadata - public
+	public.GET("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+
 	// Notification routes
 	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
 	authed.GET("/api/v1/notifications", notificationHandlers.ListNotifications)

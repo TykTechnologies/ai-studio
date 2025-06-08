@@ -40,6 +40,8 @@ type AppConf struct {
 	LicenseDisableTelemetry bool
 	LicenseTelemetryURL     string
 	DevMode                 bool
+	AuthServerURL           string
+	ProxyOAuthMetadataURL   string
 }
 
 type DocsLinks map[string]string
@@ -226,6 +228,18 @@ func getConfigFromEnv() *AppConf {
 		if err == nil {
 			conf.LicenseTelemetryPeriod = duration
 		}
+	}
+
+	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
+	if conf.AuthServerURL == "" {
+		log.Println("Warning: AUTH_SERVER_URL environment variable is not set, defaulting to http://localhost:3000")
+		conf.AuthServerURL = "http://localhost:3000"
+	}
+
+	conf.ProxyOAuthMetadataURL = os.Getenv("PROXY_OAUTH_METADATA_URL")
+	if conf.ProxyOAuthMetadataURL == "" {
+		log.Println("Warning: PROXY_OAUTH_METADATA_URL environment variable is not set, defaulting to http://localhost:9090/.well-known/oauth-protected-resource")
+		conf.ProxyOAuthMetadataURL = "http://localhost:9090/.well-known/oauth-protected-resource"
 	}
 
 	return conf
