@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Typography, Container, Paper, Box, CircularProgress, List, ListItem, ListItemText, Divider } from '@mui/material';
-import apiClient from '../../common/api/apiClient'; // Assuming apiClient is configured
+import apiClient from '../../admin/utils/apiClient'; // Corrected import path
 
 function OAuthConsentPage() {
   const [clientName, setClientName] = useState('');
@@ -43,30 +43,18 @@ function OAuthConsentPage() {
       decision: decision,
     })
     .then(response => {
-      // The backend will respond with a redirect. If the request is XHR,
-      // the browser won't follow it directly. We need to check where the backend
-      // wants to redirect. For simplicity, we assume the backend handles the redirect
-      // correctly and the browser will follow if this POST was a normal form post.
-      // If this is an XHR post (typical for React SPAs), the backend should return
-      // the redirect URL in the response body for the frontend to navigate to.
-      // For this implementation, we assume the backend's redirect is followed,
-      // or if not, the user might be stuck. A more robust solution would handle
-      // the redirect URL from the response.
-      // For now, if the call succeeds but no explicit redirect from backend via JS,
-      // it might just show loading. The task implies backend handles redirect.
-      // If a redirect happens, this component might unmount.
-      // If it's a same-origin redirect, it might work seamlessly.
-      // If it's a cross-origin redirect from an XHR, it will be blocked.
-      // The form POST method is usually better for cross-origin redirects.
-      // Let's assume the backend correctly redirects the top-level window.
-      // If the backend can't directly redirect after a POST from XHR,
-      // it should send back the URL and the frontend does window.location.href = url;
+      // Assuming the backend handles the redirect directly or provides a URL.
+      // If backend sends redirect URL:
       if (response.data && response.data.redirect_url) {
         window.location.href = response.data.redirect_url;
       } else {
-        // If backend doesn't provide a redirect URL, it implies it handled the redirect.
-        // If still loading, it means the page hasn't been redirected by the browser yet.
-        // This state might not be visible if redirect is immediate.
+        // If no redirect_url in response, it implies backend handled redirect
+        // or the test environment doesn't show XHR redirects easily.
+        // For robustness, could add a fallback or success message if no redirect_url.
+        // For now, if it doesn't redirect, it will just stop loading.
+        // Potentially, the browser might have already redirected if it was a non-XHR POST response.
+        // This part might need adjustment based on actual backend behavior for XHR POSTs.
+         setLoading(false); // Stop loading if no explicit redirect URL given
       }
     })
     .catch(err => {
@@ -96,7 +84,7 @@ function OAuthConsentPage() {
             fullWidth
             variant="contained"
             sx={{ mt: 3 }}
-            onClick={() => navigate('/')} // Navigate to a safe page, e.g., home
+            onClick={() => navigate('/')}
           >
             Go to Homepage
           </Button>
