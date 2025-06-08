@@ -29,27 +29,27 @@ const (
 // The endpointURL parameter allows dynamic setting of the mock server's URL.
 func newTestToolDefinition(endpointURL string) *models.Tool {
 	// Define operation IDs for consistency
-	opGetTestDataID := "getTestData" // Was "get-test-data"
+	opGetTestDataID := "getTestData"       // Was "get-test-data"
 	opSubmitTestDataID := "submitTestData" // Was "submit-test-data"
-	
+
 	// Create OAS spec with updated operation IDs
 	rawOASSpec := fmt.Sprintf(`{"openapi":"3.0.0","info":{"title":"Test Tool","version":"1.0.0"},"servers":[{"url":"%s"}],"paths":{"/test":{"get":{"operationId":"%s","summary":"Get Test Data","description":"Retrieves test data.","responses":{"200":{"description":"Success"}}}},"/submit":{"post":{"operationId":"%s","summary":"Submit Test Data","description":"Submits test data.","responses":{"200":{"description":"Success"}}}}}}`, endpointURL, opGetTestDataID, opSubmitTestDataID)
-	
+
 	// Base64 encode the OAS spec as required by the proxy
 	base64OASSpec := base64.StdEncoding.EncodeToString([]byte(rawOASSpec))
-	
+
 	tool := &models.Tool{
-		Name:        testToolName,
-		Description: "A mock tool for testing proxy functionality.",
-		ToolType:    models.ToolTypeREST,
-		OASSpec:     base64OASSpec,
+		Name:         testToolName,
+		Description:  "A mock tool for testing proxy functionality.",
+		ToolType:     models.ToolTypeREST,
+		OASSpec:      base64OASSpec,
 		PrivacyScore: 5,
 	}
-	
+
 	// Add operations directly with updated operation IDs
 	tool.AddOperation(opGetTestDataID)
 	tool.AddOperation(opSubmitTestDataID)
-	
+
 	return tool
 }
 
@@ -64,7 +64,7 @@ func registerTestTool(t *testing.T, service *services.Service, mockServerURL str
 		toolDef.ToolType,
 		toolDef.OASSpec,
 		toolDef.PrivacyScore,
-		"", 
+		"",
 		"",
 	)
 	assert.NoError(t, err, "Failed to register test tool")
@@ -240,7 +240,6 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
-
 	app, err := service.CreateApp("Test App", "App for testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, app)
@@ -248,7 +247,7 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
 	require.NoError(t, err)
-	
+
 	// Reload the app to get the credential
 	app, err = service.GetAppByID(app.ID)
 	require.NoError(t, err)
@@ -352,7 +351,7 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
 	require.NoError(t, err)
-	
+
 	// Reload the app to get the credential
 	app, err = service.GetAppByID(app.ID)
 	require.NoError(t, err)
@@ -425,10 +424,10 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 
 	toolDefForApp := newTestToolDefinition(mockHttpServer.URL)
 	registeredToolDef, err := service.CreateTool(
-		toolDefForApp.Name, 
-		toolDefForApp.Description, 
-		toolDefForApp.ToolType, 
-		toolDefForApp.OASSpec, 
+		toolDefForApp.Name,
+		toolDefForApp.Description,
+		toolDefForApp.ToolType,
+		toolDefForApp.OASSpec,
 		toolDefForApp.PrivacyScore,
 		"", // Auth schema name
 		"", // API key
@@ -441,7 +440,7 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
 	require.NoError(t, err)
-	
+
 	// Reload the app to get the credential
 	app, err = service.GetAppByID(app.ID)
 	require.NoError(t, err)
@@ -471,7 +470,7 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 		{
 			name:         "Missing operation_id",
 			body:         `{"payload": {"key": "value"}}`,
-			expectedCode: http.StatusInternalServerError, // From the error logs, missing operation_id causes a 500 error
+			expectedCode: http.StatusInternalServerError,  // From the error logs, missing operation_id causes a 500 error
 			expectedMsg:  "failed to call tool operation", // Based on error logs
 		},
 		{
@@ -529,7 +528,6 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 	unregisterTestTool(t, service, slug.Make(registeredToolDef.Name)) // service from outer scope
 }
 
-
 func TestHandleOAuthProtectedResourceMetadata(t *testing.T) {
 	// Minimal setup for Proxy, as handler mostly uses global config
 	p := &Proxy{}
@@ -550,7 +548,6 @@ func TestHandleOAuthProtectedResourceMetadata(t *testing.T) {
 	config.Get().AuthServerURL = "http://auth.example.com"
 	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
 	config.Get().ProxyURL = "http://proxy.example.com"
-
 
 	req := httptest.NewRequest("GET", "/.well-known/oauth-protected-resource", nil)
 	rr := httptest.NewRecorder()
@@ -609,7 +606,6 @@ func TestRespondWithError_WWWAuthenticate(t *testing.T) {
 	require.Empty(t, rrOtherStatus.Header().Get("WWW-Authenticate"))
 }
 
-
 func TestRespondWithOAIError_WWWAuthenticate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
@@ -642,22 +638,22 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := services.NewBudgetService(db, notificationSvc)
-	
+
 	// First create a tool to create a valid credential
 	mockHttpServer, mockTeardown := newMockServer(t, &mockServerConfig{})
 	defer mockTeardown()
 	toolDef := newTestToolDefinition(mockHttpServer.URL)
 	registeredTool, err := service.CreateTool(
-		toolDef.Name, 
-		toolDef.Description, 
-		toolDef.ToolType, 
-		toolDef.OASSpec, 
+		toolDef.Name,
+		toolDef.Description,
+		toolDef.ToolType,
+		toolDef.OASSpec,
 		toolDef.PrivacyScore,
 		"", // Auth schema name
 		"", // API key
 	)
 	require.NoError(t, err)
-	
+
 	user, err := service.CreateUser("testnotfound@example.com", "testuser-notfound", "password123", false, true, false, false, false, false)
 	require.NoError(t, err)
 	app, err := service.CreateApp("Test App NotFound", "App for NotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredTool.ID}, nil, nil) // Associate with valid tool
@@ -665,13 +661,13 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
 	require.NoError(t, err)
-	
+
 	// Reload the app to get the credential
 	app, err = service.GetAppByID(app.ID)
 	require.NoError(t, err)
 	require.NotNil(t, app.Credential)
 	apiKey := app.Credential.Secret
-	
+
 	// Delete the tool to set up the not found scenario but keep the app credential valid
 	err = service.DeleteTool(registeredTool.ID)
 	require.NoError(t, err)
@@ -733,10 +729,10 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 	// 3. Register Test Tool and associate with App
 	toolDefForApp := newTestToolDefinition(mockHttpServer.URL)
 	registeredToolDef, err := service.CreateTool(
-		toolDefForApp.Name, 
-		toolDefForApp.Description, 
-		toolDefForApp.ToolType, 
-		toolDefForApp.OASSpec, 
+		toolDefForApp.Name,
+		toolDefForApp.Description,
+		toolDefForApp.ToolType,
+		toolDefForApp.OASSpec,
 		toolDefForApp.PrivacyScore,
 		"", // Auth schema name
 		"", // API key
@@ -749,7 +745,7 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
 	require.NoError(t, err)
-	
+
 	// Reload the app to get the credential
 	app, err = service.GetAppByID(app.ID)
 	require.NoError(t, err)
@@ -766,9 +762,9 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 	// 5. Prepare Proxy Request with a non-existent operation_id
 	requestBody := map[string]interface{}{
 		"operation_id": "non-existent-operation",
-		"parameters":  map[string][]string{},
-		"payload":    nil,
-		"headers":    map[string][]string{},
+		"parameters":   map[string][]string{},
+		"payload":      nil,
+		"headers":      map[string][]string{},
 	}
 	jsonBody, err := json.Marshal(requestBody)
 	require.NoError(t, err)
@@ -822,10 +818,10 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 	// 3. Register Test Tool and associate with App
 	toolDefForApp := newTestToolDefinition(mockHttpServer.URL)
 	registeredToolDef, err := service.CreateTool(
-		toolDefForApp.Name, 
-		toolDefForApp.Description, 
-		toolDefForApp.ToolType, 
-		toolDefForApp.OASSpec, 
+		toolDefForApp.Name,
+		toolDefForApp.Description,
+		toolDefForApp.ToolType,
+		toolDefForApp.OASSpec,
 		toolDefForApp.PrivacyScore,
 		"", // Auth schema name
 		"", // API key
@@ -838,7 +834,7 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
 	require.NoError(t, err)
-	
+
 	// Reload the app to get the credential
 	app, err = service.GetAppByID(app.ID)
 	require.NoError(t, err)
@@ -855,9 +851,9 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 	// 5. Prepare Proxy Request
 	requestBody := map[string]interface{}{
 		"operation_id": "getTestData", // Target the GET /test operation
-		"parameters":  map[string][]string{},
-		"payload":    nil,
-		"headers":    map[string][]string{},
+		"parameters":   map[string][]string{},
+		"payload":      nil,
+		"headers":      map[string][]string{},
 	}
 	jsonBody, err := json.Marshal(requestBody)
 	require.NoError(t, err)

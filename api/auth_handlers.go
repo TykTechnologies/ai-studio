@@ -482,12 +482,12 @@ func emailVerifiedHandler(w http.ResponseWriter, r *http.Request) {
 
 // OAuth Client Registration
 type RegisterOAuthClientInput struct {
-	ClientName    string   `json:"client_name" binding:"required"`
-	RedirectURIs  []string `json:"redirect_uris" binding:"required,dive,url"`
-	Scope         string   `json:"scope"` // Optional
-	GrantTypes    []string `json:"grant_types"`
-	ResponseTypes []string `json:"response_types"`
-	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	ClientName              string   `json:"client_name" binding:"required"`
+	RedirectURIs            []string `json:"redirect_uris" binding:"required,dive,url"`
+	Scope                   string   `json:"scope"` // Optional
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
 type RegisterOAuthClientOutput struct {
@@ -555,7 +555,6 @@ func (a *API) handleRegisterOAuthClient(c *gin.Context) {
 		return
 	}
 
-
 	oauthClientService := services.NewOAuthClientService(a.config.DB)
 	client, plainSecret, err := oauthClientService.CreateClientWithAuthMethod(input.ClientName, input.RedirectURIs, userID, input.Scope, tokenAuthMethod)
 	if err != nil {
@@ -587,7 +586,7 @@ func (a *API) handleRegisterOAuthClient(c *gin.Context) {
 		TokenEndpointAuthMethod: tokenAuthMethod,
 		ClientSecretExpiresAt:   0,
 	}
-	
+
 	// Only include client secret for confidential clients (not for "none" auth method)
 	if tokenAuthMethod != "none" {
 		resp.ClientSecret = plainSecret
@@ -753,18 +752,27 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 	}
 	authRequestID := c.Query("auth_req_id")
 	if authRequestID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Bad Request", Detail: "auth_req_id is required"}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "auth_req_id is required"}}})
 		return
 	}
 
 	userCtx, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Unauthorized", Detail: "User not authenticated"}}})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not authenticated"}}})
 		return
 	}
 	currentUser, ok := userCtx.(*models.User)
 	if !ok || currentUser == nil {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Unauthorized", Detail: "Invalid user session"}}})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "Invalid user session"}}})
 		return
 	}
 
@@ -777,7 +785,10 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 		} else if err.Error() == "user mismatch for pending authorization request" {
 			statusCode = http.StatusUnauthorized
 		}
-		c.JSON(statusCode, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Error", Detail: err.Error()}}})
+		c.JSON(statusCode, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error", Detail: err.Error()}}})
 		return
 	}
 
@@ -785,7 +796,10 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 	clientDetails, err_client := oauthClientService.GetClient(pendingRequest.ClientID)
 	if err_client != nil {
 		log.Printf("Error fetching client %s for consent: %v", pendingRequest.ClientID, err_client)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Server Error", Detail: "Could not retrieve client details."}}})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Server Error", Detail: "Could not retrieve client details."}}})
 		return
 	}
 
@@ -797,7 +811,7 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 	// Get user's approved apps with tools
 	var availableApps []AppWithTools
 	var noAppsMessage string
-	
+
 	// Always require app selection for OAuth flows
 	appModel := &models.App{}
 	apps, err := appModel.GetByUserID(a.config.DB, currentUser.ID)
@@ -820,27 +834,27 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 			}
 		}
 	}
-	
+
 	if len(availableApps) == 0 {
 		noAppsMessage = "No approved apps with tools found. Please create an app in the developer portal and add tools to it before using OAuth access."
 	}
 
 	resp := ConsentDetailsResponse{
-		AuthRequestID:    authRequestID,
-		ClientName:       clientDetails.ClientName,
-		Scopes:           scopesList,
-		AvailableApps:    availableApps,
-		NoAppsMessage:    noAppsMessage,
+		AuthRequestID: authRequestID,
+		ClientName:    clientDetails.ClientName,
+		Scopes:        scopesList,
+		AvailableApps: availableApps,
+		NoAppsMessage: noAppsMessage,
 	}
 	c.JSON(http.StatusOK, resp)
 }
 
 type ConsentDetailsResponse struct {
-	AuthRequestID    string              `json:"auth_req_id"`
-	ClientName       string              `json:"client_name"`
-	Scopes           []string            `json:"scopes"`
-	AvailableApps    []AppWithTools      `json:"available_apps"`
-	NoAppsMessage    string              `json:"no_apps_message,omitempty"`
+	AuthRequestID string         `json:"auth_req_id"`
+	ClientName    string         `json:"client_name"`
+	Scopes        []string       `json:"scopes"`
+	AvailableApps []AppWithTools `json:"available_apps"`
+	NoAppsMessage string         `json:"no_apps_message,omitempty"`
 }
 
 type AppWithTools struct {
@@ -883,31 +897,40 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 		return
 	}
 	var input SubmitConsentInput
-	
+
 	// Try to bind as JSON first, then as form data
 	contentType := c.GetHeader("Content-Type")
 	var err_bind error
-	
+
 	if strings.Contains(contentType, "application/json") {
 		err_bind = c.ShouldBindJSON(&input)
 	} else {
 		// Try form binding for regular form submissions
 		err_bind = c.ShouldBind(&input)
 	}
-	
+
 	if err_bind != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Bad Request", Detail: err_bind.Error()}}})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err_bind.Error()}}})
 		return
 	}
 
 	userCtx, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Unauthorized", Detail: "User not authenticated"}}})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not authenticated"}}})
 		return
 	}
 	currentUser, ok := userCtx.(*models.User)
 	if !ok || currentUser == nil {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Unauthorized", Detail: "Invalid user session"}}})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "Invalid user session"}}})
 		return
 	}
 
@@ -920,7 +943,10 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 		} else if err_get_pending.Error() == "user mismatch for pending authorization request" {
 			statusCode = http.StatusUnauthorized
 		}
-		c.JSON(statusCode, ErrorResponse{Errors: []struct{Title string `json:"title"`; Detail string `json:"detail"`}{{Title: "Error", Detail: err_get_pending.Error()}}})
+		c.JSON(statusCode, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error", Detail: err_get_pending.Error()}}})
 		return
 	}
 
@@ -938,7 +964,7 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 			c.Redirect(http.StatusFound, finalRedirectURL.String())
 			return
 		}
-		
+
 		// Verify user owns the selected app
 		appModel := &models.App{}
 		if err := appModel.Get(a.config.DB, input.SelectedAppID); err != nil {
@@ -949,7 +975,7 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 			c.Redirect(http.StatusFound, finalRedirectURL.String())
 			return
 		}
-		
+
 		if appModel.UserID != currentUser.ID {
 			log.Printf("User %d trying to use app %d owned by user %d", currentUser.ID, input.SelectedAppID, appModel.UserID)
 			qParams.Set("error", "access_denied")
@@ -958,7 +984,7 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 			c.Redirect(http.StatusFound, finalRedirectURL.String())
 			return
 		}
-		
+
 		if !appModel.Credential.Active {
 			qParams.Set("error", "invalid_request")
 			qParams.Set("error_description", "Selected app has inactive credentials.")
@@ -966,7 +992,7 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 			c.Redirect(http.StatusFound, finalRedirectURL.String())
 			return
 		}
-		
+
 		if len(appModel.Tools) == 0 {
 			qParams.Set("error", "invalid_request")
 			qParams.Set("error_description", "Selected app has no tools.")
@@ -974,9 +1000,9 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 			c.Redirect(http.StatusFound, finalRedirectURL.String())
 			return
 		}
-		
+
 		appID := &input.SelectedAppID
-		
+
 		authCodeService := services.NewAuthCodeService(a.config.DB)
 		createArgs := services.CreateAuthCodeArgs{
 			ClientID:            pendingRequest.ClientID,
@@ -1132,7 +1158,7 @@ func (a *API) handleOAuthToken(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, OAuthErrorResponse{Error: "invalid_grant", ErrorDescription: "No app selected for OAuth access."})
 		return
 	}
-	
+
 	// Get the selected app and return its secret
 	appModel := &models.App{}
 	if err := appModel.Get(a.config.DB, *storedAuthCode.AppID); err != nil {
@@ -1140,19 +1166,19 @@ func (a *API) handleOAuthToken(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, OAuthErrorResponse{Error: "server_error", ErrorDescription: "Failed to retrieve app credentials."})
 		return
 	}
-	
+
 	if appModel.UserID != storedAuthCode.UserID {
 		log.Printf("Token endpoint: App %d ownership mismatch for user %d", *storedAuthCode.AppID, storedAuthCode.UserID)
 		c.JSON(http.StatusBadRequest, OAuthErrorResponse{Error: "invalid_grant", ErrorDescription: "App ownership mismatch."})
 		return
 	}
-	
+
 	if !appModel.Credential.Active {
 		log.Printf("Token endpoint: App %d has inactive credentials", *storedAuthCode.AppID)
 		c.JSON(http.StatusBadRequest, OAuthErrorResponse{Error: "invalid_grant", ErrorDescription: "App credentials are inactive."})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, AccessTokenResponse{
 		AccessToken: appModel.Credential.Secret,
 		TokenType:   "Bearer",
@@ -1179,28 +1205,28 @@ type AccessTokenResponse struct {
 
 // OAuthServerMetadata defines the structure for the AS metadata response.
 type OAuthServerMetadata struct {
-	Issuer                                     string   `json:"issuer"`
-	AuthorizationEndpoint                      string   `json:"authorization_endpoint"`
-	TokenEndpoint                              string   `json:"token_endpoint"`
-	RegistrationEndpoint                       string   `json:"registration_endpoint,omitempty"`
-	ScopesSupported                            []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported                     []string `json:"response_types_supported"`
-	GrantTypesSupported                        []string `json:"grant_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported          []string `json:"token_endpoint_auth_methods_supported,omitempty"`
-	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported,omitempty"`
-	IntrospectionEndpoint                      string   `json:"introspection_endpoint,omitempty"`
-	RevocationEndpoint                         string   `json:"revocation_endpoint,omitempty"`
-	DeviceAuthorizationEndpoint                string   `json:"device_authorization_endpoint,omitempty"`
-	PushedAuthorizationRequestEndpoint         string   `json:"pushed_authorization_request_endpoint,omitempty"`
-	RequirePushedAuthorizationRequests         bool     `json:"require_pushed_authorization_requests,omitempty"`
-	TlsClientCertificateBoundAccessTokens      bool     `json:"tls_client_certificate_bound_access_tokens,omitempty"`
-	RequestURIParameterSupported               bool     `json:"request_uri_parameter_supported,omitempty"`
-	RequestParameterSupported                  bool     `json:"request_parameter_supported,omitempty"`
-	ServiceDocumentation                       string   `json:"service_documentation,omitempty"`
-	UILocalesSupported                         []string `json:"ui_locales_supported,omitempty"`
-	OpPolicyURI                                string   `json:"op_policy_uri,omitempty"`
-	OpTosURI                                   string   `json:"op_tos_uri,omitempty"`
-	JwksURI                                    string   `json:"jwks_uri,omitempty"`
+	Issuer                                string   `json:"issuer"`
+	AuthorizationEndpoint                 string   `json:"authorization_endpoint"`
+	TokenEndpoint                         string   `json:"token_endpoint"`
+	RegistrationEndpoint                  string   `json:"registration_endpoint,omitempty"`
+	ScopesSupported                       []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported                []string `json:"response_types_supported"`
+	GrantTypesSupported                   []string `json:"grant_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported     []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+	CodeChallengeMethodsSupported         []string `json:"code_challenge_methods_supported,omitempty"`
+	IntrospectionEndpoint                 string   `json:"introspection_endpoint,omitempty"`
+	RevocationEndpoint                    string   `json:"revocation_endpoint,omitempty"`
+	DeviceAuthorizationEndpoint           string   `json:"device_authorization_endpoint,omitempty"`
+	PushedAuthorizationRequestEndpoint    string   `json:"pushed_authorization_request_endpoint,omitempty"`
+	RequirePushedAuthorizationRequests    bool     `json:"require_pushed_authorization_requests,omitempty"`
+	TlsClientCertificateBoundAccessTokens bool     `json:"tls_client_certificate_bound_access_tokens,omitempty"`
+	RequestURIParameterSupported          bool     `json:"request_uri_parameter_supported,omitempty"`
+	RequestParameterSupported             bool     `json:"request_parameter_supported,omitempty"`
+	ServiceDocumentation                  string   `json:"service_documentation,omitempty"`
+	UILocalesSupported                    []string `json:"ui_locales_supported,omitempty"`
+	OpPolicyURI                           string   `json:"op_policy_uri,omitempty"`
+	OpTosURI                              string   `json:"op_tos_uri,omitempty"`
+	JwksURI                               string   `json:"jwks_uri,omitempty"`
 }
 
 // @Summary OAuth Authorization Server Metadata
@@ -1236,15 +1262,15 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 	}
 
 	metadata := OAuthServerMetadata{
-		Issuer:                              appConf.AuthServerURL,
-		AuthorizationEndpoint:               resolve("/oauth/authorize"),
-		TokenEndpoint:                       resolve("/oauth/token"),
-		RegistrationEndpoint:                resolve("/oauth/register_client"),
-		ScopesSupported:                     []string{"openid", "profile", "email", "mcp"},
-		ResponseTypesSupported:              []string{"code"},
-		GrantTypesSupported:                 []string{"authorization_code"},
-		TokenEndpointAuthMethodsSupported:     []string{"client_secret_post", "client_secret_basic", "none"},
-		CodeChallengeMethodsSupported:       []string{"S256"},
+		Issuer:                            appConf.AuthServerURL,
+		AuthorizationEndpoint:             resolve("/oauth/authorize"),
+		TokenEndpoint:                     resolve("/oauth/token"),
+		RegistrationEndpoint:              resolve("/oauth/register_client"),
+		ScopesSupported:                   []string{"openid", "profile", "email", "mcp"},
+		ResponseTypesSupported:            []string{"code"},
+		GrantTypesSupported:               []string{"authorization_code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post", "client_secret_basic", "none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
 	}
 	c.JSON(http.StatusOK, metadata)
 }

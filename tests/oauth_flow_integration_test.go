@@ -72,16 +72,16 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			response := map[string]interface{}{
-				"resource": "http://test-proxy",
-				"authorization_servers": []string{"http://test-auth"},
-				"scopes_supported": []string{"mcp", "mcp_read", "mcp_write"},
+				"resource":                 "http://test-proxy",
+				"authorization_servers":    []string{"http://test-auth"},
+				"scopes_supported":         []string{"mcp", "mcp_read", "mcp_write"},
 				"bearer_methods_supported": []string{"auth_header"},
-				"mcp_protocol_version": "1.0",
+				"mcp_protocol_version":     "1.0",
 			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		// For LLM requests, check auth and respond accordingly  
+		// For LLM requests, check auth and respond accordingly
 		if strings.HasPrefix(r.URL.Path, "/llm/") {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
@@ -136,11 +136,10 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 	}
 
 	// Override config URLs to point to test servers
-	config.Get().SiteURL = dashboardServer.URL          // For consent redirects
-	config.Get().AuthServerURL = dashboardServer.URL    // For metadata
-	config.Get().ProxyURL = proxyServer.URL             // For metadata resource field
+	config.Get().SiteURL = dashboardServer.URL       // For consent redirects
+	config.Get().AuthServerURL = dashboardServer.URL // For metadata
+	config.Get().ProxyURL = proxyServer.URL          // For metadata resource field
 	config.Get().ProxyOAuthMetadataURL = proxyServer.URL + "/.well-known/oauth-protected-resource"
-
 
 	return httpClient, dashboardServer.URL, proxyServer.URL
 }
@@ -167,7 +166,7 @@ func loginUserForSession(t *testing.T, client *http.Client, dashboardURL string)
 		},
 	}
 	jsonBody, _ := json.Marshal(loginPayload)
-	
+
 	req, err := http.NewRequest("POST", dashboardURL+"/auth/login", bytes.NewBuffer(jsonBody))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -179,7 +178,6 @@ func loginUserForSession(t *testing.T, client *http.Client, dashboardURL string)
 	// Cookies are now in client.Jar
 }
 
-
 func TestDCRFlow(t *testing.T) {
 	client, dashboardURL, _ := setupIntegrationTestEnv(t)
 	defer teardownIntegrationTestEnv()
@@ -189,11 +187,11 @@ func TestDCRFlow(t *testing.T) {
 
 	// 2. Make DCR request
 	dcrPayload := map[string]interface{}{
-		"client_name":    "Test DCR Client",
-		"redirect_uris":  []string{"http://localhost:7070/callback"},
-		"scope":          "mcp offline",
-		"grant_types":    []string{"authorization_code"},
-		"response_types": []string{"code"},
+		"client_name":                "Test DCR Client",
+		"redirect_uris":              []string{"http://localhost:7070/callback"},
+		"scope":                      "mcp offline",
+		"grant_types":                []string{"authorization_code"},
+		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "client_secret_post",
 	}
 	jsonBody, _ := json.Marshal(dcrPayload)
@@ -287,27 +285,27 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 	// --- Create App for User (required for OAuth consent) ---
 	// Need to create a tool first for the app to have tools
 	dummyTool := &models.Tool{
-		Name:        "Test Tool",
-		Description: "Test tool for OAuth",
-		ToolType:    models.ToolTypeREST,
+		Name:         "Test Tool",
+		Description:  "Test tool for OAuth",
+		ToolType:     models.ToolTypeREST,
 		PrivacyScore: 5,
 	}
 	require.NoError(t, testDB.Create(dummyTool).Error)
-	
+
 	testService := services.NewService(testDB)
 	testApp, err := testService.CreateApp(
-		"Test OAuth App", 
-		"Test app for OAuth", 
+		"Test OAuth App",
+		"Test app for OAuth",
 		testUser.ID,
-		[]uint{}, // no datasources
-		[]uint{}, // no LLMs
+		[]uint{},             // no datasources
+		[]uint{},             // no LLMs
 		[]uint{dummyTool.ID}, // one tool
-		nil, // no budget
-		nil, // no budget start date
+		nil,                  // no budget
+		nil,                  // no budget start date
 	)
 	require.NoError(t, err)
 	require.NotNil(t, testApp)
-	
+
 	// Activate the app's credential (required for OAuth consent)
 	require.NoError(t, testDB.Model(&models.Credential{}).Where("id = ?", testApp.CredentialID).Update("active", true).Error)
 
@@ -323,8 +321,8 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 
 	// POST /oauth/submit_consent
 	submitConsentPayload := map[string]interface{}{
-		"auth_req_id": authRequestID, 
-		"decision": "approved",
+		"auth_req_id":     authRequestID,
+		"decision":        "approved",
 		"selected_app_id": testApp.ID,
 	}
 	jsonConsentBody, _ := json.Marshal(submitConsentPayload)
@@ -380,7 +378,6 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 	if err != nil {
 		require.Contains(t, err.Error(), "authorization code has already been used")
 	}
-
 
 	// --- Access Protected Resource with Token (Proxy Token Validation) ---
 	// Test access to LLM endpoint with valid token

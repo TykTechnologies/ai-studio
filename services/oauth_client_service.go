@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"golang.org/x/crypto/bcrypt"
 	"errors"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -99,7 +99,7 @@ func (s *OAuthClientService) ValidateClientSecret(client *models.OAuthClient, se
 	if s.IsPublicClient(client) {
 		return false, nil
 	}
-	
+
 	err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecret), []byte(secret))
 	if err == nil {
 		return true, nil

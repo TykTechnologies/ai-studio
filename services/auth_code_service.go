@@ -38,7 +38,7 @@ type CreateAuthCodeArgs struct {
 	ExpiresIn           time.Duration // How long the code is valid for
 	CodeChallenge       string
 	CodeChallengeMethod string
-	AppID               *uint         // Selected app ID for MCP OAuth
+	AppID               *uint // Selected app ID for MCP OAuth
 }
 
 // CreateAuthCode generates, stores, and returns a new authorization code.

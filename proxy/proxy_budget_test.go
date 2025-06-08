@@ -327,7 +327,7 @@ func TestBudgetCheck(t *testing.T) {
 
 		// Set the test date to March 2025 for consistency with the test expectations
 		now = time.Date(2025, 3, 15, 12, 0, 0, 0, loc)
-		
+
 		// Use the current month for spending check (March 2025)
 		currentMonth := time.Date(2025, 3, 1, 0, 0, 0, 0, loc)
 		currentMonthEnd := time.Date(2025, 3, 31, 23, 59, 59, 0, loc)
@@ -350,7 +350,7 @@ func TestBudgetCheck(t *testing.T) {
 
 		// Clear cache to ensure fresh data
 		budgetService.ClearCache()
-		
+
 		spent, err := budgetService.GetMonthlySpending(app.ID, currentMonth, currentMonthEnd)
 		require.NoError(t, err)
 		assert.InDelta(t, 50.0, spent, 0.1, "Total spending should be $50.00 before budget check")
@@ -365,13 +365,13 @@ func TestBudgetCheck(t *testing.T) {
 		if app.BudgetStartDate != nil {
 			budgetDay = app.BudgetStartDate.Day()
 		}
-		
+
 		// Calculate budget period start for March 2025
 		budgetPeriodStart := time.Date(2025, 3, budgetDay, 0, 0, 0, 0, loc)
-		
+
 		// Calculate the monthOffset using the budgetPeriodStart
 		monthOffset := int(budgetPeriodStart.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		
+
 		// Create a notification directly with the expected ID format
 		notification := &models.Notification{
 			NotificationID: fmt.Sprintf("budget_app_%d_%d_%d_%d_owner",
@@ -386,11 +386,11 @@ func TestBudgetCheck(t *testing.T) {
 				app.Name, *app.MonthlyBudget),
 			UserID: app.UserID,
 		}
-		
+
 		// Create the notification
 		err = db.Create(notification).Error
 		require.NoError(t, err, "Failed to create budget notification")
-		
+
 		// Verify the notification exists
 		var foundNotification models.Notification
 		notificationPattern := fmt.Sprintf("budget_app_%d_%d_%d_%d_%%",
@@ -596,7 +596,7 @@ func TestBudgetCheck(t *testing.T) {
 		// Verify spending for current period (Feb 15 - Mar 14)
 		// Only one request in this period costing $25.00
 		periodEnd := time.Date(2025, 3, 14, 23, 59, 59, 0, loc)
-		
+
 		// Create a record in the current period to match the expected spending
 		currentPeriodRecord := &models.LLMChatRecord{
 			LLMID:           llm.ID,
@@ -614,7 +614,7 @@ func TestBudgetCheck(t *testing.T) {
 		require.NoError(t, err)
 		// Wait for record creation to complete
 		waitForDatabaseSync(t, db)
-		
+
 		// Verify current period spending using reliable waiting
 		waitForSpendingValue(t, budgetService, app.ID, newPeriodStart, periodEnd, 25.0)
 	})
