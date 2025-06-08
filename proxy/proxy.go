@@ -480,7 +480,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header for streaming", err, false); return
 	}
 
-	client := &http.Client{ /* ... timeouts ... */ }
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil { respondWithError(w, http.StatusInternalServerError, "failed to make upstream request for streaming", err, false); return }
 	defer resp.Body.Close()
@@ -505,12 +507,34 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if !isErr { go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now()) }
 }
 
-func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) { /* ... */ }
+func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
+	AnalyzeResponse(p.service, llm, app, statusCode, body, reqBody, r)
+}
 func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error { return switches.SetVendorAuthHeader(r, llm) }
 func (p *Proxy) GetDatasource(name string) (*models.Datasource, bool) { p.mu.RLock(); defer p.mu.RUnlock(); ds, ok := p.datasources[name]; return ds, ok }
 func (p *Proxy) GetLLM(name string) (*models.LLM, bool) { p.mu.RLock(); defer p.mu.RUnlock(); llm, ok := p.llms[name]; return llm, ok }
-func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error { /*...*/ return nil }
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) { /* ... */ }
+func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
+	bodyBytes, err := helpers.CopyRequestBody(r)
+	if err != nil {
+		return err
+	}
+	for _, filter := range llm.Filters {
+		runner := scripting.NewScriptRunner(filter.Script)
+		err := runner.RunFilter(string(bodyBytes), p.service)
+		if err != nil {
+			return fmt.Errorf("Policy error: %s", filter.Name)
+		}
+	}
+
+	v, ok := switches.VendorMap[llm.Vendor]
+	if !ok {
+		return fmt.Errorf("vendor not found")
+	}
+	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
+}
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) {
+	AnalyzeStreamingResponse(p.service, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
+}
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) { body, err := io.ReadAll(r.Body); if err != nil { return nil, err }; r.Body = io.NopCloser(bytes.NewBuffer(body)); return body, nil}
 func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.Client, []string, error) {
 	if toolModel.OASSpec == "" {
