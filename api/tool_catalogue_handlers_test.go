@@ -179,7 +179,7 @@ func TestToolCatalogueEndpointsErrors(t *testing.T) {
 func TestGetOperationDetailFromSpec(t *testing.T) {
 	// Test the getOperationDetailFromSpec function to ensure method is always "POST"
 	// This tests our change to always show POST method regardless of original OpenAPI method
-	
+
 	// Simple OpenAPI spec with GET operation for testing
 	testSpec := `{
 		"openapi": "3.0.0",
@@ -195,14 +195,14 @@ func TestGetOperationDetailFromSpec(t *testing.T) {
 			}
 		}
 	}`
-	
+
 	operationDetail, err := getOperationDetailFromSpec([]byte(testSpec), "testGetOperation")
 	assert.NoError(t, err)
 	assert.Equal(t, "testGetOperation", operationDetail.OperationID)
 	assert.Equal(t, "POST", operationDetail.Method) // Should always be POST, not GET
 	assert.Equal(t, "/test", operationDetail.Path)
 	assert.Equal(t, "This is a test GET operation", operationDetail.Description)
-	
+
 	// Test with another method - PUT should also become POST
 	testSpecPut := `{
 		"openapi": "3.0.0",
@@ -218,7 +218,7 @@ func TestGetOperationDetailFromSpec(t *testing.T) {
 			}
 		}
 	}`
-	
+
 	operationDetailPut, err := getOperationDetailFromSpec([]byte(testSpecPut), "testPutOperation")
 	assert.NoError(t, err)
 	assert.Equal(t, "testPutOperation", operationDetailPut.OperationID)

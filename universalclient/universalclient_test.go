@@ -758,7 +758,7 @@ func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Check if body is empty for GET, HEAD, OPTIONS
 		if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
 			if len(body) > 0 {
@@ -775,7 +775,7 @@ func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				
+
 				// Verify payload contains the expected data
 				if val, ok := payload["test"]; !ok || val != "data" {
 					t.Errorf("Expected payload with {\"test\":\"data\"}, got: %s", string(body))
@@ -824,20 +824,20 @@ func TestNoBodyForGetHeadOptionsRequests(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := client.CallOperation(tc.operationId, nil, tc.payload, nil)
-			
+
 			// All requests should succeed
 			require.NoError(t, err, "Operation should not fail")
-			
+
 			// Skip response body validation for HEAD requests since they don't return a body
 			if tc.method != "HEAD" {
 				// Verify response
 				jsonStr, ok := result.(string)
 				require.True(t, ok, "Expected result to be a string")
-				
+
 				var responseMap map[string]interface{}
 				err = json.Unmarshal([]byte(jsonStr), &responseMap)
 				require.NoError(t, err, "Failed to unmarshal JSON response")
-				
+
 				assert.Equal(t, "success", responseMap["status"], "Expected success status")
 			}
 		})

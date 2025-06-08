@@ -463,7 +463,6 @@ func TestApp_ToolAssociation(t *testing.T) {
 	assert.True(t, foundGhostTool, "The ghost tool should be present in the retrieved tools")
 }
 
-
 func TestApps_GetAppCount(t *testing.T) {
 	db := setupTestDB(t)
 	// defer cleanTestDB(db) // Removed

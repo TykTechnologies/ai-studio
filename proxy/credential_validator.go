@@ -80,7 +80,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				if err == nil {
 					// Valid app secret - add app to context like API key flow
 					ctx := context.WithValue(r.Context(), "app", app)
-					
+
 					// For tool requests, validate the app has access to the tool
 					pathParts := strings.Split(r.URL.Path, "/")
 					if len(pathParts) >= 3 && pathParts[1] == "tools" {
@@ -91,7 +91,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
 							return
 						}
-						
+
 						// Check if app has access to this tool
 						hasAccess := false
 						for _, t := range app.Tools {
@@ -100,17 +100,17 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 								break
 							}
 						}
-						
+
 						if !hasAccess {
 							// Return 401 for security - don't leak tool access info
 							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
 							return
 						}
-						
+
 						ctx = context.WithValue(ctx, "tool", tool)
 						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
 					}
-					
+
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -138,13 +138,19 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					llmSlug = pathParts[2]
 				}
 			case "datasource":
-				if len(pathParts) > 2 { dsSlug = pathParts[2] }
+				if len(pathParts) > 2 {
+					dsSlug = pathParts[2]
+				}
 			case "ai":
-				if len(pathParts) > 2 { routeID = pathParts[2] }
+				if len(pathParts) > 2 {
+					routeID = pathParts[2]
+				}
 			case "tools":
-				if len(pathParts) > 2 { toolSlug = pathParts[2] }
+				if len(pathParts) > 2 {
+					toolSlug = pathParts[2]
+				}
 			case ".well-known":
-				next.ServeHTTP(w,r)
+				next.ServeHTTP(w, r)
 				return
 			default:
 				respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false) // false for wwwAuth
@@ -247,30 +253,41 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	}
 	r = r.WithContext(ctx)
 
-
 	if dsSlug != "" {
 		ds, ok := cv.p.GetDatasource(dsSlug)
-		if !ok { return false, r }
+		if !ok {
+			return false, r
+		}
 		for _, d := range app.Datasources {
-			if d.ID == ds.ID { return true, r }
+			if d.ID == ds.ID {
+				return true, r
+			}
 		}
 		return false, r
 	}
 
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
-		if !ok { return false, r }
+		if !ok {
+			return false, r
+		}
 		for _, l := range app.LLMs {
-			if l.ID == llm.ID { return true, r }
+			if l.ID == llm.ID {
+				return true, r
+			}
 		}
 		return false, r
 	}
 
 	if routeID != "" { // This was for /ai/{routeID}, assuming routeID is an LLM slug
 		px, ok := cv.p.GetLLM(routeID)
-		if !ok { return false, r }
+		if !ok {
+			return false, r
+		}
 		for _, llm := range app.LLMs {
-			if llm.ID == px.ID { return true, r }
+			if llm.ID == px.ID {
+				return true, r
+			}
 		}
 		return false, r
 	}
@@ -278,7 +295,9 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	if toolSlugContext := r.Context().Value("toolSlug"); toolSlugContext != nil {
 		if ts, ok := toolSlugContext.(string); ok && ts != "" {
 			tool, err := cv.service.GetToolBySlug(ts)
-			if err != nil { return false, r }
+			if err != nil {
+				return false, r
+			}
 			for _, t := range app.Tools {
 				if t.ID == tool.ID {
 					ctx := context.WithValue(r.Context(), "tool", tool) // Add full tool to context

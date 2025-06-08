@@ -100,7 +100,6 @@ func TestCredentialValidatorMiddleware(t *testing.T) {
 	err = proxyInstance.loadResources() // Reload resources in proxy
 	require.NoError(t, err)
 
-
 	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
 	config.Get().ProxyOAuthMetadataURL = "http://proxy.test/.well-known/oauth-protected-resource"
 	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()

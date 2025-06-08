@@ -320,8 +320,6 @@ func (a *API) countAppsByUserID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"count": count})
 }
 
-
-
 func serializeApp(app *models.App) AppResponse {
 	return AppResponse{
 		Type: "app",
@@ -709,19 +707,17 @@ func (a *API) getAppTools(c *gin.Context) {
 	for i, tool := range tools {
 		response[i] = gin.H{
 			"type": "tools",
-			"id": tool.ID,
+			"id":   tool.ID,
 			"attributes": gin.H{
-				"name": tool.Name,
-				"description": tool.Description,
-				"tool_type": tool.ToolType,
+				"name":          tool.Name,
+				"description":   tool.Description,
+				"tool_type":     tool.ToolType,
 				"privacy_score": tool.PrivacyScore,
-				"created_at": tool.CreatedAt,
-				"updated_at": tool.UpdatedAt,
+				"created_at":    tool.CreatedAt,
+				"updated_at":    tool.UpdatedAt,
 			},
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
-
-

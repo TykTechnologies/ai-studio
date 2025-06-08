@@ -513,9 +513,9 @@ func TestCommon_GetUserAppsWithTools(t *testing.T) {
 
 	_, err = service.CreateGroup("AppUserGroup",
 		[]uint{user.ID},
-		[]uint{llmCatalogueForAppList_apps.ID}, // Corrected variable
+		[]uint{llmCatalogueForAppList_apps.ID},  // Corrected variable
 		[]uint{dataCatalogueForAppList_apps.ID}, // Corrected variable
-		[]uint{toolCatalogue_apps.ID})          // Corrected variable
+		[]uint{toolCatalogue_apps.ID})           // Corrected variable
 	assert.NoError(t, err)
 
 	// Create an app with ToolA for the user
@@ -588,9 +588,9 @@ func TestCommon_GetUserAppDetailsWithTools(t *testing.T) {
 
 	_, err = service.CreateGroup("DetailUserGroup",
 		[]uint{user.ID},
-		[]uint{llmCatalogueForAppDetail_details.ID}, // Corrected variable
+		[]uint{llmCatalogueForAppDetail_details.ID},  // Corrected variable
 		[]uint{dataCatalogueForAppDetail_details.ID}, // Corrected variable
-		[]uint{toolCatalogue_details.ID})          // Corrected variable
+		[]uint{toolCatalogue_details.ID})             // Corrected variable
 	assert.NoError(t, err)
 
 	// Create an app with ToolB for the user

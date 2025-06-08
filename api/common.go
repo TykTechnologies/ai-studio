@@ -516,12 +516,12 @@ func (a *API) createUserApp(c *gin.Context) {
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
 		}{
-			Name:            app.Name,
-			Description:     app.Description,
-			UserID:          app.UserID,
-			CredentialID:    app.CredentialID,
-			DatasourceIDs:   getDatasourceIDs(app.Datasources),
-			LLMIDs:          getLLMIDs(app.LLMs),
+			Name:          app.Name,
+			Description:   app.Description,
+			UserID:        app.UserID,
+			CredentialID:  app.CredentialID,
+			DatasourceIDs: getDatasourceIDs(app.Datasources),
+			LLMIDs:        getLLMIDs(app.LLMs),
 			ToolIDs: func() []uint { // This was missing from the previous diff's Attributes block
 				ids := make([]uint, len(currentAppTools)) // Use the local variable
 				for i, tool := range currentAppTools {    // Use the local variable
@@ -558,12 +558,12 @@ func containsLLM(llms []models.LLM, id uint) bool {
 
 // CreateAppRequest represents the request body for creating a new app
 type CreateAppRequest struct {
-	Name          string `json:"name" binding:"required"`
-	Description   string `json:"description" binding:"required"`
-	DataSourceIDs []uint `json:"data_source_ids" binding:"required"`
-	LLMIDs        []uint `json:"llm_ids" binding:"required"`
-	ToolIDs       []uint `json:"tool_ids" binding:"required"`
-	MonthlyBudget *float64 `json:"monthly_budget"`
+	Name            string     `json:"name" binding:"required"`
+	Description     string     `json:"description" binding:"required"`
+	DataSourceIDs   []uint     `json:"data_source_ids" binding:"required"`
+	LLMIDs          []uint     `json:"llm_ids" binding:"required"`
+	ToolIDs         []uint     `json:"tool_ids" binding:"required"`
+	MonthlyBudget   *float64   `json:"monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date"`
 }
 

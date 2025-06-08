@@ -190,7 +190,7 @@ func waitForCacheFlush(t *testing.T, budgetService *services.BudgetService) {
 	// Clear cache and wait for it to propagate
 	budgetService.ClearCache()
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Verify cache is actually cleared by doing a quick operation
 	deadline := time.Now().Add(1000 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -225,14 +225,14 @@ func waitForDatabaseSync(t *testing.T, db *gorm.DB) {
 func waitForSpendingValue(t *testing.T, budgetService *services.BudgetService, appID uint, start, end time.Time, expectedSpent float64) {
 	deadline := time.Now().Add(10000 * time.Millisecond) // Increased to 10s for very reliable testing
 	var lastSpent float64
-	
+
 	for time.Now().Before(deadline) {
 		budgetService.ClearCache()
 		time.Sleep(50 * time.Millisecond) // Brief wait after cache clear
-		
+
 		var spent float64
 		var err error
-		
+
 		// Retry spending query with exponential backoff
 		for attempt := 0; attempt < 3; attempt++ {
 			spent, err = budgetService.GetMonthlySpending(appID, start, end)
@@ -242,24 +242,24 @@ func waitForSpendingValue(t *testing.T, budgetService *services.BudgetService, a
 			backoff := time.Duration(50*(1<<attempt)) * time.Millisecond
 			time.Sleep(backoff)
 		}
-		
+
 		if err != nil {
 			t.Logf("Error getting spending: %v, retrying...", err)
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		
+
 		t.Logf("Current spending: %.2f (expected: %.2f) [start=%v, end=%v]", spent, expectedSpent, start, end)
-		
+
 		if math.Abs(spent-expectedSpent) < 0.1 {
 			time.Sleep(50 * time.Millisecond) // Final stabilization
 			return
 		}
-		
+
 		lastSpent = spent
 		time.Sleep(100 * time.Millisecond)
 	}
-	
+
 	t.Fatalf("Timeout waiting for spending to reach %.2f, last value was %.2f", expectedSpent, lastSpent)
 }
 
