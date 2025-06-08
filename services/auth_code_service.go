@@ -38,6 +38,7 @@ type CreateAuthCodeArgs struct {
 	ExpiresIn           time.Duration // How long the code is valid for
 	CodeChallenge       string
 	CodeChallengeMethod string
+	AppID               *uint         // Selected app ID for MCP OAuth
 }
 
 // CreateAuthCode generates, stores, and returns a new authorization code.
@@ -57,6 +58,7 @@ func (s *AuthCodeService) CreateAuthCode(args CreateAuthCodeArgs) (*models.AuthC
 		CodeChallenge:       args.CodeChallenge,
 		CodeChallengeMethod: args.CodeChallengeMethod,
 		Used:                false,
+		AppID:               args.AppID,
 	}
 
 	if err := s.db.Create(authCode).Error; err != nil {
