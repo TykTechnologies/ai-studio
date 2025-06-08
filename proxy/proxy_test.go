@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/config" // Added import
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
@@ -507,24 +508,131 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 		reqPath := "/tools/" + testToolSlug
 		proxyReq, err := http.NewRequest(http.MethodPost, reqPath, bytes.NewBufferString(body))
 		require.NoError(t, err)
-		proxyReq.Header.Set("Authorization", "Bearer "+apiKey)
+		proxyReq.Header.Set("Authorization", "Bearer "+apiKey) // apiKey is from the outer scope of TestHandleToolRequest_InvalidRequestBody
 		proxyReq.Header.Set("Content-Type", "application/json")
 
 		rr := httptest.NewRecorder()
-		proxyRouter.ServeHTTP(rr, proxyReq)
+		proxyRouter.ServeHTTP(rr, proxyReq) // proxyRouter is from outer scope
 
 		assert.Equal(t, http.StatusInternalServerError, rr.Code, "Proxy should return 500 if operation_id field is missing")
 		var errorResponse ErrorResponse
 		err = json.Unmarshal(rr.Body.Bytes(), &errorResponse)
 		require.NoError(t, err)
 		assert.Contains(t, errorResponse.Message, "failed to call tool operation")
-		assert.Contains(t, errorResponse.Error, "operation not found") // Based on the current error logs
+		// This assertion depends on the exact error message from the service layer when operation_id is missing from input to CallToolOperation.
+		// Assuming it might error out earlier due to unmarshalling or a direct check.
+		// If CallToolOperation is called with an empty operationID, it should return an error like "operation not found".
+		assert.Contains(t, errorResponse.Error, "operation not found")
 	})
 
-
 	// 5. Cleanup
-	unregisterTestTool(t, service, slug.Make(registeredToolDef.Name))
+	unregisterTestTool(t, service, slug.Make(registeredToolDef.Name)) // service from outer scope
 }
+
+
+func TestHandleOAuthProtectedResourceMetadata(t *testing.T) {
+	// Minimal setup for Proxy, as handler mostly uses global config
+	p := &Proxy{}
+	handler := http.HandlerFunc(p.handleOAuthProtectedResourceMetadata)
+
+	// Backup and defer restore of original config values
+	originalAuthServerURL := config.Get().AuthServerURL
+	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
+	originalProxyURL := config.Get().ProxyURL
+
+	defer func() {
+		config.Get().AuthServerURL = originalAuthServerURL
+		config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL
+		config.Get().ProxyURL = originalProxyURL
+	}()
+
+	// Set test config values
+	config.Get().AuthServerURL = "http://auth.example.com"
+	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
+	config.Get().ProxyURL = "http://proxy.example.com"
+
+
+	req := httptest.NewRequest("GET", "/.well-known/oauth-protected-resource", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "application/json; charset=utf-8", rr.Header().Get("Content-Type"))
+
+	var metadata map[string]interface{}
+	err := json.Unmarshal(rr.Body.Bytes(), &metadata)
+	require.NoError(t, err)
+
+	require.Equal(t, "http://proxy.example.com", metadata["resource"])
+
+	authServers, ok := metadata["authorization_servers"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, authServers, 1)
+	require.Equal(t, "http://auth.example.com/.well-known/oauth-authorization-server", authServers[0])
+
+	scopesSupported, ok := metadata["scopes_supported"].([]interface{})
+	require.True(t, ok)
+	require.Contains(t, scopesSupported, "mcp")
+
+	bearerMethods, ok := metadata["bearer_methods_supported"].([]interface{})
+	require.True(t, ok)
+	require.Contains(t, bearerMethods, "auth_header")
+
+	require.Equal(t, "1.0", metadata["mcp_protocol_version"])
+}
+
+func TestRespondWithError_WWWAuthenticate(t *testing.T) {
+	rr := httptest.NewRecorder()
+
+	// Backup and defer restore
+	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
+	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
+
+	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
+
+	respondWithError(rr, http.StatusUnauthorized, "test auth error", nil, true)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	expectedHeader := `Bearer realm="MCPResources", resource_metadata_uri="http://proxy.example.com/.well-known/oauth-protected-resource"`
+	require.Equal(t, expectedHeader, rr.Header().Get("WWW-Authenticate"))
+
+	// Test without WWW-Authenticate
+	rrNoAuth := httptest.NewRecorder()
+	respondWithError(rrNoAuth, http.StatusUnauthorized, "test auth error no header", nil, false)
+	require.Equal(t, http.StatusUnauthorized, rrNoAuth.Code)
+	require.Empty(t, rrNoAuth.Header().Get("WWW-Authenticate"))
+
+	// Test with different status code
+	rrOtherStatus := httptest.NewRecorder()
+	respondWithError(rrOtherStatus, http.StatusForbidden, "test forbidden", nil, true)
+	require.Equal(t, http.StatusForbidden, rrOtherStatus.Code)
+	require.Empty(t, rrOtherStatus.Header().Get("WWW-Authenticate"))
+}
+
+
+func TestRespondWithOAIError_WWWAuthenticate(t *testing.T) {
+	rr := httptest.NewRecorder()
+
+	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
+	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
+
+	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/oai/.well-known/oauth-protected-resource"
+
+	respondWithOAIError(rr, http.StatusUnauthorized, "test oai auth error", nil, true)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	expectedHeader := `Bearer realm="MCPResources", resource_metadata_uri="http://proxy.example.com/oai/.well-known/oauth-protected-resource"`
+	require.Equal(t, expectedHeader, rr.Header().Get("WWW-Authenticate"))
+
+	// Test without WWW-Authenticate
+	rrNoAuth := httptest.NewRecorder()
+	respondWithOAIError(rrNoAuth, http.StatusUnauthorized, "test oai auth error no header", nil, false)
+	require.Equal(t, http.StatusUnauthorized, rrNoAuth.Code)
+	require.Empty(t, rrNoAuth.Header().Get("WWW-Authenticate"))
+}
+
+// Note: The t.Run("Missing operation_id field", ...) block was moved back into TestHandleToolRequest_InvalidRequestBody.
+// The unregisterTestTool call and the end of TestHandleToolRequest_InvalidRequestBody were also part of that move.
 
 func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 	// 1. Setup: DB, services, user, app, API key
