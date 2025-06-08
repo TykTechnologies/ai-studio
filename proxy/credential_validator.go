@@ -47,51 +47,75 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
+			// First try OAuth access token lookup
 			accessTokenService := services.NewAccessTokenService(cv.service.GetDB())
 			accessToken, err := accessTokenService.GetValidAccessTokenByToken(tokenString)
-			if err != nil {
-				respondWithError(w, http.StatusUnauthorized, "Invalid or expired access token", err, true)
+			if err == nil {
+				// Valid OAuth access token
+				user, err := cv.service.GetUserByID(accessToken.UserID)
+				if err != nil {
+					respondWithError(w, http.StatusInternalServerError, "Could not retrieve user for token", err, false)
+					return
+				}
+
+				oauthClientService := services.NewOAuthClientService(cv.service.GetDB())
+				oauthClient, err := oauthClientService.GetClient(accessToken.ClientID)
+				if err != nil {
+					respondWithError(w, http.StatusInternalServerError, "Could not retrieve client for token", err, false)
+					return
+				}
+
+				ctx := context.WithValue(r.Context(), "user", user)
+				ctx = context.WithValue(ctx, "oauthClient", oauthClient)
+				ctx = context.WithValue(ctx, "scope", accessToken.Scope)
+
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			// Use GetUserByID directly from the main service if available on the interface,
-			// or ensure UserService is correctly instantiated if it's a separate component.
-			// Based on services/user_service.go, GetUserByID is a method on *Service.
-			// cv.service is ServiceInterface. ServiceInterface has GetUserByID.
-			user, err := cv.service.GetUserByID(accessToken.UserID)
-			if err != nil {
-				respondWithError(w, http.StatusInternalServerError, "Could not retrieve user for token", err, false)
-				return
+			// If OAuth token lookup failed, try app secret lookup (for MCP OAuth)
+			cred, err := cv.service.GetCredentialBySecret(tokenString)
+			if err == nil && cred.Active {
+				app, err := cv.service.GetAppByCredentialID(cred.ID)
+				if err == nil {
+					// Valid app secret - add app to context like API key flow
+					ctx := context.WithValue(r.Context(), "app", app)
+					
+					// For tool requests, validate the app has access to the tool
+					pathParts := strings.Split(r.URL.Path, "/")
+					if len(pathParts) >= 3 && pathParts[1] == "tools" {
+						toolSlug := pathParts[2]
+						tool, err := cv.service.GetToolBySlug(toolSlug)
+						if err != nil {
+							respondWithError(w, http.StatusNotFound, "Tool not found", err, false)
+							return
+						}
+						
+						// Check if app has access to this tool
+						hasAccess := false
+						for _, t := range app.Tools {
+							if t.ID == tool.ID {
+								hasAccess = true
+								break
+							}
+						}
+						
+						if !hasAccess {
+							respondWithError(w, http.StatusForbidden, "App does not have access to this tool", nil, false)
+							return
+						}
+						
+						ctx = context.WithValue(ctx, "tool", tool)
+						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
+					}
+					
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 			}
 
-			oauthClientService := services.NewOAuthClientService(cv.service.GetDB())
-			oauthClient, err := oauthClientService.GetClient(accessToken.ClientID)
-			if err != nil {
-				respondWithError(w, http.StatusInternalServerError, "Could not retrieve client for token", err, false)
-				return
-			}
-
-			// At this point, user is authenticated via Bearer token.
-			// We need to decide what to put in context.
-			// The existing API key flow puts an *models.App in context.
-			// For OAuth, we have a *models.User and *models.OAuthClient.
-			// For simplicity, we can place the User in context.
-			// If proxy logic specifically needs an *App-like structure, we might need an adapter
-			// or modify proxy logic to handle *User or *OAuthClient.
-
-			// For now, let's add user and oauthClient to context.
-			// Proxy handlers might need adjustment if they expect *models.App.
-			ctx := context.WithValue(r.Context(), "user", user)
-			ctx = context.WithValue(ctx, "oauthClient", oauthClient)
-			// Add scope to context if needed: ctx = context.WithValue(ctx, "scope", accessToken.Scope)
-
-			// TODO: Check if the user/client has access to the specific resource (llmSlug, toolSlug, etc.)
-			// This part is analogous to CheckCredential's permission checking for API keys.
-			// For now, if token is valid, we allow access. Granular resource access control is a further step.
-			// This might involve checking user's group permissions or if the OAuthClient is tied to specific resources.
-			// For now, we'll assume valid token = access to requested resource if path matches a known type.
-
-			next.ServeHTTP(w, r.WithContext(ctx))
+			// Both OAuth token and app secret lookups failed
+			respondWithError(w, http.StatusUnauthorized, "Invalid or expired bearer token", nil, true)
 			return
 		}
 

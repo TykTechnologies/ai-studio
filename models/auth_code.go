@@ -18,4 +18,5 @@ type AuthCode struct {
 	CodeChallenge       string    `gorm:"type:varchar(255)"` // For PKCE
 	CodeChallengeMethod string    `gorm:"type:varchar(50)"`  // For PKCE (e.g., "S256")
 	Used                bool      `gorm:"default:false"`
+	AppID               *uint     `gorm:"column:app_id"` // Selected app ID for MCP OAuth
 }
