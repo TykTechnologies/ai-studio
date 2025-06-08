@@ -87,7 +87,8 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						toolSlug := pathParts[2]
 						tool, err := cv.service.GetToolBySlug(toolSlug)
 						if err != nil {
-							respondWithError(w, http.StatusNotFound, "Tool not found", err, false)
+							// Return 401 for security - don't leak whether tool exists
+							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
 							return
 						}
 						
@@ -101,7 +102,8 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						}
 						
 						if !hasAccess {
-							respondWithError(w, http.StatusForbidden, "App does not have access to this tool", nil, false)
+							// Return 401 for security - don't leak tool access info
+							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
 							return
 						}
 						
