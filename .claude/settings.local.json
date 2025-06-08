@@ -8,7 +8,8 @@
       "Bash(grep:*)",
       "Bash(gofmt:*)",
       "Bash(find:*)",
-      "Bash(go run:*)"
+      "Bash(go run:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
