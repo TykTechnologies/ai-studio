@@ -102,7 +102,6 @@ type Config struct {
 	Port int
 }
 
-var globalProxyInstance *Proxy
 
 func NewProxy(service *services.Service, cfg *Config, budgetService *services.BudgetService) *Proxy {
 	p := &Proxy{
@@ -137,13 +136,9 @@ func NewProxy(service *services.Service, cfg *Config, budgetService *services.Bu
 	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
 	p.modelValidator = modelVal
 
-	p.setGlobalProxyInstance()
 	return p
 }
 
-func (p *Proxy) setGlobalProxyInstance() {
-	globalProxyInstance = p
-}
 
 func (p *Proxy) Start() error {
 	if err := p.loadResources(); err != nil {
@@ -349,19 +344,10 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 	if status == http.StatusUnauthorized && wwwAuthenticate {
 		appConf := config.Get()
 		metadataURL := appConf.ProxyOAuthMetadataURL
-		if metadataURL == "" {
-			if globalProxyInstance != nil && globalProxyInstance.config != nil && globalProxyInstance.config.Port > 0 {
-				currentScheme := "http"
-				currentHost := "localhost:" + strconv.Itoa(globalProxyInstance.config.Port)
-				metadataURL = fmt.Sprintf("%s://%s/.well-known/oauth-protected-resource", currentScheme, currentHost)
-				slog.Warn("PROXY_OAUTH_METADATA_URL not set in config. WWW-Authenticate using constructed fallback.", "url", metadataURL)
-			} else {
-				slog.Error("PROXY_OAUTH_METADATA_URL not set and cannot construct fallback. WWW-Authenticate header may be incomplete or missing metadata_uri.")
-				w.Header().Set("WWW-Authenticate", `Bearer realm="MCPResources"`) // Minimal header
-			}
-		}
 		if metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"MCPResources\", resource_metadata_uri=\"%s\"", metadataURL))
+		} else {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="MCPResources"`)
 		}
 	}
 	w.WriteHeader(status)
@@ -380,19 +366,10 @@ func respondWithOAIError(w http.ResponseWriter, status int, message string, err 
 	if status == http.StatusUnauthorized && wwwAuthenticate {
 		appConf := config.Get()
 		metadataURL := appConf.ProxyOAuthMetadataURL
-		if metadataURL == "" {
-			if globalProxyInstance != nil && globalProxyInstance.config != nil && globalProxyInstance.config.Port > 0 {
-				currentScheme := "http"
-				currentHost := "localhost:" + strconv.Itoa(globalProxyInstance.config.Port)
-				metadataURL = fmt.Sprintf("%s://%s/.well-known/oauth-protected-resource", currentScheme, currentHost)
-				slog.Warn("PROXY_OAUTH_METADATA_URL not set in config. WWW-Authenticate for OAIError using constructed fallback.", "url", metadataURL)
-			} else {
-				slog.Error("PROXY_OAUTH_METADATA_URL not set and cannot construct fallback for OAIError. WWW-Authenticate header will be incomplete or missing metadata_uri.")
-				w.Header().Set("WWW-Authenticate", `Bearer realm="MCPResources"`) // Minimal header
-			}
-		}
 		if metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"MCPResources\", resource_metadata_uri=\"%s\"", metadataURL))
+		} else {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="MCPResources"`)
 		}
 	}
 	w.WriteHeader(status)
