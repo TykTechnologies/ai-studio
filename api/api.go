@@ -180,6 +180,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 				return
 			}
 
+			// Skip OAuth endpoints - they don't need CSRF protection
+			if strings.HasPrefix(c.Request.URL.Path, "/oauth/") {
+				c.Next()
+				return
+			}
+
 			csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				c.Request = r
 				c.Next()

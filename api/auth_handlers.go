@@ -513,17 +513,7 @@ type RegisterOAuthClientOutput struct {
 // @Failure 500 {object} ErrorResponse
 // @Router /oauth/register_client [post]
 func (a *API) handleRegisterOAuthClient(c *gin.Context) {
-	// Set explicit CORS headers to allow * origins
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	c.Header("Access-Control-Max-Age", "43200") // 12 hours
-
-	// Handle preflight requests
-	if c.Request.Method == "OPTIONS" {
-		c.Status(http.StatusOK)
-		return
-	}
+	// OAuth endpoints should not have CORS restrictions - designed for machine-to-machine communication
 	var input RegisterOAuthClientInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -535,9 +525,9 @@ func (a *API) handleRegisterOAuthClient(c *gin.Context) {
 		return
 	}
 
-	// For now, create clients without user association (userID = 0)
+	// For now, create clients without user association (userID = nil for system clients)
 	// Auth will be added later as mentioned
-	var userID uint = 0
+	var userID *uint = nil
 
 	// Default token endpoint auth method if not provided
 	tokenAuthMethod := input.TokenEndpointAuthMethod

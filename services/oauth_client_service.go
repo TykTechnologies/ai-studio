@@ -25,12 +25,12 @@ func NewOAuthClientService(db *gorm.DB) *OAuthClientService {
 // CreateClient creates a new OAuth client.
 // It returns the client object and the plain text client secret (which should be shown to the user once).
 // For public clients (isPublic=true), no client secret is generated.
-func (s *OAuthClientService) CreateClient(name string, redirectURIs []string, userID uint, scope string) (*models.OAuthClient, string, error) {
+func (s *OAuthClientService) CreateClient(name string, redirectURIs []string, userID *uint, scope string) (*models.OAuthClient, string, error) {
 	return s.CreateClientWithAuthMethod(name, redirectURIs, userID, scope, "client_secret_post")
 }
 
 // CreateClientWithAuthMethod creates a new OAuth client with specified auth method.
-func (s *OAuthClientService) CreateClientWithAuthMethod(name string, redirectURIs []string, userID uint, scope string, authMethod string) (*models.OAuthClient, string, error) {
+func (s *OAuthClientService) CreateClientWithAuthMethod(name string, redirectURIs []string, userID *uint, scope string, authMethod string) (*models.OAuthClient, string, error) {
 	// Generate unique ClientID
 	rawClientID := make([]byte, 16) // 128-bit
 	if _, err := rand.Read(rawClientID); err != nil {
