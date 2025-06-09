@@ -232,14 +232,26 @@ func getConfigFromEnv() *AppConf {
 
 	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
 	if conf.AuthServerURL == "" {
-		log.Println("Warning: AUTH_SERVER_URL environment variable is not set, defaulting to http://localhost:3000")
-		conf.AuthServerURL = "http://localhost:3000"
+		if conf.SiteURL != "" {
+			conf.AuthServerURL = conf.SiteURL
+			log.Printf("AUTH_SERVER_URL not set, using SITE_URL: %s", conf.AuthServerURL)
+		} else {
+			conf.AuthServerURL = "http://localhost:3000"
+			log.Println("Warning: AUTH_SERVER_URL and SITE_URL not set, defaulting to http://localhost:3000")
+		}
 	}
 
 	conf.ProxyOAuthMetadataURL = os.Getenv("PROXY_OAUTH_METADATA_URL")
 	if conf.ProxyOAuthMetadataURL == "" {
-		log.Println("Warning: PROXY_OAUTH_METADATA_URL environment variable is not set, defaulting to http://localhost:9090/.well-known/oauth-protected-resource")
-		conf.ProxyOAuthMetadataURL = "http://localhost:9090/.well-known/oauth-protected-resource"
+		var baseURL string
+		if conf.ProxyURL != "" {
+			baseURL = conf.ProxyURL
+			log.Printf("PROXY_OAUTH_METADATA_URL not set, using PROXY_URL: %s", baseURL)
+		} else {
+			baseURL = "http://localhost:9090"
+			log.Println("Warning: PROXY_OAUTH_METADATA_URL and PROXY_URL not set, defaulting to http://localhost:9090")
+		}
+		conf.ProxyOAuthMetadataURL = baseURL + "/.well-known/oauth-protected-resource"
 	}
 
 	return conf
