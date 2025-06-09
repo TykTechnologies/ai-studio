@@ -268,17 +268,17 @@ flowchart TD
   * `DELETE /chat-sessions/{session_id}/tools/{tool_id}`: Remove a tool from a chat session.
 
 * **Model Context Protocol (MCP) Integration:**
-  * `POST /tools/{toolSlug}/mcp`: StreamableHTTP endpoint for modern MCP clients.
-  * `GET /tools/{toolSlug}/mcp/sse`: SSE endpoint for legacy MCP clients.
-  * `POST /tools/{toolSlug}/mcp/message`: Message endpoint for legacy MCP clients.
+  * `POST /tools/{toolSlug}/mcp`: Default MCP endpoint using StreamableHTTP format for modern clients.
+  * `GET /tools/{toolSlug}/mcp/sse`: SSE endpoint for older/legacy MCP clients.
+  * `POST /tools/{toolSlug}/mcp/message`: Message endpoint for older/legacy MCP clients.
 
 **6. Model Context Protocol (MCP) Support**
 
 The Tool System provides native integration with the Model Context Protocol (MCP), enabling seamless connectivity with MCP-compatible AI clients such as Claude Desktop, VS Code, Zed, and other AI applications.
 
 * **Dual Transport Support:**
-  * **StreamableHTTP Transport:** Modern, efficient single-endpoint transport (`/tools/{toolSlug}/mcp`) recommended for new integrations.
-  * **SSE Transport:** Legacy dual-endpoint transport (`/tools/{toolSlug}/mcp/sse` + `/tools/{toolSlug}/mcp/message`) for backward compatibility.
+  * **StreamableHTTP Transport (Default):** Modern, efficient single-endpoint transport (`/tools/{toolSlug}/mcp`) using streamable HTTP format. This is the recommended default endpoint for all new MCP client integrations.
+  * **SSE Transport (Legacy):** Dual-endpoint transport (`/tools/{toolSlug}/mcp/sse` + `/tools/{toolSlug}/mcp/message`) for older MCP clients that require Server-Sent Events compatibility.
 
 * **Automatic Tool Conversion:**
   * Tools with OpenAPI specifications are automatically converted to MCP-compatible tool definitions.
