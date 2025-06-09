@@ -416,7 +416,7 @@ const ToolDocumentationPage = () => {
             })()}
           </CodeBlock>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Use this URL with Bearer token authentication in the Authorization header. This endpoint supports both StreamableHTTP (recommended) and SSE transports.
+            This is the default MCP endpoint using StreamableHTTP format. Use this URL with Bearer token authentication in the Authorization header. For older clients that require SSE transport, use <code>/mcp/sse</code> instead.
           </Typography>
         </Box>
 
@@ -499,13 +499,13 @@ const ToolDocumentationPage = () => {
               </Typography>
               
               <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                StreamableHTTP Transport (Recommended)
+                StreamableHTTP Transport (Default)
               </Typography>
               <CodeBlock index="nodejs-mcp-streamable" fontSize="0.85rem">
 {`import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamable.js';
 
-// Create StreamableHTTP transport (recommended)
+// Create StreamableHTTP transport (default endpoint)
 const transport = new StreamableHTTPClientTransport(
   new URL('${(() => {
     const config = getConfig();
@@ -547,13 +547,13 @@ const response = await client.callTool({
               </CodeBlock>
               
               <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold', mt: 2 }}>
-                SSE Transport (Legacy Support)
+                SSE Transport (For Older Clients)
               </Typography>
               <CodeBlock index="nodejs-mcp-sse" fontSize="0.85rem">
 {`import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
-// Create SSE transport (for legacy compatibility)
+// Create SSE transport (for older clients that don't support StreamableHTTP)
 const transport = new SSEClientTransport(
   new URL('${(() => {
     const config = getConfig();
@@ -595,8 +595,8 @@ await client.connect(transport);`}
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography variant="body2">
             <strong>Note:</strong> MCP support allows this tool to be used directly within AI applications that support the Model Context Protocol. 
-            The tool's operations are automatically converted to MCP-compatible schemas. The endpoint supports both StreamableHTTP (modern, single endpoint) 
-            and SSE (legacy, dual endpoint) transports. Authentication is handled via Bearer tokens in the Authorization header for secure and standard authentication.
+            The tool's operations are automatically converted to MCP-compatible schemas. The default <code>/mcp</code> endpoint uses StreamableHTTP format (modern, single endpoint), 
+            while the <code>/mcp/sse</code> endpoint provides SSE transport for older clients. Authentication is handled via Bearer tokens in the Authorization header for secure and standard authentication.
           </Typography>
         </Alert>
       </Paper>
