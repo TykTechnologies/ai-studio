@@ -396,6 +396,32 @@ func TestHandleOAuthToken_ValidCode(t *testing.T) {
 	require.NoError(t, dbUser.SetPassword("password123"))
 	require.NoError(t, testDB.Create(&dbUser).Error)
 
+	// Create a tool and app for the user
+	dummyTool := &models.Tool{
+		Name:         "Test Token Tool",
+		Description:  "Test tool for token test",
+		ToolType:     models.ToolTypeREST,
+		PrivacyScore: 5,
+	}
+	require.NoError(t, testDB.Create(dummyTool).Error)
+
+	testService := services.NewService(testDB)
+	testApp, err := testService.CreateApp(
+		"Test Token App",
+		"Test app for token",
+		dbUser.ID,
+		[]uint{},             // no datasources
+		[]uint{},             // no LLMs
+		[]uint{dummyTool.ID}, // one tool
+		nil,                  // no budget
+		nil,                  // no budget start date
+	)
+	require.NoError(t, err)
+	require.NotNil(t, testApp)
+
+	// Activate the app's credential
+	require.NoError(t, testDB.Model(&models.Credential{}).Where("id = ?", testApp.CredentialID).Update("active", true).Error)
+
 	oauthClientService := services.NewOAuthClientService(testDB)
 	client, plainSecret, err := oauthClientService.CreateClient("TokenTestClient", []string{"http://client.example.com/cb"}, dbUser.ID, "mcp")
 	require.NoError(t, err)
@@ -406,6 +432,7 @@ func TestHandleOAuthToken_ValidCode(t *testing.T) {
 	codeArgs := services.CreateAuthCodeArgs{
 		ClientID: client.ClientID, UserID: dbUser.ID, RedirectURI: "http://client.example.com/cb",
 		Scope: "mcp", ExpiresIn: 10 * time.Minute, CodeChallenge: realChallenge, CodeChallengeMethod: "S256",
+		AppID: &testApp.ID, // Associate with the created app
 	}
 	authCodeInstance, codeValue, err := authCodeService.CreateAuthCode(codeArgs)
 	require.NoError(t, err)
@@ -479,6 +506,32 @@ func TestHandleSubmitConsent_Approved(t *testing.T) {
 	mockAuthSvc.SimulateAuthenticatedUser = currentUser
 	mockAuthSvc.SimulateAuthError = nil
 
+	// Create a tool and app for the user
+	dummyTool := &models.Tool{
+		Name:         "Test Consent Tool",
+		Description:  "Test tool for consent test",
+		ToolType:     models.ToolTypeREST,
+		PrivacyScore: 5,
+	}
+	require.NoError(t, testDB.Create(dummyTool).Error)
+
+	testService := services.NewService(testDB)
+	testApp, err := testService.CreateApp(
+		"Test Consent App",
+		"Test app for consent",
+		currentUser.ID,
+		[]uint{},             // no datasources
+		[]uint{},             // no LLMs
+		[]uint{dummyTool.ID}, // one tool
+		nil,                  // no budget
+		nil,                  // no budget start date
+	)
+	require.NoError(t, err)
+	require.NotNil(t, testApp)
+
+	// Activate the app's credential
+	require.NoError(t, testDB.Model(&models.Credential{}).Where("id = ?", testApp.CredentialID).Update("active", true).Error)
+
 	clientSvc := services.NewOAuthClientService(testDB)
 	client, _, _ := clientSvc.CreateClient("ConsentSubmitClient", []string{"http://client.com/cb"}, currentUser.ID, "mcp")
 	pendingSvc := services.NewPendingAuthRequestService(testDB)
@@ -487,7 +540,7 @@ func TestHandleSubmitConsent_Approved(t *testing.T) {
 		Scope: "mcp", ExpiresIn: 5 * time.Minute, CodeChallenge: "ch", CodeChallengeMethod: "S256",
 	}
 	pendingReq, _ := pendingSvc.StorePendingAuthRequest(pendingReqArgs)
-	input := SubmitConsentInput{AuthRequestID: pendingReq.ID, Decision: "approved"}
+	input := SubmitConsentInput{AuthRequestID: pendingReq.ID, Decision: "approved", SelectedAppID: testApp.ID}
 	w := performOAuthRequest(router, "POST", "/oauth/submit_consent", input, nil)
 	require.Equal(t, http.StatusFound, w.Code)
 	location := w.Header().Get("Location")
