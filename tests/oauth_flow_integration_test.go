@@ -222,7 +222,7 @@ func TestDCRFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, dbClient)
 	require.Equal(t, "Test DCR Client", dbClient.ClientName)
-	require.Equal(t, uint(0), dbClient.UserID) // Note: Current DCR implementation doesn't associate with user
+	require.Nil(t, dbClient.UserID) // Note: Current DCR implementation doesn't associate with user
 
 	// Check if secret is hashed in DB (cannot directly compare plain to hash here without bcrypt)
 	require.NotEmpty(t, dbClient.ClientSecret)
@@ -248,7 +248,7 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 	oauthClientSvc := services.NewOAuthClientService(testDB)
 	redirectURI := proxyURL + "/test/callback" // Dummy callback for proxy based test
 	registeredClient, plainClientSecret, err := oauthClientSvc.CreateClient(
-		"TestFlowClient", []string{redirectURI}, testUser.ID, "mcp profile",
+		"TestFlowClient", []string{redirectURI}, &testUser.ID, "mcp profile",
 	)
 	require.NoError(t, err)
 	clientID := registeredClient.ClientID

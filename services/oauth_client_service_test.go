@@ -28,7 +28,7 @@ func TestOAuthClientService(t *testing.T) {
 		redirectURIs := []string{"http://localhost:8080/callback", "https://example.com/oauth"}
 		scope := "mcp openid"
 
-		client, secret, err := service.CreateClient(clientName, redirectURIs, testUser.ID, scope)
+		client, secret, err := service.CreateClient(clientName, redirectURIs, &testUser.ID, scope)
 		require.NoError(t, err)
 		require.NotNil(t, client)
 		require.NotEmpty(t, secret)
@@ -45,7 +45,8 @@ func TestOAuthClientService(t *testing.T) {
 
 		require.Equal(t, clientName, client.ClientName)
 		require.Equal(t, strings.Join(redirectURIs, ","), client.RedirectURIs)
-		require.Equal(t, testUser.ID, client.UserID)
+		require.NotNil(t, client.UserID)
+		require.Equal(t, testUser.ID, *client.UserID)
 		require.Equal(t, scope, client.Scope)
 
 		// Verify it's in DB

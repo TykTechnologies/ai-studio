@@ -343,7 +343,7 @@ func TestHandleOAuthAuthorize_SuccessRedirectsToConsent(t *testing.T) {
 	mockAuthSvc.SimulateAuthError = nil
 
 	clientSvc := services.NewOAuthClientService(testDB)
-	testClient, _, err := clientSvc.CreateClient("AuthzTestClient", []string{"http://client.example.com/callback"}, currentUser.ID, "mcp")
+	testClient, _, err := clientSvc.CreateClient("AuthzTestClient", []string{"http://client.example.com/callback"}, &currentUser.ID, "mcp")
 	require.NoError(t, err)
 
 	appConf := config.Get()
@@ -423,7 +423,7 @@ func TestHandleOAuthToken_ValidCode(t *testing.T) {
 	require.NoError(t, testDB.Model(&models.Credential{}).Where("id = ?", testApp.CredentialID).Update("active", true).Error)
 
 	oauthClientService := services.NewOAuthClientService(testDB)
-	client, plainSecret, err := oauthClientService.CreateClient("TokenTestClient", []string{"http://client.example.com/cb"}, dbUser.ID, "mcp")
+	client, plainSecret, err := oauthClientService.CreateClient("TokenTestClient", []string{"http://client.example.com/cb"}, &dbUser.ID, "mcp")
 	require.NoError(t, err)
 
 	authCodeService := services.NewAuthCodeService(testDB)
@@ -482,7 +482,7 @@ func TestHandleGetConsentDetails_Success(t *testing.T) {
 	mockAuthSvc.SimulateAuthError = nil
 
 	clientSvc := services.NewOAuthClientService(testDB)
-	client, _, _ := clientSvc.CreateClient("ConsentTestClient", []string{"http://cb"}, currentUser.ID, "mcp profile")
+	client, _, _ := clientSvc.CreateClient("ConsentTestClient", []string{"http://cb"}, &currentUser.ID, "mcp profile")
 	pendingSvc := services.NewPendingAuthRequestService(testDB)
 	pendingReqArgs := services.StorePendingAuthRequestArgs{
 		ClientID: client.ClientID, UserID: currentUser.ID, RedirectURI: "http://cb", Scope: "mcp profile",
@@ -533,7 +533,7 @@ func TestHandleSubmitConsent_Approved(t *testing.T) {
 	require.NoError(t, testDB.Model(&models.Credential{}).Where("id = ?", testApp.CredentialID).Update("active", true).Error)
 
 	clientSvc := services.NewOAuthClientService(testDB)
-	client, _, _ := clientSvc.CreateClient("ConsentSubmitClient", []string{"http://client.com/cb"}, currentUser.ID, "mcp")
+	client, _, _ := clientSvc.CreateClient("ConsentSubmitClient", []string{"http://client.com/cb"}, &currentUser.ID, "mcp")
 	pendingSvc := services.NewPendingAuthRequestService(testDB)
 	pendingReqArgs := services.StorePendingAuthRequestArgs{
 		ClientID: client.ClientID, UserID: currentUser.ID, RedirectURI: "http://client.com/cb", State: "s123",
@@ -557,7 +557,7 @@ func TestHandleSubmitConsent_Denied(t *testing.T) {
 	mockAuthSvc.SimulateAuthError = nil
 
 	clientSvc := services.NewOAuthClientService(testDB)
-	client, _, _ := clientSvc.CreateClient("ConsentDenyClient", []string{"http://client.deny.com/cb"}, currentUser.ID, "mcp")
+	client, _, _ := clientSvc.CreateClient("ConsentDenyClient", []string{"http://client.deny.com/cb"}, &currentUser.ID, "mcp")
 	pendingSvc := services.NewPendingAuthRequestService(testDB)
 	pendingReqArgs := services.StorePendingAuthRequestArgs{
 		ClientID: client.ClientID, UserID: currentUser.ID, RedirectURI: "http://client.deny.com/cb", State: "denystate",
