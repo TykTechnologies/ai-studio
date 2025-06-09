@@ -5,26 +5,61 @@ import (
 	"gorm.io/gorm"
 )
 
-// func fixLLMChatRecordIDs(db *gorm.DB) error {
-// 	// Update anthropic chat records
-// 	if err := db.Exec(`
-// 		UPDATE llm_chat_records
-// 		SET interaction_type = 'proxy',
-// 		    name = 'claude-3-5-sonnet-20241022',
-// 		    currency = 'USD'
-// 		WHERE llm_id = 5
-// 	`).Error; err != nil {
-// 		return err
-// 	}
+func fixOAuthClientUserIDConstraint(db *gorm.DB) error {
+	// Check if we're using PostgreSQL
+	dialect := db.Dialector.Name()
+	if dialect != "postgres" {
+		// SQLite and other databases don't have the same strict constraint issues
+		return nil
+	}
 
-// 	return nil
-// }
+	// For PostgreSQL, we need to alter the user_id column to allow NULL values
+	// Check if the constraint exists first
+	var constraintExists bool
+	err := db.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.table_constraints 
+			WHERE constraint_name = 'fk_o_auth_clients_user' 
+			AND table_name = 'o_auth_clients'
+		)
+	`).Scan(&constraintExists).Error
+	
+	if err != nil {
+		return err
+	}
+
+	if constraintExists {
+		// Drop the foreign key constraint temporarily
+		if err := db.Exec(`ALTER TABLE o_auth_clients DROP CONSTRAINT IF EXISTS fk_o_auth_clients_user`).Error; err != nil {
+			return err
+		}
+	}
+
+	// Make user_id column nullable
+	if err := db.Exec(`ALTER TABLE o_auth_clients ALTER COLUMN user_id DROP NOT NULL`).Error; err != nil {
+		return err
+	}
+
+	// Re-add the foreign key constraint but allow NULL values
+	if err := db.Exec(`
+		ALTER TABLE o_auth_clients 
+		ADD CONSTRAINT fk_o_auth_clients_user 
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	`).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func InitModels(db *gorm.DB) error {
-	// Fix LLM chat record IDs
-	// fixLLMChatRecordIDs(db)
+	// Fix OAuth client user_id constraint for PostgreSQL
+	err := fixOAuthClientUserIDConstraint(db)
+	if err != nil {
+		return err
+	}
 
-	err := db.AutoMigrate(
+	err = db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done
 		&LLM{},       //Done
