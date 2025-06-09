@@ -72,7 +72,7 @@ func TestCredentialValidatorMiddleware(t *testing.T) {
 	require.NoError(t, db.Create(&testUser).Error)
 
 	oauthClientSvc := services.NewOAuthClientService(db)
-	oauthClient, _, err := oauthClientSvc.CreateClient("BearerTestClient", []string{"http://dummy/cb"}, testUser.ID, "mcp")
+	oauthClient, _, err := oauthClientSvc.CreateClient("BearerTestClient", []string{"http://dummy/cb"}, &testUser.ID, "mcp")
 	require.NoError(t, err)
 
 	apiKeyUser := models.User{Email: "apikeyuser@example.com", Name: "APIKey User"}
