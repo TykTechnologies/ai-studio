@@ -168,14 +168,14 @@ func RecordContentMessage(
 		cpit*float64(promptTokens) +
 		price.CacheWritePT*float64(rec.CacheWritePromptTokens) +
 		price.CacheReadPT*float64(rec.CacheReadPromptTokens)
-	
+
 	slog.Debug("Calculated cost before scaling",
 		"cost", cost,
 		"responseTokens", responseTokens,
 		"promptTokens", promptTokens,
 		"cacheWriteTokens", rec.CacheWritePromptTokens,
 		"cacheReadTokens", rec.CacheReadPromptTokens)
-	
+
 	rec.Cost = cost * 10000
 	rec.Currency = price.Currency
 	rec.InteractionType = models.ChatInteraction
@@ -300,7 +300,7 @@ func StartRecording(ctx context.Context, db *gorm.DB) {
 						"model", record.Name,
 						"app_id", record.AppID,
 						"llm_id", record.LLMID,
-						"cost_raw", record.Cost,        // Raw value (e.g., 250000.0)
+						"cost_raw", record.Cost, // Raw value (e.g., 250000.0)
 						"cost_adjusted", record.Cost/10000, // Human-readable (e.g., 25.0)
 						"timestamp", record.TimeStamp)
 				}

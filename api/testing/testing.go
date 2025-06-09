@@ -52,9 +52,9 @@ func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",
-		CookieSecure:        true,
+		CookieSecure:        false, // Allow cookies over HTTP in tests
 		CookieHTTPOnly:      true,
-		CookieSameSite:      http.SameSiteStrictMode,
+		CookieSameSite:      http.SameSiteLaxMode, // Less restrictive for tests
 		ResetTokenExpiry:    3600,
 		FrontendURL:         "http://example.com",
 		RegistrationAllowed: true,
