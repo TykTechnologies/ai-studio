@@ -96,7 +96,7 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 		llm, ok := p.GetLLM(llmSlug)
 		if !ok {
 			errMsg := fmt.Sprintf("[modelValidator] LLM '%s' not found", llmSlug)
-			respondWithError(w, http.StatusNotFound, errMsg, nil)
+			respondWithError(w, http.StatusNotFound, errMsg, nil, false)
 			return
 		}
 
@@ -107,7 +107,7 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Failed to read request body", err)
+			respondWithError(w, http.StatusBadRequest, "Failed to read request body", err, false)
 			return
 		}
 		r.Body.Close()
@@ -115,7 +115,7 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 
 		extractor, ok := validator.extractors[strings.ToLower(string(llm.Vendor))]
 		if !ok {
-			respondWithError(w, http.StatusBadRequest, "no model extractor for this vendor", nil)
+			respondWithError(w, http.StatusBadRequest, "no model extractor for this vendor", nil, false)
 			return
 		}
 
@@ -123,17 +123,17 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			switch e := err.(type) {
 			case *ValidationError:
-				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Model validation failed: %s", e.Error()), nil)
+				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Model validation failed: %s", e.Error()), nil, false)
 			case *BadRequestError:
-				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Bad request: %s", e.Error()), nil)
+				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Bad request: %s", e.Error()), nil, false)
 			default:
-				respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
+				respondWithError(w, http.StatusInternalServerError, "Internal server error", err, false)
 			}
 			return
 		}
 
 		if !validator.IsModelAllowed(model) {
-			respondWithError(w, http.StatusForbidden, fmt.Sprintf("model '%s' is not allowed", model), nil)
+			respondWithError(w, http.StatusForbidden, fmt.Sprintf("model '%s' is not allowed", model), nil, false)
 			return
 		}
 

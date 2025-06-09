@@ -644,7 +644,7 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 			// Skip operations that can't be found in the spec (log warning but don't fail)
 			continue
 		}
-		
+
 		operationDetailsList = append(operationDetailsList, operationDetail)
 	}
 
@@ -801,42 +801,42 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 	if err != nil {
 		return OperationDetail{}, fmt.Errorf("failed to create universal client: %w", err)
 	}
-	
+
 	// First get the tool definition using the existing AsTool method
 	tools, err := client.AsTool(operationID)
 	if err != nil || len(tools) == 0 {
 		return OperationDetail{}, fmt.Errorf("failed to get tool definition: %w", err)
 	}
-	
+
 	// Find the operation in the OpenAPI spec
 	config := &datamodel.DocumentConfiguration{
 		AllowFileReferences:   false,
 		AllowRemoteReferences: false,
-		BaseURL:              nil,
-		RemoteURLHandler:     nil,
+		BaseURL:               nil,
+		RemoteURLHandler:      nil,
 	}
 	doc, err := libopenapi.NewDocumentWithConfiguration(oasSpec, config)
 	if err != nil {
 		return OperationDetail{}, fmt.Errorf("failed to parse OAS spec: %w", err)
 	}
-	
+
 	// Build a V3 model
 	model, errs := doc.BuildV3Model()
 	if len(errs) > 0 {
 		return OperationDetail{}, fmt.Errorf("failed to build V3 model: %v", errs)
 	}
-	
+
 	// Find the operation by ID
 	var foundPath string
 	var foundOperation *v3.Operation
-	
+
 	// Iterate through all paths and operations to find the one with matching ID
 	for pair := model.Model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
 		path := pair.Key()
 		pathItem := pair.Value()
-		
+
 		operationsMap := pathItem.GetOperations()
-		
+
 		// Use a for loop with known methods since GetOperations doesn't return a standard Go map
 		for _, method := range []string{"get", "post", "put", "delete", "options", "head", "patch", "trace"} {
 			// Access the operation from the operationsMap using the Get method
@@ -850,16 +850,16 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 				break
 			}
 		}
-		
+
 		if foundOperation != nil {
 			break
 		}
 	}
-	
+
 	if foundOperation == nil {
 		return OperationDetail{}, fmt.Errorf("operation %s not found in spec", operationID)
 	}
-	
+
 	// Create the OperationDetail
 	opDetail := OperationDetail{
 		OperationID: operationID,
@@ -868,11 +868,11 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 		Description: foundOperation.Description,
 		Parameters:  []ParameterDetail{},
 	}
-	
+
 	// Add parameters
 	for _, param := range foundOperation.Parameters {
 		schemaMap := convertSchemaToGinH(param.Schema.Schema())
-		
+
 		opDetail.Parameters = append(opDetail.Parameters, ParameterDetail{
 			Name:        param.Name,
 			In:          param.In,
@@ -881,12 +881,12 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 			Schema:      schemaMap,
 		})
 	}
-	
+
 	// Add request body if present
 	if foundOperation.RequestBody != nil && foundOperation.RequestBody.Content != nil {
 		if mediaType, ok := foundOperation.RequestBody.Content.Get("application/json"); ok {
 			schemaMap := convertSchemaToGinH(mediaType.Schema.Schema())
-			
+
 			opDetail.RequestBody = RequestBodyDetail{
 				Description: foundOperation.RequestBody.Description,
 				Required:    foundOperation.RequestBody.Required != nil && *foundOperation.RequestBody.Required,
@@ -895,7 +895,7 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 			}
 		}
 	}
-	
+
 	return opDetail, nil
 }
 
@@ -904,21 +904,21 @@ func convertSchemaToGinH(schema *base.Schema) gin.H {
 	if schema == nil {
 		return gin.H{}
 	}
-	
+
 	result := gin.H{}
-	
+
 	if len(schema.Type) > 0 {
 		result["type"] = schema.Type[0]
 	}
-	
+
 	if schema.Description != "" {
 		result["description"] = schema.Description
 	}
-	
+
 	if len(schema.Enum) > 0 {
 		result["enum"] = schema.Enum
 	}
-	
+
 	// Handle Properties
 	if schema.Properties != nil && schema.Properties.Len() > 0 {
 		properties := gin.H{}
@@ -929,16 +929,16 @@ func convertSchemaToGinH(schema *base.Schema) gin.H {
 			result["properties"] = properties
 		}
 	}
-	
+
 	if len(schema.Required) > 0 {
 		result["required"] = schema.Required
 	}
-	
+
 	// Add format if present
 	if schema.Format != "" {
 		result["format"] = schema.Format
 	}
-	
+
 	return result
 }
 
@@ -955,7 +955,7 @@ func convertSchemaToGinH(schema *base.Schema) gin.H {
 // @Router /tools/{id}/user-apps [get]
 func (a *API) getToolUserApps(c *gin.Context) {
 	toolID := c.Param("id")
-	
+
 	// Convert string ID to uint
 	idUint, err := strconv.ParseUint(toolID, 10, 32)
 	if err != nil {
@@ -1009,7 +1009,7 @@ func (a *API) getToolUserApps(c *gin.Context) {
 		Where("apps.user_id = ? AND app_tools.tool_id = ?", currentUser.ID, uint(idUint)).
 		Preload("Credential").
 		Find(&userApps).Error
-		
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -1026,7 +1026,7 @@ func (a *API) getToolUserApps(c *gin.Context) {
 			"name":        app.Name,
 			"description": app.Description,
 		}
-		
+
 		// Include API secret if credential exists and is loaded
 		if app.CredentialID != 0 && app.Credential.Secret != "" {
 			appResponse["api_secret"] = app.Credential.Secret
@@ -1037,12 +1037,12 @@ func (a *API) getToolUserApps(c *gin.Context) {
 				appResponse["api_secret"] = credential.Secret
 			}
 		}
-		
+
 		appResponses = append(appResponses, appResponse)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": appResponses,
+		"data":      appResponses,
 		"tool_name": tool.Name,
 	})
 }

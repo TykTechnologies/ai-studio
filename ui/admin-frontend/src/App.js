@@ -21,6 +21,9 @@ import pubClient from "./admin/utils/pubClient";
 // Themes
 import adminTheme from "./admin/theme";
 
+// Pages (add OAuthConsentPage)
+import OAuthConsentPage from "./portal/pages/OAuthConsentPage";
+
 // Components
 
 // Layouts
@@ -37,6 +40,18 @@ import ResetPassword from "./portal/pages/ResetPassword";
 import NotificationsPage from "./pages/NotificationsPage";
 import ToolDocumentationPage from "./portal/pages/ToolDocumentationPage"; // Import the new page
 import { NotificationProvider } from "./admin/context/NotificationContext";
+
+// Component to redirect OAuth requests to backend
+const BackendRedirect = () => {
+  const backendUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+  const currentPath = window.location.pathname;
+  const queryString = window.location.search;
+  
+  // Redirect to backend URL
+  window.location.href = `${backendUrl}${currentPath}${queryString}`;
+  
+  return <CircularProgress />;
+};
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -184,6 +199,16 @@ function App() {
               path="/auth/reset-password"
               element={<Navigate to="/reset-password" replace state={{ preserveQuery: true }} />}
             />
+
+            {/* OAuth Consent Page Route - public layout, backend handles auth check */}
+            <Route path="/oauth/consent" element={<OAuthConsentPage />} />
+            
+            {/* OAuth Backend Routes - redirect to backend to handle these */}
+            <Route path="/oauth/authorize" element={<BackendRedirect />} />
+            <Route path="/oauth/token" element={<BackendRedirect />} />
+            <Route path="/oauth/register_client" element={<BackendRedirect />} />
+            <Route path="/.well-known/oauth-authorization-server" element={<BackendRedirect />} />
+
 
             {/* Protected Routes with MainLayout */}
             <Route

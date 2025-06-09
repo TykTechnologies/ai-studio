@@ -280,8 +280,8 @@ func GetToolUsageStatistics(db *gorm.DB, startDate, endDate time.Time) (*ChartDa
 func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate time.Time) (*models.MultiAxisChartData, error) {
 	// Get all operations for this tool with their usage over time
 	var results []struct {
-		Date string
-		Name string
+		Date  string
+		Name  string
 		Count int64
 	}
 
@@ -299,7 +299,7 @@ func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate
 	// Build unique date labels and operation names
 	dateSet := make(map[string]bool)
 	operationSet := make(map[string]bool)
-	
+
 	for _, result := range results {
 		dateSet[result.Date] = true
 		operationSet[result.Name] = true
@@ -311,7 +311,7 @@ func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate
 		dates = append(dates, date)
 	}
 	sort.Strings(dates)
-	
+
 	var operations []string
 	for op := range operationSet {
 		operations = append(operations, op)
@@ -338,7 +338,7 @@ func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate
 				data[i] = 0
 			}
 		}
-		
+
 		datasets = append(datasets, models.Dataset{
 			Label: operation,
 			Data:  data,
@@ -497,7 +497,7 @@ func GetTokenUsageForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) 
 		tokenData.Labels[i] = result.Date
 		tokenData.Data[i] = float64(result.Tokens)
 		costData.Labels[i] = result.Date
-		costData.Data[i] = result.Cost/10000
+		costData.Data[i] = result.Cost / 10000
 	}
 
 	return &ChartData{
@@ -602,7 +602,7 @@ func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) 
 	for i, result := range results {
 		response.Labels[i] = result.Date
 		response.TokenUsage[i] = float64(result.Tokens)
-		response.Cost[i] = result.Cost/10000
+		response.Cost[i] = result.Cost / 10000
 	}
 
 	return &ChartData{
@@ -650,7 +650,7 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 	for i, result := range results {
 		response.Labels[i] = result.Date
 		response.TokenUsage[i] = float64(result.Tokens)
-		response.Cost[i] = result.Cost/10000
+		response.Cost[i] = result.Cost / 10000
 	}
 
 	return &ChartData{
@@ -744,7 +744,7 @@ func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, a
 	for i, result := range results {
 		chartData.Labels[i] = result.Date
 		chartData.Datasets[0].Data[i] = float64(result.Tokens)
-		chartData.Datasets[1].Data[i] = result.Cost/10000
+		chartData.Datasets[1].Data[i] = result.Cost / 10000
 		chartData.Datasets[2].Data[i] = float64(result.PromptTokens)
 		chartData.Datasets[3].Data[i] = float64(result.ResponseTokens)
 		chartData.Datasets[4].Data[i] = float64(result.CacheWriteTokens)
@@ -792,7 +792,7 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 	for i, result := range results {
 		chartData.Labels[i] = result.Date
 		chartData.Datasets[0].Data[i] = float64(result.Tokens)
-		chartData.Datasets[1].Data[i] = result.Cost/10000
+		chartData.Datasets[1].Data[i] = result.Cost / 10000
 	}
 
 	return chartData, nil

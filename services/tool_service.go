@@ -89,7 +89,7 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 // GetToolBySlug retrieves a tool by its slug (derived from name)
 func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 	var tool models.Tool
-	
+
 	// Use SQL to find tool by slug directly - much more efficient than O(N) scan
 	err := s.DB.Where("LOWER(REPLACE(name, ' ', '-')) = ?", slug).
 		Preload("FileStores").
@@ -97,7 +97,7 @@ func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 		Preload("Dependencies").
 		Preload("Apps").
 		First(&tool).Error
-	
+
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("tool not found with slug: %s", slug)
@@ -445,7 +445,7 @@ func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
 	specCacheMu.RUnlock()
 
 	cacheExpiry := 30 * time.Minute
-	if exists && cache.toolVersion == tool.UpdatedAt.UnixNano() && 
+	if exists && cache.toolVersion == tool.UpdatedAt.UnixNano() &&
 		time.Since(cache.createdAt) < cacheExpiry {
 		return cache.operations, nil
 	}
@@ -512,7 +512,7 @@ func (s *Service) getCachedUniversalClient(tool *models.Tool, authSchemaName, au
 	clientCacheMu.RUnlock()
 
 	cacheExpiry := 30 * time.Minute
-	if exists && cache.toolVersion == tool.UpdatedAt.UnixNano() && 
+	if exists && cache.toolVersion == tool.UpdatedAt.UnixNano() &&
 		time.Since(cache.createdAt) < cacheExpiry {
 		return cache.client, nil
 	}

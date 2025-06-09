@@ -295,6 +295,31 @@ func (a *API) setupRoutes() {
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
+	// OAuth 2.0 Authorization Server Endpoints - must be registered before NoRoute
+	public := a.router.Group("/")
+	oauthGroup := public.Group("/oauth")
+	{
+		// Dynamic Client Registration - public endpoint for now (auth will be added later)
+		oauthGroup.POST("/register_client", a.handleRegisterOAuthClient)
+		oauthGroup.OPTIONS("/register_client", a.handleRegisterOAuthClient)
+		// Authorization Endpoint - requires user authentication (user logs in to grant access)
+		// This endpoint will now redirect to a consent page if needed.
+		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), a.handleOAuthAuthorize)
+		oauthGroup.OPTIONS("/authorize", a.handleOAuthAuthorize)
+		// Token Endpoint - typically requires client authentication
+		oauthGroup.POST("/token", a.handleOAuthToken)
+		oauthGroup.OPTIONS("/token", a.handleOAuthToken)
+
+		// Endpoints for consent screen flow - require user authentication
+		oauthGroup.GET("/consent_details", a.auth.AuthMiddleware(), a.handleGetConsentDetails)
+		oauthGroup.OPTIONS("/consent_details", a.handleGetConsentDetails)
+		oauthGroup.POST("/submit_consent", a.auth.AuthMiddleware(), a.handleSubmitConsent)
+		oauthGroup.OPTIONS("/submit_consent", a.handleSubmitConsent)
+	}
+	// AS Metadata - public
+	public.GET("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+	public.OPTIONS("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Check if it's a static file request
@@ -325,8 +350,6 @@ func (a *API) setupRoutes() {
 	portalAnalytics.Use(a.auth.AuthMiddleware())
 	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
 	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
-
-	public := a.router.Group("/")
 
 	// Public routes
 	public.POST("/auth/login", a.handleLogin)
@@ -672,10 +695,10 @@ func (a *API) setupRoutes() {
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
-		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID", "Location"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	})
