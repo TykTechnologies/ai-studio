@@ -103,8 +103,8 @@ func NewClient(specBytes []byte, baseURL string, options ...ClientOption) (*Clie
 	config := &datamodel.DocumentConfiguration{
 		AllowFileReferences:   false,
 		AllowRemoteReferences: false,
-		BaseURL:              nil,
-		RemoteURLHandler:     nil,
+		BaseURL:               nil,
+		RemoteURLHandler:      nil,
 	}
 	doc, err := libopenapi.NewDocumentWithConfiguration(specBytes, config)
 	if err != nil {

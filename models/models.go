@@ -44,8 +44,12 @@ func InitModels(db *gorm.DB) error {
 		&ToolCatalogue{}, // Done
 		&secrets.Secret{},
 		&LLMChatRecord{},
-		&Notification{}, // For storing notifications
+		&Notification{},   // For storing notifications
 		&PromptTemplate{}, // For storing prompt templates
+		&OAuthClient{},
+		&AuthCode{},
+		&AccessToken{},
+		&PendingOAuthRequest{},
 	)
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {

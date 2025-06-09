@@ -34,7 +34,7 @@ func (p *Proxy) CreateCompletionHandler(w http.ResponseWriter, r *http.Request) 
 	// Validate model
 	validator := NewModelValidator(conf.AllowedModels)
 	if !validator.IsModelAllowed(req.Model) {
-		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil)
+		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil, false)
 		return
 	}
 
@@ -82,39 +82,39 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	// get the route ID from the DB to find out what back-end LLM to use
 	conf, ok := p.llms[routeID]
 	if !ok {
-		respondWithOAIError(w, http.StatusNotFound, "vendor not found", nil)
+		respondWithOAIError(w, http.StatusNotFound, "vendor not found", nil, false)
 		return
 	}
 
 	var req ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithOAIError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithOAIError(w, http.StatusBadRequest, "Invalid request body", err, false)
 		return
 	}
 
 	// Validate model
-	validator := NewModelValidator(conf.AllowedModels)
+	validator := NewModelValidator(conf.AllowedModels) // This validator is local, no need to change its NewModelValidator call
 	if !validator.IsModelAllowed(req.Model) {
-		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil)
+		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil, false)
 		return
 	}
 
 	// Validate required fields
 	if len(req.Messages) == 0 || req.Model == "" {
-		respondWithOAIError(w, http.StatusBadRequest, "missing required fields", nil)
+		respondWithOAIError(w, http.StatusBadRequest, "missing required fields", nil, false)
 		return
 	}
 
 	// Handle streaming if requested
 	if req.Stream != nil && *req.Stream {
-		respondWithOAIError(w, http.StatusBadRequest, "streaming not supported", nil)
+		respondWithOAIError(w, http.StatusBadRequest, "streaming not supported", nil, false)
 		return
 	}
 
 	// create a standard llangchain completion request based on the input
 	llm, err := switches.FetchDriver(conf, nil, nil, func(ctx context.Context, chunk []byte) error { return nil })
 	if err != nil {
-		respondWithOAIError(w, http.StatusInternalServerError, "Failed to create LLM client", err)
+		respondWithOAIError(w, http.StatusInternalServerError, "Failed to create LLM client", err, false)
 		return
 	}
 
@@ -124,7 +124,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 
 	resp, err := llm.GenerateContent(ctx, messages, opts...)
 	if err != nil {
-		respondWithOAIError(w, http.StatusInternalServerError, "failed to generate content", err)
+		respondWithOAIError(w, http.StatusInternalServerError, "failed to generate content", err, false)
 		return
 	}
 

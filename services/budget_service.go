@@ -33,7 +33,7 @@ type atomicUsageCache struct {
 
 type BudgetService struct {
 	db              *gorm.DB
-	usageCache      map[usageKey]usageData        // legacy cache
+	usageCache      map[usageKey]usageData         // legacy cache
 	atomicCache     map[usageKey]*atomicUsageCache // optimistic cache
 	cacheMutex      sync.RWMutex
 	updateMutex     sync.Mutex // separate mutex for background updates
@@ -129,10 +129,10 @@ func (s *BudgetService) startUpdateWorker() {
 // processUpdateQueue processes cache update requests in the background
 func (s *BudgetService) processUpdateQueue() {
 	defer atomic.StoreInt32(&s.queueRunning, 0)
-	
+
 	// Use a map to track unique keys to update
 	pendingUpdates := make(map[usageKey]struct{})
-	
+
 	for {
 		select {
 		case req, ok := <-s.updateQueue:
@@ -140,17 +140,17 @@ func (s *BudgetService) processUpdateQueue() {
 				// Channel closed
 				return
 			}
-			
+
 			// Just mark this key as needing an update
 			pendingUpdates[req.key] = struct{}{}
-			
+
 		case <-time.After(100 * time.Millisecond):
 			// Process accumulated requests after a short delay
 			if len(pendingUpdates) > 0 {
 				s.processPendingUpdates(pendingUpdates)
 				pendingUpdates = make(map[usageKey]struct{}) // Clear the map
 			}
-			
+
 			// If no more requests for a while, exit
 			if len(s.updateQueue) == 0 {
 				select {
@@ -172,26 +172,26 @@ func (s *BudgetService) processUpdateQueue() {
 // processPendingUpdates processes a batch of update requests
 func (s *BudgetService) processPendingUpdates(updates map[usageKey]struct{}) {
 	now := time.Now()
-	
+
 	for key := range updates {
 		var spent float64
 		var err error
-		
+
 		// Process based on entity type
 		if key.entityType == "App" {
 			spent, err = s.fetchAppSpending(key.entityID, key.startDate, now)
 		} else if key.entityType == "LLM" {
 			spent, err = s.fetchLLMSpending(key.entityID, key.startDate, now)
 		}
-		
+
 		if err != nil {
 			log.Printf("Error updating cache for %s %d: %v", key.entityType, key.entityID, err)
 			continue
 		}
-		
+
 		// Update both caches
 		s.updateCaches(key, spent, now)
-		
+
 		// Always trigger budget analysis for consistency
 		if key.entityType == "App" {
 			var app models.App
@@ -216,12 +216,12 @@ func (s *BudgetService) updateCaches(key usageKey, spent float64, now time.Time)
 		cachedAt: now,
 	}
 	s.cacheMutex.Unlock()
-	
+
 	// Update atomic cache (create if doesn't exist)
 	s.cacheMutex.RLock()
 	cache, exists := s.atomicCache[key]
 	s.cacheMutex.RUnlock()
-	
+
 	if !exists {
 		s.cacheMutex.Lock()
 		cache, exists = s.atomicCache[key]
@@ -231,7 +231,7 @@ func (s *BudgetService) updateCaches(key usageKey, spent float64, now time.Time)
 		}
 		s.cacheMutex.Unlock()
 	}
-	
+
 	// Update atomic values
 	atomic.StoreUint64(&cache.spent, uint64(spent*10000))
 	atomic.StoreInt64(&cache.cachedAt, now.UnixNano())
@@ -241,17 +241,17 @@ func (s *BudgetService) updateCaches(key usageKey, spent float64, now time.Time)
 func (s *BudgetService) fetchAppSpending(appID uint, start, end time.Time) (float64, error) {
 	// Adjust end time to include full day
 	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
-	
+
 	var rawTotal float64
 	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", appID, start, end).
 		Select("COALESCE(SUM(cost), 0)")
-	
+
 	err := query.Scan(&rawTotal).Error
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return rawTotal / 10000.0, nil
 }
 
@@ -259,30 +259,30 @@ func (s *BudgetService) fetchAppSpending(appID uint, start, end time.Time) (floa
 func (s *BudgetService) fetchLLMSpending(llmID uint, start, end time.Time) (float64, error) {
 	// Adjust end time to include full day
 	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
-	
+
 	var rawTotal float64
 	query := s.db.Model(&models.LLMChatRecord{}).
 		Where("llm_id = ? AND time_stamp >= ? AND time_stamp <= ?", llmID, start, end).
 		Select("COALESCE(SUM(cost), 0)")
-	
+
 	err := query.Scan(&rawTotal).Error
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return rawTotal / 10000.0, nil
 }
 
 func (s *BudgetService) cleanupCache() {
-	ticker := time.NewTicker(5 * time.Minute)  // Less frequent cleanup (every 5 minutes)
-	defer ticker.Stop()  // Ensure the ticker is cleaned up if the function exits
-	
+	ticker := time.NewTicker(5 * time.Minute) // Less frequent cleanup (every 5 minutes)
+	defer ticker.Stop()                       // Ensure the ticker is cleaned up if the function exits
+
 	for range ticker.C {
 		// Use a separate goroutine to avoid blocking the ticker
 		go func() {
 			// Create a list of keys to delete
 			var keysToDelete []usageKey
-			
+
 			// First identify expired keys with a read lock
 			s.cacheMutex.RLock()
 			now := time.Now()
@@ -292,7 +292,7 @@ func (s *BudgetService) cleanupCache() {
 				}
 			}
 			s.cacheMutex.RUnlock()
-			
+
 			// Only lock for the actual deletion if we have keys to delete
 			if len(keysToDelete) > 0 {
 				s.cacheMutex.Lock()
@@ -330,7 +330,7 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 		log.Printf("App %d spending from atomic cache: %.2f", appID, spent)
 		return spent, nil
 	}
-	
+
 	// Fall back to legacy cache with read lock
 	s.cacheMutex.RLock()
 	data, exists := s.usageCache[key]
@@ -341,7 +341,7 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 		return spent, nil
 	}
 	s.cacheMutex.RUnlock()
-	
+
 	log.Printf("App %d spending cache miss, querying database", appID)
 
 	// Queue an update for the future and fetch immediately
@@ -349,10 +349,10 @@ func (s *BudgetService) GetMonthlySpending(appID uint, start, end time.Time) (fl
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// Update both caches
 	s.updateCaches(key, spent, time.Now())
-	
+
 	return spent, nil
 }
 
@@ -377,7 +377,7 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 		log.Printf("LLM %d spending from atomic cache: %.2f", llmID, spent)
 		return spent, nil
 	}
-	
+
 	// Fall back to legacy cache with read lock
 	s.cacheMutex.RLock()
 	data, exists := s.usageCache[key]
@@ -388,7 +388,7 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 		return spent, nil
 	}
 	s.cacheMutex.RUnlock()
-	
+
 	log.Printf("LLM %d spending cache miss, querying database", llmID)
 
 	// Queue an update for the future and fetch immediately
@@ -396,10 +396,10 @@ func (s *BudgetService) GetLLMMonthlySpending(llmID uint, start, end time.Time) 
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// Update both caches
 	s.updateCaches(key, spent, time.Now())
-	
+
 	return spent, nil
 }
 
@@ -417,17 +417,17 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 	// Check for app budget
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
-		
+
 		// Create the key for cache lookup
 		key := usageKey{
 			entityID:   app.ID,
 			entityType: "App",
 			startDate:  start,
 		}
-		
+
 		// Try atomic cache first (no locking)
 		appSpent, cacheHit := s.getFromAtomicCache(key)
-		
+
 		if !cacheHit {
 			// Fall back to legacy cache with read lock
 			s.cacheMutex.RLock()
@@ -438,7 +438,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			}
 			s.cacheMutex.RUnlock()
 		}
-		
+
 		if cacheHit {
 			log.Printf("App %d spending from cache: %.2f/%.2f", app.ID, appSpent, *app.MonthlyBudget)
 		} else {
@@ -446,7 +446,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			// This makes the check optimistic - we'll assume budget is not exceeded
 			// until we have data that proves otherwise
 			s.updateQueue <- cacheUpdateRequest{key: key}
-			
+
 			// Check for existing notifications to see if we already know the budget is exceeded
 			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
 			baseNotificationID := fmt.Sprintf("budget_app_%d_%d_%d_%d",
@@ -455,17 +455,17 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 				int(*app.MonthlyBudget),
 				100, // 100% threshold
 			)
-			
+
 			// Quick check for notification existence
 			var notification models.Notification
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			
+
 			err := s.db.WithContext(ctx).Where("(notification_id = ? OR notification_id LIKE ?) AND sent_at >= ?",
 				fmt.Sprintf("%s_owner", baseNotificationID),
 				fmt.Sprintf("%s_admin_%%", baseNotificationID),
 				start).First(&notification).Error
-			
+
 			if err == nil {
 				// Notification exists, budget is exceeded
 				appBudgetExceeded = true
@@ -476,11 +476,11 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 				appSpent = 0
 			}
 		}
-		
+
 		// Calculate usage percentage if we have spending data
 		if !appBudgetExceeded {
 			appUsage = (appSpent / *app.MonthlyBudget) * 100
-			
+
 			// Check if budget is exceeded
 			if appSpent >= *app.MonthlyBudget {
 				appBudgetExceeded = true
@@ -492,17 +492,17 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 	// Check for LLM budget
 	if llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
-		
+
 		// Create the key for cache lookup
 		key := usageKey{
 			entityID:   llm.ID,
 			entityType: "LLM",
 			startDate:  start,
 		}
-		
+
 		// Try atomic cache first (no locking)
 		llmSpent, cacheHit := s.getFromAtomicCache(key)
-		
+
 		if !cacheHit {
 			// Fall back to legacy cache with read lock
 			s.cacheMutex.RLock()
@@ -513,13 +513,13 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 			}
 			s.cacheMutex.RUnlock()
 		}
-		
+
 		if cacheHit {
 			log.Printf("LLM %d spending from cache: %.2f/%.2f", llm.ID, llmSpent, *llm.MonthlyBudget)
 		} else {
 			// Cache miss - queue an update but use a default value for now
 			s.updateQueue <- cacheUpdateRequest{key: key}
-			
+
 			// Check for existing notifications to see if we already know the budget is exceeded
 			monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
 			baseNotificationID := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
@@ -528,16 +528,16 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 				int(*llm.MonthlyBudget),
 				100, // 100% threshold
 			)
-			
+
 			// Quick check for notification existence
 			var notification models.Notification
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			
+
 			err := s.db.WithContext(ctx).Where("notification_id LIKE ? AND sent_at >= ?",
 				fmt.Sprintf("%s_admin_%%", baseNotificationID),
 				start).First(&notification).Error
-			
+
 			if err == nil {
 				// Notification exists, budget is exceeded
 				llmBudgetExceeded = true
@@ -548,11 +548,11 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 				llmSpent = 0
 			}
 		}
-		
+
 		// Calculate usage percentage if we have spending data
 		if !llmBudgetExceeded {
 			llmUsage = (llmSpent / *llm.MonthlyBudget) * 100
-			
+
 			// Check if budget is exceeded
 			if llmSpent >= *llm.MonthlyBudget {
 				llmBudgetExceeded = true
@@ -568,7 +568,7 @@ func (s *BudgetService) CheckBudget(app *models.App, llm *models.LLM) (float64, 
 	if appBudgetExceeded {
 		return 100, llmUsage, fmt.Errorf("app monthly budget exceeded")
 	}
-	
+
 	if llmBudgetExceeded {
 		return appUsage, 100, fmt.Errorf("LLM monthly budget exceeded")
 	}
@@ -582,24 +582,24 @@ func (s *BudgetService) getFromAtomicCache(key usageKey) (float64, bool) {
 	s.cacheMutex.RLock()
 	cache, exists := s.atomicCache[key]
 	s.cacheMutex.RUnlock()
-	
+
 	if !exists {
 		return 0, false
 	}
-	
+
 	// Read atomic values
 	spentRaw := atomic.LoadUint64(&cache.spent)
 	cachedAtNano := atomic.LoadInt64(&cache.cachedAt)
-	
+
 	// Convert to proper types
 	spent := float64(spentRaw) / 10000.0
 	cachedAt := time.Unix(0, cachedAtNano)
-	
+
 	// Check if cache is still valid
 	if time.Since(cachedAt) < s.cacheDuration {
 		return spent, true
 	}
-	
+
 	return 0, false
 }
 
@@ -615,14 +615,14 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 	// Check app budget
 	if app != nil && app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
-		
+
 		// Create cache key
 		key := usageKey{
 			entityID:   app.ID,
 			entityType: "App",
 			startDate:  start,
 		}
-		
+
 		// Try to get from cache first
 		spent, cacheHit := s.getFromAtomicCache(key)
 		if !cacheHit {
@@ -634,7 +634,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 			}
 			s.cacheMutex.RUnlock()
 		}
-		
+
 		// If cache miss, fetch from database
 		var err error
 		if !cacheHit {
@@ -643,13 +643,13 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 				log.Printf("Error calculating app spending: %v", err)
 				return
 			}
-			
+
 			// Update cache in the background
 			s.updateCaches(key, spent, now)
 		}
-		
+
 		appUsage := (spent / *app.MonthlyBudget) * 100
-		log.Printf("App %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
+		log.Printf("App %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)",
 			app.ID, appUsage, spent, *app.MonthlyBudget)
 		budget := *app.MonthlyBudget
 		usage := &models.BudgetUsage{
@@ -664,7 +664,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 
 		// Check for existing notifications in this period
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		
+
 		baseNotificationID80 := fmt.Sprintf("budget_app_%d_%d_%d_%d",
 			app.ID,
 			monthOffset,
@@ -704,14 +704,14 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 	// Check LLM budget
 	if llm != nil && llm.MonthlyBudget != nil && *llm.MonthlyBudget > 0 {
 		start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
-		
+
 		// Create cache key
 		key := usageKey{
 			entityID:   llm.ID,
 			entityType: "LLM",
 			startDate:  start,
 		}
-		
+
 		// Try to get from cache first
 		spent, cacheHit := s.getFromAtomicCache(key)
 		if !cacheHit {
@@ -723,7 +723,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 			}
 			s.cacheMutex.RUnlock()
 		}
-		
+
 		// If cache miss, fetch from database
 		var err error
 		if !cacheHit {
@@ -732,13 +732,13 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 				log.Printf("Error calculating LLM spending: %v", err)
 				return
 			}
-			
+
 			// Update cache in the background
 			s.updateCaches(key, spent, now)
 		}
-		
+
 		llmUsage := (spent / *llm.MonthlyBudget) * 100
-		log.Printf("LLM %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)", 
+		log.Printf("LLM %d usage calculated: %.2f%% (spent: %.2f, budget: %.2f)",
 			llm.ID, llmUsage, spent, *llm.MonthlyBudget)
 		budget := *llm.MonthlyBudget
 		usage := &models.BudgetUsage{
@@ -753,7 +753,7 @@ func (s *BudgetService) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
 
 		// Check for existing notifications in this period
 		monthOffset := int(start.Sub(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)).Hours() / 24 / 30)
-		
+
 		baseNotificationID80 := fmt.Sprintf("budget_llm_%d_%d_%d_%d",
 			llm.ID,
 			monthOffset,
@@ -831,7 +831,7 @@ func (s *BudgetService) sendAppBudgetNotification(appID uint, spent, budget floa
 	// Get start time for notification ID
 	now := time.Now()
 	start := s.calculateBudgetPeriodStart(app.BudgetStartDate, now)
-	
+
 	// Calculate end of budget period
 	var endDate time.Time
 	if start.Month() == 12 {
@@ -883,7 +883,7 @@ func (s *BudgetService) sendLLMBudgetNotification(llmID uint, spent, budget floa
 	// Get start time for notification ID
 	now := time.Now()
 	start := s.calculateBudgetPeriodStart(llm.BudgetStartDate, now)
-	
+
 	// Calculate end of budget period
 	var endDate time.Time
 	if start.Month() == 12 {

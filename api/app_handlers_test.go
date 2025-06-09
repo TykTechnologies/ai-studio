@@ -130,13 +130,13 @@ func TestAppEndpointsWithTools(t *testing.T) {
 	err = json.Unmarshal(wGetToolsAfterAdd.Body.Bytes(), &getToolsResponse)
 	assert.NoError(t, err)
 	assert.Len(t, getToolsResponse.Data, 2)
-	
+
 	// Extract tool IDs from response for easier assertion
 	toolIDs := make([]uint, len(getToolsResponse.Data))
 	for i, toolData := range getToolsResponse.Data {
 		toolIDs[i] = toolData.ID
 	}
-	
+
 	// Check that both tool IDs are in the response
 	assert.Contains(t, toolIDs, tool1.ID)
 	assert.Contains(t, toolIDs, tool2.ID)
@@ -277,27 +277,27 @@ func TestAppPagination(t *testing.T) {
 					Name            string     `json:"name"`
 					Description     string     `json:"description"`
 					UserID          uint       `json:"user_id"`
-				DatasourceIDs   []uint     `json:"datasource_ids"`
-				LLMIDs          []uint     `json:"llm_ids"`
-				ToolIDs         []uint     `json:"tool_ids"`
+					DatasourceIDs   []uint     `json:"datasource_ids"`
+					LLMIDs          []uint     `json:"llm_ids"`
+					ToolIDs         []uint     `json:"tool_ids"`
 					MonthlyBudget   *float64   `json:"monthly_budget"`
 					BudgetStartDate *time.Time `json:"budget_start_date"`
 				} `json:"attributes" binding:"required"`
 			}{
 				Type: "app",
-			Attributes: struct {
+				Attributes: struct {
 					Name            string     `json:"name"`
 					Description     string     `json:"description"`
 					UserID          uint       `json:"user_id"`
-				DatasourceIDs   []uint     `json:"datasource_ids"`
-				LLMIDs          []uint     `json:"llm_ids"`
-				ToolIDs         []uint     `json:"tool_ids"`
+					DatasourceIDs   []uint     `json:"datasource_ids"`
+					LLMIDs          []uint     `json:"llm_ids"`
+					ToolIDs         []uint     `json:"tool_ids"`
 					MonthlyBudget   *float64   `json:"monthly_budget"`
 					BudgetStartDate *time.Time `json:"budget_start_date"`
 				}{
-					Name:            fmt.Sprintf("Test App %d", i),
-					UserID:          user.ID,
-				ToolIDs:         []uint{},
+					Name:    fmt.Sprintf("Test App %d", i),
+					UserID:  user.ID,
+					ToolIDs: []uint{},
 				},
 			},
 		}
@@ -390,7 +390,6 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 	assert.NoError(t, err)
 	err = db.Model(app).Association("LLMs").Append(llm)
 	assert.NoError(t, err)
-
 
 	updateAppInput := TestAppInput{
 		Data: struct {
