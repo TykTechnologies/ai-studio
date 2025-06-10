@@ -841,10 +841,11 @@ type UserWithEntitlementsResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		IsAdmin   bool   `json:"is_admin"`
-		UIOptions struct {
+		Email        string `json:"email"`
+		Name         string `json:"name"`
+		IsAdmin      bool   `json:"is_admin"`
+		IsSuperAdmin bool   `json:"is_super_admin"`
+		UIOptions    struct {
 			ShowChat       bool `json:"show_chat"`
 			ShowPortal     bool `json:"show_portal"`
 			ShowSSOConfig  bool `json:"show_sso_config"`

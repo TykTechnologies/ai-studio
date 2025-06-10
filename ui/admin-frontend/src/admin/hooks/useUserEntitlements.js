@@ -9,10 +9,11 @@ const useUserEntitlements = (skipInitialFetch = false) => {
   const [userName, setUserName] = useState(null);
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(!skipInitialFetch);
   const [error, setError] = useState(null);
 
-  const fetchUserEntitlements = useCallback(async () => {
+  const fetchUserEntitlements = useCallback(async (skipEntitlements = false) => {
     setLoading(true);
     setError(null);
     
@@ -23,30 +24,38 @@ const useUserEntitlements = (skipInitialFetch = false) => {
       setUserName(cachedData.userName);
       setUserId(cachedData.userId);
       setUserEmail(cachedData.userEmail);
+      setIsSuperAdmin(cachedData.isSuperAdmin);
       setLoading(false);
       return cachedData;
     }
 
-    return pubClient.get('/common/me')
+    const url = skipEntitlements
+      ? '/common/me?skip_entitlements=true'
+      : '/common/me';
+
+    return pubClient.get(url)
       .then(response => {
         const newData = response.data.attributes.entitlements;
         const newUiOptions = response.data.attributes.ui_options;
         const newUserName = response.data.attributes.name;
         const newUserId = response.data.id;
         const newUserEmail = response.data.attributes.email;
+        const newIsSuperAdmin = response.data.attributes.is_super_admin;
         
         setUserEntitlements(newData);
         setUiOptions(newUiOptions);
         setUserName(newUserName);
         setUserId(newUserId);
         setUserEmail(newUserEmail);
+        setIsSuperAdmin(newIsSuperAdmin);
         
         const dataToCache = {
           entitlements: newData,
           ui_options: newUiOptions,
           userName: newUserName,
           userId: newUserId,
-          userEmail: newUserEmail
+          userEmail: newUserEmail,
+          isSuperAdmin: newIsSuperAdmin
         };
         cacheService.set(CACHE_KEYS.USER_ENTITLEMENTS, dataToCache, 10000); // 10 seconds expiry
         
@@ -74,6 +83,7 @@ const useUserEntitlements = (skipInitialFetch = false) => {
     userName,
     userId,
     userEmail,
+    isSuperAdmin,
     loading,
     error,
     fetchUserEntitlements

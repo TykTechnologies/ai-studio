@@ -1,6 +1,6 @@
-import React from "react";
 import { Box, Typography, CircularProgress } from "@mui/material";
 import { useParams, Link } from "react-router-dom";
+import { useEffect } from "react";
 import {
   TitleBox,
   PrimaryButton,
@@ -12,6 +12,7 @@ import {
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import { useUserForm } from "./hooks/useUserForm";
 import { useSnackbarState } from "../../hooks/useSnackbarState";
+import useUserEntitlements from "../../hooks/useUserEntitlements";
 import { ButtonContainer } from "./styles";
 import UserFormBasicInfo from "./components/UserFormBasicInfo";
 import UserPermissionsSection from "./components/UserPermissionsSection";
@@ -20,6 +21,11 @@ import AlertSnackbar from "../../components/common/AlertSnackbar";
 const UserForm = () => {
   const { id } = useParams();
   const { snackbarState, showSnackbar, hideSnackbar } = useSnackbarState();
+  const { isSuperAdmin, fetchUserEntitlements } = useUserEntitlements(true);
+  
+  useEffect(() => {
+    fetchUserEntitlements(true);
+  }, [fetchUserEntitlements]);
   
   const {
     name,
@@ -28,20 +34,15 @@ const UserForm = () => {
     setEmail,
     password,
     setPassword,
-    isAdmin,
-    setIsAdmin,
-    showPortal,
-    setShowPortal,
-    showChat,
-    setShowChat,
     emailVerified,
     setEmailVerified,
     notificationsEnabled,
     setNotificationsEnabled,
     accessToSSOConfig,
     setAccessToSSOConfig,
+    selectedRole,
+    setSelectedRole,
     loading,
-    errors,
     handleSubmit,
     isFormValid,
     submitting
@@ -76,22 +77,18 @@ const UserForm = () => {
             setEmail={setEmail}
             password={password}
             setPassword={setPassword}
-            errors={errors}
             emailVerified={emailVerified}
             setEmailVerified={setEmailVerified}
           />
           
           <UserPermissionsSection
-            isAdmin={isAdmin}
-            setIsAdmin={setIsAdmin}
-            showPortal={showPortal}
-            setShowPortal={setShowPortal}
-            showChat={showChat}
-            setShowChat={setShowChat}
+            isSuperAdmin={isSuperAdmin}
             notificationsEnabled={notificationsEnabled}
             setNotificationsEnabled={setNotificationsEnabled}
             accessToSSOConfig={accessToSSOConfig}
             setAccessToSSOConfig={setAccessToSSOConfig}
+            selectedRole={selectedRole}
+            setSelectedRole={setSelectedRole}
           />
 
           <ButtonContainer>

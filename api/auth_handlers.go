@@ -359,7 +359,30 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
+	skipEntitlements := c.Query("skip_entitlements") == "true"
+	isSuperAdmin := u.ID == 1
+
+	var response UserWithEntitlementsResponse
+	response.Type = "user"
+	response.ID = strconv.Itoa(int(u.ID))
+	response.Attributes.Email = u.Email
+	response.Attributes.Name = u.Name
+	response.Attributes.IsAdmin = u.IsAdmin
+	response.Attributes.IsSuperAdmin = isSuperAdmin
+
+	if skipEntitlements {
+		c.JSON(http.StatusOK, response)
+		return
+	}
+
 	entitlements, err := a.service.GetUserEntitlements(u.ID)
+
+
+
+
+
+
+	
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -370,54 +393,14 @@ func (a *API) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Convert service-level entitlements to API response
-	response := UserWithEntitlementsResponse{
-		Type: "user",
-		ID:   strconv.Itoa(int(entitlements.User.ID)),
-		Attributes: struct {
-			Email     string `json:"email"`
-			Name      string `json:"name"`
-			IsAdmin   bool   `json:"is_admin"`
-			UIOptions struct {
-				ShowChat       bool `json:"show_chat"`
-				ShowPortal     bool `json:"show_portal"`
-				ShowSSOConfig  bool `json:"show_sso_config"`
-				SkipQuickStart bool `json:"skip_quick_start"`
-			} `json:"ui_options"`
-			Entitlements struct {
-				Catalogues     []CatalogueResponse     `json:"catalogues"`
-				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
-				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
-				Chats          []ChatResponse          `json:"chats"`
-			} `json:"entitlements"`
-		}{
-			Email:   entitlements.User.Email,
-			Name:    entitlements.User.Name,
-			IsAdmin: entitlements.User.IsAdmin,
-			UIOptions: struct {
-				ShowChat       bool `json:"show_chat"`
-				ShowPortal     bool `json:"show_portal"`
-				ShowSSOConfig  bool `json:"show_sso_config"`
-				SkipQuickStart bool `json:"skip_quick_start"`
-			}{
-				ShowChat:       entitlements.User.ShowChat,
-				ShowPortal:     entitlements.User.ShowPortal,
-				ShowSSOConfig:  entitlements.User.IsAdmin && entitlements.User.AccessToSSOConfig,
-				SkipQuickStart: entitlements.User.SkipQuickStart,
-			},
-			Entitlements: struct {
-				Catalogues     []CatalogueResponse     `json:"catalogues"`
-				DataCatalogues []DataCatalogueResponse `json:"data_catalogues"`
-				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues"`
-				Chats          []ChatResponse          `json:"chats"`
-			}{
-				Catalogues:     serializeCatalogues(entitlements.Catalogues),
-				DataCatalogues: serializeDataCatalogues(entitlements.DataCatalogues),
-				ToolCatalogues: serializeToolCatalogues(entitlements.ToolCatalogues, a.config.DB),
-				Chats:          serializeChats(entitlements.Chats, a.config.DB),
-			},
-		},
-	}
+	response.Attributes.UIOptions.ShowChat = u.ShowChat
+	response.Attributes.UIOptions.ShowPortal = u.ShowPortal
+	response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig
+	response.Attributes.UIOptions.SkipQuickStart = u.SkipQuickStart
+	response.Attributes.Entitlements.Catalogues = serializeCatalogues(entitlements.Catalogues)
+	response.Attributes.Entitlements.DataCatalogues = serializeDataCatalogues(entitlements.DataCatalogues)
+	response.Attributes.Entitlements.ToolCatalogues = serializeToolCatalogues(entitlements.ToolCatalogues, a.config.DB)
+	response.Attributes.Entitlements.Chats = serializeChats(entitlements.Chats, a.config.DB)
 
 	c.JSON(http.StatusOK, response)
 }

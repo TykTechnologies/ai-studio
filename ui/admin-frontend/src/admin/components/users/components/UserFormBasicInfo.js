@@ -1,21 +1,40 @@
-import React from "react";
+import { memo } from "react";
 import { Typography, Box } from "@mui/material";
 import { StyledTextField } from "../../../styles/sharedStyles";
 import { StyledCheckbox } from "../../../../portal/styles/authStyles";
 import CollapsibleSection from "../../common/CollapsibleSection";
 import InfoTooltip from "../../common/InfoTooltip";
+import { useFormValidation } from "../hooks/useFormValidation";
 
-const UserFormBasicInfo = React.memo(({ 
-  name, 
-  setName, 
-  email, 
-  setEmail, 
-  password, 
+const UserFormBasicInfo = memo(({
+  name,
+  setName,
+  email,
+  setEmail,
+  password,
   setPassword,
   emailVerified,
-  setEmailVerified,
-  errors
+  setEmailVerified
 }) => {
+  const {
+    error: emailError,
+    handleChange: handleEmailChange
+  } = useFormValidation(email, false, true);
+
+  const {
+    error: passwordError,
+    handleChange: handlePasswordChange
+  } = useFormValidation(password, true, false);
+
+  const onEmailChange = (e) => {
+    setEmail(e.target.value);
+    handleEmailChange(e);
+  };
+
+  const onPasswordChange = (e) => {
+    setPassword(e.target.value);
+    handlePasswordChange(e);
+  };
   return (
     <CollapsibleSection title="Basic information*" defaultExpanded={true}>
         <Box>
@@ -23,15 +42,13 @@ const UserFormBasicInfo = React.memo(({
                 Name*
             </Typography>
             <StyledTextField
-            fullWidth
-            name="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            error={!!errors?.name}
-            helperText={errors?.name}
-            required
-            autoComplete="off"
-          />
+              fullWidth
+              name="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoComplete="off"
+            />
         </Box>
         <Box my={2} flexDirection={{ xs: "column", sm: "row" }} display="flex" gap={2}>
             <Box width={{ xs: "100%", sm: "50%" }}>
@@ -39,19 +56,19 @@ const UserFormBasicInfo = React.memo(({
                     Email*
                 </Typography>
                 <StyledTextField
-                fullWidth
-                name="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                error={!!errors?.email}
-                helperText={errors?.email}
-                required
-                autoComplete="new-email"
-                inputProps={{
-                    autoComplete: "new-email",
-                    "data-form-type": "other"
-                }}
+                  fullWidth
+                  name="email"
+                  type="email"
+                  value={email}
+                  onChange={onEmailChange}
+                  error={!!emailError}
+                  helperText={emailError}
+                  required
+                  autoComplete="new-email"
+                  inputProps={{
+                      autoComplete: "new-email",
+                      "data-form-type": "other"
+                  }}
                 />
             </Box>
             <Box width={{ xs: "100%", sm: "50%" }}>
@@ -68,25 +85,26 @@ const UserFormBasicInfo = React.memo(({
                                     <Typography variant="bodySmallDefault">• A number</Typography>
                                     <Typography variant="bodySmallDefault">• A special character</Typography>
                                     <Typography variant="bodySmallDefault">• An uppercase letter</Typography>
+                                    <Typography variant="bodySmallDefault">• A lowercase letter</Typography>
                                 </Box>
                             </Box>
                         }
                     />
                 </Box>
                 <StyledTextField
-                fullWidth
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                error={!!errors?.password}
-                helperText={errors?.password}
-                required
-                autoComplete="new-password"
-                inputProps={{
-                    autoComplete: "new-password",
-                    "data-form-type": "other"
-                }}
+                  fullWidth
+                  name="password"
+                  type="password"
+                  value={password}
+                  onChange={onPasswordChange}
+                  error={!!passwordError}
+                  helperText={passwordError}
+                  required
+                  autoComplete="new-password"
+                  inputProps={{
+                      autoComplete: "new-password",
+                      "data-form-type": "other"
+                  }}
                 />
             </Box>
         </Box>

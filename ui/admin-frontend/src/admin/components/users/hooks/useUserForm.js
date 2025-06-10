@@ -7,14 +7,11 @@ export const useUserForm = (id, showSnackbar) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showPortal, setShowPortal] = useState(true);
-  const [showChat, setShowChat] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [accessToSSOConfig, setAccessToSSOConfig] = useState(false);
+  const [selectedRole, setSelectedRole] = useState("Chat user");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({});
   const navigate = useNavigate();
 
   const fetchUser = useCallback(async () => {
@@ -27,9 +24,7 @@ export const useUserForm = (id, showSnackbar) => {
       
       setName(userData.attributes.name);
       setEmail(userData.attributes.email);
-      setIsAdmin(userData.attributes.is_admin);
-      setShowPortal(userData.attributes.show_portal ?? true);
-      setShowChat(userData.attributes.show_chat ?? true);
+      setSelectedRole(userData.attributes.role);
       setEmailVerified(userData.attributes.email_verified ?? false);
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
       setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
@@ -48,29 +43,25 @@ export const useUserForm = (id, showSnackbar) => {
     }
   }, [id, fetchUser]);
 
-  const validateForm = useCallback(() => {
-    const newErrors = {};
-    if (!name.trim()) newErrors.name = "Name is required";
-    if (!email.trim()) newErrors.email = "Email is required";
-    if (!id && !password.trim()) newErrors.password = "Password is required";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [name, email, password, id]);
 
   const isFormValid = useCallback(() => {
     return (
       name.trim() !== "" &&
       email.trim() !== "" &&
-      (id || password.trim() !== "")
+      password.trim() !== ""
     );
-  }, [name, email, password, id]);
+  }, [name, email, password]);
 
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!validateForm() || !isFormValid()) return;
+    if (!isFormValid()) return;
     
     try {
+      const isAdmin = selectedRole === "Admin";
+      const showPortal = selectedRole === "Developer" || selectedRole === "Admin";
+      const showChat = true;
+      
       const userData = {
         name,
         email,
@@ -93,7 +84,6 @@ export const useUserForm = (id, showSnackbar) => {
 
       setTimeout(() => navigate("/admin/users"), 2000);
     } catch (error) {
-      console.error("Error saving user", error);
       const apiError = handleApiError(error);
       showSnackbar(apiError.message, "error");
     } 
@@ -102,13 +92,10 @@ export const useUserForm = (id, showSnackbar) => {
     name,
     email,
     password,
-    isAdmin,
-    showPortal,
-    showChat,
+    selectedRole,
     emailVerified,
     notificationsEnabled,
     accessToSSOConfig,
-    validateForm,
     isFormValid,
     navigate,
     showSnackbar,
@@ -121,34 +108,26 @@ export const useUserForm = (id, showSnackbar) => {
     setEmail,
     password,
     setPassword,
-    isAdmin,
-    setIsAdmin,
-    showPortal,
-    setShowPortal,
-    showChat,
-    setShowChat,
     emailVerified,
     setEmailVerified,
     notificationsEnabled,
     setNotificationsEnabled,
     accessToSSOConfig,
     setAccessToSSOConfig,
+    selectedRole,
+    setSelectedRole,
     loading,
-    errors,
     handleSubmit,
     isFormValid,
   }), [
     name,
     email,
     password,
-    isAdmin,
-    showPortal,
-    showChat,
     emailVerified,
     notificationsEnabled,
     accessToSSOConfig,
+    selectedRole,
     loading,
-    errors,
     handleSubmit,
     isFormValid,
   ]);
