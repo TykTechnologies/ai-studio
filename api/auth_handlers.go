@@ -623,11 +623,13 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "response_type must be 'code'"})
 		return
 	}
-	if clientID == "" || redirectURI == "" || codeChallenge == "" || codeChallengeMethod == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id, redirect_uri, code_challenge, and code_challenge_method are required"})
+	if clientID == "" || redirectURI == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id and redirect_uri are required"})
 		return
 	}
-	if codeChallengeMethod != "S256" {
+	
+	// Only validate PKCE method if PKCE is being used
+	if codeChallengeMethod != "" && codeChallengeMethod != "S256" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be 'S256'"})
 		return
 	}
@@ -1122,6 +1124,7 @@ func (a *API) handleOAuthToken(c *gin.Context) {
 		return
 	}
 
+	// Validate PKCE if it was used during authorization
 	if storedAuthCode.CodeChallengeMethod == "S256" {
 		calculatedChallenge := helpers.CalculatePKCEChallengeS256(codeVerifier)
 		if calculatedChallenge != storedAuthCode.CodeChallenge {
@@ -1129,11 +1132,12 @@ func (a *API) handleOAuthToken(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, OAuthErrorResponse{Error: "invalid_grant", ErrorDescription: "PKCE code_verifier challenge failed."})
 			return
 		}
-	} else {
+	} else if storedAuthCode.CodeChallengeMethod != "" {
 		log.Printf("Token endpoint: Unsupported code_challenge_method %s for client %s", storedAuthCode.CodeChallengeMethod, clientID)
 		c.JSON(http.StatusBadRequest, OAuthErrorResponse{Error: "invalid_grant", ErrorDescription: "Unsupported code_challenge_method."})
 		return
 	}
+	// If no PKCE was used (CodeChallengeMethod is empty), skip PKCE validation
 
 	err_mark_used := authCodeService.MarkAuthCodeAsUsed(code)
 	if err_mark_used != nil {
