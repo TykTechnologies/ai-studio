@@ -20,6 +20,7 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import AppsIcon from "@mui/icons-material/Apps";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import ExtensionIcon from "@mui/icons-material/Extension"; // Import for Tools icon
 
 import pubClient from "../../admin/utils/pubClient";
 import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
@@ -37,6 +38,7 @@ const PortalDrawer = () => {
   const [openDev, setOpenDev] = useState(true);
   const [openLLMs, setOpenLLMs] = useState(false);
   const [openDatabases, setOpenDatabases] = useState(false);
+  const [openTools, setOpenTools] = useState(false); // State for Tools section
   const [openChatRooms, setOpenChatRooms] = useState(true);
   const theme = useTheme();
 
@@ -83,6 +85,10 @@ const PortalDrawer = () => {
 
   const handleDatabasesClick = () => {
     setOpenDatabases(!openDatabases);
+  };
+
+  const handleToolsClick = () => { // Handler for Tools section
+    setOpenTools(!openTools);
   };
 
   const handleChatRoomsClick = () => {
@@ -278,6 +284,43 @@ const PortalDrawer = () => {
                     ))}
                   </List>
                 </Collapse>
+
+                {userEntitlements?.tool_catalogues && userEntitlements.tool_catalogues.length > 0 && (
+                  <>
+                    <ListItem
+                      button
+                      onClick={handleToolsClick}
+                      sx={{ pl: 4, mb: 1 }}
+                    >
+                      <ListItemIcon>
+                        <ExtensionIcon />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary="Tools"
+                        primaryTypographyProps={{ noWrap: true }}
+                      />
+                      {openTools ? <ExpandLess /> : <ExpandMore />}
+                    </ListItem>
+                    <Collapse in={openTools} timeout="auto" unmountOnExit>
+                      <List component="div" disablePadding>
+                        {userEntitlements.tool_catalogues.map((toolCatalogue) => (
+                          <ListItem
+                            key={toolCatalogue.id}
+                            button
+                            component={Link}
+                            to={`/portal/tools/${toolCatalogue.id}`}
+                            sx={{ pl: 6, mb: 1 }}
+                          >
+                            <ListItemText
+                              primary={toolCatalogue.attributes.name}
+                              primaryTypographyProps={{ noWrap: true }}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Collapse>
+                  </>
+                )}
               </List>
             </Collapse>
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -44,9 +45,9 @@ func (a *API) createApp(c *gin.Context) {
 		return
 	}
 
-	// Extract datasourceIDs and llmIDs from the input
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
 	llmIDs := input.Data.Attributes.LLMIDs
+	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 
 	app, err := a.service.CreateApp(
 		input.Data.Attributes.Name,
@@ -54,6 +55,7 @@ func (a *API) createApp(c *gin.Context) {
 		input.Data.Attributes.UserID,
 		datasourceIDs,
 		llmIDs,
+		toolIDs, // Pass toolIDs to service method
 		input.Data.Attributes.MonthlyBudget,
 		input.Data.Attributes.BudgetStartDate,
 	)
@@ -151,9 +153,9 @@ func (a *API) updateApp(c *gin.Context) {
 		return
 	}
 
-	// Extract datasourceIDs and llmIDs from the input
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
 	llmIDs := input.Data.Attributes.LLMIDs
+	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 
 	app, err := a.service.UpdateApp(
 		uint(id),
@@ -162,6 +164,7 @@ func (a *API) updateApp(c *gin.Context) {
 		input.Data.Attributes.UserID,
 		datasourceIDs,
 		llmIDs,
+		toolIDs, // Pass toolIDs to service method
 		input.Data.Attributes.MonthlyBudget,
 		input.Data.Attributes.BudgetStartDate,
 	)
@@ -252,10 +255,10 @@ func (a *API) deleteApp(c *gin.Context) {
 // @Success 200 {array} AppResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /users/{userId}/apps [get]
+// @Router /users/{user_id}/apps [get]
 // @Security BearerAuth
 func (a *API) getAppsByUserID(c *gin.Context) {
-	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -278,6 +281,113 @@ func (a *API) getAppsByUserID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+}
+
+// @Summary Count apps by user ID
+// @Description Get the total number of apps for a specific user
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param user_id path int true "User ID"
+// @Success 200 {object} map[string]int64
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /users/{user_id}/apps/count [get]
+// @Security BearerAuth
+func (a *API) countAppsByUserID(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
+		})
+		return
+	}
+
+	count, err := a.service.CountAppsByUserID(uint(userID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+func serializeApp(app *models.App) AppResponse {
+	return AppResponse{
+		Type: "app",
+		ID:   strconv.FormatUint(uint64(app.ID), 10),
+		Attributes: struct {
+			Name            string     `json:"name"`
+			Description     string     `json:"description"`
+			UserID          uint       `json:"user_id"`
+			CredentialID    uint       `json:"credential_id"`
+			DatasourceIDs   []uint     `json:"datasource_ids"`
+			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
+			MonthlyBudget   *float64   `json:"monthly_budget"`
+			BudgetStartDate *time.Time `json:"budget_start_date"`
+		}{
+			Name:            app.Name,
+			Description:     app.Description,
+			UserID:          app.UserID,
+			CredentialID:    app.CredentialID,
+			DatasourceIDs:   getDatasourceIDs(app.Datasources),
+			LLMIDs:          getLLMIDs(app.LLMs),
+			ToolIDs:         getToolIDs(app.Tools),
+			MonthlyBudget:   app.MonthlyBudget,
+			BudgetStartDate: app.BudgetStartDate,
+		},
+	}
+}
+
+func getDatasourceIDs(datasources []models.Datasource) []uint {
+	ids := make([]uint, len(datasources))
+	for i, ds := range datasources {
+		ids[i] = ds.ID
+	}
+	return ids
+}
+
+func getLLMIDs(llms []models.LLM) []uint {
+	ids := make([]uint, len(llms))
+	for i, llm := range llms {
+		ids[i] = llm.ID
+	}
+	return ids
+}
+
+func getToolIDs(tools []models.Tool) []uint {
+	ids := make([]uint, len(tools))
+	for i, tool := range tools {
+		ids[i] = tool.ID
+	}
+	return ids
+}
+
+func serializeApps(apps []models.App) []AppResponse {
+	responses := make([]AppResponse, 0, len(apps))
+	for _, app := range apps {
+		responses = append(responses, serializeApp(&app))
+	}
+	return responses
+}
+
+// createErrorResponse is a helper function to create ErrorResponse structs
+func createErrorResponse(title, detail string) ErrorResponse {
+	return ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: title, Detail: detail}},
+	}
 }
 
 // @Summary Get app by name
@@ -391,34 +501,6 @@ func (a *API) deactivateAppCredential(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func serializeApp(app *models.App) AppResponse {
-	return AppResponse{
-		Type: "app",
-		ID:   strconv.FormatUint(uint64(app.ID), 10),
-		Attributes: struct {
-			Name            string     `json:"name"`
-			Description     string     `json:"description"`
-			UserID          uint       `json:"user_id"`
-			CredentialID    uint       `json:"credential_id"`
-			DatasourceIDs   []uint     `json:"datasource_ids"`
-			LLMIDs          []uint     `json:"llm_ids"`
-			MonthlyBudget   *float64   `json:"monthly_budget"`
-			BudgetStartDate *time.Time `json:"budget_start_date"`
-		}{
-			Name:            app.Name,
-			Description:     app.Description,
-			UserID:          app.UserID,
-			CredentialID:    app.CredentialID,
-			DatasourceIDs:   getDatasourceIDs(app.Datasources),
-			LLMIDs:          getLLMIDs(app.LLMs),
-			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: app.BudgetStartDate,
-		},
-	}
-}
-
-// Add these new functions to your existing app_handlers.go file
-
 // @Summary List all apps
 // @Description Get a list of all apps
 // @Tags apps
@@ -518,63 +600,124 @@ func (a *API) countApps(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"count": count})
 }
 
-// @Summary Count apps by user ID
-// @Description Get the total number of apps for a specific user
+// @Summary Add a tool to an app
+// @Description Associate a tool with an app
 // @Tags apps
 // @Accept json
 // @Produce json
-// @Param userId path int true "User ID"
-// @Success 200 {object} map[string]int64
+// @Param app_id path int true "App ID"
+// @Param tool_id path int true "Tool ID"
+// @Success 200 {object} AppResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /users/{userId}/apps/count [get]
+// @Router /apps/{id}/tools/{tool_id} [post]
 // @Security BearerAuth
-func (a *API) countAppsByUserID(c *gin.Context) {
-	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+func (a *API) addToolToApp(c *gin.Context) {
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Changed "app_id" to "id"
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
-		})
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
+		return
+	}
+	toolID, err := strconv.ParseUint(c.Param("tool_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid Tool ID"))
 		return
 	}
 
-	count, err := a.service.CountAppsByUserID(uint(userID))
+	app, err := a.service.AddToolToApp(uint(appID), uint(toolID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App or Tool not found"))
+			return
+		}
+		// Consider other specific errors, e.g., if the tool is already added
+		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+}
+
+// @Summary Remove a tool from an app
+// @Description Disassociate a tool from an app
+// @Tags apps
+// @Produce json
+// @Param app_id path int true "App ID"
+// @Param tool_id path int true "Tool ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/{id}/tools/{tool_id} [delete]
+// @Security BearerAuth
+func (a *API) removeToolFromApp(c *gin.Context) {
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Changed "app_id" to "id"
+	if err != nil {
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
+		return
+	}
+	toolID, err := strconv.ParseUint(c.Param("tool_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid Tool ID"))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"count": count})
+	err = a.service.RemoveToolFromApp(uint(appID), uint(toolID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App or Tool not found, or tool not associated with app"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
-func getDatasourceIDs(datasources []models.Datasource) []uint {
-	ids := make([]uint, len(datasources))
-	for i, ds := range datasources {
-		ids[i] = ds.ID
+// @Summary Get tools for an app
+// @Description Retrieve all tools associated with a specific app
+// @Tags apps
+// @Produce json
+// @Param app_id path int true "App ID"
+// @Success 200 {object} AppResponse // Should be []ToolResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/{id}/tools [get]
+// @Security BearerAuth
+func (a *API) getAppTools(c *gin.Context) {
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32) // Changed "app_id" to "id"
+	if err != nil {
+		c.JSON(http.StatusBadRequest, createErrorResponse("Bad Request", "Invalid App ID"))
+		return
 	}
-	return ids
-}
 
-func getLLMIDs(llms []models.LLM) []uint {
-	ids := make([]uint, len(llms))
-	for i, llm := range llms {
-		ids[i] = llm.ID
+	tools, err := a.service.GetAppTools(uint(appID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App not found"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
+		return
 	}
-	return ids
-}
 
-func serializeApps(apps []models.App) []AppResponse {
-	result := make([]AppResponse, len(apps))
-	for i, app := range apps {
-		result[i] = serializeApp(&app)
+	// Convert tools to response format with full details
+	response := make([]gin.H, len(tools))
+	for i, tool := range tools {
+		response[i] = gin.H{
+			"type": "tools",
+			"id":   tool.ID,
+			"attributes": gin.H{
+				"name":          tool.Name,
+				"description":   tool.Description,
+				"tool_type":     tool.ToolType,
+				"privacy_score": tool.PrivacyScore,
+				"created_at":    tool.CreatedAt,
+				"updated_at":    tool.UpdatedAt,
+			},
+		}
 	}
-	return result
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
 }

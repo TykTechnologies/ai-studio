@@ -23,6 +23,7 @@ type Tool struct {
 	FileStores   []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
 	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
 	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
+	Apps         []*App      `gorm:"many2many:app_tools;" json:"apps"`
 }
 
 type Tools []Tool
@@ -42,7 +43,7 @@ func (t *Tool) Create(db *gorm.DB) error {
 
 // Get a tool by ID
 func (t *Tool) Get(db *gorm.DB, id uint) error {
-	return db.Preload("FileStores").Preload("Filters").Preload("Dependencies").First(t, id).Error
+	return db.Preload("FileStores").Preload("Filters").Preload("Dependencies").Preload("Apps").First(t, id).Error
 }
 
 // Update an existing tool
@@ -57,7 +58,7 @@ func (t *Tool) Delete(db *gorm.DB) error {
 
 // GetByName gets a tool by its name
 func (t *Tool) GetByName(db *gorm.DB, name string) error {
-	return db.Where("name = ?", name).Preload("FileStores").Preload("Filters").Preload("Dependencies").First(t).Error
+	return db.Where("name = ?", name).Preload("FileStores").Preload("Filters").Preload("Dependencies").Preload("Apps").First(t).Error
 }
 
 // GetAll retrieves all tools
@@ -79,33 +80,33 @@ func (t *Tools) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Find(t).Error
+	err := query.Preload("Apps").Find(t).Error
 	return totalCount, totalPages, err
 }
 
 // GetByType retrieves all tools of a specific type
 func (t *Tools) GetByType(db *gorm.DB, toolType string) error {
-	return db.Where("tool_type = ?", toolType).Find(t).Error
+	return db.Where("tool_type = ?", toolType).Preload("Apps").Find(t).Error
 }
 
 // GetByPrivacyScoreMin retrieves all tools with a privacy score greater than or equal to the given minimum
 func (t *Tools) GetByPrivacyScoreMin(db *gorm.DB, minScore int) error {
-	return db.Where("privacy_score >= ?", minScore).Find(t).Error
+	return db.Where("privacy_score >= ?", minScore).Preload("Apps").Find(t).Error
 }
 
 // GetByPrivacyScoreMax retrieves all tools with a privacy score less than or equal to the given maximum
 func (t *Tools) GetByPrivacyScoreMax(db *gorm.DB, maxScore int) error {
-	return db.Where("privacy_score <= ?", maxScore).Find(t).Error
+	return db.Where("privacy_score <= ?", maxScore).Preload("Apps").Find(t).Error
 }
 
 // GetByPrivacyScoreRange retrieves all tools with a privacy score within the given range
 func (t *Tools) GetByPrivacyScoreRange(db *gorm.DB, minScore, maxScore int) error {
-	return db.Where("privacy_score BETWEEN ? AND ?", minScore, maxScore).Find(t).Error
+	return db.Where("privacy_score BETWEEN ? AND ?", minScore, maxScore).Preload("Apps").Find(t).Error
 }
 
 // Search retrieves all tools matching the given query in name or description
 func (t *Tools) Search(db *gorm.DB, query string) error {
-	return db.Where("name LIKE ? OR description LIKE ?", "%"+query+"%", "%"+query+"%").Find(t).Error
+	return db.Where("name LIKE ? OR description LIKE ?", "%"+query+"%", "%"+query+"%").Preload("Apps").Find(t).Error
 }
 
 // AddOperation adds a new operation to the AvailableOperations list

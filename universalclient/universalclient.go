@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/tmc/langchaingo/llms"
@@ -99,7 +100,13 @@ type ClientOption func(*Client)
 // NewClient creates a new API client from an OpenAPI specification
 func NewClient(specBytes []byte, baseURL string, options ...ClientOption) (*Client, error) {
 	// Parse the OpenAPI specification
-	doc, err := libopenapi.NewDocument(specBytes)
+	config := &datamodel.DocumentConfiguration{
+		AllowFileReferences:   false,
+		AllowRemoteReferences: false,
+		BaseURL:               nil,
+		RemoteURLHandler:      nil,
+	}
+	doc, err := libopenapi.NewDocumentWithConfiguration(specBytes, config)
 	if err != nil {
 		return nil, err
 	}

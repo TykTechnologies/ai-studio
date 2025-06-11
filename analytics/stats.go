@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"sort"
 	"strconv"
 	"time"
 
@@ -275,6 +276,84 @@ func GetToolUsageStatistics(db *gorm.DB, startDate, endDate time.Time) (*ChartDa
 	return chartData, nil
 }
 
+// GetToolOperationsUsageOverTime returns the usage count for each operation of a specific tool over time
+func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate time.Time) (*models.MultiAxisChartData, error) {
+	// Get all operations for this tool with their usage over time
+	var results []struct {
+		Date  string
+		Name  string
+		Count int64
+	}
+
+	err := db.Model(&models.ToolCallRecord{}).
+		Select("DATE(time_stamp) as date, name, COUNT(*) as count").
+		Where("tool_id = ? AND time_stamp BETWEEN ? AND ?", toolID, startDate, endDate).
+		Group("DATE(time_stamp), name").
+		Order("date ASC, name ASC").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Build unique date labels and operation names
+	dateSet := make(map[string]bool)
+	operationSet := make(map[string]bool)
+
+	for _, result := range results {
+		dateSet[result.Date] = true
+		operationSet[result.Name] = true
+	}
+
+	// Convert to sorted slices
+	var dates []string
+	for date := range dateSet {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+
+	var operations []string
+	for op := range operationSet {
+		operations = append(operations, op)
+	}
+	sort.Strings(operations)
+
+	// Create a map for quick lookup
+	dataMap := make(map[string]map[string]int64)
+	for _, result := range results {
+		if dataMap[result.Date] == nil {
+			dataMap[result.Date] = make(map[string]int64)
+		}
+		dataMap[result.Date][result.Name] = result.Count
+	}
+
+	// Build datasets for each operation
+	var datasets []models.Dataset
+	for _, operation := range operations {
+		data := make([]float64, len(dates))
+		for i, date := range dates {
+			if count, exists := dataMap[date][operation]; exists {
+				data[i] = float64(count)
+			} else {
+				data[i] = 0
+			}
+		}
+
+		datasets = append(datasets, models.Dataset{
+			Label: operation,
+			Data:  data,
+			Yaxis: "y",
+		})
+	}
+
+	chartData := &models.MultiAxisChartData{
+		Labels:   dates,
+		Datasets: datasets,
+	}
+
+	return chartData, nil
+}
+
 // GetUniqueUsersPerDay returns the number of unique users per day
 func GetUniqueUsersPerDay(db *gorm.DB, startDate, endDate time.Time) (*ChartData, error) {
 	var results []struct {
@@ -418,7 +497,7 @@ func GetTokenUsageForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) 
 		tokenData.Labels[i] = result.Date
 		tokenData.Data[i] = float64(result.Tokens)
 		costData.Labels[i] = result.Date
-		costData.Data[i] = result.Cost/10000
+		costData.Data[i] = result.Cost / 10000
 	}
 
 	return &ChartData{
@@ -438,6 +517,37 @@ func GetChatInteractionsForChat(db *gorm.DB, startDate, endDate time.Time, chatI
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, COUNT(*) as interactions").
 		Where("time_stamp BETWEEN ? AND ? AND chat_id = ?", startDate, endDate, chatID).
+		Group("DATE(time_stamp)").
+		Order("date").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	chartData := &ChartData{
+		Labels: make([]string, len(results)),
+		Data:   make([]float64, len(results)),
+	}
+
+	for i, result := range results {
+		chartData.Labels[i] = result.Date
+		chartData.Data[i] = float64(result.Interactions)
+	}
+
+	return chartData, nil
+}
+
+// GetAppInteractionsOverTime returns the number of LLM interactions for a specific app over time
+func GetAppInteractionsOverTime(db *gorm.DB, startDate, endDate time.Time, appID uint) (*ChartData, error) {
+	var results []struct {
+		Date         string
+		Interactions int64
+	}
+
+	err := db.Model(&models.LLMChatRecord{}).
+		Select("DATE(time_stamp) as date, COUNT(*) as interactions").
+		Where("time_stamp BETWEEN ? AND ? AND app_id = ?", startDate, endDate, appID).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -492,7 +602,7 @@ func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) 
 	for i, result := range results {
 		response.Labels[i] = result.Date
 		response.TokenUsage[i] = float64(result.Tokens)
-		response.Cost[i] = result.Cost/10000
+		response.Cost[i] = result.Cost / 10000
 	}
 
 	return &ChartData{
@@ -540,7 +650,7 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 	for i, result := range results {
 		response.Labels[i] = result.Date
 		response.TokenUsage[i] = float64(result.Tokens)
-		response.Cost[i] = result.Cost/10000
+		response.Cost[i] = result.Cost / 10000
 	}
 
 	return &ChartData{
@@ -634,7 +744,7 @@ func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, a
 	for i, result := range results {
 		chartData.Labels[i] = result.Date
 		chartData.Datasets[0].Data[i] = float64(result.Tokens)
-		chartData.Datasets[1].Data[i] = result.Cost/10000
+		chartData.Datasets[1].Data[i] = result.Cost / 10000
 		chartData.Datasets[2].Data[i] = float64(result.PromptTokens)
 		chartData.Datasets[3].Data[i] = float64(result.ResponseTokens)
 		chartData.Datasets[4].Data[i] = float64(result.CacheWriteTokens)
@@ -682,7 +792,7 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 	for i, result := range results {
 		chartData.Labels[i] = result.Date
 		chartData.Datasets[0].Data[i] = float64(result.Tokens)
-		chartData.Datasets[1].Data[i] = result.Cost/10000
+		chartData.Datasets[1].Data[i] = result.Cost / 10000
 	}
 
 	return chartData, nil

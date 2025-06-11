@@ -180,6 +180,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 				return
 			}
 
+			// Skip OAuth endpoints - they don't need CSRF protection
+			if strings.HasPrefix(c.Request.URL.Path, "/oauth/") {
+				c.Next()
+				return
+			}
+
 			csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				c.Request = r
 				c.Next()
@@ -295,6 +301,31 @@ func (a *API) setupRoutes() {
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
+	// OAuth 2.0 Authorization Server Endpoints - must be registered before NoRoute
+	public := a.router.Group("/")
+	oauthGroup := public.Group("/oauth")
+	{
+		// Dynamic Client Registration - public endpoint for now (auth will be added later)
+		oauthGroup.POST("/register_client", a.handleRegisterOAuthClient)
+		oauthGroup.OPTIONS("/register_client", a.handleRegisterOAuthClient)
+		// Authorization Endpoint - requires user authentication (user logs in to grant access)
+		// This endpoint will now redirect to a consent page if needed.
+		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), a.handleOAuthAuthorize)
+		oauthGroup.OPTIONS("/authorize", a.handleOAuthAuthorize)
+		// Token Endpoint - typically requires client authentication
+		oauthGroup.POST("/token", a.handleOAuthToken)
+		oauthGroup.OPTIONS("/token", a.handleOAuthToken)
+
+		// Endpoints for consent screen flow - require user authentication
+		oauthGroup.GET("/consent_details", a.auth.AuthMiddleware(), a.handleGetConsentDetails)
+		oauthGroup.OPTIONS("/consent_details", a.handleGetConsentDetails)
+		oauthGroup.POST("/submit_consent", a.auth.AuthMiddleware(), a.handleSubmitConsent)
+		oauthGroup.OPTIONS("/submit_consent", a.handleSubmitConsent)
+	}
+	// AS Metadata - public
+	public.GET("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+	public.OPTIONS("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Check if it's a static file request
@@ -320,7 +351,11 @@ func (a *API) setupRoutes() {
 		c.Status(http.StatusOK)
 	})
 
-	public := a.router.Group("/")
+	// Analytics endpoints for portal users
+	portalAnalytics := a.router.Group("/analytics")
+	portalAnalytics.Use(a.auth.AuthMiddleware())
+	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
+	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
 
 	// Public routes
 	public.POST("/auth/login", a.handleLogin)
@@ -350,7 +385,12 @@ func (a *API) setupRoutes() {
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
-	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
+	// Use secure version for portal users that hides sensitive fields like auth_key and oas_spec
+	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
+	// Route for tool documentation page
+	authed.GET("/tools/:id/docs", a.GetToolDocumentation)
+	// Route to get user apps that have access to a tool
+	authed.GET("/tools/:id/user-apps", a.getToolUserApps)
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
@@ -489,14 +529,19 @@ func (a *API) setupRoutes() {
 	v1.GET("/apps/:id", licensing.ActionHandler(a.getApp, "Get App"))
 	v1.PATCH("/apps/:id", licensing.ActionHandler(a.updateApp, "Update App"))
 	v1.DELETE("/apps/:id", licensing.ActionHandler(a.deleteApp, "Delete App"))
-	v1.GET("/users/:id/apps", a.getAppsByUserID)
+	v1.GET("/users/:id/apps", a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
 	v1.GET("/apps", a.listApps)
 	v1.GET("/apps/search", a.searchApps)
 	v1.GET("/apps/count", a.countApps)
-	v1.GET("/users/:id/apps/count", a.countAppsByUserID)
+	v1.GET("/users/:id/apps/count", a.countAppsByUserID) // Note: Param is "id" here
+
+	// App-Tool routes
+	v1.POST("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.addToolToApp, "Add Tool to App"))
+	v1.DELETE("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.removeToolFromApp, "Remove Tool from App"))
+	v1.GET("/apps/:id/tools", licensing.ActionHandler(a.getAppTools, "Get App Tools"))
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)
@@ -591,6 +636,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/cost-analysis", a.getCostAnalysis)
 	v1.GET("/analytics/most-used-llm-models", a.getMostUsedLLMModels)
 	v1.GET("/analytics/tool-usage-statistics", a.getToolUsageStatistics)
+	v1.GET("/analytics/tool-operations-usage-over-time", a.getToolOperationsUsageOverTime)
 	v1.GET("/analytics/unique-users-per-day", a.getUniqueUsersPerDay)
 	v1.GET("/analytics/token-usage-per-user", a.getTokenUsagePerUser)
 	v1.GET("/analytics/token-usage-per-app", a.getTokenUsagePerApp)
@@ -603,6 +649,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 	v1.GET("/analytics/budget-usage", a.getBudgetUsage)
 	v1.GET("/analytics/budget-usage-for-app", a.getBudgetUsageForApp)
+	v1.GET("/analytics/app-interactions-over-time", a.getAppInteractionsOverTime)
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
@@ -654,10 +701,10 @@ func (a *API) setupRoutes() {
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
-		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID", "Location"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	})

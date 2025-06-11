@@ -21,6 +21,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/liushuangls/go-anthropic/v2 v2.8.0
 	github.com/lu4p/cat v0.1.5
+	github.com/mark3labs/mcp-go v0.31.0
 	github.com/pb33f/libopenapi v0.18.0
 	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/sashabaranov/go-openai v1.31.0
@@ -169,7 +170,7 @@ require (
 	github.com/redis/rueidis v1.0.34 // indirect
 	github.com/russellhaering/goxmldsig v1.4.0 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
-	github.com/spf13/cast v1.6.0 // indirect
+	github.com/spf13/cast v1.7.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
@@ -190,6 +191,7 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190809123943-df4f5c81cb3b // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/yargevad/filepathx v1.0.0 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	gitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181 // indirect
 	gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82 // indirect
@@ -237,4 +239,5 @@ require (
 )
 
 replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20250131233632-4cdc6fe5fe92
+
 replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.34.0

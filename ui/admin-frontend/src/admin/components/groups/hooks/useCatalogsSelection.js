@@ -20,7 +20,7 @@ export const useCatalogsSelection = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const { isGatewayOnly, isPortalOnly, isChatOnly } = getFeatureFlags(features);
+  const { isGatewayOnly, isPortalEnabled, isChatEnabled } = getFeatureFlags(features);
 
   const fetchCatalogs = useCallback(async () => {
     if (isGatewayOnly) return;
@@ -30,9 +30,9 @@ export const useCatalogsSelection = (
     
     try {
       const [catalogsRes, dataCatalogsRes, toolCatalogsRes] = await Promise.all([
-        (isPortalOnly || (!isGatewayOnly && !isChatOnly)) ? getCatalogues(1, true) : [],
+        isPortalEnabled ? getCatalogues(1, true) : [],
         !isGatewayOnly ? getDataCatalogues(1, true) : [],
-        (isChatOnly || (!isGatewayOnly && !isPortalOnly)) ? getToolCatalogues(1, true) : []
+        isChatEnabled ? getToolCatalogues(1, true) : []
       ]);
 
       setCatalogs(catalogsRes || []);
@@ -44,7 +44,7 @@ export const useCatalogsSelection = (
     } finally {
       setLoading(false);
     }
-  }, [isGatewayOnly, isPortalOnly, isChatOnly]);
+  }, [isGatewayOnly, isPortalEnabled, isChatEnabled]);
 
   const formatCatalogsForSelect = useCallback((catalogItems) => {
     if (!Array.isArray(catalogItems)) return [];

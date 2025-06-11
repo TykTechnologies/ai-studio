@@ -4,7 +4,7 @@ import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
 import Icon from '../../../components/common/Icon';
 
-const PortalDrawer = () => {
+const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
   const { features, loading: featuresLoading } = useSystemFeatures();
   const { 
     userEntitlements, 
@@ -57,6 +57,15 @@ const PortalDrawer = () => {
               id: `db-${catalogue.id}`,
               text: catalogue.attributes.name,
               path: `/portal/databases/${catalogue.id}`
+            })) || []
+          },
+          {
+            id: 'tools',
+            text: 'Tools',
+            subItems: userEntitlements?.tool_catalogues?.map(catalogue => ({
+              id: `tool-${catalogue.id}`,
+              text: catalogue.attributes.name,
+              path: `/portal/tools/${catalogue.id}`
             })) || []
           }
         ]

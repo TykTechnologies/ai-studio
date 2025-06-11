@@ -476,7 +476,7 @@ func (a *API) createUserApp(c *gin.Context) {
 	}
 
 	// Create the app
-	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, nil, nil)
+	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate)
 	if err != nil {
 		// Check for specific error types and return appropriate responses
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
@@ -493,6 +493,14 @@ func (a *API) createUserApp(c *gin.Context) {
 		return
 	}
 
+	// Log the app.Tools right after receiving from service
+	slog.Info("App received from service", "appID", app.ID, "toolsCount", len(app.Tools))
+	if len(app.Tools) > 0 {
+		slog.Info("First tool name from service", "toolName", app.Tools[0].Name)
+	}
+
+	currentAppTools := app.Tools // Explicitly copy/reference before response construction
+
 	// Prepare the response
 	response := AppResponse{
 		Type: "app",
@@ -504,13 +512,23 @@ func (a *API) createUserApp(c *gin.Context) {
 			CredentialID    uint       `json:"credential_id"`
 			DatasourceIDs   []uint     `json:"datasource_ids"`
 			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
 		}{
-			Name:            app.Name,
-			Description:     app.Description,
-			UserID:          app.UserID,
-			CredentialID:    app.CredentialID,
+			Name:          app.Name,
+			Description:   app.Description,
+			UserID:        app.UserID,
+			CredentialID:  app.CredentialID,
+			DatasourceIDs: getDatasourceIDs(app.Datasources),
+			LLMIDs:        getLLMIDs(app.LLMs),
+			ToolIDs: func() []uint { // This was missing from the previous diff's Attributes block
+				ids := make([]uint, len(currentAppTools)) // Use the local variable
+				for i, tool := range currentAppTools {    // Use the local variable
+					ids[i] = tool.ID
+				}
+				return ids
+			}(),
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 		},
@@ -540,10 +558,13 @@ func containsLLM(llms []models.LLM, id uint) bool {
 
 // CreateAppRequest represents the request body for creating a new app
 type CreateAppRequest struct {
-	Name          string `json:"name" binding:"required"`
-	Description   string `json:"description" binding:"required"`
-	DataSourceIDs []uint `json:"data_source_ids" binding:"required"`
-	LLMIDs        []uint `json:"llm_ids" binding:"required"`
+	Name            string     `json:"name" binding:"required"`
+	Description     string     `json:"description" binding:"required"`
+	DataSourceIDs   []uint     `json:"data_source_ids" binding:"required"`
+	LLMIDs          []uint     `json:"llm_ids" binding:"required"`
+	ToolIDs         []uint     `json:"tool_ids" binding:"required"`
+	MonthlyBudget   *float64   `json:"monthly_budget"`
+	BudgetStartDate *time.Time `json:"budget_start_date"`
 }
 
 // getUserAccessibleDataSources godoc
@@ -737,6 +758,7 @@ func (a *API) getUserApps(c *gin.Context) {
 				CredentialID    uint       `json:"credential_id"`
 				DatasourceIDs   []uint     `json:"datasource_ids"`
 				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
@@ -757,6 +779,13 @@ func (a *API) getUserApps(c *gin.Context) {
 					ids := make([]uint, len(app.LLMs))
 					for i, llm := range app.LLMs {
 						ids[i] = llm.ID
+					}
+					return ids
+				}(),
+				ToolIDs: func() []uint {
+					ids := make([]uint, len(app.Tools))
+					for i, tool := range app.Tools {
+						ids[i] = tool.ID
 					}
 					return ids
 				}(),
@@ -859,6 +888,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			CredentialID    uint             `json:"credential_id"`
 			DatasourceIDs   []uint           `json:"datasource_ids"`
 			LLMIDs          []uint           `json:"llm_ids"`
+			ToolIDs         []uint           `json:"tool_ids"`
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
 			Credential      CredentialDetail `json:"credential"`
@@ -871,6 +901,13 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 				ids := make([]uint, len(app.Datasources))
 				for i, ds := range app.Datasources {
 					ids[i] = ds.ID
+				}
+				return ids
+			}(),
+			ToolIDs: func() []uint {
+				ids := make([]uint, len(app.Tools))
+				for i, tool := range app.Tools {
+					ids[i] = tool.ID
 				}
 				return ids
 			}(),

@@ -2,8 +2,10 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
@@ -1264,6 +1266,13 @@ func (a *API) setToolDependencies(c *gin.Context) {
 // @Router /tools/{id}/spec-operations [get]
 // @Security BearerAuth
 func (a *API) listToolSpecOperations(c *gin.Context) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if duration > 200*time.Millisecond {
+			log.Printf("SLOW API: listToolSpecOperations took %v", duration)
+		}
+	}()
 	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -1324,6 +1333,13 @@ type CallOperationInput struct {
 // @Router /tools/{id}/call-operation [post]
 // @Security BearerAuth
 func (a *API) callToolOperation(c *gin.Context) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if duration > 1*time.Second {
+			log.Printf("SLOW API: callToolOperation took %v", duration)
+		}
+	}()
 	toolID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{

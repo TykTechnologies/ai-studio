@@ -221,8 +221,21 @@ func (s *NotificationService) GetMailer() notifications.Mailer {
 
 // renderTemplate renders a template with the given data
 func (s *NotificationService) renderTemplate(templateName string, data interface{}) (string, error) {
+	// Define the formatDate function
+	formatDate := func(t time.Time) string {
+		return t.Format("January 2, 2006")
+	}
+
+	funcMap := template.FuncMap{
+		"formatDate": formatDate,
+	}
+
+	// Get the base name of the template for template.New()
+	baseName := filepath.Base(templateName)
+
 	// First try the full path if provided
-	tmpl, err := template.ParseFiles(templateName)
+	// Use New().Funcs().ParseFiles() to include the custom function
+	tmpl, err := template.New(baseName).Funcs(funcMap).ParseFiles(templateName)
 	if err != nil {
 		// If that fails, try to find the templates directory by walking up
 		wd, err := os.Getwd()
@@ -236,7 +249,7 @@ func (s *NotificationService) renderTemplate(templateName string, data interface
 		for {
 			tryPath := filepath.Join(currentDir, templatePath)
 			if _, err := os.Stat(tryPath); err == nil {
-				tmpl, err = template.ParseFiles(tryPath)
+				tmpl, err = template.New(baseName).Funcs(funcMap).ParseFiles(tryPath) // Use New().Funcs() here too
 				if err != nil {
 					return "", fmt.Errorf("error parsing template: %v", err)
 				}

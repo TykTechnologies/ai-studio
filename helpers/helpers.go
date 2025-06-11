@@ -259,6 +259,18 @@ func HashString(s string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+// CalculatePKCEChallengeS256 calculates the S256 PKCE code challenge.
+// It takes the code verifier, computes its SHA256 hash, and then Base64 URL encodes the hash.
+func CalculatePKCEChallengeS256(codeVerifier string) string {
+	// Calculate SHA256 hash
+	sha256Hash := sha256.Sum256([]byte(codeVerifier))
+
+	// Base64 URL encode the hash
+	// The standard base64.URLEncoding uses padding, which should be removed for PKCE.
+	challenge := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(sha256Hash[:])
+	return challenge
+}
+
 func DaysLeft(targetDate time.Time) int {
 	now := time.Now().UTC().Truncate(24 * time.Hour)
 	normalizedTarget := targetDate.UTC().Truncate(24 * time.Hour)

@@ -78,7 +78,7 @@ func (h *ChatHub) UpdateSession(sessionID string, updateFunc func(*chat_session.
 	if !exists {
 		// Instead of returning an error, we'll try to load or create a new session
 		slog.Info("Session not found in memory cache, attempting to load or create", "session_id", sessionID)
-		
+
 		// We need to create a new session with the given ID
 		// Since we don't have direct access to the API instance here,
 		// we'll return a special error that can be handled by the caller
@@ -148,7 +148,7 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 	// Create a context with cancellation for this request
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
-	
+
 	// Create a channel for client disconnection
 	clientGone := c.Writer.CloseNotify()
 
@@ -209,7 +209,7 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 				log.Printf("Recovered from panic in keep-alive goroutine: %v", r)
 			}
 		}()
-		
+
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -238,7 +238,7 @@ func sendSSEMessage(w http.ResponseWriter, event, data string) {
 	// Encode newlines in data to ensure proper SSE format
 	encodedData := strings.ReplaceAll(data, "\n", "\\n")
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, encodedData)
-	
+
 	// Add a safe flush with error handling
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
@@ -251,7 +251,7 @@ func handleSSEOutgoingMessages(w http.ResponseWriter, cs *chat_session.ChatSessi
 			log.Printf("Recovered from panic in SSE message handler: %v", r)
 		}
 	}()
-	
+
 	var currentMessage strings.Builder
 	var isStreaming bool
 	for {
@@ -385,7 +385,7 @@ func (a *API) handleSSEUserMessage(c *gin.Context) {
 		}
 		thisUser := uObj.(*models.User)
 		userID := uint(thisUser.ID)
-		
+
 		// Try to load the session from the database
 		loadedSession, err := a.loadExistingSession(sessionID, userID)
 		if err != nil {
@@ -398,7 +398,7 @@ func (a *API) handleSSEUserMessage(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Start the session and add it to the hub
 		err = loadedSession.Start()
 		if err != nil {
@@ -411,7 +411,7 @@ func (a *API) handleSSEUserMessage(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		hub.AddSession(sessionID, loadedSession)
 		session = loadedSession
 		slog.Info("Successfully loaded and started session from database", "session_id", sessionID)
@@ -453,7 +453,7 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
 		// Check if this is our special error indicating session not in cache
 		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
@@ -470,7 +470,7 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 			}
 			thisUser := uObj.(*models.User)
 			userID := uint(thisUser.ID)
-			
+
 			// Try to load the session from the database
 			loadedSession, err := a.loadExistingSession(sessionID, userID)
 			if err != nil {
@@ -483,7 +483,7 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			// Start the session and add it to the hub
 			err = loadedSession.Start()
 			if err != nil {
@@ -496,9 +496,9 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			hub.AddSession(sessionID, loadedSession)
-			
+
 			// Now try the update again
 			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
 				errInner := session.AddDatasource(input.DatasourceID)
@@ -507,7 +507,7 @@ func (a *API) addDatasourceToChatSession(c *gin.Context) {
 				}
 				return nil
 			})
-			
+
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, ErrorResponse{
 					Errors: []struct {
@@ -549,7 +549,7 @@ func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 		session.RemoveDatasource(uint(datasourceID))
 		return nil
 	})
-	
+
 	if err != nil {
 		// Check if this is our special error indicating session not in cache
 		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
@@ -566,7 +566,7 @@ func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 			}
 			thisUser := uObj.(*models.User)
 			userID := uint(thisUser.ID)
-			
+
 			// Try to load the session from the database
 			loadedSession, err := a.loadExistingSession(sessionID, userID)
 			if err != nil {
@@ -579,7 +579,7 @@ func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			// Start the session and add it to the hub
 			err = loadedSession.Start()
 			if err != nil {
@@ -592,15 +592,15 @@ func (a *API) removeDatasourceFromChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			hub.AddSession(sessionID, loadedSession)
-			
+
 			// Now try the update again
 			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
 				session.RemoveDatasource(uint(datasourceID))
 				return nil
 			})
-			
+
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, ErrorResponse{
 					Errors: []struct {
@@ -678,7 +678,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
 		// Check if this is our special error indicating session not in cache
 		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
@@ -695,7 +695,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 			}
 			thisUser := uObj.(*models.User)
 			userID := uint(thisUser.ID)
-			
+
 			// Try to load the session from the database
 			loadedSession, err := a.loadExistingSession(sessionID, userID)
 			if err != nil {
@@ -708,7 +708,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			// Start the session and add it to the hub
 			err = loadedSession.Start()
 			if err != nil {
@@ -721,9 +721,9 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			hub.AddSession(sessionID, loadedSession)
-			
+
 			// Now try the update again
 			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
 				if e := session.AddTool(input.ToolID, *tool); e != nil {
@@ -731,7 +731,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 				}
 				return nil
 			})
-			
+
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, ErrorResponse{
 					Errors: []struct {
@@ -774,7 +774,7 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 		session.RemoveTool(toolID)
 		return nil
 	})
-	
+
 	if err != nil {
 		// Check if this is our special error indicating session not in cache
 		if strings.HasPrefix(err.Error(), "session_not_in_cache:") {
@@ -791,7 +791,7 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 			}
 			thisUser := uObj.(*models.User)
 			userID := uint(thisUser.ID)
-			
+
 			// Try to load the session from the database
 			loadedSession, err := a.loadExistingSession(sessionID, userID)
 			if err != nil {
@@ -804,7 +804,7 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			// Start the session and add it to the hub
 			err = loadedSession.Start()
 			if err != nil {
@@ -817,15 +817,15 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 				})
 				return
 			}
-			
+
 			hub.AddSession(sessionID, loadedSession)
-			
+
 			// Now try the update again
 			err = hub.UpdateSession(sessionID, func(session *chat_session.ChatSession) error {
 				session.RemoveTool(toolID)
 				return nil
 			})
-			
+
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, ErrorResponse{
 					Errors: []struct {
@@ -868,7 +868,7 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 		}
 		thisUser := uObj.(*models.User)
 		userID := uint(thisUser.ID)
-		
+
 		// Try to load the session from the database
 		loadedSession, err := a.loadExistingSession(sessionID, userID)
 		if err != nil {
@@ -881,7 +881,7 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Start the session and add it to the hub
 		err = loadedSession.Start()
 		if err != nil {
@@ -894,7 +894,7 @@ func (a *API) UploadFileToSession(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		hub.AddSession(sessionID, loadedSession)
 		session = loadedSession
 		slog.Info("Successfully loaded and started session from database", "session_id", sessionID)
