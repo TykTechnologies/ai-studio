@@ -374,7 +374,9 @@ func TestHandleOAuthAuthorize_ValidationErrors(t *testing.T) {
 		expectedErrorSubstring string
 	}{
 		{"no_response_type", "?client_id=1&redirect_uri=x&code_challenge=y&code_challenge_method=S256", "response_type must be 'code'"},
-		{"no_client_id", "?response_type=code&redirect_uri=x&code_challenge=y&code_challenge_method=S256", "client_id, redirect_uri, code_challenge, and code_challenge_method are required"},
+		{"no_client_id", "?response_type=code&redirect_uri=x&code_challenge=y&code_challenge_method=S256", "client_id and redirect_uri are required"},
+		{"no_redirect_uri", "?response_type=code&client_id=1&code_challenge=y&code_challenge_method=S256", "client_id and redirect_uri are required"},
+		{"invalid_pkce_method", "?response_type=code&client_id=1&redirect_uri=x&code_challenge=y&code_challenge_method=plain", "code_challenge_method must be 'S256'"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
