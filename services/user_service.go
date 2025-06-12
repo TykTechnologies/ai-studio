@@ -3,7 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"slices"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -20,6 +20,21 @@ type UserDTO struct {
 	NotificationsEnabled bool
 	AccessToSSOConfig    bool
 	Groups               []uint
+}
+
+func (s *Service) addDefaultGroupIfNotExists(groups []uint) ([]uint, error) {
+	if !slices.Contains(groups, models.DefaultGroupID) {
+		exists, err := models.DefaultGroupExists(s.DB)
+		if err != nil {
+			return groups, err
+		}
+
+		if exists {
+			groups = append(groups, models.DefaultGroupID)
+		}
+	}
+
+	return groups, nil
 }
 
 func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
@@ -50,8 +65,13 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		return nil, err
 	}
 
-	if len(dto.Groups) > 0 {
-		user.ParseGroupAssociations(dto.Groups)
+	groups, err := s.addDefaultGroupIfNotExists(dto.Groups)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(groups) > 0 {
+		user.ParseGroupAssociations(groups)
 	}
 
 	if err := user.Create(s.DB); err != nil {
@@ -99,13 +119,7 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateUser(id uint, dto UserDTO) (*models.User, error) {
-	email := strings.ToLower(dto.Email)
-	user, err := s.GetUserByID(id, "Groups")
-	if err != nil {
-		return nil, err
-	}
-
+func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, error) {
 	if dto.NotificationsEnabled && !dto.IsAdmin {
 		return nil, fmt.Errorf("notifications can only be enabled for admin users")
 	}
@@ -114,7 +128,7 @@ func (s *Service) UpdateUser(id uint, dto UserDTO) (*models.User, error) {
 		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
 	}
 
-	user.Email = email
+	user.Email = dto.Email
 	user.Name = dto.Name
 	user.IsAdmin = dto.IsAdmin
 	user.ShowChat = dto.ShowChat
@@ -146,13 +160,27 @@ func (s *Service) UpdateUser(id uint, dto UserDTO) (*models.User, error) {
 	return user, nil
 }
 
-func (s *Service) DeleteUser(id uint) error {
-	user, err := s.GetUserByID(id)
-	if err != nil {
+func (s *Service) DeleteUser(user *models.User) error {
+	if user.GetRole() == models.RoleSuperAdmin {
+		return helpers.NewForbiddenError("operation not allowed")
+	}
+
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := user.DeleteGroupAssociation(tx); err != nil {
+		tx.Rollback()
 		return err
 	}
 
-	return user.Delete(s.DB)
+	if err := user.Delete(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 var (

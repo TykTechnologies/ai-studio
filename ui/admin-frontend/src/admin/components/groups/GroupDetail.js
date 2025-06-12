@@ -1,5 +1,5 @@
 import { Typography, CircularProgress } from "@mui/material";
-import { TitleBox, ContentBox, SecondaryLinkButton, ResponsiveTitleBox, TitleContentBox, ActionButtonsBox, PrimaryButton } from "../../styles/sharedStyles";
+import { TitleBox, StyledContentBox, SecondaryLinkButton, ResponsiveTitleBox, TitleContentBox, ActionButtonsBox, PrimaryButton } from "../../styles/sharedStyles";
 import Section from "../common/Section";
 import CollapsibleSection from "../common/CollapsibleSection";
 import TeamMembersTable from "./components/TeamMembersTable";
@@ -81,14 +81,7 @@ const GroupDetail = () => {
           </ActionButtonsBox>
         </ResponsiveTitleBox>
       </TitleBox>
-      <ContentBox sx={{
-        maxWidth: {
-          xs: '100%',
-          sm: '100%',
-          md: '100%',
-          lg: '75%'
-        }
-      }}>
+      <StyledContentBox>
         {/* Section 1: Name */}
         <Section>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -125,7 +118,7 @@ const GroupDetail = () => {
             defaultExpanded={true}
           />
         )}
-      </ContentBox>
+      </StyledContentBox>
     </>
   );
 };

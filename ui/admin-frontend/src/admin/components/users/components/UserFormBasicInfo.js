@@ -1,10 +1,11 @@
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { Typography, Box } from "@mui/material";
 import { StyledTextField } from "../../../styles/sharedStyles";
 import { StyledCheckbox } from "../../../../portal/styles/authStyles";
 import CollapsibleSection from "../../common/CollapsibleSection";
 import InfoTooltip from "../../common/InfoTooltip";
 import { useFormValidation } from "../hooks/useFormValidation";
+import { useParams } from "react-router-dom";
 
 const UserFormBasicInfo = memo(({
   name,
@@ -14,8 +15,11 @@ const UserFormBasicInfo = memo(({
   password,
   setPassword,
   emailVerified,
-  setEmailVerified
+  setEmailVerified,
+  setBasicInfoValid
 }) => {
+  const { id } = useParams();
+  
   const {
     error: emailError,
     handleChange: handleEmailChange
@@ -26,6 +30,16 @@ const UserFormBasicInfo = memo(({
     handleChange: handlePasswordChange
   } = useFormValidation(password, true, false);
 
+  useEffect(() => {
+    const isValid = name.trim() !== "" && 
+                   email.trim() !== "" && 
+                   (id ? true : password.trim() !== "") &&
+                   !emailError && 
+                   !passwordError;
+    
+    setBasicInfoValid(isValid);
+  }, [name, email, password, setBasicInfoValid, id, emailError, passwordError]);
+
   const onEmailChange = (e) => {
     setEmail(e.target.value);
     handleEmailChange(e);
@@ -35,6 +49,7 @@ const UserFormBasicInfo = memo(({
     setPassword(e.target.value);
     handlePasswordChange(e);
   };
+
   return (
     <CollapsibleSection title="Basic information*" defaultExpanded={true}>
         <Box>
@@ -99,7 +114,6 @@ const UserFormBasicInfo = memo(({
                   onChange={onPasswordChange}
                   error={!!passwordError}
                   helperText={passwordError}
-                  required
                   autoComplete="new-password"
                   inputProps={{
                       autoComplete: "new-password",

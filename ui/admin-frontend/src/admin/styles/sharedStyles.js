@@ -16,6 +16,8 @@ import {
   FormControl,
   Chip,
   Link,
+  Radio,
+  Switch,
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import { NavLink } from "react-router-dom";
@@ -512,6 +514,21 @@ export const LearnMoreLink = styled(({ ...props }) => (
 
 export const StyledContentBox = styled(ContentBox)(({ theme }) => ({
   [theme.breakpoints.up('lg')]: {
-    maxWidth: '75%',
+    maxWidth: '80%',
   }
-})); 
+}));
+
+export const StyledRadio = styled(Radio)(({ theme }) => ({
+  '&.Mui-checked': {
+    color: theme.palette.background.buttonPrimaryDefault
+  }
+}));
+
+export const StyledSwitch = styled(Switch)(({ theme }) => ({
+  '& .MuiSwitch-switchBase.Mui-checked': {
+    color: theme.palette.background.buttonPrimaryDefault
+  },
+  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+    backgroundColor: theme.palette.background.buttonPrimaryDefault
+  }
+}));

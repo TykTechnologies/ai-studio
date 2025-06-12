@@ -1,5 +1,5 @@
 import { Box, Typography, CircularProgress } from "@mui/material";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import {
   TitleBox,
@@ -16,10 +16,14 @@ import useUserEntitlements from "../../hooks/useUserEntitlements";
 import { ButtonContainer } from "./styles";
 import UserFormBasicInfo from "./components/UserFormBasicInfo";
 import UserPermissionsSection from "./components/UserPermissionsSection";
+import ManageTeamsSection from "./components/ManageTeamsSection";
 import AlertSnackbar from "../../components/common/AlertSnackbar";
+import ConfirmationDialog from "../../components/common/ConfirmationDialog";
+import { IsAdminRole } from "./utils/userRolesConfig";
 
 const UserForm = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { snackbarState, showSnackbar, hideSnackbar } = useSnackbarState();
   const { isSuperAdmin, fetchUserEntitlements } = useUserEntitlements(true);
   
@@ -42,11 +46,23 @@ const UserForm = () => {
     setAccessToSSOConfig,
     selectedRole,
     setSelectedRole,
+    selectedTeams,
+    setSelectedTeams,
     loading,
     handleSubmit,
-    isFormValid,
-    submitting
+    setBasicInfoValid,
+    basicInfoValid,
+    warningDialogOpen,
+    handleDeleteClick,
+    handleCancelDelete,
+    handleConfirmDelete
   } = useUserForm(id, showSnackbar);
+
+  useEffect(() => {
+    if (id && !loading && IsAdminRole(selectedRole) && !isSuperAdmin) {
+      navigate(`/admin/users/${id}`);
+    }
+  }, [id, loading, selectedRole, isSuperAdmin, navigate]);
 
   if (loading) return <CircularProgress />;
 
@@ -79,6 +95,7 @@ const UserForm = () => {
             setPassword={setPassword}
             emailVerified={emailVerified}
             setEmailVerified={setEmailVerified}
+            setBasicInfoValid={setBasicInfoValid}
           />
           
           <UserPermissionsSection
@@ -91,17 +108,18 @@ const UserForm = () => {
             setSelectedRole={setSelectedRole}
           />
 
+          <ManageTeamsSection
+            selectedTeams={selectedTeams}
+            setSelectedTeams={setSelectedTeams}
+          />
+
           <ButtonContainer>
-            <PrimaryButton type="submit" disabled={!isFormValid() || submitting}>
-              {submitting ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                id ? "Update user" : "Save user"
-              )}
+            <PrimaryButton type="submit" disabled={!basicInfoValid}>
+              {id ? "Update user" : "Save user"}
             </PrimaryButton>
-            {id && (
+            {id && !isSuperAdmin && (
               <DangerOutlineButton
-                //onClick={handleDeleteClick}
+                onClick={handleDeleteClick}
               >
                 Delete user
               </DangerOutlineButton>
@@ -115,6 +133,21 @@ const UserForm = () => {
         message={snackbarState.message}
         severity={snackbarState.severity}
         onClose={hideSnackbar}
+      />
+
+      <ConfirmationDialog
+        open={warningDialogOpen}
+        title="Delete User"
+        message="This will delete all records of this user, and they will no longer have access to Tyk AI Studio."
+        buttonLabel="Delete user"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
       />
     </>
   );

@@ -1,8 +1,9 @@
 import { memo } from "react";
-import { Box, Typography, FormControlLabel, Switch } from "@mui/material";
+import { Box, Typography, FormControlLabel } from "@mui/material";
 import CollapsibleSection from "../../common/CollapsibleSection";
 import RoleRadioGroup from "./RoleRadioGroup";
-import { LearnMoreLink } from "../../../styles/sharedStyles";
+import RolePermissionsDisplay from "./RolePermissionsDisplay";
+import { LearnMoreLink, StyledSwitch } from "../../../styles/sharedStyles";
 import { createDocsLinkHandler } from "../../../utils/docsLinkUtils";
 import useConfig from "../../../hooks/useConfig";
 
@@ -23,64 +24,57 @@ const UserPermissionsSection = memo(({
 
   return (
     <CollapsibleSection title="Roles & permissions*" defaultExpanded={true}>
-      <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
+      <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
         Assign a role to this user to control their access levels to features and actions in the AI studio platform.
         <LearnMoreLink onClick={createDocsLinkHandler(getDocsLink, 'teams')} />
       </Typography>
 
-      <RoleRadioGroup
-        value={selectedRole}
-        onChange={handleRoleChange}
-        isSuperAdmin={isSuperAdmin}
-      />
-
-      {selectedRole === 'Admin' && (
-        <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={notificationsEnabled}
-                onChange={(e) => setNotificationsEnabled(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: theme => theme.palette.background.buttonPrimaryDefault
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: theme => theme.palette.background.buttonPrimaryDefault
-                  }
-                }}
-              />
-            }
-            label={
-              <Typography variant="bodyLargeBold" color="text.primary">
-                Enable Notifications
-              </Typography>
-            }
+      <Box position="relative" display="flex" mt={3} width="100%" gap={3}>
+        <Box display="flex" flexDirection="column" width="50%">
+          <RoleRadioGroup
+            value={selectedRole}
+            onChange={handleRoleChange}
+            isSuperAdmin={isSuperAdmin}
           />
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={accessToSSOConfig}
-                onChange={(e) => setAccessToSSOConfig(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: theme => theme.palette.background.buttonPrimaryDefault
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: theme => theme.palette.background.buttonPrimaryDefault
-                  }
-                }}
+          {selectedRole === 'Admin' && (
+            <Box mt={3} ml={5} display="flex" flexDirection="column" gap={1}>
+              <FormControlLabel
+                control={
+                  <StyledSwitch
+                    checked={notificationsEnabled}
+                    onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                  />
+                }
+                label={
+                  <Typography variant="bodyLargeBold" color="text.primary">
+                    Enable Notifications
+                  </Typography>
+                }
               />
-            }
-            label={
-              <Typography variant="bodyLargeBold" color="text.primary">
-                Allow Identity provider configuration
-              </Typography>
-            }
-          />
+
+              <FormControlLabel
+                control={
+                  <StyledSwitch
+                    checked={accessToSSOConfig}
+                    onChange={(e) => setAccessToSSOConfig(e.target.checked)}
+                  />
+                }
+                label={
+                  <Typography variant="bodyLargeBold" color="text.primary">
+                    Allow Identity provider configuration
+                  </Typography>
+                }
+              />
+            </Box>
+          )}
         </Box>
-      )}
+        <RolePermissionsDisplay
+          width="50%"
+          selectedRole={selectedRole}
+          isSuperAdmin={isSuperAdmin}
+        />
+      </Box>
     </CollapsibleSection>
   );
 });

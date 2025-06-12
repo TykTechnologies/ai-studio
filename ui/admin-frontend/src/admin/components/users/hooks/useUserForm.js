@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { createUser, updateUser, getUser } from "../../../services/userService";
+import { createUser, updateUser, getUser, deleteUser } from "../../../services/userService";
 import { handleApiError } from "../../../services/utils/errorHandler";
 
 export const useUserForm = (id, showSnackbar) => {
@@ -11,7 +11,10 @@ export const useUserForm = (id, showSnackbar) => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [accessToSSOConfig, setAccessToSSOConfig] = useState(false);
   const [selectedRole, setSelectedRole] = useState("Chat user");
+  const [selectedTeams, setSelectedTeams] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [basicInfoValid, setBasicInfoValid] = useState(false);
+  const [warningDialogOpen, setWarningDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   const fetchUser = useCallback(async () => {
@@ -25,6 +28,9 @@ export const useUserForm = (id, showSnackbar) => {
       setName(userData.attributes.name);
       setEmail(userData.attributes.email);
       setSelectedRole(userData.attributes.role);
+      if (userData.attributes.groups && userData.attributes.groups.length > 0) {
+        setSelectedTeams(userData.attributes.groups.map(group => parseInt(group.id, 10)));
+      }
       setEmailVerified(userData.attributes.email_verified ?? false);
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
       setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
@@ -36,26 +42,15 @@ export const useUserForm = (id, showSnackbar) => {
     }
   }, [id, showSnackbar]);
 
-
   useEffect(() => {
     if (id) {
       fetchUser();
     }
   }, [id, fetchUser]);
 
-
-  const isFormValid = useCallback(() => {
-    return (
-      name.trim() !== "" &&
-      email.trim() !== "" &&
-      password.trim() !== ""
-    );
-  }, [name, email, password]);
-
-
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!isFormValid()) return;
+    if (!basicInfoValid) return;
     
     try {
       const isAdmin = selectedRole === "Admin";
@@ -71,6 +66,7 @@ export const useUserForm = (id, showSnackbar) => {
         emailVerified,
         notificationsEnabled: isAdmin ? notificationsEnabled : false,
         accessToSSOConfig: isAdmin ? accessToSSOConfig : false,
+        groups: selectedTeams,
         ...(password && { password }),
       };
 
@@ -86,7 +82,7 @@ export const useUserForm = (id, showSnackbar) => {
     } catch (error) {
       const apiError = handleApiError(error);
       showSnackbar(apiError.message, "error");
-    } 
+    }
   }, [
     id,
     name,
@@ -96,10 +92,32 @@ export const useUserForm = (id, showSnackbar) => {
     emailVerified,
     notificationsEnabled,
     accessToSSOConfig,
-    isFormValid,
+    selectedTeams,
     navigate,
     showSnackbar,
+    basicInfoValid,
   ]);
+
+  const handleDeleteClick = useCallback(() => {
+    setWarningDialogOpen(true);
+  }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    setWarningDialogOpen(false);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    try {
+      await deleteUser(id);
+      showSnackbar("User deleted successfully", "success");
+      setTimeout(() => navigate("/admin/users"), 2000);
+    } catch (error) {
+      const apiError = handleApiError(error);
+      showSnackbar(apiError.message, "error");
+    } finally {
+      setWarningDialogOpen(false);
+    }
+  }, [id, navigate, showSnackbar]);
 
   return useMemo(() => ({
     name,
@@ -116,9 +134,16 @@ export const useUserForm = (id, showSnackbar) => {
     setAccessToSSOConfig,
     selectedRole,
     setSelectedRole,
+    selectedTeams,
+    setSelectedTeams,
     loading,
     handleSubmit,
-    isFormValid,
+    setBasicInfoValid,
+    basicInfoValid,
+    warningDialogOpen,
+    handleDeleteClick,
+    handleCancelDelete,
+    handleConfirmDelete
   }), [
     name,
     email,
@@ -127,8 +152,14 @@ export const useUserForm = (id, showSnackbar) => {
     notificationsEnabled,
     accessToSSOConfig,
     selectedRole,
+    selectedTeams,
     loading,
     handleSubmit,
-    isFormValid,
+    setBasicInfoValid,
+    basicInfoValid,
+    warningDialogOpen,
+    handleDeleteClick,
+    handleCancelDelete,
+    handleConfirmDelete
   ]);
 };

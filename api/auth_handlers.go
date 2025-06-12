@@ -383,13 +383,6 @@ func (a *API) handleMe(c *gin.Context) {
 	}
 
 	entitlements, err := a.service.GetUserEntitlements(u.ID)
-
-
-
-
-
-
-	
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -610,7 +603,7 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id and redirect_uri are required"})
 		return
 	}
-	
+
 	// Only validate PKCE method if PKCE is being used
 	if codeChallengeMethod != "" && codeChallengeMethod != "S256" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be 'S256'"})

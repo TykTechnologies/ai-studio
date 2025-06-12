@@ -12,7 +12,11 @@ export const createUser = async (userData) => {
           password: userData.password,
           is_admin: userData.isAdmin,
           show_portal: userData.showPortal,
-          show_chat: userData.showChat !== undefined ? userData.showChat : true
+          show_chat: userData.showChat !== undefined ? userData.showChat : true,
+          email_verified: userData.emailVerified || false,
+          notifications_enabled: userData.notificationsEnabled || false,
+          access_to_sso_config: userData.accessToSSOConfig || false,
+          groups: userData.groups || []
         }
       }
     };
@@ -20,7 +24,7 @@ export const createUser = async (userData) => {
     const response = await apiClient.post('/users', userPayload);
     return response.data?.data;
   } catch (error) {
-    throw handleApiError(error);
+    throw error;
   }
 };
 
@@ -32,10 +36,14 @@ export const updateUser = async (userId, userData) => {
         attributes: {
           name: userData.name,
           email: userData.email,
-          password: userData.password,
+          ...(userData.password && { password: userData.password }),
           is_admin: userData.isAdmin,
           show_portal: userData.showPortal,
           show_chat: userData.showChat !== undefined ? userData.showChat : true,
+          email_verified: userData.emailVerified || false,
+          notifications_enabled: userData.notificationsEnabled || false,
+          access_to_sso_config: userData.accessToSSOConfig || false,
+          groups: userData.groups || [],
           skip_quick_start: userData.skipQuickStart
         }
       }
@@ -44,7 +52,7 @@ export const updateUser = async (userId, userData) => {
     const response = await apiClient.patch(`/users/${userId}`, userPayload);
     return response.data?.data;
   } catch (error) {
-    throw handleApiError(error);
+    throw error;
   }
 };
 
@@ -74,7 +82,7 @@ export const getUsers = async (page = 1, options = {}) => {
       totalPages: parseInt(response.headers['x-total-pages'] || '0', 10)
     };
   } catch (error) {
-    throw handleApiError(error);
+    throw error;
   }
 };
 
@@ -83,6 +91,15 @@ export const getUser = async (userId) => {
     const response = await apiClient.get(`/users/${userId}`);
     return response.data;
   } catch (error) {
-    throw handleApiError(error);
+    throw error;
+  }
+};
+
+export const deleteUser = async (userId) => {
+  try {
+    const response = await apiClient.delete(`/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };

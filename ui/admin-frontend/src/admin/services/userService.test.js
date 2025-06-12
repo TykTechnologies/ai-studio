@@ -10,7 +10,11 @@ describe('userService', () => {
         password: 'password123',
         isAdmin: true,
         showPortal: true,
-        showChat: false
+        showChat: false,
+        emailVerified: true,
+        notificationsEnabled: true,
+        accessToSSOConfig: true,
+        groups: [1, 2]
       };
       const expectedPayload = {
         data: {
@@ -21,7 +25,11 @@ describe('userService', () => {
             password: 'password123',
             is_admin: true,
             show_portal: true,
-            show_chat: false
+            show_chat: false,
+            email_verified: true,
+            notifications_enabled: true,
+            access_to_sso_config: true,
+            groups: [1, 2]
           }
         }
       };
@@ -32,7 +40,7 @@ describe('userService', () => {
       expect(result).toEqual(mockResponse.data.data);
     });
 
-    it('should default show_chat to true if undefined', async () => {
+    it('should default show_chat to true if undefined and include default boolean fields', async () => {
       const mockUserData = {
         name: 'Test User',
         email: 'test@example.com',
@@ -42,7 +50,13 @@ describe('userService', () => {
       };
       const expectedPayload = expect.objectContaining({
         data: expect.objectContaining({
-          attributes: expect.objectContaining({ show_chat: true })
+          attributes: expect.objectContaining({ 
+            show_chat: true,
+            email_verified: false,
+            notifications_enabled: false,
+            access_to_sso_config: false,
+            groups: []
+          })
         })
       });
       jest.spyOn(apiClient, 'post').mockResolvedValueOnce({ data: { data: {} } });
@@ -67,7 +81,11 @@ describe('userService', () => {
         password: 'newpass',
         isAdmin: false,
         showPortal: false,
-        showChat: true
+        showChat: true,
+        emailVerified: false,
+        notificationsEnabled: false,
+        accessToSSOConfig: false,
+        groups: [3]
       };
       const expectedPayload = {
         data: {
@@ -78,7 +96,12 @@ describe('userService', () => {
             password: 'newpass',
             is_admin: false,
             show_portal: false,
-            show_chat: true
+            show_chat: true,
+            email_verified: false,
+            notifications_enabled: false,
+            access_to_sso_config: false,
+            groups: [3],
+            skip_quick_start: undefined
           }
         }
       };
@@ -89,18 +112,43 @@ describe('userService', () => {
       expect(result).toEqual(mockResponse.data.data);
     });
 
-    it('should default show_chat to true if undefined', async () => {
+    it('should default show_chat to true if undefined and include default boolean fields', async () => {
       const mockUserId = 'user-2';
       const mockUserData = {
         name: 'User',
         email: 'user@example.com',
-        password: 'pw',
         isAdmin: false,
         showPortal: false
       };
       const expectedPayload = expect.objectContaining({
         data: expect.objectContaining({
-          attributes: expect.objectContaining({ show_chat: true })
+          attributes: expect.objectContaining({ 
+            show_chat: true,
+            email_verified: false,
+            notifications_enabled: false,
+            access_to_sso_config: false,
+            groups: []
+          })
+        })
+      });
+      jest.spyOn(apiClient, 'patch').mockResolvedValueOnce({ data: { data: {} } });
+      await userService.updateUser(mockUserId, mockUserData);
+      expect(apiClient.patch).toHaveBeenCalledWith(`/users/${mockUserId}`, expectedPayload);
+    });
+
+    it('should exclude password field when not provided', async () => {
+      const mockUserId = 'user-3';
+      const mockUserData = {
+        name: 'User',
+        email: 'user@example.com',
+        isAdmin: false,
+        showPortal: false
+      };
+      const expectedPayload = expect.objectContaining({
+        data: expect.objectContaining({
+          attributes: expect.not.objectContaining({ 
+            password: expect.anything()
+          })
         })
       });
       jest.spyOn(apiClient, 'patch').mockResolvedValueOnce({ data: { data: {} } });

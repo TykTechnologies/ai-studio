@@ -5,7 +5,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   SecondaryLinkButton,
   TitleBox,
-  ContentBox,
+  StyledContentBox,
   TitleContentBox,
   PrimaryButton,
   DangerOutlineButton
@@ -83,14 +83,7 @@ const GroupForm = () => {
         </TitleContentBox>
       </TitleBox>
 
-      <ContentBox sx={{
-        maxWidth: {
-          xs: '100%',
-          sm: '100%',
-          md: '100%',
-          lg: '75%'
-        }
-      }}>
+      <StyledContentBox>
         <form onSubmit={handleSubmit}>
           <GroupFormBasicInfo
             name={name}
@@ -132,7 +125,7 @@ const GroupForm = () => {
             )}
           </Box>
         </form>
-      </ContentBox>
+      </StyledContentBox>
       
       <AlertSnackbar
         open={snackbarState.open}

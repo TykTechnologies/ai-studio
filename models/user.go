@@ -11,6 +11,13 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	RoleSuperAdmin = "Super Admin"
+	RoleAdmin      = "Admin"
+	RoleDeveloper  = "Developer"
+	RoleChatUser   = "Chat User"
+)
+
 type User struct {
 	gorm.Model
 	ID                   uint   `json:"id" gorm:"primaryKey"`
@@ -61,7 +68,7 @@ func (u *User) Get(db *gorm.DB, id uint, preloads ...string) error {
 		query = query.Preload(preload)
 	}
 
-	return db.First(u, id).Error
+	return query.First(u, id).Error
 }
 
 func (u *User) GetByAPIKey(db *gorm.DB, apiKey string) error {
@@ -240,6 +247,10 @@ func (u *User) ReplaceGroupAssociation(db *gorm.DB, groups []Group) error {
 	return db.Model(u).Association("Groups").Replace(groups)
 }
 
+func (u *User) DeleteGroupAssociation(db *gorm.DB) error {
+	return db.Model(u).Association("Groups").Clear()
+}
+
 func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
 	email = strings.ToLower(email)
 
@@ -291,13 +302,13 @@ func GetUserGroupCount(db *gorm.DB) (int64, error) {
 
 func (u *User) GetRole() string {
 	if u.ID == 1 {
-		return "Super Admin"
+		return RoleSuperAdmin
 	} else if u.IsAdmin {
-		return "Admin"
+		return RoleAdmin
 	} else if u.ShowPortal {
-		return "Developer"
+		return RoleDeveloper
 	} else {
-		return "Chat user"
+		return RoleChatUser
 	}
 }
 
