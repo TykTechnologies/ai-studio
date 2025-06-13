@@ -290,7 +290,7 @@ func (g *Groups) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber
 
 	if term != "" {
 		searchTerm := "%" + term + "%"
-		query = query.Where("name LIKE ?", searchTerm)
+		query = query.Where("LOWER(name) LIKE LOWER(?)", searchTerm)
 	}
 
 	for _, preload := range preloads {

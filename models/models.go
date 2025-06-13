@@ -23,7 +23,7 @@ func fixOAuthClientUserIDConstraint(db *gorm.DB) error {
 			AND table_name = 'o_auth_clients'
 		)
 	`).Scan(&constraintExists).Error
-	
+
 	if err != nil {
 		return err
 	}
@@ -53,13 +53,8 @@ func fixOAuthClientUserIDConstraint(db *gorm.DB) error {
 }
 
 func InitModels(db *gorm.DB) error {
-	// Fix OAuth client user_id constraint for PostgreSQL
-	err := fixOAuthClientUserIDConstraint(db)
-	if err != nil {
-		return err
-	}
-
-	err = db.AutoMigrate(
+	// First run AutoMigrate to create all tables
+	err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done
 		&LLM{},       //Done
@@ -86,6 +81,15 @@ func InitModels(db *gorm.DB) error {
 		&AccessToken{},
 		&PendingOAuthRequest{},
 	)
+	if err != nil {
+		return err
+	}
+
+	// Then fix OAuth client user_id constraint for PostgreSQL
+	err = fixOAuthClientUserIDConstraint(db)
+	if err != nil {
+		return err
+	}
 
 	err = db.Table("group_catalogues").AutoMigrate(&struct {
 		GroupID     uint `gorm:"primaryKey"`
