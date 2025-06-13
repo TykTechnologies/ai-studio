@@ -109,16 +109,16 @@ func TestGetGroupsWithMemberCounts(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create test users
-	user1, err := service.CreateUser("user1@example.com", "User One", "password123", true, true, true, true, true, true)
+	user1, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
-	user2, err := service.CreateUser("user2@example.com", "User Two", "password123", true, true, true, true, true, true)
+	user2, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
-	user3, err := service.CreateUser("user3@example.com", "User Three", "password123", true, true, true, true, true, true)
+	user3, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
-	user4, err := service.CreateUser("user4@example.com", "User Four", "password123", true, true, true, true, true, true)
+	user4, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
 	// Add users to groups
