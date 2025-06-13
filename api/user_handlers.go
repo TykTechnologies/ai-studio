@@ -4,10 +4,42 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
+
+func (a *API) validateAdminPermissions(c *gin.Context) error {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		return helpers.NewUnauthorizedError("User not authenticated")
+	}
+
+	u, ok := currentUser.(*models.User)
+	if !ok {
+		return helpers.NewUnauthorizedError("User not authenticated")
+	}
+
+	if u.GetRole() != models.RoleSuperAdmin {
+		return helpers.NewForbiddenError("operation not allowed")
+	}
+
+	return nil
+}
+
+func (a *API) validateUserInput(userInput UserInput, userId uint) error {
+	isUnique, err := models.IsEmailUnique(a.service.DB, userInput.Data.Attributes.Email, userId)
+	if err != nil {
+		return err
+	}
+
+	if !isUnique {
+		return helpers.NewBadRequestError("Email is already in use")
+	}
+
+	return nil
+}
 
 // @Summary Create a new user
 // @Description Create a new user with the provided information
@@ -23,54 +55,36 @@ import (
 func (a *API) createUser(c *gin.Context) {
 	var input UserInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
 
-	isUnique, err := models.IsEmailUnique(a.service.DB, input.Data.Attributes.Email, 0)
+	if err := a.validateUserInput(input, 0); err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	if input.Data.Attributes.IsAdmin {
+		if err := a.validateAdminPermissions(c); err != nil {
+			helpers.SendErrorResponse(c, err)
+			return
+		}
+	}
+
+	user, err := a.service.CreateUser(services.UserDTO{
+		Email:                input.Data.Attributes.Email,
+		Name:                 input.Data.Attributes.Name,
+		Password:             input.Data.Attributes.Password,
+		IsAdmin:              input.Data.Attributes.IsAdmin,
+		ShowChat:             input.Data.Attributes.ShowChat,
+		ShowPortal:           input.Data.Attributes.ShowPortal,
+		EmailVerified:        input.Data.Attributes.EmailVerified,
+		NotificationsEnabled: input.Data.Attributes.NotificationsEnabled,
+		AccessToSSOConfig:    input.Data.Attributes.AccessToSSOConfig,
+		Groups:               input.Data.Attributes.Groups,
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	if !isUnique {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Email is already in use"}},
-		})
-		return
-	}
-
-	user, err := a.service.CreateUser(
-		input.Data.Attributes.Email,
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Password,
-		input.Data.Attributes.IsAdmin,
-		input.Data.Attributes.ShowChat,
-		input.Data.Attributes.ShowPortal,
-		input.Data.Attributes.EmailVerified,
-		input.Data.Attributes.NotificationsEnabled,
-		input.Data.Attributes.AccessToSSOConfig,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
@@ -100,7 +114,7 @@ func (a *API) getUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.service.GetUserByID(uint(id))
+	user, err := a.service.GetUserByID(uint(id), "Groups")
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -129,69 +143,54 @@ func (a *API) getUser(c *gin.Context) {
 func (a *API) updateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid user ID"))
 		return
 	}
 
 	var input UserInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
 
-	isUnique, err := models.IsEmailUnique(a.service.DB, input.Data.Attributes.Email, uint(id))
+	if err := a.validateUserInput(input, uint(id)); err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	user, err := a.service.GetUserByID(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
-	if !isUnique {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Email is already in use"}},
-		})
-		return
+	if user.IsAdmin {
+		if err := a.validateAdminPermissions(c); err != nil {
+			helpers.SendErrorResponse(c, err)
+			return
+		}
 	}
 
-	user, err := a.service.UpdateUser(
-		uint(id),
-		input.Data.Attributes.Email,
-		input.Data.Attributes.Name,
-		input.Data.Attributes.IsAdmin,
-		input.Data.Attributes.ShowChat,
-		input.Data.Attributes.ShowPortal,
-		input.Data.Attributes.EmailVerified,
-		input.Data.Attributes.NotificationsEnabled,
-		input.Data.Attributes.AccessToSSOConfig,
+	updatedUser, err := a.service.UpdateUser(
+		user,
+		services.UserDTO{
+			Email:                input.Data.Attributes.Email,
+			Name:                 input.Data.Attributes.Name,
+			IsAdmin:              input.Data.Attributes.IsAdmin,
+			ShowChat:             input.Data.Attributes.ShowChat,
+			ShowPortal:           input.Data.Attributes.ShowPortal,
+			EmailVerified:        input.Data.Attributes.EmailVerified,
+			NotificationsEnabled: input.Data.Attributes.NotificationsEnabled,
+			AccessToSSOConfig:    input.Data.Attributes.AccessToSSOConfig,
+			Groups:               input.Data.Attributes.Groups,
+		},
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeUser(user)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeUser(updatedUser)})
 }
 
 // @Summary Delete a user
@@ -208,23 +207,26 @@ func (a *API) updateUser(c *gin.Context) {
 func (a *API) deleteUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid user ID"))
 		return
 	}
 
-	err = a.service.DeleteUser(uint(id))
+	user, err := a.service.GetUserByID(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	if user.IsAdmin {
+		if err := a.validateAdminPermissions(c); err != nil {
+			helpers.SendErrorResponse(c, err)
+			return
+		}
+	}
+
+	err = a.service.DeleteUser(user)
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
@@ -282,20 +284,21 @@ func (a *API) listUsers(c *gin.Context) {
 }
 
 func serializeUser(user *models.User) UserResponse {
-	return UserResponse{
+	response := UserResponse{
 		Type: "users",
 		ID:   strconv.FormatUint(uint64(user.ID), 10),
 		Attributes: struct {
-			Email                string `json:"email"`
-			Name                 string `json:"name"`
-			IsAdmin              bool   `json:"is_admin"`
-			ShowChat             bool   `json:"show_chat"`
-			ShowPortal           bool   `json:"show_portal"`
-			EmailVerified        bool   `json:"email_verified"`
-			APIKey               string `json:"api_key"`
-			NotificationsEnabled bool   `json:"notifications_enabled"`
-			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
-			Role                 string `json:"role"`
+			Email                string          `json:"email"`
+			Name                 string          `json:"name"`
+			IsAdmin              bool            `json:"is_admin"`
+			ShowChat             bool            `json:"show_chat"`
+			ShowPortal           bool            `json:"show_portal"`
+			EmailVerified        bool            `json:"email_verified"`
+			APIKey               string          `json:"api_key"`
+			NotificationsEnabled bool            `json:"notifications_enabled"`
+			AccessToSSOConfig    bool            `json:"access_to_sso_config"`
+			Role                 string          `json:"role"`
+			Groups               []GroupResponse `json:"groups,omitempty"`
 		}{
 			Email:                user.Email,
 			Name:                 user.Name,
@@ -309,6 +312,12 @@ func serializeUser(user *models.User) UserResponse {
 			Role:                 user.GetRole(),
 		},
 	}
+
+	if len(user.Groups) > 0 {
+		response.Attributes.Groups = serializeGroups(user.Groups)
+	}
+
+	return response
 }
 
 func serializeUsers(users models.Users) []UserResponse {
@@ -390,7 +399,6 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 		return
 	}
 
-	// Generate new API key
 	err = a.service.GenerateAPIKeyForUser(uint(id))
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -406,7 +414,6 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 		return
 	}
 
-	// Fetch updated user
 	user, err := a.service.GetUserByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

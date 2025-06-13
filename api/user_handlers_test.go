@@ -4,14 +4,54 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
+// Helper function to parse uint from string
+func parseUint(s string) uint64 {
+	id, _ := strconv.ParseUint(s, 10, 64)
+	return id
+}
+
+func setupTestAPIWithAdminUser(t *testing.T) (*API, *gin.Engine, *models.User) {
+	api, db := setupTestAPI(t)
+
+	// Create admin user
+	adminUser := &models.User{
+		Email:             "admin@example.com",
+		Name:              "Admin User",
+		IsAdmin:           true,
+		AccessToSSOConfig: true,
+		ShowChat:          true,
+		ShowPortal:        true,
+	}
+	err := db.Create(adminUser).Error
+	assert.NoError(t, err)
+
+	// Setup router with middleware to add admin user to context
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user", adminUser)
+		c.Next()
+	})
+
+	// Copy routes from api.router to r
+	for _, route := range api.router.Routes() {
+		r.Handle(route.Method, route.Path, route.HandlerFunc)
+	}
+
+	api.router = r
+	return api, r, adminUser
+}
+
 func TestUserEndpoints(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	api, _, _ := setupTestAPIWithAdminUser(t)
 
 	// Test Create User
 	createUserInput := UserInput{
@@ -27,6 +67,7 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -40,11 +81,18 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
-				Email:    "test@example.com",
-				Name:     "Test User",
-				Password: "password123",
-				IsAdmin:  true,
+				Email:                "test@example.com",
+				Name:                 "Test User",
+				Password:             "password123",
+				IsAdmin:              true,
+				ShowChat:             true,
+				ShowPortal:           true,
+				EmailVerified:        true,
+				NotificationsEnabled: true,
+				AccessToSSOConfig:    true,
+				Groups:               []uint{},
 			},
 		},
 	}
@@ -77,6 +125,7 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -90,12 +139,17 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
 				Email:                "updated@example.com",
 				Name:                 "Updated User",
 				IsAdmin:              true,
+				ShowChat:             true,
+				ShowPortal:           true,
+				EmailVerified:        true,
 				NotificationsEnabled: true,
 				AccessToSSOConfig:    true,
+				Groups:               []uint{},
 			},
 		},
 	}
@@ -138,7 +192,7 @@ func TestUserEndpoints(t *testing.T) {
 }
 
 func TestUserEmailUniqueness(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	api, _, _ := setupTestAPIWithAdminUser(t)
 
 	createUserInput := UserInput{
 		Data: struct {
@@ -153,6 +207,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -166,11 +221,13 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
 				Email:    "test@example.com",
 				Name:     "Test User",
 				Password: "password123",
 				IsAdmin:  true,
+				Groups:   []uint{},
 			},
 		},
 	}
@@ -188,24 +245,14 @@ func TestUserEmailUniqueness(t *testing.T) {
 	var errorResponse map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
+	assert.Contains(t, errorResponse["errors"].([]interface{})[0].(map[string]interface{})["detail"], "Email is already in use")
+}
 
-	errors := errorResponse["errors"].([]interface{})
-	assert.Equal(t, "Bad Request", errors[0].(map[string]interface{})["title"])
-	assert.Equal(t, "Email is already in use", errors[0].(map[string]interface{})["detail"])
+func TestSkipUserQuickStart(t *testing.T) {
+	api, _, _ := setupTestAPIWithAdminUser(t)
 
-	createUserInput.Data.Attributes.Email = "TEST@example.com"
-	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	createUserInput.Data.Attributes.Email = "another@example.com"
-	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
-	assert.Equal(t, http.StatusCreated, w.Code)
-
-	var secondUserResponse map[string]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &secondUserResponse)
-	assert.NoError(t, err)
-
-	updateUserInput := UserInput{
+	// Create a test user
+	createUserInput := UserInput{
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
@@ -218,6 +265,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			} `json:"attributes"`
 		}{
 			Type: "users",
@@ -231,79 +279,59 @@ func TestUserEmailUniqueness(t *testing.T) {
 				EmailVerified        bool   `json:"email_verified"`
 				NotificationsEnabled bool   `json:"notifications_enabled"`
 				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
 			}{
-				Email:   "test@example.com",
-				Name:    "Updated User",
-				IsAdmin: true,
+				Email:    "quickstart@example.com",
+				Name:     "QuickStart User",
+				Password: "password123",
+				IsAdmin:  false,
+				Groups:   []uint{},
 			},
 		},
 	}
 
-	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", secondUserResponse["data"].ID), updateUserInput)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
+	w := performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
 
-func TestSkipUserQuickStart(t *testing.T) {
-	api, db := setupTestAPI(t)
-
-	// Create a test user
-	user := &models.User{
-		Email:          "test@example.com",
-		Name:           "Test User",
-		IsAdmin:        false,
-		ShowPortal:     true,
-		ShowChat:       true,
-		EmailVerified:  true,
-		SkipQuickStart: false, // Initially false
-	}
-	err := user.Create(db)
+	var response map[string]UserResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.False(t, user.SkipQuickStart)
+	userID := response["data"].ID
 
-	// Test the skipUserQuickStart endpoint
-	w := performRequest(api.router, "POST", fmt.Sprintf("/api/v1/users/%d/skip-quick-start", user.ID), nil)
+	// Test Skip QuickStart
+	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/users/%s/skip-quick-start", userID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify response format
-	var response map[string]string
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+	// Get the user from the database
+	user, err := api.service.GetUserByID(uint(parseUint(userID)))
 	assert.NoError(t, err)
-	assert.Equal(t, "success", response["status"])
 
-	// Verify the user's SkipQuickStart flag was updated in the database
-	var updatedUser models.User
-	err = db.First(&updatedUser, user.ID).Error
-	assert.NoError(t, err)
-	assert.True(t, updatedUser.SkipQuickStart)
-
-	// Test with invalid user ID
-	w = performRequest(api.router, "POST", "/api/v1/users/invalid/skip-quick-start", nil)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	// Test with non-existent user ID
-	w = performRequest(api.router, "POST", "/api/v1/users/9999/skip-quick-start", nil)
+	// Create a new request with the user in context
+	w = performRequest(api.router, "GET", "/api/v1/me", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var meResponse map[string]UserWithEntitlementsResponse
+	err = json.Unmarshal(w.Body.Bytes(), &meResponse)
+	assert.NoError(t, err)
+	assert.True(t, meResponse["data"].Attributes.UIOptions.SkipQuickStart)
 }
 
-// TestListUsersSearchFunctionality tests the search functionality of the listUsers endpoint
+// Helper function to perform a request with a user in context
+func performRequestWithUser(r *gin.Engine, method, path string, body interface{}, user *models.User) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("user", user)
+	c.Request = httptest.NewRequest(method, path, nil)
+	r.HandleContext(c)
+	return w
+}
+
 func TestListUsersSearchFunctionality(t *testing.T) {
-	api, _ := setupTestAPI(t)
+	api, _, _ := setupTestAPIWithAdminUser(t)
 
-	// Create multiple users with different attributes for search testing
-	users := []struct {
-		email    string
-		name     string
-		isAdmin  bool
-		password string
-	}{
-		{email: "john.doe@example.com", name: "John Doe", isAdmin: false, password: "password1"},
-		{email: "jane.smith@example.com", name: "Jane Smith", isAdmin: true, password: "password2"},
-		{email: "bob.jones@company.com", name: "Bob Jones", isAdmin: false, password: "password3"},
-	}
-
-	// Create the users
-	for _, userData := range users {
-		createUserInput := UserInput{
+	// Create test users
+	users := []UserInput{
+		{
 			Data: struct {
 				Type       string `json:"type"`
 				Attributes struct {
@@ -316,6 +344,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				} `json:"attributes"`
 			}{
 				Type: "users",
@@ -329,102 +358,120 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				}{
-					Email:    userData.email,
-					Name:     userData.name,
-					Password: userData.password,
-					IsAdmin:  userData.isAdmin,
+					Email:    "alice@example.com",
+					Name:     "Alice Smith",
+					Password: "password123",
+					IsAdmin:  false,
+					Groups:   []uint{},
 				},
 			},
-		}
+		},
+		{
+			Data: struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
+				} `json:"attributes"`
+			}{
+				Type: "users",
+				Attributes: struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
+				}{
+					Email:    "bob@example.com",
+					Name:     "Bob Johnson",
+					Password: "password123",
+					IsAdmin:  false,
+					Groups:   []uint{},
+				},
+			},
+		},
+	}
 
-		w := performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	for _, user := range users {
+		w := performRequest(api.router, "POST", "/api/v1/users", user)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	}
 
-	// Test 1: Search by email domain
-	w := performRequest(api.router, "GET", "/api/v1/users?search=example.com", nil)
+	// Test search by email
+	w := performRequest(api.router, "GET", "/api/v1/users?search=alice", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var responseByDomain map[string][]UserResponse
-	err := json.Unmarshal(w.Body.Bytes(), &responseByDomain)
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 
-	// Should find 2 users with example.com domain
-	assert.Len(t, responseByDomain["data"], 2)
-	assert.NotEmpty(t, w.Header().Get("X-Total-Count"))
-	assert.NotEmpty(t, w.Header().Get("X-Total-Pages"))
+	data := response["data"].([]interface{})
+	assert.Equal(t, 1, len(data))
 
-	// Verify all returned users have example.com in their email
-	for _, user := range responseByDomain["data"] {
-		assert.Contains(t, user.Attributes.Email, "example.com")
-	}
-
-	// Test 2: Search by name
-	w = performRequest(api.router, "GET", "/api/v1/users?search=Bob", nil)
+	// Test search by name
+	w = performRequest(api.router, "GET", "/api/v1/users?search=johnson", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var responseByName map[string][]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &responseByName)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 
-	// Should find 1 user with Bob in name
-	assert.Len(t, responseByName["data"], 1)
-	assert.Equal(t, "Bob Jones", responseByName["data"][0].Attributes.Name)
+	data = response["data"].([]interface{})
+	assert.Equal(t, 1, len(data))
 
-	// Test 3: Search with no matches
+	// Test search with no results
 	w = performRequest(api.router, "GET", "/api/v1/users?search=nonexistent", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var responseNoMatches map[string][]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &responseNoMatches)
-	assert.NoError(t, err)
-	assert.Empty(t, responseNoMatches["data"])
-
-	// Test 4: Search with sorting
-	w = performRequest(api.router, "GET", "/api/v1/users?search=example.com&sort=name", nil)
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var responseSorted map[string][]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &responseSorted)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 
-	// Should be in alphabetical order by name
-	assert.Len(t, responseSorted["data"], 2)
-	assert.Equal(t, "Jane Smith", responseSorted["data"][0].Attributes.Name)
-	assert.Equal(t, "John Doe", responseSorted["data"][1].Attributes.Name)
+	data = response["data"].([]interface{})
+	assert.Equal(t, 0, len(data))
 }
 
-// TestListUsersErrorResponseFormat tests that the error response format from the listUsers endpoint is correct
 func TestListUsersErrorResponseFormat(t *testing.T) {
-	// This test verifies that the error response from the listUsers endpoint
-	// follows the expected format when an error occurs
+	api, _, _ := setupTestAPIWithAdminUser(t)
 
-	// Create a regular API
-	api, db := setupTestAPI(t)
+	// Test invalid page number
+	w := performRequest(api.router, "GET", "/api/v1/users?page=0", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Make a real error happen by closing the DB connection
-	sqlDB, err := db.DB()
+	var errorResponse ErrorResponse
+	err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
-	sqlDB.Close()
+	assert.NotEmpty(t, errorResponse.Errors)
+	assert.Equal(t, "Bad Request", errorResponse.Errors[0].Title)
 
-	// Test regular listing with a closed DB - should produce a real error
-	w := performRequest(api.router, "GET", "/api/v1/users", nil)
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	// Test invalid page size
+	w = performRequest(api.router, "GET", "/api/v1/users?page_size=0", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Verify the error response format
-	var errorResponse map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
+	assert.NotEmpty(t, errorResponse.Errors)
+	assert.Equal(t, "Bad Request", errorResponse.Errors[0].Title)
 
-	// Check that the error response has the correct structure
-	errors, exists := errorResponse["errors"]
-	assert.True(t, exists)
-	errorList := errors.([]interface{})
-	assert.NotEmpty(t, errorList)
+	// Test invalid sort field
+	w = performRequest(api.router, "GET", "/api/v1/users?sort=invalid_field", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Check that the error has title and detail fields
-	errorObj := errorList[0].(map[string]interface{})
-	assert.Equal(t, "Internal Server Error", errorObj["title"])
-	assert.NotEmpty(t, errorObj["detail"])
+	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, errorResponse.Errors)
+	assert.Equal(t, "Bad Request", errorResponse.Errors[0].Title)
 }

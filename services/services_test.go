@@ -35,7 +35,7 @@ func TestUserService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateUser
-	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.NotZero(t, user.ID)
@@ -46,7 +46,17 @@ func TestUserService(t *testing.T) {
 	assert.Equal(t, user.Email, fetchedUser.Email)
 
 	// Test UpdateUser
-	updatedUser, err := service.UpdateUser(user.ID, "updated@example.com", "Updated User", true, true, true, true, true, true)
+	updatedUser, err := service.UpdateUser(user.ID, UserDTO{
+		Email:                "updated@example.com",
+		Name:                 "Updated User",
+		IsAdmin:              true,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: true,
+		AccessToSSOConfig:    true,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 	assert.Equal(t, "updated@example.com", updatedUser.Email)
 	assert.Equal(t, "Updated User", updatedUser.Name)
@@ -106,9 +116,9 @@ func TestGroupService(t *testing.T) {
 	// Test CreateGroup with associations
 	t.Run("CreateGroup with associations", func(t *testing.T) {
 		// Create user, catalogue, data catalogue and tool catalogue
-		user1, err := service.CreateUser("test1@example.com", "Test User 1", "password123", true, true, true, true, true, true)
+		user1, err := service.CreateUser(UserDTO{Email: "user1@example.com", Name: "User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
-		user2, err := service.CreateUser("test2@example.com", "Test User 2", "password123", true, true, true, true, true, true)
+		user2, err := service.CreateUser(UserDTO{Email: "user2@example.com", Name: "User 2", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
 
 		catalogue, err := service.CreateCatalogue("Test Catalogue")
@@ -144,7 +154,7 @@ func TestGroupService(t *testing.T) {
 	// Test GetGroupByID with different preload options
 	t.Run("GetGroupByID with preloads", func(t *testing.T) {
 		// Create a group with a user
-		user, err := service.CreateUser("preload@example.com", "Preload User", "password123", true, true, true, true, true, true)
+		user, err := service.CreateUser(UserDTO{Email: "preload@example.com", Name: "Preload User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
 
 		group, err := service.CreateGroup("Preload Group", []uint{user.ID}, []uint{}, []uint{}, []uint{})
@@ -171,11 +181,11 @@ func TestGroupService(t *testing.T) {
 	// Test UpdateGroup
 	t.Run("UpdateGroup", func(t *testing.T) {
 		// Create users
-		user1, err := service.CreateUser("update1@example.com", "Update User 1", "password123", true, true, true, true, true, true)
+		user1, err := service.CreateUser(UserDTO{Email: "update1@example.com", Name: "Update User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
-		user2, err := service.CreateUser("update2@example.com", "Update User 2", "password123", true, true, true, true, true, true)
+		user2, err := service.CreateUser(UserDTO{Email: "update2@example.com", Name: "Update User 2", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
-		user3, err := service.CreateUser("update3@example.com", "Update User 3", "password123", true, true, true, true, true, true)
+		user3, err := service.CreateUser(UserDTO{Email: "update3@example.com", Name: "Update User 3", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
 
 		// Create catalogues
@@ -293,7 +303,7 @@ func TestGroupService(t *testing.T) {
 		assert.Contains(t, err.Error(), "record not found")
 
 		// Test RemoveUserFromGroup with non-existent group
-		user, err := service.CreateUser("error@example.com", "Error User", "password123", true, true, true, true, true, true)
+		user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
 
 		err = service.RemoveUserFromGroup(user.ID, 9999)
@@ -390,7 +400,7 @@ func TestGroupService(t *testing.T) {
 	// Test DeleteGroup
 	t.Run("DeleteGroup", func(t *testing.T) {
 		// Create a group with associations
-		user, err := service.CreateUser("delete@example.com", "Delete User", "password123", true, true, true, true, true, true)
+		user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 		assert.NoError(t, err)
 
 		catalogue, err := service.CreateCatalogue("Delete Catalogue")
@@ -797,7 +807,7 @@ func TestUserAccessibleCatalogues(t *testing.T) {
 	service := NewService(db)
 
 	// Create a user
-	user, err := service.CreateUser("test@example.com", "Test User", "password123", true, true, true, true, true, true)
+	user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
 	// Create groups

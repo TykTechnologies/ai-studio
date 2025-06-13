@@ -2,6 +2,8 @@ package models
 
 import "gorm.io/gorm"
 
+const DefaultGroupID uint = 1
+
 type Group struct {
 	gorm.Model
 	ID             uint            `json:"id" gorm:"primaryKey"`
@@ -368,4 +370,11 @@ func IsGroupNameUnique(db *gorm.DB, name string, groupID uint) (bool, error) {
 	}
 
 	return count == 0, nil
+}
+
+func DefaultGroupExists(db *gorm.DB) (bool, error) {
+	var count int64
+	err := db.Model(&Group{}).Where("id = ?", DefaultGroupID).Count(&count).Error
+
+	return count > 0, err
 }
