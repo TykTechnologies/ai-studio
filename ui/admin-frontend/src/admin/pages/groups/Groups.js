@@ -46,6 +46,7 @@ const Groups = () => {
     handlePageChange,
     handlePageSizeChange,
     handleSearch,
+    searchTerm,
     sortConfig,
     handleSortChange,
     refreshGroups,
@@ -128,6 +129,7 @@ const Groups = () => {
           handlePageChange={handlePageChange}
           handlePageSizeChange={handlePageSizeChange}
           handleSearch={handleSearch}
+          searchTerm={searchTerm}
           sortConfig={sortConfig}
           handleSortChange={handleSortChange}
           handleGroupClick={handleGroupClick}
