@@ -22,7 +22,7 @@ func (a *API) validateAdminPermissions(c *gin.Context) error {
 	}
 
 	if u.GetRole() != models.RoleSuperAdmin {
-		return helpers.NewForbiddenError("operation not allowed")
+		return helpers.NewForbiddenError("operation only allowed for super admin user")
 	}
 
 	return nil

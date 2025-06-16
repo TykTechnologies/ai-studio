@@ -317,14 +317,108 @@ func TestUserService(t *testing.T) {
 		// Ensure the user is actually a super admin
 		assert.True(t, superAdmin.IsAdmin)
 
-		// Attempt to delete should fail with "operation not allowed"
+		// Attempt to delete should fail
 		err = service.DeleteUser(superAdmin)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "operation not allowed")
+		assert.Contains(t, err.Error(), "super admin user cannot be deleted")
 
 		// Verify super admin still exists
 		_, err = service.GetUserByID(1)
 		assert.NoError(t, err)
+	})
+
+	t.Run("Group validation", func(t *testing.T) {
+		// First, create some groups for testing
+		group1, err := service.CreateGroup("Group Validation Test 1", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		group2, err := service.CreateGroup("Group Validation Test 2", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Test creating a user with valid groups
+		user, err := service.CreateUser(UserDTO{
+			Email:                "group_test@example.com",
+			Name:                 "Group Test User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{group1.ID, group2.ID},
+		})
+		assert.NoError(t, err)
+		assert.NotNil(t, user)
+
+		// Get the user with groups preloaded to verify group assignments
+		userWithGroups, err := service.GetUserByID(user.ID, "Groups")
+		assert.NoError(t, err)
+		assert.Len(t, userWithGroups.Groups, 3) // 2 assigned groups + default group
+
+		// Extract group IDs for easier assertion
+		var groupIDs []uint
+		for _, g := range userWithGroups.Groups {
+			groupIDs = append(groupIDs, g.ID)
+		}
+		assert.Contains(t, groupIDs, group1.ID)
+		assert.Contains(t, groupIDs, group2.ID)
+		assert.Contains(t, groupIDs, models.DefaultGroupID)
+
+		// Test creating a user with invalid groups
+		_, err = service.CreateUser(UserDTO{
+			Email:                "invalid_group@example.com",
+			Name:                 "Invalid Group User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{9999}, // Non-existent group ID
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "groups not found")
+
+		// Test updating a user with valid groups
+		updatedUser, err := service.UpdateUser(user, UserDTO{
+			Email:                user.Email,
+			Name:                 user.Name,
+			IsAdmin:              user.IsAdmin,
+			ShowChat:             user.ShowChat,
+			ShowPortal:           user.ShowPortal,
+			EmailVerified:        user.EmailVerified,
+			NotificationsEnabled: user.NotificationsEnabled,
+			AccessToSSOConfig:    user.AccessToSSOConfig,
+			Groups:               []uint{group1.ID}, // Only keep group1
+		})
+		assert.NoError(t, err)
+
+		// Get the updated user with groups preloaded
+		updatedUserWithGroups, err := service.GetUserByID(updatedUser.ID, "Groups")
+		assert.NoError(t, err)
+		assert.Len(t, updatedUserWithGroups.Groups, 1) // Only 1 group now
+		assert.Equal(t, group1.ID, updatedUserWithGroups.Groups[0].ID)
+
+		// Test updating a user with invalid groups
+		_, err = service.UpdateUser(user, UserDTO{
+			Email:                user.Email,
+			Name:                 user.Name,
+			IsAdmin:              user.IsAdmin,
+			ShowChat:             user.ShowChat,
+			ShowPortal:           user.ShowPortal,
+			EmailVerified:        user.EmailVerified,
+			NotificationsEnabled: user.NotificationsEnabled,
+			AccessToSSOConfig:    user.AccessToSSOConfig,
+			Groups:               []uint{9999}, // Non-existent group ID
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "groups not found")
+
+		// Clean up
+		service.DeleteUser(user)
+		service.DeleteGroup(group1.ID)
+		service.DeleteGroup(group2.ID)
 	})
 }
 
