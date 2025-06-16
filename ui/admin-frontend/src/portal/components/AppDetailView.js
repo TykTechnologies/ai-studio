@@ -85,6 +85,7 @@ const AppDetailView = () => {
   const [baseUrl, setBaseUrl] = useState("");
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
+  const [appInteractionsData, setAppInteractionsData] = useState(null);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -99,16 +100,20 @@ const AppDetailView = () => {
 
   const fetchAnalyticsData = useCallback(async (start, end) => {
     try {
-      const [usageResponse, budgetResponse] = await Promise.all([
-        pubClient.get(`/analytics/token-usage-and-cost-for-app`, {
-          params: { start_date: start, end_date: end, app_id: id },
+      const [usageResponse, budgetResponse, interactionsResponse] = await Promise.all([
+        pubClient.get(`/common/apps/${id}/analytics/usage`, {
+          params: { start_date: start, end_date: end },
         }),
         pubClient.get(`/analytics/budget-usage-for-app`, {
           params: { app_id: id },
         }),
+        pubClient.get(`/common/apps/${id}/analytics/interactions`, {
+          params: { start_date: start, end_date: end },
+        }),
       ]);
       setTokenUsageAndCostData(usageResponse.data);
       setBudgetUsageData(budgetResponse.data);
+      setAppInteractionsData(interactionsResponse.data);
     } catch (error) {
       console.error("Error fetching usage and budget data", error);
     }
@@ -359,6 +364,53 @@ const AppDetailView = () => {
               label: "Cost",
               data: tokenUsageAndCostData?.datasets?.[1]?.data || [],
               borderColor: "rgb(255, 99, 132)",
+              tension: 0.1,
+            },
+          ],
+        }} />
+      </Box>
+
+      <SectionTitle>App Interactions</SectionTitle>
+      <Box height={300} mb={4}>
+        <Line options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              type: "time",
+              time: {
+                unit: "day",
+              },
+              title: {
+                display: true,
+                text: "Date",
+              },
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "Number of Interactions",
+              },
+            },
+          },
+          plugins: {
+            legend: {
+              position: "top",
+            },
+            title: {
+              display: true,
+              text: "App Interactions Over Time",
+            },
+          },
+        }} data={{
+          labels: appInteractionsData?.labels || [],
+          datasets: [
+            {
+              label: "Interactions",
+              data: appInteractionsData?.data || [],
+              borderColor: "rgb(255, 206, 86)",
+              backgroundColor: "rgba(255, 206, 86, 0.2)",
               tension: 0.1,
             },
           ],
