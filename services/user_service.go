@@ -37,17 +37,25 @@ func (s *Service) addDefaultGroupIfNotExists(groups []uint) ([]uint, error) {
 	return groups, nil
 }
 
-func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
+func (s *Service) validateUserInput(dto UserDTO) error {
 	if err := helpers.ValidateEmailDomain(dto.Email); err != nil {
-		return nil, err
+		return err
 	}
 
 	if dto.NotificationsEnabled && !dto.IsAdmin {
-		return nil, fmt.Errorf("notifications can only be enabled for admin users")
+		return errors.New("notifications can only be enabled for admin users")
 	}
 
 	if dto.AccessToSSOConfig && !dto.IsAdmin {
-		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
+		return errors.New("access to IdP configuration can only be enabled for admin users")
+	}
+
+	return nil
+}
+
+func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
+	if err := s.validateUserInput(dto); err != nil {
+		return nil, err
 	}
 
 	user := &models.User{
@@ -120,12 +128,8 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 }
 
 func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, error) {
-	if dto.NotificationsEnabled && !dto.IsAdmin {
-		return nil, fmt.Errorf("notifications can only be enabled for admin users")
-	}
-
-	if dto.AccessToSSOConfig && !dto.IsAdmin {
-		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
+	if err := s.validateUserInput(dto); err != nil {
+		return nil, err
 	}
 
 	user.Email = dto.Email

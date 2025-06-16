@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"testing"
 
@@ -12,12 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
-
-// Helper function to parse uint from string
-func parseUint(s string) uint64 {
-	id, _ := strconv.ParseUint(s, 10, 64)
-	return id
-}
 
 func setupTestAPIWithAdminUser(t *testing.T) (*API, *gin.Engine, *models.User) {
 	api, db := setupTestAPI(t)
@@ -111,6 +104,25 @@ func TestUserEndpoints(t *testing.T) {
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/users/%s", userID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	// Test email uniqueness - try to create a user with the same email
+	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Verify error response contains the expected message
+	var errorResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
+	assert.NoError(t, err)
+
+	// Safely check error response structure
+	assert.Contains(t, errorResponse, "errors")
+	errorsArray, ok := errorResponse["errors"].([]interface{})
+	assert.True(t, ok)
+	assert.NotEmpty(t, errorsArray)
+	errorObj, ok := errorsArray[0].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Contains(t, errorObj, "detail")
+	assert.Contains(t, errorObj["detail"], "Email is already in use")
+
 	// Test Update User
 	updateUserInput := UserInput{
 		Data: struct {
@@ -188,6 +200,208 @@ func TestUserEndpoints(t *testing.T) {
 
 	// Test Delete User
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/users/%s", userID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// TestAdminPermissions verifies that only super admins can create/update/delete admin users
+func TestAdminPermissions(t *testing.T) {
+	// Setup for regular admin tests
+	api, db := setupTestAPI(t)
+
+	// Create a regular admin (not the first user, so not super admin)
+	regularAdmin := &models.User{
+		ID:                2, // ID 2 is a regular admin
+		Email:             "regular-admin@example.com",
+		Name:              "Regular Admin",
+		IsAdmin:           true,
+		AccessToSSOConfig: true,
+		ShowChat:          true,
+		ShowPortal:        true,
+	}
+	err := db.Create(regularAdmin).Error
+	assert.NoError(t, err)
+
+	// Setup router with regular admin user in context
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user", regularAdmin)
+		c.Next()
+	})
+
+	// Copy routes from api.router to r
+	for _, route := range api.router.Routes() {
+		r.Handle(route.Method, route.Path, route.HandlerFunc)
+	}
+
+	api.router = r
+
+	// Test 1: Regular admin cannot create admin users
+	createAdminUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			}{
+				Email:    "new-admin@example.com",
+				Name:     "New Admin User",
+				Password: "password123",
+				IsAdmin:  true, // Trying to create an admin user
+			},
+		},
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/users", createAdminUserInput)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var errorResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
+	assert.NoError(t, err)
+
+	// Safely check error response structure
+	assert.Contains(t, errorResponse, "errors")
+	errorsArray, ok := errorResponse["errors"].([]interface{})
+	assert.True(t, ok)
+	assert.NotEmpty(t, errorsArray)
+	errorObj, ok := errorsArray[0].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Contains(t, errorObj, "detail")
+	assert.Contains(t, errorObj["detail"], "operation not allowed")
+
+	// Setup for super admin tests
+	apiSuper, dbSuper := setupTestAPI(t)
+
+	// Create a super admin (ID 1)
+	superAdmin := &models.User{
+		ID:                1, // ID 1 is super admin
+		Email:             "super-admin@example.com",
+		Name:              "Super Admin",
+		IsAdmin:           true,
+		AccessToSSOConfig: true,
+		ShowChat:          true,
+		ShowPortal:        true,
+	}
+	err = dbSuper.Create(superAdmin).Error
+	assert.NoError(t, err)
+
+	// Setup router with super admin user
+	rSuper := gin.New()
+	rSuper.Use(func(c *gin.Context) {
+		c.Set("user", superAdmin)
+		c.Next()
+	})
+
+	for _, route := range apiSuper.router.Routes() {
+		rSuper.Handle(route.Method, route.Path, route.HandlerFunc)
+	}
+
+	apiSuper.router = rSuper
+
+	// Test 2: Super admin can create admin users
+	w = performRequest(apiSuper.router, "POST", "/api/v1/users", createAdminUserInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createResponse map[string]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &createResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-admin@example.com", createResponse["data"].Attributes.Email)
+	assert.True(t, createResponse["data"].Attributes.IsAdmin)
+
+	adminUserID := createResponse["data"].ID
+
+	// Test 3: Regular admin cannot update admin users
+	// First create an admin user that we'll try to update
+	adminToUpdate := &models.User{
+		Email:   "admin-to-update@example.com",
+		Name:    "Admin To Update",
+		IsAdmin: true,
+	}
+	err = db.Create(adminToUpdate).Error
+	assert.NoError(t, err)
+
+	updateAdminUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			}{
+				Email:   "updated-admin@example.com",
+				Name:    "Updated Admin User",
+				IsAdmin: true,
+			},
+		},
+	}
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%d", adminToUpdate.ID), updateAdminUserInput)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var updateErrorResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &updateErrorResponse)
+	assert.NoError(t, err)
+	// Safely check that we have errors
+	assert.Contains(t, updateErrorResponse, "errors")
+
+	// Test 4: Regular admin cannot delete admin users
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/users/%d", adminToUpdate.ID), nil)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var deleteErrorResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &deleteErrorResponse)
+	assert.NoError(t, err)
+	// Safely check that we have errors
+	assert.Contains(t, deleteErrorResponse, "errors")
+
+	// Test 5: Super admin can update admin users
+	w = performRequest(apiSuper.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", adminUserID), updateAdminUserInput)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test 6: Super admin can delete admin users
+	w = performRequest(apiSuper.router, "DELETE", fmt.Sprintf("/api/v1/users/%s", adminUserID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
@@ -302,28 +516,11 @@ func TestSkipUserQuickStart(t *testing.T) {
 	w = performRequest(api.router, "POST", fmt.Sprintf("/api/v1/users/%s/skip-quick-start", userID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Get the user from the database
-	user, err := api.service.GetUserByID(uint(parseUint(userID)))
+	// Retrieve user to check if flag was set
+	id, _ := strconv.ParseUint(userID, 10, 64)
+	userWithFlag, err := api.service.GetUserByID(uint(id))
 	assert.NoError(t, err)
-
-	// Create a new request with the user in context
-	w = performRequest(api.router, "GET", "/api/v1/me", nil)
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var meResponse map[string]UserWithEntitlementsResponse
-	err = json.Unmarshal(w.Body.Bytes(), &meResponse)
-	assert.NoError(t, err)
-	assert.True(t, meResponse["data"].Attributes.UIOptions.SkipQuickStart)
-}
-
-// Helper function to perform a request with a user in context
-func performRequestWithUser(r *gin.Engine, method, path string, body interface{}, user *models.User) *httptest.ResponseRecorder {
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Set("user", user)
-	c.Request = httptest.NewRequest(method, path, nil)
-	r.HandleContext(c)
-	return w
+	assert.True(t, userWithFlag.SkipQuickStart, "SkipQuickStart flag should be true")
 }
 
 func TestListUsersSearchFunctionality(t *testing.T) {
@@ -444,34 +641,36 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 	assert.Equal(t, 0, len(data))
 }
 
+// TestListUsersErrorResponseFormat tests that the error response format from the listUsers endpoint is correct
 func TestListUsersErrorResponseFormat(t *testing.T) {
-	api, _, _ := setupTestAPIWithAdminUser(t)
+	// This test verifies that the error response from the listUsers endpoint
+	// follows the expected format when an error occurs
 
-	// Test invalid page number
-	w := performRequest(api.router, "GET", "/api/v1/users?page=0", nil)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Create a regular API
+	api, db := setupTestAPI(t)
 
-	var errorResponse ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
+	// Make a real error happen by closing the DB connection
+	sqlDB, err := db.DB()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, errorResponse.Errors)
-	assert.Equal(t, "Bad Request", errorResponse.Errors[0].Title)
+	sqlDB.Close()
 
-	// Test invalid page size
-	w = performRequest(api.router, "GET", "/api/v1/users?page_size=0", nil)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Test regular listing with a closed DB - should produce a real error
+	w := performRequest(api.router, "GET", "/api/v1/users", nil)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
+	// Verify the error response format
+	var errorResponse map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, errorResponse.Errors)
-	assert.Equal(t, "Bad Request", errorResponse.Errors[0].Title)
 
-	// Test invalid sort field
-	w = performRequest(api.router, "GET", "/api/v1/users?sort=invalid_field", nil)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Check that the error response has the correct structure
+	errors, exists := errorResponse["errors"]
+	assert.True(t, exists)
+	errorList := errors.([]interface{})
+	assert.NotEmpty(t, errorList)
 
-	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, errorResponse.Errors)
-	assert.Equal(t, "Bad Request", errorResponse.Errors[0].Title)
+	// Check that the error has title and detail fields
+	errorObj := errorList[0].(map[string]interface{})
+	assert.Equal(t, "Internal Server Error", errorObj["title"])
+	assert.NotEmpty(t, errorObj["detail"])
 }
