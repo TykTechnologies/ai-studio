@@ -43,11 +43,22 @@ func (s *Service) validateUserInput(dto UserDTO) error {
 	}
 
 	if dto.NotificationsEnabled && !dto.IsAdmin {
-		return errors.New("notifications can only be enabled for admin users")
+		return helpers.NewBadRequestError("notifications can only be enabled for admin users")
 	}
 
 	if dto.AccessToSSOConfig && !dto.IsAdmin {
-		return errors.New("access to IdP configuration can only be enabled for admin users")
+		return helpers.NewBadRequestError("access to IdP configuration can only be enabled for admin users")
+	}
+
+	if len(dto.Groups) > 0 {
+		groupsExist, err := models.ValidateGroupsExist(s.DB, dto.Groups)
+		if err != nil {
+			return err
+		}
+
+		if !groupsExist {
+			return helpers.NewBadRequestError("groups not found")
+		}
 	}
 
 	return nil
@@ -166,7 +177,7 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 
 func (s *Service) DeleteUser(user *models.User) error {
 	if user.GetRole() == models.RoleSuperAdmin {
-		return helpers.NewForbiddenError("operation not allowed")
+		return helpers.NewForbiddenError("super admin user cannot be deleted")
 	}
 
 	tx := s.DB.Begin()

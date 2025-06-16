@@ -378,3 +378,21 @@ func DefaultGroupExists(db *gorm.DB) (bool, error) {
 
 	return count > 0, err
 }
+
+func ValidateGroupsExist(db *gorm.DB, groupIDs []uint) (bool, error) {
+	if len(groupIDs) == 0 {
+		return false, nil
+	}
+
+	var count int64
+	err := db.Model(&Group{}).Where("id IN ?", groupIDs).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	if count != int64(len(groupIDs)) {
+		return false, nil
+	}
+
+	return true, nil
+}

@@ -46,7 +46,23 @@ func setupTestAPIWithAdminUser(t *testing.T) (*API, *gin.Engine, *models.User) {
 func TestUserEndpoints(t *testing.T) {
 	api, _, _ := setupTestAPIWithAdminUser(t)
 
-	// Test Create User
+	// Create a test group first
+	group := &models.Group{
+		Name: "Test Group",
+	}
+	err := api.service.DB.Create(group).Error
+	assert.NoError(t, err)
+	assert.NotZero(t, group.ID)
+
+	// Create another test group
+	secondGroup := &models.Group{
+		Name: "Second Test Group",
+	}
+	err = api.service.DB.Create(secondGroup).Error
+	assert.NoError(t, err)
+	assert.NotZero(t, secondGroup.ID)
+
+	// Test Create User with groups
 	createUserInput := UserInput{
 		Data: struct {
 			Type       string `json:"type"`
@@ -85,7 +101,7 @@ func TestUserEndpoints(t *testing.T) {
 				EmailVerified:        true,
 				NotificationsEnabled: true,
 				AccessToSSOConfig:    true,
-				Groups:               []uint{},
+				Groups:               []uint{group.ID, secondGroup.ID}, // Assign to both groups
 			},
 		},
 	}
@@ -94,11 +110,81 @@ func TestUserEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var response map[string]UserResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "test@example.com", response["data"].Attributes.Email)
 
 	userID := response["data"].ID
+	// Verify user has the correct groups assigned
+	id, _ := strconv.ParseUint(userID, 10, 64)
+	createdUser, err := api.service.GetUserByID(uint(id), "Groups")
+	assert.NoError(t, err)
+	assert.Len(t, createdUser.Groups, 2)
+	// Test attempting to create a user with a non-existent group
+	nonExistentGroupID := uint(9999) // Using a high number that's unlikely to exist
+	createUserWithBadGroupInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			}{
+				Email:    "nonexistent-group@example.com",
+				Name:     "Non-existent Group User",
+				Password: "password123",
+				IsAdmin:  false,
+				Groups:   []uint{nonExistentGroupID},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "POST", "/api/v1/users", createUserWithBadGroupInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Verify error response contains the expected message about non-existent group
+	var errorResponseForGroup map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &errorResponseForGroup)
+	assert.NoError(t, err)
+
+	// Safely check error response structure
+	assert.Contains(t, errorResponseForGroup, "errors")
+	errorsArrayGroup, okGroup := errorResponseForGroup["errors"].([]interface{})
+	assert.True(t, okGroup)
+	assert.NotEmpty(t, errorsArrayGroup)
+	errorObjGroup, okGroup := errorsArrayGroup[0].(map[string]interface{})
+	assert.True(t, okGroup)
+	assert.Contains(t, errorObjGroup, "detail")
+	assert.Contains(t, errorObjGroup["detail"].(string), "groups not found")
+
+	// Check if the groups match the ones we assigned
+	groupIDs := make([]uint, len(createdUser.Groups))
+	for i, g := range createdUser.Groups {
+		groupIDs[i] = g.ID
+	}
+	assert.Contains(t, groupIDs, group.ID)
+	assert.Contains(t, groupIDs, secondGroup.ID)
 
 	// Test Get User
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/users/%s", userID), nil)
@@ -288,7 +374,7 @@ func TestAdminPermissions(t *testing.T) {
 	errorObj, ok := errorsArray[0].(map[string]interface{})
 	assert.True(t, ok)
 	assert.Contains(t, errorObj, "detail")
-	assert.Contains(t, errorObj["detail"], "operation not allowed")
+	assert.Contains(t, errorObj["detail"], "operation only allowed for super admin user")
 
 	// Setup for super admin tests
 	apiSuper, dbSuper := setupTestAPI(t)
@@ -460,6 +546,100 @@ func TestUserEmailUniqueness(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
 	assert.Contains(t, errorResponse["errors"].([]interface{})[0].(map[string]interface{})["detail"], "Email is already in use")
+	// Test case 2: Trying to update a user's email to one that already exists
+	// Create a second user with a different email
+	secondUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			}{
+				Email:    "test2@example.com",
+				Name:     "Second Test User",
+				Password: "password123",
+				IsAdmin:  false,
+				Groups:   []uint{},
+			},
+		},
+	}
+
+	w = performRequest(api.router, "POST", "/api/v1/users", secondUserInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var secondUserResponse map[string]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &secondUserResponse)
+	assert.NoError(t, err)
+	secondUserID := secondUserResponse["data"].ID
+
+	// Now try to update the second user's email to match the first user's email
+	updateUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			}{
+				Email:  "test@example.com", // Already used by the first user
+				Name:   "Updated Second User",
+				Groups: []uint{},
+			},
+		},
+	}
+
+	// Attempt to update with duplicate email should fail
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", secondUserID), updateUserInput)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Verify error response
+	var updateErrorResponse map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &updateErrorResponse)
+	assert.NoError(t, err)
+	assert.Contains(t, updateErrorResponse["errors"].([]interface{})[0].(map[string]interface{})["detail"], "Email is already in use")
 }
 
 func TestSkipUserQuickStart(t *testing.T) {
