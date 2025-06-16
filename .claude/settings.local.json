@@ -9,7 +9,9 @@
       "Bash(gofmt:*)",
       "Bash(find:*)",
       "Bash(go run:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:www.anthropic.com)"
     ],
     "deny": []
   }

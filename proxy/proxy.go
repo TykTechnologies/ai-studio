@@ -102,7 +102,6 @@ type Config struct {
 	Port int
 }
 
-
 func NewProxy(service *services.Service, cfg *Config, budgetService *services.BudgetService) *Proxy {
 	p := &Proxy{
 		service:       service,
@@ -138,7 +137,6 @@ func NewProxy(service *services.Service, cfg *Config, budgetService *services.Bu
 
 	return p
 }
-
 
 func (p *Proxy) Start() error {
 	if err := p.loadResources(); err != nil {

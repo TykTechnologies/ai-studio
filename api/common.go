@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -1394,4 +1395,159 @@ type SimplifiedToolResponse struct {
 type SimplifiedDataSourceResponse struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
+}
+
+// getUserAppUsage godoc
+// @Summary Get app usage analytics for portal user
+// @Description Get token usage and cost analytics for a user's app
+// @Tags portal-analytics
+// @Accept json
+// @Produce json
+// @Param id path string true "App ID"
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Success 200 {object} models.MultiAxisChartData
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps/{id}/analytics/usage [get]
+func (a *API) getUserAppUsage(c *gin.Context) {
+	// Get current user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	// Parse app ID from URL path
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+		return
+	}
+
+	// Validate user owns the app
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "App not found"}}})
+		return
+	}
+
+	if app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to access this app's analytics"}}})
+		return
+	}
+
+	// Parse date range
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	// Get analytics data
+	appIDPtr := uint(appID)
+	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, "", nil, &appIDPtr, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to get usage analytics"}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
+}
+
+// getUserAppInteractions godoc
+// @Summary Get app interactions analytics for portal user
+// @Description Get interaction analytics for a user's app
+// @Tags portal-analytics
+// @Accept json
+// @Produce json
+// @Param id path string true "App ID"
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Success 200 {object} analytics.ChartData
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps/{id}/analytics/interactions [get]
+func (a *API) getUserAppInteractions(c *gin.Context) {
+	// Get current user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	// Parse app ID from URL path
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+		return
+	}
+
+	// Validate user owns the app
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "App not found"}}})
+		return
+	}
+
+	if app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to access this app's analytics"}}})
+		return
+	}
+
+	// Parse date range
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	// Get analytics data
+	chartData, err := analytics.GetAppInteractionsOverTime(a.service.DB, startDate, endDate, uint(appID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to get interactions analytics"}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
 }

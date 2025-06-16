@@ -3,6 +3,7 @@ package services
 import (
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 
 	"github.com/stretchr/testify/assert"
@@ -27,28 +28,17 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to auto-migrate schema: %v", err)
 	}
 
-	return db
-}
-
-func TestUserService(t *testing.T) {
-	db := setupTestDB(t)
+	// Create a default group (ID 1) that will be used for automatic user assignments
 	service := NewService(db)
-
-	// Test CreateUser
-	user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+	defaultGroup, err := service.CreateGroup("Default Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
-	assert.NotNil(t, user)
-	assert.NotZero(t, user.ID)
+	assert.Equal(t, models.DefaultGroupID, defaultGroup.ID) // Ensure it has ID 1
 
-	// Test GetUserByID
-	fetchedUser, err := service.GetUserByID(user.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, user.Email, fetchedUser.Email)
-
-	// Test UpdateUser
-	updatedUser, err := service.UpdateUser(user.ID, UserDTO{
-		Email:                "updated@example.com",
-		Name:                 "Updated User",
+	// Create a superadmin user (ID 1) to avoid issues with user deletion in tests
+	_, err = service.CreateUser(UserDTO{
+		Email:                "admin@example.com",
+		Name:                 "Admin User",
+		Password:             "password123",
 		IsAdmin:              true,
 		ShowChat:             true,
 		ShowPortal:           true,
@@ -58,38 +48,378 @@ func TestUserService(t *testing.T) {
 		Groups:               []uint{},
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, "updated@example.com", updatedUser.Email)
-	assert.Equal(t, "Updated User", updatedUser.Name)
 
-	// Test AuthenticateUser
-	authenticatedUser, err := service.AuthenticateUser("updated@example.com", "password123")
-	assert.NoError(t, err)
-	assert.NotNil(t, authenticatedUser)
+	return db
+}
 
-	// Test ListUsers
-	params := ListUsersParams{
-		PageSize:   10,
-		PageNumber: 1,
-		All:        true,
-		Sort:       "id",
-	}
-	users, _, _, err := service.ListUsers(params)
-	assert.NoError(t, err)
-	assert.Len(t, users, 1)
+func TestUserService(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
 
-	// Test SearchUsersByEmailStub
-	searchedUsers, err := service.SearchUsersByEmailStub("updat")
-	assert.NoError(t, err)
-	assert.Len(t, searchedUsers, 1)
-	assert.Equal(t, "updated@example.com", searchedUsers[0].Email)
+	t.Run("Basic CRUD operations", func(t *testing.T) {
+		// Test CreateUser - this will be our regular test user
+		user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: false, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: false, AccessToSSOConfig: false, Groups: []uint{}})
+		assert.NoError(t, err)
+		assert.NotNil(t, user)
+		assert.NotZero(t, user.ID)
 
-	// Test DeleteUser
-	err = service.DeleteUser(user.ID)
-	assert.NoError(t, err)
+		// Test GetUserByID
+		fetchedUser, err := service.GetUserByID(user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, user.Email, fetchedUser.Email)
 
-	// Verify user is deleted
-	_, err = service.GetUserByID(user.ID)
-	assert.Error(t, err)
+		// Test UpdateUser
+		updatedUser, err := service.UpdateUser(user, UserDTO{
+			Email:                "updated@example.com",
+			Name:                 "Updated User",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "updated@example.com", updatedUser.Email)
+		assert.Equal(t, "Updated User", updatedUser.Name)
+
+		// Test AuthenticateUser
+		authenticatedUser, err := service.AuthenticateUser("updated@example.com", "password123")
+		assert.NoError(t, err)
+		assert.NotNil(t, authenticatedUser)
+
+		// Test ListUsers
+		params := ListUsersParams{
+			PageSize:   10,
+			PageNumber: 1,
+			All:        true,
+			Sort:       "id",
+		}
+		users, _, _, err := service.ListUsers(params)
+		assert.NoError(t, err)
+		assert.Len(t, users, 2) // Now expecting 2 users (superadmin + test user)
+
+		// Test SearchUsersByEmailStub
+		searchedUsers, err := service.SearchUsersByEmailStub("updat")
+		assert.NoError(t, err)
+		assert.Len(t, searchedUsers, 1)
+		assert.Equal(t, "updated@example.com", searchedUsers[0].Email)
+
+		// Test DeleteUser
+		err = service.DeleteUser(user)
+		assert.NoError(t, err)
+
+		// Verify user is deleted
+		_, err = service.GetUserByID(user.ID)
+		assert.Error(t, err)
+	})
+
+	t.Run("Email format validation", func(t *testing.T) {
+		// Temporarily configure FilterSignupDomains to enable email validation
+		appConfig := config.Get()
+		originalDomains := appConfig.FilterSignupDomains
+		appConfig.FilterSignupDomains = []string{"example.com"}            // Only allow example.com
+		defer func() { appConfig.FilterSignupDomains = originalDomains }() // Restore original config
+
+		// Try to create a user with an invalid email format (missing @ symbol)
+		_, err := service.CreateUser(UserDTO{
+			Email:                "notanemailaddress",
+			Name:                 "Invalid Email User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid email address")
+
+		// Try with invalid domain
+		_, err = service.CreateUser(UserDTO{
+			Email:                "valid@invaliddomain.com",
+			Name:                 "Invalid Domain User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email domain 'invaliddomain.com' is not permitted")
+
+		// Create a user with valid email and domain
+		user, err := service.CreateUser(UserDTO{
+			Email:                "validemail@example.com",
+			Name:                 "Valid Email User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.NoError(t, err)
+
+		// Try updating a user with an invalid email format
+		_, err = service.UpdateUser(user, UserDTO{
+			Email:                "invalidemailformat", // No @ symbol
+			Name:                 user.Name,
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid email address")
+
+		// Try updating with invalid domain
+		_, err = service.UpdateUser(user, UserDTO{
+			Email:                "newemail@invaliddomain.com",
+			Name:                 user.Name,
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email domain 'invaliddomain.com' is not permitted")
+
+		// Clean up
+		service.DeleteUser(user)
+	})
+
+	t.Run("Notifications validation", func(t *testing.T) {
+		// Admin user with notifications enabled (should succeed)
+		adminUser, err := service.CreateUser(UserDTO{
+			Email:                "admin_notif@example.com",
+			Name:                 "Admin with Notifications",
+			Password:             "password123",
+			IsAdmin:              true,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: true,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.NoError(t, err)
+		assert.True(t, adminUser.NotificationsEnabled)
+
+		// Non-admin user with notifications enabled (should fail)
+		_, err = service.CreateUser(UserDTO{
+			Email:                "regular_notif@example.com",
+			Name:                 "Regular User with Notifications",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: true,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "notifications can only be enabled for admin users")
+
+		// Regular user (no notifications) should succeed
+		regularUser, err := service.CreateUser(UserDTO{
+			Email:                "regular_no_notif@example.com",
+			Name:                 "Regular User without Notifications",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.NoError(t, err)
+		assert.False(t, regularUser.NotificationsEnabled)
+
+		// Test updating a regular user to have notifications (should fail)
+		_, err = service.UpdateUser(regularUser, UserDTO{
+			Email:                regularUser.Email,
+			Name:                 regularUser.Name,
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: true,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "notifications can only be enabled for admin users")
+
+		// Clean up
+		service.DeleteUser(adminUser)
+		service.DeleteUser(regularUser)
+	})
+
+	t.Run("SSO config access validation", func(t *testing.T) {
+		// Admin user with SSO config access (should succeed)
+		adminUser, err := service.CreateUser(UserDTO{
+			Email:                "admin_sso@example.com",
+			Name:                 "Admin with SSO Access",
+			Password:             "password123",
+			IsAdmin:              true,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    true,
+			Groups:               []uint{},
+		})
+		assert.NoError(t, err)
+		assert.True(t, adminUser.AccessToSSOConfig)
+
+		// Non-admin user with SSO config access (should fail)
+		_, err = service.CreateUser(UserDTO{
+			Email:                "regular_sso@example.com",
+			Name:                 "Regular User with SSO Access",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    true,
+			Groups:               []uint{},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
+
+		// Clean up
+		service.DeleteUser(adminUser)
+	})
+
+	t.Run("Super admin deletion prevention", func(t *testing.T) {
+		// Try to delete the super admin user (ID 1)
+		superAdmin, err := service.GetUserByID(1)
+		assert.NoError(t, err)
+
+		// Ensure the user is actually a super admin
+		assert.True(t, superAdmin.IsAdmin)
+
+		// Attempt to delete should fail
+		err = service.DeleteUser(superAdmin)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "super admin user cannot be deleted")
+
+		// Verify super admin still exists
+		_, err = service.GetUserByID(1)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Group validation", func(t *testing.T) {
+		// First, create some groups for testing
+		group1, err := service.CreateGroup("Group Validation Test 1", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+		group2, err := service.CreateGroup("Group Validation Test 2", []uint{}, []uint{}, []uint{}, []uint{})
+		assert.NoError(t, err)
+
+		// Test creating a user with valid groups
+		user, err := service.CreateUser(UserDTO{
+			Email:                "group_test@example.com",
+			Name:                 "Group Test User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{group1.ID, group2.ID},
+		})
+		assert.NoError(t, err)
+		assert.NotNil(t, user)
+
+		// Get the user with groups preloaded to verify group assignments
+		userWithGroups, err := service.GetUserByID(user.ID, "Groups")
+		assert.NoError(t, err)
+		assert.Len(t, userWithGroups.Groups, 3) // 2 assigned groups + default group
+
+		// Extract group IDs for easier assertion
+		var groupIDs []uint
+		for _, g := range userWithGroups.Groups {
+			groupIDs = append(groupIDs, g.ID)
+		}
+		assert.Contains(t, groupIDs, group1.ID)
+		assert.Contains(t, groupIDs, group2.ID)
+		assert.Contains(t, groupIDs, models.DefaultGroupID)
+
+		// Test creating a user with invalid groups
+		_, err = service.CreateUser(UserDTO{
+			Email:                "invalid_group@example.com",
+			Name:                 "Invalid Group User",
+			Password:             "password123",
+			IsAdmin:              false,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: false,
+			AccessToSSOConfig:    false,
+			Groups:               []uint{9999}, // Non-existent group ID
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "groups not found")
+
+		// Test updating a user with valid groups
+		updatedUser, err := service.UpdateUser(user, UserDTO{
+			Email:                user.Email,
+			Name:                 user.Name,
+			IsAdmin:              user.IsAdmin,
+			ShowChat:             user.ShowChat,
+			ShowPortal:           user.ShowPortal,
+			EmailVerified:        user.EmailVerified,
+			NotificationsEnabled: user.NotificationsEnabled,
+			AccessToSSOConfig:    user.AccessToSSOConfig,
+			Groups:               []uint{group1.ID}, // Only keep group1
+		})
+		assert.NoError(t, err)
+
+		// Get the updated user with groups preloaded
+		updatedUserWithGroups, err := service.GetUserByID(updatedUser.ID, "Groups")
+		assert.NoError(t, err)
+		assert.Len(t, updatedUserWithGroups.Groups, 1) // Only 1 group now
+		assert.Equal(t, group1.ID, updatedUserWithGroups.Groups[0].ID)
+
+		// Test updating a user with invalid groups
+		_, err = service.UpdateUser(user, UserDTO{
+			Email:                user.Email,
+			Name:                 user.Name,
+			IsAdmin:              user.IsAdmin,
+			ShowChat:             user.ShowChat,
+			ShowPortal:           user.ShowPortal,
+			EmailVerified:        user.EmailVerified,
+			NotificationsEnabled: user.NotificationsEnabled,
+			AccessToSSOConfig:    user.AccessToSSOConfig,
+			Groups:               []uint{9999}, // Non-existent group ID
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "groups not found")
+
+		// Clean up
+		service.DeleteUser(user)
+		service.DeleteGroup(group1.ID)
+		service.DeleteGroup(group2.ID)
+	})
 }
 
 func TestGroupService(t *testing.T) {
@@ -303,7 +633,7 @@ func TestGroupService(t *testing.T) {
 		assert.Contains(t, err.Error(), "record not found")
 
 		// Test RemoveUserFromGroup with non-existent group
-		user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+		user, err := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: false, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: false, AccessToSSOConfig: false, Groups: []uint{}})
 		assert.NoError(t, err)
 
 		err = service.RemoveUserFromGroup(user.ID, 9999)
@@ -387,7 +717,7 @@ func TestGroupService(t *testing.T) {
 		// Clean up
 		err = service.DeleteGroup(group.ID)
 		assert.NoError(t, err)
-		err = service.DeleteUser(user.ID)
+		err = service.DeleteUser(user)
 		assert.NoError(t, err)
 		err = service.DeleteCatalogue(catalogue.ID)
 		assert.NoError(t, err)

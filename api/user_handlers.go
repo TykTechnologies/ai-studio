@@ -22,13 +22,13 @@ func (a *API) validateAdminPermissions(c *gin.Context) error {
 	}
 
 	if u.GetRole() != models.RoleSuperAdmin {
-		return helpers.NewForbiddenError("operation not allowed")
+		return helpers.NewForbiddenError("operation only allowed for super admin user")
 	}
 
 	return nil
 }
 
-func (a *API) validateUserInput(c *gin.Context, userInput UserInput, userId uint) error {
+func (a *API) validateUserInput(userInput UserInput, userId uint) error {
 	isUnique, err := models.IsEmailUnique(a.service.DB, userInput.Data.Attributes.Email, userId)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	if err := a.validateUserInput(c, input, 0); err != nil {
+	if err := a.validateUserInput(input, 0); err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
@@ -153,7 +153,7 @@ func (a *API) updateUser(c *gin.Context) {
 		return
 	}
 
-	if err := a.validateUserInput(c, input, uint(id)); err != nil {
+	if err := a.validateUserInput(input, uint(id)); err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
