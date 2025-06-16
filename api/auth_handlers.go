@@ -367,7 +367,7 @@ func (a *API) handleMe(c *gin.Context) {
 	}
 
 	skipEntitlements := c.Query("skip_entitlements") == "true"
-	isSuperAdmin := u.ID == 1
+	isSuperAdmin := u.GetRole() == models.RoleSuperAdmin
 
 	var response UserWithEntitlementsResponse
 	response.Type = "user"
