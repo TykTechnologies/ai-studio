@@ -514,7 +514,8 @@ func TestGetUserCounts(t *testing.T) {
 func TestGetRole(t *testing.T) {
 	// Test Super Admin (ID=1)
 	user := &User{
-		ID: 1,
+		ID:      1,
+		IsAdmin: true,
 	}
 	assert.Equal(t, "Super Admin", user.GetRole())
 

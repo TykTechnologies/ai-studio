@@ -110,7 +110,7 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test 1: Enable AccessToSSOConfig for admin user (should succeed)
-	updatedAdmin, err := service.UpdateUser(adminUser.ID, UserDTO{
+	updatedAdmin, err := service.UpdateUser(adminUser, UserDTO{
 		Email:                adminUser.Email,
 		Name:                 adminUser.Name,
 		IsAdmin:              true,
@@ -125,7 +125,7 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	assert.True(t, updatedAdmin.AccessToSSOConfig)
 
 	// Test 2: Try to enable AccessToSSOConfig for non-admin user (should fail)
-	_, err = service.UpdateUser(regularUser.ID, UserDTO{
+	_, err = service.UpdateUser(regularUser, UserDTO{
 		Email:                regularUser.Email,
 		Name:                 regularUser.Name,
 		IsAdmin:              false,
@@ -140,7 +140,7 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
 
 	// Test 3: Change admin user to non-admin with AccessToSSOConfig = true (should fail)
-	_, err = service.UpdateUser(adminUser.ID, UserDTO{
+	_, err = service.UpdateUser(adminUser, UserDTO{
 		Email:                adminUser.Email,
 		Name:                 adminUser.Name,
 		IsAdmin:              false,
@@ -155,7 +155,7 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
 
 	// Test 4: Change admin user to non-admin with AccessToSSOConfig = false (should succeed)
-	updatedUser, err := service.UpdateUser(adminUser.ID, UserDTO{
+	updatedUser, err := service.UpdateUser(adminUser, UserDTO{
 		Email:                adminUser.Email,
 		Name:                 adminUser.Name,
 		IsAdmin:              false,

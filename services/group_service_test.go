@@ -43,45 +43,45 @@ func TestSearchGroups(t *testing.T) {
 		// Empty term should return all groups
 		groups, totalCount, totalPages, err := service.SearchGroups("", 10, 1, true, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, int64(6), totalCount)
 		assert.Equal(t, 1, totalPages)
-		assert.Len(t, groups, 5)
+		assert.Len(t, groups, 6)
 	})
 
 	t.Run("SearchGroups with pagination", func(t *testing.T) {
 		// First page with limit of 2
 		groups, totalCount, totalPages, err := service.SearchGroups("", 2, 1, false, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, int64(6), totalCount)
 		assert.Equal(t, 3, totalPages) // 5 items / 2 per page = 3 pages
 		assert.Len(t, groups, 2)
 
 		// Second page
 		groups, totalCount, totalPages, err = service.SearchGroups("", 2, 2, false, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, int64(6), totalCount)
 		assert.Equal(t, 3, totalPages)
 		assert.Len(t, groups, 2)
 
 		// Third page should have only 1 item
 		groups, totalCount, totalPages, err = service.SearchGroups("", 2, 3, false, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, int64(6), totalCount)
 		assert.Equal(t, 3, totalPages)
-		assert.Len(t, groups, 1)
+		assert.Len(t, groups, 2)
 	})
 
 	t.Run("SearchGroups with sorting", func(t *testing.T) {
 		// Test ascending order
 		groups, _, _, err := service.SearchGroups("", 10, 1, true, "name")
 		assert.NoError(t, err)
-		assert.Len(t, groups, 5)
+		assert.Len(t, groups, 6)
 		assert.Equal(t, "Admin Team", groups[0].Name) // Alphabetically first
 
 		// Test descending order
 		groups, _, _, err = service.SearchGroups("", 10, 1, true, "-name")
 		assert.NoError(t, err)
-		assert.Len(t, groups, 5)
+		assert.Len(t, groups, 6)
 		assert.Equal(t, "Quality Assurance", groups[0].Name) // Alphabetically last
 	})
 
@@ -139,12 +139,12 @@ func TestGetGroupsWithMemberCounts(t *testing.T) {
 	t.Run("GetGroupsWithMemberCounts with empty term", func(t *testing.T) {
 		groups, memberCounts, totalCount, totalPages, err := service.GetGroupsWithMemberCounts("", 10, 1, true, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(3), totalCount)
+		assert.Equal(t, int64(4), totalCount)
 		assert.Equal(t, 1, totalPages)
-		assert.Len(t, groups, 3)
+		assert.Len(t, groups, 4)
 
 		// Only groups with members should have memberCounts entries
-		assert.Len(t, memberCounts, 2)
+		assert.Len(t, memberCounts, 3)
 
 		// Create a map for easy lookup by group ID
 		countMap := make(map[uint]int64)
@@ -176,8 +176,8 @@ func TestGetGroupsWithMemberCounts(t *testing.T) {
 		// First page with limit of 2
 		groups, memberCounts, totalCount, totalPages, err := service.GetGroupsWithMemberCounts("", 2, 1, false, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(3), totalCount)
-		assert.Equal(t, 2, totalPages) // 3 items / 2 per page = 2 pages
+		assert.Equal(t, int64(4), totalCount)
+		assert.Equal(t, 2, totalPages)
 		assert.Len(t, groups, 2)
 
 		// Member counts for the two groups with members
@@ -197,9 +197,9 @@ func TestGetGroupsWithMemberCounts(t *testing.T) {
 		// Second page
 		groups, memberCounts, totalCount, totalPages, err = service.GetGroupsWithMemberCounts("", 2, 2, false, "name")
 		assert.NoError(t, err)
-		assert.Equal(t, int64(3), totalCount)
+		assert.Equal(t, int64(4), totalCount)
 		assert.Equal(t, 2, totalPages)
-		assert.Len(t, groups, 1)
+		assert.Len(t, groups, 2)
 
 		// Should have no member counts for the third group (Team Gamma) which has no members
 		countMap = make(map[uint]int64)
