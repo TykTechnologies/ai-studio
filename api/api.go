@@ -398,6 +398,10 @@ func (a *API) setupRoutes() {
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
+	
+	// Portal analytics endpoints with proper user validation
+	authed.GET("/apps/:id/analytics/usage", a.getUserAppUsage)
+	authed.GET("/apps/:id/analytics/interactions", a.getUserAppInteractions)
 
 	// Notification routes
 	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
