@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	RoleSuperAdmin = "Super Admin"
-	RoleAdmin      = "Admin"
-	RoleDeveloper  = "Developer"
-	RoleChatUser   = "Chat user"
+	SuperAdminID   uint = 1
+	RoleSuperAdmin      = "Super Admin"
+	RoleAdmin           = "Admin"
+	RoleDeveloper       = "Developer"
+	RoleChatUser        = "Chat user"
 )
 
 type User struct {
@@ -302,7 +303,7 @@ func GetUserGroupCount(db *gorm.DB) (int64, error) {
 
 func (u *User) GetRole() string {
 	switch {
-	case u.IsAdmin && u.ID == 1:
+	case u.IsAdmin && u.ID == SuperAdminID:
 		return RoleSuperAdmin
 	case u.IsAdmin:
 		return RoleAdmin
