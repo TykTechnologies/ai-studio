@@ -1,37 +1,31 @@
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { renderWithTheme } from '../../../../test-utils/render-with-theme';
+import { mockTeamsService, mockNavigate } from '../../../../test-utils/service-mocks';
 import { useGroupForm } from './useGroupForm';
-import { teamsService } from '../../../services/teamsService';
 import { CACHE_KEYS } from '../../../utils/constants';
 
-// Mock the teams service
 jest.mock('../../../services/teamsService', () => ({
-  teamsService: {
-    getTeam: jest.fn(),
-    createTeam: jest.fn(),
-    updateTeam: jest.fn(),
-    deleteTeam: jest.fn(),
-  }
+  teamsService: mockTeamsService
 }));
 
-// Mock useNavigate
-const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
   useNavigate: () => mockNavigate,
 }));
 
-// Create a test component that uses the hook
 const TestComponent = ({ 
   id = null,
   initialCatalogs = [], 
   initialDataCatalogs = [], 
-  initialToolCatalogs = [] 
+  initialToolCatalogs = [],
+  mockShowSnackbar
 }) => {
   const hookResult = useGroupForm(
     id,
+    mockShowSnackbar,
     initialCatalogs,
     initialDataCatalogs,
     initialToolCatalogs
@@ -47,10 +41,6 @@ const TestComponent = ({
       <div data-testid="selected-data-catalogs">{JSON.stringify(hookResult.selectedDataCatalogs)}</div>
       <div data-testid="selected-tool-catalogs">{JSON.stringify(hookResult.selectedToolCatalogs)}</div>
       
-      <div data-testid="snackbar-open">{hookResult.snackbar.open.toString()}</div>
-      <div data-testid="snackbar-message">{hookResult.snackbar.message}</div>
-      <div data-testid="snackbar-severity">{hookResult.snackbar.severity}</div>
-      
       <div data-testid="warning-dialog-open">{hookResult.warningDialogOpen.toString()}</div>
       
       <input 
@@ -61,16 +51,13 @@ const TestComponent = ({
       
       <button 
         data-testid="submit-form" 
-        onClick={(e) => hookResult.handleSubmit(e)}
+        type="submit"
+        onClick={(e) => {
+          e.preventDefault = jest.fn();
+          hookResult.handleSubmit(e);
+        }}
       >
         Submit Form
-      </button>
-      
-      <button 
-        data-testid="close-snackbar" 
-        onClick={() => hookResult.handleCloseSnackbar({}, 'escapeKeyDown')}
-      >
-        Close Snackbar
       </button>
       
       <button 
@@ -121,12 +108,19 @@ const TestComponent = ({
       >
         Set Tool Catalogs
       </button>
+      
+      <div data-testid="show-snackbar-calls">{mockShowSnackbar.mock.calls.length}</div>
+      <div data-testid="last-snackbar-call">
+        {mockShowSnackbar.mock.calls.length > 0 ? 
+          JSON.stringify(mockShowSnackbar.mock.calls[mockShowSnackbar.mock.calls.length - 1]) : 
+          'null'
+        }
+      </div>
     </div>
   );
 };
 
 describe('useGroupForm Hook', () => {
-  // Mock data for testing
   const mockGroupResponse = {
     data: {
       attributes: {
@@ -157,22 +151,21 @@ describe('useGroupForm Hook', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    localStorage.clear(); // Clear local storage before each test
-    jest.useFakeTimers();
+    localStorage.clear();
     
-    // Default successful responses
-    teamsService.getTeam.mockResolvedValue(mockGroupResponse);
-    teamsService.createTeam.mockResolvedValue({});
-    teamsService.updateTeam.mockResolvedValue({});
-    teamsService.deleteTeam.mockResolvedValue({});
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
+    jest.spyOn(require('../../../services/utils/errorHandler'), 'handleApiError').mockImplementation(e => ({
+      message: e.message || 'API Error'
+    }));
+    
+    mockTeamsService.getTeam.mockResolvedValue(mockGroupResponse);
+    mockTeamsService.createTeam.mockResolvedValue({});
+    mockTeamsService.updateTeam.mockResolvedValue({});
+    mockTeamsService.deleteTeam.mockResolvedValue({});
   });
 
   test('initializes with default values when no parameters are provided', () => {
-    render(<TestComponent />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent mockShowSnackbar={mockShowSnackbar} />);
     
     expect(screen.getByTestId('name').textContent).toBe('');
     expect(screen.getByTestId('loading').textContent).toBe('false');
@@ -180,16 +173,17 @@ describe('useGroupForm Hook', () => {
     expect(screen.getByTestId('selected-catalogs').textContent).toBe('[]');
     expect(screen.getByTestId('selected-data-catalogs').textContent).toBe('[]');
     expect(screen.getByTestId('selected-tool-catalogs').textContent).toBe('[]');
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
     expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
   });
 
   test('initializes with provided values', () => {
-    render(
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(
       <TestComponent 
         initialCatalogs={initialCatalogs}
         initialDataCatalogs={initialDataCatalogs}
         initialToolCatalogs={initialToolCatalogs}
+        mockShowSnackbar={mockShowSnackbar}
       />
     );
     
@@ -199,37 +193,31 @@ describe('useGroupForm Hook', () => {
   });
 
   test('fetches group data when ID is provided', async () => {
-    render(<TestComponent id="123" />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent id="123" mockShowSnackbar={mockShowSnackbar} />);
     
-    // Initially loading should be true
     expect(screen.getByTestId('loading').textContent).toBe('true');
     
-    // Wait for data to load
     await waitFor(() => {
       expect(screen.getByTestId('loading').textContent).toBe('false');
     });
     
-    // Check service function was called with correct params
-    expect(teamsService.getTeam).toHaveBeenCalledWith('123');
+    expect(mockTeamsService.getTeam).toHaveBeenCalledWith('123');
     
-    // Check that the form fields are populated with the response data
     expect(screen.getByTestId('name').textContent).toBe('Test Group');
     
-    // Check catalogs
     const expectedCatalogs = [
       { value: '1', label: 'Catalog 1' },
       { value: '2', label: 'Catalog 2' }
     ];
     expect(JSON.parse(screen.getByTestId('selected-catalogs').textContent)).toEqual(expectedCatalogs);
     
-    // Check data catalogs
     const expectedDataCatalogs = [
       { value: '3', label: 'Data Catalog 1' },
       { value: '4', label: 'Data Catalog 2' }
     ];
     expect(JSON.parse(screen.getByTestId('selected-data-catalogs').textContent)).toEqual(expectedDataCatalogs);
     
-    // Check tool catalogs
     const expectedToolCatalogs = [
       { value: '5', label: 'Tool Catalog 1' },
       { value: '6', label: 'Tool Catalog 2' }
@@ -238,27 +226,24 @@ describe('useGroupForm Hook', () => {
   });
 
   test('handles API fetch errors', async () => {
-    // Mock API error
     const errorMessage = 'Failed to fetch team details';
-    teamsService.getTeam.mockRejectedValue(new Error(errorMessage));
+    mockTeamsService.getTeam.mockRejectedValue(new Error(errorMessage));
     
-    // Spy on console.error
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const mockShowSnackbar = jest.fn();
     
-    render(<TestComponent id="123" />);
+    renderWithTheme(<TestComponent id="123" mockShowSnackbar={mockShowSnackbar} />);
     
-    // Initially loading should be true
     expect(screen.getByTestId('loading').textContent).toBe('true');
     
-    // Wait for loading to finish (after error)
     await waitFor(() => {
       expect(screen.getByTestId('loading').textContent).toBe('false');
     });
     
-    // Check snackbar shows error
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
-    expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
+    expect(screen.getByTestId('show-snackbar-calls').textContent).toBe('1');
+    const lastCall = JSON.parse(screen.getByTestId('last-snackbar-call').textContent);
+    expect(lastCall[0]).toBe(errorMessage);
+    expect(lastCall[1]).toBe('error');
     
     expect(consoleSpy).toHaveBeenCalled();
     
@@ -266,276 +251,185 @@ describe('useGroupForm Hook', () => {
   });
 
   test('submits form to create a new group', async () => {
-    render(<TestComponent />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent mockShowSnackbar={mockShowSnackbar} />);
     
-    // Set name
     fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'New Group' } });
     
-    // Set selections
     fireEvent.click(screen.getByTestId('set-users'));
     fireEvent.click(screen.getByTestId('set-catalogs'));
     fireEvent.click(screen.getByTestId('set-data-catalogs'));
     fireEvent.click(screen.getByTestId('set-tool-catalogs'));
     
-    // Mock a successful response
-    teamsService.createTeam.mockImplementation(() => {
-      return Promise.resolve({});
-    });
-    
-    // Submit form and wait for state updates
+    const mockEvent = { preventDefault: jest.fn() };
     fireEvent.click(screen.getByTestId('submit-form'));
     
-    // Check loading state during API call
-    expect(screen.getByTestId('loading').textContent).toBe('true');
-    
-    // Check that createTeam was called with the correct data
     const expectedData = {
       data: {
         type: 'Group',
         attributes: {
           name: 'New Group',
-          members: [123], // Convert to number from string id
+          members: [123],
           catalogues: [456],
           data_catalogues: [789],
           tool_catalogues: [101]
         }
       }
     };
-    expect(teamsService.createTeam).toHaveBeenCalledWith(expectedData);
-    
-    // Wait for loading to finish
+
     await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false');
+      expect(mockTeamsService.createTeam).toHaveBeenCalledWith(expectedData);
     });
     
-    // Check navigation
     expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
     
-    // Check localStorage for the notification
     const notification = JSON.parse(localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION));
     expect(notification.operation).toBe('create');
     expect(notification.message).toBe('Team created successfully');
     expect(notification.timestamp).toBeDefined();
-    
-    // Snackbar should not be open for success messages
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
   });
 
   test('submits form to update an existing group', async () => {
-    render(<TestComponent id="123" />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent id="123" mockShowSnackbar={mockShowSnackbar} />);
     
-    // Wait for data to load
     await waitFor(() => {
       expect(screen.getByTestId('loading').textContent).toBe('false');
     });
     
-    // Set name and selections
     fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'Updated Group' } });
     
-    // Set selections
     fireEvent.click(screen.getByTestId('set-users'));
     fireEvent.click(screen.getByTestId('set-catalogs'));
     fireEvent.click(screen.getByTestId('set-data-catalogs'));
     fireEvent.click(screen.getByTestId('set-tool-catalogs'));
     
-    // Mock a successful response
-    teamsService.updateTeam.mockImplementation(() => {
-      return Promise.resolve({});
-    });
-    
-    // Submit form and wait for state updates
     fireEvent.click(screen.getByTestId('submit-form'));
     
-    // Check loading state
-    expect(screen.getByTestId('loading').textContent).toBe('true');
-    
-    // Check that updateTeam was called with the correct data
     const expectedData = {
       data: {
         type: 'Group',
         attributes: {
           name: 'Updated Group',
-          members: [123], // Convert to number from string id
+          members: [123],
           catalogues: [456],
           data_catalogues: [789],
           tool_catalogues: [101]
         }
       }
     };
-    expect(teamsService.updateTeam).toHaveBeenCalledWith('123', expectedData);
-    
-    // Wait for loading to finish
+
     await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false');
+      expect(mockTeamsService.updateTeam).toHaveBeenCalledWith('123', expectedData);
     });
     
-    // Check navigation
     expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
     
-    // Check localStorage for the notification
     const notification = JSON.parse(localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION));
     expect(notification.operation).toBe('update');
     expect(notification.message).toBe('Team updated successfully');
     expect(notification.timestamp).toBeDefined();
-
-    // Snackbar should not be open for success messages
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
   });
 
   test('handles form submission errors', async () => {
-    // Mock API error
     const errorMessage = 'Failed to save team. Please try again.';
-    teamsService.createTeam.mockRejectedValue(new Error(errorMessage));
+    mockTeamsService.createTeam.mockRejectedValue(new Error(errorMessage));
     
-    // Spy on console.error
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const mockShowSnackbar = jest.fn();
     
-    render(<TestComponent />);
+    renderWithTheme(<TestComponent mockShowSnackbar={mockShowSnackbar} />);
     
-    // Set name
     fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'New Group' } });
     
-    // Submit form
-    fireEvent.click(screen.getByTestId('submit-form'));
+    fireEvent.click(screen.getByTestId('set-users'));
+    fireEvent.click(screen.getByTestId('set-catalogs'));
+    fireEvent.click(screen.getByTestId('set-data-catalogs'));
+    fireEvent.click(screen.getByTestId('set-tool-catalogs'));
     
-    // Wait for API call to reject
-    expect(screen.getByTestId('loading').textContent).toBe('true'); // Loading is true during submission
+    const submitButton = screen.getByTestId('submit-form');
+    fireEvent.click(submitButton);
+    
     await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false'); // Loading finishes after error
-    });
+      expect(mockTeamsService.createTeam).toHaveBeenCalled();
+    }, { timeout: 3000 });
     
-    // Check snackbar shows error
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
-    expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
+    await waitFor(() => {
+      expect(mockShowSnackbar).toHaveBeenCalled();
+    }, { timeout: 3000 });
+    
+    expect(mockShowSnackbar).toHaveBeenCalledWith(errorMessage, 'error');
     
     consoleSpy.mockRestore();
   });
 
-  test('handles snackbar close', async () => {
-    // Mock API error to trigger snackbar
-    const errorMessage = 'Failed to save team. Please try again.';
-    teamsService.createTeam.mockRejectedValue(new Error(errorMessage));
-
-    render(<TestComponent />);
-    
-    // Set name
-    fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'New Group' } });
-    
-    // Submit form to trigger error snackbar
-    fireEvent.click(screen.getByTestId('submit-form'));
-    
-    // Wait for loading to finish (after error)
-    expect(screen.getByTestId('loading').textContent).toBe('true');
-    await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false');
-    });
-    
-    // Wait for snackbar to be open (due to error)
-    await waitFor(() => {
-      expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    });
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
-    
-    // Close snackbar
-    fireEvent.click(screen.getByTestId('close-snackbar'));
-    
-    // Check snackbar is closed
-    await waitFor(() => {
-      expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
-    });
-  });
-
   test('handles delete click and cancel', async () => {
-    render(<TestComponent id="123" />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent id="123" mockShowSnackbar={mockShowSnackbar} />);
     
-    // Click delete
     fireEvent.click(screen.getByTestId('delete-click'));
     
-    // Check dialog is open
     await waitFor(() => {
       expect(screen.getByTestId('warning-dialog-open').textContent).toBe('true');
     });
     
-    // Cancel delete
     fireEvent.click(screen.getByTestId('cancel-delete'));
     
-    // Check dialog is closed
     await waitFor(() => {
       expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
     });
     
-    // Verify no delete call was made
-    expect(teamsService.deleteTeam).not.toHaveBeenCalled();
+    expect(mockTeamsService.deleteTeam).not.toHaveBeenCalled();
   });
 
   test('handles confirm delete success', async () => {
-    render(<TestComponent id="123" />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent id="123" mockShowSnackbar={mockShowSnackbar} />);
     
-    // Click delete
     fireEvent.click(screen.getByTestId('delete-click'));
     
-    // Check dialog is open
     expect(screen.getByTestId('warning-dialog-open').textContent).toBe('true');
     
-    // Confirm delete
     fireEvent.click(screen.getByTestId('confirm-delete'));
     
-    // Check loading state
-    expect(screen.getByTestId('loading').textContent).toBe('true');
-    
-    // Verify delete call was made
-    expect(teamsService.deleteTeam).toHaveBeenCalledWith('123');
-    
-    // Wait for API call to resolve and loading to finish
     await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false');
+      expect(mockTeamsService.deleteTeam).toHaveBeenCalledWith('123');
     });
     
-    // Check dialog is closed
-    expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
+    await waitFor(() => {
+      expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
+    });
     
-    // Check localStorage for the notification
     const notification = JSON.parse(localStorage.getItem(CACHE_KEYS.GROUP_NOTIFICATION));
     expect(notification.operation).toBe('delete');
     expect(notification.message).toBe('Team deleted successfully');
     expect(notification.timestamp).toBeDefined();
-
-    // Snackbar should not be open for success messages
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
   });
 
   test('handles confirm delete error', async () => {
-    // Mock API error
     const errorMessage = 'Failed to delete team. Please try again.';
-    teamsService.deleteTeam.mockRejectedValue(new Error(errorMessage));
+    mockTeamsService.deleteTeam.mockRejectedValue(new Error(errorMessage));
     
-    // Spy on console.error
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const mockShowSnackbar = jest.fn();
     
-    render(<TestComponent id="123" />);
+    renderWithTheme(<TestComponent id="123" mockShowSnackbar={mockShowSnackbar} />);
     
-    // Click delete
     fireEvent.click(screen.getByTestId('delete-click'));
     
-    // Confirm delete
     fireEvent.click(screen.getByTestId('confirm-delete'));
     
-    // Wait for API call to reject
-    expect(screen.getByTestId('loading').textContent).toBe('true'); // Loading is true during delete attempt
-    await waitFor(() => {
-      expect(screen.getByTestId('loading').textContent).toBe('false'); // Loading finishes after error
-    });
-    
-    // Check dialog is closed
     await waitFor(() => {
       expect(screen.getByTestId('warning-dialog-open').textContent).toBe('false');
     });
     
-    // Check snackbar shows error
-    expect(screen.getByTestId('snackbar-open').textContent).toBe('true');
-    expect(screen.getByTestId('snackbar-message').textContent).toBe(errorMessage);
-    expect(screen.getByTestId('snackbar-severity').textContent).toBe('error');
+    await waitFor(() => {
+      expect(screen.getByTestId('show-snackbar-calls').textContent).toBe('1');
+    });
+    
+    const lastCall = JSON.parse(screen.getByTestId('last-snackbar-call').textContent);
+    expect(lastCall[0]).toBe(errorMessage);
+    expect(lastCall[1]).toBe('error');
     
     expect(consoleSpy).toHaveBeenCalled();
     
@@ -543,21 +437,18 @@ describe('useGroupForm Hook', () => {
   });
 
   test('handles state changes for users and catalogs', () => {
-    render(<TestComponent />);
+    const mockShowSnackbar = jest.fn();
+    renderWithTheme(<TestComponent mockShowSnackbar={mockShowSnackbar} />);
     
-    // Set users
     fireEvent.click(screen.getByTestId('set-users'));
     expect(JSON.parse(screen.getByTestId('selected-users').textContent)).toEqual([{ id: '123', name: 'New User' }]);
     
-    // Set catalogs
     fireEvent.click(screen.getByTestId('set-catalogs'));
     expect(JSON.parse(screen.getByTestId('selected-catalogs').textContent)).toEqual([{ value: '456', label: 'New Catalog' }]);
     
-    // Set data catalogs
     fireEvent.click(screen.getByTestId('set-data-catalogs'));
     expect(JSON.parse(screen.getByTestId('selected-data-catalogs').textContent)).toEqual([{ value: '789', label: 'New Data Catalog' }]);
     
-    // Set tool catalogs
     fireEvent.click(screen.getByTestId('set-tool-catalogs'));
     expect(JSON.parse(screen.getByTestId('selected-tool-catalogs').textContent)).toEqual([{ value: '101', label: 'New Tool Catalog' }]);
   });

@@ -24,7 +24,7 @@ export const createUser = async (userData) => {
     const response = await apiClient.post('/users', userPayload);
     return response.data?.data;
   } catch (error) {
-    throw error;
+    throw handleApiError(error);
   }
 };
 
@@ -52,7 +52,7 @@ export const updateUser = async (userId, userData) => {
     const response = await apiClient.patch(`/users/${userId}`, userPayload);
     return response.data?.data;
   } catch (error) {
-    throw error;
+    throw handleApiError(error);
   }
 };
 
@@ -82,7 +82,7 @@ export const getUsers = async (page = 1, options = {}) => {
       totalPages: parseInt(response.headers['x-total-pages'] || '0', 10)
     };
   } catch (error) {
-    throw error;
+    throw handleApiError(error);
   }
 };
 
@@ -91,7 +91,7 @@ export const getUser = async (userId) => {
     const response = await apiClient.get(`/users/${userId}`);
     return response.data;
   } catch (error) {
-    throw error;
+    throw handleApiError(error);
   }
 };
 
@@ -100,6 +100,6 @@ export const deleteUser = async (userId) => {
     const response = await apiClient.delete(`/users/${userId}`);
     return response.data;
   } catch (error) {
-    throw error;
+    throw handleApiError(error);
   }
 };

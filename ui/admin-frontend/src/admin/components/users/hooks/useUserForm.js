@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { createUser, updateUser, getUser, deleteUser } from "../../../services/userService";
-import { handleApiError } from "../../../services/utils/errorHandler";
 
 export const useUserForm = (id, showSnackbar) => {
   const [name, setName] = useState("");
@@ -35,8 +34,7 @@ export const useUserForm = (id, showSnackbar) => {
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
       setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
     } catch (error) {
-      const apiError = handleApiError(error);
-      showSnackbar(apiError.message, "error");
+      showSnackbar(error.message, "error");
     } finally {
       setLoading(false);
     }
@@ -80,8 +78,7 @@ export const useUserForm = (id, showSnackbar) => {
 
       setTimeout(() => navigate("/admin/users"), 2000);
     } catch (error) {
-      const apiError = handleApiError(error);
-      showSnackbar(apiError.message, "error");
+      showSnackbar(error.message, "error");
     }
   }, [
     id,
@@ -112,8 +109,7 @@ export const useUserForm = (id, showSnackbar) => {
       showSnackbar("User deleted successfully", "success");
       setTimeout(() => navigate("/admin/users"), 2000);
     } catch (error) {
-      const apiError = handleApiError(error);
-      showSnackbar(apiError.message, "error");
+      showSnackbar(error.message, "error");
     } finally {
       setWarningDialogOpen(false);
     }

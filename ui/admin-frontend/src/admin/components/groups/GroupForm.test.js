@@ -5,7 +5,9 @@ import GroupForm from './GroupForm';
 import { useGroupForm } from './hooks/useGroupForm';
 import { useCatalogsSelection } from './hooks/useCatalogsSelection';
 
-// Mock React Router
+jest.mock('@mui/material', () => require('../../../test-utils/mui-mocks').muiMaterialMock);
+jest.mock('@mui/icons-material/ChevronLeft', () => () => 'ChevronLeftIcon');
+jest.mock('../../styles/sharedStyles', () => require('../../../test-utils/styled-component-mocks').sharedStylesMock);
 jest.mock('react-router-dom', () => ({
   useParams: jest.fn().mockImplementation(() => ({})),
   Link: ({ children, to, ...props }) => (
@@ -16,7 +18,6 @@ jest.mock('react-router-dom', () => ({
   useNavigate: () => jest.fn()
 }));
 
-// Mock the hooks
 jest.mock('./hooks/useGroupForm', () => ({
   useGroupForm: jest.fn()
 }));
@@ -25,7 +26,34 @@ jest.mock('./hooks/useCatalogsSelection', () => ({
   useCatalogsSelection: jest.fn()
 }));
 
-// Mock the child components
+jest.mock('../../hooks/useSnackbarState', () => ({
+  useSnackbarState: () => ({
+    snackbarState: { open: false, message: '', severity: 'success' },
+    showSnackbar: jest.fn(),
+    hideSnackbar: jest.fn()
+  })
+}));
+
+jest.mock('../../hooks/useSystemFeatures', () => ({
+  __esModule: true,
+  default: () => ({
+    features: {}
+  })
+}));
+
+jest.mock('../../utils/featureUtils', () => ({
+  getFeatureFlags: () => ({
+    isGatewayOnly: false
+  })
+}));
+
+jest.mock('../../hooks/useOverviewData', () => ({
+  __esModule: true,
+  default: () => ({
+    getDocsLink: jest.fn()
+  })
+}));
+
 jest.mock('./components/GroupFormBasicInfo', () => ({
   __esModule: true,
   default: props => (
@@ -46,9 +74,7 @@ jest.mock('./components/GroupMembersSection', () => ({
     <div data-testid="mock-members-section">
       <button
         data-testid="mock-change-users"
-        onClick={() => props.handleUsersChange({
-          selected: [...props.selectedUsers, { id: '999', name: 'New Test User' }]
-        })}
+        onClick={() => props.onSelectedUsersChange([{ id: '999', name: 'New Test User' }])}
       >
         Add User
       </button>
@@ -82,95 +108,48 @@ jest.mock('./components/GroupCatalogsSection', () => ({
   )
 }));
 
-// Mock Material UI components
-jest.mock('@mui/material', () => ({
-  Typography: ({ children, variant, ...props }) => (
-    <div data-testid="mock-typography" data-variant={variant} {...props}>{children}</div>
-  ),
-  
-  CircularProgress: () => <div data-testid="mock-circular-progress" />,
-  
-  Box: ({ children, ...props }) => (
-    <div data-testid="mock-box" {...props}>{children}</div>
-  ),
-  
-  Snackbar: ({ children, open, onClose, ...props }) => (
+jest.mock('../../components/common/ConfirmationDialog', () => ({
+  __esModule: true,
+  default: ({ 
+    open, 
+    onConfirm, 
+    onCancel, 
+    title,
+    message,
+    buttonLabel,
+    iconName,
+    iconColor,
+    titleColor,
+    backgroundColor,
+    borderColor,
+    primaryButtonComponent,
+    ...props 
+  }) => (
     open ? (
-      <div data-testid="mock-snackbar" {...props}>
-        {children}
-        <button data-testid="mock-snackbar-close" onClick={onClose}>Close</button>
+      <div 
+        data-testid="confirmation-dialog" 
+        data-title={title}
+        data-message={message}
+        data-button-label={buttonLabel}
+      >
+        <button data-testid="confirm-button" onClick={onConfirm}>Confirm</button>
+        <button data-testid="cancel-button" onClick={onCancel}>Cancel</button>
       </div>
     ) : null
-  ),
-  
-  Alert: ({ children, severity, onClose, ...props }) => (
-    <div data-testid="mock-alert" data-severity={severity} {...props}>
-      {children}
-      {onClose && <button data-testid="mock-alert-close" onClick={onClose}>Close Alert</button>}
+  )
+}));
+
+jest.mock('../../components/common/AlertSnackbar', () => ({
+  __esModule: true,
+  default: ({ open, message, severity, onClose }) => (
+    <div data-testid="alert-snackbar" data-open={open} data-message={message} data-severity={severity}>
+      <button onClick={onClose} data-testid="close-snackbar">Close</button>
     </div>
   )
 }));
 
-jest.mock('@mui/icons-material/ChevronLeft', () => ({
-  __esModule: true,
-  default: () => <span data-testid="mock-chevron-left-icon" />
-}));
-
-// Mock ConfirmationDialog
-jest.mock('../../components/common/ConfirmationDialog', () => ({
-  __esModule: true,
-  default: ({ open, onConfirm, onCancel, ...props }) => (
-    open ? (
-      <div data-testid="mock-confirmation-dialog" {...props}>
-        <button data-testid="mock-confirm-button" onClick={onConfirm}>Confirm</button>
-        <button data-testid="mock-cancel-button" onClick={onCancel}>Cancel</button>
-      </div>
-    ) : null
-  )
-}));
-
-// Mock shared styles
-jest.mock('../../styles/sharedStyles', () => ({
-  SecondaryLinkButton: ({ children, component, to, ...props }) => (
-    <button data-testid="mock-secondary-link-button" data-to={to} {...props}>
-      {children}
-    </button>
-  ),
-  TitleBox: ({ children, ...props }) => (
-    <div data-testid="mock-title-box" {...props}>{children}</div>
-  ),
-  ContentBox: ({ children, ...props }) => (
-    <div data-testid="mock-content-box" {...props}>{children}</div>
-  ),
-  TitleContentBox: ({ children, ...props }) => (
-    <div data-testid="mock-title-content-box" {...props}>{children}</div>
-  ),
-  PrimaryButton: ({ children, type, disabled, onClick, ...props }) => (
-    <button
-      data-testid="mock-primary-button"
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      {...props}
-    >
-      {children}
-    </button>
-  ),
-  DangerOutlineButton: ({ children, onClick, ...props }) => (
-    <button
-      data-testid="mock-danger-outline-button"
-      onClick={onClick}
-      {...props}
-    >
-      {children}
-    </button>
-  ),
-}));
-
 describe('GroupForm Component', () => {
-  // Mock hook return values
   const mockHandleSubmit = jest.fn(e => e.preventDefault());
-  const mockHandleCloseSnackbar = jest.fn();
   const mockHandleDeleteClick = jest.fn();
   const mockHandleCancelDelete = jest.fn();
   const mockHandleConfirmDelete = jest.fn();
@@ -180,18 +159,10 @@ describe('GroupForm Component', () => {
   const mockSetSelectedDataCatalogs = jest.fn();
   const mockSetSelectedToolCatalogs = jest.fn();
   
-  const mockFetchUsers = jest.fn();
-  const mockHandleUsersChange = jest.fn();
-  const mockHandleSearch = jest.fn();
-  const mockHandleLoadMore = jest.fn();
-  
-  // Default mock values
   const defaultGroupFormValues = {
     name: 'Test Team',
     setName: mockSetName,
     loading: false,
-    error: null,
-    selectedUsers: [{ id: '1', name: 'User 1' }],
     setSelectedUsers: mockSetSelectedUsers,
     selectedCatalogs: [{ value: '1', label: 'Catalog 1' }],
     setSelectedCatalogs: mockSetSelectedCatalogs,
@@ -200,27 +171,10 @@ describe('GroupForm Component', () => {
     selectedToolCatalogs: [{ value: '3', label: 'Tool Catalog 1' }],
     setSelectedToolCatalogs: mockSetSelectedToolCatalogs,
     handleSubmit: mockHandleSubmit,
-    snackbar: { open: false, message: '', severity: 'success' },
-    handleCloseSnackbar: mockHandleCloseSnackbar,
     warningDialogOpen: false,
     handleDeleteClick: mockHandleDeleteClick,
     handleCancelDelete: mockHandleCancelDelete,
     handleConfirmDelete: mockHandleConfirmDelete
-  };
-  
-  const defaultUserSelectionValues = {
-    availableUsers: [{ id: '2', name: 'User 2' }, { id: '3', name: 'User 3' }],
-    currentPage: 1,
-    totalPages: 2,
-    isLoadingMore: false,
-    loading: false,
-    fetchUsers: mockFetchUsers,
-    handleUsersChange: mockHandleUsersChange,
-    handleLoadMore: mockHandleLoadMore,
-    handleSearch: mockHandleSearch,
-    handleUserAdded: jest.fn(),
-    handleUserRemoved: jest.fn(),
-    resetState: jest.fn()
   };
   
   const defaultCatalogsSelectionValues = {
@@ -233,22 +187,18 @@ describe('GroupForm Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Setup default mock hook implementations for all tests
     useGroupForm.mockImplementation(() => defaultGroupFormValues);
     useCatalogsSelection.mockImplementation(() => defaultCatalogsSelectionValues);
     
-    // Set default mock for useParams (create mode) for all tests
     require('react-router-dom').useParams.mockImplementation(() => ({}));
   });
 
   test('renders the component in create mode', () => {
-    // Make sure useParams returns empty object for create mode
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    // Check title and form content - need to find within the Typography mock
-    const titleElement = screen.getAllByTestId('mock-typography')
+    const titleElement = screen.getAllByTestId('typography')
       .find(el => el.textContent === 'Create team');
     expect(titleElement).toBeInTheDocument();
     
@@ -256,30 +206,24 @@ describe('GroupForm Component', () => {
     expect(screen.getByTestId('mock-members-section')).toBeInTheDocument();
     expect(screen.getByTestId('mock-catalogs-section')).toBeInTheDocument();
     
-    // Check submit button text for create mode
-    expect(screen.getByTestId('mock-primary-button')).toHaveTextContent('Create team');
+    expect(screen.getByTestId('primary-button')).toHaveTextContent('Create team');
     
-    // Delete button should not be present in create mode
-    const dangerButtons = screen.queryAllByTestId('mock-danger-outline-button');
+    const dangerButtons = screen.queryAllByTestId('danger-outline-button');
     expect(dangerButtons.length).toBe(0);
   });
 
   test('renders the component in edit mode', () => {
-    // Mock useParams to simulate editing an existing group
     require('react-router-dom').useParams.mockImplementation(() => ({ id: '123' }));
     
     render(<GroupForm />);
     
-    // Check title for edit mode - need to find within the Typography mock
-    const titleElement = screen.getAllByTestId('mock-typography')
+    const titleElement = screen.getAllByTestId('typography')
       .find(el => el.textContent === 'Edit team');
     expect(titleElement).toBeInTheDocument();
     
-    // Check submit button text for edit mode
-    expect(screen.getByTestId('mock-primary-button')).toHaveTextContent('Update team');
+    expect(screen.getByTestId('primary-button')).toHaveTextContent('Update team');
     
-    // Delete button should be present in edit mode
-    const deleteButton = screen.getByTestId('mock-danger-outline-button');
+    const deleteButton = screen.getByTestId('danger-outline-button');
     expect(deleteButton).toHaveTextContent('Delete team');
   });
 
@@ -294,28 +238,9 @@ describe('GroupForm Component', () => {
       loading: false
     }));
     
-    const { debug } = render(<GroupForm />);
-    // debug(); // Uncomment to see rendered output for debugging
-    
-    expect(screen.getByTestId('mock-circular-progress')).toBeInTheDocument();
-    expect(screen.queryByTestId('mock-basic-info')).not.toBeInTheDocument();
-  });
-
-  test('shows loading spinner when users are loading', () => {
-    // Set only formLoading state to true
-    useGroupForm.mockImplementation(() => ({
-      ...defaultGroupFormValues,
-      loading: false
-    }));
-    
-    useCatalogsSelection.mockImplementation(() => ({
-      ...defaultCatalogsSelectionValues,
-      loading: true
-    }));
-    
     render(<GroupForm />);
     
-    expect(screen.getByTestId('mock-circular-progress')).toBeInTheDocument();
+    expect(screen.getByTestId('circular-progress')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-basic-info')).not.toBeInTheDocument();
   });
 
@@ -332,18 +257,16 @@ describe('GroupForm Component', () => {
     
     render(<GroupForm />);
     
-    expect(screen.getByTestId('mock-circular-progress')).toBeInTheDocument();
+    expect(screen.getByTestId('circular-progress')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-basic-info')).not.toBeInTheDocument();
   });
 
   test('submits the form when the submit button is clicked', () => {
     render(<GroupForm />);
     
-    // Submit the form
-    const submitButton = screen.getByTestId('mock-primary-button');
+    const submitButton = screen.getByTestId('primary-button');
     fireEvent.click(submitButton);
     
-    // Check if handleSubmit was called with a mocked event
     expect(mockHandleSubmit).toHaveBeenCalledWith(expect.objectContaining({
       preventDefault: expect.any(Function)
     }));
@@ -355,170 +278,111 @@ describe('GroupForm Component', () => {
       name: ''
     }));
     
-    // Make sure useParams returns empty object for create mode
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    const submitButton = screen.getByTestId('mock-primary-button');
+    const submitButton = screen.getByTestId('primary-button');
     expect(submitButton).toHaveAttribute('disabled', '');
   });
 
-  test('shows snackbar when open', () => {
-    useGroupForm.mockImplementation(() => ({
-      ...defaultGroupFormValues,
-      snackbar: { open: true, message: 'Test message', severity: 'success' }
-    }));
-    
-    // Make sure useParams returns empty object for create mode
-    require('react-router-dom').useParams.mockImplementation(() => ({}));
-    
-    render(<GroupForm />);
-    
-    expect(screen.getByTestId('mock-snackbar')).toBeInTheDocument();
-    
-    // Find the alert inside the snackbar
-    const alertElement = screen.getByTestId('mock-alert');
-    expect(alertElement).toHaveTextContent('Test message');
-  });
-
-  test('closes snackbar when close button is clicked', () => {
-    useGroupForm.mockImplementation(() => ({
-      ...defaultGroupFormValues,
-      snackbar: { open: true, message: 'Test message', severity: 'success' }
-    }));
-    
-    // Make sure useParams returns empty object for create mode
-    require('react-router-dom').useParams.mockImplementation(() => ({}));
-    
-    render(<GroupForm />);
-    
-    const closeButton = screen.getByTestId('mock-snackbar-close');
-    fireEvent.click(closeButton);
-    
-    expect(mockHandleCloseSnackbar).toHaveBeenCalled();
-  });
-
   test('opens confirmation dialog when delete button is clicked', () => {
-    // Mock useParams to simulate editing an existing group
     require('react-router-dom').useParams.mockImplementation(() => ({ id: '123' }));
     
     render(<GroupForm />);
     
-    // Click the delete button
-    const deleteButton = screen.getByTestId('mock-danger-outline-button');
+    const deleteButton = screen.getByTestId('danger-outline-button');
     expect(deleteButton).toHaveTextContent('Delete team');
     fireEvent.click(deleteButton);
     
-    // Check if handleDeleteClick was called
     expect(mockHandleDeleteClick).toHaveBeenCalled();
   });
 
   test('shows confirmation dialog when warningDialogOpen is true', () => {
-    // Set warningDialogOpen to true
     useGroupForm.mockImplementation(() => ({ ...defaultGroupFormValues, warningDialogOpen: true }));
     
-    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    expect(screen.getByTestId('mock-confirmation-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('confirmation-dialog')).toBeInTheDocument();
   });
 
   test('calls handleConfirmDelete when confirm button in dialog is clicked', () => {
-    // Set warningDialogOpen to true
     useGroupForm.mockImplementation(() => ({ ...defaultGroupFormValues, warningDialogOpen: true }));
     
-    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    const confirmButton = screen.getByTestId('mock-confirm-button');
+    const confirmButton = screen.getByTestId('confirm-button');
     fireEvent.click(confirmButton);
     
     expect(mockHandleConfirmDelete).toHaveBeenCalled();
   });
 
   test('calls handleCancelDelete when cancel button in dialog is clicked', () => {
-    // Set warningDialogOpen to true
     useGroupForm.mockImplementation(() => ({ ...defaultGroupFormValues, warningDialogOpen: true }));
     
-    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    const cancelButton = screen.getByTestId('mock-cancel-button');
+    const cancelButton = screen.getByTestId('cancel-button');
     fireEvent.click(cancelButton);
     
     expect(mockHandleCancelDelete).toHaveBeenCalled();
   });
 
-  test('renders the component properly', () => {
-    require('react-router-dom').useParams.mockImplementation(() => ({}));
-    
-    useGroupForm.mockImplementation(() => ({
-      ...defaultGroupFormValues,
-      selectedUsers: [{ id: '1', name: 'User 1' }]
-    }));
-    
-    render(<GroupForm />);
-    
-    expect(screen.getByTestId('mock-basic-info')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-members-section')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-catalogs-section')).toBeInTheDocument();
-  });
-
   test('handles catalog selection changes', () => {
-    // Reset the mock implementation to make sure we can track the function call
     mockSetSelectedCatalogs.mockClear();
     
-    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    // Click the "Add Catalog" button in the mock GroupCatalogsSection
     const addCatalogButton = screen.getByTestId('mock-change-catalogs');
     fireEvent.click(addCatalogButton);
     
-    // Check if the catalogs change handlers were called
     expect(mockSetSelectedCatalogs).toHaveBeenCalled();
   });
 
   test('handles data catalog selection changes', () => {
-    // Reset the mock implementation to make sure we can track the function call
     mockSetSelectedDataCatalogs.mockClear();
     
-    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    // Click the "Add Data Catalog" button in the mock GroupCatalogsSection
     const addDataCatalogButton = screen.getByTestId('mock-change-data-catalogs');
     fireEvent.click(addDataCatalogButton);
     
-    // Check if the data catalogs change handlers were called
     expect(mockSetSelectedDataCatalogs).toHaveBeenCalled();
   });
 
   test('handles tool catalog selection changes', () => {
-    // Reset the mock implementation to make sure we can track the function call
     mockSetSelectedToolCatalogs.mockClear();
     
-    // Make sure useParams returns empty object
     require('react-router-dom').useParams.mockImplementation(() => ({}));
     
     render(<GroupForm />);
     
-    // Click the "Add Tool Catalog" button in the mock GroupCatalogsSection
     const addToolCatalogButton = screen.getByTestId('mock-change-tool-catalogs');
     fireEvent.click(addToolCatalogButton);
     
-    // Check if the tool catalogs change handlers were called
     expect(mockSetSelectedToolCatalogs).toHaveBeenCalled();
+  });
+
+  test('handles users selection changes', () => {
+    mockSetSelectedUsers.mockClear();
+    
+    require('react-router-dom').useParams.mockImplementation(() => ({}));
+    
+    render(<GroupForm />);
+    
+    const addUserButton = screen.getByTestId('mock-change-users');
+    fireEvent.click(addUserButton);
+    
+    expect(mockSetSelectedUsers).toHaveBeenCalledWith([{ id: '999', name: 'New Test User' }]);
   });
 });

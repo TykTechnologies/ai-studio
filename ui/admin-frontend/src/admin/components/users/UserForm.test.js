@@ -1,267 +1,223 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from '@mui/material/styles';
-import { createTheme } from '@mui/material';
+import { render, screen, fireEvent } from '@testing-library/react';
 import UserForm from './UserForm';
+import { useUserForm } from './hooks/useUserForm';
+import useUserEntitlements from '../../hooks/useUserEntitlements';
+import { IsAdminRole } from './utils/userRolesConfig';
+import * as reactRouterDom from 'react-router-dom';
+import { renderWithTheme } from '../../../test-utils/render-with-theme';
 
-// Mock apiClient
-jest.mock('../../utils/apiClient', () => {
-  const mockClient = {
-    get: jest.fn(),
-    post: jest.fn(),
-    patch: jest.fn(),
-    interceptors: {
-      request: { use: jest.fn() },
-      response: { use: jest.fn() }
-    }
-  };
-  return {
-    __esModule: true,
-    default: mockClient
-  };
-});
-
-// Mock useNavigate
-const mockNavigate = jest.fn();
+jest.mock('@mui/material', () => require('../../../test-utils/mui-mocks').muiMaterialMock);
+jest.mock('@mui/icons-material/ChevronLeft', () => () => 'ChevronLeftIcon');
+jest.mock('./hooks/useUserForm');
+jest.mock('../../hooks/useUserEntitlements');
+jest.mock('./utils/userRolesConfig');
+jest.mock('../../styles/sharedStyles', () => require('../../../test-utils/styled-component-mocks').sharedStylesMock);
+jest.mock('./styles', () => require('../../../test-utils/styled-component-mocks').userFormStylesMock);
 jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-  useParams: () => ({ id: undefined }) // Default to create mode
+  useNavigate: jest.fn(),
+  useParams: jest.fn(),
+  Link: jest.fn()
+}));
+jest.mock('../../components/common/AlertSnackbar', () => ({
+  __esModule: true,
+  default: ({ open, message, severity, onClose }) => (
+    <div data-testid="alert-snackbar" data-open={open} data-message={message} data-severity={severity}>
+      <button onClick={onClose} data-testid="close-snackbar">Close</button>
+    </div>
+  )
+}));
+jest.mock('../../components/common/ConfirmationDialog', () => ({
+  __esModule: true,
+  default: ({ open, title, message, onConfirm, onCancel }) => {
+    if (!open) return null;
+    return (
+      <div data-testid="confirmation-dialog" data-open={open} data-title={title} data-message={message}>
+        <button onClick={onConfirm} data-testid="confirm-button">Delete user</button>
+        <button onClick={onCancel} data-testid="cancel-button">Cancel</button>
+      </div>
+    );
+  }
+}));
+jest.mock('./components/UserFormBasicInfo', () => ({
+  __esModule: true,
+  default: ({ name, setName, email, setEmail, password, setPassword, emailVerified, setEmailVerified, notificationsEnabled, setNotificationsEnabled, accessToSSOConfig, setAccessToSSOConfig, setBasicInfoValid, basicInfoValid, ...props }) => (
+    <div data-testid="user-form-basic-info" />
+  )
+}));
+jest.mock('./components/UserPermissionsSection', () => ({
+  __esModule: true,
+  default: ({ selectedRole, setSelectedRole, isSuperAdmin, ...props }) => (
+    <div data-testid="user-permissions-section" />
+  )
+}));
+jest.mock('./components/ManageTeamsSection', () => ({
+  __esModule: true,
+  default: ({ selectedTeams, setSelectedTeams, ...props }) => (
+    <div data-testid="manage-teams-section" />
+  )
 }));
 
-describe('UserForm Component', () => {
-  // Create a custom theme for testing
-  const theme = createTheme({
-    palette: {
-      text: {
-        primary: '#ffffff',
-        defaultSubdued: 'rgba(255, 255, 255, 0.6)',
-      },
-      background: {
-        buttonPrimaryDefault: '#007bff',
-        buttonPrimaryDefaultHover: '#0069d9',
-      },
-      custom: {
-        white: '#ffffff',
-      },
-      primary: {
-        main: '#7b68ee',
-      },
-      error: {
-        main: '#dc3545',
-      },
-      border: {
-        neutralDefault: '#e0e0e0',
-      },
-    },
-    typography: {
-      bodyLargeMedium: {
-        fontSize: '1rem',
-        fontWeight: 500,
-      },
-      headingXLarge: {
-        fontSize: '2rem',
-        fontWeight: 'bold',
-      },
-    },
-  });
-
-  // Wrapper component with theme provider and router
-  const Wrapper = ({ children }) => (
-    <ThemeProvider theme={theme}>
-      <MemoryRouter>
-        <Routes>
-          <Route path="*" element={children} />
-        </Routes>
-      </MemoryRouter>
-    </ThemeProvider>
-  );
-
-  let apiClient;
-
+describe('UserForm', () => {
+  const mockNavigate = jest.fn();
+  const mockFetchUserEntitlements = jest.fn();
+  const mockHandleSubmit = jest.fn(e => e.preventDefault());
+  const mockHandleDeleteClick = jest.fn();
+  const mockHandleCancelDelete = jest.fn();
+  const mockHandleConfirmDelete = jest.fn();
+  
   beforeEach(() => {
     jest.clearAllMocks();
-    apiClient = require('../../utils/apiClient').default;
-    apiClient.get.mockReset();
-    apiClient.post.mockReset();
-    apiClient.patch.mockReset();
-
-    // Mock successful API responses
-    apiClient.get.mockImplementation((url) => {
-      if (url === '/groups') {
-        return Promise.resolve({
-          data: {
-            data: [
-              { id: '1', attributes: { name: 'Group 1' } },
-              { id: '2', attributes: { name: 'Group 2' } }
-            ]
-          }
-        });
-      }
-      return Promise.resolve({ data: {} });
-    });
-
-    apiClient.post.mockResolvedValue({
-      data: {
-        data: {
-          id: '123',
-          attributes: {
-            email: 'test@example.com',
-            name: 'Test User',
-            is_admin: true
-          }
-        }
-      }
-    });
-  });
-
-  test('renders form correctly in create mode', async () => {
-    render(<UserForm />, { wrapper: Wrapper });
-
-    // Wait for the component to load
-    await waitFor(() => {
-      expect(screen.getAllByText('Add user')[0]).toBeInTheDocument();
-    });
-
-    // Check that all form fields are present
-    expect(screen.getByRole('textbox', { name: /name/i })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
-    expect(screen.getByText('Admin User')).toBeInTheDocument();
-    expect(screen.getByText('Show Portal')).toBeInTheDocument();
-    expect(screen.getByText('Show Chat')).toBeInTheDocument();
-    expect(screen.getByText('Email Verified')).toBeInTheDocument();
-
-    // The "Enable access to IdP configuration" switch should not be visible initially
-    // because isAdmin is false by default
-    expect(screen.queryByText('Enable access to IdP configuration')).not.toBeInTheDocument();
-  });
-
-  test('shows AccessToSSOConfig switch when Admin is selected', async () => {
-    render(<UserForm />, { wrapper: Wrapper });
-
-    // Wait for the component to load
-    await waitFor(() => {
-      expect(screen.getAllByText('Add user')[0]).toBeInTheDocument();
-    });
-
-    // Initially, the AccessToSSOConfig switch should not be visible
-    expect(screen.queryByText('Enable access to IdP configuration')).not.toBeInTheDocument();
-
-    // Toggle the Admin switch
-    const adminSwitch = screen.getByLabelText('Admin User');
-    fireEvent.click(adminSwitch);
-
-    // Now the AccessToSSOConfig switch should be visible
-    expect(screen.getByText('Enable access to IdP configuration')).toBeInTheDocument();
-
-    // Toggle the Admin switch back to off
-    fireEvent.click(adminSwitch);
-
-    // The AccessToSSOConfig switch should disappear again
-    expect(screen.queryByText('Enable access to IdP configuration')).not.toBeInTheDocument();
-  });
-
-  test('submits form with AccessToSSOConfig when Admin is selected', async () => {
-    render(<UserForm />, { wrapper: Wrapper });
-
-    // Wait for the component to load
-    await waitFor(() => {
-      expect(screen.getAllByText('Add user')[0]).toBeInTheDocument();
-    });
-
-    // Fill in the form
-    // Find the input fields by their label text in the DOM
-    const nameInput = screen.getByRole('textbox', { name: /name/i });
-    const emailInput = screen.getByRole('textbox', { name: /email/i });
-    const passwordInput = screen.getByLabelText(/password/i);
     
-    // Fill in the form
-    fireEvent.change(nameInput, { target: { value: 'Test Admin' } });
-    fireEvent.change(emailInput, { target: { value: 'admin@example.com' } });
-    fireEvent.change(passwordInput, { target: { value: 'password123' } });
-
-    // Toggle the Admin switch
-    const adminSwitch = screen.getByLabelText('Admin User');
-    fireEvent.click(adminSwitch);
-
-    // Now the AccessToSSOConfig switch should be visible
-    const ssoConfigSwitch = screen.getByLabelText('Enable access to IdP configuration');
-    expect(ssoConfigSwitch).toBeInTheDocument();
-
-    // Toggle the AccessToSSOConfig switch
-    fireEvent.click(ssoConfigSwitch);
-
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /add user/i }));
-
-    // Wait for the API call to complete
-    await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/users', {
-        data: {
-          type: 'User',
-          attributes: {
-            name: 'Test Admin',
-            email: 'admin@example.com',
-            password: 'password123',
-            is_admin: true,
-            show_portal: true,
-            show_chat: true,
-            email_verified: false,
-            notifications_enabled: false,
-            access_to_sso_config: true,
-          },
-        },
-      });
+    reactRouterDom.useNavigate.mockImplementation(() => mockNavigate);
+    reactRouterDom.useParams.mockImplementation(() => ({ id: '123' }));
+    reactRouterDom.Link.mockImplementation(props => props.children);
+    
+    useUserEntitlements.mockReturnValue({
+      isSuperAdmin: false,
+      fetchUserEntitlements: mockFetchUserEntitlements
     });
+    
+    useUserForm.mockReturnValue({
+      name: 'Test User',
+      setName: jest.fn(),
+      email: 'test@example.com',
+      setEmail: jest.fn(),
+      password: '',
+      setPassword: jest.fn(),
+      emailVerified: false,
+      setEmailVerified: jest.fn(),
+      notificationsEnabled: false,
+      setNotificationsEnabled: jest.fn(),
+      accessToSSOConfig: false,
+      setAccessToSSOConfig: jest.fn(),
+      selectedRole: 'Chat user',
+      setSelectedRole: jest.fn(),
+      selectedTeams: [],
+      setSelectedTeams: jest.fn(),
+      loading: false,
+      handleSubmit: mockHandleSubmit,
+      setBasicInfoValid: jest.fn(),
+      basicInfoValid: true,
+      warningDialogOpen: false,
+      handleDeleteClick: mockHandleDeleteClick,
+      handleCancelDelete: mockHandleCancelDelete,
+      handleConfirmDelete: mockHandleConfirmDelete
+    });
+
+    IsAdminRole.mockReturnValue(false);
   });
 
-  test('does not allow AccessToSSOConfig when not Admin', async () => {
-    render(<UserForm />, { wrapper: Wrapper });
-
-    // Wait for the component to load
-    await waitFor(() => {
-      expect(screen.getAllByText('Add user')[0]).toBeInTheDocument();
+  it('renders loading state when loading is true', () => {
+    useUserForm.mockReturnValueOnce({
+      ...useUserForm(),
+      loading: true
     });
 
-    // Fill in the form
-    // Find the input fields by their label text in the DOM
-    const nameInput = screen.getByRole('textbox', { name: /name/i });
-    const emailInput = screen.getByRole('textbox', { name: /email/i });
-    const passwordInput = screen.getByLabelText(/password/i);
+    render(<UserForm />);
+    expect(screen.getByTestId('circular-progress')).toBeInTheDocument();
+  });
+
+  it('renders form correctly for creating a new user', () => {
+    reactRouterDom.useParams.mockImplementationOnce(() => ({}));
     
-    // Fill in the form
-    fireEvent.change(nameInput, { target: { value: 'Regular User' } });
-    fireEvent.change(emailInput, { target: { value: 'user@example.com' } });
-    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    render(<UserForm />);
+    expect(screen.getByText('Create user')).toBeInTheDocument();
+    expect(screen.getByText('Save user')).toBeInTheDocument();
+    expect(screen.queryByText('Delete user')).not.toBeInTheDocument();
+  });
 
-    // Submit the form (without toggling Admin)
-    fireEvent.click(screen.getByRole('button', { name: /add user/i }));
+  it('renders form correctly for editing an existing user', () => {
+    renderWithTheme(<UserForm />);
+    expect(screen.getByText('Edit user')).toBeInTheDocument();
+    expect(screen.getByText('Update user')).toBeInTheDocument();
+    expect(screen.getByTestId('danger-outline-button')).toBeInTheDocument();
+  });
 
-    // Wait for the API call to complete
-    await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/users', {
-        data: {
-          type: 'User',
-          attributes: {
-            name: 'Regular User',
-            email: 'user@example.com',
-            password: 'password123',
-            is_admin: false,
-            show_portal: true,
-            show_chat: true,
-            email_verified: false,
-            notifications_enabled: false,
-            access_to_sso_config: false,
-          },
-        },
-      });
+  it('calls handleSubmit when form is submitted', () => {
+    render(<UserForm />);
+    const form = screen.getByTestId('box');
+    fireEvent.submit(form);
+    expect(mockHandleSubmit).toHaveBeenCalled();
+  });
+
+  it('disables submit button when basicInfoValid is false', () => {
+    useUserForm.mockReturnValueOnce({
+      ...useUserForm(),
+      basicInfoValid: false
     });
 
-    // Verify that access_to_sso_config is false in the API call
-    const apiCall = apiClient.post.mock.calls[0][1];
-    expect(apiCall.data.attributes.access_to_sso_config).toBe(false);
+    render(<UserForm />);
+    const submitButton = screen.getByText('Update user');
+    expect(submitButton.disabled).toBeTruthy();
+  });
+
+  it('enables submit button when basicInfoValid is true', () => {
+    useUserForm.mockReturnValueOnce({
+      ...useUserForm(),
+      basicInfoValid: true
+    });
+
+    render(<UserForm />);
+    const submitButton = screen.getByText('Update user');
+    expect(submitButton.disabled).toBeFalsy();
+  });
+
+  it('calls handleDeleteClick when delete button is clicked', () => {
+    renderWithTheme(<UserForm />);
+    const deleteButton = screen.getByTestId('danger-outline-button');
+    fireEvent.click(deleteButton);
+    expect(mockHandleDeleteClick).toHaveBeenCalled();
+  });
+
+  it('fetches user entitlements on mount', () => {
+    render(<UserForm />);
+    expect(mockFetchUserEntitlements).toHaveBeenCalledWith(true);
+  });
+
+  it('redirects when editing admin user without super admin privileges', () => {
+    useUserForm.mockReturnValueOnce({
+      ...useUserForm(),
+      selectedRole: 'Admin'
+    });
+    
+    IsAdminRole.mockReturnValue(true);
+    
+    render(<UserForm />);
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/users/123');
+  });
+
+  it('does not show delete button for super admin', () => {
+    useUserEntitlements.mockReturnValueOnce({
+      isSuperAdmin: true,
+      fetchUserEntitlements: mockFetchUserEntitlements
+    });
+
+    render(<UserForm />);
+    expect(screen.queryByText('Delete user')).not.toBeInTheDocument();
+  });
+
+  it('renders confirmation dialog when delete is clicked', () => {
+    useUserForm.mockReturnValueOnce({
+      ...useUserForm(),
+      warningDialogOpen: true
+    });
+
+    render(<UserForm />);
+    expect(screen.getByTestId('confirmation-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('confirmation-dialog')).toHaveAttribute('data-title', 'Delete User');
+    expect(screen.getByTestId('confirmation-dialog')).toHaveAttribute('data-message', 'This will delete all records of this user, and they will no longer have access to Tyk AI Studio.');
+  });
+
+  it('calls handleConfirmDelete when delete is confirmed', () => {
+    useUserForm.mockReturnValueOnce({
+      ...useUserForm(),
+      warningDialogOpen: true
+    });
+
+    render(<UserForm />);
+    const confirmButton = screen.getByTestId('confirm-button');
+    fireEvent.click(confirmButton);
+    expect(mockHandleConfirmDelete).toHaveBeenCalled();
   });
 });
