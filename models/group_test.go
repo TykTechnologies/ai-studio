@@ -665,6 +665,32 @@ func TestGroups_SearchByTerm(t *testing.T) {
 		assert.Len(t, fetchedGroups, 5)
 	})
 
+	t.Run("Search with case insensitivity", func(t *testing.T) {
+		// Test lowercase search term
+		var fetchedGroups Groups
+		totalCount, _, err := fetchedGroups.SearchByTerm(db, "devops", 10, 1, true, "name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), totalCount)
+		assert.Len(t, fetchedGroups, 1)
+		assert.Equal(t, "DevOps Team", fetchedGroups[0].Name)
+
+		// Test uppercase search term
+		fetchedGroups = Groups{}
+		totalCount, _, err = fetchedGroups.SearchByTerm(db, "FRONTEND", 10, 1, true, "name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), totalCount)
+		assert.Len(t, fetchedGroups, 1)
+		assert.Equal(t, "Frontend Developers", fetchedGroups[0].Name)
+
+		// Test mixed case search term
+		fetchedGroups = Groups{}
+		totalCount, _, err = fetchedGroups.SearchByTerm(db, "LeAdErShIp", 10, 1, true, "name")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), totalCount)
+		assert.Len(t, fetchedGroups, 1)
+		assert.Equal(t, "Development Leadership", fetchedGroups[0].Name)
+	})
+
 	t.Run("Search with preloads", func(t *testing.T) {
 		// Create a user and add to a group
 		user := &User{Name: "Test User", Email: "test@example.com"}
