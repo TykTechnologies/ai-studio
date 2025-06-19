@@ -1,0 +1,20 @@
+[Unit]
+Description=Tyk API Dashboard
+Wants=network-online.target
+After=network-online.target
+ 
+[Service]
+Type=simple
+User=tyk
+Group=tyk
+# Load env vars from /etc/default/ and /etc/sysconfig/ if they exist.
+# Prefixing the path with '-' makes it try to load, but if the file doesn't
+# exist, it continues onward.
+EnvironmentFile=-/etc/default/tyk-dashboard
+EnvironmentFile=-/etc/sysconfig/tyk-dashboard
+ExecStart=/opt/tyk-dashboard/tyk-analytics --conf /opt/tyk-dashboard/tyk_analytics.conf
+Restart=always
+WorkingDirectory=/opt/tyk-dashboard
+
+[Install]
+WantedBy=multi-user.target
