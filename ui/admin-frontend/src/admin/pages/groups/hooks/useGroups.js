@@ -23,7 +23,6 @@ const useGroups = () => {
 
   const fetchGroups = useCallback(async () => {
     try {
-      setLoading(true);
       const sortParam = sortConfig.direction === "desc" ? `-${sortConfig.field}` : sortConfig.field;
 
       const params = {
@@ -54,6 +53,10 @@ const useGroups = () => {
 
   const handleSearch = (value) => {
     setSearchTerm(value);
+    
+    if (!value) {
+      handlePageChange(1);
+    }
   };
 
   const handleSortChange = (newSortConfig) => {
@@ -70,6 +73,7 @@ const useGroups = () => {
     handlePageChange,
     handlePageSizeChange,
     handleSearch,
+    searchTerm,
     sortConfig,
     handleSortChange,
     refreshGroups: fetchGroups,
