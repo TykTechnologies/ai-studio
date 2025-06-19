@@ -31,12 +31,12 @@ const DataTable = ({
   sortConfig,
   onSortChange,
   onSearch,
+  searchTerm = "",
   searchPlaceholder = "Search...",
   enableSearch = false,
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
 
   const handleMenuOpen = (event, item) => {
     event.stopPropagation();
@@ -66,7 +66,6 @@ const DataTable = ({
 
   const handleSearchChange = (event) => {
     const value = event.target.value;
-    setSearchTerm(value);
     if (onSearch) {
       onSearch(value);
     }
