@@ -920,3 +920,90 @@ func TestIsGroupNameUnique(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, isUnique)
 }
+
+func TestDefaultGroupExists(t *testing.T) {
+	t.Run("Default group exists", func(t *testing.T) {
+		db := setupTestDB(t)
+
+		// Create the default group
+		defaultGroup := &Group{
+			ID:   DefaultGroupID,
+			Name: "Default Group",
+		}
+		err := defaultGroup.Create(db)
+		assert.NoError(t, err)
+
+		// Test the function
+		exists, err := DefaultGroupExists(db)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+	})
+
+	t.Run("Default group does not exist", func(t *testing.T) {
+		db := setupTestDB(t)
+
+		// Test the function without creating the default group
+		exists, err := DefaultGroupExists(db)
+		assert.NoError(t, err)
+		assert.False(t, exists)
+	})
+}
+
+func TestValidateGroupsExist(t *testing.T) {
+	t.Run("Empty group IDs", func(t *testing.T) {
+		db := setupTestDB(t)
+
+		// Test with empty slice
+		exists, err := ValidateGroupsExist(db, []uint{})
+		assert.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("All groups exist", func(t *testing.T) {
+		db := setupTestDB(t)
+
+		// Create test groups
+		group1 := &Group{Name: "Group 1"}
+		group2 := &Group{Name: "Group 2"}
+		group3 := &Group{Name: "Group 3"}
+
+		err := group1.Create(db)
+		assert.NoError(t, err)
+		err = group2.Create(db)
+		assert.NoError(t, err)
+		err = group3.Create(db)
+		assert.NoError(t, err)
+
+		// Test with existing group IDs
+		groupIDs := []uint{group1.ID, group2.ID, group3.ID}
+		exists, err := ValidateGroupsExist(db, groupIDs)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+	})
+
+	t.Run("Some groups don't exist", func(t *testing.T) {
+		db := setupTestDB(t)
+
+		// Create test groups
+		group1 := &Group{Name: "Group 1"}
+		err := group1.Create(db)
+		assert.NoError(t, err)
+
+		// Test with mix of existing and non-existing group IDs
+		// Using a very high ID (9999) that shouldn't exist in the test DB
+		groupIDs := []uint{group1.ID, 9999}
+		exists, err := ValidateGroupsExist(db, groupIDs)
+		assert.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("All groups don't exist", func(t *testing.T) {
+		db := setupTestDB(t)
+
+		// Test with non-existing group IDs
+		groupIDs := []uint{9998, 9999}
+		exists, err := ValidateGroupsExist(db, groupIDs)
+		assert.NoError(t, err)
+		assert.False(t, exists)
+	})
+}

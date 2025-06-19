@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +20,18 @@ func TestChatHistoryRecordEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create a test user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true, true, false, false)
+	user, err := api.service.CreateUser(services.UserDTO{
+		Email:                "test@example.com",
+		Name:                 "Test User",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 
 	// Create a test chat

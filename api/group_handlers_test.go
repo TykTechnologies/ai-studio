@@ -140,52 +140,66 @@ func TestGroupEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Test Add User to Group
-	createUserInput := UserInput{
-		Data: struct {
-			Type       string `json:"type"`
-			Attributes struct {
-				Email                string `json:"email"`
-				Name                 string `json:"name"`
-				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
-				ShowChat             bool   `json:"show_chat"`
-				ShowPortal           bool   `json:"show_portal"`
-				EmailVerified        bool   `json:"email_verified"`
-				NotificationsEnabled bool   `json:"notifications_enabled"`
-				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
-			} `json:"attributes"`
-		}{
-			Type: "users",
-			Attributes: struct {
-				Email                string `json:"email"`
-				Name                 string `json:"name"`
-				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
-				ShowChat             bool   `json:"show_chat"`
-				ShowPortal           bool   `json:"show_portal"`
-				EmailVerified        bool   `json:"email_verified"`
-				NotificationsEnabled bool   `json:"notifications_enabled"`
-				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+	createUserInputs := []UserInput{
+		{
+			Data: struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
+				} `json:"attributes"`
 			}{
-				Email:             "groupuser@example.com",
-				Name:              "Group User",
-				Password:          "password123",
-				IsAdmin:           false,
-				ShowChat:          false,
-				ShowPortal:        false,
-				EmailVerified:     false,
-				AccessToSSOConfig: false,
+				Type: "users",
+				Attributes: struct {
+					Email                string `json:"email"`
+					Name                 string `json:"name"`
+					Password             string `json:"password,omitempty"`
+					IsAdmin              bool   `json:"is_admin"`
+					ShowChat             bool   `json:"show_chat"`
+					ShowPortal           bool   `json:"show_portal"`
+					EmailVerified        bool   `json:"email_verified"`
+					NotificationsEnabled bool   `json:"notifications_enabled"`
+					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
+				}{
+					Email:                "groupuser@example.com",
+					Name:                 "Group User",
+					Password:             "password123",
+					IsAdmin:              false,
+					ShowChat:             false,
+					ShowPortal:           false,
+					EmailVerified:        false,
+					NotificationsEnabled: false,
+					AccessToSSOConfig:    false,
+					Groups:               []uint{},
+				},
 			},
 		},
 	}
 
-	w = performRequest(api.router, "POST", "/api/v1/users", createUserInput)
-	assert.Equal(t, http.StatusCreated, w.Code)
+	userIDs := make([]uint, 0, len(createUserInputs))
 
-	var userResponse map[string]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &userResponse)
-	assert.NoError(t, err)
-	userID := userResponse["data"].ID
+	for _, userInput := range createUserInputs {
+		w = performRequest(api.router, "POST", "/api/v1/users", userInput)
+		assert.Equal(t, http.StatusCreated, w.Code)
+
+		var userResponse map[string]UserResponse
+		err := json.Unmarshal(w.Body.Bytes(), &userResponse)
+		assert.NoError(t, err)
+		userID := userResponse["data"].ID
+
+		userIDUint, err := strconv.ParseUint(userID, 10, 32)
+		assert.NoError(t, err)
+		userIDs = append(userIDs, uint(userIDUint))
+	}
 
 	addUserToGroupInput := UserGroupInput{
 		Data: struct {
@@ -193,7 +207,7 @@ func TestGroupEndpoints(t *testing.T) {
 			ID   string `json:"id"`
 		}{
 			Type: "users",
-			ID:   userID,
+			ID:   strconv.FormatUint(uint64(userIDs[0]), 10),
 		},
 	}
 
@@ -208,7 +222,7 @@ func TestGroupEndpoints(t *testing.T) {
 	assert.NotEmpty(t, w.Header().Get("X-Total-Pages"))
 
 	// Test Remove User from Group
-	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s/users/%s", groupID, userID), nil)
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/groups/%s/users/%s", groupID, strconv.FormatUint(uint64(userIDs[0]), 10)), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
 	// Test Add DataCatalogue to Group
@@ -589,6 +603,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				} `json:"attributes"`
 			}{
 				Type: "users",
@@ -602,15 +617,18 @@ func TestUpdateGroupUsers(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				}{
-					Email:             "user1@example.com",
-					Name:              "User One",
-					Password:          "password123",
-					IsAdmin:           false,
-					ShowChat:          false,
-					ShowPortal:        false,
-					EmailVerified:     false,
-					AccessToSSOConfig: false,
+					Email:                "user1@example.com",
+					Name:                 "User One",
+					Password:             "password123",
+					IsAdmin:              false,
+					ShowChat:             false,
+					ShowPortal:           false,
+					EmailVerified:        false,
+					NotificationsEnabled: false,
+					AccessToSSOConfig:    false,
+					Groups:               []uint{},
 				},
 			},
 		},
@@ -627,6 +645,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				} `json:"attributes"`
 			}{
 				Type: "users",
@@ -640,15 +659,18 @@ func TestUpdateGroupUsers(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				}{
-					Email:             "user2@example.com",
-					Name:              "User Two",
-					Password:          "password123",
-					IsAdmin:           false,
-					ShowChat:          false,
-					ShowPortal:        false,
-					EmailVerified:     false,
-					AccessToSSOConfig: false,
+					Email:                "user2@example.com",
+					Name:                 "User Two",
+					Password:             "password123",
+					IsAdmin:              false,
+					ShowChat:             false,
+					ShowPortal:           false,
+					EmailVerified:        false,
+					NotificationsEnabled: false,
+					AccessToSSOConfig:    false,
+					Groups:               []uint{},
 				},
 			},
 		},
@@ -665,6 +687,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				} `json:"attributes"`
 			}{
 				Type: "users",
@@ -678,15 +701,18 @@ func TestUpdateGroupUsers(t *testing.T) {
 					EmailVerified        bool   `json:"email_verified"`
 					NotificationsEnabled bool   `json:"notifications_enabled"`
 					AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+					Groups               []uint `json:"groups"`
 				}{
-					Email:             "user3@example.com",
-					Name:              "User Three",
-					Password:          "password123",
-					IsAdmin:           false,
-					ShowChat:          false,
-					ShowPortal:        false,
-					EmailVerified:     false,
-					AccessToSSOConfig: false,
+					Email:                "user3@example.com",
+					Name:                 "User Three",
+					Password:             "password123",
+					IsAdmin:              false,
+					ShowChat:             false,
+					ShowPortal:           false,
+					EmailVerified:        false,
+					NotificationsEnabled: false,
+					AccessToSSOConfig:    false,
+					Groups:               []uint{},
 				},
 			},
 		},
@@ -701,11 +727,10 @@ func TestUpdateGroupUsers(t *testing.T) {
 		var userResponse map[string]UserResponse
 		err := json.Unmarshal(w.Body.Bytes(), &userResponse)
 		assert.NoError(t, err)
+		userID := userResponse["data"].ID
 
-		userIDStr := userResponse["data"].ID
-		userIDUint, err := strconv.ParseUint(userIDStr, 10, 32)
+		userIDUint, err := strconv.ParseUint(userID, 10, 32)
 		assert.NoError(t, err)
-
 		userIDs = append(userIDs, uint(userIDUint))
 	}
 
