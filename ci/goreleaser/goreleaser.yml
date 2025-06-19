@@ -102,10 +102,10 @@ nfpms:
         key_file: tyk.io.signing.key
         type: origin
 publishers:
-  - name: tyk-ai-studio-unstable
+  - name: tyk-ee-unstable
     env:
       - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
-    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ai-studio-unstable {{ .ArtifactPath }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ee-unstable {{ .ArtifactPath }}
 # This disables archives
 archives:
   - format: binary

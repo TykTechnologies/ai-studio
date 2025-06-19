@@ -129,7 +129,13 @@ jobs:
           PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
           echo "Checking build output..."
           ls -la build
-          cd ../...
+          echo "Checking static directory..."
+          ls -la build/static
+          echo "Checking index.html..."
+          cat build/index.html | head -n 5
+          echo "Verifying static files..."
+          find build -type f
+          cd ../..
 
       -
         name: Build
