@@ -24,48 +24,51 @@ func TestCreateUserWithAccessToSSOConfig(t *testing.T) {
 	service := NewService(db)
 
 	// Test 1: Admin user with AccessToSSOConfig = true (should succeed)
-	user, err := service.CreateUser(
-		"admin@example.com",
-		"Admin User",
-		"password123",
-		true, // isAdmin
-		true, // showChat
-		true, // showPortal
-		true, // emailVerified
-		true, // notificationsEnabled
-		true, // accessToSSOConfig
-	)
+	user, err := service.CreateUser(UserDTO{
+		Email:                "admin@example.com",
+		Name:                 "Admin User",
+		Password:             "password123",
+		IsAdmin:              true,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: true,
+		AccessToSSOConfig:    true,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.True(t, user.AccessToSSOConfig)
 
 	// Test 2: Non-admin user with AccessToSSOConfig = true (should fail)
-	_, err = service.CreateUser(
-		"nonadmin@example.com",
-		"Non-Admin User",
-		"password123",
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		true,  // accessToSSOConfig
-	)
+	_, err = service.CreateUser(UserDTO{
+		Email:                "nonadmin@example.com",
+		Name:                 "Non-Admin User",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    true,
+		Groups:               []uint{},
+	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
 
 	// Test 3: Non-admin user with AccessToSSOConfig = false (should succeed)
-	user, err = service.CreateUser(
-		"regular@example.com",
-		"Regular User",
-		"password123",
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		false, // accessToSSOConfig
-	)
+	user, err = service.CreateUser(UserDTO{
+		Email:                "regular@example.com",
+		Name:                 "Regular User",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.False(t, user.AccessToSSOConfig)
@@ -77,90 +80,92 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	service := NewService(db)
 
 	// Create an admin user
-	adminUser, err := service.CreateUser(
-		"admin@example.com",
-		"Admin User",
-		"password123",
-		true,  // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		false, // accessToSSOConfig
-	)
+	adminUser, err := service.CreateUser(UserDTO{
+		Email:                "admin@example.com",
+		Name:                 "Admin User",
+		Password:             "password123",
+		IsAdmin:              true,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 
 	// Create a non-admin user
-	regularUser, err := service.CreateUser(
-		"regular@example.com",
-		"Regular User",
-		"password123",
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		false, // accessToSSOConfig
-	)
+	regularUser, err := service.CreateUser(UserDTO{
+		Email:                "regular@example.com",
+		Name:                 "Regular User",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 
 	// Test 1: Enable AccessToSSOConfig for admin user (should succeed)
-	updatedAdmin, err := service.UpdateUser(
-		adminUser.ID,
-		adminUser.Email,
-		adminUser.Name,
-		true,  // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		true,  // accessToSSOConfig
-	)
+	updatedAdmin, err := service.UpdateUser(adminUser, UserDTO{
+		Email:                adminUser.Email,
+		Name:                 adminUser.Name,
+		IsAdmin:              true,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    true,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 	assert.True(t, updatedAdmin.AccessToSSOConfig)
 
 	// Test 2: Try to enable AccessToSSOConfig for non-admin user (should fail)
-	_, err = service.UpdateUser(
-		regularUser.ID,
-		regularUser.Email,
-		regularUser.Name,
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		true,  // accessToSSOConfig
-	)
+	_, err = service.UpdateUser(regularUser, UserDTO{
+		Email:                regularUser.Email,
+		Name:                 regularUser.Name,
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    true,
+		Groups:               []uint{},
+	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
 
 	// Test 3: Change admin user to non-admin with AccessToSSOConfig = true (should fail)
-	_, err = service.UpdateUser(
-		adminUser.ID,
-		adminUser.Email,
-		adminUser.Name,
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		true,  // accessToSSOConfig
-	)
+	_, err = service.UpdateUser(adminUser, UserDTO{
+		Email:                adminUser.Email,
+		Name:                 adminUser.Name,
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    true,
+		Groups:               []uint{},
+	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
 
 	// Test 4: Change admin user to non-admin with AccessToSSOConfig = false (should succeed)
-	updatedUser, err := service.UpdateUser(
-		adminUser.ID,
-		adminUser.Email,
-		adminUser.Name,
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		false, // accessToSSOConfig
-	)
+	updatedUser, err := service.UpdateUser(adminUser, UserDTO{
+		Email:                adminUser.Email,
+		Name:                 adminUser.Name,
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 	assert.False(t, updatedUser.IsAdmin)
 	assert.False(t, updatedUser.AccessToSSOConfig)
@@ -171,17 +176,18 @@ func TestSkipQuickStartForUser(t *testing.T) {
 	service := NewService(db)
 
 	// Create a test user
-	user, err := service.CreateUser(
-		"test@example.com",
-		"Test User",
-		"password123",
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		false, // accessToSSOConfig
-	)
+	user, err := service.CreateUser(UserDTO{
+		Email:                "test@example.com",
+		Name:                 "Test User",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 
@@ -212,13 +218,13 @@ func TestUpdateGroupUsers(t *testing.T) {
 	service := NewService(db)
 
 	// Create test users
-	user1, err := service.CreateUser("user1@example.com", "User 1", "password123", false, true, true, true, false, false)
+	user1, err := service.CreateUser(UserDTO{Email: "user1@example.com", Name: "User 1", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
-	user2, err := service.CreateUser("user2@example.com", "User 2", "password123", false, true, true, true, false, false)
+	user2, err := service.CreateUser(UserDTO{Email: "user2@example.com", Name: "User 2", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
-	user3, err := service.CreateUser("user3@example.com", "User 3", "password123", false, true, true, true, false, false)
+	user3, err := service.CreateUser(UserDTO{Email: "user3@example.com", Name: "User 3", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	assert.NoError(t, err)
 
 	// Create a group with user1 and user2
