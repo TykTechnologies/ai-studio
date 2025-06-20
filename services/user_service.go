@@ -3,40 +3,94 @@ package services
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"slices"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateUser(email, name, password string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
-	email = strings.ToLower(email)
+type UserDTO struct {
+	Email                string
+	Name                 string
+	Password             string
+	IsAdmin              bool
+	ShowChat             bool
+	ShowPortal           bool
+	EmailVerified        bool
+	NotificationsEnabled bool
+	AccessToSSOConfig    bool
+	Groups               []uint
+}
 
-	if err := helpers.ValidateEmailDomain(email); err != nil {
+func (s *Service) addDefaultGroupIfNotExists(groups []uint) ([]uint, error) {
+	if !slices.Contains(groups, models.DefaultGroupID) {
+		exists, err := models.DefaultGroupExists(s.DB)
+		if err != nil {
+			return groups, err
+		}
+
+		if exists {
+			groups = append(groups, models.DefaultGroupID)
+		}
+	}
+
+	return groups, nil
+}
+
+func (s *Service) validateUserInput(dto UserDTO) error {
+	if err := helpers.ValidateEmailDomain(dto.Email); err != nil {
+		return err
+	}
+
+	if dto.NotificationsEnabled && !dto.IsAdmin {
+		return helpers.NewBadRequestError("notifications can only be enabled for admin users")
+	}
+
+	if dto.AccessToSSOConfig && !dto.IsAdmin {
+		return helpers.NewBadRequestError("access to IdP configuration can only be enabled for admin users")
+	}
+
+	if len(dto.Groups) > 0 {
+		groupsExist, err := models.ValidateGroupsExist(s.DB, dto.Groups)
+		if err != nil {
+			return err
+		}
+
+		if !groupsExist {
+			return helpers.NewBadRequestError("groups not found")
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
+	if err := s.validateUserInput(dto); err != nil {
 		return nil, err
-	}
-
-	if notificationsEnabled && !isAdmin {
-		return nil, fmt.Errorf("notifications can only be enabled for admin users")
-	}
-
-	if accessToSSOConfig && !isAdmin {
-		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
 	}
 
 	user := &models.User{
-		Email:                email,
-		Name:                 name,
-		IsAdmin:              isAdmin,
-		ShowChat:             showChat,
-		ShowPortal:           showPortal,
-		EmailVerified:        emailVerified,
-		NotificationsEnabled: notificationsEnabled,
-		AccessToSSOConfig:    accessToSSOConfig,
+		Email:                dto.Email,
+		Name:                 dto.Name,
+		IsAdmin:              dto.IsAdmin,
+		ShowChat:             dto.ShowChat,
+		ShowPortal:           dto.ShowPortal,
+		EmailVerified:        dto.EmailVerified,
+		NotificationsEnabled: dto.NotificationsEnabled,
+		AccessToSSOConfig:    dto.AccessToSSOConfig,
 	}
 
-	if err := user.SetPassword(password); err != nil {
+	if err := user.SetPassword(dto.Password); err != nil {
 		return nil, err
+	}
+
+	groups, err := s.addDefaultGroupIfNotExists(dto.Groups)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(groups) > 0 {
+		user.ParseGroupAssociations(groups)
 	}
 
 	if err := user.Create(s.DB); err != nil {
@@ -46,11 +100,12 @@ func (s *Service) CreateUser(email, name, password string, isAdmin bool, showCha
 	return user, nil
 }
 
-func (s *Service) GetUserByID(id uint) (*models.User, error) {
+func (s *Service) GetUserByID(id uint, preload ...string) (*models.User, error) {
 	user := models.NewUser()
-	if err := user.Get(s.DB, id); err != nil {
+	if err := user.Get(s.DB, id, preload...); err != nil {
 		return nil, err
 	}
+
 	return user, nil
 }
 
@@ -83,44 +138,64 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateUser(id uint, email, name string, isAdmin bool, showChat bool, showPortal bool, emailVerified bool, notificationsEnabled bool, accessToSSOConfig bool) (*models.User, error) {
-	email = strings.ToLower(email)
-	user, err := s.GetUserByID(id)
-	if err != nil {
+func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, error) {
+	if err := s.validateUserInput(dto); err != nil {
 		return nil, err
 	}
 
-	if notificationsEnabled && !isAdmin {
-		return nil, fmt.Errorf("notifications can only be enabled for admin users")
+	user.Email = dto.Email
+	user.Name = dto.Name
+	user.IsAdmin = dto.IsAdmin
+	user.ShowChat = dto.ShowChat
+	user.ShowPortal = dto.ShowPortal
+	user.EmailVerified = dto.EmailVerified
+	user.NotificationsEnabled = dto.NotificationsEnabled
+	user.AccessToSSOConfig = dto.AccessToSSOConfig
+
+	newGroups := user.GetGroupsToUpdate(dto.Groups)
+
+	tx := s.DB.Begin()
+
+	if err := user.Update(tx); err != nil {
+		tx.Rollback()
+		return nil, err
 	}
 
-	if accessToSSOConfig && !isAdmin {
-		return nil, fmt.Errorf("access to IdP configuration can only be enabled for admin users")
+	if newGroups != nil {
+		if err := user.ReplaceGroupAssociation(tx, newGroups); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 
-	user.Email = email
-	user.Name = name
-	user.IsAdmin = isAdmin
-	user.ShowChat = showChat
-	user.ShowPortal = showPortal
-	user.EmailVerified = emailVerified
-	user.NotificationsEnabled = notificationsEnabled
-	user.AccessToSSOConfig = accessToSSOConfig
-
-	if err := user.Update(s.DB); err != nil {
+	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
 	return user, nil
 }
 
-func (s *Service) DeleteUser(id uint) error {
-	user, err := s.GetUserByID(id)
-	if err != nil {
+func (s *Service) DeleteUser(user *models.User) error {
+	if user.GetRole() == models.RoleSuperAdmin {
+		return helpers.NewForbiddenError("super admin user cannot be deleted")
+	}
+
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := user.DeleteGroupAssociation(tx); err != nil {
+		tx.Rollback()
 		return err
 	}
 
-	return user.Delete(s.DB)
+	if err := user.Delete(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 var (

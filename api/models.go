@@ -17,6 +17,7 @@ type UserInput struct {
 			EmailVerified        bool   `json:"email_verified"`
 			NotificationsEnabled bool   `json:"notifications_enabled"`
 			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			Groups               []uint `json:"groups"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -60,16 +61,17 @@ type UserResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email                string `json:"email"`
-		Name                 string `json:"name"`
-		IsAdmin              bool   `json:"is_admin"`
-		ShowChat             bool   `json:"show_chat"`
-		ShowPortal           bool   `json:"show_portal"`
-		EmailVerified        bool   `json:"email_verified"`
-		APIKey               string `json:"api_key"`
-		NotificationsEnabled bool   `json:"notifications_enabled"`
-		AccessToSSOConfig    bool   `json:"access_to_sso_config"`
-		Role                 string `json:"role"`
+		Email                string          `json:"email"`
+		Name                 string          `json:"name"`
+		IsAdmin              bool            `json:"is_admin"`
+		ShowChat             bool            `json:"show_chat"`
+		ShowPortal           bool            `json:"show_portal"`
+		EmailVerified        bool            `json:"email_verified"`
+		APIKey               string          `json:"api_key"`
+		NotificationsEnabled bool            `json:"notifications_enabled"`
+		AccessToSSOConfig    bool            `json:"access_to_sso_config"`
+		Role                 string          `json:"role"`
+		Groups               []GroupResponse `json:"groups,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -841,10 +843,11 @@ type UserWithEntitlementsResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		IsAdmin   bool   `json:"is_admin"`
-		UIOptions struct {
+		Email        string `json:"email"`
+		Name         string `json:"name"`
+		IsAdmin      bool   `json:"is_admin"`
+		IsSuperAdmin bool   `json:"is_super_admin"`
+		UIOptions    struct {
 			ShowChat       bool `json:"show_chat"`
 			ShowPortal     bool `json:"show_portal"`
 			ShowSSOConfig  bool `json:"show_sso_config"`

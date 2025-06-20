@@ -2,6 +2,8 @@ package models
 
 import "gorm.io/gorm"
 
+const DefaultGroupID uint = 1
+
 type Group struct {
 	gorm.Model
 	ID             uint            `json:"id" gorm:"primaryKey"`
@@ -290,7 +292,7 @@ func (g *Groups) SearchByTerm(db *gorm.DB, term string, pageSize int, pageNumber
 
 	if term != "" {
 		searchTerm := "%" + term + "%"
-		query = query.Where("name LIKE ?", searchTerm)
+		query = query.Where("LOWER(name) LIKE LOWER(?)", searchTerm)
 	}
 
 	for _, preload := range preloads {
@@ -368,4 +370,29 @@ func IsGroupNameUnique(db *gorm.DB, name string, groupID uint) (bool, error) {
 	}
 
 	return count == 0, nil
+}
+
+func DefaultGroupExists(db *gorm.DB) (bool, error) {
+	var count int64
+	err := db.Model(&Group{}).Where("id = ?", DefaultGroupID).Count(&count).Error
+
+	return count > 0, err
+}
+
+func ValidateGroupsExist(db *gorm.DB, groupIDs []uint) (bool, error) {
+	if len(groupIDs) == 0 {
+		return false, nil
+	}
+
+	var count int64
+	err := db.Model(&Group{}).Where("id IN ?", groupIDs).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	if count != int64(len(groupIDs)) {
+		return false, nil
+	}
+
+	return true, nil
 }

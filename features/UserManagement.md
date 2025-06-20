@@ -22,9 +22,10 @@ The User Management, Groups, and Role-Based Access Control (RBAC) system in Mids
 
 **User Roles & Interactions:**
 
-* **Administrator:** The first registered user automatically becomes a system administrator. Administrators can manage all users, groups, and resources, and receive special notifications about system events.
+* **Super Admin:** The first registered user (with ID 1) is the only Super Admin in the system. The Super Admin has complete system access including logs (conversations and proxy logs), SSO profiles, can add new admins, and assign any user roles.
+* **Administrator:** Admins have elevated privileges but cannot create other admins (only the Super Admin can create admins). They can add new users and assign only developer and chat user roles.
 * **Standard User:** Regular users with limited privileges who can access only resources shared with them via group membership.
-* **Group Membership:** All users belong to at least one group (default group created automatically), which determines their access to resources.
+* **Group Membership:** All users belong to at least one group (default group created automatically), which determines their access to resources. When creating a user, they are automatically added to the default group.
 
 ## 2. Architecture & Data Flow
 
@@ -89,7 +90,7 @@ flowchart TD
     L -- "6: UI Rendering" --> M[Show/Hide Features]
 ```
 
-## 3. User Model & Permissions
+## 3. User Model, Roles & Permissions
 
 The `User` model (`models/user.go`) is the central entity in the RBAC system:
 
@@ -137,7 +138,7 @@ type User struct {
 9. **IsAdmin**: Boolean flag indicating administrator status.
    - If `true`: User has full administrative privileges.
    - If `false`: User has standard permissions limited by group membership.
-   - First registered user automatically has this set to `true`.
+   - First registered user (ID 1) automatically has this set to `true` and becomes the Super Admin. There is only one Super Admin in the system.
 
 10. **ShowPortal**: Boolean flag controlling UI visibility.
     - If `true`: User can access the portal interface.
@@ -161,8 +162,28 @@ type User struct {
 
 ## 4. User Roles & Permissions
 
-1. **Admin Role** (`User.IsAdmin = true`):
-   - Manage users (create, update, delete)
+The system implements a hierarchical role structure with the following roles:
+
+1. **Super Admin Role** (`User.IsAdmin = true` and `User.ID = 1`):
+   - Only one Super Admin exists in the system (the first registered user)
+   - Complete access to all system features and resources
+   - Access to logs (conversations and proxy logs)
+   - Access to SSO profiles configuration
+   - Can add new admins and assign any user role
+   - Manage all users (create, update, delete)
+   - Manage groups (create, update, delete)
+   - Add/remove users from groups
+   - Associate/disassociate resources with groups
+   - Access all system resources regardless of group membership
+   - Receive system notifications (if `NotificationsEnabled = true`)
+   - Access admin UI screens (`/admin/*` routes)
+   - Perform API key rotation for any user
+   - Force email verification for users
+   - Toggle UI visibility flags for users
+
+2. **Admin Role** (`User.IsAdmin = true` and `User.ID != 1`):
+   - Cannot create or modify other admin users (only the Super Admin can do this)
+   - Can only add new users and assign developer and chat user roles
    - Manage groups (create, update, delete)
    - Add/remove users from groups
    - Associate/disassociate resources with groups
@@ -335,8 +356,8 @@ func (ue *UserEntitlements) HasToolAccess(toolID uint) bool {
 
 **User Registration & Onboarding:**
 - Standard registration with email verification
-- First user automatically becomes admin
-- Default group assignment
+- First user automatically becomes the one and only Super Admin
+- All users are automatically assigned to the default group on creation
 
 **Authentication Flows:**
 - Browser authentication with secure cookies

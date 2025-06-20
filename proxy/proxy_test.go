@@ -206,7 +206,17 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := services.NewBudgetService(db, notificationSvc) // Added budgetService
 
-	user, err := service.CreateUser("test@example.com", "testuser", "password123", false, true, false, false, false, false)
+	user, err := service.CreateUser(services.UserDTO{
+		Email:                "test@example.com",
+		Name:                 "testuser",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           false,
+		EmailVerified:        false,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, user)
 
@@ -313,7 +323,17 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := services.NewBudgetService(db, notificationSvc)
 
-	user, err := service.CreateUser("testpost@example.com", "testuser-post", "password123", false, true, false, false, false, false)
+	user, err := service.CreateUser(services.UserDTO{
+		Email:                "testpost@example.com",
+		Name:                 "testuser-post",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           false,
+		EmailVerified:        false,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 
 	// 2. Setup Mock Server
@@ -414,7 +434,17 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := services.NewBudgetService(db, notificationSvc)
 
-	user, err := service.CreateUser("testinvalidbody@example.com", "testuser-invalidbody", "password123", false, true, false, false, false, false)
+	user, err := service.CreateUser(services.UserDTO{
+		Email:                "testinvalidbody@example.com",
+		Name:                 "testuser-invalidbody",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           false,
+		EmailVerified:        false,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 
 	// 2. Mock server isn't strictly needed as the request should fail before hitting the tool,
@@ -654,7 +684,17 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	user, err := service.CreateUser("testnotfound@example.com", "testuser-notfound", "password123", false, true, false, false, false, false)
+	user, err := service.CreateUser(services.UserDTO{
+		Email:                "testnotfound@example.com",
+		Name:                 "testuser-notfound",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           false,
+		EmailVerified:        false,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 	app, err := service.CreateApp("Test App NotFound", "App for NotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredTool.ID}, nil, nil) // Associate with valid tool
 	require.NoError(t, err)
@@ -715,7 +755,17 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := services.NewBudgetService(db, notificationSvc)
 
-	user, err := service.CreateUser("testopnotfound@example.com", "testuser-opnotfound", "password123", false, true, false, false, false, false)
+	user, err := service.CreateUser(services.UserDTO{
+		Email:                "testopnotfound@example.com",
+		Name:                 "testuser-opnotfound",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           false,
+		EmailVerified:        false,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 
 	// 2. Setup Mock Server (although it won't be called in this case)
@@ -802,7 +852,17 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := services.NewBudgetService(db, notificationSvc)
 
-	user, err := service.CreateUser("testuser-servererror", "testservererror@example.com", "password123", false, false, false, false, false, false)
+	user, err := service.CreateUser(services.UserDTO{
+		Email:                "testuser-servererror",
+		Name:                 "testservererror@example.com",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             false,
+		ShowPortal:           false,
+		EmailVerified:        false,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 
 	// 2. Setup Mock Server to return 500

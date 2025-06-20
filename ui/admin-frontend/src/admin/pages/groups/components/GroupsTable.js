@@ -12,6 +12,7 @@ const GroupsTable = ({
   handlePageChange,
   handlePageSizeChange,
   handleSearch,
+  searchTerm,
   sortConfig,
   handleSortChange,
   handleGroupClick,
@@ -108,6 +109,7 @@ const GroupsTable = ({
       onRowClick={handleGroupClick}
       enableSearch={true}
       onSearch={handleSearch}
+      searchTerm={searchTerm}
       searchPlaceholder="Search by name"
       sortConfig={sortConfig}
       onSortChange={handleSortChange}

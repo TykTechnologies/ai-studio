@@ -55,7 +55,7 @@ jobs:
             rpmvers: "el/7 el/8 el/9 amazon/2 amazon/2023"
             debvers: "ubuntu/xenial ubuntu/bionic ubuntu/focal ubuntu/jammy debian/jessie debian/buster debian/bullseye debian/bookworm"
     outputs:
-      tags: ${{ steps.ci_metadata.outputs.tags }}
+      tags: ${{ steps.tag_metadata.outputs.tags }}
       commit_author: ${{ steps.set_outputs.outputs.commit_author}}
     steps:
       -
@@ -112,33 +112,29 @@ jobs:
             ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       -
-        name: Cache node modules
-        if: steps.check_changes.outputs.ui == 'true'
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-node-modules
+        name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
 
       -
-        name: Install Dependencies
-        if: steps.check_changes.outputs.ui == 'true'
+        name: Build UI
         run: |
           cd ui/admin-frontend
+          echo "Installing dependencies..."
           npm ci
-          cd ../..
-
-      -
-        name: NPM Build
-        if: steps.check_changes.outputs.ui == 'true'
-        run: |
-          cd ui/admin-frontend
-          npm run build
+          echo "Building UI..."
+          PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+          echo "Checking build output..."
+          ls -la build
+          echo "Checking static directory..."
+          ls -la build/static
+          echo "Checking index.html..."
+          cat build/index.html | head -n 5
+          echo "Verifying static files..."
+          find build -type f
           cd ../..
 
       -
@@ -177,51 +173,6 @@ jobs:
           -w /go/src/github.com/TykTechnologies/midsommar                      \
           tykio/golang-cross:${{ matrix.golang_cross }} /tmp/build.sh
       -
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::754489498669:role/ecr_rw_tyk
-          role-session-name: cipush
-          aws-region: eu-central-1
-          # Don't mask to pass it across job boundaries
-          mask-aws-account-id: false
-      -
-        uses: aws-actions/amazon-ecr-login@v2
-        id: ecr
-        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
-        with:
-          mask-password: "true"
-      -
-        name: Docker metadata for CI
-        id: ci_metadata
-        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.ecr.outputs.registry }}/tyk-ai-studio
-          flavor: |
-            latest=false
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,format=long
-            type=semver,pattern={{major}},prefix=v
-            type=semver,pattern={{major}}.{{minor}},prefix=v
-            type=semver,pattern={{version}},prefix=v
-      -
-        name: push image to CI
-        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
-        uses: docker/build-push-action@v6
-        with:
-          context: "dist"
-          platforms: linux/amd64,linux/arm64
-          file: ci/Dockerfile.distroless
-          provenance: mode=max
-          sbom: true
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: ${{ steps.ci_metadata.outputs.tags }}
-          labels: ${{ steps.tag_metadata.outputs.labels }}
-      -
         name: Docker metadata for tag push
         id: tag_metadata
         uses: docker/metadata-action@v5
@@ -241,9 +192,9 @@ jobs:
         if: ${{ matrix.golang_cross == '1.23-bullseye' }}
         uses: docker/build-push-action@v6
         with:
-          context: "dist"
+          context: "midsommar/dist"
           platforms: linux/amd64,linux/arm64
-          file: ci/Dockerfile.distroless
+          file: midsommar/ci/Dockerfile.distroless
           provenance: mode=max
           sbom: true
           cache-from: type=gha

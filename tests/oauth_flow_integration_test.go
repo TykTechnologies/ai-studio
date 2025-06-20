@@ -110,17 +110,17 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 	proxyServer = httptest.NewServer(proxyHandler)
 
 	// Create a test user
-	createdUser, err := serviceInstance.CreateUser(
-		"testuser@example.com",
-		"Test User OAuth",
-		"password123",
-		false, // isAdmin
-		true,  // showChat
-		true,  // showPortal
-		true,  // emailVerified
-		false, // notificationsEnabled
-		false, // accessToSSOConfig
-	)
+	createdUser, err := serviceInstance.CreateUser(services.UserDTO{
+		Email:                "testuser@example.com",
+		Name:                 "Test User OAuth",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+	})
 	require.NoError(t, err)
 	testUser = *createdUser
 
