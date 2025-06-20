@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 COPY *${TARGETARCH}.deb /
 RUN rm -f /*fips*.deb && dpkg -i /tyk-ai-studio*${TARGETARCH}.deb && rm /*.deb
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/base-debian12:nonroot
 
 COPY --from=DEB /opt/tyk-ai-studio /opt/tyk-ai-studio
 
