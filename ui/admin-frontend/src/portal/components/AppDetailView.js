@@ -83,6 +83,7 @@ const AppDetailView = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
+  const [proxyUrl, setProxyUrl] = useState("");
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [appInteractionsData, setAppInteractionsData] = useState(null);
@@ -133,7 +134,10 @@ const AppDetailView = () => {
         // Set the base URL for API endpoints
         const config = getConfig();
         const apiHost = config.api_host || window.location.origin;
+        // Use proxyURL for proxy endpoints if available, otherwise fall back to apiHost
+        const proxyUrlValue = config.proxyURL || `${window.location.protocol}//${window.location.hostname}:9090`;
         setBaseUrl(apiHost);
+        setProxyUrl(proxyUrlValue);
 
         const app = appResponse.data;
         setApp(app);
@@ -176,7 +180,8 @@ const AppDetailView = () => {
 
   const generateEndpointUrl = (path, name) => {
     const slug = generateSlug(name);
-    return `${baseUrl}${path}${slug}`;
+    // Use proxyUrl for proxy endpoints
+    return `${proxyUrl}${path}${slug}`;
   };
 
   const copyToClipboard = (text) => {
