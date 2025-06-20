@@ -192,9 +192,9 @@ jobs:
         if: ${{ matrix.golang_cross == '1.23-bullseye' }}
         uses: docker/build-push-action@v6
         with:
-          context: "dist"
+          context: "midsommar/dist"
           platforms: linux/amd64,linux/arm64
-          file: ci/Dockerfile.distroless
+          file: midsommar/ci/Dockerfile.distroless
           provenance: mode=max
           sbom: true
           cache-from: type=gha
