@@ -52,6 +52,10 @@ nfpms:
         dst: /lib/systemd/system/tyk-ai-studio.service
       - src: ci/install/inits/sysv/init.d/tyk-ai-studio
         dst: /etc/init.d/tyk-ai-studio
+      - src: ci/install/inits/systemd/default/tyk-ai-studio
+        dst: /etc/default/tyk-ai-studio
+      - src: ci/install/data/tyk-ai-studio.conf.example
+        dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
@@ -87,6 +91,10 @@ nfpms:
         dst: /lib/systemd/system/tyk-ai-studio.service
       - src: ci/install/inits/sysv/init.d/tyk-ai-studio
         dst: /etc/init.d/tyk-ai-studio
+      - src: ci/install/inits/systemd/default/tyk-ai-studio
+        dst: /etc/default/tyk-ai-studio
+      - src: ci/install/data/tyk-ai-studio.conf.example
+        dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
@@ -102,10 +110,10 @@ nfpms:
         key_file: tyk.io.signing.key
         type: origin
 publishers:
-  - name: tyk-ai-studio-unstable
+  - name: tyk-ee-unstable
     env:
       - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
-    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ai-studio-unstable {{ .ArtifactPath }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ee-unstable {{ .ArtifactPath }}
 # This disables archives
 archives:
   - format: binary

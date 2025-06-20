@@ -1,0 +1,7 @@
+# Tyk AI Studio Environment Variables
+# Set any environment variables here for tyk-ai-studio
+# These variables will be loaded by the sysv init script
+
+# Example:
+# TYK_AI_STUDIO_LISTEN_ADDRESS=":8080"
+# TYK_AI_STUDIO_LOG_LEVEL=info

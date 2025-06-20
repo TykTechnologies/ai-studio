@@ -1,0 +1,13 @@
+# Tyk AI Studio Configuration File Example
+# Copy this file to /opt/tyk-ai-studio/tyk-ai-studio.conf and modify as needed
+
+# Server configuration
+listen_address: ":8080"
+log_level: "info"
+
+# Database configuration
+database:
+  driver: "sqlite"
+  connection_string: "/opt/tyk-ai-studio/data/tyk-ai-studio.db"
+
+# Additional configuration options can be added here based on your needs
