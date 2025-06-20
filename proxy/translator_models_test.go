@@ -80,7 +80,7 @@ func (t *testCallOptions) SetToolChoice(toolChoice any) {
 func TestChatCompletionRequest_ToLangchainOptions_ModelSelection(t *testing.T) {
 	tests := []struct {
 		name           string
-		vendor         string
+		vendor         models.Vendor
 		defaultModel   string
 		requestModel   string
 		expectedModel  string
@@ -112,7 +112,7 @@ func TestChatCompletionRequest_ToLangchainOptions_ModelSelection(t *testing.T) {
 		},
 		{
 			name:          "Non-OpenAI vendor with request model specified",
-			vendor:        "anthropic",
+			vendor:        models.ANTHROPIC,
 			defaultModel:  "claude-3-opus",
 			requestModel:  "gpt-4",
 			expectedModel: "claude-3-opus",
@@ -120,7 +120,7 @@ func TestChatCompletionRequest_ToLangchainOptions_ModelSelection(t *testing.T) {
 		},
 		{
 			name:          "Non-OpenAI vendor with no request model",
-			vendor:        "anthropic",
+			vendor:        models.ANTHROPIC,
 			defaultModel:  "claude-3-opus",
 			requestModel:  "",
 			expectedModel: "claude-3-opus",
@@ -128,7 +128,7 @@ func TestChatCompletionRequest_ToLangchainOptions_ModelSelection(t *testing.T) {
 		},
 		{
 			name:          "Non-OpenAI vendor with empty default model",
-			vendor:        "anthropic",
+			vendor:        models.ANTHROPIC,
 			defaultModel:  "",
 			requestModel:  "gpt-4",
 			expectedModel: "",
@@ -155,6 +155,7 @@ func TestChatCompletionRequest_ToLangchainOptions_ModelSelection(t *testing.T) {
 			// Apply all options to our test struct
 			testOpts := &testCallOptions{}
 			for _, opt := range options {
+				// Apply the option to our test struct
 				opt(testOpts)
 			}
 
