@@ -6,7 +6,7 @@
 # - amd64
 version: 2
 builds:
-  - id: std
+  - id: std-amd64
     ldflags:
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
@@ -16,7 +16,31 @@ builds:
       - linux
     goarch:
       - amd64
+    binary: tyk-ai-studio
+  - id: std-arm64
+    env:
+      - CC=aarch64-linux-gnu-gcc
+    ldflags:
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
       - arm64
+    binary: tyk-ai-studio
+  - id: std-s390x
+    env:
+      - CC=s390x-linux-gnu-gcc
+    ldflags:
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
+      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
       - s390x
     binary: tyk-ai-studio
   - id: fips
@@ -39,7 +63,9 @@ nfpms:
     package_name: tyk-ai-studio
     file_name_template: "{{ .ConventionalFileName }}"
     builds:
-      - std
+      - std-amd64
+      - std-arm64
+      - std-s390x
     formats:
       - deb
       - rpm
