@@ -181,7 +181,6 @@ jobs:
       -
         name: push image to prod
         if: ${{ matrix.golang_cross == '1.23-bullseye' }}
-        working-directory: .
         uses: docker/build-push-action@v6
         with:
           context: "midsommar/dist"
