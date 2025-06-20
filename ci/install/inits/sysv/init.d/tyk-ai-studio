@@ -44,12 +44,14 @@ start() {
   
 
   # Run the program!
-  
-  chroot --userspec "$user":"$group" "$chroot" sh -c "
-    
-    cd \"$chdir\"
-    exec \"$program\" $args
-  " >> /var/log/tyk-ai-studio.stdout 2>> /var/log/tyk-ai-studio.stderr &
+  if [ -n "$chroot" ]; then
+    chroot --userspec "$user":"$group" "$chroot" sh -c "
+      cd \"$chdir\"
+      exec \"$program\" $args
+    " >> /var/log/tyk-ai-studio.stdout 2>> /var/log/tyk-ai-studio.stderr &
+  else
+    su -s /bin/sh -c "cd \"$chdir\" && exec \"$program\" $args" "$user" >> /var/log/tyk-ai-studio.stdout 2>> /var/log/tyk-ai-studio.stderr &
+  fi
 
   # Generate the pidfile from here. If we instead made the forked process
   # generate it there will be a race condition between the pidfile writing
