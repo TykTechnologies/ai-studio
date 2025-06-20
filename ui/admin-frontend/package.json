@@ -5,6 +5,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.4.3",
     "@mui/material": "^6.4.3",
     "@mui/x-date-pickers": "^7.25.0",
@@ -32,6 +33,7 @@
     "remark-gfm": "^4.0.0",
     "remark-react": "^9.0.1",
     "unist-util-visit": "^5.0.0",
+    "use-debounce": "^10.0.4",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

@@ -34,6 +34,7 @@ const AppList = () => {
   const navigate = useNavigate();
   const [apps, setApps] = useState([]);
   const [users, setUsers] = useState({});
+  const [credentials, setCredentials] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
@@ -43,7 +44,8 @@ const AppList = () => {
     message: "",
     severity: "success",
   });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const {
     page,
@@ -57,15 +59,42 @@ const AppList = () => {
   const fetchApps = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // Handle special sort fields that need custom handling
+      let sortParam = sortField;
+      if (sortField === "approval_status") {
+        // Use a default sort field since approval status is calculated client-side
+        sortParam = "id";
+      } else if (sortField === "monthly_budget") {
+        // Use the correct field name for the API
+        sortParam = "monthly_budget";
+      }
+      
       const response = await apiClient.get("/apps", {
         params: {
           page,
           page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
+          sort: `${sortOrder === "desc" ? "-" : ""}${sortParam}`,
         },
       });
-      setApps(response.data.data || []);
+      
+      let appsData = response.data.data || [];
+      
+      // If sorting by approval status, we need to sort client-side
+      if (sortField === "approval_status") {
+        appsData = [...appsData].sort((a, b) => {
+          const statusA = getApprovalStatus(a);
+          const statusB = getApprovalStatus(b);
+          
+          // Define order: Approved > Inactive > Pending
+          const statusOrder = { "Approved": 0, "Inactive": 1, "Pending": 2 };
+          
+          const comparison = statusOrder[statusA] - statusOrder[statusB];
+          return sortOrder === "asc" ? comparison : -comparison;
+        });
+      }
+      
+      setApps(appsData);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
       updatePaginationData(totalCount, totalPages);
@@ -76,7 +105,7 @@ const AppList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [page, pageSize, sortField, sortOrder, updatePaginationData, credentials]);
 
   useEffect(() => {
     fetchApps();
@@ -84,11 +113,37 @@ const AppList = () => {
 
   useEffect(() => {
     fetchUsers();
+    fetchCredentials();
   }, []);
+
+  const fetchCredentials = async () => {
+    try {
+      const response = await apiClient.get("/credentials", {
+        params: {
+          all: true,
+          page_size: 1000
+        }
+      });
+      const credentialMap = {};
+      response.data.data.forEach((credential) => {
+        credentialMap[credential.id] = credential.attributes;
+      });
+      setCredentials(credentialMap);
+    } catch (error) {
+      console.error("Error fetching credentials", error);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get("/users");
+      // Request all users by setting all=true
+      const response = await apiClient.get("/users", {
+        params: {
+          all: true,
+          // Add a large page_size as a fallback in case 'all' is not working
+          page_size: 1000
+        }
+      });
       const userMap = {};
       response.data.data.forEach((user) => {
         userMap[user.id] = user.attributes.name;
@@ -107,6 +162,21 @@ const AppList = () => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const getApprovalStatus = (app) => {
+    const credentialId = app.attributes.credential_id;
+    
+    if (!credentialId) {
+      return "Pending";
+    }
+    
+    const credential = credentials[credentialId];
+    if (!credential) {
+      return "Pending";
+    }
+    
+    return credential.active ? "Approved" : "Inactive";
   };
 
   const handleDelete = async (id) => {
@@ -140,14 +210,6 @@ const AppList = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
-  };
-
   const handleAddApp = () => {
     navigate("/admin/apps/new");
   };
@@ -174,7 +236,7 @@ const AppList = () => {
           </PrimaryButton>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>
         </Box>
         <ContentBox>
           {apps.length === 0 ? (
@@ -190,12 +252,59 @@ const AppList = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("id");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      ID {sortField === "id" && (sortOrder === "asc" ? "↑" : "↓")}
                     </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("user_id")}>
-                      User
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "name" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("name");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Name {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "description" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("description");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Description {sortField === "description" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "user_id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("user_id");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      User {sortField === "user_id" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "approval_status" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("approval_status");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Status {sortField === "approval_status" && (sortOrder === "asc" ? "↑" : "↓")}
+                    </StyledTableHeaderCell>
+                    <StyledTableHeaderCell
+                      onClick={() => {
+                        setSortOrder(sortField === "monthly_budget" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                        setSortField("monthly_budget");
+                      }}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      Budget {sortField === "monthly_budget" && (sortOrder === "asc" ? "↑" : "↓")}
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
@@ -207,10 +316,19 @@ const AppList = () => {
                       onClick={() => handleAppClick(app)}
                       sx={{ cursor: "pointer" }}
                     >
+                      <StyledTableCell>{app.id}</StyledTableCell>
                       <StyledTableCell>{app.attributes.name}</StyledTableCell>
                       <StyledTableCell>{app.attributes.description}</StyledTableCell>
                       <StyledTableCell>
                         {users[app.attributes.user_id] || "Unknown"}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {getApprovalStatus(app)}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {app.attributes.monthly_budget ? 
+                          `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}` : 
+                          "Not set"}
                       </StyledTableCell>
                       <StyledTableCell align="right">
                         <IconButton

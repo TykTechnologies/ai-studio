@@ -11,6 +11,21 @@ const theme = createTheme({
     body2: {
       fontSize: "0.89rem",
     },
+    bodyXLargeDefault: {
+      fontSize: "18px",
+      lineHeight: "24px",
+      fontFamily: "Inter-Regular",
+    },
+    bodyXLargeMedium: {
+      fontSize: "16px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Medium",
+    },
+    bodyXLargeBold: {
+      fontSize: "16px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Bold",
+    },
     bodyLargeDefault: {
       fontSize: "14px",
       lineHeight: "20px",
@@ -20,6 +35,26 @@ const theme = createTheme({
       fontSize: "14px",
       lineHeight: "20px",
       fontFamily: "Inter-Medium",
+    },
+    bodyLargeBold: {
+      fontSize: "14px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Bold",
+    },
+    bodyMediumDefault: {
+      fontSize: "13.2px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Regular",
+    },
+    bodyMediumMedium: {
+      fontSize: "13.2px",
+      lineHeight: "20px",
+      fontFamily: "Inter-Medium",
+    },
+    bodyMediumSemiBold: {
+      fontSize: "13.2px",
+      lineHeight: "20px",
+      fontFamily: "Inter-SemiBold",
     },
     bodySmallDefault: {
       fontSize: "12px",
@@ -36,6 +71,11 @@ const theme = createTheme({
       lineHeight: "36px",
       fontFamily: "Inter-SemiBold",
     },
+    headingxLarge : {
+      fontSize: "24px",
+      lineHeight: "24px",
+      fontFamily: "Inter-Bold",
+    },
     headingLarge: {
       fontSize: "20px",
       lineHeight: "24px",
@@ -46,6 +86,11 @@ const theme = createTheme({
       lineHeight: "24px",
       fontFamily: "Inter-Bold",
     },
+    headingSmall: {
+      fontSize: "14px",
+      lineHeight: "20px", 
+      fontFamily: "Inter-SemiBold", 
+    }
   },
   palette: {
     mode: "light",
@@ -66,8 +111,18 @@ const theme = createTheme({
       surfaceDefaultHover: '#B7F9E926',
       surfaceDefaultSelected: '#B7F9E973',
       surfaceNeutralDisabled: '#FCFCFC',
+      surfaceNeutralHover: '#F8F8F9',
+      surfaceBrandDefaultPortal: '#EFF3FF',
+      surfaceBrandDefaultDashboard: '#F6EFFF',
+      surfaceBrandDefaultGovernance: '#FDE9F6',
       surfaceBrandHovered: '#EBDFFE',
       surfaceDefaultBubble: '#B7F9E9C2',
+      surfaceCriticalDefault: '#FCEFEC',
+      surfaceWarningDefault: '#FFFBF2',
+      surfaceSuccessDefault: '#EEF8F1',
+      surfaceInformativeDefault: '#EBF8FE',
+      iconSuccessDefault: '#2BA84A',
+      iconWarningDefault: '#FFC453',
       buttonPrimaryDefault: '#343452',
       buttonPrimaryDefaultHover: '#181834',
       buttonPrimaryOutlineHover: '#EEFEFA',
@@ -79,8 +134,13 @@ const theme = createTheme({
       neutralDefault: '#D8D8DF',
       neutralHovered: '#9D9DAF',
       neutralDefaultSubdued: '#F1F1F4',
+      neutralPressed: '#656582',
       criticalDefault: '#AE2410',
-      criticalHover: '#8B1D12'
+      criticalDefaultSubdue: '#F9DDD8',
+      criticalHover: '#8B1D12',
+      successDefaultSubdued: '#DDF1E2 ',
+      warningDefaultSubdued: '#FFF5E3',
+      informativeDefaultSubdued: '#D6F1FC',
     },
     gray: {
       ligh: "#F5F5F5",
@@ -94,6 +154,7 @@ const theme = createTheme({
       purpleDark: "#8438FA",
       purpleLight: "#B421FA",
       purpleExtraLight: "#F0E4FF",
+      purpleMedium: "#BB11FF",
       teal: "#21ecba",
       lightTeal: "rgb(33 236 186 / 7%)",
       hoverTeal: "rgb(33 236 186 / 47%)",
@@ -104,10 +165,16 @@ const theme = createTheme({
       light: "#FFFFFF",
       dark: "#023056",
       default: "#03031C",
-      defaultSubdued: '#414160'
+      defaultSubdued: '#414160',
+      linkDefault: "#00A6ED",
+      criticalDefault: "#3E0E18",
+      successDefault: "#0E3129",
+      warningDefault: "#473717",
+      neutralDisabled: "#818198",
     },
   },
   components: {
+
     MuiSvgIcon: {
       styleOverrides: {
         root: {
@@ -251,6 +318,8 @@ const theme = createTheme({
           position: 'relative',
           borderRadius: 20,
           padding: '8px 16px',
+          minWidth: 'fit-content',
+          maxWidth: 'fit-content',
           color: theme.palette.text.defaultSubdued,
           backgroundColor: theme.palette.background.buttonSecondary,
           boxShadow: "none",

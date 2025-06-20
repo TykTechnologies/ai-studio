@@ -8,19 +8,19 @@ name: Release
 # - docker hub
 # - devenv ECR
 # - Cloudsmith
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+#concurrency:
+#  group: ${{ github.workflow }}-${{ github.ref }}
+#  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
   # Trigger release every monday at midnight for master CI images
-  schedule:
-    -
-      cron: "0 0 * * 1"
-  pull_request:
+  #schedule:
+  #  -
+  #    cron: "0 0 * * 1"
+  # pull_request:
   push:
-    branches:
-      - master
-      - release-**
+    # branches:
+    #  - master
+    #  - release-**
     tags:
       - "v*"
 
@@ -37,7 +37,6 @@ env:
   BASE_REF: ${{startsWith(github.event_name, 'pull_request') && github.base_ref || github.ref_name}}
 jobs:
   goreleaser:
-    if: false # Temporarily disabled
     name: "${{ matrix.golang_cross }}"
     runs-on: ubuntu-latest
     permissions:
@@ -47,16 +46,16 @@ jobs:
       fail-fast: false
       matrix:
         golang_cross:
-          - 1.22-bullseye
+          - 1.23-bullseye
         include:
           -
-            golang_cross: 1.22-bullseye
+            golang_cross: 1.23-bullseye
             goreleaser: "ci/goreleaser/goreleaser.yml"
             cgo: 0
             rpmvers: "el/7 el/8 el/9 amazon/2 amazon/2023"
             debvers: "ubuntu/xenial ubuntu/bionic ubuntu/focal ubuntu/jammy debian/jessie debian/buster debian/bullseye debian/bookworm"
     outputs:
-      tags: ${{ steps.ci_metadata.outputs.tags }}
+      tags: ${{ steps.tag_metadata.outputs.tags }}
       commit_author: ${{ steps.set_outputs.outputs.commit_author}}
     steps:
       -
@@ -95,14 +94,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       -
-        name: Login to Cloudsmith
-        if: startsWith(github.ref, 'refs/tags')
-        uses: docker/login-action@v3
-        with:
-          registry: docker.tyk.io
-          username: ${{ secrets.CLOUDSMITH_USERNAME }}
-          password: ${{ secrets.CLOUDSMITH_API_KEY }}
-      -
         uses: actions/cache@v4
         with:
           path: |
@@ -113,33 +104,29 @@ jobs:
             ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       -
-        name: Cache node modules
-        if: steps.check_changes.outputs.ui == 'true'
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-node-modules
+        name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
 
       -
-        name: Install Dependencies
-        if: steps.check_changes.outputs.ui == 'true'
+        name: Build UI
         run: |
           cd ui/admin-frontend
+          echo "Installing dependencies..."
           npm ci
-          cd ../..
-
-      -
-        name: NPM Build
-        if: steps.check_changes.outputs.ui == 'true'
-        run: |
-          cd ui/admin-frontend
-          npm run build
+          echo "Building UI..."
+          PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+          echo "Checking build output..."
+          ls -la build
+          echo "Checking static directory..."
+          ls -la build/static
+          echo "Checking index.html..."
+          cat build/index.html | head -n 5
+          echo "Verifying static files..."
+          find build -type f
           cd ../..
 
       -
@@ -149,12 +136,15 @@ jobs:
           PKG_SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
         run: |
+          pwd
+          ls
           echo '#!/bin/sh
           ci/bin/unlock-agent.sh
           git config --global url."https://${{ secrets.ORG_GH_TOKEN }}@github.com".insteadOf "https://github.com"
           git config --global --add safe.directory /go/src/github.com/TykTechnologies/midsommar
           goreleaser release --clean -f ${{ matrix.goreleaser }} ${{ !startsWith(github.ref, 'refs/tags/') && ' --snapshot --skip=sign' || '' }}' | tee /tmp/build.sh
           chmod +x /tmp/build.sh
+          pwd
           docker run --rm --privileged -e GITHUB_TOKEN=${{ github.token }} \
           -e GOPRIVATE=github.com/TykTechnologies                                \
           -e DEBVERS='${{ matrix.debvers }}'                               \
@@ -164,7 +154,7 @@ jobs:
           -e GPG_FINGERPRINT=12B5D62C28F57592D1575BD51ED14C59E37DAC20            \
           -e PKG_SIGNING_KEY="$PKG_SIGNING_KEY"                                  \
           -e PACKAGECLOUD_TOKEN=$PACKAGECLOUD_TOKEN                              \
-          -v ${{github.workspace}}:/go/src/github.com/TykTechnologies/midsommar \
+          -v ${{github.workspace}}/midsommar:/go/src/github.com/TykTechnologies/midsommar \
           -v /var/run/docker.sock:/var/run/docker.sock                           \
           -v ~/.docker/config.json:/root/.docker/config.json                     \
           -e GOCACHE=/cache/go-build                                             \
@@ -175,73 +165,27 @@ jobs:
           -w /go/src/github.com/TykTechnologies/midsommar                      \
           tykio/golang-cross:${{ matrix.golang_cross }} /tmp/build.sh
       -
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::754489498669:role/ecr_rw_tyk
-          role-session-name: cipush
-          aws-region: eu-central-1
-          # Don't mask to pass it across job boundaries
-          mask-aws-account-id: false
-      -
-        uses: aws-actions/amazon-ecr-login@v2
-        id: ecr
-        if: ${{ matrix.golang_cross == '1.22-bullseye' }}
-        with:
-          mask-password: "true"
-      -
-        name: Docker metadata for CI
-        id: ci_metadata
-        if: ${{ matrix.golang_cross == '1.22-bullseye' }}
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.ecr.outputs.registry }}/midsommar
-          flavor: |
-            latest=false
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,format=long
-            type=semver,pattern={{major}},prefix=v
-            type=semver,pattern={{major}}.{{minor}},prefix=v
-            type=semver,pattern={{version}},prefix=v
-      -
-        name: push image to CI
-        if: ${{ matrix.golang_cross == '1.22-bullseye' }}
-        uses: docker/build-push-action@v6
-        with:
-          context: "dist"
-          platforms: linux/amd64,linux/arm64
-          file: ci/Dockerfile.distroless
-          provenance: mode=max
-          sbom: true
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: ${{ steps.ci_metadata.outputs.tags }}
-          labels: ${{ steps.tag_metadata.outputs.labels }}
-      -
         name: Docker metadata for tag push
         id: tag_metadata
         uses: docker/metadata-action@v5
         with:
           images: |
-            tykio/midsommar
-            docker.tyk.io/midsommar/midsommar
+            tykio/tyk-ai-studio
           flavor: |
             latest=false
             prefix=v
           tags: |
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
-          labels: "org.opencontainers.image.title=midsommar  (distroless) \norg.opencontainers.image.description=Tyk AI Portal\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
+          labels: "org.opencontainers.image.title=tyk-ai-studio  (distroless) \norg.opencontainers.image.description=Tyk AI Studio\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
       -
         name: push image to prod
-        if: ${{ matrix.golang_cross == '1.22-bullseye' }}
+        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
         uses: docker/build-push-action@v6
         with:
-          context: "dist"
+          context: "midsommar/dist"
           platforms: linux/amd64,linux/arm64
-          file: ci/Dockerfile.distroless
+          file: midsommar/ci/Dockerfile.distroless
           provenance: mode=max
           sbom: true
           cache-from: type=gha
@@ -252,7 +196,7 @@ jobs:
       -
         name: save deb
         uses: actions/upload-artifact@v4
-        if: ${{ matrix.golang_cross == '1.22-bullseye' }}
+        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
         with:
           name: deb
           retention-days: 1
@@ -263,7 +207,7 @@ jobs:
       -
         name: save rpm
         uses: actions/upload-artifact@v4
-        if: ${{ matrix.golang_cross == '1.22-bullseye' }}
+        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
         with:
           name: rpm
           retention-days: 1
@@ -326,10 +270,10 @@ jobs:
         run: |
           echo 'FROM ${{ matrix.distro }}
           ARG TARGETARCH
-          COPY midsommar*_${TARGETARCH}.deb /midsommar.deb
+          COPY tyk-ai-studio*_${TARGETARCH}.deb /tyk-ai-studio.deb
           RUN apt-get update && apt-get install -y curl
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/midsommar/script.deb.sh | bash && apt-get install -y midsommar=0.0.1
-          RUN dpkg -i /midsommar.deb
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.deb.sh | bash && apt-get install -y tyk-ai-studio=0.0.1
+          RUN dpkg -i /tyk-ai-studio.deb
 
           ' | tee Dockerfile
       -
@@ -377,13 +321,13 @@ jobs:
         run: |
           echo 'FROM ${{ matrix.distro }}
           ARG RHELARCH
-          COPY midsommar*.${RHELARCH}.rpm /midsommar.rpm
+          COPY tyk-ai-studio*.${RHELARCH}.rpm /tyk-ai-studio.rpm
           RUN command -v curl || yum install -y curl
           RUN command -v useradd || yum install -y shadow-utils
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/midsommar/script.rpm.sh | bash && yum install -y midsommar-0.0.1-1
-          RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o midsommar.key && rpm --import midsommar.key
-          RUN rpm --checksig /midsommar.rpm
-          RUN rpm -Uvh --force /midsommar.rpm
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.rpm.sh | bash && yum install -y tyk-ai-studio-0.0.1-1
+          RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o tyk-ai-studio.key && rpm --import tyk-ai-studio.key
+          RUN rpm --checksig /tyk-ai-studio.rpm
+          RUN rpm -Uvh --force /tyk-ai-studio.rpm
 
           ' | tee Dockerfile
       -

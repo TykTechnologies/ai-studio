@@ -4,10 +4,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
+	"gorm.io/gorm"
 )
 
 // CreateTool creates a new tool with validity checks
@@ -81,6 +84,29 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 
 	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
 	return tool, nil
+}
+
+// GetToolBySlug retrieves a tool by its slug (derived from name)
+func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
+	var tool models.Tool
+
+	// Use SQL to find tool by slug directly - much more efficient than O(N) scan
+	err := s.DB.Where("LOWER(REPLACE(name, ' ', '-')) = ?", slug).
+		Preload("FileStores").
+		Preload("Filters").
+		Preload("Dependencies").
+		Preload("Apps").
+		First(&tool).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("tool not found with slug: %s", slug)
+		}
+		return nil, fmt.Errorf("error retrieving tool: %w", err)
+	}
+
+	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	return &tool, nil
 }
 
 // GetAllTools retrieves all tools
@@ -380,6 +406,28 @@ func (s *Service) HasToolDependency(toolID uint, dependencyID uint) (bool, error
 	return tool.HasDependency(s.DB, dependencyID)
 }
 
+// parsedSpecCache caches parsed OpenAPI specs to avoid repeated parsing
+type parsedSpecCache struct {
+	operations  []string
+	toolVersion int64
+	createdAt   time.Time
+}
+
+// clientCacheEntry caches universalclient instances for tool operations
+type clientCacheEntry struct {
+	client      *universalclient.Client
+	toolVersion int64
+	authHash    string
+	createdAt   time.Time
+}
+
+var (
+	specCache     = make(map[uint]*parsedSpecCache)
+	specCacheMu   sync.RWMutex
+	clientCache   = make(map[string]*clientCacheEntry)
+	clientCacheMu sync.RWMutex
+)
+
 // ListToolOperationsFromSpec retrieves all operations from the tool's OpenAPI spec
 func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
 	tool, err := s.GetToolByID(toolID)
@@ -391,7 +439,18 @@ func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
 		return nil, fmt.Errorf("tool has no OpenAPI specification")
 	}
 
-	// Decode the Base64 OAS spec
+	// Check cache first
+	specCacheMu.RLock()
+	cache, exists := specCache[toolID]
+	specCacheMu.RUnlock()
+
+	cacheExpiry := 30 * time.Minute
+	if exists && cache.toolVersion == tool.UpdatedAt.UnixNano() &&
+		time.Since(cache.createdAt) < cacheExpiry {
+		return cache.operations, nil
+	}
+
+	// Cache miss or expired - parse the spec
 	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
@@ -402,21 +461,63 @@ func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
 		return nil, fmt.Errorf("failed to parse OpenAPI spec: %w", err)
 	}
 
-	return client.ListOperations()
-}
-
-// CallToolOperation calls an operation from the tool's OpenAPI spec
-func (s *Service) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	tool, err := s.GetToolByID(toolID)
+	operations, err := client.ListOperations()
 	if err != nil {
 		return nil, err
 	}
 
+	// Update cache
+	specCacheMu.Lock()
+	specCache[toolID] = &parsedSpecCache{
+		operations:  operations,
+		toolVersion: tool.UpdatedAt.UnixNano(),
+		createdAt:   time.Now(),
+	}
+
+	// Clean up old cache entries to prevent memory leaks
+	if len(specCache) > 100 {
+		oldestKey := uint(0)
+		oldestTime := time.Now()
+		for k, v := range specCache {
+			if v.createdAt.Before(oldestTime) {
+				oldestTime = v.createdAt
+				oldestKey = k
+			}
+		}
+		if oldestKey != 0 {
+			delete(specCache, oldestKey)
+		}
+	}
+	specCacheMu.Unlock()
+
+	return operations, nil
+}
+
+// getCachedUniversalClient returns a cached universalclient or creates a new one
+func (s *Service) getCachedUniversalClient(tool *models.Tool, authSchemaName, authKey string) (*universalclient.Client, error) {
 	if tool.OASSpec == "" {
 		return nil, fmt.Errorf("tool has no OpenAPI specification")
 	}
 
-	// Decode the Base64 OAS spec
+	// Create cache key from tool ID + auth info
+	authHash := ""
+	if authSchemaName != "" && authKey != "" {
+		authHash = fmt.Sprintf("%s:%s", authSchemaName, authKey)
+	}
+	cacheKey := fmt.Sprintf("tool_%d_auth_%s", tool.ID, authHash)
+
+	// Check cache first
+	clientCacheMu.RLock()
+	cache, exists := clientCache[cacheKey]
+	clientCacheMu.RUnlock()
+
+	cacheExpiry := 30 * time.Minute
+	if exists && cache.toolVersion == tool.UpdatedAt.UnixNano() &&
+		time.Since(cache.createdAt) < cacheExpiry {
+		return cache.client, nil
+	}
+
+	// Cache miss or expired - create new client
 	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
@@ -427,14 +528,55 @@ func (s *Service) CallToolOperation(toolID uint, operationID string, params map[
 		universalclient.WithResponseFormat(universalclient.ResponseFormatJSON),
 	}
 
-	// Add auth option if tool has authentication configured
-	if tool.AuthSchemaName != "" && tool.AuthKey != "" {
-		options = append(options, universalclient.WithAuth(tool.AuthSchemaName, tool.AuthKey))
+	// Add auth option if provided
+	if authSchemaName != "" && authKey != "" {
+		options = append(options, universalclient.WithAuth(authSchemaName, authKey))
 	}
 
 	client, err := universalclient.NewClient(decodedSpec, "", options...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse OpenAPI spec: %w", err)
+		return nil, fmt.Errorf("failed to create universalclient: %w", err)
+	}
+
+	// Update cache
+	clientCacheMu.Lock()
+	clientCache[cacheKey] = &clientCacheEntry{
+		client:      client,
+		toolVersion: tool.UpdatedAt.UnixNano(),
+		authHash:    authHash,
+		createdAt:   time.Now(),
+	}
+
+	// Clean up old cache entries to prevent memory leaks
+	if len(clientCache) > 50 { // Smaller limit for client cache since clients are larger
+		oldestKey := ""
+		oldestTime := time.Now()
+		for k, v := range clientCache {
+			if v.createdAt.Before(oldestTime) {
+				oldestTime = v.createdAt
+				oldestKey = k
+			}
+		}
+		if oldestKey != "" {
+			delete(clientCache, oldestKey)
+		}
+	}
+	clientCacheMu.Unlock()
+
+	return client, nil
+}
+
+// CallToolOperation calls an operation from the tool's OpenAPI spec
+func (s *Service) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use cached client for better performance
+	client, err := s.getCachedUniversalClient(tool, tool.AuthSchemaName, tool.AuthKey)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := client.CallOperation(operationID, params, payload, headers)

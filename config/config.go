@@ -1,35 +1,62 @@
 package config
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type AppConf struct {
-	SMTPServer          string
-	SMTPPort            int
-	SMTPUser            string
-	SMTPPass            string
-	FromEmail           string
-	AllowRegistrations  bool
-	AdminEmail          string
-	SiteURL             string
-	ProxyURL            string
-	ServerPort          string
-	CertFile            string
-	KeyFile             string
-	DisableCors         bool
-	DatabaseURL         string
-	DatabaseType        string
-	FilterSignupDomains []string
-	EchoConversation    bool
-	ProxyOnly           bool
-	DocsURL             string
-	DefaultSignupMode   string
+	SMTPServer              string
+	SMTPPort                int
+	SMTPUser                string
+	SMTPPass                string
+	FromEmail               string
+	AllowRegistrations      bool
+	AdminEmail              string
+	SiteURL                 string
+	ProxyURL                string
+	ServerPort              string
+	CertFile                string
+	KeyFile                 string
+	DisableCors             bool
+	DatabaseURL             string
+	DatabaseType            string
+	FilterSignupDomains     []string
+	EchoConversation        bool
+	ProxyOnly               bool
+	DocsURL                 string
+	DefaultSignupMode       string
+	TIBEnabled              bool
+	TIBAPISecret            string
+	DocsLinks               DocsLinks
+	LicenseKey              string
+	LicenseTelemetryPeriod  time.Duration
+	LicenseDisableTelemetry bool
+	LicenseTelemetryURL     string
+	DevMode                 bool
+	AuthServerURL           string
+	ProxyOAuthMetadataURL   string
+}
+
+type DocsLinks map[string]string
+
+func (d DocsLinks) ReadFromFile(fileName string) {
+	data, err := os.ReadFile(fileName)
+	if err != nil {
+		log.Printf("Warning: Failed to parse docs_links.json: %v", err)
+		return
+	}
+
+	err = json.Unmarshal(data, &d)
+	if err != nil {
+		log.Printf("Warning: Could not read docs_links.json: %v", err)
+	}
 }
 
 var globalConfig *AppConf
@@ -116,7 +143,9 @@ func getConfigFromEnv() *AppConf {
 		log.Println("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
-	if os.Getenv("DEVMODE") != "" {
+	devMode := os.Getenv("DEVMODE")
+	if devMode == "true" || devMode == "1" {
+		conf.DevMode = true
 		conf.DisableCors = true
 	}
 
@@ -158,6 +187,9 @@ func getConfigFromEnv() *AppConf {
 		conf.DocsURL = "http://localhost:8989"
 	}
 
+	conf.DocsLinks = make(DocsLinks)
+	conf.DocsLinks.ReadFromFile("config/docs_links.json")
+
 	conf.ProxyURL = os.Getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
 		log.Println("Warning: PROXY_URL environment variable is not set")
@@ -166,6 +198,60 @@ func getConfigFromEnv() *AppConf {
 	conf.DefaultSignupMode = os.Getenv("DEFAULT_SIGNUP_MODE")
 	if conf.DefaultSignupMode == "" {
 		conf.DefaultSignupMode = "both"
+	}
+
+	tibEnabledStr := os.Getenv("TIB_ENABLED")
+	if tibEnabledStr == "true" || tibEnabledStr == "1" {
+		conf.TIBEnabled = true
+	}
+
+	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
+	if conf.TIBAPISecret == "" && conf.TIBEnabled {
+		log.Println("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
+	}
+
+	conf.LicenseKey = os.Getenv("TYK_AI_LICENSE")
+	if conf.LicenseKey == "" {
+		log.Println("Warning: TYK_AI_LICENSE environment variable is not set")
+	}
+
+	licenseDisableTelemetryStr := os.Getenv("LICENSE_DISABLE_TELEMETRY")
+	if licenseDisableTelemetryStr == "true" || licenseDisableTelemetryStr == "1" {
+		conf.LicenseDisableTelemetry = true
+	}
+
+	conf.LicenseTelemetryURL = os.Getenv("LICENSE_TELEMETRY_URL")
+
+	licenseReportPeriodStr := os.Getenv("LICENSE_TELEMETRY_PERIOD")
+	if licenseReportPeriodStr != "" {
+		duration, err := time.ParseDuration(licenseReportPeriodStr)
+		if err == nil {
+			conf.LicenseTelemetryPeriod = duration
+		}
+	}
+
+	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
+	if conf.AuthServerURL == "" {
+		if conf.SiteURL != "" {
+			conf.AuthServerURL = conf.SiteURL
+			log.Printf("AUTH_SERVER_URL not set, using SITE_URL: %s", conf.AuthServerURL)
+		} else {
+			conf.AuthServerURL = "http://localhost:3000"
+			log.Println("Warning: AUTH_SERVER_URL and SITE_URL not set, defaulting to http://localhost:3000")
+		}
+	}
+
+	conf.ProxyOAuthMetadataURL = os.Getenv("PROXY_OAUTH_METADATA_URL")
+	if conf.ProxyOAuthMetadataURL == "" {
+		var baseURL string
+		if conf.ProxyURL != "" {
+			baseURL = conf.ProxyURL
+			log.Printf("PROXY_OAUTH_METADATA_URL not set, using PROXY_URL: %s", baseURL)
+		} else {
+			baseURL = "http://localhost:9090"
+			log.Println("Warning: PROXY_OAUTH_METADATA_URL and PROXY_URL not set, defaulting to http://localhost:9090")
+		}
+		conf.ProxyOAuthMetadataURL = baseURL + "/.well-known/oauth-protected-resource"
 	}
 
 	return conf

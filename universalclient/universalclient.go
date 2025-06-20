@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/tmc/langchaingo/llms"
@@ -99,7 +100,13 @@ type ClientOption func(*Client)
 // NewClient creates a new API client from an OpenAPI specification
 func NewClient(specBytes []byte, baseURL string, options ...ClientOption) (*Client, error) {
 	// Parse the OpenAPI specification
-	doc, err := libopenapi.NewDocument(specBytes)
+	config := &datamodel.DocumentConfiguration{
+		AllowFileReferences:   false,
+		AllowRemoteReferences: false,
+		BaseURL:               nil,
+		RemoteURLHandler:      nil,
+	}
+	doc, err := libopenapi.NewDocumentWithConfiguration(specBytes, config)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +317,8 @@ func (c *Client) CallOperation(operationId string, params map[string][]string, p
 
 	// Prepare the request body
 	var body io.Reader
-	if payload != nil {
+	// Only set body for methods that typically accept a body and when payload has content
+	if payload != nil && len(payload) > 0 && method != "GET" && method != "HEAD" && method != "OPTIONS" {
 		jsonBody, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal payload: %w", err)
@@ -802,10 +810,8 @@ func (c *Client) buildParametersSchema(operation *v3.Operation) map[string]inter
 	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
 		if content, ok := operation.RequestBody.Content.Get("application/json"); ok {
 			properties["body"] = c.SchemaToMap(content.Schema.Schema())
-			if operation != nil {
-				if *operation.RequestBody.Required {
-					required = append(required, "body")
-				}
+			if operation.RequestBody.Required != nil && *operation.RequestBody.Required {
+				required = append(required, "body")
 			}
 		}
 	}

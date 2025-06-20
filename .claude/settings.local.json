@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rg:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(grep:*)",
+      "Bash(gofmt:*)",
+      "Bash(find:*)",
+      "Bash(go run:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:www.anthropic.com)",
+      "Bash(chmod:*)"
+    ],
+    "deny": []
+  }
+}

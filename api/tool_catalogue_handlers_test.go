@@ -175,3 +175,54 @@ func TestToolCatalogueEndpointsErrors(t *testing.T) {
 	w = performRequest(api.router, "GET", "/api/v1/tool-catalogues/search", nil)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestGetOperationDetailFromSpec(t *testing.T) {
+	// Test the getOperationDetailFromSpec function to ensure method is always "POST"
+	// This tests our change to always show POST method regardless of original OpenAPI method
+
+	// Simple OpenAPI spec with GET operation for testing
+	testSpec := `{
+		"openapi": "3.0.0",
+		"info": {"title": "Test API", "version": "1.0.0"},
+		"servers": [{"url": "https://example.com"}],
+		"paths": {
+			"/test": {
+				"get": {
+					"operationId": "testGetOperation",
+					"summary": "Test GET operation",
+					"description": "This is a test GET operation"
+				}
+			}
+		}
+	}`
+
+	operationDetail, err := getOperationDetailFromSpec([]byte(testSpec), "testGetOperation")
+	assert.NoError(t, err)
+	assert.Equal(t, "testGetOperation", operationDetail.OperationID)
+	assert.Equal(t, "POST", operationDetail.Method) // Should always be POST, not GET
+	assert.Equal(t, "/test", operationDetail.Path)
+	assert.Equal(t, "This is a test GET operation", operationDetail.Description)
+
+	// Test with another method - PUT should also become POST
+	testSpecPut := `{
+		"openapi": "3.0.0",
+		"info": {"title": "Test API", "version": "1.0.0"},
+		"servers": [{"url": "https://example.com"}],
+		"paths": {
+			"/update": {
+				"put": {
+					"operationId": "testPutOperation",
+					"summary": "Test PUT operation",
+					"description": "This is a test PUT operation"
+				}
+			}
+		}
+	}`
+
+	operationDetailPut, err := getOperationDetailFromSpec([]byte(testSpecPut), "testPutOperation")
+	assert.NoError(t, err)
+	assert.Equal(t, "testPutOperation", operationDetailPut.OperationID)
+	assert.Equal(t, "POST", operationDetailPut.Method) // Should always be POST, not PUT
+	assert.Equal(t, "/update", operationDetailPut.Path)
+	assert.Equal(t, "This is a test PUT operation", operationDetailPut.Description)
+}

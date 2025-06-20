@@ -56,6 +56,7 @@ const UserForm = () => {
   const [newGroupName, setNewGroupName] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [accessToSSOConfig, setAccessToSSOConfig] = useState(false);
 
   useEffect(() => {
     fetchGroups();
@@ -90,6 +91,7 @@ const UserForm = () => {
       setShowChat(userData.attributes.show_chat ?? true);
       setEmailVerified(userData.attributes.email_verified ?? false);
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
+      setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -145,6 +147,7 @@ const UserForm = () => {
           show_chat: showChat,
           email_verified: emailVerified,
           notifications_enabled: isAdmin ? notificationsEnabled : false,
+          access_to_sso_config: isAdmin ? accessToSSOConfig : false,
           ...(password && { password }),
         },
       },
@@ -347,67 +350,85 @@ const UserForm = () => {
               </Grid>
             )}
             <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={isAdmin}
-                    onChange={(e) => setIsAdmin(e.target.checked)}
-                    color="primary"
+              <Grid container>
+                <Grid item xs={2}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={isAdmin}
+                        onChange={(e) => setIsAdmin(e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label="Admin User"
                   />
-                }
-                label="Admin User"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showPortal}
-                    onChange={(e) => setShowPortal(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label="Show Portal"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showChat}
-                    onChange={(e) => setShowChat(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label="Show Chat"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={emailVerified}
-                    onChange={(e) => setEmailVerified(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label="Email Verified"
-              />
-            </Grid>
-            {isAdmin && (
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={notificationsEnabled}
-                      onChange={(e) => setNotificationsEnabled(e.target.checked)}
-                      color="primary"
+                  <Box mt={2}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={showPortal}
+                          onChange={(e) => setShowPortal(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label="Show Portal"
                     />
-                  }
-                  label="Enable Notifications"
-                />
+                  </Box>
+                  <Box mt={2}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={showChat}
+                          onChange={(e) => setShowChat(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label="Show Chat"
+                    />
+                  </Box>
+                  <Box mt={2}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={emailVerified}
+                          onChange={(e) => setEmailVerified(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label="Email Verified"
+                    />
+                  </Box>
+                </Grid>
+                <Grid item xs={6}>
+                  {isAdmin && (
+                    <>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={notificationsEnabled}
+                            onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                            color="primary"
+                          />
+                        }
+                        label="Enable Notifications"
+                      />
+                      <Box mt={2}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={accessToSSOConfig}
+                              onChange={(e) => setAccessToSSOConfig(e.target.checked)}
+                              color="primary"
+                            />
+                          }
+                          label="Enable access to IdP configuration"
+                        />
+                      </Box>
+                    </>
+                  )}
+                </Grid>
               </Grid>
-            )}
+            </Grid>
             <Grid item xs={12}>
               <PrimaryButton
                 variant="contained"

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,23 +24,19 @@ import (
 func (a *API) createGroup(c *gin.Context) {
 	var input GroupInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("malformed request body: "+err.Error()))
 		return
 	}
 
-	group, err := a.service.CreateGroup(input.Data.Attributes.Name)
+	group, err := a.service.CreateGroup(
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Members,
+		input.Data.Attributes.Catalogues,
+		input.Data.Attributes.DataCatalogues,
+		input.Data.Attributes.ToolCatalogues,
+	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
@@ -69,7 +66,7 @@ func (a *API) getGroup(c *gin.Context) {
 		return
 	}
 
-	group, err := a.service.GetGroupByID(uint(id))
+	group, err := a.service.GetGroupByID(uint(id), "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -98,34 +95,26 @@ func (a *API) getGroup(c *gin.Context) {
 func (a *API) updateGroup(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid group ID"}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("invalid group ID"))
 		return
 	}
 
 	var input GroupInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("malformed request body: "+err.Error()))
 		return
 	}
 
-	group, err := a.service.UpdateGroup(uint(id), input.Data.Attributes.Name)
+	group, err := a.service.UpdateGroup(
+		uint(id),
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Members,
+		input.Data.Attributes.Catalogues,
+		input.Data.Attributes.DataCatalogues,
+		input.Data.Attributes.ToolCatalogues,
+	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
@@ -180,8 +169,13 @@ func (a *API) deleteGroup(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) listGroups(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	searchTerm := c.Query("search")
+	sort := c.Query("sort")
+	if sort == "" {
+		sort = "id"
+	}
 
-	groups, totalCount, totalPages, err := a.service.GetAllGroups(pageSize, pageNumber, all)
+	groups, memberCounts, totalCount, totalPages, err := a.service.GetGroupsWithMemberCounts(searchTerm, pageSize, pageNumber, all, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -194,44 +188,7 @@ func (a *API) listGroups(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
-}
-
-// @Summary Search groups by name
-// @Description Search for groups using a name stub
-// @Tags groups
-// @Accept json
-// @Produce json
-// @Param name query string true "Name stub to search for"
-// @Success 200 {array} GroupResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /groups/search [get]
-// @Security BearerAuth
-func (a *API) searchGroups(c *gin.Context) {
-	nameStub := c.Query("name")
-	if nameStub == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Name stub is required"}},
-		})
-		return
-	}
-
-	groups, err := a.service.SearchGroupsByNameStub(nameStub)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroups(groups)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeGroupsForList(groups, memberCounts)})
 }
 
 // @Summary Add a user to a group
@@ -366,7 +323,9 @@ func (a *API) listGroupUsers(c *gin.Context) {
 		return
 	}
 
-	users, err := a.service.GetGroupUsers(uint(groupID))
+	pageSize, pageNumber, all := getPaginationParams(c)
+
+	users, totalCount, totalPages, err := a.service.GetGroupUsers(uint(groupID), pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -377,19 +336,122 @@ func (a *API) listGroupUsers(c *gin.Context) {
 		return
 	}
 
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
 }
 
+// @Summary Update group users
+// @Description Update the users in a specific group
+// @Tags groups
+// @Accept json
+// @Produce json
+// @Param id path int true "Group ID"
+// @Param users body GroupUsersInput true "Users to update"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /groups/{id}/users [put]
+// @Security BearerAuth
+func (a *API) updateGroupUsers(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid group ID"))
+		return
+	}
+
+	var input GroupUsersInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Malformed request body"))
+		return
+	}
+
+	err = a.service.UpdateGroupUsers(uint(id), input.Data.Attributes.Members)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group users: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func serializeGroupForList(group *models.Group, memberCounts []models.GroupMemberCount) GroupListResponse {
+	response := GroupListResponse{
+		Type: "groups",
+		ID:   strconv.FormatUint(uint64(group.ID), 10),
+	}
+
+	response.Attributes.Name = group.Name
+	response.Attributes.UserCount = group.GetMembersCount(memberCounts)
+	response.Attributes.CatalogueCount = group.GetCataloguesCount()
+	response.Attributes.DataCatalogueCount = group.GetDataCataloguesCount()
+	response.Attributes.ToolCatalogueCount = group.GetToolCataloguesCount()
+
+	catalogueNames := make([]string, len(group.Catalogues))
+	for i, cat := range group.Catalogues {
+		catalogueNames[i] = cat.Name
+	}
+
+	response.Attributes.CatalogueNames = catalogueNames
+
+	dataCatalogueNames := make([]string, len(group.DataCatalogues))
+	for i, cat := range group.DataCatalogues {
+		dataCatalogueNames[i] = cat.Name
+	}
+
+	response.Attributes.DataCatalogueNames = dataCatalogueNames
+
+	toolCatalogueNames := make([]string, len(group.ToolCatalogues))
+	for i, cat := range group.ToolCatalogues {
+		toolCatalogueNames[i] = cat.Name
+	}
+
+	response.Attributes.ToolCatalogueNames = toolCatalogueNames
+
+	return response
+}
+
+func serializeGroupsForList(groups models.Groups, memberCounts []models.GroupMemberCount) []GroupListResponse {
+	result := make([]GroupListResponse, len(groups))
+	for i, group := range groups {
+		result[i] = serializeGroupForList(&group, memberCounts)
+	}
+
+	return result
+}
+
 func serializeGroup(group *models.Group) GroupResponse {
-	return GroupResponse{
+	response := GroupResponse{
 		Type: "groups",
 		ID:   strconv.FormatUint(uint64(group.ID), 10),
 		Attributes: struct {
-			Name string `json:"name"`
+			Name           string                  `json:"name"`
+			Users          []UserResponse          `json:"users,omitempty"`
+			Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
+			DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
+			ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
 		}{
 			Name: group.Name,
 		},
 	}
+
+	if len(group.Users) > 0 {
+		response.Attributes.Users = serializeUsers(group.Users)
+	}
+
+	if len(group.Catalogues) > 0 {
+		response.Attributes.Catalogues = serializeCatalogues(group.Catalogues)
+	}
+
+	if len(group.DataCatalogues) > 0 {
+		response.Attributes.DataCatalogues = serializeDataCatalogues(group.DataCatalogues)
+	}
+
+	if len(group.ToolCatalogues) > 0 {
+		response.Attributes.ToolCatalogues = serializeToolCatalogues(group.ToolCatalogues, nil)
+	}
+
+	return response
 }
 
 func serializeGroups(groups models.Groups) []GroupResponse {
@@ -920,6 +982,45 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues, a.config.DB)})
+}
+
+// @Summary Update group catalogues
+// @Description Update the catalogues in a specific group
+// @Tags groups
+// @Accept json
+// @Produce json
+// @Param id path int true "Group ID"
+// @Param catalogues body GroupCataloguesRequest true "Catalogues to update"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /groups/{id}/catalogues [put]
+// @Security BearerAuth
+func (a *API) updateGroupCatalogues(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid group ID"))
+		return
+	}
+
+	var req GroupCataloguesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Malformed request body"))
+		return
+	}
+
+	err = a.service.UpdateGroupCatalogues(
+		uint(id),
+		req.Data.Attributes.Catalogues,
+		req.Data.Attributes.DataCatalogues,
+		req.Data.Attributes.ToolCatalogues,
+	)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group catalogues: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 // Helper function to serialize ToolCatalogues

@@ -55,6 +55,7 @@ import ChatView from "../portal/components/ChatView";
 import PortalDashboard from "../portal/pages/PortalDashboard";
 import LLMListView from "../portal/components/LLMListView";
 import DataSourceListView from "../portal/components/DataSourceListView";
+import ToolListView from "../portal/components/ToolListView";
 import AppBuilder from "../portal/components/AppBuilder";
 import AppListView from "../portal/components/AppListView";
 import AppDetailView from "../portal/components/AppDetailView";
@@ -94,6 +95,10 @@ export const protectedRoutes = [
     element: <DataSourceListView />,
   },
   {
+    path: "/portal/tools/:catalogueId",
+    element: <ToolListView />,
+  },
+  {
     path: "/portal/app/new",
     element: <AppBuilder />,
   },
@@ -109,7 +114,7 @@ export const protectedRoutes = [
   // Admin routes
   {
     path: "/admin",
-    element: <Navigate to="/admin/dashboard" replace />,
+    element: <Navigate to="/admin" replace />,
   },
   {
     path: "/admin/dashboard",

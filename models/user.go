@@ -3,9 +3,20 @@ package models
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
+)
+
+const (
+	SuperAdminID   uint = 1
+	RoleSuperAdmin      = "Super Admin"
+	RoleAdmin           = "Admin"
+	RoleDeveloper       = "Developer"
+	RoleChatUser        = "Chat user"
 )
 
 type User struct {
@@ -22,8 +33,11 @@ type User struct {
 	IsAdmin              bool
 	ShowPortal           bool
 	ShowChat             bool
+	AccessToSSOConfig    bool
+	SkipQuickStart       bool
 	APIKey               string
-	NotificationsEnabled bool `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
+	NotificationsEnabled bool    `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
+	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
 }
 
 type Users []User
@@ -48,8 +62,14 @@ func (u *User) GenerateAPIKey() error {
 	return nil
 }
 
-func (u *User) Get(db *gorm.DB, id uint) error {
-	return db.First(u, id).Error
+func (u *User) Get(db *gorm.DB, id uint, preloads ...string) error {
+	query := db.Model(u)
+
+	for _, preload := range preloads {
+		query = query.Preload(preload)
+	}
+
+	return query.First(u, id).Error
 }
 
 func (u *User) GetByAPIKey(db *gorm.DB, apiKey string) error {
@@ -86,42 +106,6 @@ func (u *User) SetPassword(password string) error {
 
 	u.Password = hashed
 	return nil
-}
-
-func (u *Users) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
-	var totalCount int64
-	query := db.Model(&User{})
-
-	// Handle sorting
-	if sort != "" {
-		if sort[0] == '-' {
-			query = query.Order(sort[1:] + " DESC")
-		} else {
-			query = query.Order(sort + " ASC")
-		}
-	} else {
-		query = query.Order("id ASC") // Default sort by ID ascending
-	}
-
-	if err := query.Count(&totalCount).Error; err != nil {
-		return 0, 0, err
-	}
-
-	var totalPages int
-	if pageSize > 0 {
-		totalPages = int(totalCount) / pageSize
-		if int(totalCount)%pageSize != 0 {
-			totalPages++
-		}
-	}
-
-	if !all && pageSize > 0 {
-		offset := (pageNumber - 1) * pageSize
-		query = query.Offset(offset).Limit(pageSize)
-	}
-
-	err := query.Find(u).Error
-	return totalCount, totalPages, err
 }
 
 func (u *Users) GetByGroupID(db *gorm.DB, groupID uint) error {
@@ -206,4 +190,171 @@ func (u *Users) CountActive(db *gorm.DB) (int64, error) {
 	var count int64
 	err := db.Model(&User{}).Where("deleted_at IS NULL").Count(&count).Error
 	return count, err
+}
+
+func (u *User) UpdateGroupMemberships(db *gorm.DB, groupIDs ...string) error {
+	var groupUintIDs []uint
+	for _, idStr := range groupIDs {
+		id, err := strconv.ParseUint(idStr, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid group ID: %s", idStr)
+		}
+		groupUintIDs = append(groupUintIDs, uint(id))
+	}
+
+	var groups []Group
+	if err := db.Where("id IN ?", groupUintIDs).Find(&groups).Error; err != nil {
+		return fmt.Errorf("failed to find groups: %w", err)
+	}
+
+	if err := db.Model(u).Association("Groups").Replace(groups); err != nil {
+		return fmt.Errorf("failed to update user group memberships: %w", err)
+	}
+
+	return nil
+}
+
+func (u *User) ParseGroupAssociations(groupIDs []uint) {
+	u.Groups = make([]Group, 0, len(groupIDs))
+
+	for _, groupID := range groupIDs {
+		u.Groups = append(u.Groups, Group{ID: groupID})
+	}
+}
+
+func (u *User) ExtractGroupIDs() []uint {
+	groupIDs := make([]uint, len(u.Groups))
+
+	for i, group := range u.Groups {
+		groupIDs[i] = group.ID
+	}
+
+	return groupIDs
+}
+
+func (u *User) GetGroupsToUpdate(groupIDs []uint) []Group {
+	currentGroupIDs := u.ExtractGroupIDs()
+
+	if SameIDs(currentGroupIDs, groupIDs) {
+		return nil
+	}
+
+	u.ParseGroupAssociations(groupIDs)
+
+	return u.Groups
+}
+
+func (u *User) ReplaceGroupAssociation(db *gorm.DB, groups []Group) error {
+	return db.Model(u).Association("Groups").Replace(groups)
+}
+
+func (u *User) DeleteGroupAssociation(db *gorm.DB) error {
+	return db.Model(u).Association("Groups").Clear()
+}
+
+func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
+	email = strings.ToLower(email)
+
+	var count int64
+	query := db.Model(&User{}).Where("LOWER(email) = ?", email)
+
+	if userID != 0 {
+		query = query.Where("id != ?", userID)
+	}
+
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count == 0, nil
+}
+
+func SetSkipQuickStartForUser(db *gorm.DB, userID uint) error {
+	return db.Model(&User{}).Where("id = ?", userID).Update("skip_quick_start", true).Error
+}
+
+type UserCounts struct {
+	UserCount      int64
+	AdminCount     int64
+	DeveloperCount int64
+	ChatUserCount  int64
+}
+
+func GetUserCounts(db *gorm.DB) (UserCounts, error) {
+	var results UserCounts
+	err := db.Model(&User{}).
+		Select(`
+			COUNT(*) as user_count,
+			SUM(CASE WHEN is_admin = true THEN 1 ELSE 0 END) as admin_count,
+			SUM(CASE WHEN is_admin = false AND show_portal = true THEN 1 ELSE 0 END) as developer_count,
+			SUM(CASE WHEN is_admin = false AND show_portal = false AND show_chat = true THEN 1 ELSE 0 END) as chat_user_count
+		`).
+		Scan(&results).Error
+
+	return results, err
+}
+
+func GetUserGroupCount(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Model(&Group{}).Count(&count).Error
+
+	return count, err
+}
+
+func (u *User) GetRole() string {
+	switch {
+	case u.IsAdmin && u.ID == SuperAdminID:
+		return RoleSuperAdmin
+	case u.IsAdmin:
+		return RoleAdmin
+	case u.ShowPortal:
+		return RoleDeveloper
+	default:
+		return RoleChatUser
+	}
+}
+
+func (u *Users) GetGroupUsersPaginated(db *gorm.DB, groupID uint, pageSize, pageNumber int, all bool) (int64, int, error) {
+	query := db.Model(&User{}).
+		Joins("JOIN user_groups ON user_groups.user_id = users.id").
+		Where("user_groups.group_id = ?", groupID)
+
+	query, totalCount, totalPages, err := PaginateAndSort(query, pageSize, pageNumber, all, "id")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = query.Find(u).Error
+	return totalCount, totalPages, err
+}
+
+type UserQueryParams struct {
+	Search         string
+	ExcludeGroupID uint
+	PageSize       int
+	PageNumber     int
+	All            bool
+	Sort           string
+}
+
+func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, error) {
+	query := db.Model(&User{})
+
+	if params.Search != "" {
+		searchTerm := "%" + params.Search + "%"
+		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
+	}
+
+	if params.ExcludeGroupID > 0 {
+		query = query.Joins("LEFT JOIN user_groups ON user_groups.user_id = users.id AND user_groups.group_id = ?", params.ExcludeGroupID).
+			Where("user_groups.group_id IS NULL")
+	}
+
+	query, totalCount, totalPages, err := PaginateAndSort(query, params.PageSize, params.PageNumber, params.All, params.Sort)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = query.Find(u).Error
+	return totalCount, totalPages, err
 }

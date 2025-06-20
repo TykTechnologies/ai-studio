@@ -1,590 +1,130 @@
-# Filters
+## Filters Functionality
 
-## Overview
-Filters are a core component of the Midsommar system that provide a way to process and modify data or behavior in various contexts. They are primarily used in conjunction with Tools and Chats to control and customize functionality.
+**1. Overview & Purpose**
 
-## Data Model
+The Filters feature allows administrators to define and apply custom logic to intercept and potentially block or modify requests flowing through the Midsommar proxy before they reach the upstream Large Language Model (LLM) vendor. Filters act as policy enforcement points.
 
-### Filter Structure
-```go
-type Filter struct {
-    ID          uint   // Primary key
-    Name        string // Name of the filter
-    Description string // Description of what the filter does
-    Script      []byte // The actual filter implementation script
-}
+**Key Objectives:**
+
+*   **Policy Enforcement:** Implement custom rules based on request content (payload). Examples include data loss prevention (DLP), content moderation, prompt injection detection, or enforcing specific formatting.
+*   **Request Blocking:** Prevent non-compliant requests from reaching the LLM vendor, returning an error (HTTP 403 Forbidden) to the client.
+*   **Flexibility:** Allow administrators to write custom logic using a scripting language (Tengo) to address diverse policy needs.
+*   **Granular Application:** Apply filters globally (via proxy configuration, though less explicit in current findings) or specifically to individual LLMs or Chats.
+
+**User Roles & Interactions:**
+
+*   **Administrator:** Creates, manages, and assigns Filters via API/UI. Defines the script logic for policy enforcement.
+*   **AI Developer/App Owner:** Associates existing Filters with their Chats or uses LLMs that have Filters applied.
+*   **End User (Chat):** Interacts indirectly; may encounter a "Policy error" (HTTP 403) if their request violates a Filter's rules.
+
+**2. Architecture & Data Flow**
+
+**Core Components & Interactions:**
+
+*   **API (`api/filter_handlers.go`):** Provides CRUD endpoints (`/filters`) for managing Filter resources (Name, Description, Script).
+*   **Service (`services/filter_service.go`):** Implements the business logic for managing Filters (Create, Get, Update, Delete, List). Interacts with the Database.
+*   **Database (`models/filter.go`):** Stores Filter definitions (`filters` table), including the `script` (byte array containing Tengo code). Also stores associations (e.g., `llm_filters` join table for LLM-Filter links, `chat_filters` for Chat-Filter links).
+*   **Proxy (`proxy/proxy.go`):** The central component that intercepts LLM requests and applies Filters.
+    *   Retrieves associated Filters (e.g., `llm.Filters` for the target LLM).
+    *   *Dependency:* Uses the **Scripting Engine** (`scripting/scripting.go`) to execute each Filter's script.
+*   **Scripting Engine (`scripting/scripting.go`):** Responsible for executing Filter scripts.
+    *   Uses the `tengo` scripting language interpreter.
+    *   Injects the request `payload` (as a string) into the script's context.
+    *   *Dependency:* Uses **Script Extensions** (`scriptExtensions/script_extensions.go`) to provide custom functions (`makeHTTPRequest`, `llm`) callable from within the script.
+    *   Expects the script to return a boolean `result` variable.
+*   **Script Extensions (`scriptExtensions/script_extensions.go`):** Provides custom functions accessible within Filter scripts.
+    *   `makeHTTPRequest`: Allows scripts to make external HTTP calls.
+    *   `llm`: Allows scripts to call Midsommar's LLM service, potentially invoking other models.
+*   **Models (`models/llm.go`, `models/chat.go`):** Define the relationships between LLMs/Chats and Filters (many-to-many).
+
+**Data Flow (Simplified):**
+
+```mermaid
+flowchart LR
+    subgraph Filter Management
+        direction TB
+        AdminUI["Admin UI/API Client"] -- "1: CRUD Request" --> API["API Endpoints (/filters)"];
+        API -- "2: Call Service" --> SVC["Filter Service"];
+        SVC -- "3: Persist/Retrieve" --> DB["(Database - filters)"];
+    end
+
+    subgraph Request Filtering
+        direction LR
+        A["LLM Request (Client -> Proxy)"] --> B{Proxy};
+        B -- "4: Identify Target LLM/Chat" --> C["Fetch LLM/Chat Data"];
+        C -- "5: Get Associated Filters" --> DB;
+        B -- "6: For each Filter" --> D["Scripting Engine"];
+        D -- "7: Load Filter Script" --> DB;
+        D -- "8: Inject Payload & Extensions" --> SE["Script Extensions"];
+        SE -- "9: Provide 'makeHTTPRequest', 'llm'" --> D;
+        D -- "10: Execute Script (Tengo)" --> ScriptExec;
+        ScriptExec -- "11: Get 'result' variable" --> D;
+        D -- "12a: result == true" --> E{Forward Request};
+        D -- "12b: result == false" --> F["Return HTTP 403 Policy Error"];
+        E --> G["LLM Vendor API"];
+        G --> B;
+        B --> H["Client Response"];
+        F --> H;
+    end
+
+    style F fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
-## Core Functionality
-
-### Filter Management
-1. **CRUD Operations**
-   - Create new filters with name, description, and script
-   - Retrieve filters by ID or name
-   - Update existing filters
-   - Delete filters
-   - List all filters with pagination support
-
-2. **Tool Integration**
-   - Filters can be associated with Tools through a many-to-many relationship
-   - Tools can have multiple filters
-   - Filters can be shared across multiple tools
-
-3. **Chat Integration**
-   - Filters can be associated with Chats
-   - Multiple filters can be applied to a single chat
-   - Filters affect chat behavior through their scripts
-
-## Service Layer
-
-### Filter Service
-The Filter Service provides the following operations:
-
-1. **Filter Creation**
-   ```go
-   CreateFilter(name, description string, script []byte) (*Filter, error)
-   ```
-
-2. **Filter Retrieval**
-   ```go
-   GetFilterByID(id uint) (*Filter, error)
-   GetFilterByName(name string) (*Filter, error)
-   GetAllFilters(pageSize int, pageNumber int, all bool) ([]Filter, int64, int, error)
-   ```
-
-3. **Filter Updates**
-   ```go
-   UpdateFilter(id uint, name, description string, script []byte) (*Filter, error)
-   ```
-
-4. **Filter Deletion**
-   ```go
-   DeleteFilter(id uint) error
-   ```
-
-### Tool Service Filter Operations
-1. **Filter Association Management**
-   ```go
-   AddFilterToTool(toolID uint, filterID uint) error
-   RemoveFilterFromTool(toolID uint, filterID uint) error
-   GetToolFilters(toolID uint) ([]Filter, error)
-   SetToolFilters(toolID uint, filterIDs []uint) error
-   ```
-
-## Script Execution Engine
-
-### Scripting Package
-The `scripting` package provides the core functionality for executing filter scripts:
-
-1. **Script Runner**
-   ```go
-   scripting.NewScriptRunner(script []byte) *ScriptRunner
-   ```
-   - Creates a new script execution environment
-   - Handles script lifecycle and execution context
-   - Provides isolation between different script executions
-
-2. **Execution Contexts**
-   - Chat Session Context
-   - Proxy Context
-   - Tool Context
-
-### Integration Points
-
-#### 1. Chat Session Integration
-```go
-func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service, withFilters []*models.Filter, userID *uint, sessionID *string) (*ChatSession, error)
-```
-- Filters are initialized at chat session creation
-- Scripts are executed during message processing
-- Filters can modify chat behavior and message content
-
-#### 2. Proxy Integration
-```go
-func (p *Proxy) executeFilters(filters []*models.Filter, ctx context.Context) error
-```
-- Filters are executed in the proxy layer
-- Can modify request/response behavior
-- Supports request validation and transformation
-
-## User Interface
-
-### Admin Frontend
-Located in `ui/admin-frontend/src/admin/pages/FilterList.js`:
-
-1. **Filter Management**
-   - List view of all filters
-   - Create/Edit/Delete operations
-   - Filter script editor
-   - Filter association management
-
-2. **Script Editor Features**
-   - Syntax highlighting
-   - Script validation
-   - Template support
-   - Error handling
-
-## Usage Contexts
-
-### 1. Tool Enhancement
-- Filters can be attached to tools to modify their behavior
-- Multiple filters can be chained together on a single tool
-- Filters can be added or removed dynamically
-
-### 2. Chat Processing
-- Filters can be applied to chats to modify message processing
-- Chat creation supports filter configuration through filterIDs
-- Filters affect RAG (Retrieval-Augmented Generation) behavior
-
-## Implementation Details
-
-### 1. Database Schema
-- Uses GORM for database operations
-- Many-to-many relationships handled through junction tables:
-  - `tool_filters` for Tool-Filter associations
-  - Implicit filter associations in Chat model
-
-### 2. Script Execution
-- Filters store their implementation logic in the Script field
-- Scripts are stored as byte arrays for flexibility in implementation
-- Script execution context depends on the integration point (Tool vs Chat)
-
-## Security Considerations
-
-1. **Access Control**
-   - Filter operations should be restricted to authorized users
-   - Filter scripts should be validated before execution
-   - Filter associations should respect tool and chat access permissions
-
-2. **Script Safety**
-   - Script content should be validated before storage
-   - Execution environment should be properly sandboxed
-   - Resource limits should be enforced during script execution
-
-## Integration Points
-
-1. **LLM Service**
-   - Filters can be applied to LLM configurations
-   - Supports vendor-specific filter implementations
-
-2. **Tool Service**
-   - Filters modify tool behavior and capabilities
-   - Supports dynamic filter chain configuration
-
-3. **Chat Service**
-   - Filters process chat messages and responses
-   - Affects RAG behavior and tool interactions
-
-## Testing
-
-### 1. Unit Tests
-- `services/filter_test.go`: Service layer tests
-- `api/filter_handlers_test.go`: API endpoint tests
-- `scripting/scripting_test.go`: Script execution tests
-
-### 2. Integration Tests
-- Filter execution in chat sessions
-- Filter execution in proxy layer
-- Tool-filter interaction tests
-
-## Error Handling
-
-### 1. Script Execution Errors
-```go
-cs.errors <- fmt.Errorf("error creating script runner")
-```
-- Script compilation errors
-- Runtime errors
-- Resource limit violations
-
-### 2. Service Layer Errors
-- Database operation errors
-- Validation errors
-- Permission errors
-
-## Performance Considerations
-
-### 1. Script Execution
-- Script execution is isolated per context
-- Resource limits are enforced
-- Caching of compiled scripts when possible
-
-### 2. Database Operations
-- Efficient filter retrieval for associated entities
-- Pagination support for large filter lists
-- Optimized many-to-many relationships
-
-## Implementation Status
-
-### Completed Features
-
-1. **Core Filter Implementation**
-   - `models/filters.go` - Core filter model and database operations
-   - `services/filter_service.go` - Filter service implementation
-   - `services/filter_test.go` - Filter service tests
-
-2. **API Layer**
-   - `api/filter_handlers.go` - REST API handlers for filters
-   - `api/filter_handlers_test.go` - API handler tests
-
-3. **Scripting Engine**
-   - `scripting/scripting.go` - Core scripting engine implementation
-   - `scripting/scripting_test.go` - Scripting engine tests
-   - `scriptExtensions/script_extensions.go` - Script extensions and utilities
-
-4. **Documentation**
-   - `docs/site/content/docs/filters.md` - Filter documentation
-   - `features/Filters.md` - Filter feature specification
-
-5. **UI Components**
-   - `ui/admin-frontend/src/admin/components/filters/FilterDetails.js` - Filter detail view
-   - `ui/admin-frontend/src/admin/components/filters/FilterForm.js` - Filter creation/editing form
-   - `ui/admin-frontend/src/admin/pages/FilterList.js` - Filter list page
-
-6. **Integration Files**
-   - `services/tool_service.go` - Tool-Filter integration
-   - `services/chat_service.go` - Chat-Filter integration
-   - `proxy/proxy.go` - Proxy layer filter integration
-   - `chat_session/chat_session.go` - Chat session filter integration
-
-7. **Model Integration**
-   - `models/tool.go` - Tool model with filter associations
-   - `models/chat.go` - Chat model with filter associations
-
-8. **Core Data Model**
-   ```go
-   type Filter struct {
-       gorm.Model
-       ID          uint   `json:"id" gorm:"primaryKey"`
-       Name        string `json:"name"`
-       Description string `json:"description"`
-       Script      []byte `json:"script"`
-   }
-   ```
-   - Basic CRUD operations implemented
-   - Database operations with proper error handling
-
-2. **API Layer** (`api/filter_handlers.go`)
-   - RESTful endpoints following JSON:API specification
-   - Complete CRUD operations:
-     - POST /filters
-     - GET /filters/{id}
-     - PATCH /filters/{id}
-     - DELETE /filters/{id}
-     - GET /filters
-   - Pagination support with X-Total-Count and X-Total-Pages headers
-   - Proper error handling and validation
-
-3. **Tool Integration**
-   - Database Schema (`models/tool.go`):
-     ```go
-     type Tool struct {
-         // ...
-         Filters []Filter `gorm:"many2many:tool_filters;" json:"filters"`
-         // ...
-     }
-     ```
-   - Service Methods (`services/tool_service.go`):
-     ```go
-     AddFilterToTool(toolID uint, filterID uint) error
-     RemoveFilterFromTool(toolID uint, filterID uint) error
-     GetToolFilters(toolID uint) ([]Filter, error)
-     SetToolFilters(toolID uint, filterIDs []uint) error
-     ```
-
-4. **Frontend Implementation**
-   - List View (`ui/admin-frontend/src/admin/pages/FilterList.js`):
-     - Paginated list of filters
-     - Sorting capabilities
-     - Basic CRUD operations
-   - Filter Form (`ui/admin-frontend/src/admin/components/filters/FilterForm.js`):
-     - Create/Edit functionality
-     - Basic validation
-     - Base64 encoding/decoding of scripts
-   - Filter Details (`ui/admin-frontend/src/admin/components/filters/FilterDetails.js`):
-     - Detailed view of filter properties
-     - Script display in monospace font
-
-5. **Script Execution** (`scripting/scripting.go`)
-   - Tengo script execution engine
-   - Concurrent execution support via mutex
-   - Basic error handling
-   - Support for custom modules
-
-### Pending Implementation
-
-1. **Frontend Enhancements**
-   - Script Editor (`ui/admin-frontend/src/admin/components/filters/FilterEditor.js`) [TODO]:
-     ```jsx
-     const FilterEditor = () => {
-       // Monaco Editor integration
-       // Syntax highlighting for Tengo
-       // Real-time validation
-       // Template support
-     }
-     ```
-   - Script Testing Interface (`ui/admin-frontend/src/admin/components/filters/FilterTester.js`) [TODO]:
-     ```jsx
-     const FilterTester = () => {
-       // Test payload input
-       // Execution results display
-       // Performance metrics
-     }
-     ```
-
-2. **Script Execution Enhancements** (`scripting/scripting.go`) [TODO]:
-   ```go
-   type ScriptRunner struct {
-       mu            sync.Mutex
-       source        []byte
-       compiledCache *tengo.Compiled
-       resourceLimits ResourceLimits
-   }
-
-   type ResourceLimits struct {
-       MaxExecutionTime time.Duration
-       MaxMemoryUsage   int64
-       MaxOperations    int64
-   }
-   ```
-
-3. **Chat Integration** [TODO]:
-   - Chat Session Filter (`chat_session/filter_executor.go`):
-     ```go
-     type FilterExecutor interface {
-         ExecuteFilters(ctx context.Context, msg *models.Message) error
-         ModifyRAGBehavior(ctx context.Context) error
-     }
-     ```
-   - Message Processing (`chat_session/message_processor.go`):
-     ```go
-     type MessageProcessor struct {
-         filters []models.Filter
-         executor FilterExecutor
-     }
-     ```
-
-4. **Monitoring System** (`analytics/filter_analytics.go`) [TODO]:
-   ```go
-   type FilterAnalytics struct {
-       ExecutionMetrics map[uint]*Metrics
-       UsageStats       map[uint]*Usage
-   }
-
-   type Metrics struct {
-       ExecutionTime    []time.Duration
-       MemoryUsage     []int64
-       SuccessRate     float64
-       LastExecuted    time.Time
-   }
-   ```
-
-5. **Version Control** (`models/filter_version.go`) [TODO]:
-   ```go
-   type FilterVersion struct {
-       gorm.Model
-       FilterID    uint
-       Version     int
-       Script      []byte
-       ChangedBy   string
-       ChangeLog   string
-       DeployedAt  *time.Time
-   }
-   ```
-
-6. **Testing Infrastructure** [TODO]:
-   - Integration Tests (`api/filter_handlers_test.go`):
-     ```go
-     func TestFilterToolIntegration(t *testing.T)
-     func TestFilterChatIntegration(t *testing.T)
-     func TestFilterPerformance(t *testing.T)
-     ```
-   - Security Tests (`scripting/security_test.go`):
-     ```go
-     func TestScriptSandboxing(t *testing.T)
-     func TestResourceLimits(t *testing.T)
-     ```
-   - Edge Cases (`models/filters_test.go`):
-     ```go
-     func TestFilterEdgeCases(t *testing.T)
-     func TestConcurrentAccess(t *testing.T)
-     ```
-
-7. **Documentation** [TODO]:
-   - API Documentation (`docs/site/content/docs/filters.md`)
-   - Script Writing Guide (`docs/site/content/docs/filter-scripts.md`)
-   - Integration Guide (`docs/site/content/docs/filter-integration.md`)
-   - Best Practices (`docs/site/content/docs/filter-best-practices.md`)
-
-### Required Changes
-
-1. **Database Migrations**:
-   ```sql
-   -- Add version control support
-   CREATE TABLE filter_versions (
-       id SERIAL PRIMARY KEY,
-       filter_id INTEGER REFERENCES filters(id),
-       version INTEGER,
-       script BYTEA,
-       changed_by VARCHAR(255),
-       change_log TEXT,
-       deployed_at TIMESTAMP
-   );
-
-   -- Add analytics support
-   CREATE TABLE filter_metrics (
-       id SERIAL PRIMARY KEY,
-       filter_id INTEGER REFERENCES filters(id),
-       execution_time INTEGER,
-       memory_usage INTEGER,
-       success BOOLEAN,
-       executed_at TIMESTAMP
-   );
-   ```
-
-2. **Configuration Updates** (`config/config.go`):
-   ```go
-   type FilterConfig struct {
-       MaxExecutionTime    time.Duration `env:"FILTER_MAX_EXECUTION_TIME" default:"5s"`
-       MaxMemoryUsage     int64         `env:"FILTER_MAX_MEMORY_MB" default:"100"`
-       EnableVersioning   bool          `env:"FILTER_ENABLE_VERSIONING" default:"true"`
-       EnableAnalytics    bool          `env:"FILTER_ENABLE_ANALYTICS" default:"true"`
-   }
-   ```
-
-
-## Codebase Structure
-
-This section provides a comprehensive overview of all files involved in the Filter system, organized by their purpose and responsibility.
-
-### Core Models and Types
-
-1. **Models**
-   - `models/filters.go` - Core Filter struct and CRUD operations
-   - `models/tool.go` - Tool-filter associations and management
-   - `models/chat.go` - Chat-filter integration
-   - `models/user_message.go` - Message filtering support
-
-2. **Scripting Engine**
-   - `scripting/scripting.go` - Core script execution engine
-   - `scripting/scripting_test.go` - Script execution testing
-   - `scriptExtensions/script_extensions.go` - Custom script extensions
-
-### Services Layer
-
-1. **Filter Services**
-   - `services/filter_service.go` - Main filter business logic
-   - `services/filter_test.go` - Service layer testing
-
-2. **Integration Services**
-   - `services/tool_service.go` - Tool-filter integration
-   - `services/chat_service.go` - Chat session filter integration
-   - `services/notification_service.go` - Filter event notifications
-
-### API Layer
-
-1. **Handlers**
-   - `api/filter_handlers.go` - Filter management endpoints
-   - `api/filter_handlers_test.go` - API endpoint testing
-
-2. **Integration Handlers**
-   - `api/tool_handlers.go` - Tool-filter operations
-   - `api/chat_handlers.go` - Chat filter operations
-   - `api/chat_session_handler.go` - Chat session filter management
-
-### Frontend Components
-
-1. **Filter Management**
-   - `ui/admin-frontend/src/admin/pages/FilterList.js` - Filter listing page
-   - `ui/admin-frontend/src/admin/components/filters/FilterForm.js` - Filter creation/editing
-   - `ui/admin-frontend/src/admin/components/filters/FilterDetails.js` - Filter details view
-
-### Integration Points
-
-1. **Chat System**
-   - `chat_session/chat_session.go` - Chat session filter execution
-   - `chat_session/gorm_history.go` - Filter history tracking
-
-2. **Proxy Layer**
-   - `proxy/proxy.go` - Request/response filtering
-   - `proxy/analyze_utils.go` - Filter analysis utilities
-
-### Documentation
-
-1. **Feature Specifications**
-   - `features/Filters.md` - Main filter specification
-   - `docs/site/content/docs/filters.md` - Filter documentation
-
-2. **API Documentation**
-   - `docs/swagger/docs.go` - API documentation
-   - `docs/site/content/docs/filter-scripts.md` - Script writing guide
-   - `docs/site/content/docs/filter-integration.md` - Integration guide
-   - `docs/site/content/docs/filter-best-practices.md` - Best practices
-
-### Testing Infrastructure
-
-1. **Unit Tests**
-   - `models/filters_test.go` - Model testing
-   - `services/filter_test.go` - Service testing
-   - `api/filter_handlers_test.go` - API testing
-
-2. **Integration Tests**
-   - `scripting/scripting_test.go` - Script execution testing
-   - `chat_session/chat_session_test.go` - Chat integration testing
-   - `proxy/proxy_test.go` - Proxy integration testing
-
-### File Responsibilities
-
-Each file in the codebase serves a specific purpose in the filter ecosystem:
-
-1. **Core Functionality:**
-   - Model files define data structures and relationships
-   - Service files implement business logic
-   - Handler files expose external API endpoints
-
-2. **Integration:**
-   - Chat session files manage interactive filtering
-   - Proxy files handle request/response filtering
-   - Tool service manages filter associations
-
-3. **Frontend:**
-   - List component provides filter management
-   - Form component handles filter creation/editing
-   - Details component shows filter information
-
-4. **Documentation:**
-   - Feature specs provide technical details
-   - API docs guide implementation
-   - Best practices guide development
-
-5. **Testing:**
-   - Unit tests verify core functionality
-   - Integration tests ensure system cohesion
-   - Performance tests validate efficiency
-
-This structure ensures:
-- Clear separation of concerns
-- Comprehensive testing coverage
-- Complete documentation
-- Maintainable codebase
-- Scalable architecture
-
-## Future Considerations
-
-1. **Filter Categories**
-   - Implement filter categorization for better organization
-   - Support filter tagging for improved searchability
-
-2. **Filter Templates**
-   - Provide pre-built filter templates for common use cases
-   - Support filter composition from existing filters
-
-3. **Advanced Analytics**
-   - Machine learning for filter optimization
-   - Usage pattern analysis
-   - Performance prediction
-
-4. **Collaboration Features**
-   - Filter sharing between teams
-   - Collaborative editing
-   - Access control granularity
+**Flow Explanation:**
+
+1.  **Management:** An Admin uses the API (likely via a UI) to Create/Read/Update/Delete Filters. The API calls the `Filter Service`.
+2.  The `Filter Service` interacts with the `Database` to store/retrieve Filter definitions (Name, Description, Script). Filters can be associated with LLMs or Chats via separate API calls (e.g., `PATCH /llms/{id}`, `PATCH /chats/{id}`, `POST /tools/{id}/filters/{filter_id}`).
+3.  **Filtering:** A client sends a request intended for an LLM via the `Proxy`.
+4.  The `Proxy` identifies the target LLM (and potentially the Chat context).
+5.  It fetches the LLM/Chat details from the `Database`, including any associated `Filter` IDs.
+6.  For each associated `Filter`, the `Proxy` instructs the `Scripting Engine` to run it.
+7.  The `Scripting Engine` loads the `Filter.Script` code from the database (or cache).
+8.  It prepares the execution environment, injecting the request `payload` and making custom functions (`makeHTTPRequest`, `llm` from `Script Extensions`) available to the script.
+9.  The Tengo script is executed.
+10. The `Scripting Engine` retrieves the value of the `result` variable set by the script.
+11. If `result` is `true`, the filter passes, and the `Proxy` proceeds (either to the next filter or to forwarding the request).
+12. If `result` is `false` (or not set), the filter fails. The `Proxy` immediately stops processing and returns an HTTP 403 Forbidden error ("Policy error: {Filter Name}") to the client.
+13. If all filters pass, the `Proxy` forwards the request to the upstream LLM Vendor.
+
+**3. Implementation Details**
+
+*   **Script Language:** Filters are written in Tengo (`github.com/d5/tengo`).
+*   **Script Input:** The request body is passed to the script as a string variable named `payload`.
+*   **Script Output:** The script *must* set a variable named `result`. A value of `true` allows the request; `false` blocks it.
+*   **Execution Context:** Scripts run within the `Scripting Engine` (`scripting/scripting.go`). They have access to Tengo's standard library and custom Midsommar functions provided via `scriptExtensions`.
+*   **Custom Functions:**
+    *   `tyk.makeHTTPRequest(method, url, body, headers)`: Makes an HTTP call.
+    *   `tyk.llm(llm_id, prompt)`: Calls another LLM managed by Midsommar.
+*   **Error Handling:** Compilation or runtime errors in the script, or a `result` of `false`, lead to request rejection (HTTP 403).
+*   **Association:** Filters are linked to LLMs and Chats via many-to-many relationships in the database, managed through the respective entity's update endpoints or specific association endpoints (like for Tools).
+*   **API Endpoints:**
+    *   `POST /filters`: Create a new Filter.
+    *   `GET /filters`: List all Filters (paginated).
+    *   `GET /filters/{id}`: Get a specific Filter.
+    *   `PATCH /filters/{id}`: Update a Filter.
+    *   `DELETE /filters/{id}`: Delete a Filter.
+    *   `PATCH /llms/{id}`: (Likely includes `filter_ids` in payload to associate filters).
+    *   `PATCH /chats/{id}`: (Likely includes `filter_ids` in payload to associate filters).
+    *   `POST /tools/{id}/filters/{filter_id}`: Add a filter to a tool.
+    *   `DELETE /tools/{id}/filters/{filter_id}`: Remove a filter from a tool.
+    *   `PUT /tools/{id}/filters`: Set all filters for a tool.
+
+**4. Use Cases & Behavior**
+
+*   **Creating a DLP Filter:** Admin creates a Filter via `POST /filters` with a Tengo script that searches the `payload` for keywords or patterns (e.g., credit card numbers) and sets `result = false` if found.
+*   **Applying Filter to LLM:** Admin updates an LLM via `PATCH /llms/{id}`, including the DLP Filter's ID in the list of associated filters.
+*   **Blocking Request:** A user sends a request containing sensitive data through the `Proxy` targeting the filtered LLM. The `Proxy` executes the DLP Filter script. The script finds the pattern, sets `result = false`. The `Proxy` returns HTTP 403.
+*   **Allowing Request:** A user sends a compliant request. The DLP Filter script runs, doesn't find patterns, sets `result = true`. The `Proxy` forwards the request to the LLM vendor.
+*   **Using LLM Filter:** A script uses `tyk.llm()` to call a moderation model to check the `payload` content, setting `result` based on the moderation model's response.
+
+**5. Potential Considerations & Future Enhancements**
+
+*   **Script Performance:** Complex Tengo scripts could introduce latency. Performance testing is crucial.
+*   **Security Risks:** The `makeHTTPRequest` function allows scripts to call arbitrary URLs, which could be a security risk if not carefully managed. Access control or sandboxing might be needed. Calling internal services could also be risky.
+*   **Error Reporting:** Clearer error messages from failed scripts back to the client or admin logs would be helpful.
+*   **Script Complexity:** Managing complex logic in Tengo scripts might become difficult. Versioning or testing frameworks for scripts could be beneficial.
+*   **Filter Ordering:** If multiple filters are applied, their execution order might matter but isn't explicitly defined in the findings.
+*   **Request/Response Filtering:** Currently, filtering seems focused on the *request* payload (`outboundRequestMiddleware`, `screenProxyRequestByVendor`). Filtering the *response* from the LLM might be a future enhancement.
+*   **Middleware Scripting:** The `scripting` package also contains `RunMiddleware`, suggesting scripts might also be usable for modifying requests/responses, not just filtering/blocking. This wasn't the focus but is related.
+
+This document outlines the Midsommar Filters functionality based on the analyzed code, detailing how custom scripts can be used to enforce policies on LLM requests.

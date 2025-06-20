@@ -55,7 +55,7 @@ const MainLayout = () => {
         ) {
           const storedAdminPath = getStoredPath('admin');
           setCurrentTab("admin");
-          navigate(storedAdminPath || "/admin/dash", { replace: true });
+          navigate(storedAdminPath || "/admin", { replace: true });
         } else {
           // Set initial tab based on current location
           if (location.pathname.startsWith("/admin")) {
@@ -120,7 +120,7 @@ const MainLayout = () => {
         navigate(storedPath || "/portal/dashboard");
         break;
       case "admin":
-        navigate(storedPath || "/admin/dash");
+        navigate(storedPath || "/admin");
         break;
     }
   };
@@ -164,6 +164,7 @@ const MainLayout = () => {
             <PortalDrawer
               catalogues={entitlements.catalogues}
               dataCatalogues={entitlements.data_catalogues}
+              toolCatalogues={entitlements.tool_catalogues}
               open
             />
           )}

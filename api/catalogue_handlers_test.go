@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -183,7 +184,7 @@ func TestGroupCatalogueAssociation(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
 	// Create a group
-	group, err := api.service.CreateGroup("Test Group")
+	group, err := api.service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Create a catalogue
@@ -229,12 +230,22 @@ func TestGroupCatalogueAssociation(t *testing.T) {
 func TestUserAccessibleCatalogues(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
-	// Create a user
-	user, err := api.service.CreateUser("test@example.com", "Test User", "password123", false, true, true, true, false)
+	user, err := api.service.CreateUser(services.UserDTO{
+		Email:                "test@example.com",
+		Name:                 "Test User",
+		Password:             "password123",
+		IsAdmin:              false,
+		ShowChat:             true,
+		ShowPortal:           true,
+		EmailVerified:        true,
+		NotificationsEnabled: false,
+		AccessToSSOConfig:    false,
+		Groups:               []uint{},
+	})
 	assert.NoError(t, err)
 
 	// Create a group
-	group, err := api.service.CreateGroup("Test Group")
+	group, err := api.service.CreateGroup("Test Group", []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 
 	// Add user to group

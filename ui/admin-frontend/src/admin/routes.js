@@ -4,7 +4,7 @@ import Users from "./pages/Users";
 import UserDetails from "./components/users/UserDetails";
 import UserForm from "./components/users/UserForm";
 
-import Groups from "./pages/Groups";
+import Groups from "./pages/groups/Groups";
 import GroupDetail from "./components/groups/GroupDetail";
 import GroupForm from "./components/groups/GroupForm";
 
@@ -58,9 +58,15 @@ import SecretDetails from "./components/secrets/SecretDetails";
 import SecretForm from "./components/secrets/SecretForm";
 
 import Dashboard from "./pages/Dashboard";
+import Overview from "./pages/Overview";
 
-const adminRoutes = (
+import SSOProfiles from "./pages/SSOProfiles";
+import SSOProfileEditor from "./components/sso-profiles/SSOProfileEditor";
+import SSOProfileDetails from "./components/sso-profiles/SSOProfileDetails";
+
+const mainAdminRoutes = (
   <>
+    <Route index element={<Overview />} />
     <Route path="dash" element={<Dashboard />} />
     <Route path="dashboard" element={<Dashboard />} />
     <Route path="users" element={<Users />} />
@@ -134,4 +140,15 @@ const adminRoutes = (
   </>
 );
 
-export default adminRoutes;
+// SSO profile routes that will be conditionally rendered based on uiOptions.show_sso_config
+const ssoRoutes = (
+  <>
+    <Route path="sso-profiles" element={<SSOProfiles />} />
+    <Route path="sso-profiles/new" element={<SSOProfileEditor />} />
+    <Route path="sso-profiles/edit/:profileId" element={<SSOProfileEditor />} />
+    <Route path="sso-profiles/:profileId" element={<SSOProfileDetails />} />
+  </>
+);
+
+export { mainAdminRoutes, ssoRoutes };
+export default mainAdminRoutes;

@@ -1,0 +1,95 @@
+name: UI Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - release-**
+      - QA-**
+    tags:
+      - "v*"
+
+env:
+  GOPRIVATE: github.com/TykTechnologies
+  
+jobs:
+    ui-tests:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v2
+        - name: Install Node.js 19.0.1
+          uses: actions/setup-node@v4
+          with:
+            node-version: "19.0.1"
+        - name: Build Frontend
+          run: |
+            npm install
+            CI='' npm run build
+          working-directory: ui/admin-frontend
+        - name: Start AI Portal
+          env: 
+            TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+            TYK_AI_SECRET_KEY: ${{ secrets.TYK_AI_SECRET_KEY }}
+            OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+            ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}
+            GO_BUILD_FLAGS: "-buildvcs=false"
+          run: |
+            docker compose -f tests/compose.yml up &
+        - name: Install test dependencies
+          working-directory: tests/ui
+          run: |
+            npm ci      
+        - name: Install Playwright Browsers
+          run: npx playwright install --with-deps chromium
+          working-directory: tests/ui
+        # Wait for AI Studio to start. No health check endpoint available yet, so checking notifications for 401 status code.
+        - name: Wait for AI Studio to start
+          run: |
+            attempts=0
+            max_attempts=50
+            while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/common/api/v1/notifications/unread/count)" != "401" ]; do
+              attempts=$((attempts+1))
+              echo "Waiting for AI Studio to start... (Attempt $attempts/$max_attempts)"
+              if [ $attempts -ge $max_attempts ]; then
+                echo "Timed out after $max_attempts attempts. AI Studio failed to start."
+                exit 1  # Exit with error code
+              fi
+              sleep 10
+            done
+        - name: Execute UI tests
+          id: test_execution
+          working-directory: tests/ui
+          run: npm run test
+        - name: Upload Playwright Test Report to S3
+          if: failure() && steps.test_execution.outcome != 'success'
+          run: npm run upload_report_to_s3
+          env:
+            AWS_ACCESS_KEY_ID: ${{ secrets.UI_AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY: ${{ secrets.UI_AWS_SECRET_ACCESS_KEY }}
+            RUN_ID: 'midsommar/${{ github.run_id }}'
+          working-directory: tests/ui
+        - name: Share S3 report link into summary
+          if: failure() && steps.test_execution.outcome != 'success'
+          run: |
+            echo "# :clipboard: S3 UI Test REPORT" >> $GITHUB_STEP_SUMMARY
+            echo "- Status: ${{ steps.test_execution.outcome == 'success' && ':white_check_mark:' || ':no_entry_sign:' }}" >> $GITHUB_STEP_SUMMARY
+            echo "- [Link to report](https://tyk-qa-reports.s3.eu-central-1.amazonaws.com/midsommar/${{ github.run_id }}/index.html)" >> $GITHUB_STEP_SUMMARY
+        - name: Docker logs for all components
+          if: failure()
+          run: |
+            docker compose -f tests/compose.yml logs > docker-compose.log
+            cat ${{ github.workspace }}/docker-compose.log
+            echo "::endgroup::"
+        - name: Upload compose logs
+          uses: actions/upload-artifact@v4
+          if: failure()
+          with:
+            name: docker-compose-logs-${{ github.job }}
+            path: ${{ github.workspace }}/docker-compose.log
+            retention-days: 3
+            overwrite: true

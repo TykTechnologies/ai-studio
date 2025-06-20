@@ -442,19 +442,19 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 		Type: "chats",
 		ID:   strconv.FormatUint(uint64(chat.ID), 10),
 		Attributes: struct {
-			Name                string                 `json:"name"`
-			Description         string                 `json:"description"`
-			LLMSettingsID       string                 `json:"llm_settings_id"`
-			LLMID               string                 `json:"llm_id"`
-			Groups              []GroupResponse        `json:"groups"`
-			Filters             []FilterResponse       `json:"filters"`
-			RagN                int                    `json:"rag_n"`
-			ToolSupport         bool                   `json:"tool_support"`
-			SystemPrompt        string                 `json:"system_prompt"`
-			DefaultDataSourceID int                    `json:"default_data_source_id"`
-			DefaultDataSource   DatasourceResponse     `json:"default_data_source"`
-			ExtraContext        []FileStoreResponse    `json:"extra_context"`
-			DefaultTools        []ToolResponse         `json:"default_tools"`
+			Name                string                   `json:"name"`
+			Description         string                   `json:"description"`
+			LLMSettingsID       string                   `json:"llm_settings_id"`
+			LLMID               string                   `json:"llm_id"`
+			Groups              []GroupResponse          `json:"groups"`
+			Filters             []FilterResponse         `json:"filters"`
+			RagN                int                      `json:"rag_n"`
+			ToolSupport         bool                     `json:"tool_support"`
+			SystemPrompt        string                   `json:"system_prompt"`
+			DefaultDataSourceID int                      `json:"default_data_source_id"`
+			DefaultDataSource   DatasourceResponse       `json:"default_data_source"`
+			ExtraContext        []FileStoreResponse      `json:"extra_context"`
+			DefaultTools        []ToolResponse           `json:"default_tools"`
 			PromptTemplates     []PromptTemplateResponse `json:"prompt_templates"`
 		}{
 			Name:                chat.Name,

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
@@ -51,15 +52,23 @@ func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {
 		DB:                  db,
 		Service:             service,
 		CookieName:          "session",
-		CookieSecure:        true,
+		CookieSecure:        false, // Allow cookies over HTTP in tests
 		CookieHTTPOnly:      true,
-		CookieSameSite:      http.SameSiteStrictMode,
+		CookieSameSite:      http.SameSiteLaxMode, // Less restrictive for tests
 		ResetTokenExpiry:    3600,
 		FrontendURL:         "http://example.com",
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 		TestMode:            true,
 	}
+}
+
+func SetupTestLicenser() *licensing.Licenser {
+	licenser := licensing.NewLicenser(licensing.LicenseConfig{})
+	licenser.InitializeForTests(map[string]interface{}{
+		licensing.FEATUREChat: true,
+	})
+	return licenser
 }
 
 func PerformRequest(r http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {

@@ -427,6 +427,16 @@ func (m *mockService) AddUserToGroup(userID, groupID uint) error {
 	return nil
 }
 
+// GetToolByID implements the services.ServiceInterface method
+func (m *mockService) GetToolByID(id uint) (*models.Tool, error) {
+	return &models.Tool{}, nil
+}
+
+// GetToolBySlug implements the services.ServiceInterface method
+func (m *mockService) GetToolBySlug(slug string) (*models.Tool, error) {
+	return &models.Tool{}, nil
+}
+
 // Ensure mockService implements both ServiceInterface and EmailSender
 var _ services.ServiceInterface = (*mockService)(nil)
 var _ models.EmailSender = (*mockService)(nil)
@@ -555,7 +565,7 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 			assert.Equal(t, 25.0, cost.TotalCost)          // (100000.0 + 150000.0) / 10000
 			assert.Equal(t, int64(2500), cost.TotalTokens) // 1000 + 1500
 		} else if cost.Model == "Model2" {
-			assert.Equal(t, 20.0, cost.TotalCost)          // 200000.0 / 10000
+			assert.Equal(t, 20.0, cost.TotalCost) // 200000.0 / 10000
 			assert.Equal(t, int64(2000), cost.TotalTokens)
 		}
 	}
@@ -568,6 +578,6 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 
 	// Verify filtered results
 	assert.Equal(t, "Model1", filteredCosts[0].Model)
-	assert.Equal(t, 25.0, filteredCosts[0].TotalCost)     // (100000.0 + 150000.0) / 10000
+	assert.Equal(t, 25.0, filteredCosts[0].TotalCost) // (100000.0 + 150000.0) / 10000
 	assert.Equal(t, int64(2500), filteredCosts[0].TotalTokens)
 }

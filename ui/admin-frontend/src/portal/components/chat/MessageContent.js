@@ -9,21 +9,21 @@ import MarkdownMessage from './MarkdownMessage';
 import pubClient from '../../../admin/utils/pubClient';
 
 const MessageAvatar = ({ messageType, userName }) => (
-  <Box
-    sx={{
-      width: 35,
-      height: 35,
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      bgcolor: messageType === 'user' ? 'background.surfaceBrandHovered' : 'background.surfaceDefaultBubble'
-    }}
-  >
-    <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-      {messageType === 'user' ? userName?.charAt(0).toUpperCase() || 'U' : 'AI'}
-    </Typography>
-  </Box>
+	<Box
+		sx={{
+			width: 35,
+			height: 35,
+			borderRadius: '50%',
+			display: 'flex',
+			alignItems: 'center',
+			justifyContent: 'center',
+			bgcolor: messageType === 'user' ? 'background.surfaceBrandHovered' : 'background.surfaceDefaultBubble'
+		}}
+	>
+		<Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+			{messageType === 'user' ? userName?.charAt(0).toUpperCase() || 'U' : 'AI'}
+		</Typography>
+	</Box>
 );
 
 const extractSystemBlocks = (content) => {
@@ -310,7 +310,7 @@ const ContextBlock = ({ content, groupId, isExpanded, toggleGroup }) => {
 	if (!content || content.trim() === '') {
 		return null;
 	}
-	
+
 	return (
 		<Box
 			sx={{
@@ -531,7 +531,7 @@ const MessageContent = ({
 
 		// If system messages are hidden, filter out context blocks and first system message
 		const visibleSegments = showSystemMessages
-			? segments.filter(segment => 
+			? segments.filter(segment =>
 				!(segment.type === 'context' && (!segment.text || segment.text.trim() === '')))
 			: segments.filter(segment => {
 				if (segment.type === 'context') return false;
@@ -599,6 +599,11 @@ const MessageContent = ({
 							padding: '12px',
 							maxWidth: '85%',
 						}),
+						...(messageType === 'ai' && {
+							borderBottom: '1px solid',
+							borderColor: 'border.neutralDefault',
+							pb: 2
+						}),
 						'&:hover .edit-button': {
 							opacity: 1,
 							visibility: 'visible'
@@ -665,7 +670,7 @@ const MessageContent = ({
 				position: 'relative',
 				py: 3,
 				display: 'flex',
-				alignItems: 'flex-start',
+				flexDirection: 'column',
 				gap: 2,
 				...(messageType === 'user' && {
 					maxWidth: '70%',
@@ -674,49 +679,80 @@ const MessageContent = ({
 				})
 			}}
 		>
-<Box
-			sx={{
-				width: 'fit-content',
-				maxWidth: '100%', // Ensure it doesn't exceed parent width
-				overflowWrap: 'break-word', // Break long words
-				wordWrap: 'break-word', // For older browsers
-				...(messageType === 'user' && {
-					bgcolor: 'background.surfaceNeutralDisabled',
-					border: '1px solid',
-					borderColor: 'border.neutralDefault',
-					borderRadius: '8px',
-					padding: '12px',
-				}),
-				...(messageType === 'ai' && {
-					borderBottom: '1px solid',
-					borderColor: 'border.neutralDefault',
-					pb: 2
-				  }),
-				'&:hover .edit-button': {
-					opacity: 1,
-					visibility: 'visible'
-				}
-			}}
-		>
-				<MarkdownMessage content={content} />
-				{isUserMessage && (
-					<IconButton
-						className="edit-button"
-						size="small"
-						onClick={handleEditClick}
-						sx={{
-							position: 'absolute',
-							bottom: '-5px',
-							right: '5px',
-							zIndex: 100,
-							visibility: 'hidden',
-							opacity: 0,
-							transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
-						}}
-					>
-						<EditIcon fontSize="small" />
-					</IconButton>
-				)}
+			{messageType === 'user' && messageIndex > 0 && (
+				<Box
+					sx={{
+						alignSelf: 'flex-end',
+						backgroundColor: '#f5f5f5',
+						borderRadius: '4px',
+						padding: '8px 12px',
+						marginBottom: '8px',
+						maxWidth: '100%'
+					}}
+				>
+					<Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+						Continue where you left off: "{content.substring(0, 100)}{content.length > 100 ? '...' : ''}"
+					</Typography>
+				</Box>
+			)}
+			<Box
+				sx={{
+					width: '100%',
+					position: 'relative',
+					display: 'flex',
+					alignItems: 'flex-start',
+					gap: 2,
+					...(messageType === 'user' && {
+						maxWidth: '100%',
+						alignSelf: 'end',
+						justifyContent: 'end'
+					})
+				}}
+			>
+				<Box
+					sx={{
+						width: 'fit-content',
+						maxWidth: '100%', // Ensure it doesn't exceed parent width
+						overflowWrap: 'break-word', // Break long words
+						wordWrap: 'break-word', // For older browsers
+						...(messageType === 'user' && {
+							bgcolor: 'background.surfaceNeutralDisabled',
+							border: '1px solid',
+							borderColor: 'border.neutralDefault',
+							borderRadius: '8px',
+							padding: '12px',
+						}),
+						...(messageType === 'ai' && {
+							borderBottom: '1px solid',
+							borderColor: 'border.neutralDefault',
+							pb: 2
+						}),
+						'&:hover .edit-button': {
+							opacity: 1,
+							visibility: 'visible'
+						}
+					}}
+				>
+					<MarkdownMessage content={content} />
+					{isUserMessage && (
+						<IconButton
+							className="edit-button"
+							size="small"
+							onClick={handleEditClick}
+							sx={{
+								position: 'absolute',
+								bottom: '-5px',
+								right: '5px',
+								zIndex: 100,
+								visibility: 'hidden',
+								opacity: 0,
+								transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
+							}}
+						>
+							<EditIcon fontSize="small" />
+						</IconButton>
+					)}
+				</Box>
 			</Box>
 		</Box>
 	);

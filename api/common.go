@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -476,14 +477,14 @@ func (a *API) createUserApp(c *gin.Context) {
 	}
 
 	// Create the app
-	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs)
+	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate)
 	if err != nil {
 		// Check for specific error types and return appropriate responses
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Data source privacy score cannot be higher than LLM privacy score"}}})
+			}{{Title: "Privacy Score Mismatch", Detail: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."}}})
 		} else {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
@@ -492,6 +493,14 @@ func (a *API) createUserApp(c *gin.Context) {
 		}
 		return
 	}
+
+	// Log the app.Tools right after receiving from service
+	slog.Info("App received from service", "appID", app.ID, "toolsCount", len(app.Tools))
+	if len(app.Tools) > 0 {
+		slog.Info("First tool name from service", "toolName", app.Tools[0].Name)
+	}
+
+	currentAppTools := app.Tools // Explicitly copy/reference before response construction
 
 	// Prepare the response
 	response := AppResponse{
@@ -504,13 +513,23 @@ func (a *API) createUserApp(c *gin.Context) {
 			CredentialID    uint       `json:"credential_id"`
 			DatasourceIDs   []uint     `json:"datasource_ids"`
 			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
 		}{
-			Name:            app.Name,
-			Description:     app.Description,
-			UserID:          app.UserID,
-			CredentialID:    app.CredentialID,
+			Name:          app.Name,
+			Description:   app.Description,
+			UserID:        app.UserID,
+			CredentialID:  app.CredentialID,
+			DatasourceIDs: getDatasourceIDs(app.Datasources),
+			LLMIDs:        getLLMIDs(app.LLMs),
+			ToolIDs: func() []uint { // This was missing from the previous diff's Attributes block
+				ids := make([]uint, len(currentAppTools)) // Use the local variable
+				for i, tool := range currentAppTools {    // Use the local variable
+					ids[i] = tool.ID
+				}
+				return ids
+			}(),
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 		},
@@ -540,10 +559,13 @@ func containsLLM(llms []models.LLM, id uint) bool {
 
 // CreateAppRequest represents the request body for creating a new app
 type CreateAppRequest struct {
-	Name          string `json:"name" binding:"required"`
-	Description   string `json:"description" binding:"required"`
-	DataSourceIDs []uint `json:"data_source_ids" binding:"required"`
-	LLMIDs        []uint `json:"llm_ids" binding:"required"`
+	Name            string     `json:"name" binding:"required"`
+	Description     string     `json:"description" binding:"required"`
+	DataSourceIDs   []uint     `json:"data_source_ids" binding:"required"`
+	LLMIDs          []uint     `json:"llm_ids" binding:"required"`
+	ToolIDs         []uint     `json:"tool_ids" binding:"required"`
+	MonthlyBudget   *float64   `json:"monthly_budget"`
+	BudgetStartDate *time.Time `json:"budget_start_date"`
 }
 
 // getUserAccessibleDataSources godoc
@@ -714,8 +736,9 @@ func (a *API) getUserApps(c *gin.Context) {
 	currentUser := user.(*models.User)
 
 	pageSize, pageNumber, all := getPaginationParams(c)
+	sort := c.Query("sort")
 
-	apps, totalCount, totalPages, err := a.service.ListAppsByUserID(currentUser.ID, pageSize, pageNumber, all)
+	apps, totalCount, totalPages, err := a.service.ListAppsByUserID(currentUser.ID, pageSize, pageNumber, all, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -736,6 +759,7 @@ func (a *API) getUserApps(c *gin.Context) {
 				CredentialID    uint       `json:"credential_id"`
 				DatasourceIDs   []uint     `json:"datasource_ids"`
 				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
 			}{
@@ -756,6 +780,13 @@ func (a *API) getUserApps(c *gin.Context) {
 					ids := make([]uint, len(app.LLMs))
 					for i, llm := range app.LLMs {
 						ids[i] = llm.ID
+					}
+					return ids
+				}(),
+				ToolIDs: func() []uint {
+					ids := make([]uint, len(app.Tools))
+					for i, tool := range app.Tools {
+						ids[i] = tool.ID
 					}
 					return ids
 				}(),
@@ -858,6 +889,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			CredentialID    uint             `json:"credential_id"`
 			DatasourceIDs   []uint           `json:"datasource_ids"`
 			LLMIDs          []uint           `json:"llm_ids"`
+			ToolIDs         []uint           `json:"tool_ids"`
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
 			Credential      CredentialDetail `json:"credential"`
@@ -870,6 +902,13 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 				ids := make([]uint, len(app.Datasources))
 				for i, ds := range app.Datasources {
 					ids[i] = ds.ID
+				}
+				return ids
+			}(),
+			ToolIDs: func() []uint {
+				ids := make([]uint, len(app.Tools))
+				for i, tool := range app.Tools {
+					ids[i] = tool.ID
 				}
 				return ids
 			}(),
@@ -1147,12 +1186,12 @@ func (a *API) getLastCMessagesForSession(c *gin.Context) {
 			ID:   strconv.FormatUint(uint64(msg.ID), 10),
 			Attributes: struct {
 				Session   string    `json:"session"`
-				Content   string    `json:"content"`
+				Content   any       `json:"content"`
 				CreatedAt time.Time `json:"created_at"`
 				ChatID    uint      `json:"chat_id"`
 			}{
 				Session:   msg.Session,
-				Content:   string(msg.Content),
+				Content:   msg.UnmarshalContent(),
 				CreatedAt: msg.CreatedAt,
 				ChatID:    msg.ChatID,
 			},
@@ -1356,4 +1395,159 @@ type SimplifiedToolResponse struct {
 type SimplifiedDataSourceResponse struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
+}
+
+// getUserAppUsage godoc
+// @Summary Get app usage analytics for portal user
+// @Description Get token usage and cost analytics for a user's app
+// @Tags portal-analytics
+// @Accept json
+// @Produce json
+// @Param id path string true "App ID"
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Success 200 {object} models.MultiAxisChartData
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps/{id}/analytics/usage [get]
+func (a *API) getUserAppUsage(c *gin.Context) {
+	// Get current user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	// Parse app ID from URL path
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+		return
+	}
+
+	// Validate user owns the app
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "App not found"}}})
+		return
+	}
+
+	if app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to access this app's analytics"}}})
+		return
+	}
+
+	// Parse date range
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	// Get analytics data
+	appIDPtr := uint(appID)
+	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, "", nil, &appIDPtr, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to get usage analytics"}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
+}
+
+// getUserAppInteractions godoc
+// @Summary Get app interactions analytics for portal user
+// @Description Get interaction analytics for a user's app
+// @Tags portal-analytics
+// @Accept json
+// @Produce json
+// @Param id path string true "App ID"
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Success 200 {object} analytics.ChartData
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /common/apps/{id}/analytics/interactions [get]
+func (a *API) getUserAppInteractions(c *gin.Context) {
+	// Get current user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	// Parse app ID from URL path
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: "Invalid app ID"}}})
+		return
+	}
+
+	// Validate user owns the app
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "App not found"}}})
+		return
+	}
+
+	if app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Forbidden", Detail: "You don't have permission to access this app's analytics"}}})
+		return
+	}
+
+	// Parse date range
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Bad Request", Detail: err.Error()}}})
+		return
+	}
+
+	// Get analytics data
+	chartData, err := analytics.GetAppInteractionsOverTime(a.service.DB, startDate, endDate, uint(appID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: "Failed to get interactions analytics"}}})
+		return
+	}
+
+	c.JSON(http.StatusOK, chartData)
 }

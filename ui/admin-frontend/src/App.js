@@ -9,16 +9,22 @@ import {
 import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import SuccessBanner from "./admin/components/common/SuccessBanner";
 
 // Configurations and utilities
-import { getConfig, loadConfig } from "./config";
+import { loadConfig } from "./config";
 import { reinitializeApiClient } from "./admin/utils/apiClient";
 import { reinitializePubClient } from "./admin/utils/pubClient";
 import pubClient from "./admin/utils/pubClient";
 
 // Themes
-import portalTheme from "./portal/theme/portalTheme";
-import theme from "./admin/theme";
+import adminTheme from "./admin/theme";
+
+// Pages (add OAuthConsentPage)
+import OAuthConsentPage from "./portal/pages/OAuthConsentPage";
+
+// Components
 
 // Layouts
 import MainLayout from "./layouts/MainLayout";
@@ -32,7 +38,20 @@ import Register from "./portal/pages/Register";
 import ForgotPassword from "./portal/pages/ForgotPassword";
 import ResetPassword from "./portal/pages/ResetPassword";
 import NotificationsPage from "./pages/NotificationsPage";
+import ToolDocumentationPage from "./portal/pages/ToolDocumentationPage"; // Import the new page
 import { NotificationProvider } from "./admin/context/NotificationContext";
+
+// Component to redirect OAuth requests to backend
+const BackendRedirect = () => {
+  const backendUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+  const currentPath = window.location.pathname;
+  const queryString = window.location.search;
+  
+  // Redirect to backend URL
+  window.location.href = `${backendUrl}${currentPath}${queryString}`;
+  
+  return <CircularProgress />;
+};
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -40,6 +59,11 @@ function App() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(true);
+
+  const handleCloseBanner = () => {
+    setShowSuccessBanner(false);
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -121,7 +145,7 @@ function App() {
   return (
     <Router>
       <NotificationProvider>
-        <ThemeProvider theme={portalTheme}>
+        <ThemeProvider theme={adminTheme}>
           <CssBaseline />
           <Routes>
             {/* Public Routes */}
@@ -176,6 +200,16 @@ function App() {
               element={<Navigate to="/reset-password" replace state={{ preserveQuery: true }} />}
             />
 
+            {/* OAuth Consent Page Route - public layout, backend handles auth check */}
+            <Route path="/oauth/consent" element={<OAuthConsentPage />} />
+            
+            {/* OAuth Backend Routes - redirect to backend to handle these */}
+            <Route path="/oauth/authorize" element={<BackendRedirect />} />
+            <Route path="/oauth/token" element={<BackendRedirect />} />
+            <Route path="/oauth/register_client" element={<BackendRedirect />} />
+            <Route path="/.well-known/oauth-authorization-server" element={<BackendRedirect />} />
+
+
             {/* Protected Routes with MainLayout */}
             <Route
               element={
@@ -193,27 +227,40 @@ function App() {
               <Route path="/chat/*" element={<ChatRoutes />} />
 
               {/* Admin Routes */}
-              <Route path="/admin/*" element={<AdminRoutes />} />
+              <Route path="/admin/*" element={<AdminRoutes uiOptions={entitlements?.ui_options} />} />
 
               {/* Common Routes */}
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/common/tools/:id/docs" element={<ToolDocumentationPage />} /> {/* Add new route here */}
 
               {/* Default redirect */}
               <Route
                 path="/"
                 element={
-                  <Navigate
-                    to={
-                      isAuthenticated
-                        ? entitlements?.is_admin === true
-                          ? "/admin/dash"
-                          : entitlements?.ui_options?.show_portal
-                            ? "/portal/dashboard"
-                            : "/chat/dashboard"
-                        : "/login"
-                    }
-                    replace
-                  />
+                  isAuthenticated ? (
+                    entitlements?.is_admin === true ? (
+                      <Navigate to="/admin/dash" replace />
+                    ) : entitlements?.ui_options?.show_portal ? (
+                      <Navigate to="/portal/dashboard" replace />
+                    ) : entitlements?.ui_options?.show_chat ? (
+                      <Navigate to="/chat/dashboard" replace />
+                    ) : (
+                      <Box sx={{ p: 7, display: "flex", flexDirection: "column", gap: 2 }}>
+                        <Typography variant="headingXLarge">
+                          Welcome to Tyk AI Studio!
+                        </Typography>
+                        {showSuccessBanner && (
+                          <SuccessBanner
+                            title="Tyk AI studio account"
+                            message="You'll receive an email once your role is assigned and access is ready. If there's a delay, contact your organization admin"
+                            onClose={handleCloseBanner}
+                          />
+                        )}
+                      </Box>
+                    )
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
                 }
               />
             </Route>
@@ -225,7 +272,7 @@ function App() {
                 <Navigate
                   to={
                     isAuthenticated
-                      ? "/admin/dash" // Just redirect to admin dash for unknown routes
+                      ? "/admin"
                       : "/login"
                   }
                   replace

@@ -69,9 +69,11 @@ type API struct {
 	staticFiles         embed.FS
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
+	ssoService          *services.SSOService
+	licenser            *licensing.Licenser
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licenser *licensing.Licenser) *API {
 	gin.SetMode(gin.ReleaseMode)
 
 	// Initialize provider registry
@@ -134,6 +136,23 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		proxy:       proxy,
 		staticFiles: staticFiles,
 		providers:   providerRegistry,
+		licenser:    licenser,
+	}
+
+	if config.TIBEnabled {
+		logLevel := "info"
+
+		if config.TestMode {
+			logLevel = "debug"
+		}
+
+		ssoConfig := &services.Config{
+			APISecret: config.TIBAPISecret,
+			LogLevel:  logLevel,
+		}
+		api.ssoService = services.NewSSOService(ssoConfig, router, config.DB, service.NotificationService)
+
+		api.ssoService.InitInternalTIB()
 	}
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
@@ -157,6 +176,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		api.router.Use(func(c *gin.Context) {
 			// Skip API calls
 			if c.GetHeader("Authorization") != "" {
+				c.Next()
+				return
+			}
+
+			// Skip OAuth endpoints - they don't need CSRF protection
+			if strings.HasPrefix(c.Request.URL.Path, "/oauth/") {
 				c.Next()
 				return
 			}
@@ -217,7 +242,9 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 func (a *API) setupRoutes() {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
-	
+
+	a.router.Use(a.licenser.TelemetryMiddleware())
+
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())
 	} else {
@@ -274,6 +301,31 @@ func (a *API) setupRoutes() {
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
+	// OAuth 2.0 Authorization Server Endpoints - must be registered before NoRoute
+	public := a.router.Group("/")
+	oauthGroup := public.Group("/oauth")
+	{
+		// Dynamic Client Registration - public endpoint for now (auth will be added later)
+		oauthGroup.POST("/register_client", a.handleRegisterOAuthClient)
+		oauthGroup.OPTIONS("/register_client", a.handleRegisterOAuthClient)
+		// Authorization Endpoint - requires user authentication (user logs in to grant access)
+		// This endpoint will now redirect to a consent page if needed.
+		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), a.handleOAuthAuthorize)
+		oauthGroup.OPTIONS("/authorize", a.handleOAuthAuthorize)
+		// Token Endpoint - typically requires client authentication
+		oauthGroup.POST("/token", a.handleOAuthToken)
+		oauthGroup.OPTIONS("/token", a.handleOAuthToken)
+
+		// Endpoints for consent screen flow - require user authentication
+		oauthGroup.GET("/consent_details", a.auth.AuthMiddleware(), a.handleGetConsentDetails)
+		oauthGroup.OPTIONS("/consent_details", a.handleGetConsentDetails)
+		oauthGroup.POST("/submit_consent", a.auth.AuthMiddleware(), a.handleSubmitConsent)
+		oauthGroup.OPTIONS("/submit_consent", a.handleSubmitConsent)
+	}
+	// AS Metadata - public
+	public.GET("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+	public.OPTIONS("/.well-known/oauth-authorization-server", a.handleOAuthMetadata)
+
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Check if it's a static file request
@@ -299,7 +351,11 @@ func (a *API) setupRoutes() {
 		c.Status(http.StatusOK)
 	})
 
-	public := a.router.Group("/")
+	// Analytics endpoints for portal users
+	portalAnalytics := a.router.Group("/analytics")
+	portalAnalytics.Use(a.auth.AuthMiddleware())
+	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
+	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
 
 	// Public routes
 	public.POST("/auth/login", a.handleLogin)
@@ -329,7 +385,12 @@ func (a *API) setupRoutes() {
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
-	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueTools)
+	// Use secure version for portal users that hides sensitive fields like auth_key and oas_spec
+	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
+	// Route for tool documentation page
+	authed.GET("/tools/:id/docs", a.GetToolDocumentation)
+	// Route to get user apps that have access to a tool
+	authed.GET("/tools/:id/user-apps", a.getToolUserApps)
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
@@ -337,6 +398,10 @@ func (a *API) setupRoutes() {
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
 	authed.PUT("/chat-history-records/:session_id/name", a.updateChatHistoryRecordName)
+	
+	// Portal analytics endpoints with proper user validation
+	authed.GET("/apps/:id/analytics/usage", a.getUserAppUsage)
+	authed.GET("/apps/:id/analytics/interactions", a.getUserAppInteractions)
 
 	// Notification routes
 	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
@@ -350,19 +415,20 @@ func (a *API) setupRoutes() {
 
 	// User routes
 	v1.POST("/logout", a.handleLogout)
-	v1.POST("/users", a.createUser)
-	v1.GET("/users/:id", a.getUser)
-	v1.PATCH("/users/:id", a.updateUser)
-	v1.DELETE("/users/:id", a.deleteUser)
+	v1.POST("/users", licensing.ActionHandler(a.createUser, "Create User"))
+	v1.GET("/users/:id", licensing.ActionHandler(a.getUser, "Get User"))
+	v1.PATCH("/users/:id", licensing.ActionHandler(a.updateUser, "Update User"))
+	v1.DELETE("/users/:id", licensing.ActionHandler(a.deleteUser, "Delete User"))
 	v1.GET("/users", a.listUsers)
 	v1.GET("/users/:id/catalogues", a.getUserAccessibleCatalogues)
-	v1.POST("users/:id/roll-api-key", a.rollUserAPIKey)
+	v1.POST("/users/:id/roll-api-key", a.rollUserAPIKey)
+	v1.POST("/users/:id/skip-quick-start", a.skipUserQuickStart)
 
 	// Group routes
-	v1.POST("/groups", a.createGroup)
-	v1.GET("/groups/:id", a.getGroup)
-	v1.PATCH("/groups/:id", a.updateGroup)
-	v1.DELETE("/groups/:id", a.deleteGroup)
+	v1.POST("/groups", licensing.ActionHandler(a.createGroup, "Create User Group"))
+	v1.GET("/groups/:id", licensing.ActionHandler(a.getGroup, "Get User Group"))
+	v1.PATCH("/groups/:id", licensing.ActionHandler(a.updateGroup, "Update User Group"))
+	v1.DELETE("/groups/:id", licensing.ActionHandler(a.deleteGroup, "Delete User Group"))
 	v1.GET("/groups", a.listGroups)
 	v1.POST("/groups/:id/users", a.addUserToGroup)
 	v1.DELETE("/groups/:id/users/:userId", a.removeUserFromGroup)
@@ -377,12 +443,14 @@ func (a *API) setupRoutes() {
 	v1.POST("/groups/:id/tool-catalogues", a.addToolCatalogueToGroup)
 	v1.DELETE("/groups/:id/tool-catalogues/:toolCatalogueId", a.removeToolCatalogueFromGroup)
 	v1.GET("/groups/:id/tool-catalogues", a.listGroupToolCatalogues)
+	v1.PUT("/groups/:id/catalogues", a.updateGroupCatalogues)
+	v1.PUT("/groups/:id/users", a.updateGroupUsers)
 
 	// LLM routes
-	v1.POST("/llms", a.createLLM)
-	v1.GET("/llms/:id", a.getLLM)
-	v1.PATCH("/llms/:id", a.updateLLM)
-	v1.DELETE("/llms/:id", a.deleteLLM)
+	v1.POST("/llms", licensing.ActionHandler(a.createLLM, "Create LLM"))
+	v1.GET("/llms/:id", licensing.ActionHandler(a.getLLM, "Get LLM"))
+	v1.PATCH("/llms/:id", licensing.ActionHandler(a.updateLLM, "Update LLM"))
+	v1.DELETE("/llms/:id", licensing.ActionHandler(a.deleteLLM, "Delete LLM"))
 	v1.GET("/llms", a.listLLMs)
 	v1.GET("/llms/search", a.searchLLMs)
 	v1.GET("/llms/max-privacy-score", a.getLLMsByMaxPrivacyScore)
@@ -461,18 +529,23 @@ func (a *API) setupRoutes() {
 	v1.GET("/credentials/active", a.listActiveCredentials)
 
 	// App routes
-	v1.POST("/apps", a.createApp)
-	v1.GET("/apps/:id", a.getApp)
-	v1.PATCH("/apps/:id", a.updateApp)
-	v1.DELETE("/apps/:id", a.deleteApp)
-	v1.GET("/users/:id/apps", a.getAppsByUserID)
+	v1.POST("/apps", licensing.ActionHandler(a.createApp, "Create App"))
+	v1.GET("/apps/:id", licensing.ActionHandler(a.getApp, "Get App"))
+	v1.PATCH("/apps/:id", licensing.ActionHandler(a.updateApp, "Update App"))
+	v1.DELETE("/apps/:id", licensing.ActionHandler(a.deleteApp, "Delete App"))
+	v1.GET("/users/:id/apps", a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
 	v1.GET("/apps", a.listApps)
 	v1.GET("/apps/search", a.searchApps)
 	v1.GET("/apps/count", a.countApps)
-	v1.GET("/users/:id/apps/count", a.countAppsByUserID)
+	v1.GET("/users/:id/apps/count", a.countAppsByUserID) // Note: Param is "id" here
+
+	// App-Tool routes
+	v1.POST("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.addToolToApp, "Add Tool to App"))
+	v1.DELETE("/apps/:id/tools/:tool_id", licensing.ActionHandler(a.removeToolFromApp, "Remove Tool from App"))
+	v1.GET("/apps/:id/tools", licensing.ActionHandler(a.getAppTools, "Get App Tools"))
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)
@@ -483,10 +556,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/llm-settings/search", a.searchLLMSettings)
 
 	// Chat routes
-	v1.POST("/chats", a.createChat)
-	v1.GET("/chats/:id", a.getChat)
-	v1.PATCH("/chats/:id", a.updateChat)
-	v1.DELETE("/chats/:id", a.deleteChat)
+	v1.POST("/chats", licensing.ActionHandler(a.createChat, "Create Chat"))
+	v1.GET("/chats/:id", licensing.ActionHandler(a.getChat, "Get Chat"))
+	v1.PATCH("/chats/:id", licensing.ActionHandler(a.updateChat, "Update Chat"))
+	v1.DELETE("/chats/:id", licensing.ActionHandler(a.deleteChat, "Delete Chat"))
 	v1.GET("/chats", a.listChats)
 	v1.GET("/chats/by-group", a.getChatsByGroupID)
 	v1.POST("/chats/:id/extra-context/:filestore_id", a.addExtraContextToChat)
@@ -498,10 +571,10 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/chats/:id/prompt-templates", a.updateChatPromptTemplates)
 
 	// Tool routes
-	v1.POST("/tools", a.createTool)
-	v1.GET("/tools/:id", a.getTool)
-	v1.PATCH("/tools/:id", a.updateTool)
-	v1.DELETE("/tools/:id", a.deleteTool)
+	v1.POST("/tools", licensing.ActionHandler(a.createTool, "Create Tool"))
+	v1.GET("/tools/:id", licensing.ActionHandler(a.getTool, "Get Tool"))
+	v1.PATCH("/tools/:id", licensing.ActionHandler(a.updateTool, "Update Tool"))
+	v1.DELETE("/tools/:id", licensing.ActionHandler(a.deleteTool, "Delete Tool"))
 	v1.GET("/tools", a.getAllTools)
 	v1.GET("/tools/by-type", a.getToolsByType)
 	v1.GET("/tools/search", a.searchTools)
@@ -567,6 +640,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/cost-analysis", a.getCostAnalysis)
 	v1.GET("/analytics/most-used-llm-models", a.getMostUsedLLMModels)
 	v1.GET("/analytics/tool-usage-statistics", a.getToolUsageStatistics)
+	v1.GET("/analytics/tool-operations-usage-over-time", a.getToolOperationsUsageOverTime)
 	v1.GET("/analytics/unique-users-per-day", a.getUniqueUsersPerDay)
 	v1.GET("/analytics/token-usage-per-user", a.getTokenUsagePerUser)
 	v1.GET("/analytics/token-usage-per-app", a.getTokenUsagePerApp)
@@ -579,6 +653,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/total-cost-per-vendor-and-model", a.getTotalCostPerVendorAndModel)
 	v1.GET("/analytics/budget-usage", a.getBudgetUsage)
 	v1.GET("/analytics/budget-usage-for-app", a.getBudgetUsageForApp)
+	v1.GET("/analytics/app-interactions-over-time", a.getAppInteractionsOverTime)
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
@@ -597,7 +672,32 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
-	chatEnabled, chaOK := licensing.Entitlement(licensing.FEATUREChat)
+	// SSO routes
+	if a.config.TIBEnabled {
+		public.GET("/auth/:id/:provider", a.handleTIBAuth)
+		public.POST("/auth/:id/:provider", a.handleTIBAuth)
+		public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+		public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+		public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+		public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+		public.GET("/sso", a.handleSSO)
+		public.GET("/login-sso-profile", a.getLoginPageProfile)
+
+		apiGroup := public.Group("/api")
+		apiGroup.Use(a.SSOAuthMiddleware())
+		apiGroup.POST("/sso", a.handleNonceRequest)
+
+		profiles := v1.Group("/sso-profiles")
+		profiles.Use(a.auth.SSOOnly())
+		profiles.POST("", a.createProfile)
+		profiles.GET("", a.listProfiles)
+		profiles.GET("/:profile_id", a.getProfile)
+		profiles.PUT("/:profile_id", a.updateProfile)
+		profiles.DELETE("/:profile_id", a.deleteProfile)
+		profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
+	}
+
+	chatEnabled, chaOK := a.licenser.Entitlement(licensing.FEATUREChat)
 	if chaOK && chatEnabled.Bool() && a.setupChatRoutesFunc != nil {
 		a.setupChatRoutesFunc(authed)
 	}
@@ -605,10 +705,10 @@ func (a *API) setupRoutes() {
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token", "Last-Event-ID"},
-		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Total-Count", "X-Total-Pages", "X-CSRF-Token", "Last-Event-ID", "Location"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	})
@@ -628,7 +728,6 @@ func (a *API) corsMiddleware() gin.HandlerFunc {
 }
 
 func (a *API) handleGetConfig(c *gin.Context) {
-	// Get the request protocol and host
 	scheme := "http"
 
 	host := c.Request.Host
@@ -641,7 +740,6 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
-	// Construct the base URL
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	suMode := "both"
@@ -653,6 +751,8 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		APIBaseURL:        apiBaseURL,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
+		TIBEnabled:        a.config.TIBEnabled,
+		DocsLinks:         config.Get().DocsLinks,
 	}
 
 	c.JSON(http.StatusOK, config)

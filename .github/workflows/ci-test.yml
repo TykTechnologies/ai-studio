@@ -6,30 +6,29 @@ on:
     branches:
       - master
 
+env:
+  GOPRIVATE: github.com/TykTechnologies
+
 jobs:
   golangci-lint:
     if: false
     runs-on: ubuntu-latest-m-2
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      -
-        name: Fetch base branch
+      - name: Fetch base branch
         if: ${{ github.event_name == 'pull_request' }}
         run: git fetch origin ${{ github.base_ref }}
-      -
-        name: golangci-lint
+      - name: golangci-lint
         if: ${{ github.event_name == 'pull_request' }}
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
           args: --out-format=checkstyle:golanglint.xml --timeout=300s --max-issues-per-linter=0 --max-same-issues=0 --new-from-rev=origin/${{ github.base_ref }}
-      -
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: golangcilint
           retention-days: 1
@@ -40,55 +39,41 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest-m-2
     steps:
-      -
-        name: Checkout main repository
+      - name: Checkout main repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
           submodules: true
 
-      -
-        name: Checkout langchaingo repository
+      - name: Checkout langchaingo repository
         uses: actions/checkout@v4
         with:
           repository: lonelycode/langchaingo
           path: langchaingo
           fetch-depth: 2
 
-      -
-        name: Setup Golang
+      - name: Setup Golang
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      -
-        name: Setup Hugo
-        uses: peaceiris/actions-hugo@v2
-        with:
-          hugo-version: 'latest'
-          extended: true
-
-      -
-        name: Use Node.js
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
 
-      -
-        name: Install goimports
+      - name: Install goimports
         run: go install golang.org/x/tools/cmd/goimports@latest
 
-      -
-        name: Fetch base branch
+      - name: Fetch base branch
         if: ${{ github.event_name == 'pull_request' }}
         run: git fetch origin ${{ github.base_ref }}
 
       # Improved Go dependency caching
-      -
-        name: Go Cache
+      - name: Go Cache
         uses: actions/cache@v3
         with:
           path: |
@@ -98,18 +83,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      # Cache Hugo resources
-      -
-        name: Cache Hugo resources
+      # Cache VitePress resources
+      - name: Cache VitePress resources
         uses: actions/cache@v3
         with:
-          path: docs/site/resources
-          key: ${{ runner.os }}-hugomod-${{ hashFiles('docs/site/go.sum') }}
+          path: docs/site/.vitepress/cache
+          key: ${{ runner.os }}-vitepress-${{ hashFiles('docs/site/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-hugomod-
+            ${{ runner.os }}-vitepress-
 
-      -
-        name: Build UI
+      - name: Build UI
         run: |
           cd ui/admin-frontend
           npm ci
@@ -117,20 +100,17 @@ jobs:
           CI=false npm run build
           cd ../..
 
-      -
-        name: Build Docs
+      - name: Build Docs
         run: |
           cp .env.example .env
-          cd docs/site && hugo && cd ../..
+          cd docs/site && npm install && NODE_ENV=production npm run docs:build && cd ../..
 
-      -
-        name: Run Go Tests
+      - name: Run Go Tests
         id: ci-tests
         run: |
           go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
-      -
-        name: Upload coverage
+      - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage

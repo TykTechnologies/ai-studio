@@ -58,7 +58,7 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		AdminEmail:          "admin@example.com",
 		TestMode:            false,
 	}
-	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 587, "user", "pass", suite.mockMailer)
+	mailService := notifications.NewMailService("test@example.com", "smtp.test.com", 587, "user", "pass", suite.mockMailer, false)
 	notificationService := services.NewTestNotificationService(suite.db)
 	suite.authService = auth.NewAuthService(config, mailService, suite.service, notificationService)
 	suite.api = &API{
@@ -522,5 +522,146 @@ func (suite *AuthHandlersTestSuite) TestLogoutHandler() {
 		// Check if the session token is cleared
 		suite.db.First(user, user.ID)
 		assert.Empty(suite.T(), user.SessionToken)
+	})
+}
+
+// New test for handleMe function to verify the ShowSSOConfig field
+func (suite *AuthHandlersTestSuite) TestHandleMe() {
+	suite.Run("Admin user with access to SSO config", func() {
+		// Create a user with admin privileges and access to SSO config
+		user := &models.User{
+			Email:             "admin@example.com",
+			Name:              "Admin User",
+			IsAdmin:           true,
+			AccessToSSOConfig: true,
+			ShowChat:          true,
+			ShowPortal:        true,
+		}
+		suite.db.Create(user)
+
+		// Mock the gin.Context to include the user
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("user", user)
+
+		// Create mock entitlements
+		entitlements := &services.UserEntitlements{
+			User: user,
+		}
+		c.Set("entitlements", entitlements)
+
+		// Call the handleMe function
+		suite.api.handleMe(c)
+
+		// Verify the response
+		assert.Equal(suite.T(), http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(suite.T(), err)
+
+		data := response["data"].(map[string]interface{})
+		attributes := data["attributes"].(map[string]interface{})
+
+		// Check that the user is an admin
+		assert.Equal(suite.T(), true, attributes["is_admin"])
+
+		// Check UI options
+		uiOptions := attributes["ui_options"].(map[string]interface{})
+		assert.Equal(suite.T(), true, uiOptions["show_chat"])
+		assert.Equal(suite.T(), true, uiOptions["show_portal"])
+		assert.Equal(suite.T(), true, uiOptions["show_sso_config"])
+	})
+
+	suite.Run("Admin user without access to SSO config", func() {
+		// Create a user with admin privileges but no access to SSO config
+		user := &models.User{
+			Email:             "admin2@example.com",
+			Name:              "Admin User 2",
+			IsAdmin:           true,
+			AccessToSSOConfig: false,
+			ShowChat:          true,
+			ShowPortal:        true,
+		}
+		suite.db.Create(user)
+
+		// Mock the gin.Context to include the user
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("user", user)
+
+		// Create mock entitlements
+		entitlements := &services.UserEntitlements{
+			User: user,
+		}
+		c.Set("entitlements", entitlements)
+
+		// Call the handleMe function
+		suite.api.handleMe(c)
+
+		// Verify the response
+		assert.Equal(suite.T(), http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(suite.T(), err)
+
+		data := response["data"].(map[string]interface{})
+		attributes := data["attributes"].(map[string]interface{})
+
+		// Check that the user is an admin
+		assert.Equal(suite.T(), true, attributes["is_admin"])
+
+		// Check UI options
+		uiOptions := attributes["ui_options"].(map[string]interface{})
+		assert.Equal(suite.T(), true, uiOptions["show_chat"])
+		assert.Equal(suite.T(), true, uiOptions["show_portal"])
+		assert.Equal(suite.T(), false, uiOptions["show_sso_config"])
+	})
+
+	suite.Run("Non-admin user", func() {
+		// Create a regular user
+		user := &models.User{
+			Email:             "user@example.com",
+			Name:              "Regular User",
+			IsAdmin:           false,
+			AccessToSSOConfig: false,
+			ShowChat:          true,
+			ShowPortal:        true,
+		}
+		suite.db.Create(user)
+
+		// Mock the gin.Context to include the user
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("user", user)
+
+		// Create mock entitlements
+		entitlements := &services.UserEntitlements{
+			User: user,
+		}
+		c.Set("entitlements", entitlements)
+
+		// Call the handleMe function
+		suite.api.handleMe(c)
+
+		// Verify the response
+		assert.Equal(suite.T(), http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(suite.T(), err)
+
+		data := response["data"].(map[string]interface{})
+		attributes := data["attributes"].(map[string]interface{})
+
+		// Check that the user is not an admin
+		assert.Equal(suite.T(), false, attributes["is_admin"])
+
+		// Check UI options
+		uiOptions := attributes["ui_options"].(map[string]interface{})
+		assert.Equal(suite.T(), true, uiOptions["show_chat"])
+		assert.Equal(suite.T(), true, uiOptions["show_portal"])
+		assert.Equal(suite.T(), false, uiOptions["show_sso_config"])
 	})
 }

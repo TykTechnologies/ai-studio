@@ -1,13 +1,37 @@
 package services
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateGroup(name string) (*models.Group, error) {
+func (s *Service) validateGroupName(name string, groupID uint) error {
+	if name == "" {
+		return helpers.NewBadRequestError("group name is required")
+	}
+
+	isUnique, err := models.IsGroupNameUnique(s.DB, name, groupID)
+	if err != nil {
+		return helpers.NewInternalServerError("error checking group name uniqueness: " + err.Error())
+	}
+
+	if !isUnique {
+		return helpers.NewBadRequestError("group name already exists")
+	}
+
+	return nil
+}
+
+func (s *Service) CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
+	if err := s.validateGroupName(name, 0); err != nil {
+		return nil, err
+	}
+
 	group := &models.Group{
 		Name: name,
 	}
+
+	group.ParseAssociations(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
 
 	if err := group.Create(s.DB); err != nil {
 		return nil, err
@@ -16,23 +40,46 @@ func (s *Service) CreateGroup(name string) (*models.Group, error) {
 	return group, nil
 }
 
-func (s *Service) GetGroupByID(id uint) (*models.Group, error) {
+func (s *Service) GetGroupByID(id uint, preloads ...string) (*models.Group, error) {
 	group := models.NewGroup()
-	if err := group.Get(s.DB, id); err != nil {
+	if err := group.Get(s.DB, id, preloads...); err != nil {
 		return nil, err
 	}
 	return group, nil
 }
 
-func (s *Service) UpdateGroup(id uint, name string) (*models.Group, error) {
-	group, err := s.GetGroupByID(id)
+func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
+	if err := s.validateGroupName(name, id); err != nil {
+		return nil, err
+	}
+
+	group, err := s.GetGroupByID(id, "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		return nil, err
 	}
 
-	group.Name = name
+	tx := s.DB.Begin()
 
-	if err := group.Update(s.DB); err != nil {
+	if name != "" && name != group.Name {
+		group.Name = name
+		if err := group.Update(tx); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
+	associations := group.GetAssociationsToUpdate(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
+
+	for _, assoc := range associations {
+		if assoc.NeedsUpdate {
+			if err := group.ReplaceAssociation(tx, assoc.Name, assoc.GetValue()); err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
@@ -45,7 +92,22 @@ func (s *Service) DeleteGroup(id uint) error {
 		return err
 	}
 
-	return group.Delete(s.DB)
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := group.ClearAssociations(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := group.Delete(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (s *Service) AddUserToGroup(userID, groupID uint) error {
@@ -76,26 +138,55 @@ func (s *Service) RemoveUserFromGroup(userID, groupID uint) error {
 	return group.RemoveUser(s.DB, user)
 }
 
-func (s *Service) GetGroupUsers(groupID uint) (models.Users, error) {
-	group, err := s.GetGroupByID(groupID)
+func (s *Service) GetGroupUsers(groupID uint, pageSize int, pageNumber int, all bool) (models.Users, int64, int, error) {
+	var users models.Users
+	totalCount, totalPages, err := users.GetGroupUsersPaginated(s.DB, groupID, pageSize, pageNumber, all)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
-
-	if err := group.GetGroupUsers(s.DB); err != nil {
-		return nil, err
-	}
-
-	return group.Users, nil
+	return users, totalCount, totalPages, nil
 }
 
-func (s *Service) GetAllGroups(pageSize int, pageNumber int, all bool) (models.Groups, int64, int, error) {
+func (s *Service) GetAllGroups(pageSize int, pageNumber int, all bool, sort string) (models.Groups, int64, int, error) {
 	var groups models.Groups
-	totalCount, totalPages, err := groups.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := groups.GetAll(s.DB, pageSize, pageNumber, all, sort, "Catalogues", "DataCatalogues", "ToolCatalogues")
 	if err != nil {
 		return nil, 0, 0, err
 	}
 	return groups, totalCount, totalPages, nil
+}
+
+func (s *Service) SearchGroups(term string, pageSize int, pageNumber int, all bool, sort string) (models.Groups, int64, int, error) {
+	var groups models.Groups
+	totalCount, totalPages, err := groups.SearchByTerm(s.DB, term, pageSize, pageNumber, all, sort, "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return groups, totalCount, totalPages, nil
+}
+
+func (s *Service) GetGroupsWithMemberCounts(term string, pageSize int, pageNumber int, all bool, sort string) (models.Groups, []models.GroupMemberCount, int64, int, error) {
+	var groups models.Groups
+	var totalCount int64
+	var totalPages int
+	var err error
+
+	if term != "" {
+		groups, totalCount, totalPages, err = s.SearchGroups(term, pageSize, pageNumber, all, sort)
+	} else {
+		groups, totalCount, totalPages, err = s.GetAllGroups(pageSize, pageNumber, all, sort)
+	}
+
+	if err != nil {
+		return nil, nil, 0, 0, err
+	}
+
+	memberCounts, err := groups.GetGroupsMemberCounts(s.DB)
+	if err != nil {
+		return nil, nil, 0, 0, err
+	}
+
+	return groups, memberCounts, totalCount, totalPages, nil
 }
 
 func (s *Service) SearchGroupsByNameStub(stub string) (models.Groups, error) {
@@ -237,4 +328,26 @@ func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber 
 	}
 
 	return group.ToolCatalogues, totalCount, totalPages, nil
+}
+
+func (s *Service) UpdateGroupCatalogues(id uint, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) error {
+	group, err := s.GetGroupByID(id, "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		return err
+	}
+
+	associations := group.GetAssociationsToUpdate([]uint{}, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
+
+	tx := s.DB.Begin()
+
+	for _, assoc := range associations {
+		if assoc.Name != "Users" && assoc.NeedsUpdate {
+			if err := group.ReplaceAssociation(tx, assoc.Name, assoc.GetValue()); err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	return tx.Commit().Error
 }

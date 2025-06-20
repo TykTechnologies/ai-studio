@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import PropTypes from 'prop-types';
 import {
   List,
@@ -10,9 +10,9 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import { StyledNavLink } from '../../../styles/sharedStyles';
 import { ParentListItem, SubListItem, ListItemIcon } from './styles';
 
-const MenuItem = ({ 
-  item, 
-  depth = 0, 
+const MenuItem = ({
+  item,
+  depth = 0,
   parentId = null,
   rootParentId = null,
   open,
@@ -20,7 +20,6 @@ const MenuItem = ({
   onExpandClick,
   onPathSelect,
   selectedPath,
-  disableRipple,
   isFirstItem,
 }) => {
   const itemId = item.id || item.text;
@@ -28,22 +27,34 @@ const MenuItem = ({
   const isExpanded = expandedItems[itemId];
   const immediateParentId = parentId || itemId;
 
-  const isSelected = selectedPath === item.path || 
-    (hasSubItems && item.subItems?.some(subItem => {
-      if (subItem.path === selectedPath) return true;
-      if (subItem.subItems) {
-        return subItem.subItems.some(deepSubItem => deepSubItem.path === selectedPath);
-      }
-      return false;
-    }));
+  const pathMatches = (itemPath, currentPath) => {
+    return itemPath === currentPath || (itemPath && currentPath?.startsWith(itemPath + '/'));
+  };
 
+  const isItemSelected = (item, currentPath) => {
+    if (pathMatches(item.path, currentPath)) return true;
+    if (item.subItems) {
+      return item.subItems.some(subItem => isItemSelected(subItem, currentPath));
+    }
+    return false;
+  };
+
+  const isSelected = item.exact
+    ? selectedPath === item.path
+    : isItemSelected(item, selectedPath);
+    
   const ListItemComponent = depth === 0 ? ParentListItem : SubListItem;
 
   if (hasSubItems) {
+    const handleItemClick = (e) => {
+      e.stopPropagation();
+      onExpandClick(itemId, parentId);
+    };
+
     return (
       <React.Fragment key={itemId}>
         <ListItemComponent
-          onClick={() => onExpandClick(itemId, parentId)}
+          onClick={handleItemClick}
           depth={depth}
           selected={isSelected}
           disableRipple
@@ -93,7 +104,7 @@ const MenuItem = ({
       to={item.path}
       depth={depth}
       onClick={() => onPathSelect(item.path)}
-      selected={selectedPath === item.path}
+      selected={item.exact ? selectedPath === item.path : pathMatches(item.path, selectedPath)}
       disableRipple
       disableTouchRipple
       rootParentId={immediateParentId}
@@ -101,7 +112,7 @@ const MenuItem = ({
       hasSubItems={hasSubItems}
       open={open}
       isFirstItem={depth === 0 && isFirstItem}
-      {...(item.path === '/admin/' ? { end: true } : {})}
+      {...(item.exact ? { end: true } : {})}
     >
       {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
       <ListItemText
@@ -121,6 +132,7 @@ MenuItem.propTypes = {
     path: PropTypes.string,
     icon: PropTypes.node,
     subItems: PropTypes.array,
+    exact: PropTypes.bool,
   }).isRequired,
   depth: PropTypes.number,
   parentId: PropTypes.string,
@@ -130,8 +142,7 @@ MenuItem.propTypes = {
   onExpandClick: PropTypes.func.isRequired,
   onPathSelect: PropTypes.func.isRequired,
   selectedPath: PropTypes.string,
-  disableRipple: PropTypes.bool,
   isFirstItem: PropTypes.bool,
 };
 
-export default React.memo(MenuItem);
+export default memo(MenuItem);

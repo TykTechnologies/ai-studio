@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import apiClient from "../../utils/apiClient";
+import React, { useState, useEffect, useCallback } from "react";
+import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import {
   TextField,
   Box,
@@ -36,6 +36,7 @@ const AppForm = () => {
     user_id: "",
     llm_ids: [],
     datasource_ids: [],
+    tool_ids: [], // Added for tools
     monthly_budget: null,
     budget_start_date: null,
   });
@@ -43,6 +44,7 @@ const AppForm = () => {
   const [users, setUsers] = useState([]);
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
+  const [availableTools, setAvailableTools] = useState([]);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -52,16 +54,16 @@ const AppForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  useEffect(() => {
-    fetchUsers();
-    fetchLLMs();
-    fetchDatasources();
-    if (id) {
-      fetchApp();
+  const fetchCredential = useCallback(async (credentialId) => {
+    try {
+      const response = await apiClient.get(`/credentials/${credentialId}`);
+      setCredential(response.data.data); // Store the full data object
+    } catch (error) {
+      console.error("Error fetching credential", error);
     }
-  }, [id]);
+  }, []);
 
-  const fetchApp = async () => {
+  const fetchApp = useCallback(async () => {
     try {
       const response = await apiClient.get(`/apps/${id}`);
       const appData = response.data.data.attributes;
@@ -72,6 +74,9 @@ const AppForm = () => {
           : [],
         datasource_ids: Array.isArray(appData.datasource_ids)
           ? appData.datasource_ids.map(String)
+          : [],
+        tool_ids: Array.isArray(appData.tool_ids)
+          ? appData.tool_ids.map(String)
           : [],
       });
       if (appData.credential_id) {
@@ -85,16 +90,19 @@ const AppForm = () => {
         severity: "error",
       });
     }
-  };
+  }, [id, fetchCredential]);
 
-  const fetchCredential = async (credentialId) => {
-    try {
-      const response = await apiClient.get(`/credentials/${credentialId}`);
-      setCredential(response.data.data); // Store the full data object
-    } catch (error) {
-      console.error("Error fetching credential", error);
+  useEffect(() => {
+    fetchUsers();
+    fetchLLMs();
+    fetchDatasources();
+    fetchTools();
+    if (id) {
+      fetchApp();
     }
-  };
+  }, [id, fetchApp]);
+
+  // fetchApp is now defined using useCallback above
 
   const handleCredentialActiveToggle = async (event) => {
     const newActiveState = event.target.checked;
@@ -161,6 +169,15 @@ const AppForm = () => {
     }
   };
 
+  const fetchTools = async () => {
+    try {
+      const response = await appToolAPI.listAvailableTools();
+      setAvailableTools(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching tools", error);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setApp({ ...app, [name]: value });
@@ -197,15 +214,18 @@ const AppForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    const appPayload = {
+      ...app,
+      user_id: parseInt(app.user_id, 10),
+      llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
+      datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
+      tool_ids: app.tool_ids.map((id) => parseInt(id, 10)),
+    };
+
     const appData = {
       data: {
         type: "apps",
-        attributes: {
-          ...app,
-          user_id: parseInt(app.user_id, 10),
-          llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
-          datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
-        },
+        attributes: appPayload,
       },
     };
 
@@ -401,6 +421,43 @@ const AppForm = () => {
                       value={datasource.id.toString()}
                     >
                       {datasource.attributes.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Tools</InputLabel>
+                <Select
+                  multiple
+                  name="tool_ids"
+                  value={app.tool_ids}
+                  onChange={handleMultiSelectChange}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {selected.map((value) => {
+                        const tool = availableTools.find(
+                          (t) => t.id.toString() === value,
+                        );
+                        return (
+                          <Chip
+                            key={value}
+                            label={
+                              tool ? tool.attributes.name : value
+                            }
+                          />
+                        );
+                      })}
+                    </Box>
+                  )}
+                >
+                  {availableTools.map((tool) => (
+                    <MenuItem
+                      key={tool.id}
+                      value={tool.id.toString()}
+                    >
+                      {tool.attributes.name}
                     </MenuItem>
                   ))}
                 </Select>

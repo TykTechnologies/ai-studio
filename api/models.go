@@ -16,6 +16,8 @@ type UserInput struct {
 			ShowPortal           bool   `json:"show_portal"`
 			EmailVerified        bool   `json:"email_verified"`
 			NotificationsEnabled bool   `json:"notifications_enabled"`
+			AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+			Groups               []uint `json:"groups"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -26,7 +28,11 @@ type GroupInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name string `json:"name"`
+			Name           string `json:"name"`
+			Members        []uint `json:"members"`
+			Catalogues     []uint `json:"catalogues"`
+			DataCatalogues []uint `json:"data_catalogues"`
+			ToolCatalogues []uint `json:"tool_catalogues"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -55,14 +61,17 @@ type UserResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email                string `json:"email"`
-		Name                 string `json:"name"`
-		IsAdmin              bool   `json:"is_admin"`
-		ShowChat             bool   `json:"show_chat"`
-		ShowPortal           bool   `json:"show_portal"`
-		EmailVerified        bool   `json:"email_verified"`
-		APIKey               string `json:"api_key"`
-		NotificationsEnabled bool   `json:"notifications_enabled"`
+		Email                string          `json:"email"`
+		Name                 string          `json:"name"`
+		IsAdmin              bool            `json:"is_admin"`
+		ShowChat             bool            `json:"show_chat"`
+		ShowPortal           bool            `json:"show_portal"`
+		EmailVerified        bool            `json:"email_verified"`
+		APIKey               string          `json:"api_key"`
+		NotificationsEnabled bool            `json:"notifications_enabled"`
+		AccessToSSOConfig    bool            `json:"access_to_sso_config"`
+		Role                 string          `json:"role"`
+		Groups               []GroupResponse `json:"groups,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -72,7 +81,11 @@ type GroupResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name string `json:"name"`
+		Name           string                  `json:"name"`
+		Users          []UserResponse          `json:"users,omitempty"`
+		Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
+		DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
+		ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -340,6 +353,7 @@ type AppInput struct {
 			UserID          uint       `json:"user_id"`
 			DatasourceIDs   []uint     `json:"datasource_ids"`
 			LLMIDs          []uint     `json:"llm_ids"`
+			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
 		} `json:"attributes"`
@@ -358,6 +372,7 @@ type AppResponse struct {
 		CredentialID    uint       `json:"credential_id"`
 		DatasourceIDs   []uint     `json:"datasource_ids"`
 		LLMIDs          []uint     `json:"llm_ids"`
+		ToolIDs         []uint     `json:"tool_ids"`
 		MonthlyBudget   *float64   `json:"monthly_budget"`
 		BudgetStartDate *time.Time `json:"budget_start_date"`
 	} `json:"attributes"`
@@ -433,19 +448,19 @@ type ChatResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name                string                 `json:"name"`
-		Description         string                 `json:"description"`
-		LLMSettingsID       string                 `json:"llm_settings_id"`
-		LLMID               string                 `json:"llm_id"`
-		Groups              []GroupResponse        `json:"groups"`
-		Filters             []FilterResponse       `json:"filters"`
-		RagN                int                    `json:"rag_n"`
-		ToolSupport         bool                   `json:"tool_support"`
-		SystemPrompt        string                 `json:"system_prompt"`
-		DefaultDataSourceID int                    `json:"default_data_source_id"`
-		DefaultDataSource   DatasourceResponse     `json:"default_data_source"`
-		ExtraContext        []FileStoreResponse    `json:"extra_context"`
-		DefaultTools        []ToolResponse         `json:"default_tools"`
+		Name                string                   `json:"name"`
+		Description         string                   `json:"description"`
+		LLMSettingsID       string                   `json:"llm_settings_id"`
+		LLMID               string                   `json:"llm_id"`
+		Groups              []GroupResponse          `json:"groups"`
+		Filters             []FilterResponse         `json:"filters"`
+		RagN                int                      `json:"rag_n"`
+		ToolSupport         bool                     `json:"tool_support"`
+		SystemPrompt        string                   `json:"system_prompt"`
+		DefaultDataSourceID int                      `json:"default_data_source_id"`
+		DefaultDataSource   DatasourceResponse       `json:"default_data_source"`
+		ExtraContext        []FileStoreResponse      `json:"extra_context"`
+		DefaultTools        []ToolResponse           `json:"default_tools"`
 		PromptTemplates     []PromptTemplateResponse `json:"prompt_templates"`
 	} `json:"attributes"`
 }
@@ -828,12 +843,15 @@ type UserWithEntitlementsResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		IsAdmin   bool   `json:"is_admin"`
-		UIOptions struct {
-			ShowChat   bool `json:"show_chat"`
-			ShowPortal bool `json:"show_portal"`
+		Email        string `json:"email"`
+		Name         string `json:"name"`
+		IsAdmin      bool   `json:"is_admin"`
+		IsSuperAdmin bool   `json:"is_super_admin"`
+		UIOptions    struct {
+			ShowChat       bool `json:"show_chat"`
+			ShowPortal     bool `json:"show_portal"`
+			ShowSSOConfig  bool `json:"show_sso_config"`
+			SkipQuickStart bool `json:"skip_quick_start"`
 		} `json:"ui_options"`
 		Entitlements struct {
 			Catalogues     []CatalogueResponse     `json:"catalogues"`
@@ -868,6 +886,7 @@ type AppDetailResponse struct {
 		CredentialID    uint             `json:"credential_id"`
 		DatasourceIDs   []uint           `json:"datasource_ids"`
 		LLMIDs          []uint           `json:"llm_ids"`
+		ToolIDs         []uint           `json:"tool_ids"`
 		MonthlyBudget   *float64         `json:"monthly_budget"`
 		BudgetStartDate *time.Time       `json:"budget_start_date"`
 		Credential      CredentialDetail `json:"credential"`
@@ -889,7 +908,7 @@ type CMessageResponse struct {
 	ID         string `json:"id"`
 	Attributes struct {
 		Session   string    `json:"session"`
-		Content   string    `json:"content"`
+		Content   any       `json:"content"`
 		CreatedAt time.Time `json:"created_at"`
 		ChatID    uint      `json:"chat_id"`
 	} `json:"attributes"`
@@ -926,9 +945,11 @@ type PaginatedProxyLogs struct {
 // FrontendConfig holds front-end configuration settings
 // @Description Front-end config model
 type FrontendConfig struct {
-	APIBaseURL        string `json:"apiBaseURL"`
-	ProxyURL          string `json:"proxyURL"`
-	DefaultSignUpMode string `json:"defaultSignUpMode"`
+	APIBaseURL        string            `json:"apiBaseURL"`
+	ProxyURL          string            `json:"proxyURL"`
+	DefaultSignUpMode string            `json:"defaultSignUpMode"`
+	TIBEnabled        bool              `json:"tibEnabled"`
+	DocsLinks         map[string]string `json:"docsLinks"`
 }
 
 // FileStoreInput represents the input for filestore-related operations
@@ -994,6 +1015,96 @@ type SecretListResponse struct {
 	} `json:"meta"`
 }
 
+// ProfileInput represents the input for creating/updating an SSO profile
+// @Description Profile input model
+type ProfileInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			ProfileID                 string                 `json:"profile_id"`
+			Name                      string                 `json:"name"`
+			OrgID                     string                 `json:"org_id"`
+			ActionType                string                 `json:"action_type"`
+			MatchedPolicyID           string                 `json:"matched_policy_id"`
+			Type                      string                 `json:"type"`
+			ProviderName              string                 `json:"provider_name"`
+			CustomEmailField          string                 `json:"custom_email_field"`
+			CustomUserIDField         string                 `json:"custom_user_id_field"`
+			ProviderConfig            map[string]interface{} `json:"provider_config"`
+			IdentityHandlerConfig     map[string]interface{} `json:"identity_handler_config"`
+			ProviderConstraintsDomain string                 `json:"provider_constraints_domain"`
+			ProviderConstraintsGroup  string                 `json:"provider_constraints_group"`
+			ReturnURL                 string                 `json:"return_url"`
+			DefaultUserGroupID        string                 `json:"default_user_group_id"`
+			CustomUserGroupField      string                 `json:"custom_user_group_field"`
+			UserGroupMapping          map[string]string      `json:"user_group_mapping"`
+			UserGroupSeparator        string                 `json:"user_group_separator"`
+			SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// ProfileResponse represents the response for an SSO profile
+// @Description Profile response model
+type ProfileResponse struct {
+	Type       string `json:"type"`
+	ID         uint   `json:"id"`
+	Attributes struct {
+		ProfileID                 string                 `json:"profile_id"`
+		Name                      string                 `json:"name"`
+		OrgID                     string                 `json:"org_id"`
+		ActionType                string                 `json:"action_type"`
+		MatchedPolicyID           string                 `json:"matched_policy_id"`
+		Type                      string                 `json:"type"`
+		ProviderName              string                 `json:"provider_name"`
+		CustomEmailField          string                 `json:"custom_email_field"`
+		CustomUserIDField         string                 `json:"custom_user_id_field"`
+		ProviderConfig            map[string]interface{} `json:"provider_config"`
+		IdentityHandlerConfig     map[string]interface{} `json:"identity_handler_config"`
+		ProviderConstraintsDomain string                 `json:"provider_constraints_domain"`
+		ProviderConstraintsGroup  string                 `json:"provider_constraints_group"`
+		ReturnURL                 string                 `json:"return_url"`
+		DefaultUserGroupID        string                 `json:"default_user_group_id"`
+		CustomUserGroupField      string                 `json:"custom_user_group_field"`
+		UserGroupMapping          map[string]string      `json:"user_group_mapping"`
+		UserGroupSeparator        string                 `json:"user_group_separator"`
+		SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
+		SelectedProviderType      string                 `json:"selected_provider_type"`
+		LoginURL                  string                 `json:"login_url"`
+		CallbackURL               string                 `json:"callback_url"`
+		FailureRedirectURL        string                 `json:"failure_redirect_url"`
+		UseInLoginPage            bool                   `json:"use_in_login_page"`
+	} `json:"attributes"`
+}
+
+// ProfileListItem represents a simplified profile item for list responses
+// @Description Profile list item model
+type ProfileListItem struct {
+	Type       string `json:"type"`
+	ID         uint   `json:"id"`
+	Attributes struct {
+		Name           string    `json:"name"`
+		ProfileID      string    `json:"profile_id"`
+		ProfileType    string    `json:"profile_type"`
+		ProviderType   string    `json:"provider_type"`
+		UpdatedBy      string    `json:"updated_by"`
+		UpdatedAt      time.Time `json:"updated_at"`
+		UseInLoginPage bool      `json:"use_in_login_page"`
+	} `json:"attributes"`
+}
+
+// ProfilesResponse represents the paginated response for listing profiles
+// @Description Profiles list response model
+type ProfilesResponse struct {
+	Data []ProfileListItem `json:"data"`
+	Meta struct {
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+		PageSize   int   `json:"page_size"`
+		PageNumber int   `json:"page_number"`
+	} `json:"meta"`
+}
+
 // DependencyInput represents the input for adding or removing a dependency
 // @Description Dependency input model
 type DependencyInput struct {
@@ -1032,4 +1143,39 @@ type PromptTemplateResponse struct {
 		Prompt string `json:"prompt"`
 		ChatID uint   `json:"chat_id"`
 	} `json:"attributes"`
+}
+
+type GroupUsersInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Members []uint `json:"members"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+type GroupListResponse struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Attributes struct {
+		Name               string   `json:"name"`
+		UserCount          int      `json:"user_count"`
+		CatalogueCount     int      `json:"catalogue_count"`
+		DataCatalogueCount int      `json:"data_catalogue_count"`
+		ToolCatalogueCount int      `json:"tool_catalogue_count"`
+		CatalogueNames     []string `json:"catalogue_names"`
+		DataCatalogueNames []string `json:"data_catalogue_names"`
+		ToolCatalogueNames []string `json:"tool_catalogue_names"`
+	} `json:"attributes"`
+}
+
+type GroupCataloguesRequest struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Catalogues     []uint `json:"catalogues"`
+			DataCatalogues []uint `json:"data_catalogues"`
+			ToolCatalogues []uint `json:"tool_catalogues"`
+		} `json:"attributes"`
+	} `json:"data"`
 }
