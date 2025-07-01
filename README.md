@@ -1,4 +1,4 @@
-# Midsommar - AKA Tyk AI Portal
+# Midsommar - Tyk AI Studio
 
 Tyk AI Portal makes it easy to embrace AI in the organisation.
 
