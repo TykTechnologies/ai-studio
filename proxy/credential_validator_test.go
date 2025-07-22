@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+
 	// "strings" // REMOVED as it seems unused in the final version of the test logic
 	"testing"
 	"time"
@@ -66,7 +67,8 @@ func TestCredentialValidatorMiddleware(t *testing.T) {
 	err := proxyInstance.loadResources()
 	require.NoError(t, err)
 
-	validator := NewCredentialValidator(serviceInstance, proxyInstance)
+	gatewayService := &concreteServiceWrapper{service: serviceInstance}
+	validator := NewCredentialValidator(gatewayService, proxyInstance)
 
 	testUser := models.User{Email: "beareruser@example.com", Name: "Bearer User"}
 	require.NoError(t, db.Create(&testUser).Error)

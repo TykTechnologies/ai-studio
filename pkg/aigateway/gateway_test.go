@@ -32,7 +32,11 @@ func TestNew(t *testing.T) {
 		t.Skip("Skipping test - requires real database services")
 	}
 
-	gateway := New(service, config, budgetService)
+	gateway := New(
+		NewDatabaseService(service),
+		NewDatabaseBudgetService(budgetService),
+		&Config{Port: config.Port},
+	)
 	if gateway == nil {
 		t.Error("New() returned nil gateway")
 	}

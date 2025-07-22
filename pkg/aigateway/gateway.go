@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/proxy"
-	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 // Gateway represents an AI Gateway instance that can proxy requests to LLM providers,
@@ -31,22 +30,46 @@ type gateway struct {
 	proxy *proxy.Proxy
 }
 
-// New creates a new Gateway instance using the existing services and configuration.
-// This is the simplest way to create a gateway that works with the current Midsommar setup.
+// Config represents the configuration for the AI Gateway
+type Config struct {
+	Port int
+}
+
+// New creates a new Gateway instance using interface-based services.
+// This approach allows for flexible backend implementations (database, file, API, etc.).
 //
 // Parameters:
-//   - service: The service layer that provides access to database operations
-//   - config: Proxy configuration including port settings
-//   - budgetService: Service for budget enforcement and tracking
+//   - gatewayService: Service interface for configuration, authentication, and pricing
+//   - budgetService: Budget interface for spending validation and tracking
+//   - config: Gateway configuration including port settings
 //
-// Example:
+// Example with database backend:
 //
+//	db := setupDatabase()
 //	service := services.NewService(db)
 //	budgetService := services.NewBudgetService(db, service)
-//	gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
+//
+//	gateway := aigateway.New(
+//		aigateway.NewDatabaseService(service),
+//		aigateway.NewDatabaseBudgetService(budgetService),
+//		&aigateway.Config{Port: 9090},
+//	)
 //	gateway.Start()
-func New(service *services.Service, config *proxy.Config, budgetService *services.BudgetService) Gateway {
-	proxyInstance := proxy.NewProxy(service, config, budgetService)
+//
+// Example with custom backend:
+//
+//	gateway := aigateway.New(
+//		myCustomService,        // implements GatewayServiceInterface
+//		myCustomBudgetService,  // implements GatewayBudgetServiceInterface
+//		&aigateway.Config{Port: 9090},
+//	)
+func New(
+	gatewayService GatewayServiceInterface,
+	budgetService GatewayBudgetServiceInterface,
+	config *Config,
+) Gateway {
+	proxyConfig := &proxy.Config{Port: config.Port}
+	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{
 		proxy: proxyInstance,
 	}
