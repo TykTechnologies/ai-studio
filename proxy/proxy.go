@@ -196,6 +196,12 @@ func (p *Proxy) Reload() error {
 	return p.loadResources()
 }
 
+// Handler returns the HTTP handler for the proxy, allowing it to be used
+// with existing HTTP servers instead of starting its own server
+func (p *Proxy) Handler() http.Handler {
+	return fixDoubleSlash(p.createHandler())
+}
+
 func (p *Proxy) loadResources() error {
 	// ... (implementation as before, ensuring it's complete)
 	llms, err := p.service.GetActiveLLMs()
