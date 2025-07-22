@@ -6,18 +6,18 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"gorm.io/gorm"
 )
 
 type CredentialExtractor func(r *http.Request) (string, error)
 
 type CredentialValidator struct {
-	service    *services.Service // Changed to concrete type
+	service    GatewayServiceInterface
 	p          *Proxy
 	validators map[string]CredentialExtractor
-	// No need for explicit accessTokenService, use cv.service.AccessTokenService
 }
 
-func NewCredentialValidator(service *services.Service, proxy *Proxy) *CredentialValidator { // Changed to concrete type
+func NewCredentialValidator(service GatewayServiceInterface, proxy *Proxy) *CredentialValidator {
 	return &CredentialValidator{
 		service:    service,
 		p:          proxy,
@@ -48,7 +48,13 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 			// First try OAuth access token lookup
-			accessTokenService := services.NewAccessTokenService(cv.service.GetDB())
+			db, ok := cv.service.GetDB().(*gorm.DB)
+			if !ok {
+				respondWithError(w, http.StatusInternalServerError, "Database connection not available", nil, false)
+				return
+			}
+
+			accessTokenService := services.NewAccessTokenService(db)
 			accessToken, err := accessTokenService.GetValidAccessTokenByToken(tokenString)
 			if err == nil {
 				// Valid OAuth access token
@@ -58,7 +64,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 
-				oauthClientService := services.NewOAuthClientService(cv.service.GetDB())
+				oauthClientService := services.NewOAuthClientService(db)
 				oauthClient, err := oauthClientService.GetClient(accessToken.ClientID)
 				if err != nil {
 					respondWithError(w, http.StatusInternalServerError, "Could not retrieve client for token", err, false)
