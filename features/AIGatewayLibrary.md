@@ -42,6 +42,66 @@ type Gateway interface {
 }
 ```
 
+## Architecture & OAuth Support
+
+### Interface Abstraction Pattern
+
+The AI Gateway uses proper interface abstraction to support multiple backend implementations while maintaining clean separation of concerns. The `GatewayServiceInterface` defines all authentication methods, including OAuth support:
+
+```go
+type GatewayServiceInterface interface {
+    // Core LLM and resource methods
+    GetActiveLLMs() ([]models.LLM, error)
+    GetCredentialBySecret(secret string) (*models.Credential, error)
+    GetUserByID(id uint) (*models.User, error)
+    
+    // OAuth authentication methods (part of interface)
+    GetValidAccessTokenByToken(token string) (*models.AccessToken, error)
+    GetOAuthClient(clientID string) (*models.OAuthClient, error)
+}
+```
+
+### OAuth Implementation Strategy
+
+**Problem Solved**: The credential validator was previously bypassing the interface abstraction and directly accessing the database for OAuth operations, breaking the clean architecture pattern.
+
+**Solution**: OAuth methods are now part of the `GatewayServiceInterface`, allowing different implementations:
+
+1. **Database Implementation**: Uses actual OAuth token services for full OAuth support
+2. **File-based Implementation**: Returns graceful "not found" errors for OAuth methods
+3. **Custom Implementations**: Can implement OAuth however needed
+
+### Authentication Flow
+
+The credential validator now properly uses interface methods:
+
+```go
+// Try OAuth access token lookup (interface method)
+accessToken, err := cv.service.GetValidAccessTokenByToken(tokenString)
+if err == nil {
+    // OAuth success - get user and client via interface
+    user, _ := cv.service.GetUserByID(accessToken.UserID)
+    oauthClient, _ := cv.service.GetOAuthClient(accessToken.ClientID)
+    // Set context and proceed
+}
+
+// If OAuth fails, gracefully fall back to app secret lookup
+cred, err := cv.service.GetCredentialBySecret(tokenString)
+if err == nil && cred.Active {
+    // App secret authentication
+}
+```
+
+### Benefits of This Architecture
+
+- **Clean Interface Abstraction**: No direct database access in credential validator
+- **Multiple Backend Support**: Database systems get full OAuth, file-based systems get graceful fallback
+- **Proper Separation**: OAuth functionality encapsulated in service implementations
+- **Easy Testing**: Interface can be mocked for comprehensive testing
+- **Extensible**: New authentication backends can be added without changing core logic
+
+This ensures the gateway can work in both full database environments (with OAuth) and lightweight file-based deployments (without OAuth) while maintaining the same clean interface.
+
 ## Analytics Interface
 
 The AI Gateway Library provides **pluggable analytics backends**, enabling developers to send usage data to different destinations based on their architecture needs.

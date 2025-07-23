@@ -16,6 +16,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/examples/file-based-demo/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
+	"github.com/gosimple/slug"
 )
 
 const (
@@ -152,12 +153,15 @@ func printConfigSummary(gatewayService *services.FileGatewayService, budgetServi
 	} else {
 		fmt.Printf("🤖 Active LLMs: %d\n", len(llms))
 		for _, llm := range llms {
+			// Generate slug from name using the same logic as proxy
+			llmSlug := slug.Make(llm.Name)
 			apiKeyDisplay := "***"
 			if llm.APIKey != "" {
 				apiKeyDisplay = llm.APIKey[:min(8, len(llm.APIKey))] + "***"
 			}
 			fmt.Printf("   • %s (%s) - %s - API Key: %s\n",
 				llm.Name, llm.Vendor, llm.DefaultModel, apiKeyDisplay)
+			fmt.Printf("     URL: /llm/rest/%s/* and /llm/stream/%s/*\n", llmSlug, llmSlug)
 		}
 	}
 
@@ -186,9 +190,9 @@ func printUsageExamples() {
 
 	fmt.Printf("\n💬 Example API calls:\n")
 
-	// GPT-4 example
+	// GPT-4 example (slug.Make("GPT-4") = "gpt-4")
 	fmt.Printf("\n1. Chat with GPT-4:\n")
-	fmt.Printf("curl -X POST http://localhost:%d/llm/rest/gpt4/chat/completions \\\n", defaultPort)
+	fmt.Printf("curl -X POST http://localhost:%d/llm/rest/gpt-4/chat/completions \\\n", defaultPort)
 	fmt.Printf("  -H \"Content-Type: application/json\" \\\n")
 	fmt.Printf("  -H \"Authorization: Bearer demo-key-12345\" \\\n")
 	fmt.Printf("  -d '{\n")
@@ -199,9 +203,9 @@ func printUsageExamples() {
 	fmt.Printf("    \"max_tokens\": 150\n")
 	fmt.Printf("  }'\n")
 
-	// Claude example
+	// Claude example (slug.Make("Claude-3.5 Sonnet") = "claude-3-5-sonnet")
 	fmt.Printf("\n2. Chat with Claude:\n")
-	fmt.Printf("curl -X POST http://localhost:%d/llm/rest/claude35sonnet/messages \\\n", defaultPort)
+	fmt.Printf("curl -X POST http://localhost:%d/llm/rest/claude-3-5-sonnet/messages \\\n", defaultPort)
 	fmt.Printf("  -H \"Content-Type: application/json\" \\\n")
 	fmt.Printf("  -H \"Authorization: Bearer demo-key-12345\" \\\n")
 	fmt.Printf("  -d '{\n")
@@ -212,9 +216,9 @@ func printUsageExamples() {
 	fmt.Printf("    ]\n")
 	fmt.Printf("  }'\n")
 
-	// Budget test example
+	// Budget test example (slug.Make("GPT-3.5 Turbo") = "gpt-3-5-turbo")
 	fmt.Printf("\n3. Test budget limits (will likely be blocked):\n")
-	fmt.Printf("curl -X POST http://localhost:%d/llm/rest/gpt35turbo/chat/completions \\\n", defaultPort)
+	fmt.Printf("curl -X POST http://localhost:%d/llm/rest/gpt-3-5-turbo/chat/completions \\\n", defaultPort)
 	fmt.Printf("  -H \"Content-Type: application/json\" \\\n")
 	fmt.Printf("  -H \"Authorization: Bearer budget-key-67890\" \\\n")
 	fmt.Printf("  -d '{\n")

@@ -19,16 +19,17 @@ type GatewayServiceInterface interface {
 	// Authentication & Authorization (read-only)
 	GetCredentialBySecret(secret string) (*models.Credential, error)
 	GetAppByCredentialID(credID uint) (*models.App, error)
+	GetUserByID(id uint) (*models.User, error)
+
+	// OAuth Authentication (read-only)
+	GetValidAccessTokenByToken(token string) (*models.AccessToken, error)
+	GetOAuthClient(clientID string) (*models.OAuthClient, error)
 
 	// Pricing (read-only)
 	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
 
 	// Tool operations
 	CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error)
-
-	// Additional methods needed by credential validator
-	GetDB() interface{} // Returns database interface for OAuth token services
-	GetUserByID(id uint) (*models.User, error)
 }
 
 // GatewayBudgetServiceInterface defines budget operations needed by the gateway proxy.

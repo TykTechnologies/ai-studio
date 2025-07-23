@@ -27,7 +27,6 @@ type FileGatewayService struct {
 type llmConfig struct {
 	ID            uint    `json:"id"`
 	Name          string  `json:"name"`
-	Slug          string  `json:"slug"`
 	Vendor        string  `json:"vendor"`
 	Endpoint      string  `json:"endpoint"`
 	APIKey        string  `json:"api_key"`
@@ -330,6 +329,16 @@ func (s *FileGatewayService) GetUserByID(id uint) (*models.User, error) {
 		Email: fmt.Sprintf("user%d@example.com", id),
 		Name:  fmt.Sprintf("Demo User %d", id),
 	}, nil
+}
+
+// GetValidAccessTokenByToken returns an error since OAuth is not supported in file-based demo
+func (s *FileGatewayService) GetValidAccessTokenByToken(token string) (*models.AccessToken, error) {
+	return nil, fmt.Errorf("OAuth access tokens not supported in file-based demo")
+}
+
+// GetOAuthClient returns an error since OAuth is not supported in file-based demo
+func (s *FileGatewayService) GetOAuthClient(clientID string) (*models.OAuthClient, error) {
+	return nil, fmt.Errorf("OAuth clients not supported in file-based demo")
 }
 
 // Reload reloads all configuration files

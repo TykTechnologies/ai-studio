@@ -17,7 +17,7 @@ require (
 	github.com/gorilla/csrf v1.7.2
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.2.1
-	github.com/gosimple/slug v1.14.0
+	github.com/gosimple/slug v1.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/liushuangls/go-anthropic/v2 v2.8.0
 	github.com/lu4p/cat v0.1.5

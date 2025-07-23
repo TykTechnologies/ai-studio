@@ -50,9 +50,10 @@ type GatewayServiceInterface interface {
 	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
 	CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error)
 
-	// Additional methods needed by credential validator
-	GetDB() interface{} // Returns database interface for OAuth token services
+	// Authentication & Authorization methods
 	GetUserByID(id uint) (*models.User, error)
+	GetValidAccessTokenByToken(token string) (*models.AccessToken, error)
+	GetOAuthClient(clientID string) (*models.OAuthClient, error)
 }
 
 // GatewayBudgetServiceInterface defines budget operations needed by the proxy.
@@ -217,6 +218,18 @@ func (w *concreteServiceWrapper) GetDB() interface{} {
 
 func (w *concreteServiceWrapper) GetUserByID(id uint) (*models.User, error) {
 	return w.service.GetUserByID(id)
+}
+
+func (w *concreteServiceWrapper) GetValidAccessTokenByToken(token string) (*models.AccessToken, error) {
+	// Use the services from the concrete service to handle OAuth token lookup
+	accessTokenService := services.NewAccessTokenService(w.service.DB)
+	return accessTokenService.GetValidAccessTokenByToken(token)
+}
+
+func (w *concreteServiceWrapper) GetOAuthClient(clientID string) (*models.OAuthClient, error) {
+	// Use the services from the concrete service to handle OAuth client lookup
+	oauthClientService := services.NewOAuthClientService(w.service.DB)
+	return oauthClientService.GetClient(clientID)
 }
 
 // AsServiceInterface returns a services.ServiceInterface implementation
