@@ -54,9 +54,16 @@ func (d *DatabaseService) CallToolOperation(toolID uint, operationID string, par
 	return d.service.CallToolOperation(toolID, operationID, params, payload, headers)
 }
 
-// GetDB returns the database interface for OAuth token services.
-func (d *DatabaseService) GetDB() interface{} {
-	return d.service.DB
+// GetValidAccessTokenByToken retrieves a valid OAuth access token using the interface
+func (d *DatabaseService) GetValidAccessTokenByToken(token string) (*models.AccessToken, error) {
+	accessTokenService := services.NewAccessTokenService(d.service.DB)
+	return accessTokenService.GetValidAccessTokenByToken(token)
+}
+
+// GetOAuthClient retrieves an OAuth client by its client ID using the interface
+func (d *DatabaseService) GetOAuthClient(clientID string) (*models.OAuthClient, error) {
+	oauthClientService := services.NewOAuthClientService(d.service.DB)
+	return oauthClientService.GetClient(clientID)
 }
 
 // GetUserByID returns a user by their ID from the database.

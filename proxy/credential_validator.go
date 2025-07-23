@@ -4,9 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-
-	"github.com/TykTechnologies/midsommar/v2/services"
-	"gorm.io/gorm"
 )
 
 type CredentialExtractor func(r *http.Request) (string, error)
@@ -47,15 +44,8 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// First try OAuth access token lookup
-			db, ok := cv.service.GetDB().(*gorm.DB)
-			if !ok {
-				respondWithError(w, http.StatusInternalServerError, "Database connection not available", nil, false)
-				return
-			}
-
-			accessTokenService := services.NewAccessTokenService(db)
-			accessToken, err := accessTokenService.GetValidAccessTokenByToken(tokenString)
+			// First try OAuth access token lookup using interface method
+			accessToken, err := cv.service.GetValidAccessTokenByToken(tokenString)
 			if err == nil {
 				// Valid OAuth access token
 				user, err := cv.service.GetUserByID(accessToken.UserID)
@@ -64,8 +54,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 
-				oauthClientService := services.NewOAuthClientService(db)
-				oauthClient, err := oauthClientService.GetClient(accessToken.ClientID)
+				oauthClient, err := cv.service.GetOAuthClient(accessToken.ClientID)
 				if err != nil {
 					respondWithError(w, http.StatusInternalServerError, "Could not retrieve client for token", err, false)
 					return
