@@ -28,10 +28,11 @@ import "github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 package main
 
 import (
+    "context"
     "log"
     
+    "github.com/TykTechnologies/midsommar/v2/analytics"
     "github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
-    "github.com/TykTechnologies/midsommar/v2/proxy"
     "github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -41,8 +42,19 @@ func main() {
     service := services.NewService(db)
     budgetService := services.NewBudgetService(db, service)
 
-    // Create the gateway
-    gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
+    // Initialize analytics (required for default database analytics)
+    ctx := context.Background()
+    analytics.InitDefault(ctx, db)
+
+    // Create gateway with interface-based services
+    gatewayService := aigateway.NewDatabaseService(service)
+    gatewayBudgetService := aigateway.NewDatabaseBudgetService(budgetService)
+    
+    gateway := aigateway.New(
+        gatewayService,
+        gatewayBudgetService,
+        &aigateway.Config{Port: 9090},
+    )
 
     // Start as standalone server
     log.Println("Starting AI Gateway on :9090")
@@ -58,11 +70,12 @@ func main() {
 package main
 
 import (
+    "context"
     "log"
     "net/http"
     
+    "github.com/TykTechnologies/midsommar/v2/analytics"
     "github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
-    "github.com/TykTechnologies/midsommar/v2/proxy"
     "github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -71,9 +84,20 @@ func main() {
     db := setupDatabase()
     service := services.NewService(db)
     budgetService := services.NewBudgetService(db, service)
+
+    // Initialize analytics
+    ctx := context.Background()
+    analytics.InitDefault(ctx, db)
     
-    // Create gateway (note: Port in config is ignored when using as handler)
-    gateway := aigateway.New(service, &proxy.Config{}, budgetService)
+    // Create gateway with interface-based services (note: Port in config is ignored when using as handler)
+    gatewayService := aigateway.NewDatabaseService(service)
+    gatewayBudgetService := aigateway.NewDatabaseBudgetService(budgetService)
+    
+    gateway := aigateway.New(
+        gatewayService,
+        gatewayBudgetService,
+        &aigateway.Config{},
+    )
 
     // Mount gateway in existing server
     mux := http.NewServeMux()
@@ -96,13 +120,14 @@ package main
 import (
     "context"
     "log"
+    "net/http"
     "os"
     "os/signal"
     "syscall"
     "time"
     
+    "github.com/TykTechnologies/midsommar/v2/analytics"
     "github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
-    "github.com/TykTechnologies/midsommar/v2/proxy"
     "github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -111,7 +136,20 @@ func main() {
     db := setupDatabase()
     service := services.NewService(db)
     budgetService := services.NewBudgetService(db, service)
-    gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
+
+    // Initialize analytics
+    ctx := context.Background()
+    analytics.InitDefault(ctx, db)
+
+    // Create gateway with interface-based services
+    gatewayService := aigateway.NewDatabaseService(service)
+    gatewayBudgetService := aigateway.NewDatabaseBudgetService(budgetService)
+    
+    gateway := aigateway.New(
+        gatewayService,
+        gatewayBudgetService,
+        &aigateway.Config{Port: 9090},
+    )
 
     // Set up graceful shutdown
     ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -137,6 +175,128 @@ func main() {
     }
     log.Println("Gateway stopped")
 }
+```
+
+## Analytics Configuration
+
+The AI Gateway supports pluggable analytics backends, allowing you to send usage data to different destinations.
+
+### Default Database Analytics
+
+By default, the gateway uses database-based analytics:
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/analytics"
+
+// Initialize database analytics (required)
+analytics.InitDefault(ctx, db)
+
+// Create gateway - uses default database analytics
+gateway := aigateway.New(gatewayService, budgetService, config)
+```
+
+### HTTP Analytics for External Control Planes
+
+Send analytics to external APIs or control planes:
+
+```go
+// Send analytics to external HTTP endpoint
+httpAnalytics := aigateway.NewHTTPAnalyticsHandler("https://my-control-plane.com/api")
+
+gateway := aigateway.NewWithAnalytics(
+    gatewayService,
+    budgetService, 
+    httpAnalytics,
+    config,
+)
+```
+
+The HTTP analytics handler sends POST requests with JSON payloads:
+
+```json
+{
+  "type": "llm_usage",
+  "llm_id": 1,
+  "model": "gpt-4",
+  "vendor": "openai",
+  "prompt_tokens": 100,
+  "response_tokens": 50,
+  "total_tokens": 150,
+  "cost": 2500,
+  "currency": "USD",
+  "timestamp": "2025-01-01T12:00:00Z",
+  "app_id": 1,
+  "user_id": 42
+}
+```
+
+### Custom Analytics Implementation
+
+Implement your own analytics backend:
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/analytics"
+
+type MyCustomAnalytics struct {
+    // Your custom fields
+}
+
+func (m *MyCustomAnalytics) RecordChatRecord(record *models.LLMChatRecord) {
+    // Send to message queue, file, etc.
+}
+
+func (m *MyCustomAnalytics) RecordChatLogEntry(log *models.LLMChatLogEntry) {
+    // Handle chat logs
+}
+
+func (m *MyCustomAnalytics) RecordProxyLog(log *models.ProxyLog) {
+    // Handle proxy logs  
+}
+
+func (m *MyCustomAnalytics) RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint) {
+    // Handle tool calls
+}
+
+func (m *MyCustomAnalytics) SetAsGlobalHandler() {
+    analytics.SetHandler(m)
+}
+
+// Use custom analytics
+customAnalytics := &MyCustomAnalytics{}
+gateway := aigateway.NewWithAnalytics(
+    gatewayService,
+    budgetService,
+    customAnalytics, 
+    config,
+)
+```
+
+### Multiple Analytics Backends
+
+You can also combine multiple analytics backends:
+
+```go
+type MultiAnalytics struct {
+    handlers []analytics.AnalyticsHandler
+}
+
+func (m *MultiAnalytics) RecordChatRecord(record *models.LLMChatRecord) {
+    for _, handler := range m.handlers {
+        handler.RecordChatRecord(record)
+    }
+}
+
+// ... implement other methods similarly
+
+// Use multiple backends
+multi := &MultiAnalytics{
+    handlers: []analytics.AnalyticsHandler{
+        analytics.NewDatabaseHandler(ctx, db),           // Local database
+        aigateway.NewHTTPAnalyticsHandler(controlPlaneURL), // External API  
+    },
+}
+
+gateway := aigateway.NewWithAnalytics(gatewayService, budgetService, multi, config)
 ```
 
 ## Integration with Popular Frameworks
@@ -235,13 +395,15 @@ package main
 import (
     "context"
     "log"
+    "net/http"
     "os"
     "os/signal"
+    "strconv"
     "syscall"
     "time"
 
+    "github.com/TykTechnologies/midsommar/v2/analytics"
     "github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
-    "github.com/TykTechnologies/midsommar/v2/proxy"
     "github.com/TykTechnologies/midsommar/v2/services"
     "gorm.io/driver/postgres"
     "gorm.io/gorm"
@@ -263,13 +425,26 @@ func main() {
     service := services.NewService(db)
     budgetService := services.NewBudgetService(db, service)
 
-    // Gateway setup
+    // Initialize analytics
+    ctx := context.Background()
+    analytics.InitDefault(ctx, db)
+
+    // Gateway setup with interface-based services
+    gatewayService := aigateway.NewDatabaseService(service)
+    gatewayBudgetService := aigateway.NewDatabaseBudgetService(budgetService)
+
     port := 9090
     if portStr := os.Getenv("PORT"); portStr != "" {
-        // Parse port if provided
+        if p, err := strconv.Atoi(portStr); err == nil {
+            port = p
+        }
     }
     
-    gateway := aigateway.New(service, &proxy.Config{Port: port}, budgetService)
+    gateway := aigateway.New(
+        gatewayService,
+        gatewayBudgetService,
+        &aigateway.Config{Port: port},
+    )
 
     // Graceful shutdown setup
     ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

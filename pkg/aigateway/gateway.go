@@ -35,7 +35,7 @@ type Config struct {
 	Port int
 }
 
-// New creates a new Gateway instance using interface-based services.
+// New creates a new Gateway instance using interface-based services with default database analytics.
 // This approach allows for flexible backend implementations (database, file, API, etc.).
 //
 // Parameters:
@@ -68,6 +68,38 @@ func New(
 	budgetService GatewayBudgetServiceInterface,
 	config *Config,
 ) Gateway {
+	// Use default database analytics handler (assumes analytics.Init was called)
+	return NewWithAnalytics(gatewayService, budgetService, nil, config)
+}
+
+// NewWithAnalytics creates a new Gateway instance with a custom analytics handler.
+// This allows full control over where analytics data is sent (HTTP API, message queue, etc.).
+//
+// Parameters:
+//   - gatewayService: Service interface for configuration, authentication, and pricing
+//   - budgetService: Budget interface for spending validation and tracking
+//   - analyticsHandler: Analytics handler for recording usage data (nil uses existing global handler)
+//   - config: Gateway configuration including port settings
+//
+// Example with HTTP analytics:
+//
+//	gateway := aigateway.NewWithAnalytics(
+//		aigateway.NewDatabaseService(service),
+//		aigateway.NewDatabaseBudgetService(budgetService),
+//		aigateway.NewHTTPAnalyticsHandler("https://my-control-plane/api"),
+//		&aigateway.Config{Port: 9090},
+//	)
+func NewWithAnalytics(
+	gatewayService GatewayServiceInterface,
+	budgetService GatewayBudgetServiceInterface,
+	analyticsHandler AnalyticsHandler,
+	config *Config,
+) Gateway {
+	// Set the global analytics handler if provided
+	if analyticsHandler != nil {
+		analyticsHandler.SetAsGlobalHandler()
+	}
+
 	proxyConfig := &proxy.Config{Port: config.Port}
 	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{

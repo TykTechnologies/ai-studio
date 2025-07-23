@@ -42,21 +42,115 @@ type Gateway interface {
 }
 ```
 
+## Analytics Interface
+
+The AI Gateway Library provides **pluggable analytics backends**, enabling developers to send usage data to different destinations based on their architecture needs.
+
+### Core Analytics Interface
+```go
+type AnalyticsHandler interface {
+    RecordChatRecord(record *models.LLMChatRecord)
+    RecordChatLogEntry(log *models.LLMChatLogEntry) 
+    RecordProxyLog(log *models.ProxyLog)
+    RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint)
+    SetAsGlobalHandler()
+}
+```
+
+### Available Implementations
+
+#### 1. Database Analytics (Default)
+Records analytics to PostgreSQL database tables:
+```go
+analytics.InitDefault(ctx, db)
+gateway := aigateway.New(gatewayService, budgetService, config)
+```
+
+#### 2. HTTP Analytics  
+Sends analytics to external APIs/control planes:
+```go
+httpAnalytics := aigateway.NewHTTPAnalyticsHandler("https://control-plane/api")
+gateway := aigateway.NewWithAnalytics(gatewayService, budgetService, httpAnalytics, config)
+```
+
+HTTP payloads sent to `/analytics` endpoint:
+```json
+{
+  "type": "llm_usage",
+  "llm_id": 1,
+  "model": "gpt-4", 
+  "vendor": "openai",
+  "prompt_tokens": 100,
+  "response_tokens": 50,
+  "cost": 2500,
+  "currency": "USD",
+  "timestamp": "2025-01-01T12:00:00Z",
+  "app_id": 1,
+  "user_id": 42
+}
+```
+
+#### 3. Custom Analytics
+Implement custom backends (message queues, files, etc.):
+```go
+type CustomAnalytics struct{}
+func (c *CustomAnalytics) RecordChatRecord(record *models.LLMChatRecord) {
+    // Send to Kafka, Redis, file, etc.
+}
+// ... implement other methods
+```
+
+### Multi-Backend Support
+Combine multiple analytics destinations:
+```go
+multi := &MultiAnalytics{
+    handlers: []analytics.AnalyticsHandler{
+        analytics.NewDatabaseHandler(ctx, db),           // Local storage
+        aigateway.NewHTTPAnalyticsHandler(apiEndpoint),  // External API
+        customHandler,                                   // Custom backend
+    },
+}
+gateway := aigateway.NewWithAnalytics(gatewayService, budgetService, multi, config)
+```
+
+This removes hard dependencies on specific analytics implementations, enabling flexible deployment architectures.
+
 ## Usage Patterns
 
-### 1. Standalone Microproxy
+### 1. Standalone Microproxy (Database Analytics)
 ```go
-gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
+// Initialize analytics
+analytics.InitDefault(ctx, db)
+
+// Create gateway with interface-based services
+gatewayService := aigateway.NewDatabaseService(service)
+budgetService := aigateway.NewDatabaseBudgetService(budgetService)
+
+gateway := aigateway.New(gatewayService, budgetService, &aigateway.Config{Port: 9090})
 gateway.Start() // Blocks and serves on :9090
 ```
 
-### 2. Integration with Existing HTTP Server
+### 2. Standalone Microproxy (HTTP Analytics)
 ```go
-gateway := aigateway.New(service, &proxy.Config{}, budgetService)
+// Send analytics to external control plane
+httpAnalytics := aigateway.NewHTTPAnalyticsHandler("https://control-plane/api")
+
+gateway := aigateway.NewWithAnalytics(
+    gatewayService, 
+    budgetService, 
+    httpAnalytics,
+    &aigateway.Config{Port: 9090},
+)
+gateway.Start()
+```
+
+### 3. Integration with Existing HTTP Server
+```go
+gateway := aigateway.New(gatewayService, budgetService, &aigateway.Config{})
 http.Handle("/ai/", http.StripPrefix("/ai", gateway.Handler()))
 ```
 
-### 3. Framework Integration
+### 4. Framework Integration
 - **Gin**: `router.Any("/ai/*path", gin.WrapH(gateway.Handler()))`
 - **Gorilla Mux**: `router.PathPrefix("/ai/").Handler(gateway.Handler())`
 - **Chi**: `router.Mount("/ai", gateway.Handler())`
@@ -122,11 +216,13 @@ pkg/aigateway/
 ## Testing
 
 - ✅ Unit tests for interface compliance
-- ✅ Compilation tests for all components
+- ✅ Compilation tests for all components  
 - ✅ Example programs demonstrating usage
 - ✅ Integration with existing test suite
+- ✅ Analytics interface abstraction implemented
+- ✅ Custom analytics handlers (HTTP, database) available
 
-Coverage: Interface and basic functionality tested. Integration tests require database setup.
+Coverage: Interface and basic functionality tested. Analytics interface allows custom backends for reporting to external control planes. Integration tests require database setup.
 
 ## Documentation
 

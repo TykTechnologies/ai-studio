@@ -74,11 +74,15 @@ func realWorldExample() {
 			log.Fatalf("Failed to connect to database: %v", err)
 		}
 
+		// Initialize analytics first
+		ctx := context.Background()
+		analytics.InitDefault(ctx, db)
+
 		// Services setup
 		service := services.NewService(db)
 		budgetService := services.NewBudgetService(db, service)
 
-		// Gateway setup
+		// Gateway setup with default database analytics
 		port := 9090
 		if portStr := os.Getenv("PORT"); portStr != "" {
 			if p, err := strconv.Atoi(portStr); err == nil {
@@ -86,7 +90,20 @@ func realWorldExample() {
 			}
 		}
 
-		gateway := aigateway.New(service, &proxy.Config{Port: port}, budgetService)
+		gateway := aigateway.New(
+			aigateway.NewDatabaseService(service),
+			aigateway.NewDatabaseBudgetService(budgetService),
+			&aigateway.Config{Port: port},
+		)
+
+		// Alternative: Gateway with custom HTTP analytics
+		// httpAnalytics := aigateway.NewHTTPAnalyticsHandler("https://my-control-plane/api")
+		// gateway := aigateway.NewWithAnalytics(
+		// 	aigateway.NewDatabaseService(service),
+		// 	aigateway.NewDatabaseBudgetService(budgetService),
+		// 	httpAnalytics,
+		// 	&aigateway.Config{Port: port},
+		// )
 
 		// Graceful shutdown setup
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
