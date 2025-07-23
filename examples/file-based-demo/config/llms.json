@@ -1,0 +1,52 @@
+{
+  "llms": [
+    {
+      "id": 1,
+      "name": "GPT-4",
+      "slug": "gpt4",
+      "vendor": "openai",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "api_key": "$OPENAI_API_KEY",
+      "model": "gpt-4",
+      "active": true,
+      "max_tokens": 4096,
+      "monthly_budget": 500.0
+    },
+    {
+      "id": 2,
+      "name": "GPT-3.5 Turbo",
+      "slug": "gpt35turbo",
+      "vendor": "openai",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "api_key": "$OPENAI_API_KEY",
+      "model": "gpt-3.5-turbo",
+      "active": true,
+      "max_tokens": 4096,
+      "monthly_budget": 200.0
+    },
+    {
+      "id": 3,
+      "name": "Claude-3.5 Sonnet",
+      "slug": "claude35sonnet",
+      "vendor": "anthropic",
+      "endpoint": "https://api.anthropic.com/v1/messages",
+      "api_key": "$ANTHROPIC_API_KEY",
+      "model": "claude-3-5-sonnet-20241022",
+      "active": true,
+      "max_tokens": 4096,
+      "monthly_budget": 300.0
+    },
+    {
+      "id": 4,
+      "name": "Google Gemini Pro",
+      "slug": "gemini-pro",
+      "vendor": "googleai",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent",
+      "api_key": "$GOOGLE_AI_API_KEY",
+      "model": "gemini-1.5-pro-latest", 
+      "active": true,
+      "max_tokens": 8192,
+      "monthly_budget": 250.0
+    }
+  ]
+}

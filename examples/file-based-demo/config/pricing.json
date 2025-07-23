@@ -1,0 +1,40 @@
+{
+  "model_prices": [
+    {
+      "id": 1,
+      "model": "gpt-4",
+      "vendor": "openai",
+      "prompt_price": 0.03,
+      "response_price": 0.06,
+      "currency": "USD",
+      "per_tokens": 1000
+    },
+    {
+      "id": 2,
+      "model": "gpt-3.5-turbo",
+      "vendor": "openai",
+      "prompt_price": 0.0015,
+      "response_price": 0.002,
+      "currency": "USD",
+      "per_tokens": 1000
+    },
+    {
+      "id": 3,
+      "model": "claude-3-5-sonnet-20241022",
+      "vendor": "anthropic",
+      "prompt_price": 0.015,
+      "response_price": 0.075,
+      "currency": "USD",
+      "per_tokens": 1000
+    },
+    {
+      "id": 4,
+      "model": "gemini-1.5-pro-latest",
+      "vendor": "googleai",
+      "prompt_price": 0.0035,
+      "response_price": 0.0105,
+      "currency": "USD",
+      "per_tokens": 1000
+    }
+  ]
+}
