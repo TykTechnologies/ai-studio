@@ -19,6 +19,9 @@ type AnalyticsHandler interface {
 
 	// RecordToolCall records tool call execution
 	RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint)
+
+	// SetAsGlobalHandler sets this handler as the global analytics handler
+	SetAsGlobalHandler()
 }
 
 var globalHandler AnalyticsHandler

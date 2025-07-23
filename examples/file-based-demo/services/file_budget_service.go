@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 )
 
-// FileBudgetService implements aigateway.GatewayBudgetServiceInterface using JSON configuration files
+// FileBudgetService implements budget tracking using JSON configuration files
 type FileBudgetService struct {
 	configDir  string
 	appBudgets map[uint]*AppBudget
@@ -291,5 +290,5 @@ func (s *FileBudgetService) Reload() error {
 	return s.loadBudgets()
 }
 
-// Ensure FileBudgetService implements the interface
-var _ aigateway.GatewayBudgetServiceInterface = (*FileBudgetService)(nil)
+// FileBudgetService is used directly with the unified interface approach
+// No need for interface assertion since it's used concretely

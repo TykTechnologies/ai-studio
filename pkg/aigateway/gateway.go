@@ -6,7 +6,9 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 // Gateway represents an AI Gateway instance that can proxy requests to LLM providers,
@@ -35,7 +37,7 @@ type Config struct {
 	Port int
 }
 
-// New creates a new Gateway instance using interface-based services with default database analytics.
+// New creates a new Gateway instance using the unified services interface with default database analytics.
 // This approach allows for flexible backend implementations (database, file, API, etc.).
 //
 // Parameters:
@@ -50,22 +52,22 @@ type Config struct {
 //	budgetService := services.NewBudgetService(db, service)
 //
 //	gateway := aigateway.New(
-//		aigateway.NewDatabaseService(service),
-//		aigateway.NewDatabaseBudgetService(budgetService),
+//		service,           // directly use services.Service
+//		budgetService,     // directly use services.BudgetService
 //		&aigateway.Config{Port: 9090},
 //	)
 //	gateway.Start()
 //
-// Example with custom backend:
+// Example with file-based backend:
 //
 //	gateway := aigateway.New(
-//		myCustomService,        // implements GatewayServiceInterface
-//		myCustomBudgetService,  // implements GatewayBudgetServiceInterface
+//		fileGatewayService,    // implements services.ServiceInterface
+//		fileBudgetService,     // implements services.BudgetServiceInterface
 //		&aigateway.Config{Port: 9090},
 //	)
 func New(
-	gatewayService GatewayServiceInterface,
-	budgetService GatewayBudgetServiceInterface,
+	gatewayService services.ServiceInterface,
+	budgetService services.BudgetServiceInterface,
 	config *Config,
 ) Gateway {
 	// Use default database analytics handler (assumes analytics.Init was called)
@@ -77,22 +79,22 @@ func New(
 //
 // Parameters:
 //   - gatewayService: Service interface for configuration, authentication, and pricing
-//   - budgetService: Budget interface for spending validation and tracking
+//   - budgetService: Budget service interface for spending validation and tracking
 //   - analyticsHandler: Analytics handler for recording usage data (nil uses existing global handler)
 //   - config: Gateway configuration including port settings
 //
 // Example with HTTP analytics:
 //
 //	gateway := aigateway.NewWithAnalytics(
-//		aigateway.NewDatabaseService(service),
-//		aigateway.NewDatabaseBudgetService(budgetService),
+//		service,           // implements services.ServiceInterface
+//		budgetService,     // implements services.BudgetServiceInterface
 //		aigateway.NewHTTPAnalyticsHandler("https://my-control-plane/api"),
 //		&aigateway.Config{Port: 9090},
 //	)
 func NewWithAnalytics(
-	gatewayService GatewayServiceInterface,
-	budgetService GatewayBudgetServiceInterface,
-	analyticsHandler AnalyticsHandler,
+	gatewayService services.ServiceInterface,
+	budgetService services.BudgetServiceInterface,
+	analyticsHandler analytics.AnalyticsHandler,
 	config *Config,
 ) Gateway {
 	// Set the global analytics handler if provided

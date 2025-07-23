@@ -2,7 +2,7 @@
   "model_prices": [
     {
       "id": 1,
-      "model": "gpt-4",
+      "model": "gpt-4-0613",
       "vendor": "openai",
       "prompt_price": 0.03,
       "response_price": 0.06,
@@ -11,7 +11,7 @@
     },
     {
       "id": 2,
-      "model": "gpt-3.5-turbo",
+      "model": "gpt-3.5-turbo-0125",
       "vendor": "openai",
       "prompt_price": 0.0015,
       "response_price": 0.002,

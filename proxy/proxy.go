@@ -36,32 +36,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pb33f/libopenapi"
 	"github.com/tmc/langchaingo/schema"
-	"gorm.io/gorm"
 )
-
-// GatewayServiceInterface defines the core operations needed by the proxy.
-// This interface is defined here to avoid import cycles.
-type GatewayServiceInterface interface {
-	GetActiveLLMs() ([]models.LLM, error)
-	GetActiveDatasources() ([]models.Datasource, error)
-	GetToolBySlug(slug string) (*models.Tool, error)
-	GetCredentialBySecret(secret string) (*models.Credential, error)
-	GetAppByCredentialID(credID uint) (*models.App, error)
-	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
-	CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error)
-
-	// Authentication & Authorization methods
-	GetUserByID(id uint) (*models.User, error)
-	GetValidAccessTokenByToken(token string) (*models.AccessToken, error)
-	GetOAuthClient(clientID string) (*models.OAuthClient, error)
-}
-
-// GatewayBudgetServiceInterface defines budget operations needed by the proxy.
-// This interface is defined here to avoid import cycles.
-type GatewayBudgetServiceInterface interface {
-	CheckBudget(app *models.App, llm *models.LLM) (float64, float64, error)
-	AnalyzeBudgetUsage(app *models.App, llm *models.LLM)
-}
 
 const (
 	LLMPRefix        = "/llm/"
@@ -106,8 +81,8 @@ type MCPServerCache struct {
 }
 
 type Proxy struct {
-	gatewayService GatewayServiceInterface
-	budgetService  GatewayBudgetServiceInterface
+	gatewayService services.ServiceInterface
+	budgetService  services.BudgetServiceInterface
 	server         *http.Server
 	llms           map[string]*models.LLM
 	datasources    map[string]*models.Datasource
@@ -127,9 +102,9 @@ type Config struct {
 	Port int
 }
 
-// New creates a new Proxy instance using interface-based services.
+// New creates a new Proxy instance using the unified services interface.
 // This is the new interface-based constructor that supports flexible backends.
-func New(gatewayService GatewayServiceInterface, budgetService GatewayBudgetServiceInterface, cfg *Config) *Proxy {
+func New(gatewayService services.ServiceInterface, budgetService services.BudgetServiceInterface, cfg *Config) *Proxy {
 	p := &Proxy{
 		gatewayService: gatewayService,
 		budgetService:  budgetService,
@@ -168,155 +143,8 @@ func New(gatewayService GatewayServiceInterface, budgetService GatewayBudgetServ
 // NewProxy creates a new Proxy instance using the existing concrete services.
 // This is the legacy constructor that maintains backward compatibility.
 func NewProxy(service *services.Service, cfg *Config, budgetService *services.BudgetService) *Proxy {
-	// Create wrapper implementations for the interfaces
-	gatewayService := &concreteServiceWrapper{service: service}
-	budgetServiceInterface := &concreteBudgetServiceWrapper{budgetService: budgetService}
-
-	return New(gatewayService, budgetServiceInterface, cfg)
-}
-
-// concreteServiceWrapper adapts the concrete service to the interface
-type concreteServiceWrapper struct {
-	service *services.Service
-}
-
-func (w *concreteServiceWrapper) GetActiveLLMs() ([]models.LLM, error) {
-	return w.service.GetActiveLLMs()
-}
-
-func (w *concreteServiceWrapper) GetActiveDatasources() ([]models.Datasource, error) {
-	datasources, err := w.service.GetActiveDatasources()
-	if err != nil {
-		return nil, err
-	}
-	return []models.Datasource(datasources), nil
-}
-
-func (w *concreteServiceWrapper) GetToolBySlug(slug string) (*models.Tool, error) {
-	return w.service.GetToolBySlug(slug)
-}
-
-func (w *concreteServiceWrapper) GetCredentialBySecret(secret string) (*models.Credential, error) {
-	return w.service.GetCredentialBySecret(secret)
-}
-
-func (w *concreteServiceWrapper) GetAppByCredentialID(credID uint) (*models.App, error) {
-	return w.service.GetAppByCredentialID(credID)
-}
-
-func (w *concreteServiceWrapper) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
-	return w.service.GetModelPriceByModelNameAndVendor(modelName, vendor)
-}
-
-func (w *concreteServiceWrapper) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	return w.service.CallToolOperation(toolID, operationID, params, payload, headers)
-}
-
-func (w *concreteServiceWrapper) GetDB() interface{} {
-	return w.service.DB
-}
-
-func (w *concreteServiceWrapper) GetUserByID(id uint) (*models.User, error) {
-	return w.service.GetUserByID(id)
-}
-
-func (w *concreteServiceWrapper) GetValidAccessTokenByToken(token string) (*models.AccessToken, error) {
-	// Use the services from the concrete service to handle OAuth token lookup
-	accessTokenService := services.NewAccessTokenService(w.service.DB)
-	return accessTokenService.GetValidAccessTokenByToken(token)
-}
-
-func (w *concreteServiceWrapper) GetOAuthClient(clientID string) (*models.OAuthClient, error) {
-	// Use the services from the concrete service to handle OAuth client lookup
-	oauthClientService := services.NewOAuthClientService(w.service.DB)
-	return oauthClientService.GetClient(clientID)
-}
-
-// AsServiceInterface returns a services.ServiceInterface implementation
-func (w *concreteServiceWrapper) AsServiceInterface() services.ServiceInterface {
-	return &servicesInterfaceAdapter{service: w.service}
-}
-
-// servicesInterfaceAdapter adapts the concrete service to services.ServiceInterface
-type servicesInterfaceAdapter struct {
-	service *services.Service
-}
-
-func (s *servicesInterfaceAdapter) GetActiveLLMs() (models.LLMs, error) {
-	llms, err := s.service.GetActiveLLMs()
-	if err != nil {
-		return nil, err
-	}
-	return models.LLMs(llms), nil
-}
-
-func (s *servicesInterfaceAdapter) GetActiveDatasources() (models.Datasources, error) {
-	return s.service.GetActiveDatasources()
-}
-
-func (s *servicesInterfaceAdapter) GetLLMByID(id uint) (*models.LLM, error) {
-	return s.service.GetLLMByID(id)
-}
-
-func (s *servicesInterfaceAdapter) GetLLMSettingsByID(id uint) (*models.LLMSettings, error) {
-	return s.service.GetLLMSettingsByID(id)
-}
-
-func (s *servicesInterfaceAdapter) GetDatasourceByID(id uint) (*models.Datasource, error) {
-	return s.service.GetDatasourceByID(id)
-}
-
-func (s *servicesInterfaceAdapter) GetCredentialBySecret(secret string) (*models.Credential, error) {
-	return s.service.GetCredentialBySecret(secret)
-}
-
-func (s *servicesInterfaceAdapter) GetAppByCredentialID(credID uint) (*models.App, error) {
-	return s.service.GetAppByCredentialID(credID)
-}
-
-func (s *servicesInterfaceAdapter) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
-	return s.service.GetModelPriceByModelNameAndVendor(modelName, vendor)
-}
-
-func (s *servicesInterfaceAdapter) GetDB() *gorm.DB {
-	return s.service.DB
-}
-
-func (s *servicesInterfaceAdapter) AuthenticateUser(email, password string) (*models.User, error) {
-	return s.service.AuthenticateUser(email, password)
-}
-
-func (s *servicesInterfaceAdapter) GetUserByAPIKey(apiKey string) (*models.User, error) {
-	return s.service.GetUserByAPIKey(apiKey)
-}
-
-func (s *servicesInterfaceAdapter) GetUserByEmail(email string) (*models.User, error) {
-	return s.service.GetUserByEmail(email)
-}
-
-func (s *servicesInterfaceAdapter) AddUserToGroup(userID, groupID uint) error {
-	return s.service.AddUserToGroup(userID, groupID)
-}
-
-func (s *servicesInterfaceAdapter) GetToolByID(id uint) (*models.Tool, error) {
-	return s.service.GetToolByID(id)
-}
-
-func (s *servicesInterfaceAdapter) GetToolBySlug(slug string) (*models.Tool, error) {
-	return s.service.GetToolBySlug(slug)
-}
-
-// concreteBudgetServiceWrapper adapts the concrete budget service to the interface
-type concreteBudgetServiceWrapper struct {
-	budgetService *services.BudgetService
-}
-
-func (w *concreteBudgetServiceWrapper) CheckBudget(app *models.App, llm *models.LLM) (float64, float64, error) {
-	return w.budgetService.CheckBudget(app, llm)
-}
-
-func (w *concreteBudgetServiceWrapper) AnalyzeBudgetUsage(app *models.App, llm *models.LLM) {
-	w.budgetService.AnalyzeBudgetUsage(app, llm)
+	// Use the new unified interface constructor
+	return New(service, budgetService, cfg)
 }
 
 func (p *Proxy) Start() error {
@@ -799,11 +627,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
-	// Get service interface for analytics
-	if wrapper, ok := p.gatewayService.(*concreteServiceWrapper); ok {
-		serviceInterface := wrapper.AsServiceInterface()
-		AnalyzeResponse(serviceInterface, llm, app, statusCode, body, reqBody, r)
-	}
+	AnalyzeResponse(p.gatewayService, llm, app, statusCode, body, reqBody, r)
 }
 func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	return switches.SetVendorAuthHeader(r, llm)
@@ -842,11 +666,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
 }
 func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) {
-	// Get service interface for analytics
-	if wrapper, ok := p.gatewayService.(*concreteServiceWrapper); ok {
-		serviceInterface := wrapper.AsServiceInterface()
-		AnalyzeStreamingResponse(serviceInterface, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
-	}
+	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
 }
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)
