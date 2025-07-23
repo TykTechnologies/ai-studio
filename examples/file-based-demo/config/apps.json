@@ -1,0 +1,52 @@
+{
+  "apps": [
+    {
+      "id": 1,
+      "name": "Demo Chat App",
+      "description": "A demo chatbot application with access to multiple LLMs",
+      "user_id": 1,
+      "credential_id": 1,
+      "llm_ids": [1, 2, 3],
+      "datasource_ids": [],
+      "tool_ids": [],
+      "monthly_budget": 100.0,
+      "budget_start_date": "2025-01-01T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Budget-Limited App",
+      "description": "App with strict budget limits for testing budget enforcement",
+      "user_id": 1,
+      "credential_id": 2,
+      "llm_ids": [2],
+      "datasource_ids": [],
+      "tool_ids": [],
+      "monthly_budget": 5.0,
+      "budget_start_date": "2025-01-01T00:00:00Z"
+    },
+    {
+      "id": 3,
+      "name": "Premium Enterprise App",
+      "description": "High-limit application with access to all LLM providers",
+      "user_id": 2,
+      "credential_id": 3,
+      "llm_ids": [1, 2, 3, 4],
+      "datasource_ids": [],
+      "tool_ids": [],
+      "monthly_budget": 1000.0,
+      "budget_start_date": "2025-01-01T00:00:00Z"
+    },
+    {
+      "id": 4,
+      "name": "OpenAI Only App",
+      "description": "Application restricted to OpenAI models only",
+      "user_id": 1,
+      "credential_id": 1,
+      "llm_ids": [1, 2],
+      "datasource_ids": [],
+      "tool_ids": [],
+      "monthly_budget": 50.0,
+      "budget_start_date": "2025-01-01T00:00:00Z"
+    }
+  ]
+}

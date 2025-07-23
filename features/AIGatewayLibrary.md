@@ -259,8 +259,26 @@ go test ./pkg/aigateway
 
 ## Examples
 
+### File-Based Demo Application
+See `examples/file-based-demo/` for a comprehensive demonstration that showcases:
+- **Complete file-based setup** using JSON configurations instead of a database
+- **Multiple LLM providers** (OpenAI, Anthropic, Google AI) with environment variable resolution
+- **Budget management** with real-time tracking and enforcement
+- **Authentication** using token-based credentials with multiple access levels
+- **Analytics** with file-based logging of all gateway activity
+- **Comprehensive testing** with full test coverage for all components
+- **Production-ready patterns** including graceful shutdown and hot reloading
+
+**Key Features:**
+- No database required - uses JSON configuration files
+- Environment variable resolution for API keys
+- Real-time budget tracking and notifications
+- File-based analytics with JSON logs
+- Comprehensive test suite demonstrating best practices
+- Detailed documentation and usage examples
+
 ### Basic Standalone Service
-See `examples/standalone-gateway/main.go` for a complete example.
+See `examples/standalone-gateway/main.go` for a simple database-based example.
 
 ### Integration Examples
 The `pkg/aigateway/README.md` contains comprehensive integration examples for:
