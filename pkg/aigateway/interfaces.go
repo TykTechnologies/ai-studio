@@ -1,7 +1,11 @@
 // Package aigateway provides interfaces for gateway service implementations
 package aigateway
 
-import "github.com/TykTechnologies/midsommar/v2/models"
+import (
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+)
 
 // GatewayServiceInterface defines the core operations needed by the gateway proxy.
 // This interface abstracts the data layer, allowing implementations to use databases,
@@ -38,4 +42,20 @@ type GatewayBudgetServiceInterface interface {
 	// AnalyzeBudgetUsage analyzes current budget usage and sends notifications if thresholds are reached.
 	// This runs in the background and doesn't block the main request flow.
 	AnalyzeBudgetUsage(app *models.App, llm *models.LLM)
+}
+
+// AnalyticsHandler defines the interface for analytics implementations
+// This interface allows custom analytics backends (HTTP APIs, message queues, etc.)
+type AnalyticsHandler interface {
+	// RecordChatRecord records LLM chat/proxy usage
+	RecordChatRecord(record *models.LLMChatRecord)
+
+	// RecordProxyLog records proxy request/response logs
+	RecordProxyLog(log *models.ProxyLog)
+
+	// RecordToolCall records tool call execution
+	RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint)
+
+	// SetAsGlobalHandler sets this handler as the global analytics handler
+	SetAsGlobalHandler()
 }

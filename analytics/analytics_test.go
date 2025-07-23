@@ -50,6 +50,9 @@ func waitForRecord[T any](db *gorm.DB, condition string, args ...interface{}) (*
 }
 
 func TestRecordContentMessage(t *testing.T) {
+	// Reset global handler state before test
+	ResetHandler()
+
 	db := setupTestDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -109,6 +112,9 @@ func TestRecordContentMessage(t *testing.T) {
 }
 
 func TestRecordProxyInteraction(t *testing.T) {
+	// Reset global handler state before test
+	ResetHandler()
+
 	db := setupTestDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -128,7 +134,7 @@ func TestRecordProxyInteraction(t *testing.T) {
 		InteractionType: models.ProxyInteraction,
 	}
 
-	recordChatRecord(rec)
+	RecordChatRecord(rec)
 
 	proxyRecord, err := waitForRecord[models.LLMChatRecord](db, "name = ? AND interaction_type = ?", "TestProxy", models.ProxyInteraction)
 	require.NoError(t, err)
@@ -139,6 +145,9 @@ func TestRecordProxyInteraction(t *testing.T) {
 }
 
 func TestRecordToolCall(t *testing.T) {
+	// Reset global handler state before test
+	ResetHandler()
+
 	db := setupTestDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -234,6 +243,9 @@ func TestCostCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset global handler state before test
+			ResetHandler()
+
 			db := setupTestDB(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -319,6 +331,9 @@ func TestCostCalculation(t *testing.T) {
 }
 
 func TestCostCalculationWithoutPrice(t *testing.T) {
+	// Reset global handler state before test
+	ResetHandler()
+
 	db := setupTestDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

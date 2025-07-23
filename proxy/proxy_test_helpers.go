@@ -53,6 +53,9 @@ func setupDB(t *testing.T) *gorm.DB {
 
 // setupTest initializes DB, does migrations, and starts analytics in one place.
 func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
+	// Reset global analytics handler state before test
+	analytics.ResetHandler()
+
 	db := setupDB(t)
 
 	// Now start analytics AFTER migrations, ensuring the table is ready.
