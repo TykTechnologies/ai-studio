@@ -11,10 +11,9 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 )
 
-// FileGatewayService implements aigateway.GatewayServiceInterface using JSON configuration files
+// FileGatewayService implements services.ServiceInterface using JSON configuration files
 type FileGatewayService struct {
 	configDir string
 	llms      []models.LLM
@@ -322,13 +321,53 @@ func (s *FileGatewayService) GetDB() interface{} {
 	return nil
 }
 
+// GetLLMByID returns an LLM by its ID
+func (s *FileGatewayService) GetLLMByID(id uint) (*models.LLM, error) {
+	for _, llm := range s.llms {
+		if llm.ID == id {
+			return &llm, nil
+		}
+	}
+	return nil, fmt.Errorf("LLM not found: %d", id)
+}
+
+// GetLLMSettingsByID returns LLM settings by ID (not implemented for demo)
+func (s *FileGatewayService) GetLLMSettingsByID(id uint) (*models.LLMSettings, error) {
+	return nil, fmt.Errorf("LLM settings not supported in file-based demo")
+}
+
+// GetDatasourceByID returns a datasource by its ID (not implemented for demo)
+func (s *FileGatewayService) GetDatasourceByID(id uint) (*models.Datasource, error) {
+	return nil, fmt.Errorf("datasource not found: %d", id)
+}
+
+// AuthenticateUser authenticates a user (not implemented for demo)
+func (s *FileGatewayService) AuthenticateUser(email, password string) (*models.User, error) {
+	return nil, fmt.Errorf("user authentication not supported in file-based demo")
+}
+
+// GetUserByAPIKey returns a user by API key (not implemented for demo)
+func (s *FileGatewayService) GetUserByAPIKey(apiKey string) (*models.User, error) {
+	return nil, fmt.Errorf("API key authentication not supported in file-based demo")
+}
+
+// GetUserByEmail returns a user by email (not implemented for demo)
+func (s *FileGatewayService) GetUserByEmail(email string) (*models.User, error) {
+	return nil, fmt.Errorf("user lookup by email not supported in file-based demo")
+}
+
 // GetUserByID returns a mock user (not implemented for this demo)
-func (s *FileGatewayService) GetUserByID(id uint) (*models.User, error) {
+func (s *FileGatewayService) GetUserByID(id uint, preload ...string) (*models.User, error) {
 	return &models.User{
 		ID:    id,
 		Email: fmt.Sprintf("user%d@example.com", id),
 		Name:  fmt.Sprintf("Demo User %d", id),
 	}, nil
+}
+
+// AddUserToGroup adds a user to a group (not implemented for demo)
+func (s *FileGatewayService) AddUserToGroup(userID, groupID uint) error {
+	return fmt.Errorf("user group management not supported in file-based demo")
 }
 
 // GetValidAccessTokenByToken returns an error since OAuth is not supported in file-based demo
@@ -341,10 +380,12 @@ func (s *FileGatewayService) GetOAuthClient(clientID string) (*models.OAuthClien
 	return nil, fmt.Errorf("OAuth clients not supported in file-based demo")
 }
 
+// GetToolByID returns a tool by its ID (not implemented for demo)
+func (s *FileGatewayService) GetToolByID(id uint) (*models.Tool, error) {
+	return nil, fmt.Errorf("tool not found: %d", id)
+}
+
 // Reload reloads all configuration files
 func (s *FileGatewayService) Reload() error {
 	return s.loadConfigurations()
 }
-
-// Ensure FileGatewayService implements the interface
-var _ aigateway.GatewayServiceInterface = (*FileGatewayService)(nil)

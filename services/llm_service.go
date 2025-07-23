@@ -195,7 +195,7 @@ func (s *Service) GetAllLLMs(pageSize int, pageNumber int, all bool) (models.LLM
 	return llms, totalCount, totalPages, nil
 }
 
-func (s *Service) GetActiveLLMs() (models.LLMs, error) {
+func (s *Service) GetActiveLLMs() ([]models.LLM, error) {
 	llms := models.LLMs{}
 	if err := llms.GetActiveLLMs(s.DB); err != nil {
 		return nil, err
@@ -206,7 +206,7 @@ func (s *Service) GetActiveLLMs() (models.LLMs, error) {
 		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
 	}
 
-	return llms, nil
+	return []models.LLM(llms), nil
 }
 
 func (s *Service) GetLLMsByNameStub(name string) (models.LLMs, error) {

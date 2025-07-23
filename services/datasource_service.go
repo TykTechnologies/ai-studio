@@ -108,12 +108,12 @@ func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (mod
 	return datasources, totalCount, totalPages, nil
 }
 
-func (s *Service) GetActiveDatasources() (models.Datasources, error) {
+func (s *Service) GetActiveDatasources() ([]models.Datasource, error) {
 	var datasources models.Datasources
 	if err := datasources.GetActiveDataSources(s.DB); err != nil {
 		return nil, err
 	}
-	return datasources, nil
+	return []models.Datasource(datasources), nil
 }
 
 func (s *Service) SearchDatasources(query string) (models.Datasources, error) {

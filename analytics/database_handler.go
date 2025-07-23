@@ -200,6 +200,11 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	}
 }
 
+// SetAsGlobalHandler sets this handler as the global analytics handler
+func (h *DatabaseHandler) SetAsGlobalHandler() {
+	SetHandler(h)
+}
+
 // initDB handles database migration - moved from analytics.go
 func initDB(db *gorm.DB) {
 	err := db.AutoMigrate(

@@ -61,11 +61,15 @@ func main() {
 	}
 	fmt.Printf("✅ Budget service initialized\n")
 
-	analyticsHandler, err := services.NewFileAnalyticsHandler(analyticsPath)
+	analyticsHandler, err := services.NewFileAnalyticsHandler(analyticsPath, budgetService)
 	if err != nil {
 		log.Fatalf("Failed to initialize analytics handler: %v", err)
 	}
 	fmt.Printf("✅ Analytics handler initialized\n")
+
+	// Set as global analytics handler so the proxy system can use it
+	analyticsHandler.SetAsGlobalHandler()
+	fmt.Printf("✅ Analytics handler registered globally\n")
 
 	// Print configuration summary
 	printConfigSummary(gatewayService, budgetService)

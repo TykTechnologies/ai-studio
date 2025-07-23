@@ -33,8 +33,8 @@ func TestNew(t *testing.T) {
 	}
 
 	gateway := New(
-		NewDatabaseService(service),
-		NewDatabaseBudgetService(budgetService),
+		service,       // directly use services.Service (implements unified ServiceInterface)
+		budgetService, // directly use services.BudgetService (implements unified BudgetServiceInterface)
 		&Config{Port: config.Port},
 	)
 	if gateway == nil {

@@ -11,16 +11,16 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 )
 
-// FileAnalyticsHandler implements aigateway.AnalyticsHandler using file-based logging
+// FileAnalyticsHandler implements analytics.AnalyticsHandler using file-based logging
 type FileAnalyticsHandler struct {
-	logDir      string
-	mu          sync.Mutex
-	chatRecords []models.LLMChatRecord
-	toolCalls   []ToolCallRecord
-	proxyLogs   []models.ProxyLog
+	logDir        string
+	budgetService *FileBudgetService
+	mu            sync.Mutex
+	chatRecords   []models.LLMChatRecord
+	toolCalls     []ToolCallRecord
+	proxyLogs     []models.ProxyLog
 }
 
 // ToolCallRecord represents a tool call for analytics
@@ -32,16 +32,17 @@ type ToolCallRecord struct {
 }
 
 // NewFileAnalyticsHandler creates a new file-based analytics handler
-func NewFileAnalyticsHandler(logDir string) (*FileAnalyticsHandler, error) {
+func NewFileAnalyticsHandler(logDir string, budgetService *FileBudgetService) (*FileAnalyticsHandler, error) {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
 	handler := &FileAnalyticsHandler{
-		logDir:      logDir,
-		chatRecords: make([]models.LLMChatRecord, 0),
-		toolCalls:   make([]ToolCallRecord, 0),
-		proxyLogs:   make([]models.ProxyLog, 0),
+		logDir:        logDir,
+		budgetService: budgetService,
+		chatRecords:   make([]models.LLMChatRecord, 0),
+		toolCalls:     make([]ToolCallRecord, 0),
+		proxyLogs:     make([]models.ProxyLog, 0),
 	}
 
 	// Load existing records if they exist
@@ -85,9 +86,19 @@ func (h *FileAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
 	// Add to in-memory storage
 	h.chatRecords = append(h.chatRecords, *record)
 
+	// Convert cost from cents to dollars for budget tracking
+	costInDollars := float64(record.Cost) / 10000.0
+
 	// Log to console for demo purposes
 	log.Printf("[ANALYTICS] Chat Record: LLM=%d, Model=%s, Tokens=%d, Cost=$%.4f, App=%d",
-		record.LLMID, record.Name, record.TotalTokens, float64(record.Cost)/10000.0, record.AppID)
+		record.LLMID, record.Name, record.TotalTokens, costInDollars, record.AppID)
+
+	// Update budget usage if budget service is available
+	if h.budgetService != nil {
+		h.budgetService.AddUsage(record.AppID, record.LLMID, costInDollars)
+		log.Printf("[BUDGET] Updated usage: App=%d, LLM=%d, Cost=$%.4f",
+			record.AppID, record.LLMID, costInDollars)
+	}
 
 	// Save to file
 	h.saveChatRecords()
@@ -253,4 +264,4 @@ func (h *FileAnalyticsHandler) ClearData() {
 }
 
 // Ensure FileAnalyticsHandler implements the interface
-var _ aigateway.AnalyticsHandler = (*FileAnalyticsHandler)(nil)
+var _ analytics.AnalyticsHandler = (*FileAnalyticsHandler)(nil)
