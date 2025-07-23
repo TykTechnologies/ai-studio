@@ -9,7 +9,8 @@
       "model": "gpt-4",
       "active": true,
       "max_tokens": 4096,
-      "monthly_budget": 500.0
+      "monthly_budget": 500.0,
+      "filter_ids": [1, 2]
     },
     {
       "id": 2,
@@ -20,7 +21,8 @@
       "model": "gpt-3.5-turbo",
       "active": true,
       "max_tokens": 4096,
-      "monthly_budget": 200.0
+      "monthly_budget": 200.0,
+      "filter_ids": [2]
     },
     {
       "id": 3,
@@ -42,7 +44,8 @@
       "model": "gemini-1.5-pro-latest", 
       "active": true,
       "max_tokens": 8192,
-      "monthly_budget": 250.0
+      "monthly_budget": 250.0,
+      "filter_ids": []
     }
   ]
 }
