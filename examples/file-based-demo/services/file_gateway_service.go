@@ -20,6 +20,7 @@ type FileGatewayService struct {
 	apps      []models.App
 	creds     []models.Credential
 	pricing   []models.ModelPrice
+	filters   []models.Filter
 }
 
 // Configuration file structures that match our JSON files
@@ -33,6 +34,7 @@ type llmConfig struct {
 	Active        bool    `json:"active"`
 	MaxTokens     int     `json:"max_tokens"`
 	MonthlyBudget float64 `json:"monthly_budget"`
+	FilterIDs     []uint  `json:"filter_ids"`
 }
 
 type credentialConfig struct {
@@ -66,6 +68,13 @@ type pricingConfig struct {
 	PerTokens     int     `json:"per_tokens"`
 }
 
+type filterConfig struct {
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Script      string `json:"script"`
+}
+
 // NewFileGatewayService creates a new file-based gateway service
 func NewFileGatewayService(configDir string) (*FileGatewayService, error) {
 	service := &FileGatewayService{
@@ -81,6 +90,11 @@ func NewFileGatewayService(configDir string) (*FileGatewayService, error) {
 
 // loadConfigurations loads all configuration files
 func (s *FileGatewayService) loadConfigurations() error {
+	// Load filters first since LLMs may reference them
+	if err := s.loadFilters(); err != nil {
+		return fmt.Errorf("failed to load filters: %w", err)
+	}
+
 	if err := s.loadLLMs(); err != nil {
 		return fmt.Errorf("failed to load LLMs: %w", err)
 	}
@@ -126,6 +140,17 @@ func (s *FileGatewayService) loadLLMs() error {
 			}
 		}
 
+		// Find associated filters
+		var filters []*models.Filter
+		for _, filterID := range llmConf.FilterIDs {
+			for j := range s.filters {
+				if s.filters[j].ID == filterID {
+					filters = append(filters, &s.filters[j])
+					break
+				}
+			}
+		}
+
 		s.llms[i] = models.LLM{
 			ID:            llmConf.ID,
 			Name:          llmConf.Name,
@@ -135,6 +160,7 @@ func (s *FileGatewayService) loadLLMs() error {
 			DefaultModel:  llmConf.Model,
 			Active:        llmConf.Active,
 			MonthlyBudget: &llmConf.MonthlyBudget,
+			Filters:       filters,
 		}
 	}
 
@@ -254,6 +280,36 @@ func (s *FileGatewayService) loadPricing() error {
 			CPT:       priceConf.PromptPrice,
 			CPIT:      priceConf.ResponsePrice,
 			Currency:  priceConf.Currency,
+		}
+	}
+
+	return nil
+}
+
+// loadFilters loads filter configurations from filters.json
+func (s *FileGatewayService) loadFilters() error {
+	data, err := os.ReadFile(filepath.Join(s.configDir, "filters.json"))
+	if err != nil {
+		// If filters.json doesn't exist, just continue with empty filters
+		s.filters = []models.Filter{}
+		return nil
+	}
+
+	var config struct {
+		Filters []filterConfig `json:"filters"`
+	}
+
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	s.filters = make([]models.Filter, len(config.Filters))
+	for i, filterConf := range config.Filters {
+		s.filters[i] = models.Filter{
+			ID:          filterConf.ID,
+			Name:        filterConf.Name,
+			Description: filterConf.Description,
+			Script:      []byte(filterConf.Script),
 		}
 	}
 
@@ -383,6 +439,27 @@ func (s *FileGatewayService) GetOAuthClient(clientID string) (*models.OAuthClien
 // GetToolByID returns a tool by its ID (not implemented for demo)
 func (s *FileGatewayService) GetToolByID(id uint) (*models.Tool, error) {
 	return nil, fmt.Errorf("tool not found: %d", id)
+}
+
+// GetFilterByID returns a filter by its ID
+func (s *FileGatewayService) GetFilterByID(id uint) (*models.Filter, error) {
+	for _, filter := range s.filters {
+		if filter.ID == id {
+			return &filter, nil
+		}
+	}
+	return nil, fmt.Errorf("filter not found: %d", id)
+}
+
+// GetAllFilters returns all filters (simplified version for file-based demo)
+func (s *FileGatewayService) GetAllFilters(pageSize int, pageNumber int, all bool) ([]models.Filter, int64, int, error) {
+	// For simplicity, ignore pagination in file-based demo and return all filters
+	totalCount := int64(len(s.filters))
+	totalPages := 1
+	if pageSize > 0 && !all {
+		totalPages = int((totalCount + int64(pageSize) - 1) / int64(pageSize))
+	}
+	return s.filters, totalCount, totalPages, nil
 }
 
 // Reload reloads all configuration files

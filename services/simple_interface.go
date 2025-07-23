@@ -49,4 +49,8 @@ type ServiceInterface interface {
 
 	// Analytics & Pricing
 	GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error)
+
+	// Filter Management (for scripting support)
+	GetFilterByID(id uint) (*models.Filter, error)
+	GetAllFilters(pageSize int, pageNumber int, all bool) ([]models.Filter, int64, int, error)
 }
