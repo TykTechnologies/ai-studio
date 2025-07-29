@@ -1,0 +1,22 @@
+{
+  "filters": [
+    {
+      "id": 1,
+      "name": "Content Blocker",
+      "description": "Blocks requests containing sensitive or confidential content",
+      "script": "result := true"
+    },
+    {
+      "id": 2,
+      "name": "Request Logger",
+      "description": "Logs all incoming requests for monitoring purposes",
+      "script": "result := true"
+    },
+    {
+      "id": 3,
+      "name": "PII Detector",
+      "description": "Detects and blocks requests containing potential PII like email addresses",
+      "script": "// Simple PII detection - blocks if email-like patterns found\ntext := strings.lower(payload)\nif strings.contains(text, \"@\") && strings.contains(text, \".com\") {\n    fmt.println(\"PII Filter: Potential email detected, blocking request\")\n    result = false\n} else {\n    result = true\n}"
+    }
+  ]
+}

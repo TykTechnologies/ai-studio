@@ -25,3 +25,6 @@ coverage.html
 node_modules
 docs/site/package-lock.json
 *.key
+examples/file-based-demo/file-based-demo
+examples/file-based-demo/demo
+examples/file-based-demo/analytics/*.json
