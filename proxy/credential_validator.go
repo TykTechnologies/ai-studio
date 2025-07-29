@@ -11,13 +11,12 @@ import (
 type CredentialExtractor func(r *http.Request) (string, error)
 
 type CredentialValidator struct {
-	service    *services.Service // Changed to concrete type
+	service    services.ServiceInterface
 	p          *Proxy
 	validators map[string]CredentialExtractor
-	// No need for explicit accessTokenService, use cv.service.AccessTokenService
 }
 
-func NewCredentialValidator(service *services.Service, proxy *Proxy) *CredentialValidator { // Changed to concrete type
+func NewCredentialValidator(service services.ServiceInterface, proxy *Proxy) *CredentialValidator {
 	return &CredentialValidator{
 		service:    service,
 		p:          proxy,
@@ -47,9 +46,8 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// First try OAuth access token lookup
-			accessTokenService := services.NewAccessTokenService(cv.service.GetDB())
-			accessToken, err := accessTokenService.GetValidAccessTokenByToken(tokenString)
+			// First try OAuth access token lookup using interface method
+			accessToken, err := cv.service.GetValidAccessTokenByToken(tokenString)
 			if err == nil {
 				// Valid OAuth access token
 				user, err := cv.service.GetUserByID(accessToken.UserID)
@@ -58,8 +56,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 
-				oauthClientService := services.NewOAuthClientService(cv.service.GetDB())
-				oauthClient, err := oauthClientService.GetClient(accessToken.ClientID)
+				oauthClient, err := cv.service.GetOAuthClient(accessToken.ClientID)
 				if err != nil {
 					respondWithError(w, http.StatusInternalServerError, "Could not retrieve client for token", err, false)
 					return

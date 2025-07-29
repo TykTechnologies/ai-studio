@@ -1,0 +1,86 @@
+{
+  "app_budgets": [
+    {
+      "app_id": 1,
+      "monthly_limit": 100.0,
+      "current_usage": 15.50,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z",
+      "notifications": {
+        "50_percent": false,
+        "80_percent": false,
+        "90_percent": false,
+        "100_percent": false
+      }
+    },
+    {
+      "app_id": 2,
+      "monthly_limit": 5.0,
+      "current_usage": 4.75,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z",
+      "notifications": {
+        "50_percent": true,
+        "80_percent": true,
+        "90_percent": true,
+        "100_percent": false
+      }
+    },
+    {
+      "app_id": 3,
+      "monthly_limit": 1000.0,
+      "current_usage": 127.35,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z",
+      "notifications": {
+        "50_percent": false,
+        "80_percent": false,
+        "90_percent": false,
+        "100_percent": false
+      }
+    },
+    {
+      "app_id": 4,
+      "monthly_limit": 50.0,
+      "current_usage": 8.25,
+      "currency": "USD", 
+      "reset_date": "2025-02-01T00:00:00Z",
+      "notifications": {
+        "50_percent": false,
+        "80_percent": false,
+        "90_percent": false,
+        "100_percent": false
+      }
+    }
+  ],
+  "llm_budgets": [
+    {
+      "llm_id": 1,
+      "monthly_limit": 500.0,
+      "current_usage": 89.45,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z"
+    },
+    {
+      "llm_id": 2,
+      "monthly_limit": 200.0,
+      "current_usage": 43.22,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z"
+    },
+    {
+      "llm_id": 3,
+      "monthly_limit": 300.0,
+      "current_usage": 67.88,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z"
+    },
+    {
+      "llm_id": 4,
+      "monthly_limit": 250.0,
+      "current_usage": 34.55,
+      "currency": "USD",
+      "reset_date": "2025-02-01T00:00:00Z"
+    }
+  ]
+}

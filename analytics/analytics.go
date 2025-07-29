@@ -2,10 +2,7 @@ package analytics
 
 import (
 	"context"
-	"log"
 	"log/slog"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,40 +15,21 @@ import (
 )
 
 var (
-	chatRecordChan chan *models.LLMChatRecord
-	logEntryChan   chan *models.LLMChatLogEntry
-	toolCallChan   chan *models.ToolCallRecord
-	proxyLogChan   chan *models.ProxyLog
-	recStarted     bool
-	recMutex       sync.RWMutex
+	// Legacy variables kept for backwards compatibility
+	recStarted bool
+	recMutex   sync.RWMutex
 )
 
 func RecordProxyLog(log *models.ProxyLog) {
-	recMutex.RLock()
-	if !recStarted {
-		recMutex.RUnlock()
-		return
+	if globalHandler != nil {
+		globalHandler.RecordProxyLog(log)
 	}
-	recMutex.RUnlock()
-
-	proxyLogChan <- log
 }
 
 func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
-	recMutex.RLock()
-	if !recStarted {
-		recMutex.RUnlock()
-		return
+	if globalHandler != nil {
+		globalHandler.RecordToolCall(name, t, execTime, toolID)
 	}
-	recMutex.RUnlock()
-
-	tcEntry := &models.ToolCallRecord{}
-	tcEntry.TimeStamp = t
-	tcEntry.ExecTime = execTime
-	tcEntry.Name = name
-	tcEntry.ToolID = toolID
-
-	recordToolCall(tcEntry)
 }
 
 func RecordContentMessage(
@@ -63,12 +41,10 @@ func RecordContentMessage(
 	t time.Time,
 	svc services.ServiceInterface,
 ) {
-	recMutex.RLock()
-	if !recStarted {
-		recMutex.RUnlock()
+	// Check if analytics handler is available
+	if globalHandler == nil {
 		return
 	}
-	recMutex.RUnlock()
 
 	rec := &models.LLMChatRecord{}
 
@@ -191,145 +167,50 @@ func RecordContentMessage(
 	chatLog.UserID = userID
 	chatLog.ChatID = chatID
 
-	recordChatRecord(rec)
-	recordChatLogEntry(chatLog)
-}
-
-func recordToolCall(tc *models.ToolCallRecord) {
-	recMutex.RLock()
-	if !recStarted {
-		recMutex.RUnlock()
-		return
-	}
-	recMutex.RUnlock()
-
-	select {
-	case toolCallChan <- tc:
-	default:
-		slog.Warn("tool call buffer full, dropping tool call")
-	}
+	RecordChatRecord(rec)
+	RecordChatLogEntry(chatLog)
 }
 
 func RecordChatRecord(record *models.LLMChatRecord) {
-	recordChatRecord(record)
-}
-
-func recordChatRecord(record *models.LLMChatRecord) {
-	recMutex.RLock()
-	if !recStarted {
-		log.Printf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
-		recMutex.RUnlock()
-		return
-	}
-	recMutex.RUnlock()
-
-	select {
-	case chatRecordChan <- record:
-		log.Printf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
-	default:
-		log.Printf("Chat record buffer full, dropping record: model=%s, app_id=%d, llm_id=%d", record.Name, record.AppID, record.LLMID)
+	if globalHandler != nil {
+		globalHandler.RecordChatRecord(record)
 	}
 }
 
-func recordChatLogEntry(log *models.LLMChatLogEntry) {
-	recMutex.RLock()
-	if !recStarted {
-		recMutex.RUnlock()
-		return
-	}
-	recMutex.RUnlock()
-
-	select {
-	case logEntryChan <- log:
-	default:
-		slog.Warn("chat log buffer full, dropping log")
+func RecordChatLogEntry(log *models.LLMChatLogEntry) {
+	if globalHandler != nil {
+		globalHandler.RecordChatLogEntry(log)
 	}
 }
 
-func initDB(db *gorm.DB) {
-	err := db.AutoMigrate(
-		&models.LLMChatRecord{},
-		&models.LLMChatLogEntry{},
-		&models.ToolCallRecord{},
-		&models.ProxyLog{},
-	)
-
-	if err != nil {
-		slog.Warn("error migrating analytics tables", "error", err)
+// InitDefault initializes the default database analytics handler
+func InitDefault(ctx context.Context, db *gorm.DB) {
+	if globalHandler == nil {
+		handler := NewDatabaseHandler(ctx, db)
+		SetHandler(handler)
 	}
 }
 
+// Init initializes analytics with default database handler (for backward compatibility)
+func Init(ctx context.Context, db *gorm.DB) {
+	InitDefault(ctx, db)
+}
+
+// StartRecording is deprecated, use InitDefault instead
 func StartRecording(ctx context.Context, db *gorm.DB) {
+	// Just delegate to the new interface-based system
+	InitDefault(ctx, db)
+
+	// Set the legacy flag for any code that checks it
 	recMutex.Lock()
-	if recStarted {
-		recMutex.Unlock()
-		return
-	}
 	recStarted = true
 	recMutex.Unlock()
 
-	initDB(db)
-
-	defaultBufferSize := 1000
-	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_SIZE")
-	if analyticsBufferSizeStr != "" {
-		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
-		if err != nil {
-			slog.Warn("ANALYTICS_BUFFER_SIZE must be a string", "error", err)
-		} else {
-			defaultBufferSize = bfr
-		}
-	}
-
-	slog.Info("starting analytics recording", "buffer_size", defaultBufferSize)
-
-	chatRecordChan = make(chan *models.LLMChatRecord, defaultBufferSize)
-	logEntryChan = make(chan *models.LLMChatLogEntry, defaultBufferSize)
-	toolCallChan = make(chan *models.ToolCallRecord, defaultBufferSize)
-	proxyLogChan = make(chan *models.ProxyLog, defaultBufferSize)
-
+	// Wait for context cancellation to reset the flag
 	go func() {
-		for {
-			select {
-			case record := <-chatRecordChan:
-				err := db.Create(record).Error
-				if err != nil {
-					slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
-				} else {
-					slog.Info("created chat record",
-						"model", record.Name,
-						"app_id", record.AppID,
-						"llm_id", record.LLMID,
-						"cost_raw", record.Cost, // Raw value (e.g., 250000.0)
-						"cost_adjusted", record.Cost/10000, // Human-readable (e.g., 25.0)
-						"timestamp", record.TimeStamp)
-				}
-			case log := <-logEntryChan:
-				err := db.Create(log).Error
-				if err != nil {
-					slog.Warn("error creating chat log entry", "error", err)
-				}
-			case toolCall := <-toolCallChan:
-				err := db.Create(toolCall).Error
-				if err != nil {
-					slog.Warn("error creating tool call record", "error", err)
-				}
-			case proxyLog := <-proxyLogChan:
-				err := db.Create(proxyLog).Error
-				if err != nil {
-					slog.Warn("error creating proxy log", "error", err)
-				}
-			case <-ctx.Done():
-				slog.Info("shutting down analytics recording")
-				recMutex.Lock()
-				recStarted = false
-				recMutex.Unlock()
-				close(chatRecordChan)
-				close(logEntryChan)
-				close(toolCallChan)
-				close(proxyLogChan)
-				return
-			}
-		}
+		<-ctx.Done()
+		recMutex.Lock()
+		recStarted = false
+		recMutex.Unlock()
 	}()
 }
