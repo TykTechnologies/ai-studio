@@ -289,7 +289,7 @@ func TestUserEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
-// TestAdminPermissions verifies that only super admins can create/update/delete admin users
+// TestAdminPermissions verifies that all admins can create/update/delete admin users
 func TestAdminPermissions(t *testing.T) {
 	// Setup for regular admin tests
 	api, db := setupTestAPI(t)
@@ -321,7 +321,7 @@ func TestAdminPermissions(t *testing.T) {
 
 	api.router = r
 
-	// Test 1: Regular admin cannot create admin users
+	// Test 1: Admin can create admin users
 	createAdminUserInput := UserInput{
 		Data: struct {
 			Type       string `json:"type"`
@@ -360,73 +360,66 @@ func TestAdminPermissions(t *testing.T) {
 	}
 
 	w := performRequest(api.router, "POST", "/api/v1/users", createAdminUserInput)
-	assert.Equal(t, http.StatusForbidden, w.Code)
-
-	var errorResponse map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
-
-	// Safely check error response structure
-	assert.Contains(t, errorResponse, "errors")
-	errorsArray, ok := errorResponse["errors"].([]interface{})
-	assert.True(t, ok)
-	assert.NotEmpty(t, errorsArray)
-	errorObj, ok := errorsArray[0].(map[string]interface{})
-	assert.True(t, ok)
-	assert.Contains(t, errorObj, "detail")
-	assert.Contains(t, errorObj["detail"], "operation only allowed for super admin user")
-
-	// Setup for super admin tests
-	apiSuper, dbSuper := setupTestAPI(t)
-
-	// Create a super admin (ID 1)
-	superAdmin := &models.User{
-		ID:                1, // ID 1 is super admin
-		Email:             "super-admin@example.com",
-		Name:              "Super Admin",
-		IsAdmin:           true,
-		AccessToSSOConfig: true,
-		ShowChat:          true,
-		ShowPortal:        true,
-	}
-	err = dbSuper.Create(superAdmin).Error
-	assert.NoError(t, err)
-
-	// Setup router with super admin user
-	rSuper := gin.New()
-	rSuper.Use(func(c *gin.Context) {
-		c.Set("user", superAdmin)
-		c.Next()
-	})
-
-	for _, route := range apiSuper.router.Routes() {
-		rSuper.Handle(route.Method, route.Path, route.HandlerFunc)
-	}
-
-	apiSuper.router = rSuper
-
-	// Test 2: Super admin can create admin users
-	w = performRequest(apiSuper.router, "POST", "/api/v1/users", createAdminUserInput)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	var createResponse map[string]UserResponse
-	err = json.Unmarshal(w.Body.Bytes(), &createResponse)
+	var firstCreateResponse map[string]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &firstCreateResponse)
 	assert.NoError(t, err)
-	assert.Equal(t, "new-admin@example.com", createResponse["data"].Attributes.Email)
-	assert.True(t, createResponse["data"].Attributes.IsAdmin)
+	assert.Equal(t, "new-admin@example.com", firstCreateResponse["data"].Attributes.Email)
+	assert.True(t, firstCreateResponse["data"].Attributes.IsAdmin)
 
-	adminUserID := createResponse["data"].ID
+	firstAdminUserID := firstCreateResponse["data"].ID
 
-	// Test 3: Regular admin cannot update admin users
-	// First create an admin user that we'll try to update
-	adminToUpdate := &models.User{
-		Email:   "admin-to-update@example.com",
-		Name:    "Admin To Update",
-		IsAdmin: true,
+	// Test 2: Create another admin user with different email to test multiple admin operations
+	createSecondAdminUserInput := UserInput{
+		Data: struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			} `json:"attributes"`
+		}{
+			Type: "users",
+			Attributes: struct {
+				Email                string `json:"email"`
+				Name                 string `json:"name"`
+				Password             string `json:"password,omitempty"`
+				IsAdmin              bool   `json:"is_admin"`
+				ShowChat             bool   `json:"show_chat"`
+				ShowPortal           bool   `json:"show_portal"`
+				EmailVerified        bool   `json:"email_verified"`
+				NotificationsEnabled bool   `json:"notifications_enabled"`
+				AccessToSSOConfig    bool   `json:"access_to_sso_config"`
+				Groups               []uint `json:"groups"`
+			}{
+				Email:    "second-admin@example.com",
+				Name:     "Second Admin User",
+				Password: "password123",
+				IsAdmin:  true,
+			},
+		},
 	}
-	err = db.Create(adminToUpdate).Error
-	assert.NoError(t, err)
 
+	w = performRequest(api.router, "POST", "/api/v1/users", createSecondAdminUserInput)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var secondCreateResponse map[string]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &secondCreateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "second-admin@example.com", secondCreateResponse["data"].Attributes.Email)
+	assert.True(t, secondCreateResponse["data"].Attributes.IsAdmin)
+
+	secondAdminUserID := secondCreateResponse["data"].ID
+
+	// Test 3: Admin can update admin users
 	updateAdminUserInput := UserInput{
 		Data: struct {
 			Type       string `json:"type"`
@@ -463,31 +456,17 @@ func TestAdminPermissions(t *testing.T) {
 		},
 	}
 
-	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%d", adminToUpdate.ID), updateAdminUserInput)
-	assert.Equal(t, http.StatusForbidden, w.Code)
-
-	var updateErrorResponse map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &updateErrorResponse)
-	assert.NoError(t, err)
-	// Safely check that we have errors
-	assert.Contains(t, updateErrorResponse, "errors")
-
-	// Test 4: Regular admin cannot delete admin users
-	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/users/%d", adminToUpdate.ID), nil)
-	assert.Equal(t, http.StatusForbidden, w.Code)
-
-	var deleteErrorResponse map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &deleteErrorResponse)
-	assert.NoError(t, err)
-	// Safely check that we have errors
-	assert.Contains(t, deleteErrorResponse, "errors")
-
-	// Test 5: Super admin can update admin users
-	w = performRequest(apiSuper.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", adminUserID), updateAdminUserInput)
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%s", firstAdminUserID), updateAdminUserInput)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Test 6: Super admin can delete admin users
-	w = performRequest(apiSuper.router, "DELETE", fmt.Sprintf("/api/v1/users/%s", adminUserID), nil)
+	var updateResponse map[string]UserResponse
+	err = json.Unmarshal(w.Body.Bytes(), &updateResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "updated-admin@example.com", updateResponse["data"].Attributes.Email)
+	assert.True(t, updateResponse["data"].Attributes.IsAdmin)
+
+	// Test 4: Admin can delete admin users
+	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/users/%s", secondAdminUserID), nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
