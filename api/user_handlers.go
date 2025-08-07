@@ -21,8 +21,8 @@ func (a *API) validateAdminPermissions(c *gin.Context) error {
 		return helpers.NewUnauthorizedError("User not authenticated")
 	}
 
-	if u.GetRole() != models.RoleSuperAdmin {
-		return helpers.NewForbiddenError("operation only allowed for super admin user")
+	if !u.IsAdmin {
+		return helpers.NewForbiddenError("operation only allowed for admin users")
 	}
 
 	return nil
