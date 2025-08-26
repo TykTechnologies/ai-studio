@@ -23,8 +23,7 @@ func SetupTestAPI(t *testing.T) (*api.API, *gorm.DB) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	licenser := apitest.SetupTestLicenser()
-	a := api.NewAPI(service, true, authService, config, nil, emptyFile, licenser)
+	a := api.NewAPI(service, true, authService, config, nil, emptyFile, nil)
 
 	// Initialize test data
 	if err := SetupTestData(db, service); err != nil {

@@ -1,8 +1,10 @@
-# Licensing System
+# Licensing System (REMOVED)
 
 ## Introduction
 
-This document provides a comprehensive overview of Midsommar's **Licensing System**, detailing its architecture, components, and integration points across the platform. The Licensing System enables feature control, license validation, and usage telemetry while maintaining security and access controls.
+**NOTE: The licensing system has been removed from the codebase. All features are now available by default without requiring a license.**
+
+This document is kept for historical reference only. The previous licensing system included feature control, license validation, and usage telemetry.
 
 ---
 
