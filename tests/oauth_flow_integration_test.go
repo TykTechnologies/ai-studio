@@ -54,10 +54,8 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 	serviceInstance := apitesting.SetupTestService(testDB)
 	authConfig := apitesting.SetupTestAuthConfig(testDB, serviceInstance)
 	authService := apitesting.SetupTestAuthService(testDB, serviceInstance) // Uses real services
-	licenser := apitesting.SetupTestLicenser()
-
 	// Setup Dashboard API server
-	testAPI = api.NewAPI(serviceInstance, true, authService, authConfig, nil, apitesting.EmptyFile, licenser)
+	testAPI = api.NewAPI(serviceInstance, true, authService, authConfig, nil, apitesting.EmptyFile, nil)
 	dashboardServer = httptest.NewServer(testAPI.Router())
 
 	// Setup Proxy server
