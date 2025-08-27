@@ -3,7 +3,6 @@ import useUserEntitlements from './useUserEntitlements';
 import useSystemFeatures from './useSystemFeatures';
 import useLLMs from './useLLMs';
 import useConfig from './useConfig';
-import useLicenseDaysLeft from './useLicenseDaysLeft';
 
 /**
  * Coordinator hook that fetches all data needed for the Overview page in parallel
@@ -40,12 +39,6 @@ const useOverviewData = () => {
     error: configError
   } = useConfig(true);
 
-  const {
-    licenseDaysLeft,
-    fetchLicenseDaysLeft,
-    error: licenseDaysError
-  } = useLicenseDaysLeft(true);
-
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -53,8 +46,7 @@ const useOverviewData = () => {
       fetchUserEntitlements(),
       fetchFeatures(),
       fetchLLMs(),
-      fetchConfig(),
-      fetchLicenseDaysLeft()
+      fetchConfig()
     ])
       .catch(error => {
         console.error('Error fetching overview data:', error);
@@ -63,14 +55,14 @@ const useOverviewData = () => {
       .finally(() => {
         setLoading(false);
       });
-  }, [fetchUserEntitlements, fetchFeatures, fetchLLMs, fetchConfig, fetchLicenseDaysLeft]);
+  }, [fetchUserEntitlements, fetchFeatures, fetchLLMs, fetchConfig]);
 
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
 
   // Combine errors if any
-  const combinedError = entitlementsError || featuresError || llmsError || configError || licenseDaysError || error;
+  const combinedError = entitlementsError || featuresError || llmsError || configError || error;
 
   return {
     userEntitlements,
@@ -79,7 +71,7 @@ const useOverviewData = () => {
     hasLLMs,
     config,
     getDocsLink,
-    licenseDaysLeft,
+    licenseDaysLeft: null, // Licensing has been removed, returning null for backward compatibility
     loading,
     error: combinedError,
     fetchAllData
