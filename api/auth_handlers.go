@@ -28,9 +28,10 @@ import (
 func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet := make(map[string]interface{})
 
-	for k, v := range a.licenser.FeatureSet() {
-		featureSet[k] = v
-	}
+	// Enable all features by default (licensing removed)
+	featureSet["feature_portal"] = true
+	featureSet["feature_chat"] = true
+	featureSet["feature_gateway"] = true
 
 	if cfg := config.Get(); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
@@ -40,12 +41,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 		"features": featureSet,
 	}
 
-	if license := a.licenser.License(); license != nil && !license.ExpiresAt.IsZero() {
-		daysLeft := helpers.DaysLeft(license.ExpiresAt)
-		if daysLeft > 0 && daysLeft < 30 {
-			response["license_days_left"] = daysLeft
-		}
-	}
+	// No license expiry to check anymore
 
 	c.JSON(http.StatusOK, response)
 }

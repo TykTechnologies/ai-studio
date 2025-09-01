@@ -25,6 +25,44 @@ jest.mock('./hooks/useCatalogsSelection', () => ({
   useCatalogsSelection: jest.fn()
 }));
 
+// Mock the useSystemFeatures hook
+jest.mock('../../hooks/useSystemFeatures', () => {
+  return {
+    __esModule: true,
+    default: () => ({
+      features: {},
+      loading: false,
+      error: null
+    })
+  };
+});
+
+// Mock the useOverviewData hook  
+jest.mock('../../hooks/useOverviewData', () => {
+  return {
+    __esModule: true,
+    default: () => ({
+      getDocsLink: jest.fn(() => 'https://docs.example.com'),
+      loading: false,
+      error: null,
+      licenseDaysLeft: null,
+      userEntitlements: {},
+      systemFeatures: {},
+      llms: [],
+      config: {}
+    })
+  };
+});
+
+// Mock featureUtils
+jest.mock('../../utils/featureUtils', () => ({
+  getFeatureFlags: () => ({
+    isGatewayOnly: false,
+    isPortalEnabled: true,
+    isChatEnabled: true
+  })
+}));
+
 // Mock the child components
 jest.mock('./components/GroupFormBasicInfo', () => ({
   __esModule: true,

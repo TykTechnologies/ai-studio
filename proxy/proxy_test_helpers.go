@@ -24,28 +24,48 @@ func setupDB(t *testing.T) *gorm.DB {
 	})
 	require.NoError(t, err)
 
-	// Enable WAL + set busy_timeout so concurrent writes won't fail with "locked".
+	// Get underlying SQL DB for pragma configuration
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	_, _ = sqlDB.Exec("PRAGMA journal_mode = WAL;")
-	_, _ = sqlDB.Exec("PRAGMA busy_timeout = 5000;")
-	_, _ = sqlDB.Exec("PRAGMA synchronous = NORMAL;")
-	_, _ = sqlDB.Exec("PRAGMA cache_size = 2000;")       // Increase cache size
-	_, _ = sqlDB.Exec("PRAGMA temp_store = MEMORY;")     // Store temp tables in memory
-	_, _ = sqlDB.Exec("PRAGMA mmap_size = 30000000000;") // Use memory-mapped I/O
 
-	// Migrate main models.
+	// Configure SQLite for better concurrent access
+	_, _ = sqlDB.Exec("PRAGMA journal_mode = WAL;")
+	_, _ = sqlDB.Exec("PRAGMA busy_timeout = 30000;") // Increased from 5s to 30s for CI
+	_, _ = sqlDB.Exec("PRAGMA synchronous = NORMAL;")
+	_, _ = sqlDB.Exec("PRAGMA cache_size = -64000;") // 64MB cache
+	_, _ = sqlDB.Exec("PRAGMA temp_store = MEMORY;")
+	_, _ = sqlDB.Exec("PRAGMA mmap_size = 30000000000;")
+	_, _ = sqlDB.Exec("PRAGMA wal_autocheckpoint = 1000;")
+	_, _ = sqlDB.Exec("PRAGMA optimize;")
+
+	// Set connection pool settings for better concurrent access
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	// Migrate main models with retry logic
 	err = models.InitModels(db)
 	require.NoError(t, err)
 
-	// Migrate analytics tables explicitly.
-	err = db.AutoMigrate(
-		&models.LLMChatRecord{},
-		&models.LLMChatLogEntry{},
-		&models.ToolCallRecord{},
-		&models.ProxyLog{},
-		&models.Notification{},
-	)
+	// Migrate analytics tables explicitly with retry logic
+	for attempt := 0; attempt < 3; attempt++ {
+		err = db.AutoMigrate(
+			&models.LLMChatRecord{},
+			&models.LLMChatLogEntry{},
+			&models.ToolCallRecord{},
+			&models.ProxyLog{},
+			&models.Notification{},
+		)
+		if err == nil {
+			break
+		}
+		if strings.Contains(err.Error(), "database table is locked") {
+			t.Logf("Database locked during migration, retrying... (attempt %d/3)", attempt+1)
+			time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
+			continue
+		}
+		require.NoError(t, err)
+	}
 	require.NoError(t, err)
 
 	return db
@@ -78,26 +98,41 @@ func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
 
 // waitForAnalytics ensures we have at least `expectedCount` LLMChatRecords.
 func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
-	deadline := time.Now().Add(8000 * time.Millisecond) // Increased to 8s for very reliable testing
+	deadline := time.Now().Add(12000 * time.Millisecond) // Increased to 12s for CI reliability
 	for time.Now().Before(deadline) {
 		var count int64
 		var err error
-		for i := 0; i < 3; i++ {
+
+		// Retry with exponential backoff for database lock errors
+		for i := 0; i < 5; i++ {
 			err = db.Model(&models.LLMChatRecord{}).Count(&count).Error
 			if err == nil {
 				break
 			}
-			time.Sleep(100 * time.Millisecond) // Increased inner retry sleep
+
+			// Handle database lock errors specifically
+			if strings.Contains(err.Error(), "database table is locked") ||
+				strings.Contains(err.Error(), "database is locked") {
+				backoff := time.Duration(100*(1<<i)) * time.Millisecond
+				t.Logf("Database locked during analytics wait, backing off %v (attempt %d/5)", backoff, i+1)
+				time.Sleep(backoff)
+				continue
+			}
+
+			// For other errors, use shorter backoff
+			time.Sleep(50 * time.Millisecond)
 		}
 		if err != nil {
+			t.Logf("Error checking analytics count: %v, retrying...", err)
+			time.Sleep(200 * time.Millisecond)
 			continue
 		}
 
 		if count >= expectedCount {
-			time.Sleep(50 * time.Millisecond) // Increased sleep before returning
+			time.Sleep(100 * time.Millisecond) // Increased stabilization sleep
 			return
 		}
-		time.Sleep(100 * time.Millisecond) // Increased outer polling interval
+		time.Sleep(150 * time.Millisecond) // Increased polling interval for CI
 	}
 	t.Fatalf("Timeout waiting for analytics records. Expected at least: %d", expectedCount)
 }

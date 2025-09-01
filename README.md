@@ -39,7 +39,7 @@ first, make a copy of the env file:
 cp .env.example .env
 ```
 
-Then, fill in the required environment variables in the .env file, most importantly you'll need the `TYK_AI_LICENSE_KEY`, which you can get from the AI Team.
+Then, fill in the required environment variables in the .env file.
 
 Note: Environment variables set in your system or Docker environment will take precedence over values in the .env file. This is useful when you need to override specific settings without modifying the .env file, especially in container environments.
 
@@ -116,4 +116,3 @@ The resulting binary will be a full server that serves the UI and the API from t
 - `make stop-frontend`: Stops the frontend development server
 - `make start-backend`: Builds and starts the backend
 - `make stop-backend`: Stops the backend server
-

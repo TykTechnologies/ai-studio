@@ -192,11 +192,10 @@ func setupTestAPIWithMocks(t *testing.T) (*API, *gin.Engine, *MockOAuthClientSer
 	realAuthService := apitesting.SetupTestAuthService(testDB, realService)
 
 	apiInstance := &API{
-		router:   router,
-		config:   authConfig,
-		auth:     realAuthService,
-		service:  realService,
-		licenser: apitesting.SetupTestLicenser(),
+		router:  router,
+		config:  authConfig,
+		auth:    realAuthService,
+		service: realService,
 	}
 
 	// Configure the default behavior for AuthMiddleware() calls during router setup

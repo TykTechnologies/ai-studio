@@ -43,8 +43,7 @@ func TestChatSSE(t *gotest.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	licenser := apitest.SetupTestLicenser()
-	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, licenser)
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
 	// Create user.
 	user := &models.User{
