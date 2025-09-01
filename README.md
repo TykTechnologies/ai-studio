@@ -1,135 +1,283 @@
-# Midsommar - Tyk AI Studio
+# Tyk AI Studio
 
-Tyk AI Portal makes it easy to embrace AI in the organisation.
+![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)
+[![GitHub Latest Release](https://img.shields.io/github/v/release/TykTechnologies/ai-studio?color=8836FB)](https://github.com/TykTechnologies/ai-studio/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/TykTechnologies/ai-studio?logoColor=8836FB)](https://github.com/TykTechnologies/ai-studio/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/TykTechnologies/ai-studio.svg?logoColor=8836FB)](https://github.com/TykTechnologies/ai-studio/fork)
 
-Tyk AI Portal provides two capabilities laser-focussed on corporate AI deployment:
-1. Enable non-technical users to utilise AI in a safe and measure way
-2. Enable technical users to deploy AI in a secure and scalable way
+---
+[Official Documentation](https://tyk.io/docs/ai-management/overview/) | [AI Studio Homepage](https://tyk.io/tyk-ai-studio/) | [Community Forum](https://community.tyk.io) | [Contributing](CONTRIBUTING.md)
 
-For non-technical users, Tyk AI Portal:
-- Provides an intuitive chat window to interact with any supported AI Vendor with your personalised system prompt
-- Enables the use of internal and external tools for those models in the chat window (e.g. JIRA, Hubspot, etc.)
-- Enables the use of internal vector data sources provided by the admin team as part of theiur converations
-- Enables th user to upload documents for the AI to use with their prompt
+**Open source AI management platform for secure, governed, and scalable AI integration**
 
-For Technical users:
-- Provides an AI Gateway that they can interact with most popular model vendors using native tooling
-- Provides secure access provisioning through the AI Portal
-- Provides an easy way to browse and decide on which Vendors to interact with
-- Provides a universal API for developers to interact with vector data sources
+Tyk AI Studio is an open source platform that addresses the critical challenges organizations face when adopting AI: shadow AI usage, compliance requirements, security concerns, and spiraling costs. Built for developers and platform teams, it provides structured AI management through governance, monitoring, and unified access controls.
 
-For Administratorts, IT, and Platform Teams:
-- Easy to set-up cost monitoring of AI models
-- Easy to set up, group-based access to AIs, Tools, and Data sets
-- Usage monitoring of Tools, AI models, and developer AI apps
-- Simple, scriptable content filter policy enablement for interactions with AI models to protect data security
-- Access control and access provisioning for developers in the AI Portal.
+## Why Tyk AI Studio?
 
-## Developer Guide
+AI adoption brings significant challenges that require structured solutions:
 
-There are two ways to run in developer mode: using the docker container, or running everything locally.
+🚫 **Shadow AI Prevention** - Stop unauthorized AI tool usage without oversight  
+🔒 **Security & Compliance** - Maintain data privacy and meet regulatory requirements  
+💰 **Cost Control** - Monitor usage and prevent unlimited AI consumption  
+🎯 **Unified Access** - Single interface for multiple AI vendors and internal tools  
 
-### Running in Docker
+## Core Capabilities
 
-To run the app in Docker, you need to have Docker installed on your machine.
+### AI Gateway
+The heart of secure AI integration, providing:
+- **Multi-vendor LLM support**: OpenAI, Anthropic, Mistral, Vertex AI, Bedrock, Gemini, Huggingface, Ollama, and custom models
+- **Secure API proxying**: Centralized access control and credential management  
+- **Usage monitoring**: Real-time tracking of costs, usage patterns, and performance
+- **Rate limiting**: Prevent excessive token consumption and manage budgets
+- **Content filtering**: Scriptable policy enforcement for data security
 
-first, make a copy of the env file:
+### AI Portal  
+Developer-focused service catalog featuring:
+- **Curated AI services**: Easy discovery and access to approved AI tools
+- **Unified interface**: Single point of access for all AI capabilities
+- **Integration support**: Connect with internal systems and external workflows
+- **Rapid prototyping**: Secure experimentation with built-in policy controls
 
+### AI Chat Interface
+Collaborative workspace that provides:
+- **Universal chat experience**: Single interface for LLMs, tools, and internal data sources
+- **Custom chatrooms**: Dedicated spaces for teams, projects, or specific use cases
+- **Built-in governance**: Policy enforcement without disrupting user workflows
+- **Document integration**: Upload and use documents within AI conversations
+
+### MCP Integration
+Standards-based AI component integration:
+- **Remote MCP support**: Connect internal APIs and tools without custom scripts
+- **Local MCP servers**: Generate installable servers for testing or restricted environments
+- **Standardized interactions**: Following Model Context Protocol specifications
+- **Secure connections**: All MCP traffic routed through the AI Gateway for visibility
+
+## Real-World Applications
+
+**Software Development**
+- Integrate AI with Jira, GitHub, and internal development tools
+- Accelerate development cycles with AI-powered assistance
+- Maintain security while enabling developer productivity
+
+**Financial Services**  
+- Ensure only anonymized data reaches external LLMs
+- Track AI usage costs by department or team
+- Meet compliance requirements while enabling innovation
+
+**Healthcare**
+- Route LLM traffic through governed pathways for HIPAA compliance
+- Protect sensitive patient data with content filtering
+- Enable AI-driven insights while maintaining privacy controls
+
+**General Business Applications**
+- Query internal APIs and databases through conversational interfaces
+- Integrate AI with existing business systems and workflows
+- Enable non-technical users to leverage AI capabilities safely
+
+## Quick Start
+
+Get up and running in under 5 minutes:
+
+### Option 1: Docker (Recommended)
+
+1. **Clone and setup**
 ```bash
+git clone https://github.com/TykTechnologies/ai-studio.git
+cd ai-studio
 cp .env.example .env
 ```
 
-Then, fill in the required environment variables in the .env file.
+2. **Configure environment**
+Edit `.env` file with your AI provider credentials and desired settings.
 
-Note: Environment variables set in your system or Docker environment will take precedence over values in the .env file. This is useful when you need to override specific settings without modifying the .env file, especially in container environments.
-
-To start the app in Docker, run the following command:
-
+3. **Start the platform**
 ```bash
 docker compose up --build
 ```
 
-This will take a while on first run, but when fully up, should watch the server, and let you update any code and have it re-compiled each time you make a change to the front end or back end.
+4. **Access the interface**
+- UI: http://localhost:3000
+- API: http://localhost:8080
+- Proxy: http://localhost:9090
 
-### Running natively
+When you first register, your account will automatically become admin with a default user group created.
 
-### Prerequisites
-1. Clone this repository
-2. Clone the llangchain-go fork at https://github.com/lonelycode/langchaingo (yes, I know, but they have not merged my fixes yet).
-3. Get some AI access credentials from any supported vendor
+### Option 2: Native Development
 
-## Getting Started
-The App has two sections: the back-end and the UI. The back-end is written in Go and the UI is written in React.
+**Prerequisites**
+- Go 1.22+
+- Node.js 18+
+- Clone the langchaingo fork: https://github.com/lonelycode/langchaingo
 
-All configuration is in the .env file in the root of the project, there is a sample provided in the root of the project.
-
-To run the go server and front-end:
-
+**Start development servers**
 ```bash
-make start-dev
+make start-dev  # Starts both frontend and backend
+make stop-dev   # Stops both services
 ```
 
-This command will:
-1. Create a .env file from .env.example if it doesn't exist
-2. Start the frontend in development mode
-3. Build and start the backend
-4. Open a screen session with two windows for the frontend and backend
+## Installation Options
 
-To stop both the frontend and backend:
-
+### Docker
 ```bash
-make stop-dev
+# Production deployment
+docker compose up -d
+
+# Development with hot reload
+docker compose up --build
 ```
 
-The UI is on `http://localhost:3000`, the proxy is on `http://localhost:9090`, and the API is on `http://localhost:8080/`.
-
-When you open the site up for the first time, register a new account - this account will automatically be made admin and a default user group will be created.
-
-## Telemetry & Privacy
-
-Tyk AI Studio collects anonymized usage statistics to help improve the product. This includes counts of users, apps, LLMs, and chats - **no personal data or content is collected**.
-
-**To disable telemetry collection:**
-
+### Kubernetes
 ```bash
-export TELEMETRY_ENABLED=false
+# Using Helm (if available)
+helm install ai-studio ./helm
+
+# Using kubectl
+kubectl apply -f k8s/
 ```
 
-Or add to your `.env` file:
-```
-TELEMETRY_ENABLED=false
-```
-
-For more details, see the [Telemetry Documentation](docs/site/docs/telemetry.md).
-
-## Structure
-
-The back end is very straightforward, there are three levels:
-1. The model layer - this contains nearly all data structures and database-level CRUD operations
-2. The service layer - This contains all data access and business logic to the model layer
-3. The API layer - This is an interface to the service layer via a REST API.
-
-The front-end is split into two sections: admin and portal, each have their own layouts and components. The admin section is for managing the AI models, tools, and data sources,  and the portal is for interacting with the AI models.
-
-## Building a Final Binary
-
-To build the final binary, use the following command:
-
+### Native Binary
 ```bash
+# Build production binary
 make build
+
+# The binary includes both API and UI
+./ai-studio
 ```
 
-This will:
-1. Build the admin frontend if it doesn't exist or if FORCE_BUILD=true
-2. Build the Golang binary
+## Architecture
 
-The resulting binary will be a full server that serves the UI and the API from the same port.
+Tyk AI Studio follows a clean three-tier architecture:
 
-## Additional Makefile Commands
+**Model Layer**: Data structures and database-level CRUD operations  
+**Service Layer**: Business logic and data access to the model layer  
+**API Layer**: REST interface to the service layer  
 
-- `make test`: Runs Go tests after building the admin frontend
-- `make clean`: Removes the admin frontend build directory
-- `make start-frontend`: Starts the frontend in development mode
-- `make stop-frontend`: Stops the frontend development server
-- `make start-backend`: Builds and starts the backend
-- `make stop-backend`: Stops the backend server
+**Frontend Structure**:
+- **Admin**: Managing AI models, tools, and data sources
+- **Portal**: User interface for interacting with AI models and tools
+
+The AI Gateway sits at the center, proxying all AI interactions while enforcing policies, monitoring usage, and maintaining security controls.
+
+## Supported AI Vendors
+
+- **OpenAI**: GPT models, Embeddings, and more
+- **Anthropic**: Claude models and assistants  
+- **Mistral**: Open source and commercial models
+- **Google**: Vertex AI and Gemini models
+- **AWS**: Bedrock model access
+- **Hugging Face**: Open source model ecosystem
+- **Ollama**: Local model deployment
+- **Custom Models**: Bring your own model integrations
+
+## Key Benefits
+
+✅ **Reduce Risk** - Centralized access controls and comprehensive monitoring  
+✅ **Improve Efficiency** - Streamlined workflows for both developers and end users  
+✅ **Cost Control** - Real-time usage tracking with budgeting and rate limiting  
+✅ **Support Compliance** - Built-in policy enforcement and audit logging  
+✅ **Enable Scale** - Standards-based architecture supporting growth  
+
+## Documentation & Resources
+
+**Official Documentation**
+- [AI Management Overview](https://tyk.io/docs/ai-management/overview/)
+- [AI Studio Documentation](https://tyk.io/docs/ai-management/ai-studio/overview/)
+- [MCP Integration Guide](https://tyk.io/docs/ai-management/mcps/overview/)
+
+**Product Information**
+- [AI Studio Homepage](https://tyk.io/tyk-ai-studio/)
+- [Request Demo](https://tyk.io/ai-demo/)
+
+**Developer Resources**
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Code of Conduct](CLA.md)
+
+## Configuration
+
+All configuration is managed through the `.env` file. Key settings include:
+
+```bash
+# AI Provider Credentials
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
+
+# Database Configuration
+DATABASE_URL=your-database-url
+
+# Telemetry (Optional)
+TELEMETRY_ENABLED=false  # Disable usage statistics collection
+```
+
+**Privacy Note**: Tyk AI Studio collects anonymized usage statistics to improve the platform. No personal data or AI conversation content is collected. Set `TELEMETRY_ENABLED=false` to disable.
+
+## Development
+
+### Building from Source
+```bash
+# Build backend
+go build
+
+# Build with admin frontend included
+make build
+
+# Run tests
+make test
+
+# Clean build artifacts
+make clean
+```
+
+### Additional Commands
+```bash
+make start-frontend    # Frontend development server only
+make start-backend     # Backend development server only
+make stop-frontend     # Stop frontend server
+make stop-backend      # Stop backend server
+```
+
+### Testing
+```bash
+# Run all tests
+go test ./...
+
+# Run tests for specific package
+go test ./api/...
+
+# Run tests with coverage
+go test -coverprofile=coverage.out -coverpkg=./... ./...
+```
+
+## Community & Support
+
+**Get Help**
+- [Community Forum](https://community.tyk.io) - Technical support and discussions
+- [GitHub Issues](https://github.com/TykTechnologies/ai-studio/issues) - Bug reports and feature requests
+- [Official Documentation](https://tyk.io/docs/ai-management/overview/) - Comprehensive guides and references
+
+**Contributing**
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to:
+- Report bugs and request features
+- Submit pull requests
+- Sign the Contributor License Agreement
+- Join our development community
+
+## Licensing
+
+Tyk AI Studio is released under the GNU Affero General Public License v3.0. See [LICENSE.md](LICENSE.md) for full details.
+
+**Contributor License Agreement**: All contributors must sign the [Tyk CLA](CLA.md) before contributions can be accepted.
+
+## Project Status
+
+Tyk AI Studio is actively developed and maintained by Tyk Technologies. It serves as the open source foundation for Tyk's AI management ecosystem.
+
+**Stability**: Production ready for AI gateway and basic management features  
+**Development**: Active development with regular releases  
+**Community**: Welcoming contributions and feedback from the community  
+
+---
+
+**Built with ❤️ by Tyk**
+
+If you're using Tyk AI Studio, give us a star ⭐️ and let us know how it's working for you!
