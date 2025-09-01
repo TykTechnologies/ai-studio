@@ -21,7 +21,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
-	"github.com/TykTechnologies/midsommar/v2/licensing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -82,22 +81,6 @@ func main() {
 		log.Fatalf("Failed to initialize models: %v", err)
 	}
 
-	licenseConfig := licensing.LicenseConfig{
-		LicenseKey:          appConf.LicenseKey,
-		ValidityCheckPeriod: 10 * time.Minute,
-		TelemetryPeriod:     appConf.LicenseTelemetryPeriod,
-		DisableTelemetry:    appConf.LicenseDisableTelemetry,
-		TelemetryURL:        appConf.LicenseTelemetryURL,
-		Version:             VERSION,
-		Component:           "tyk-ai-studio",
-		TelemetryService:    services.NewTelemetryService(db),
-	}
-
-	licenser := licensing.NewLicenser(licenseConfig)
-
-	licenser.Start()
-	defer licenser.Stop()
-
 	// Create a new service instance
 	service := services.NewService(db)
 
@@ -157,10 +140,8 @@ func main() {
 	}
 	p := proxy.NewProxy(service, pConfig, budgetService)
 
-	gatewayEnabled, gatewayOk := licenser.Entitlement(licensing.FEATUREGateway)
-	if gatewayOk && gatewayEnabled.Bool() {
-		go p.Start()
-	}
+	// Always enable gateway
+	go p.Start()
 
 	noDocsArg := false
 	docsPortArg := 8989
@@ -182,7 +163,7 @@ func main() {
 
 	if !appConf.ProxyOnly {
 		// Create a new API instance
-		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, licenser) // true to disable CORS for development
+		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, nil) // true to disable CORS for development
 
 		// listEmbeddedFiles(staticFiles)
 		// Run the API

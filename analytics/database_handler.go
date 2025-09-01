@@ -4,8 +4,10 @@ import (
 	"context"
 	"log"
 	"log/slog"
+	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,7 +83,9 @@ func (h *DatabaseHandler) startWorker() {
 	for {
 		select {
 		case record := <-h.chatRecordChan:
-			err := h.db.Create(record).Error
+			err := h.createRecordWithRetry(func() error {
+				return h.db.Create(record).Error
+			})
 			if err != nil {
 				slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
 			} else {
@@ -94,17 +98,23 @@ func (h *DatabaseHandler) startWorker() {
 					"timestamp", record.TimeStamp)
 			}
 		case logEntry := <-h.logEntryChan:
-			err := h.db.Create(logEntry).Error
+			err := h.createRecordWithRetry(func() error {
+				return h.db.Create(logEntry).Error
+			})
 			if err != nil {
 				slog.Warn("error creating chat log entry", "error", err)
 			}
 		case toolCall := <-h.toolCallChan:
-			err := h.db.Create(toolCall).Error
+			err := h.createRecordWithRetry(func() error {
+				return h.db.Create(toolCall).Error
+			})
 			if err != nil {
 				slog.Warn("error creating tool call record", "error", err)
 			}
 		case proxyLog := <-h.proxyLogChan:
-			err := h.db.Create(proxyLog).Error
+			err := h.createRecordWithRetry(func() error {
+				return h.db.Create(proxyLog).Error
+			})
 			if err != nil {
 				slog.Warn("error creating proxy log", "error", err)
 			}
@@ -120,6 +130,50 @@ func (h *DatabaseHandler) startWorker() {
 			return
 		}
 	}
+}
+
+// createRecordWithRetry executes database operations with retry logic for lock errors
+func (h *DatabaseHandler) createRecordWithRetry(createFn func() error) error {
+	maxRetries := 5
+	baseDelay := 50 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := createFn()
+		if err == nil {
+			return nil
+		}
+
+		// Check if this is a database lock error
+		if strings.Contains(err.Error(), "database table is locked") ||
+			strings.Contains(err.Error(), "database is locked") ||
+			strings.Contains(err.Error(), "SQLITE_BUSY") {
+
+			if attempt < maxRetries-1 {
+				// Exponential backoff with jitter
+				delay := baseDelay * time.Duration(1<<attempt)
+				// Add some jitter to prevent thundering herd
+				jitter := time.Duration(rand.Intn(50)) * time.Millisecond
+				totalDelay := delay + jitter
+
+				slog.Debug("database locked, retrying database operation",
+					"attempt", attempt+1,
+					"max_retries", maxRetries,
+					"delay_ms", totalDelay.Milliseconds())
+
+				select {
+				case <-time.After(totalDelay):
+					continue
+				case <-h.ctx.Done():
+					return h.ctx.Err()
+				}
+			}
+		}
+
+		// For non-lock errors or final attempt, return the error
+		return err
+	}
+
+	return nil
 }
 
 // Stop gracefully stops the database handler

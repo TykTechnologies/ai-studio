@@ -28,3 +28,5 @@ docs/site/package-lock.json
 examples/file-based-demo/file-based-demo
 examples/file-based-demo/demo
 examples/file-based-demo/analytics/*.json
+utils/uc/*.json
+utils/uc/uc

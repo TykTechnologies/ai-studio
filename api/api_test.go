@@ -23,8 +23,7 @@ func setupTestAPI(t *testing.T) (*API, *gorm.DB) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	licenser := apitest.SetupTestLicenser()
-	api := NewAPI(service, true, authService, config, nil, emptyFile, licenser)
+	api := NewAPI(service, true, authService, config, nil, emptyFile, nil)
 
 	return api, db
 }
@@ -43,9 +42,6 @@ func performRequest(r http.Handler, method, path string, body interface{}) *http
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
-
-	// Initialize test licenser
-	apitest.SetupTestLicenser()
 
 	os.Exit(m.Run())
 }
