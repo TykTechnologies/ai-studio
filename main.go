@@ -134,6 +134,11 @@ func main() {
 	analytics.StartRecording(ctx, db)
 	budgetService := services.NewBudgetService(db, notificationService)
 
+	// Initialize and start telemetry
+	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, VERSION)
+	telemetryManager.Start()
+	defer telemetryManager.Stop()
+
 	// start the Proxy
 	pConfig := &proxy.Config{
 		Port: 9090,
