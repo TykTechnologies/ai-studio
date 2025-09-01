@@ -37,6 +37,7 @@ type AppConf struct {
 	DevMode               bool
 	AuthServerURL         string
 	ProxyOAuthMetadataURL string
+	TelemetryEnabled      bool
 }
 
 type DocsLinks map[string]string
@@ -206,6 +207,14 @@ func getConfigFromEnv() *AppConf {
 	}
 
 	// Licensing has been removed - TYK_AI_LICENSE no longer required
+
+	// Telemetry configuration - enabled by default, can be disabled by setting TELEMETRY_ENABLED=false
+	telemetryEnabledStr := os.Getenv("TELEMETRY_ENABLED")
+	if telemetryEnabledStr == "false" || telemetryEnabledStr == "0" {
+		conf.TelemetryEnabled = false
+	} else {
+		conf.TelemetryEnabled = true // Default to enabled
+	}
 
 	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
 	if conf.AuthServerURL == "" {
