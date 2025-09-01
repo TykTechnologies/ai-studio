@@ -85,6 +85,23 @@ The UI is on `http://localhost:3000`, the proxy is on `http://localhost:9090`, a
 
 When you open the site up for the first time, register a new account - this account will automatically be made admin and a default user group will be created.
 
+## Telemetry & Privacy
+
+Tyk AI Studio collects anonymized usage statistics to help improve the product. This includes counts of users, apps, LLMs, and chats - **no personal data or content is collected**.
+
+**To disable telemetry collection:**
+
+```bash
+export TELEMETRY_ENABLED=false
+```
+
+Or add to your `.env` file:
+```
+TELEMETRY_ENABLED=false
+```
+
+For more details, see the [Telemetry Documentation](docs/site/docs/telemetry.md).
+
 ## Structure
 
 The back end is very straightforward, there are three levels:
