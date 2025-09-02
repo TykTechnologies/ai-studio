@@ -74,6 +74,53 @@ Standards-based AI component integration:
 - Integrate AI with existing business systems and workflows
 - Enable non-technical users to leverage AI capabilities safely
 
+## First Time Setup
+
+**For absolute first-timers who want to build from source:**
+
+### Prerequisites
+- Go 1.22+  
+- Node.js 18+
+- Git
+
+### Initial Setup Steps
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/TykTechnologies/ai-studio.git
+cd ai-studio
+```
+
+2. **Install frontend dependencies**
+```bash
+cd ui/admin-frontend
+npm install
+```
+
+3. **Build the frontend** (required for Go embedding)
+```bash
+npm run build
+```
+
+4. **Return to project root and build backend**
+```bash
+cd ../../
+go build
+```
+
+5. **Setup environment**
+```bash
+cp .env.example .env
+# Edit .env file with your AI provider credentials
+```
+
+6. **Run the application**
+```bash
+./ai-studio
+```
+
+**⚠️ Important**: If you try to run `go build` without first building the frontend, you'll get an error about empty directories because the Go application embeds the frontend build assets. Always build the frontend first!
+
 ## Quick Start
 
 Get up and running in under 5 minutes:
@@ -214,12 +261,31 @@ TELEMETRY_ENABLED=false  # Disable usage statistics collection
 ## Development
 
 ### Building from Source
+
+**Manual build process** (step by step):
 ```bash
-# Build backend
+# 1. Install frontend dependencies (if not done already)
+cd ui/admin-frontend
+npm install
+
+# 2. Build frontend assets (required before Go build)
+npm run build
+
+# 3. Return to root and build backend
+cd ../../
 go build
 
-# Build with admin frontend included
+# 4. Run the application
+./ai-studio
+```
+
+**Using Make commands** (automated):
+```bash
+# Build everything (frontend + backend)
 make build
+
+# Build for local development only
+make build-local
 
 # Run tests
 make test
@@ -227,6 +293,8 @@ make test
 # Clean build artifacts
 make clean
 ```
+
+**⚠️ Build Order Important**: The frontend must be built before the Go binary because the application embeds frontend assets. Running `go build` without building the frontend first will fail with empty directory errors.
 
 ### Additional Commands
 ```bash
