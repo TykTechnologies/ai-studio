@@ -1,10 +1,10 @@
 # Chat Queue System
 
-**Status:** ✅ Phase 1 Complete - Interface-driven Queue Architecture
+**Status:** ✅ Phase 4 Complete - NATS Implementation with Configuration System
 
 ## Overview
 
-The Chat Queue System provides an interface-driven abstraction layer for message passing in chat sessions, allowing for pluggable queue implementations that can be swapped via configuration.
+The Chat Queue System provides an interface-driven abstraction layer for message passing in chat sessions, with pluggable queue implementations that can be swapped via configuration. Currently supports in-memory and NATS JetStream implementations.
 
 ## Architecture
 
@@ -30,7 +30,7 @@ type MessageQueue interface {
     // Lifecycle management
     Close() error
 
-    // Metrics for monitoring
+    // Metrics for monitoring (InMemoryQueue only)
     QueueDepth() (messages, stream, errors, llmResponses int)
 }
 ```
@@ -44,7 +44,7 @@ type QueueFactory interface {
 
 ### Implementations
 
-#### InMemoryQueue (Phase 1 ✅)
+#### InMemoryQueue ✅
 - **Purpose**: Default implementation using Go channels
 - **Characteristics**: 
   - Zero-latency message delivery
@@ -53,9 +53,20 @@ type QueueFactory interface {
   - Blocking sends with context timeout support
 - **Use Case**: Single-instance deployments, development, testing
 
-#### Future Implementations (Phase 4)
-- **NATS Queue**: For distributed deployments
-- **Redis Queue**: For persistent message storage
+#### NATS JetStream Queue ✅
+- **Purpose**: Distributed, persistent message queue using NATS JetStream
+- **Characteristics**:
+  - Persistent message storage with file-based streams
+  - Interest-based retention (messages deleted when consumed)
+  - Automatic reconnection with connection monitoring
+  - Durable consumers for restart recovery
+  - Configurable message age and storage limits
+  - Per-session stream isolation
+- **Use Case**: Distributed deployments, high availability, message persistence
+- **Configuration**: Hybrid persistent (file storage + interest retention + limits)
+
+#### Future Implementations
+- **Redis Queue**: For Redis-based persistence
 - **AWS SQS**: For cloud-native deployments
 
 ## Message Types
@@ -89,21 +100,56 @@ Internal LLM response objects for continued processing.
 
 ## Configuration
 
-### Environment Variables (Future - Phase 3)
+### Environment Variables ✅
 ```bash
-QUEUE_TYPE=inmemory|nats|redis
-QUEUE_BUFFER_SIZE=100
-NATS_URL=nats://localhost:4222
-REDIS_URL=redis://localhost:6379
+# Queue Configuration
+QUEUE_TYPE=inmemory|nats                    # Queue implementation type
+QUEUE_BUFFER_SIZE=100                       # Buffer size for queues
+
+# NATS Configuration  
+NATS_URL=nats://localhost:4222              # NATS server URL
+NATS_STORAGE_TYPE=file|memory               # JetStream storage type (default: file)
+NATS_RETENTION_POLICY=interest|limits|workqueue  # Retention policy (default: interest)
+NATS_MAX_AGE=2h                             # Maximum message age (default: 2h)
+NATS_MAX_BYTES=104857600                    # Max stream size in bytes (default: 100MB)
+NATS_DURABLE_CONSUMER=true                  # Use durable consumers (default: true)
+NATS_ACK_WAIT=30s                           # Ack wait timeout (default: 30s)  
+NATS_MAX_DELIVER=3                          # Max delivery attempts (default: 3)
 ```
 
-### Chat-level Configuration (Future)
+### Configuration Structure ✅
 ```go
-type Chat struct {
+// In config/config.go
+type AppConf struct {
     // ... existing fields ...
-    QueueConfig map[string]interface{} `json:"queue_config"`
+    QueueConfig QueueConfig `json:"queue_config"`
+}
+
+type QueueConfig struct {
+    Type       string      `json:"type"`        // "inmemory" or "nats"
+    BufferSize int         `json:"buffer_size"` // Buffer size for channels
+    NATS       NATSConfig  `json:"nats"`        // NATS-specific configuration
+}
+
+type NATSConfig struct {
+    URL             string `json:"url"`
+    StorageType     string `json:"storage_type"`
+    RetentionPolicy string `json:"retention_policy"`
+    MaxAge          string `json:"max_age"`           // Duration string
+    MaxBytes        int64  `json:"max_bytes"`
+    DurableConsumer bool   `json:"durable_consumer"`
+    AckWait         string `json:"ack_wait"`          // Duration string
+    MaxDeliver      int    `json:"max_deliver"`
 }
 ```
+
+### NATS JetStream Configuration ✅
+The NATS implementation uses a **hybrid persistent configuration**:
+- **Storage**: File-based persistence for durability
+- **Retention**: Interest-based (messages deleted when consumed)
+- **Limits**: 2-hour max age, 100MB max size per stream
+- **Recovery**: Durable consumers for restart recovery
+- **Isolation**: Per-session streams (`CHAT_{sessionID}_{messageType}`)
 
 ## Message Reliability
 

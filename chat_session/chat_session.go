@@ -67,7 +67,7 @@ type ChatResponse struct {
 	Payload string
 }
 
-func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service, withFilters []*models.Filter, userID *uint, sessionID *string) (*ChatSession, error) {
+func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services.Service, withFilters []*models.Filter, userID *uint, sessionID *string, queueFactory ...QueueFactory) (*ChatSession, error) {
 	uid, _ := uuid.NewV4()
 	id := uid.String()
 
@@ -76,8 +76,23 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		id = *sessionID
 	}
 
-	// Create default in-memory queue for backward compatibility
-	queue := NewDefaultInMemoryQueue(id)
+	// Create queue using factory or default
+	var queue MessageQueue
+	var err error
+
+	if len(queueFactory) > 0 && queueFactory[0] != nil {
+		// Use provided factory
+		queue, err = queueFactory[0].CreateQueue(id, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create queue: %w", err)
+		}
+	} else {
+		// Use default factory based on configuration
+		queue, err = CreateDefaultQueue(id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create default queue: %w", err)
+		}
+	}
 
 	cs := &ChatSession{
 		id:            id,
@@ -740,25 +755,19 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		}
 		// Only send to output stream if this is not a tool call
 		if !toolCall {
-			// Send only the final message with proper formatting
-			finalMsg := llms.MessageContent{
-				Role: llms.ChatMessageTypeAI,
-				Parts: []llms.ContentPart{
-					llms.TextContent{
-						Text: content,
-					},
-				},
+			// Send message via queue to both message and stream channels
+			msgCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+			defer cancel()
+
+			// Send as ChatResponse message
+			if err := cs.queue.PublishMessage(msgCtx, &ChatResponse{Payload: content}); err != nil {
+				slog.Warn("failed to publish message to queue", "session_id", cs.id, "error", err)
 			}
-			_, err := json.Marshal(finalMsg)
-			if err != nil {
-				cs.sendError(fmt.Errorf("error marshaling final message: %v", err))
-				return err
+
+			// Send as stream data
+			if err := cs.queue.PublishStream(msgCtx, []byte(content)); err != nil {
+				slog.Warn("failed to publish stream to queue", "session_id", cs.id, "error", err)
 			}
-			// select {
-			// case cs.outputStream <- finalMsgBytes:
-			// default:
-			// 	return fmt.Errorf("streaming channel is full")
-			// }
 		}
 	}
 
