@@ -220,7 +220,7 @@ The telemetry system collects anonymized usage statistics:
    - Data is collected via the `TelemetryService` which queries the database
 
 3. **Transmission:**
-   - Data is sent to a central telemetry service (default: https://telemetry.tyk.technologies)
+   - Data is sent to a central telemetry service (default: https://telemetry.tyk.technology)
    - The license key is hashed for anonymization before transmission
    - Data is sent as JSON via HTTPS POST requests
 
@@ -284,7 +284,7 @@ The licensing system integrates with the API through middleware:
 1. **Environment Variables:**
    - `TYK_AI_LICENSE` - The license key (JWT token) for the application
    - `LICENSE_DISABLE_TELEMETRY` - Set to "true" or "1" to disable telemetry collection
-   - `LICENSE_TELEMETRY_URL` - Custom URL for the telemetry service (default: https://telemetry.tyk.technologies)
+   - `LICENSE_TELEMETRY_URL` - Custom URL for the telemetry service (default: https://telemetry.tyk.technology)
    - `LICENSE_TELEMETRY_PERIOD` - Custom duration for telemetry collection interval (e.g., "1h", "30m")
 
 2. **Configuration in [config/config.go](../config/config.go):**
@@ -302,7 +302,7 @@ The licensing system integrates with the API through middleware:
    - `LicenseKey` - No default, must be provided
    - `LicenseTelemetryPeriod` - Default: 1 hour
    - `LicenseDisableTelemetry` - Default: false
-   - `LicenseTelemetryURL` - Default: https://telemetry.tyk.technologies
+   - `LicenseTelemetryURL` - Default: https://telemetry.tyk.technology
    - `ValidityCheckPeriod` - Default: 10 minutes (not configurable via environment variables)
 
 4. **License Requirements:**
