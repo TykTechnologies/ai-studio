@@ -46,7 +46,7 @@ The **Midsommar Telemetry System** objectives are:
 1. Telemetry manager starts during application startup
 2. Initial telemetry data is collected and sent immediately
 3. Periodic collection occurs every hour (hardcoded)
-4. Data is anonymized and sent to `https://telemetry.tyk.technologies`
+4. Data is anonymized and sent to `https://telemetry.tyk.technology`
 5. If telemetry is disabled, no data collection or transmission occurs
 
 ---
@@ -142,7 +142,7 @@ type TelemetryPayload struct {
 - Individual collection failures are logged but don't stop the overall process
 
 ### Transmission:
-- Data is sent to: `https://telemetry.tyk.technologies` (hardcoded)
+- Data is sent to: `https://telemetry.tyk.technology` (hardcoded)
 - Data is sent as JSON via HTTPS POST requests
 - Instance ID is anonymized using SHA256 hashing
 - Transmission failures are logged but don't affect application functionality
@@ -175,7 +175,7 @@ type TelemetryPayload struct {
 - `TELEMETRY_ENABLED` - Set to "false" or "0" to disable telemetry collection (default: enabled)
 
 ### Hardcoded Settings:
-- **Telemetry URL:** `https://telemetry.tyk.technologies` 
+- **Telemetry URL:** `https://telemetry.tyk.technology` 
 - **Collection Period:** 1 hour
 - **Timeout:** 30 seconds for HTTP requests
 
@@ -222,7 +222,7 @@ Telemetry is disabled
 When telemetry is enabled, you'll see these log messages:
 ```
 Telemetry collection started - collecting usage statistics every 1h0m0s
-Telemetry data will be sent to: https://telemetry.tyk.technologies
+Telemetry data will be sent to: https://telemetry.tyk.technology
 To disable telemetry, set environment variable: TELEMETRY_ENABLED=false
 ```
 
@@ -248,7 +248,7 @@ The telemetry manager is properly stopped when the application shuts down, ensur
 ## Technical Details
 
 ### Constants:
-- `TelemetryURL = "https://telemetry.tyk.technologies"`
+- `TelemetryURL = "https://telemetry.tyk.technology"`
 - `TelemetryPeriod = time.Hour`
 
 ### HTTP Client Configuration:

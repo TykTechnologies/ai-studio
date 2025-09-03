@@ -16,7 +16,7 @@ import (
 
 const (
 	// TelemetryURL is the hardcoded endpoint for sending telemetry data
-	TelemetryURL = "https://telemetry.tyk.technologies"
+	TelemetryURL = "https://telemetry.tyk.technology"
 	// TelemetryPeriod is the hardcoded interval for collecting telemetry
 	TelemetryPeriod = time.Hour
 )
