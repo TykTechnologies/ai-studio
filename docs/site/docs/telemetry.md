@@ -32,7 +32,7 @@ The telemetry system collects only aggregate statistics:
 - **No chat content, prompts, or responses** are transmitted
 - **No API keys or credentials** are included
 - Instance identifiers are hashed and rotated daily
-- Data is sent over HTTPS to `https://telemetry.tyk.technologies`
+- Data is sent over HTTPS to `https://telemetry.tyk.technology`
 
 ## Disabling Telemetry
 
@@ -75,7 +75,7 @@ Telemetry is disabled
 When enabled, you'll see:
 ```
 Telemetry collection started - collecting usage statistics every 1h0m0s
-Telemetry data will be sent to: https://telemetry.tyk.technologies
+Telemetry data will be sent to: https://telemetry.tyk.technology
 To disable telemetry, set environment variable: TELEMETRY_ENABLED=false
 ```
 
