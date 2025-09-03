@@ -45,25 +45,22 @@ type LLMDriver interface {
 }
 
 type ChatSession struct {
-	id             string
-	chatRef        *models.Chat
-	chatHistory    *GormChatMessageHistory
-	input          chan *models.UserMessage
-	llmResponses   chan *LLMResponseWrapper
-	outputMessages chan *ChatResponse
-	outputStream   chan []byte
-	stop           chan struct{}
-	errors         chan error
-	preProcessors  []func(*models.UserMessage) error
-	caller         llms.Model
-	mode           ChatMode
-	datasources    map[uint]*models.Datasource
-	tools          map[string]models.Tool
-	db             *gorm.DB
-	service        *services.Service
-	userID         uint
-	files          map[string]string
-	filters        []*models.Filter
+	id            string
+	chatRef       *models.Chat
+	chatHistory   *GormChatMessageHistory
+	input         chan *models.UserMessage
+	queue         MessageQueue // NEW: Replaces llmResponses, outputMessages, outputStream, errors
+	stop          chan struct{}
+	preProcessors []func(*models.UserMessage) error
+	caller        llms.Model
+	mode          ChatMode
+	datasources   map[uint]*models.Datasource
+	tools         map[string]models.Tool
+	db            *gorm.DB
+	service       *services.Service
+	userID        uint
+	files         map[string]string
+	filters       []*models.Filter
 }
 
 type ChatResponse struct {
@@ -79,24 +76,24 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		id = *sessionID
 	}
 
+	// Create default in-memory queue for backward compatibility
+	queue := NewDefaultInMemoryQueue(id)
+
 	cs := &ChatSession{
-		id:             id,
-		chatRef:        chat,
-		input:          make(chan *models.UserMessage, 100),
-		outputMessages: make(chan *ChatResponse, 100),
-		outputStream:   make(chan []byte, 100),
-		stop:           make(chan struct{}),
-		errors:         make(chan error, 100),
-		preProcessors:  []func(*models.UserMessage) error{},
-		mode:           mode,
-		db:             db,
-		datasources:    map[uint]*models.Datasource{},
-		tools:          map[string]models.Tool{},
-		llmResponses:   make(chan *LLMResponseWrapper, 100),
-		service:        svc,
-		files:          map[string]string{},
-		userID:         *userID,
-		filters:        withFilters,
+		id:            id,
+		chatRef:       chat,
+		input:         make(chan *models.UserMessage, 100),
+		queue:         queue, // Use MessageQueue interface
+		stop:          make(chan struct{}),
+		preProcessors: []func(*models.UserMessage) error{},
+		mode:          mode,
+		db:            db,
+		datasources:   map[uint]*models.Datasource{},
+		tools:         map[string]models.Tool{},
+		service:       svc,
+		files:         map[string]string{},
+		userID:        *userID,
+		filters:       withFilters,
 	}
 
 	// filter setup
@@ -119,16 +116,16 @@ func (cs *ChatSession) ID() string {
 	return cs.id
 }
 
-func (cs *ChatSession) Errors() chan error {
-	return cs.errors
+func (cs *ChatSession) Errors() <-chan error {
+	return cs.queue.ConsumeErrors(context.Background())
 }
 
-func (cs *ChatSession) OutputMessage() chan *ChatResponse {
-	return cs.outputMessages
+func (cs *ChatSession) OutputMessage() <-chan *ChatResponse {
+	return cs.queue.ConsumeMessages(context.Background())
 }
 
-func (cs *ChatSession) OutputStream() chan []byte {
-	return cs.outputStream
+func (cs *ChatSession) OutputStream() <-chan []byte {
+	return cs.queue.ConsumeStream(context.Background())
 }
 
 func (cs *ChatSession) Input() chan *models.UserMessage {
@@ -281,8 +278,7 @@ func (cs *ChatSession) AddPreProcessor(fn func(*models.UserMessage) error) {
 func (cs *ChatSession) Stop() {
 	cs.stop <- struct{}{}
 	close(cs.input)
-	close(cs.outputMessages)
-	close(cs.outputStream)
+	cs.queue.Close() // Close the queue instead of individual channels
 }
 
 func (cs *ChatSession) Start() error {
@@ -332,7 +328,7 @@ func (cs *ChatSession) Start() error {
 				ds := dataSession.NewDataSession(cs.datasources)
 				docs, err := ds.Search(msg.Payload, 10) //TODO this should be configurable in the future
 				if err != nil {
-					cs.errors <- fmt.Errorf("error searching datasources: %v", err)
+					cs.sendError(fmt.Errorf("error searching datasources: %v", err))
 					continue
 				}
 
@@ -342,7 +338,7 @@ func (cs *ChatSession) Start() error {
 				// secure file references
 				scanFailureResponse, ok := cs.scanFiles(msg.FileRef)
 				if !ok {
-					cs.errors <- fmt.Errorf(scanFailureResponse)
+					cs.sendError(fmt.Errorf(scanFailureResponse))
 					continue
 				}
 
@@ -352,7 +348,7 @@ func (cs *ChatSession) Start() error {
 					for i, _ := range msg.FileRef {
 						fileContents, ok := cs.GetFileReference(msg.FileRef[i])
 						if !ok {
-							cs.errors <- fmt.Errorf("file reference not found: %s", msg.FileRef[i])
+							cs.sendError(fmt.Errorf("file reference not found: %s", msg.FileRef[i]))
 							continue
 						}
 						files[msg.FileRef[i]] = fileContents
@@ -362,15 +358,15 @@ func (cs *ChatSession) Start() error {
 				// Handle the message from the user
 				_, err = cs.HandleUserMessage(msg, docs, tools, files)
 				if err != nil {
-					cs.errors <- fmt.Errorf("error handling user message: %v", err)
+					cs.sendError(fmt.Errorf("error handling user message: %v", err))
 					continue
 				}
 
-			case resp := <-cs.llmResponses:
+			case resp := <-cs.queue.ConsumeLLMResponses(context.Background()):
 				// handle any response from the LLM
 				err := cs.HandleLLMResponse(resp)
 				if err != nil {
-					cs.errors <- fmt.Errorf("error handling LLM response: %v", err)
+					cs.sendError(fmt.Errorf("error handling LLM response: %v", err))
 					continue
 				}
 			}
@@ -386,22 +382,20 @@ func (cs *ChatSession) sendOutput(resp string) {
 
 func (cs *ChatSession) sendStatus(resp string) {
 	msg := fmt.Sprintf(":::system %s:::", resp)
-	select {
-	case cs.outputMessages <- &ChatResponse{Payload: msg}:
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
 
-	if cs.outputStream != nil {
-		select {
-		case cs.outputStream <- []byte(msg):
-		}
-	}
+	// Send to both message and stream channels via queue
+	cs.queue.PublishMessage(ctx, &ChatResponse{Payload: msg})
+	cs.queue.PublishStream(ctx, []byte(msg))
 }
 
 func (cs *ChatSession) sendError(err error) {
-	select {
-	case cs.errors <- err:
-	default:
-		slog.Error("error sending error to channel", "channel", "errors", "error", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	if queueErr := cs.queue.PublishError(ctx, err); queueErr != nil {
+		slog.Error("error sending error to queue", "queue_error", queueErr, "original_error", err)
 	}
 }
 
@@ -428,14 +422,14 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 
 			uc, err := universalclient.NewClient([]byte(t.OASSpec), "", opts...)
 			if err != nil {
-				cs.errors <- fmt.Errorf("error creating universal client: %v", err)
+				cs.sendError(fmt.Errorf("error creating universal client: %v", err))
 				continue
 			}
 
 			if len(t.GetOperations()) > 0 {
 				asToolDef, err := uc.AsTool(t.GetOperations()...)
 				if err != nil {
-					cs.errors <- fmt.Errorf("error creating tool definition: %v", err)
+					cs.sendError(fmt.Errorf("error creating tool definition: %v", err))
 					continue
 				}
 
@@ -444,7 +438,7 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 			}
 
 		default:
-			cs.errors <- fmt.Errorf("unknown tool type: %s", t.ToolType)
+			cs.sendError(fmt.Errorf("unknown tool type: %s", t.ToolType))
 		}
 
 	}
@@ -579,7 +573,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 			for i2, _ := range cs.filters {
 				sr := scripting.NewScriptRunner(cs.filters[i2].Script)
 				if sr == nil {
-					cs.errors <- fmt.Errorf("error creating script runner")
+					cs.sendError(fmt.Errorf("error creating script runner"))
 					continue
 				}
 
@@ -804,7 +798,9 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		}
 
 		// Send the new LLM response to continue the conversation
-		cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: w.Opts}
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		cs.queue.PublishLLMResponse(ctx, &LLMResponseWrapper{Response: resp, Opts: w.Opts})
 	}
 
 	return nil
@@ -860,12 +856,19 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		return nil, fmt.Errorf("[userMessage handler] error generating content: %v", err)
 	}
 
+	// Send LLM response to queue with timeout
+	publishCtx, publishCancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer publishCancel()
+
+	if err := cs.queue.PublishLLMResponse(publishCtx, &LLMResponseWrapper{Response: resp, Opts: opts}); err != nil {
+		return nil, fmt.Errorf("could not send response to llm responses queue: %v", err)
+	}
+
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("context cancelled")
-	case cs.llmResponses <- &LLMResponseWrapper{Response: resp, Opts: opts}:
 	default:
-		return nil, fmt.Errorf("could not send response to llm responses channel")
+		// Continue normally
 	}
 
 	mc := llms.TextParts(llms.ChatMessageTypeHuman, pl)
@@ -1208,13 +1211,12 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 	// Try to parse as JSON to check if it's a final message
 	var msg llms.MessageContent
 	if err := json.Unmarshal(chunk, &msg); err != nil {
-		// Not JSON, send as stream chunk
-		select {
-		case cs.outputStream <- chunk:
-		case <-ctx.Done():
-			return nil
-		default:
-			return fmt.Errorf("streaming channel is full")
+		// Not JSON, send as stream chunk via queue
+		streamCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+		defer cancel()
+
+		if queueErr := cs.queue.PublishStream(streamCtx, chunk); queueErr != nil {
+			return fmt.Errorf("streaming queue error: %v", queueErr)
 		}
 	}
 	return nil

@@ -1085,27 +1085,23 @@ func TestSendStatus(t *testing.T) {
 	cs, err := NewChatSession(chatRef, ChatMessage, nil, nil, nil, &uid, &sid)
 	require.NoError(t, err)
 
-	// Create channels to capture output
-	messagesChan := make(chan *ChatResponse, 10)
-	streamChan := make(chan []byte, 10)
-	cs.outputMessages = messagesChan
-	cs.outputStream = streamChan
+	// Test status message sending through queue interface
 
 	// Send a status message
 	testStatus := "Test status message"
 	cs.sendStatus(testStatus)
 
-	// Verify message was sent to outputMessages
+	// Verify message was sent to outputMessages via queue
 	select {
-	case msg := <-messagesChan:
+	case msg := <-cs.OutputMessage():
 		assert.Contains(t, msg.Payload, testStatus)
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "Timeout waiting for message in outputMessages")
 	}
 
-	// Verify message was sent to outputStream
+	// Verify message was sent to outputStream via queue
 	select {
-	case stream := <-streamChan:
+	case stream := <-cs.OutputStream():
 		assert.Contains(t, string(stream), testStatus)
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "Timeout waiting for message in outputStream")
