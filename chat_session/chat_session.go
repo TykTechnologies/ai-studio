@@ -798,18 +798,24 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			return err
 		}
 
+		// Regenerate options from current session state instead of using w.Opts
+		// This ensures we have the correct tools and settings after NATS deserialization
+		tools := cs.prepareTools()
+		currentOpts := cs.getOptions(cs.chatRef.LLMSettings, tools)
+
 		// Check token length and get LLM response based on updated history
 		history = cs.PreflightTokenLengthCheck(history)
-		resp, err := cs.caller.GenerateContent(ctx, history, w.Opts...)
+		resp, err := cs.caller.GenerateContent(ctx, history, currentOpts...)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
 			return err
 		}
 
 		// Send the new LLM response to continue the conversation
+		// Note: We still use nil for Opts since they'll be regenerated when needed
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		cs.queue.PublishLLMResponse(ctx, &LLMResponseWrapper{Response: resp, Opts: w.Opts})
+		cs.queue.PublishLLMResponse(ctx, &LLMResponseWrapper{Response: resp, Opts: nil})
 	}
 
 	return nil
