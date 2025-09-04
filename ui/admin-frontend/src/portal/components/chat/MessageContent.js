@@ -577,7 +577,7 @@ const MessageContent = ({
 				sx={{
 					width: '100%',
 					position: 'relative',
-					py: 3,
+					py: (messageType === 'system' || (content && content.includes(':::system'))) ? 3 : 1,
 					display: 'flex',
 					gap: 2,
 					...(messageType === 'user' && {
@@ -589,7 +589,7 @@ const MessageContent = ({
 			>
 				<Box
 					sx={{
-						width: 'fit-content',
+						width: (messageType === 'system' || (content && content.includes(':::system'))) ? '100%' : 'fit-content',
 						maxWidth: '100%', // Ensure it doesn't exceed parent width
 						overflowWrap: 'break-word', // Break long words
 						wordWrap: 'break-word', // For older browsers
@@ -601,7 +601,7 @@ const MessageContent = ({
 							padding: '12px',
 							maxWidth: '85%',
 						}),
-						...(messageType === 'ai' && {
+						...(messageType === 'ai' && !content?.includes(':::system') && {
 							borderBottom: '1px solid',
 							borderColor: 'border.neutralDefault',
 							pb: 2
