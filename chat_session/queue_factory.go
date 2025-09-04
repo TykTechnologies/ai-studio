@@ -36,6 +36,20 @@ func createNATSQueueFactory(cfg config.QueueConfig) (QueueFactory, error) {
 		MaxDeliver:      cfg.NATS.MaxDeliver,
 		MaxRetries:      cfg.NATS.MaxRetries,
 		BufferSize:      cfg.BufferSize,
+		
+		// Authentication configuration
+		CredentialsFile: cfg.NATS.CredentialsFile,
+		Username:        cfg.NATS.Username,
+		Password:        cfg.NATS.Password,
+		Token:           cfg.NATS.Token,
+		NKeyFile:        cfg.NATS.NKeyFile,
+		
+		// TLS configuration
+		TLSEnabled:      cfg.NATS.TLSEnabled,
+		TLSCertFile:     cfg.NATS.TLSCertFile,
+		TLSKeyFile:      cfg.NATS.TLSKeyFile,
+		TLSCAFile:       cfg.NATS.TLSCAFile,
+		TLSSkipVerify:   cfg.NATS.TLSSkipVerify,
 	}
 
 	// Parse MaxAge duration string
@@ -104,6 +118,8 @@ func createNATSQueueFactory(cfg config.QueueConfig) (QueueFactory, error) {
 		"max_age", natsConfig.MaxAge,
 		"max_bytes", natsConfig.MaxBytes,
 		"durable", natsConfig.DurableConsumer,
+		"tls_enabled", natsConfig.TLSEnabled,
+		"auth_configured", natsConfig.CredentialsFile != "" || natsConfig.Username != "" || natsConfig.Token != "" || natsConfig.NKeyFile != "",
 	)
 
 	return NewNATSQueueFactory(natsConfig), nil
