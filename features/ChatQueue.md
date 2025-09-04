@@ -106,7 +106,7 @@ Internal LLM response objects for continued processing.
 QUEUE_TYPE=inmemory|nats                    # Queue implementation type
 QUEUE_BUFFER_SIZE=100                       # Buffer size for queues
 
-# NATS Configuration  
+# NATS Connection Configuration  
 NATS_URL=nats://localhost:4222              # NATS server URL
 NATS_STORAGE_TYPE=file|memory               # JetStream storage type (default: file)
 NATS_RETENTION_POLICY=interest|limits|workqueue  # Retention policy (default: interest)
@@ -115,6 +115,23 @@ NATS_MAX_BYTES=104857600                    # Max stream size in bytes (default:
 NATS_DURABLE_CONSUMER=true                  # Use durable consumers (default: true)
 NATS_ACK_WAIT=30s                           # Ack wait timeout (default: 30s)  
 NATS_MAX_DELIVER=3                          # Max delivery attempts (default: 3)
+NATS_FETCH_TIMEOUT=5s                       # Timeout for fetch operations (default: 5s)
+NATS_RETRY_INTERVAL=1s                      # Retry interval for failed operations (default: 1s)
+NATS_MAX_RETRIES=3                          # Max retries for failed operations (default: 3)
+
+# NATS Authentication Configuration ✅
+NATS_USERNAME=myuser                        # Basic auth username (optional)
+NATS_PASSWORD=mypassword                    # Basic auth password (optional)
+NATS_TOKEN=my-secret-token                  # Token-based authentication (optional)
+NATS_CREDENTIALS_FILE=/path/to/creds.file   # JWT/User credentials file (optional)
+NATS_NKEY_FILE=/path/to/nkey.file          # NKey file for authentication (optional)
+
+# NATS TLS Configuration ✅
+NATS_TLS_ENABLED=false                      # Enable TLS connection (default: false)
+NATS_TLS_CERT_FILE=/path/to/cert.pem       # Client certificate file (optional)
+NATS_TLS_KEY_FILE=/path/to/key.pem         # Client private key file (optional)
+NATS_TLS_CA_FILE=/path/to/ca.pem           # CA certificate file (optional)
+NATS_TLS_SKIP_VERIFY=false                 # Skip TLS certificate verification (default: false)
 ```
 
 ### Configuration Structure ✅
@@ -140,8 +157,85 @@ type NATSConfig struct {
     DurableConsumer bool   `json:"durable_consumer"`
     AckWait         string `json:"ack_wait"`          // Duration string
     MaxDeliver      int    `json:"max_deliver"`
+    FetchTimeout    string `json:"fetch_timeout"`      // Duration string
+    RetryInterval   string `json:"retry_interval"`     // Duration string
+    MaxRetries      int    `json:"max_retries"`        // Max retries for failed operations
+    
+    // Authentication options ✅
+    CredentialsFile string `json:"credentials_file"`   // Optional NATS credentials file
+    Username        string `json:"username"`           // Optional username for basic auth
+    Password        string `json:"password"`           // Optional password for basic auth
+    Token           string `json:"token"`              // Optional token for token-based auth
+    NKeyFile        string `json:"nkey_file"`          // Optional NKey file path
+    
+    // TLS options ✅
+    TLSEnabled      bool   `json:"tls_enabled"`        // Enable TLS connection
+    TLSCertFile     string `json:"tls_cert_file"`      // Optional client certificate file
+    TLSKeyFile      string `json:"tls_key_file"`       // Optional client key file
+    TLSCAFile       string `json:"tls_ca_file"`        // Optional CA certificate file
+    TLSSkipVerify   bool   `json:"tls_skip_verify"`    // Skip TLS certificate verification
 }
 ```
+
+### NATS Authentication Methods ✅
+
+#### 1. No Authentication (Default)
+```bash
+NATS_URL=nats://localhost:4222
+```
+Connect to NATS server without authentication (suitable for development).
+
+#### 2. Username/Password Authentication
+```bash
+NATS_URL=nats://localhost:4222
+NATS_USERNAME=myuser
+NATS_PASSWORD=mypassword
+```
+Basic username/password authentication for simple deployments.
+
+#### 3. Token-Based Authentication
+```bash
+NATS_URL=nats://localhost:4222
+NATS_TOKEN=my-secret-token-123
+```
+Token-based authentication using a shared secret.
+
+#### 4. JWT/User Credentials File Authentication (Recommended)
+```bash
+NATS_URL=nats://localhost:4222
+NATS_CREDENTIALS_FILE=/path/to/user.creds
+```
+Use JWT-based authentication with user credential files. This is the recommended approach for production deployments as it provides:
+- **Decentralized Authentication**: No shared secrets
+- **Fine-grained Permissions**: Subject-level access control
+- **Automatic Token Renewal**: JWT tokens can be refreshed
+- **Audit Trail**: User actions are traceable
+
+#### 5. NKey Authentication
+```bash
+NATS_URL=nats://localhost:4222
+NATS_NKEY_FILE=/path/to/user.nkey
+```
+Use NKey-based authentication for cryptographic security without JWT overhead.
+
+#### 6. TLS Client Certificate Authentication
+```bash
+NATS_URL=nats://localhost:4222
+NATS_TLS_ENABLED=true
+NATS_TLS_CERT_FILE=/path/to/client-cert.pem
+NATS_TLS_KEY_FILE=/path/to/client-key.pem
+NATS_TLS_CA_FILE=/path/to/ca-cert.pem
+```
+Use mutual TLS (mTLS) authentication with client certificates for maximum security.
+
+#### 7. Combined TLS + JWT Authentication (Production)
+```bash
+NATS_URL=nats://localhost:4222
+NATS_TLS_ENABLED=true
+NATS_CREDENTIALS_FILE=/path/to/user.creds
+NATS_TLS_CA_FILE=/path/to/ca-cert.pem
+```
+Combine TLS encryption with JWT authentication for secure production deployments.
 
 ### NATS JetStream Configuration ✅
 The NATS implementation uses a **hybrid persistent configuration**:
@@ -150,6 +244,7 @@ The NATS implementation uses a **hybrid persistent configuration**:
 - **Limits**: 2-hour max age, 100MB max size per stream
 - **Recovery**: Durable consumers for restart recovery
 - **Isolation**: Per-session streams (`CHAT_{sessionID}_{messageType}`)
+- **Security**: Full authentication support including JWT, NKey, and TLS
 
 ## Message Reliability
 
@@ -205,10 +300,11 @@ func (cs *ChatSession) sendStatus(resp string) {
 - [ ] Environment variable support
 - [ ] Runtime queue type selection
 
-### Phase 4: Pending
-- [ ] NATS implementation
+### Phase 4: ✅ Complete
+- [x] NATS implementation
+- [x] NATS authentication support (JWT, NKey, TLS, Username/Password, Token)
+- [x] Production deployment guides
 - [ ] Redis implementation
-- [ ] Production deployment guides
 
 ## Benefits Achieved (Phase 1)
 

@@ -17,7 +17,8 @@
       "mcp__probe__search_code",
       "Bash(npm run build:*)",
       "Bash(make:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(go vet:*)"
     ],
     "deny": []
   }

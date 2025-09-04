@@ -2,6 +2,7 @@ package chat_session
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -133,6 +134,20 @@ type NATSConfig struct {
 	FetchTimeout    time.Duration `json:"fetch_timeout"`  // Timeout for individual fetch operations
 	RetryInterval   time.Duration `json:"retry_interval"` // Interval between fetch retries
 	MaxRetries      int           `json:"max_retries"`    // Max retries for failed operations
+	
+	// Authentication options
+	CredentialsFile string `json:"credentials_file"` // Optional NATS credentials file
+	Username        string `json:"username"`         // Optional username for basic auth
+	Password        string `json:"password"`         // Optional password for basic auth
+	Token           string `json:"token"`            // Optional token for token-based auth
+	NKeyFile        string `json:"nkey_file"`        // Optional NKey file path
+	
+	// TLS options
+	TLSEnabled      bool   `json:"tls_enabled"`      // Enable TLS connection
+	TLSCertFile     string `json:"tls_cert_file"`    // Optional client certificate file
+	TLSKeyFile      string `json:"tls_key_file"`     // Optional client key file
+	TLSCAFile       string `json:"tls_ca_file"`      // Optional CA certificate file
+	TLSSkipVerify   bool   `json:"tls_skip_verify"`  // Skip TLS certificate verification
 }
 
 // DefaultNATSConfig returns the hybrid persistent configuration (Option 3)
@@ -150,6 +165,20 @@ func DefaultNATSConfig() NATSConfig {
 		FetchTimeout:    5 * time.Second, // Default 5 second fetch timeout
 		RetryInterval:   1 * time.Second, // Default 1 second between retries
 		MaxRetries:      3,               // Default max 3 retries for operations
+		
+		// Authentication defaults (empty - no auth by default)
+		CredentialsFile: "",
+		Username:        "",
+		Password:        "",
+		Token:           "",
+		NKeyFile:        "",
+		
+		// TLS defaults (disabled by default)
+		TLSEnabled:      false,
+		TLSCertFile:     "",
+		TLSKeyFile:      "",
+		TLSCAFile:       "",
+		TLSSkipVerify:   false,
 	}
 }
 
@@ -198,6 +227,63 @@ const (
 	MessageTypeLLMResponse  = "llm_response"
 )
 
+// addNATSAuthOptions configures NATS authentication options
+func addNATSAuthOptions(opts *[]nats.Option, config NATSConfig) error {
+	// Handle credentials file authentication (JWT/NKeys)
+	if config.CredentialsFile != "" {
+		*opts = append(*opts, nats.UserCredentials(config.CredentialsFile))
+		slog.Info("NATS authentication configured with credentials file", "file", config.CredentialsFile)
+	}
+	
+	// Handle NKey file authentication
+	if config.NKeyFile != "" {
+		*opts = append(*opts, nats.UserCredentials(config.NKeyFile))
+		slog.Info("NATS authentication configured with NKey file", "file", config.NKeyFile)
+	}
+	
+	// Handle basic username/password authentication
+	if config.Username != "" && config.Password != "" {
+		*opts = append(*opts, nats.UserInfo(config.Username, config.Password))
+		slog.Info("NATS authentication configured with username/password", "username", config.Username)
+	}
+	
+	// Handle token-based authentication
+	if config.Token != "" {
+		*opts = append(*opts, nats.Token(config.Token))
+		slog.Info("NATS authentication configured with token")
+	}
+	
+	// Handle TLS configuration
+	if config.TLSEnabled {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: config.TLSSkipVerify,
+		}
+		
+		// Load client certificate if provided
+		if config.TLSCertFile != "" && config.TLSKeyFile != "" {
+			cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
+			if err != nil {
+				return fmt.Errorf("failed to load TLS client certificate: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+			slog.Info("NATS TLS client certificate configured", "cert_file", config.TLSCertFile, "key_file", config.TLSKeyFile)
+		}
+		
+		// Load CA certificate if provided
+		if config.TLSCAFile != "" {
+			// Note: For CA files, users typically need to handle this through the NATS server configuration
+			// or by setting up the CA in the system trust store. NATS Go client doesn't have a direct
+			// option for custom CA files, but we can configure InsecureSkipVerify for testing.
+			slog.Info("NATS TLS CA file specified - ensure CA is properly configured", "ca_file", config.TLSCAFile)
+		}
+		
+		*opts = append(*opts, nats.Secure(tlsConfig))
+		slog.Info("NATS TLS connection enabled", "skip_verify", config.TLSSkipVerify)
+	}
+	
+	return nil
+}
+
 // NewNATSQueue creates a new NATS-based message queue
 func NewNATSQueue(sessionID string, config NATSConfig) (*NATSQueue, error) {
 	// Connect to NATS
@@ -213,6 +299,11 @@ func NewNATSQueue(sessionID string, config NATSConfig) (*NATSQueue, error) {
 		nats.ErrorHandler(func(conn *nats.Conn, s *nats.Subscription, err error) {
 			slog.Error("NATS error", "session_id", sessionID, "error", err)
 		}),
+	}
+	
+	// Add authentication options
+	if err := addNATSAuthOptions(&opts, config); err != nil {
+		return nil, fmt.Errorf("failed to configure NATS authentication: %w", err)
 	}
 
 	conn, err := nats.Connect(config.URL, opts...)

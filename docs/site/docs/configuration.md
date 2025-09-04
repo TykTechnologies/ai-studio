@@ -60,12 +60,25 @@ While most core settings are configured during deployment, you can usually revie
 
 Remember that fundamental system parameters are typically set via environment variables or Helm values *during deployment*. This includes:
 
+### Core System Settings
 *   Database Connection (`DATABASE_TYPE`, `DATABASE_URL`)
 *   License Key (`TYK_AI_LICENSE`)
 *   Secrets Encryption Key (`TYK_AI_SECRET_KEY`)
 *   Base URL (`SITE_URL`)
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`, `ADMIN_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
+
+### Message Queue Configuration
+*   Queue Type (`QUEUE_TYPE`): `inmemory` (default) or `nats`
+*   Buffer Size (`QUEUE_BUFFER_SIZE`): Default 100
+
+### NATS Configuration (when QUEUE_TYPE=nats)
+*   **Connection**: `NATS_URL`, `NATS_STORAGE_TYPE`, `NATS_RETENTION_POLICY`
+*   **Authentication**: `NATS_USERNAME`/`NATS_PASSWORD`, `NATS_TOKEN`, `NATS_CREDENTIALS_FILE`
+*   **Security**: `NATS_TLS_ENABLED`, `NATS_TLS_CERT_FILE`, `NATS_TLS_KEY_FILE`
+*   **Performance**: `NATS_MAX_AGE`, `NATS_MAX_BYTES`, `NATS_ACK_WAIT`
+
+For detailed NATS configuration options, see the [NATS Configuration Guide](./nats-configuration.md).
 
 Refer to the **Configuration Options** detailed within the [Installation Guide](./deployment-helm-k8s.md) for specifics on setting these values during the deployment process.
 

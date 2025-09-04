@@ -61,8 +61,20 @@ type NATSConfig struct {
 	FetchTimeout    string `json:"fetch_timeout"`    // Duration string like "5s"
 	RetryInterval   string `json:"retry_interval"`   // Duration string like "1s"
 	MaxRetries      int    `json:"max_retries"`      // Max retries for failed operations
+	
+	// Authentication options
 	CredentialsFile string `json:"credentials_file"` // Optional NATS credentials file
+	Username        string `json:"username"`         // Optional username for basic auth
+	Password        string `json:"password"`         // Optional password for basic auth
+	Token           string `json:"token"`            // Optional token for token-based auth
+	NKeyFile        string `json:"nkey_file"`        // Optional NKey file path
+	
+	// TLS options
 	TLSEnabled      bool   `json:"tls_enabled"`      // Enable TLS connection
+	TLSCertFile     string `json:"tls_cert_file"`    // Optional client certificate file
+	TLSKeyFile      string `json:"tls_key_file"`     // Optional client key file
+	TLSCAFile       string `json:"tls_ca_file"`      // Optional CA certificate file
+	TLSSkipVerify   bool   `json:"tls_skip_verify"`  // Skip TLS certificate verification
 }
 
 type DocsLinks map[string]string
@@ -399,12 +411,49 @@ func getNATSConfig() NATSConfig {
 		config.CredentialsFile = credFile
 	}
 
-	// TLS enabled
+	// Authentication credentials
+	if username := os.Getenv("NATS_USERNAME"); username != "" {
+		config.Username = username
+	}
+	
+	if password := os.Getenv("NATS_PASSWORD"); password != "" {
+		config.Password = password
+	}
+	
+	if token := os.Getenv("NATS_TOKEN"); token != "" {
+		config.Token = token
+	}
+	
+	if nkeyFile := os.Getenv("NATS_NKEY_FILE"); nkeyFile != "" {
+		config.NKeyFile = nkeyFile
+	}
+
+	// TLS configuration
 	if tlsStr := os.Getenv("NATS_TLS_ENABLED"); tlsStr != "" {
 		if tls, err := strconv.ParseBool(tlsStr); err == nil {
 			config.TLSEnabled = tls
 		} else {
 			log.Printf("Warning: Invalid NATS_TLS_ENABLED value: %s. Using default: %t", tlsStr, config.TLSEnabled)
+		}
+	}
+	
+	if certFile := os.Getenv("NATS_TLS_CERT_FILE"); certFile != "" {
+		config.TLSCertFile = certFile
+	}
+	
+	if keyFile := os.Getenv("NATS_TLS_KEY_FILE"); keyFile != "" {
+		config.TLSKeyFile = keyFile
+	}
+	
+	if caFile := os.Getenv("NATS_TLS_CA_FILE"); caFile != "" {
+		config.TLSCAFile = caFile
+	}
+	
+	if skipVerifyStr := os.Getenv("NATS_TLS_SKIP_VERIFY"); skipVerifyStr != "" {
+		if skipVerify, err := strconv.ParseBool(skipVerifyStr); err == nil {
+			config.TLSSkipVerify = skipVerify
+		} else {
+			log.Printf("Warning: Invalid NATS_TLS_SKIP_VERIFY value: %s. Using default: %t", skipVerifyStr, config.TLSSkipVerify)
 		}
 	}
 

@@ -28,10 +28,10 @@ This guide explains how to deploy Tyk AI Studio (Tyk AI Studio), a secure and ex
 
 Tyk AI Studio can be deployed in several configurations:
 
-1. Local Development
+1. Local Development  
 2. Production without TLS
 3. Production with TLS
-4. Production with External Database
+4. Production with NATS Distributed Queue
 
 ### Option 1: Local Development Setup
 
@@ -193,6 +193,177 @@ database:
 ```bash
 helm install midsommar . -f values-prod-tls.yaml
 ```
+
+### Option 4: Production with NATS Distributed Queue
+
+For high-availability production deployment with distributed message queuing:
+
+1. Create `values-prod-nats.yaml`:
+
+```yaml
+midsommar:
+  ingress:
+    enabled: true
+    certificateEnabled: true
+    className: nginx
+    certManager:
+      issuer: letsencrypt-prod
+    hosts:
+      - host: app.yourdomain.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 8080
+      - host: gateway.yourdomain.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 9090
+    tls:
+      - secretName: app-tls-secret
+        hosts:
+          - app.yourdomain.com
+      - secretName: gateway-tls-secret
+        hosts:
+          - gateway.yourdomain.com
+
+config:
+  allowRegistrations: "true"
+  adminEmail: "admin@yourdomain.com"
+  siteUrl: "https://app.yourdomain.com"
+  fromEmail: "noreply@yourdomain.com"
+  devMode: "false"
+  databaseType: "postgres"
+  tykAiSecretKey: "your-production-key"
+  tykAiLicense: "your-production-license"
+  
+  # NATS Queue Configuration
+  queueType: "nats"
+  natsUrl: "nats://nats-cluster:4222"
+  natsStorageType: "file"
+  natsRetentionPolicy: "interest"
+  natsMaxAge: "4h"
+  natsMaxBytes: 536870912  # 512MB
+  natsDurableConsumer: true
+  natsCredentialsFile: "/etc/nats/user.creds"
+  natsTlsEnabled: true
+  natsTlsCaFile: "/etc/ssl/certs/nats-ca.pem"
+
+database:
+  internal: false
+  url: "postgres://user:password@your-production-db:5432/midsommar"
+
+# NATS Cluster Configuration
+nats:
+  enabled: true
+  cluster:
+    enabled: true
+    replicas: 3
+  jetstream:
+    enabled: true
+    fileStore:
+      enabled: true
+      size: 50Gi
+      storageClass: "fast-ssd"
+  auth:
+    enabled: true
+    resolver:
+      type: "jwt"
+      configMap:
+        name: "nats-accounts"
+        key: "resolver.conf"
+  tls:
+    enabled: true
+    ca: "nats-ca-secret"
+    cert: "nats-server-cert"
+```
+
+2. Create NATS authentication secrets:
+
+```bash
+# Create JWT resolver configuration
+kubectl create configmap nats-accounts --from-file=resolver.conf
+
+# Create user credentials secret
+kubectl create secret generic nats-user-creds --from-file=user.creds
+
+# Create TLS certificates
+kubectl create secret tls nats-server-cert --cert=server.crt --key=server.key
+kubectl create secret generic nats-ca-secret --from-file=ca.crt
+```
+
+3. Install:
+
+```bash
+helm install midsommar . -f values-prod-nats.yaml
+```
+
+## Message Queue Configuration
+
+Tyk AI Studio supports two message queue implementations:
+
+### In-Memory Queue (Default)
+
+For single-instance deployments:
+
+```yaml
+config:
+  queueType: "inmemory"
+  queueBufferSize: 100
+```
+
+### NATS JetStream Queue
+
+For distributed deployments with message persistence:
+
+```yaml
+config:
+  queueType: "nats"
+  queueBufferSize: 100
+  
+  # NATS Connection
+  natsUrl: "nats://nats-server:4222"
+  natsStorageType: "file"
+  natsRetentionPolicy: "interest"
+  natsMaxAge: "2h"
+  natsMaxBytes: 104857600
+  
+  # NATS Authentication (choose one method)
+  natsUsername: "chat_service"           # Basic auth
+  natsPassword: "secure_password"        # Basic auth
+  # OR
+  natsToken: "your-secret-token"         # Token auth
+  # OR  
+  natsCredentialsFile: "/etc/nats/user.creds"  # JWT auth (recommended)
+  
+  # NATS TLS (optional)
+  natsTlsEnabled: true
+  natsTlsCertFile: "/etc/ssl/client-cert.pem"
+  natsTlsKeyFile: "/etc/ssl/client-key.pem"
+  natsTlsCaFile: "/etc/ssl/ca-cert.pem"
+```
+
+### NATS Server Deployment
+
+To deploy NATS with your Helm chart:
+
+```yaml
+# Add to your values.yaml
+nats:
+  enabled: true
+  image:
+    repository: nats
+    tag: "latest"
+  jetstream:
+    enabled: true
+    storage: file
+    storageSize: 10Gi
+  auth:
+    enabled: true
+    # Configure authentication method
+```
+
+For detailed NATS configuration, see the [NATS Configuration Guide](./nats-configuration.md).
 
 ## Optional Components
 
