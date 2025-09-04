@@ -601,11 +601,6 @@ const MessageContent = ({
 							padding: '12px',
 							maxWidth: '85%',
 						}),
-						...(messageType === 'ai' && !content?.includes(':::system') && {
-							borderBottom: '1px solid',
-							borderColor: 'border.neutralDefault',
-							pb: 2
-						}),
 						'&:hover .edit-button': {
 							opacity: 1,
 							visibility: 'visible'
@@ -723,11 +718,6 @@ const MessageContent = ({
 							borderColor: 'border.neutralDefault',
 							borderRadius: '8px',
 							padding: '12px',
-						}),
-						...(messageType === 'ai' && {
-							borderBottom: '1px solid',
-							borderColor: 'border.neutralDefault',
-							pb: 2
 						}),
 						'&:hover .edit-button': {
 							opacity: 1,
