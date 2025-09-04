@@ -9,10 +9,12 @@ import {
   Snackbar,
   Alert,
   IconButton,
+  Button,
 } from '@mui/material';
 import { TitleBox } from '../../admin/styles/sharedStyles';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import AddIcon from '@mui/icons-material/Add';
 import pubClient from '../../admin/utils/pubClient';
 
 import { useChatSSE } from './chat/hooks/useChatSSE';
@@ -638,6 +640,38 @@ const ChatView = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  const handleNewChat = () => {
+    // Clear current session and messages
+    if (closeConnection) {
+      closeConnection();
+    }
+    setMessages([]);
+    setCurrentlyUsing([]);
+    setDatabases(prev => prev.map(db => ({ ...db, isSelected: false })));
+    setTools(prev => prev.map(tool => ({ ...tool, isSelected: false })));
+    setInputMessage('');
+    setError(null);
+    setUploadedFiles([]);
+    setIsUploading(false);
+    setExpandedGroups({});
+    
+    // Remove session ID from localStorage and URL
+    localStorage.removeItem('chatSessionId');
+    const newUrl = `/chat/${chatId}`;
+    try {
+      window.history.replaceState({}, "", newUrl);
+    } catch (err) {
+      console.error('Failed to update URL:', err);
+    }
+    
+    // Trigger reconnection by navigating away and back (similar to PortalDrawer approach)
+    const currentPath = window.location.pathname;
+    navigate('/chat/dashboard');
+    setTimeout(() => {
+      navigate(currentPath);
+    }, 10);
+  };
+
   // Show error if we have an error, but don't block UI for LLM config errors
   if ((error || sseError) && !isConnected) {
     const errorInfo = processErrorMessage(error || sseError);
@@ -682,6 +716,14 @@ const ChatView = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="headingXLarge">{chatName}</Typography>
+        <Button
+          variant="outlined"
+          startIcon={<AddIcon />}
+          onClick={handleNewChat}
+          sx={{ ml: 2 }}
+        >
+          New Chat
+        </Button>
       </TitleBox>
       <Box
         sx={{
