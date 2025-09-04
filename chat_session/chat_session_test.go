@@ -52,10 +52,12 @@ func TestNewChatSession(t *testing.T) {
 	assert.Equal(t, chat, cs.chatRef)
 	assert.Equal(t, ChatMessage, cs.mode)
 	assert.NotNil(t, cs.input)
-	assert.NotNil(t, cs.outputMessages)
-	assert.NotNil(t, cs.outputStream)
+	assert.NotNil(t, cs.queue)
 	assert.NotNil(t, cs.stop)
-	assert.NotNil(t, cs.errors)
+	// Test that queue methods work
+	assert.NotNil(t, cs.OutputMessage())
+	assert.NotNil(t, cs.OutputStream())
+	assert.NotNil(t, cs.Errors())
 }
 
 func TestChatSession_InitSession(t *testing.T) {
@@ -435,7 +437,7 @@ func TestChatSession_StreamingFunc(t *testing.T) {
 	assert.NoError(t, err)
 
 	select {
-	case chunk := <-cs.outputStream:
+	case chunk := <-cs.OutputStream():
 		assert.Equal(t, []byte("test chunk"), chunk)
 	case <-time.After(1 * time.Second):
 		assert.Fail(t, "Timeout waiting for streaming chunk")
@@ -698,9 +700,6 @@ func TestChatSession_HandleToolError(t *testing.T) {
 	// Create a chat session
 	cs, _ := NewChatSession(&models.Chat{}, ChatMessage, nil, nil, nil, &uid, &sid)
 
-	// Create a channel to capture the status message
-	cs.outputMessages = make(chan *ChatResponse, 1)
-
 	// Create a tool result message content
 	toolResult := &llms.MessageContent{
 		Parts: []llms.ContentPart{},
@@ -714,12 +713,12 @@ func TestChatSession_HandleToolError(t *testing.T) {
 	// Call the function
 	cs.handleToolError(errMsg, toolCallID, functionName, toolResult)
 
-	// Verify the status message was sent
+	// Verify the status message was sent via queue
 	select {
-	case response := <-cs.outputMessages:
+	case response := <-cs.OutputMessage():
 		assert.Contains(t, response.Payload, errMsg)
 		assert.Contains(t, response.Payload, ":::system")
-	default:
+	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "No status message was sent")
 	}
 

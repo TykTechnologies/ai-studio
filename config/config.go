@@ -38,6 +38,31 @@ type AppConf struct {
 	AuthServerURL         string
 	ProxyOAuthMetadataURL string
 	TelemetryEnabled      bool
+	QueueConfig           QueueConfig
+}
+
+// QueueConfig holds configuration for message queues
+type QueueConfig struct {
+	Type       string     `json:"type"`        // "inmemory" | "nats"
+	BufferSize int        `json:"buffer_size"` // Local channel buffer (default: 100)
+	NATS       NATSConfig `json:"nats"`        // NATS-specific config
+}
+
+// NATSConfig holds NATS JetStream configuration
+type NATSConfig struct {
+	URL             string `json:"url"`
+	StorageType     string `json:"storage_type"`     // "memory" | "file"
+	RetentionPolicy string `json:"retention_policy"` // "limits" | "interest" | "workqueue"
+	MaxAge          string `json:"max_age"`          // Duration string like "2h", "30m"
+	MaxBytes        int64  `json:"max_bytes"`
+	DurableConsumer bool   `json:"durable_consumer"`
+	AckWait         string `json:"ack_wait"` // Duration string like "30s"
+	MaxDeliver      int    `json:"max_deliver"`
+	FetchTimeout    string `json:"fetch_timeout"`    // Duration string like "5s"
+	RetryInterval   string `json:"retry_interval"`   // Duration string like "1s"
+	MaxRetries      int    `json:"max_retries"`      // Max retries for failed operations
+	CredentialsFile string `json:"credentials_file"` // Optional NATS credentials file
+	TLSEnabled      bool   `json:"tls_enabled"`      // Enable TLS connection
 }
 
 type DocsLinks map[string]string
@@ -240,7 +265,150 @@ func getConfigFromEnv() *AppConf {
 		conf.ProxyOAuthMetadataURL = baseURL + "/.well-known/oauth-protected-resource"
 	}
 
+	// Queue configuration
+	conf.QueueConfig = getQueueConfig()
+
 	return conf
+}
+
+// getQueueConfig parses queue-related environment variables
+func getQueueConfig() QueueConfig {
+	config := QueueConfig{
+		Type:       "inmemory", // Default to in-memory queue
+		BufferSize: 100,        // Default buffer size
+	}
+
+	// Parse queue type
+	queueType := os.Getenv("QUEUE_TYPE")
+	if queueType == "nats" || queueType == "inmemory" {
+		config.Type = queueType
+	} else if queueType != "" {
+		log.Printf("Warning: Invalid QUEUE_TYPE value: %s. Defaulting to inmemory", queueType)
+	}
+
+	// Parse buffer size
+	if bufferSizeStr := os.Getenv("QUEUE_BUFFER_SIZE"); bufferSizeStr != "" {
+		if bufferSize, err := strconv.Atoi(bufferSizeStr); err == nil && bufferSize > 0 {
+			config.BufferSize = bufferSize
+		} else {
+			log.Printf("Warning: Invalid QUEUE_BUFFER_SIZE value: %s. Using default: %d", bufferSizeStr, config.BufferSize)
+		}
+	}
+
+	// Parse NATS configuration
+	config.NATS = getNATSConfig()
+
+	return config
+}
+
+// getNATSConfig parses NATS-specific environment variables
+func getNATSConfig() NATSConfig {
+	config := NATSConfig{
+		URL:             "nats://localhost:4222", // Default NATS URL
+		StorageType:     "file",                  // Default to persistent storage
+		RetentionPolicy: "interest",              // Default to interest-based retention
+		MaxAge:          "2h",                    // Default 2 hour retention
+		MaxBytes:        100 * 1024 * 1024,       // Default 100MB
+		DurableConsumer: true,                    // Default to durable consumers
+		AckWait:         "30s",                   // Default 30 second ack wait
+		MaxDeliver:      3,                       // Default max 3 delivery attempts
+		FetchTimeout:    "5s",                    // Default 5 second fetch timeout
+		RetryInterval:   "1s",                    // Default 1 second retry interval
+		MaxRetries:      3,                       // Default max 3 retries
+		TLSEnabled:      false,                   // Default TLS off
+	}
+
+	// NATS server URL
+	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+		config.URL = natsURL
+	}
+
+	// Storage type
+	if storageType := os.Getenv("NATS_STORAGE_TYPE"); storageType == "memory" || storageType == "file" {
+		config.StorageType = storageType
+	} else if storageType != "" {
+		log.Printf("Warning: Invalid NATS_STORAGE_TYPE value: %s. Using default: %s", storageType, config.StorageType)
+	}
+
+	// Retention policy
+	retentionPolicy := os.Getenv("NATS_RETENTION_POLICY")
+	if retentionPolicy == "limits" || retentionPolicy == "interest" || retentionPolicy == "workqueue" {
+		config.RetentionPolicy = retentionPolicy
+	} else if retentionPolicy != "" {
+		log.Printf("Warning: Invalid NATS_RETENTION_POLICY value: %s. Using default: %s", retentionPolicy, config.RetentionPolicy)
+	}
+
+	// Max age
+	if maxAge := os.Getenv("NATS_MAX_AGE"); maxAge != "" {
+		config.MaxAge = maxAge
+	}
+
+	// Max bytes
+	if maxBytesStr := os.Getenv("NATS_MAX_BYTES"); maxBytesStr != "" {
+		if maxBytes, err := strconv.ParseInt(maxBytesStr, 10, 64); err == nil && maxBytes > 0 {
+			config.MaxBytes = maxBytes
+		} else {
+			log.Printf("Warning: Invalid NATS_MAX_BYTES value: %s. Using default: %d", maxBytesStr, config.MaxBytes)
+		}
+	}
+
+	// Durable consumer
+	if durableStr := os.Getenv("NATS_DURABLE_CONSUMER"); durableStr != "" {
+		if durable, err := strconv.ParseBool(durableStr); err == nil {
+			config.DurableConsumer = durable
+		} else {
+			log.Printf("Warning: Invalid NATS_DURABLE_CONSUMER value: %s. Using default: %t", durableStr, config.DurableConsumer)
+		}
+	}
+
+	// Ack wait
+	if ackWait := os.Getenv("NATS_ACK_WAIT"); ackWait != "" {
+		config.AckWait = ackWait
+	}
+
+	// Max deliver
+	if maxDeliverStr := os.Getenv("NATS_MAX_DELIVER"); maxDeliverStr != "" {
+		if maxDeliver, err := strconv.Atoi(maxDeliverStr); err == nil && maxDeliver > 0 {
+			config.MaxDeliver = maxDeliver
+		} else {
+			log.Printf("Warning: Invalid NATS_MAX_DELIVER value: %s. Using default: %d", maxDeliverStr, config.MaxDeliver)
+		}
+	}
+
+	// Fetch timeout
+	if fetchTimeout := os.Getenv("NATS_FETCH_TIMEOUT"); fetchTimeout != "" {
+		config.FetchTimeout = fetchTimeout
+	}
+
+	// Retry interval
+	if retryInterval := os.Getenv("NATS_RETRY_INTERVAL"); retryInterval != "" {
+		config.RetryInterval = retryInterval
+	}
+
+	// Max retries
+	if maxRetriesStr := os.Getenv("NATS_MAX_RETRIES"); maxRetriesStr != "" {
+		if maxRetries, err := strconv.Atoi(maxRetriesStr); err == nil && maxRetries >= 0 {
+			config.MaxRetries = maxRetries
+		} else {
+			log.Printf("Warning: Invalid NATS_MAX_RETRIES value: %s. Using default: %d", maxRetriesStr, config.MaxRetries)
+		}
+	}
+
+	// Credentials file
+	if credFile := os.Getenv("NATS_CREDENTIALS_FILE"); credFile != "" {
+		config.CredentialsFile = credFile
+	}
+
+	// TLS enabled
+	if tlsStr := os.Getenv("NATS_TLS_ENABLED"); tlsStr != "" {
+		if tls, err := strconv.ParseBool(tlsStr); err == nil {
+			config.TLSEnabled = tls
+		} else {
+			log.Printf("Warning: Invalid NATS_TLS_ENABLED value: %s. Using default: %t", tlsStr, config.TLSEnabled)
+		}
+	}
+
+	return config
 }
 
 func Get() *AppConf {

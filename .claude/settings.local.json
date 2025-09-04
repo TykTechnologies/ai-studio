@@ -13,7 +13,11 @@
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:www.anthropic.com)",
       "Bash(chmod:*)",
-      "Bash(dpkg-deb:*)"
+      "Bash(dpkg-deb:*)",
+      "mcp__probe__search_code",
+      "Bash(npm run build:*)",
+      "Bash(make:*)",
+      "Bash(git log:*)"
     ],
     "deny": []
   }
