@@ -150,7 +150,7 @@ export const setupSSEConnection = ({
       onMessageReceived({
         id: generateTempId(),
         type: 'system',
-        content: messageContent,
+        payload: messageContent,  // Fixed: Use 'payload' instead of 'content' for consistency
         isComplete: true
       });
     } catch (error) {
@@ -171,7 +171,7 @@ export const setupSSEConnection = ({
       onMessageReceived({
         id: generateTempId(),
         type: 'system',
-        content: `:::system Error: ${event.data}:::`,
+        payload: `:::system Error: ${event.data}:::`,  // Fixed: Use 'payload' instead of 'content' for consistency
         errorType: errorType,
         isComplete: true
       });

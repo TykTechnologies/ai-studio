@@ -380,7 +380,7 @@ describe('setupSSEConnection', () => {
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      content: ':::system System notification:::',
+      payload: ':::system System notification:::',
       isComplete: true
     });
   });
@@ -399,7 +399,7 @@ describe('setupSSEConnection', () => {
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      content: ':::system Already formatted:::',
+      payload: ':::system Already formatted:::',
       isComplete: true
     });
   });
@@ -415,13 +415,24 @@ describe('setupSSEConnection', () => {
     });
     
     // Verify onMessageReceived was called with error message
-    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
-      id: 'temp-123',
-      type: 'system',
-      content: ':::system Error: Connection error:::',
-      errorType: 'connection',
-      isComplete: true
-    });
+    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'temp-123',
+        type: 'system',
+        payload: ':::system Error: Connection error:::',
+        errorType: 'connection',
+        isComplete: true
+      })
+    );
+    
+    // The error event also triggers the connection error handler, which sends a reconnection message
+    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'system',
+        payload: 'Connection lost. Attempting to reconnect... (Attempt 1/3)',
+        errorType: 'connection'
+      })
+    );
   });
   
   test('should handle LLM config error differently', () => {
@@ -435,13 +446,24 @@ describe('setupSSEConnection', () => {
     });
     
     // Verify onMessageReceived was called with LLM error message
-    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
-      id: 'temp-123',
-      type: 'system',
-      content: ':::system Error: LLM configuration error:::',
-      errorType: 'llm_config',
-      isComplete: true
-    });
+    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'temp-123',
+        type: 'system',
+        payload: ':::system Error: LLM configuration error:::',
+        errorType: 'llm_config',
+        isComplete: true
+      })
+    );
+    
+    // The error event also triggers the connection error handler, which sends an LLM config message
+    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'system',
+        payload: 'LLM configuration error. Please check your settings.',
+        errorType: 'llm_config'
+      })
+    );
     
     // Verify reconnectAttempts was set to max to prevent reconnection
     expect(mockRefs.reconnectAttempts.current).toBe(3);
