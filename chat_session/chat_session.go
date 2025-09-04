@@ -400,9 +400,9 @@ func (cs *ChatSession) sendStatus(resp string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	// Send to both message and stream channels via queue
+	// Send only to message channel to avoid duplicate messages
+	// The SSE handler processes this via OutputMessage() which creates system-type messages
 	cs.queue.PublishMessage(ctx, &ChatResponse{Payload: msg})
-	cs.queue.PublishStream(ctx, []byte(msg))
 }
 
 func (cs *ChatSession) sendError(err error) {
@@ -759,14 +759,11 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			msgCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 			defer cancel()
 
-			// Send as ChatResponse message
+			// Send as ChatResponse message only
+			// Note: We don't send to PublishStream here because streaming is complete
+			// and sending to both channels causes duplicate messages in the SSE handler
 			if err := cs.queue.PublishMessage(msgCtx, &ChatResponse{Payload: content}); err != nil {
 				slog.Warn("failed to publish message to queue", "session_id", cs.id, "error", err)
-			}
-
-			// Send as stream data
-			if err := cs.queue.PublishStream(msgCtx, []byte(content)); err != nil {
-				slog.Warn("failed to publish stream to queue", "session_id", cs.id, "error", err)
 			}
 		}
 	}

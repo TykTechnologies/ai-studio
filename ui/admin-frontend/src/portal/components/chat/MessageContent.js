@@ -27,6 +27,8 @@ const MessageAvatar = ({ messageType, userName }) => (
 );
 
 const extractSystemBlocks = (content) => {
+	console.log('EXTRACT: Processing content length:', content?.length, 'preview:', content?.substring(0, 200));
+	
 	const segments = [];
 	let lastIndex = 0;
 
@@ -35,6 +37,8 @@ const extractSystemBlocks = (content) => {
 	let match;
 
 	while ((match = regex.exec(content)) !== null) {
+		console.log('EXTRACT: Found match:', match[0], 'system content:', match[1]);
+		
 		const matchStart = match.index;
 		const matchEnd = regex.lastIndex;
 
@@ -52,6 +56,7 @@ const extractSystemBlocks = (content) => {
 
 		if (systemMatch) {
 			// System message - match[1] contains the content
+			console.log('EXTRACT: Adding system segment:', systemMatch.trim());
 			segments.push({ type: 'system', text: match[1].trim() });
 		} else if (contextMatch && contextMatch.trim()) {
 			// Context block - match[2] contains the content
@@ -69,6 +74,7 @@ const extractSystemBlocks = (content) => {
 		}
 	}
 
+	console.log('EXTRACT: Final segments:', segments.length, segments);
 	return segments;
 };
 
@@ -278,24 +284,20 @@ const SystemBlock = ({ messages, groupId, isExpanded, toggleGroup }) => {
 									/>
 								)}
 								<Box sx={{ flex: 1 }}>
-									{msgIsError ? (
-										message.split('\n').map((line, i) => (
-											<Typography
-												key={i}
-												variant={i === 0 ? 'subtitle2' : 'body2'}
-												sx={{
-													fontWeight: i === 0 ? 'bold' : 'normal',
-													mt: i > 0 ? 0.5 : 0,
-													color: line.startsWith('[Details:') ? 'text.secondary' : 'inherit',
-													fontSize: line.startsWith('[Details:') ? '0.85em' : 'inherit'
-												}}
-											>
-												{line}
-											</Typography>
-										))
-									) : (
-										message
-									)}
+									{message.split('\n').map((line, i) => (
+										<Typography
+											key={i}
+											variant={msgIsError && i === 0 ? 'subtitle2' : 'body2'}
+											sx={{
+												fontWeight: msgIsError && i === 0 ? 'bold' : 'normal',
+												mt: i > 0 ? 0.5 : 0,
+												color: line.startsWith('[Details:') ? 'text.secondary' : 'inherit',
+												fontSize: line.startsWith('[Details:') ? '0.85em' : 'inherit'
+											}}
+										>
+											{line}
+										</Typography>
+									))}
 								</Box>
 							</Box>
 						);

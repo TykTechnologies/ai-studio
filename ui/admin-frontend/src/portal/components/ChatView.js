@@ -32,13 +32,14 @@ const ChatView = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [error, setError] = useState(null);
+
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showTools, setShowTools] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [showSystemMessages, setShowSystemMessages] = useState(() => {
     const saved = localStorage.getItem('showSystemMessages');
-    return saved !== null ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : true;
   });
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -781,10 +782,58 @@ const ChatView = () => {
                         </Typography>
                       </Box>
                     )}
-                    {messages.map((message, index) => {
+                    {(() => {
+                      console.log('RENDER: messages array:', messages.length, messages.map(m => ({ id: m.id, type: m.type, preview: m.content?.substring(0, 50) })));
+                      console.log('RENDER: showSystemMessages:', showSystemMessages);
+                      
+                      // Group consecutive system messages so MessageContent.js can create collapsible groups
+                      const groupSystemMessages = (messages) => {
+                        const result = [];
+                        let systemBuffer = [];
+                        
+                        const flushSystemBuffer = () => {
+                          if (systemBuffer.length === 0) return;
+                          
+                          if (systemBuffer.length === 1) {
+                            result.push(systemBuffer[0]);
+                          } else {
+                            // Combine system messages into one with multiple :::system::: segments
+                            const combinedContent = systemBuffer
+                              .map(msg => msg.content)
+                              .join('');
+                            
+                            console.log('GROUPING:', systemBuffer.length, 'system messages into one combined message');
+                            result.push({
+                              ...systemBuffer[0],
+                              content: combinedContent,
+                              type: 'ai' // Change to 'ai' so extractSystemBlocks gets called
+                            });
+                          }
+                          systemBuffer = [];
+                        };
+                        
+                        for (const message of messages) {
+                          if (message.type === 'system') {
+                            systemBuffer.push(message);
+                          } else {
+                            flushSystemBuffer();
+                            result.push(message);
+                          }
+                        }
+                        
+                        flushSystemBuffer();
+                        return result;
+                      };
+                      
+                      const groupedMessages = groupSystemMessages(messages);
+                      
+                      return groupedMessages.map((message, index) => {
                       if (!showSystemMessages && message.type === 'system') {
+                        console.log('FILTERING OUT system message:', message.id);
                         return null;
                       }
+                      
+                      console.log('RENDERING message:', message.id, message.type);
 
                       return (
                         <MessageContent
@@ -820,7 +869,8 @@ const ChatView = () => {
                           }}
                         />
                       );
-                    })}
+                      });
+                    })()}
 
                     {/* Removed scroll to bottom button */}
                   </>

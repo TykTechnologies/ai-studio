@@ -1099,13 +1099,7 @@ func TestSendStatus(t *testing.T) {
 		assert.Fail(t, "Timeout waiting for message in outputMessages")
 	}
 
-	// Verify message was sent to outputStream via queue
-	select {
-	case stream := <-cs.OutputStream():
-		assert.Contains(t, string(stream), testStatus)
-	case <-time.After(100 * time.Millisecond):
-		assert.Fail(t, "Timeout waiting for message in outputStream")
-	}
+	// Note: sendStatus now only sends to outputMessages channel to prevent duplicates
 }
 
 // TestHandleToolCallsWithFilters tests the handleToolCalls function with tools that have filters
