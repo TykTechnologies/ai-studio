@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -30,7 +30,7 @@ import {
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
-const FilterList = () => {
+const FilterList = memo(() => {
   const navigate = useNavigate();
   const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -81,15 +81,15 @@ const FilterList = () => {
     fetchFilters();
   }, [fetchFilters]);
 
-  const handleMenuOpen = (event, filter) => {
+  const handleMenuOpen = useCallback((event, filter) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
     setSelectedFilter(filter);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
   const handleDelete = async (id) => {
     try {
@@ -111,28 +111,28 @@ const FilterList = () => {
     handleMenuClose();
   };
 
-  const handleFilterClick = (filter) => {
+  const handleFilterClick = useCallback((filter) => {
     navigate(`/admin/filters/${filter.id}`);
-  };
+  }, [navigate]);
 
-  const handleCloseSnackbar = (event, reason) => {
+  const handleCloseSnackbar = useCallback((event, reason) => {
     if (reason === "clickaway") {
       return;
     }
     setSnackbar({ ...snackbar, open: false });
-  };
+  }, [snackbar]);
 
-  const handleSort = (key) => {
+  const handleSort = useCallback((key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
       direction = "desc";
     }
     setSortConfig({ key, direction });
-  };
+  }, [sortConfig]);
 
-  const handleAddFilter = () => {
+  const handleAddFilter = useCallback(() => {
     navigate("/admin/filters/new");
-  };
+  }, [navigate]);
 
   if (loading && filters.length === 0) {
     return <CircularProgress />;
@@ -242,6 +242,8 @@ const FilterList = () => {
       </Snackbar>
     </>
   );
-};
+});
+
+FilterList.displayName = 'FilterList';
 
 export default FilterList;

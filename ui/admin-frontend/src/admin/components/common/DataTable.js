@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, memo } from "react";
 import {
   Table,
   TableBody,
@@ -22,7 +22,7 @@ import {
 } from "../../styles/sharedStyles";
 import PaginationControls from "./PaginationControls";
 
-const DataTable = ({
+const DataTable = memo(({
   columns,
   data,
   actions,
@@ -38,22 +38,22 @@ const DataTable = ({
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
 
-  const handleMenuOpen = (event, item) => {
+  const handleMenuOpen = useCallback((event, item) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
     setSelectedItem(item);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
-  const handleActionClick = (action) => {
+  const handleActionClick = useCallback((action) => {
     action.onClick(selectedItem);
     handleMenuClose();
-  };
+  }, [selectedItem, handleMenuClose]);
 
-  const handleHeaderClick = (column) => {
+  const handleHeaderClick = useCallback((column) => {
     if (!column.sortable || !onSortChange) return;
     
     const direction =
@@ -62,14 +62,14 @@ const DataTable = ({
         : "asc";
     
     onSortChange({ field: column.field, direction });
-  };
+  }, [sortConfig, onSortChange]);
 
-  const handleSearchChange = (event) => {
+  const handleSearchChange = useCallback((event) => {
     const value = event.target.value;
     if (onSearch) {
       onSearch(value);
     }
-  };
+  }, [onSearch]);
 
   return (
     <>
@@ -174,6 +174,8 @@ const DataTable = ({
     </StyledPaper>
     </>
   );
-};
+});
+
+DataTable.displayName = 'DataTable';
 
 export default DataTable;
