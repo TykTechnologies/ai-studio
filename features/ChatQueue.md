@@ -290,6 +290,11 @@ QUEUE_BUFFER_SIZE=200                        # Local channel buffer size (defaul
 - **Automatic Cleanup**: Channels are properly cleaned up when sessions end
 - **Connection Recovery**: Automatic reconnection with configurable retry logic
 - **Deferred Connection**: Database connection established only when queue is created
+- **Connection Pooling (v2.0+)**: Optimized to prevent connection exhaustion
+  - Uses single connection per session instead of multiple
+  - Configurable max connections (default: 25)
+  - Connection recycling every 5 minutes
+  - Reuses existing database connection pool
 
 #### Channel Naming Convention
 PostgreSQL queues use a structured channel naming convention:
