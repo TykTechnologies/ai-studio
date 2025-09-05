@@ -120,53 +120,6 @@ func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) 
 	return psq, nil
 }
 
-// NewPostgreSQLQueueLegacy creates the old PostgreSQL queue implementation
-// This is kept for reference but should not be used in production
-func NewPostgreSQLQueueLegacy(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
-	// Get the underlying SQL database connection
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get SQL database: %w", err)
-	}
-
-	// Test the connection
-	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("database connection failed: %w", err)
-	}
-
-	// Create context for lifecycle management
-	ctx, cancel := context.WithCancel(context.Background())
-
-	psq := &PostgreSQLQueue{
-		sessionID:        sessionID,
-		db:               db,
-		sqlDB:            sqlDB,
-		messagesChan:     make(chan *ChatResponse, config.BufferSize),
-		streamChan:       make(chan []byte, config.BufferSize),
-		errorsChan:       make(chan error, config.BufferSize),
-		llmResponsesChan: make(chan *LLMResponseWrapper, config.BufferSize),
-		closed:           false,
-		cancelCtx:        ctx,
-		cancel:           cancel,
-		config:           config,
-	}
-
-	// Setup PostgreSQL listener with reconnection logic
-	if err := psq.setupListener(); err != nil {
-		psq.Close()
-		return nil, fmt.Errorf("failed to setup listener: %w", err)
-	}
-
-	// Start consumers for each message type
-	if err := psq.startConsumers(); err != nil {
-		psq.Close()
-		return nil, fmt.Errorf("failed to start consumers: %w", err)
-	}
-
-	slog.Info("PostgreSQL queue created successfully", "session_id", sessionID)
-	return psq, nil
-}
-
 // setupListener creates and configures the PostgreSQL listener
 func (psq *PostgreSQLQueue) setupListener() error {
 	// Create PostgreSQL listener with reconnection handling
