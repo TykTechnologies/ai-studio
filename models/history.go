@@ -25,6 +25,7 @@ type ChatHistoryRecord struct {
 	ChatID    uint   `gorm:"index"`
 	UserID    uint   `gorm:"index"`
 	Name      string
+	TitleGenerated bool `gorm:"default:false"` // Tracks if the title was auto-generated
 }
 
 // Create a new ChatHistoryRecord
@@ -193,4 +194,16 @@ func GetLastCMessagesForSession(db *gorm.DB, sessionID string, limit int) ([]CMe
 	}
 
 	return messages, nil
+}
+
+// ShouldGenerateTitle checks if a title should be auto-generated for this chat
+// Returns true if the title hasn't been generated and the user message is substantial
+func (chr *ChatHistoryRecord) ShouldGenerateTitle(userMessage string) bool {
+	return !chr.TitleGenerated && len(userMessage) > 10
+}
+
+// MarkTitleGenerated marks the chat history record as having its title auto-generated
+func (chr *ChatHistoryRecord) MarkTitleGenerated(db *gorm.DB) error {
+	chr.TitleGenerated = true
+	return db.Model(chr).Update("title_generated", true).Error
 }

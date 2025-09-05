@@ -46,7 +46,7 @@ const FloatingSection = ({ title, items, onRemove, onAdd, emptyText, messages, r
             {title}
           </Typography>
           {roomName && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
               Room: {roomName}
             </Typography>
           )}

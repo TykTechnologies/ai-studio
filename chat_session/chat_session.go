@@ -883,6 +883,9 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		// Continue normally
 	}
 
+	// Try to generate a title for this chat if appropriate
+	cs.maybeGenerateTitle(msg.Payload)
+
 	mc := llms.TextParts(llms.ChatMessageTypeHuman, pl)
 	analytics.RecordContentMessage(
 		&mc,
@@ -899,6 +902,93 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	)
 
 	return resp, nil
+}
+
+// generateChatTitle uses the LLM to generate a concise title based on the user's message
+func (cs *ChatSession) generateChatTitle(userMessage string) (string, error) {
+	if cs.caller == nil {
+		return "", fmt.Errorf("LLM driver is not initialized")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create a simple prompt for title generation
+	titlePrompt := fmt.Sprintf(`Based on the following user message, generate a short, descriptive title (maximum 8 words) that captures the main topic or intent. Only return the title, nothing else.
+
+User message: %s`, userMessage)
+
+	// Create messages for the title generation request
+	messages := []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeHuman, titlePrompt),
+	}
+
+	// Use minimal options for title generation (no tools, etc.)
+	opts := []llms.CallOption{
+		llms.WithMaxTokens(50), // Keep response short
+		llms.WithTemperature(0.7),
+	}
+
+	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		return "", fmt.Errorf("error generating chat title: %v", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in title generation response")
+	}
+
+	title := strings.TrimSpace(resp.Choices[0].Content)
+	
+	// Clean up the title - remove quotes and limit length
+	title = strings.Trim(title, `"'`)
+	if len(title) > 60 {
+		title = title[:57] + "..."
+	}
+
+	return title, nil
+}
+
+// maybeGenerateTitle checks if we should generate a title and does so if needed
+func (cs *ChatSession) maybeGenerateTitle(userMessage string) {
+	// Get the chat history record
+	exists, historyRecord, err := cs.chatHistory.CheckIfSessionExists(context.Background())
+	if err != nil {
+		slog.Error("failed to check session for title generation", "error", err, "session_id", cs.id)
+		return
+	}
+
+	if !exists || historyRecord == nil {
+		return // No record found
+	}
+
+	// Check if we should generate a title
+	if !historyRecord.ShouldGenerateTitle(userMessage) {
+		return
+	}
+
+	// Generate the title asynchronously to avoid blocking the main chat flow
+	go func() {
+		title, err := cs.generateChatTitle(userMessage)
+		if err != nil {
+			slog.Error("failed to generate chat title", "error", err, "session_id", cs.id)
+			return
+		}
+
+		// Update the chat history record with the new title
+		if err := historyRecord.UpdateName(cs.db, title); err != nil {
+			slog.Error("failed to update chat title", "error", err, "session_id", cs.id, "title", title)
+			return
+		}
+
+		// Mark as title generated
+		if err := historyRecord.MarkTitleGenerated(cs.db); err != nil {
+			slog.Error("failed to mark title as generated", "error", err, "session_id", cs.id)
+			return
+		}
+
+		slog.Info("successfully generated chat title", "session_id", cs.id, "title", title)
+	}()
 }
 
 type CallParams struct {
