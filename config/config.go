@@ -507,3 +507,9 @@ func Get() *AppConf {
 	}
 	return globalConfig
 }
+
+// ResetGlobalConfig resets the global configuration cache, forcing a reload on next Get() call
+// This is primarily for testing purposes to ensure test isolation
+func ResetGlobalConfig() {
+	globalConfig = nil
+}

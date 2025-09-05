@@ -84,10 +84,15 @@ func TestCreateDefaultQueueFactory_PostgreSQL(t *testing.T) {
 		} else {
 			os.Setenv("QUEUE_TYPE", originalType)
 		}
+		// Reset global config cache to ensure test isolation
+		config.ResetGlobalConfig()
 	}()
 
 	// Set to postgres
 	os.Setenv("QUEUE_TYPE", "postgres")
+	
+	// Reset global config cache to force reload with new environment variable
+	config.ResetGlobalConfig()
 
 	// This should create a PostgreSQL factory
 	factory := CreateDefaultQueueFactory()
