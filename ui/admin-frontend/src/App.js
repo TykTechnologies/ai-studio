@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { ThemeProvider } from "@mui/material/styles";
 import {
   BrowserRouter as Router,
@@ -29,17 +29,19 @@ import OAuthConsentPage from "./portal/pages/OAuthConsentPage";
 // Layouts
 import MainLayout from "./layouts/MainLayout";
 
-// Routes
-import AdminRoutes from "./routes/AdminRoutes";
-import PortalRoutes from "./routes/PortalRoutes";
-import ChatRoutes from "./routes/ChatRoutes";
-import Login from "./portal/pages/Login";
-import Register from "./portal/pages/Register";
-import ForgotPassword from "./portal/pages/ForgotPassword";
-import ResetPassword from "./portal/pages/ResetPassword";
-import NotificationsPage from "./pages/NotificationsPage";
-import ToolDocumentationPage from "./portal/pages/ToolDocumentationPage"; // Import the new page
+// Context providers
 import { NotificationProvider } from "./admin/context/NotificationContext";
+
+// Lazy loaded routes for code splitting
+const AdminRoutes = React.lazy(() => import("./routes/AdminRoutes"));
+const PortalRoutes = React.lazy(() => import("./routes/PortalRoutes"));
+const ChatRoutes = React.lazy(() => import("./routes/ChatRoutes"));
+const Login = React.lazy(() => import("./portal/pages/Login"));
+const Register = React.lazy(() => import("./portal/pages/Register"));
+const ForgotPassword = React.lazy(() => import("./portal/pages/ForgotPassword"));
+const ResetPassword = React.lazy(() => import("./portal/pages/ResetPassword"));
+const NotificationsPage = React.lazy(() => import("./pages/NotificationsPage"));
+const ToolDocumentationPage = React.lazy(() => import("./portal/pages/ToolDocumentationPage"));
 
 // Component to redirect OAuth requests to backend
 const BackendRedirect = () => {
@@ -52,6 +54,20 @@ const BackendRedirect = () => {
   
   return <CircularProgress />;
 };
+
+// Loading component for lazy-loaded routes
+const RouteLoadingFallback = () => (
+  <Box
+    sx={{
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      height: "50vh",
+    }}
+  >
+    <CircularProgress />
+  </Box>
+);
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -160,7 +176,9 @@ function App() {
                     replace
                   />
                 ) : (
-                  <Login />
+                  <Suspense fallback={<RouteLoadingFallback />}>
+                    <Login />
+                  </Suspense>
                 )
               }
             />
@@ -170,7 +188,9 @@ function App() {
                 isAuthenticated ? (
                   <Navigate to="/portal/dashboard" replace />
                 ) : (
-                  <Register />
+                  <Suspense fallback={<RouteLoadingFallback />}>
+                    <Register />
+                  </Suspense>
                 )
               }
             />
@@ -180,7 +200,9 @@ function App() {
                 isAuthenticated ? (
                   <Navigate to="/portal/dashboard" replace />
                 ) : (
-                  <ForgotPassword />
+                  <Suspense fallback={<RouteLoadingFallback />}>
+                    <ForgotPassword />
+                  </Suspense>
                 )
               }
             />
@@ -191,7 +213,9 @@ function App() {
                 isAuthenticated ? (
                   <Navigate to="/portal/dashboard" replace />
                 ) : (
-                  <ResetPassword />
+                  <Suspense fallback={<RouteLoadingFallback />}>
+                    <ResetPassword />
+                  </Suspense>
                 )
               }
             />
@@ -221,17 +245,37 @@ function App() {
               }
             >
               {/* Portal Routes */}
-              <Route path="/portal/*" element={<PortalRoutes />} />
+              <Route path="/portal/*" element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <PortalRoutes />
+                </Suspense>
+              } />
 
               {/* Chat Routes */}
-              <Route path="/chat/*" element={<ChatRoutes />} />
+              <Route path="/chat/*" element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <ChatRoutes />
+                </Suspense>
+              } />
 
               {/* Admin Routes */}
-              <Route path="/admin/*" element={<AdminRoutes uiOptions={entitlements?.ui_options} />} />
+              <Route path="/admin/*" element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <AdminRoutes uiOptions={entitlements?.ui_options} />
+                </Suspense>
+              } />
 
               {/* Common Routes */}
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/common/tools/:id/docs" element={<ToolDocumentationPage />} /> {/* Add new route here */}
+              <Route path="/notifications" element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <NotificationsPage />
+                </Suspense>
+              } />
+              <Route path="/common/tools/:id/docs" element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <ToolDocumentationPage />
+                </Suspense>
+              } />
 
               {/* Default redirect */}
               <Route

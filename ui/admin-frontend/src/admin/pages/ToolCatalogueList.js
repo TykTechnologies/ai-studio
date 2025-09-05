@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -31,7 +31,7 @@ import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
-const ToolCatalogueList = () => {
+const ToolCatalogueList = memo(() => {
   const [toolCatalogues, setToolCatalogues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -79,14 +79,14 @@ const ToolCatalogueList = () => {
     fetchToolCatalogues();
   }, [fetchToolCatalogues]);
 
-  const handleMenuOpen = (event, catalogue) => {
+  const handleMenuOpen = useCallback((event, catalogue) => {
     setAnchorEl(event.currentTarget);
     setSelectedCatalogue(catalogue);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
   const handleDelete = async (id) => {
     try {
@@ -108,24 +108,24 @@ const ToolCatalogueList = () => {
     handleMenuClose();
   };
 
-  const handleEdit = (id) => {
+  const handleEdit = useCallback((id) => {
     navigate(`/admin/catalogs/tools/edit/${id}`);
-  };
+  }, [navigate]);
 
-  const handleAddToolCatalogue = () => {
+  const handleAddToolCatalogue = useCallback(() => {
     navigate("/admin/catalogs/tools/new");
-  };
+  }, [navigate]);
 
-  const handleCatalogueClick = (id) => {
+  const handleCatalogueClick = useCallback((id) => {
     navigate(`/admin/catalogs/tools/${id}`);
-  };
+  }, [navigate]);
 
-  const handleCloseSnackbar = (event, reason) => {
+  const handleCloseSnackbar = useCallback((event, reason) => {
     if (reason === "clickaway") {
       return;
     }
     setSnackbar({ ...snackbar, open: false });
-  };
+  }, [snackbar]);
 
   if (loading && toolCatalogues.length === 0) return <CircularProgress />;
   if (error && toolCatalogues.length === 0)
@@ -252,6 +252,8 @@ const ToolCatalogueList = () => {
       </Snackbar>
     </>
   );
-};
+});
+
+ToolCatalogueList.displayName = 'ToolCatalogueList';
 
 export default ToolCatalogueList;
