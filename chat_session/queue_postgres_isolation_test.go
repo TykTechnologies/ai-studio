@@ -47,7 +47,7 @@ func TestPostgreSQLQueue_MultiUserIsolation(t *testing.T) {
 	}
 
 	// Create queues for each user
-	queues := make([]*PostgreSQLQueue, len(users))
+	queues := make([]MessageQueue, len(users))
 	config := DefaultPostgreSQLConfig()
 	config.BufferSize = 10
 
@@ -153,7 +153,7 @@ func TestPostgreSQLQueue_ConcurrentMessageIsolation(t *testing.T) {
 	users := make([]struct {
 		name      string
 		sessionID string
-		queue     *PostgreSQLQueue
+		queue     MessageQueue
 	}, numUsers)
 
 	config := DefaultPostgreSQLConfig()
@@ -170,7 +170,7 @@ func TestPostgreSQLQueue_ConcurrentMessageIsolation(t *testing.T) {
 		users[i] = struct {
 			name      string
 			sessionID string
-			queue     *PostgreSQLQueue
+			queue     MessageQueue
 		}{
 			name:      fmt.Sprintf("user%d", i),
 			sessionID: sessionID,
@@ -191,7 +191,7 @@ func TestPostgreSQLQueue_ConcurrentMessageIsolation(t *testing.T) {
 		go func(idx int, u struct {
 			name      string
 			sessionID string
-			queue     *PostgreSQLQueue
+			queue     MessageQueue
 		}) {
 			defer publishWG.Done()
 
@@ -205,7 +205,7 @@ func TestPostgreSQLQueue_ConcurrentMessageIsolation(t *testing.T) {
 					t.Errorf("Failed to publish message for %s: %v", u.name, err)
 					return
 				}
-				
+
 				// Small delay to interleave messages from different users
 				time.Sleep(1 * time.Millisecond)
 			}
@@ -229,7 +229,7 @@ func TestPostgreSQLQueue_ConcurrentMessageIsolation(t *testing.T) {
 		go func(u struct {
 			name      string
 			sessionID string
-			queue     *PostgreSQLQueue
+			queue     MessageQueue
 		}) {
 			defer receiveWG.Done()
 
@@ -298,17 +298,17 @@ func TestPostgreSQLQueue_ChannelNameIsolation(t *testing.T) {
 	// Test that different sessions generate different channel names
 	sessionIDs := []string{
 		"session-1",
-		"session-2", 
+		"session-2",
 		"room-abc-user-123",
 		"room-xyz-user-456",
 	}
 
 	channels := make(map[string]bool)
-	
+
 	for _, sessionID := range sessionIDs {
-		// Create a temporary queue just to test channel naming
-		psq := &PostgreSQLQueue{sessionID: sessionID}
-		
+		// Use the OptimizedPostgreSQLQueue directly for testing channel naming
+		psq := &OptimizedPostgreSQLQueue{sessionID: sessionID}
+
 		// Test all message types
 		messageTypes := []string{
 			PostgreSQLMessageTypeChatResponse,
@@ -316,16 +316,16 @@ func TestPostgreSQLQueue_ChannelNameIsolation(t *testing.T) {
 			PostgreSQLMessageTypeError,
 			PostgreSQLMessageTypeLLMResponse,
 		}
-		
+
 		for _, msgType := range messageTypes {
 			channelName := psq.getChannelName(msgType)
-			
+
 			// Ensure channel name includes session ID
 			expectedChannel := fmt.Sprintf("chat_%s_%s", msgType, sessionID)
 			if channelName != expectedChannel {
 				t.Errorf("Wrong channel name. Expected: %s, Got: %s", expectedChannel, channelName)
 			}
-			
+
 			// Ensure no duplicate channel names across different sessions
 			if channels[channelName] {
 				t.Errorf("Duplicate channel name detected: %s", channelName)
@@ -333,7 +333,7 @@ func TestPostgreSQLQueue_ChannelNameIsolation(t *testing.T) {
 			channels[channelName] = true
 		}
 	}
-	
-	t.Logf("✅ Validated unique channel names for %d sessions across %d message types", 
+
+	t.Logf("✅ Validated unique channel names for %d sessions across %d message types",
 		len(sessionIDs), 4)
 }
