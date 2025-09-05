@@ -87,6 +87,9 @@ func testQueueConnectivity(queueConfig config.QueueConfig) error {
 	case "nats":
 		return testNATSConnectivity(queueConfig.NATS)
 
+	case "postgres":
+		return testPostgreSQLQueueConnectivity(queueConfig.PostgreSQL)
+
 	default:
 		return fmt.Errorf("unsupported queue type: %s", queueConfig.Type)
 	}
@@ -252,5 +255,48 @@ func addNATSAuthOptions(opts *[]nats.Option, config config.NATSConfig) error {
 		log.Printf("NATS TLS connection enabled")
 	}
 	
+	return nil
+}
+
+// testPostgreSQLQueueConnectivity tests PostgreSQL connectivity for queue functionality
+func testPostgreSQLQueueConnectivity(pgConfig config.PostgreSQLQueueConfig) error {
+	log.Println("Testing PostgreSQL queue connectivity...")
+
+	// PostgreSQL queues require DATABASE_URL environment variable
+	databaseURL := config.Get().DatabaseURL
+	if databaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required for PostgreSQL queues")
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Test database connection for PostgreSQL queues
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to connect to PostgreSQL for queue: %w", err)
+	}
+
+	// Get the underlying SQL DB to test connectivity  
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get PostgreSQL database instance: %w", err)
+	}
+	defer sqlDB.Close()
+
+	// Test database connectivity
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("failed to ping PostgreSQL database: %w", err)
+	}
+
+	// Test PostgreSQL LISTEN/NOTIFY functionality (basic test)
+	// We'll test if we can execute a simple NOTIFY command
+	_, err = sqlDB.ExecContext(ctx, "SELECT pg_notify('test_connectivity_check', 'startup_test')")
+	if err != nil {
+		return fmt.Errorf("PostgreSQL LISTEN/NOTIFY test failed: %w", err)
+	}
+
+	log.Println("✅ PostgreSQL queue connectivity test passed (LISTEN/NOTIFY available)")
 	return nil
 }

@@ -66,6 +66,11 @@ func TestQueueConnectivity(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "postgres queue (no DATABASE_URL)",
+			queueType:   "postgres",
+			expectError: true, // Should fail without DATABASE_URL
+		},
+		{
 			name:        "invalid queue type",
 			queueType:   "invalid",
 			expectError: true,
