@@ -21,7 +21,8 @@
       "Bash(go vet:*)",
       "Bash(go mod:*)",
       "Bash(INTEGRATION_TEST=1 go test ./startup/... -v)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(npm test)"
     ],
     "deny": []
   }

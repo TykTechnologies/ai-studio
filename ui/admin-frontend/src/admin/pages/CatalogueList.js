@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -39,7 +39,7 @@ import {
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 
-const CatalogueList = () => {
+const CatalogueList = memo(() => {
   const navigate = useNavigate();
   const [catalogues, setCatalogues] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -92,15 +92,15 @@ const CatalogueList = () => {
     fetchCatalogues();
   }, [fetchCatalogues]);
 
-  const handleMenuOpen = (event, catalogue) => {
+  const handleMenuOpen = useCallback((event, catalogue) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
     setSelectedCatalogue(catalogue);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
   const handleDelete = async (id) => {
     try {
@@ -215,7 +215,7 @@ const CatalogueList = () => {
     navigate(`/admin/catalogs/llms/${id}`);
   };
 
-  const getLLMNames = (catalogue) => {
+  const getLLMNames = useCallback((catalogue) => {
     if (catalogue.attributes.llm_names) {
       return catalogue.attributes.llm_names;
     } else if (
@@ -225,7 +225,7 @@ const CatalogueList = () => {
       return catalogue.attributes.llms.map((llm) => llm.attributes.name);
     }
     return [];
-  };
+  }, []);
 
   if (loading && catalogues.length === 0) {
     return <CircularProgress />;
@@ -391,6 +391,8 @@ const CatalogueList = () => {
       </Snackbar>
     </>
   );
-};
+});
+
+CatalogueList.displayName = 'CatalogueList';
 
 export default CatalogueList;

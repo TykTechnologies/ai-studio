@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
@@ -39,7 +39,7 @@ import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 import useSystemFeatures from "../hooks/useSystemFeatures";
 
-const Users = () => {
+const Users = memo(() => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -115,15 +115,15 @@ const Users = () => {
     fetchGroups();
   }, [fetchUsers, fetchGroups]);
 
-  const handleMenuOpen = (event, user) => {
+  const handleMenuOpen = useCallback((event, user) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
     setSelectedUser(user);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
   const handleDelete = async (id) => {
     try {
@@ -145,22 +145,22 @@ const Users = () => {
     handleMenuClose();
   };
 
-  const handleUserClick = (user) => {
+  const handleUserClick = useCallback((user) => {
     navigate(`/admin/users/${user.id}`);
-  };
+  }, [navigate]);
 
-  const handleAddToGroup = () => {
+  const handleAddToGroup = useCallback(() => {
     if (groups.length === 0) {
       setIsAddingGroup(true);
     }
     setOpenAddToGroupModal(true);
     handleMenuClose();
-  };
+  }, [groups.length, handleMenuClose]);
 
-  const handleCloseAddToGroupModal = () => {
+  const handleCloseAddToGroupModal = useCallback(() => {
     setOpenAddToGroupModal(false);
     setSelectedGroup("");
-  };
+  }, []);
 
   const handleAddUserToGroup = async () => {
     if (!selectedGroup || !selectedUser) {
@@ -234,12 +234,12 @@ const Users = () => {
     }
   };
 
-  const handleCloseSnackbar = (event, reason) => {
+  const handleCloseSnackbar = useCallback((event, reason) => {
     if (reason === "clickaway") {
       return;
     }
     setSnackbar({ ...snackbar, open: false });
-  };
+  }, [snackbar]);
 
   if (loading && users.length === 0) {
     return <CircularProgress />;
@@ -448,6 +448,8 @@ const Users = () => {
       </Box>
     </>
   );
-};
+});
+
+Users.displayName = 'Users';
 
 export default Users;
