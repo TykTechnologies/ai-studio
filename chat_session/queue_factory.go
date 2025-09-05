@@ -13,6 +13,8 @@ func CreateQueueFactory(cfg config.QueueConfig) (QueueFactory, error) {
 	switch cfg.Type {
 	case "nats":
 		return createNATSQueueFactory(cfg)
+	case "postgres":
+		return createPostgreSQLQueueFactory(cfg)
 	case "inmemory":
 		return NewDefaultQueueFactory(cfg.BufferSize), nil
 	default:
@@ -123,6 +125,51 @@ func createNATSQueueFactory(cfg config.QueueConfig) (QueueFactory, error) {
 	)
 
 	return NewNATSQueueFactory(natsConfig), nil
+}
+
+// createPostgreSQLQueueFactory creates PostgreSQL queue factory with proper configuration conversion
+func createPostgreSQLQueueFactory(cfg config.QueueConfig) (QueueFactory, error) {
+	// PostgreSQL queues require a database connection, which isn't available at config time
+	// Instead, we'll create a special factory that defers database connection to queue creation time
+	// This requires the user to ensure DATABASE_URL is properly configured
+	
+	// Convert config to PostgreSQL config
+	psqlConfig := PostgreSQLConfig{
+		BufferSize:          cfg.BufferSize,
+		ReconnectInterval:   2 * time.Second, // Default values
+		MaxReconnectRetries: 10,
+		NotifyTimeout:       5 * time.Second,
+	}
+
+	// Parse duration strings from config
+	if cfg.PostgreSQL.ReconnectInterval != "" {
+		if duration, err := time.ParseDuration(cfg.PostgreSQL.ReconnectInterval); err == nil {
+			psqlConfig.ReconnectInterval = duration
+		} else {
+			slog.Warn("invalid PostgreSQL reconnect interval, using default", "value", cfg.PostgreSQL.ReconnectInterval, "error", err)
+		}
+	}
+
+	if cfg.PostgreSQL.NotifyTimeout != "" {
+		if duration, err := time.ParseDuration(cfg.PostgreSQL.NotifyTimeout); err == nil {
+			psqlConfig.NotifyTimeout = duration
+		} else {
+			slog.Warn("invalid PostgreSQL notify timeout, using default", "value", cfg.PostgreSQL.NotifyTimeout, "error", err)
+		}
+	}
+
+	if cfg.PostgreSQL.MaxReconnectRetries > 0 {
+		psqlConfig.MaxReconnectRetries = cfg.PostgreSQL.MaxReconnectRetries
+	}
+
+	slog.Info("creating PostgreSQL queue factory",
+		"buffer_size", psqlConfig.BufferSize,
+		"reconnect_interval", psqlConfig.ReconnectInterval,
+		"max_reconnect_retries", psqlConfig.MaxReconnectRetries,
+		"notify_timeout", psqlConfig.NotifyTimeout,
+	)
+
+	return NewDeferredPostgreSQLQueueFactory(psqlConfig), nil
 }
 
 // CreateDefaultQueueFactory creates the default queue factory based on global configuration

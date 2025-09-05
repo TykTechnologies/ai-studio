@@ -1,10 +1,10 @@
 # Chat Queue System
 
-**Status:** ✅ Phase 4 Complete - NATS Implementation with Configuration System
+**Status:** ✅ Phase 4 Complete - NATS & PostgreSQL Implementation with Configuration System
 
 ## Overview
 
-The Chat Queue System provides an interface-driven abstraction layer for message passing in chat sessions, with pluggable queue implementations that can be swapped via configuration. Currently supports in-memory and NATS JetStream implementations.
+The Chat Queue System provides an interface-driven abstraction layer for message passing in chat sessions, with pluggable queue implementations that can be swapped via configuration. Currently supports in-memory, NATS JetStream, and PostgreSQL implementations.
 
 ## Architecture
 
@@ -65,6 +65,17 @@ type QueueFactory interface {
 - **Use Case**: Distributed deployments, high availability, message persistence
 - **Configuration**: Hybrid persistent (file storage + interest retention + limits)
 
+#### PostgreSQL Queue ✅
+- **Purpose**: Distributed message queue using PostgreSQL LISTEN/NOTIFY
+- **Characteristics**:
+  - Real-time pub/sub messaging with PostgreSQL LISTEN/NOTIFY
+  - No external message broker required (uses existing database)
+  - Automatic reconnection with configurable retry logic
+  - Session-isolated channels with proper cleanup
+  - Configurable timeouts and connection management
+- **Use Case**: Distributed deployments with PostgreSQL database, simplified infrastructure
+- **Configuration**: Deferred connection model (connects at queue creation time)
+
 #### Future Implementations
 - **Redis Queue**: For Redis-based persistence
 - **AWS SQS**: For cloud-native deployments
@@ -103,7 +114,7 @@ Internal LLM response objects for continued processing.
 ### Environment Variables ✅
 ```bash
 # Queue Configuration
-QUEUE_TYPE=inmemory|nats                    # Queue implementation type
+QUEUE_TYPE=inmemory|nats|postgres           # Queue implementation type
 QUEUE_BUFFER_SIZE=100                       # Buffer size for queues
 
 # NATS Connection Configuration  
@@ -132,6 +143,12 @@ NATS_TLS_CERT_FILE=/path/to/cert.pem       # Client certificate file (optional)
 NATS_TLS_KEY_FILE=/path/to/key.pem         # Client private key file (optional)
 NATS_TLS_CA_FILE=/path/to/ca.pem           # CA certificate file (optional)
 NATS_TLS_SKIP_VERIFY=false                 # Skip TLS certificate verification (default: false)
+
+# PostgreSQL Connection Configuration ✅
+DATABASE_URL=postgres://user:pass@host:port/db  # PostgreSQL connection URL (required for postgres queues)
+POSTGRES_QUEUE_RECONNECT_INTERVAL=2s        # Reconnection interval (default: 2s)
+POSTGRES_QUEUE_MAX_RECONNECT_RETRIES=10     # Max reconnection attempts (default: 10)
+POSTGRES_QUEUE_NOTIFY_TIMEOUT=5s            # NOTIFY operation timeout (default: 5s)
 ```
 
 ### Configuration Structure ✅
@@ -143,9 +160,10 @@ type AppConf struct {
 }
 
 type QueueConfig struct {
-    Type       string      `json:"type"`        // "inmemory" or "nats"
-    BufferSize int         `json:"buffer_size"` // Buffer size for channels
-    NATS       NATSConfig  `json:"nats"`        // NATS-specific configuration
+    Type       string         `json:"type"`        // "inmemory", "nats", or "postgres"
+    BufferSize int            `json:"buffer_size"` // Buffer size for channels
+    NATS       NATSConfig     `json:"nats"`        // NATS-specific configuration
+    PostgreSQL PostgreSQLQueueConfig `json:"postgresql"` // PostgreSQL-specific configuration
 }
 
 type NATSConfig struct {
@@ -174,6 +192,12 @@ type NATSConfig struct {
     TLSKeyFile      string `json:"tls_key_file"`       // Optional client key file
     TLSCAFile       string `json:"tls_ca_file"`        // Optional CA certificate file
     TLSSkipVerify   bool   `json:"tls_skip_verify"`    // Skip TLS certificate verification
+}
+
+type PostgreSQLQueueConfig struct {
+    ReconnectInterval   string `json:"reconnect_interval"`   // Duration string like "2s"
+    MaxReconnectRetries int    `json:"max_reconnect_retries"` // Maximum reconnection attempts (default: 10)
+    NotifyTimeout       string `json:"notify_timeout"`       // Duration string like "5s"
 }
 ```
 
@@ -236,6 +260,54 @@ NATS_CREDENTIALS_FILE=/path/to/user.creds
 NATS_TLS_CA_FILE=/path/to/ca-cert.pem
 ```
 Combine TLS encryption with JWT authentication for secure production deployments.
+
+### PostgreSQL Queue Configuration ✅
+
+The PostgreSQL queue implementation leverages PostgreSQL's built-in LISTEN/NOTIFY functionality to provide real-time messaging capabilities:
+
+#### Basic PostgreSQL Configuration
+```bash
+# Minimum required configuration
+QUEUE_TYPE=postgres
+DATABASE_URL=postgres://user:password@localhost:5432/myapp
+```
+
+#### Advanced PostgreSQL Configuration
+```bash
+# Full configuration with all options
+QUEUE_TYPE=postgres
+DATABASE_URL=postgres://user:password@localhost:5432/myapp?sslmode=require
+POSTGRES_QUEUE_RECONNECT_INTERVAL=3s        # How often to retry connections (default: 2s)
+POSTGRES_QUEUE_MAX_RECONNECT_RETRIES=20     # Max reconnection attempts (default: 10)  
+POSTGRES_QUEUE_NOTIFY_TIMEOUT=10s           # Timeout for NOTIFY operations (default: 5s)
+QUEUE_BUFFER_SIZE=200                        # Local channel buffer size (default: 100)
+```
+
+#### PostgreSQL Queue Features
+- **Real-time Messaging**: Uses PostgreSQL LISTEN/NOTIFY for instant message delivery
+- **No External Dependencies**: Leverages existing database infrastructure
+- **Session Isolation**: Each chat session gets its own PostgreSQL channels
+- **Automatic Cleanup**: Channels are properly cleaned up when sessions end
+- **Connection Recovery**: Automatic reconnection with configurable retry logic
+- **Deferred Connection**: Database connection established only when queue is created
+
+#### Channel Naming Convention
+PostgreSQL queues use a structured channel naming convention:
+```
+chat_{message_type}_{session_id}
+```
+
+Examples:
+- `chat_chat_response_session-123-abc`: ChatResponse messages for session-123-abc
+- `chat_stream_session-123-abc`: Stream data for session-123-abc  
+- `chat_error_session-123-abc`: Error messages for session-123-abc
+- `chat_llm_response_session-123-abc`: LLM responses for session-123-abc
+
+#### Database Connection Requirements
+- **PostgreSQL Version**: 9.0+ (LISTEN/NOTIFY support)
+- **Connection Pooling**: Supported (each queue gets its own connection)
+- **SSL Support**: Full SSL/TLS support via DATABASE_URL parameters
+- **Authentication**: All PostgreSQL authentication methods supported
 
 ### NATS JetStream Configuration ✅
 The NATS implementation uses a **hybrid persistent configuration**:
@@ -303,6 +375,8 @@ func (cs *ChatSession) sendStatus(resp string) {
 ### Phase 4: ✅ Complete
 - [x] NATS implementation
 - [x] NATS authentication support (JWT, NKey, TLS, Username/Password, Token)
+- [x] PostgreSQL implementation with LISTEN/NOTIFY
+- [x] PostgreSQL configuration system integration
 - [x] Production deployment guides
 - [ ] Redis implementation
 
@@ -343,11 +417,21 @@ factory := NewDefaultQueueFactory(100)
 chatSession, err := NewChatSession(chat, ChatMessage, db, service, filters, &userID, nil, factory)
 ```
 
-### Future Configuration-driven (Phase 3)
+### Configuration-driven Usage ✅
 ```go
-// Runtime configuration
-queueType := config.Get().QueueType
-factory := CreateQueueFactory(queueType, config.Get().QueueConfig)
+// Runtime configuration - automatically selects queue based on QUEUE_TYPE
+factory := CreateDefaultQueueFactory()
+chatSession, err := NewChatSession(chat, ChatMessage, db, service, filters, &userID, nil, factory)
+```
+
+### PostgreSQL Queue Example ✅
+```go
+// Direct PostgreSQL queue creation (with database connection)
+config := DefaultPostgreSQLConfig()
+queue, err := NewPostgreSQLQueue(sessionID, db, config)
+
+// Or via factory (connects using DATABASE_URL)
+factory := CreateDefaultQueueFactory() // when QUEUE_TYPE=postgres
 chatSession, err := NewChatSession(chat, ChatMessage, db, service, filters, &userID, nil, factory)
 ```
 
@@ -364,6 +448,51 @@ chatSession, err := NewChatSession(chat, ChatMessage, db, service, filters, &use
 - **Error Recovery**: 100% (all errors properly propagated)
 - **Test Coverage**: >95% for queue implementations
 
+## Queue Implementation Comparison
+
+### Choosing the Right Queue Implementation
+
+| Feature | InMemory | NATS | PostgreSQL |
+|---------|----------|------|------------|
+| **Setup Complexity** | None | Medium | Low |
+| **External Dependencies** | None | NATS Server | PostgreSQL DB |
+| **Message Persistence** | No | Yes | No (real-time only) |
+| **Multi-instance Support** | No | Yes | Yes |
+| **Horizontal Scaling** | No | Yes | Yes |
+| **Connection Recovery** | N/A | Yes | Yes |
+| **Real-time Messaging** | Yes | Yes | Yes |
+| **Infrastructure Cost** | None | NATS Server | Uses existing DB |
+| **Recommended Use** | Dev/Testing | Production Distributed | Production Simplified |
+
+### Deployment Recommendations
+
+#### Development & Testing
+```bash
+QUEUE_TYPE=inmemory
+```
+- **Pros**: Zero setup, instant startup, no dependencies
+- **Cons**: Single instance only, no persistence
+- **Use When**: Local development, unit testing
+
+#### Production - Simplified Infrastructure
+```bash
+QUEUE_TYPE=postgres
+DATABASE_URL=postgres://user:pass@host:port/db
+```
+- **Pros**: Uses existing database, no additional infrastructure, auto-scaling
+- **Cons**: Adds load to database, no message persistence across restarts
+- **Use When**: You already have PostgreSQL, want to minimize infrastructure
+
+#### Production - Distributed Systems
+```bash
+QUEUE_TYPE=nats
+NATS_URL=nats://nats-cluster:4222
+NATS_CREDENTIALS_FILE=/path/to/creds.file
+```
+- **Pros**: Dedicated message infrastructure, persistence, advanced features
+- **Cons**: Additional infrastructure to manage, more complex setup
+- **Use When**: High throughput, message durability required, complex routing
+
 ## Future Roadmap
 
 ### Phase 2: API Integration
@@ -376,10 +505,11 @@ chatSession, err := NewChatSession(chat, ChatMessage, db, service, filters, &use
 - Runtime queue selection
 - Per-chat queue configuration
 
-### Phase 4: Alternative Implementations
-- NATS for distributed systems
-- Redis for persistence
-- Cloud-native options (SQS, Pub/Sub)
+### Phase 4: Alternative Implementations ✅
+- [x] NATS for distributed systems
+- [x] PostgreSQL for database-backed messaging
+- [ ] Redis for persistence
+- [ ] Cloud-native options (SQS, Pub/Sub)
 
 ### Phase 5: Advanced Features
 - Message routing

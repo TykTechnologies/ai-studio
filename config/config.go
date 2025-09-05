@@ -43,9 +43,10 @@ type AppConf struct {
 
 // QueueConfig holds configuration for message queues
 type QueueConfig struct {
-	Type       string     `json:"type"`        // "inmemory" | "nats"
-	BufferSize int        `json:"buffer_size"` // Local channel buffer (default: 100)
-	NATS       NATSConfig `json:"nats"`        // NATS-specific config
+	Type       string         `json:"type"`        // "inmemory" | "nats" | "postgres"
+	BufferSize int            `json:"buffer_size"` // Local channel buffer (default: 100)
+	NATS       NATSConfig     `json:"nats"`        // NATS-specific config
+	PostgreSQL PostgreSQLQueueConfig `json:"postgresql"` // PostgreSQL-specific config
 }
 
 // NATSConfig holds NATS JetStream configuration
@@ -75,6 +76,13 @@ type NATSConfig struct {
 	TLSKeyFile      string `json:"tls_key_file"`     // Optional client key file
 	TLSCAFile       string `json:"tls_ca_file"`      // Optional CA certificate file
 	TLSSkipVerify   bool   `json:"tls_skip_verify"`  // Skip TLS certificate verification
+}
+
+// PostgreSQLQueueConfig holds PostgreSQL-specific queue configuration
+type PostgreSQLQueueConfig struct {
+	ReconnectInterval   string `json:"reconnect_interval"`   // Duration string like "2s"
+	MaxReconnectRetries int    `json:"max_reconnect_retries"` // Maximum reconnection attempts (default: 10)
+	NotifyTimeout       string `json:"notify_timeout"`       // Duration string like "5s"
 }
 
 type DocsLinks map[string]string
@@ -292,7 +300,7 @@ func getQueueConfig() QueueConfig {
 
 	// Parse queue type
 	queueType := os.Getenv("QUEUE_TYPE")
-	if queueType == "nats" || queueType == "inmemory" {
+	if queueType == "nats" || queueType == "inmemory" || queueType == "postgres" {
 		config.Type = queueType
 	} else if queueType != "" {
 		log.Printf("Warning: Invalid QUEUE_TYPE value: %s. Defaulting to inmemory", queueType)
@@ -309,6 +317,9 @@ func getQueueConfig() QueueConfig {
 
 	// Parse NATS configuration
 	config.NATS = getNATSConfig()
+	
+	// Parse PostgreSQL configuration
+	config.PostgreSQL = getPostgreSQLQueueConfig()
 
 	return config
 }
@@ -455,6 +466,36 @@ func getNATSConfig() NATSConfig {
 		} else {
 			log.Printf("Warning: Invalid NATS_TLS_SKIP_VERIFY value: %s. Using default: %t", skipVerifyStr, config.TLSSkipVerify)
 		}
+	}
+
+	return config
+}
+
+// getPostgreSQLQueueConfig parses PostgreSQL-specific queue environment variables
+func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
+	config := PostgreSQLQueueConfig{
+		ReconnectInterval:   "2s", // Default 2 second reconnection interval
+		MaxReconnectRetries: 10,   // Default max 10 reconnection attempts
+		NotifyTimeout:       "5s", // Default 5 second notify timeout
+	}
+
+	// Reconnect interval
+	if reconnectInterval := os.Getenv("POSTGRES_QUEUE_RECONNECT_INTERVAL"); reconnectInterval != "" {
+		config.ReconnectInterval = reconnectInterval
+	}
+
+	// Max reconnect retries
+	if maxRetriesStr := os.Getenv("POSTGRES_QUEUE_MAX_RECONNECT_RETRIES"); maxRetriesStr != "" {
+		if maxRetries, err := strconv.Atoi(maxRetriesStr); err == nil && maxRetries >= 0 {
+			config.MaxReconnectRetries = maxRetries
+		} else {
+			log.Printf("Warning: Invalid POSTGRES_QUEUE_MAX_RECONNECT_RETRIES value: %s. Using default: %d", maxRetriesStr, config.MaxReconnectRetries)
+		}
+	}
+
+	// Notify timeout
+	if notifyTimeout := os.Getenv("POSTGRES_QUEUE_NOTIFY_TIMEOUT"); notifyTimeout != "" {
+		config.NotifyTimeout = notifyTimeout
 	}
 
 	return config
