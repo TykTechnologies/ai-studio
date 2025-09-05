@@ -363,6 +363,12 @@ func (a *API) setupRoutes() {
 	public.GET("/auth/config", a.handleGetConfig)
 	public.GET("/auth/features", a.handleFeatureSet)
 
+	// Health and readiness endpoints (unauthenticated)
+	public.GET("/healthz", a.handleHealth)
+	public.GET("/health", a.handleHealth)
+	public.GET("/readyz", a.handleReadiness)
+	public.GET("/ready", a.handleReadiness)
+
 	// routes for portal users
 	authed := public.Group("/common")
 	authed.Use(a.auth.AuthMiddleware())
