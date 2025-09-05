@@ -75,16 +75,49 @@ const (
 )
 
 // NewPostgreSQLQueue creates a new PostgreSQL-based message queue
-// This function now returns the optimized implementation to prevent connection exhaustion.
-// The original implementation created multiple connections per session which could exhaust PostgreSQL connection limits.
-func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (MessageQueue, error) {
-	// Log info about using the optimized version
-	slog.Info("Using optimized PostgreSQL queue implementation",
-		"session_id", sessionID,
-		"connection_reuse", true)
+func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
+	// Get the underlying SQL database connection
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SQL database: %w", err)
+	}
 
-	// Use the optimized implementation that reuses connections
-	return NewOptimizedPostgreSQLQueue(sessionID, db, config)
+	// Test the connection
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("database connection failed: %w", err)
+	}
+
+	// Create context for lifecycle management
+	ctx, cancel := context.WithCancel(context.Background())
+
+	psq := &PostgreSQLQueue{
+		sessionID:        sessionID,
+		db:               db,
+		sqlDB:            sqlDB,
+		messagesChan:     make(chan *ChatResponse, config.BufferSize),
+		streamChan:       make(chan []byte, config.BufferSize),
+		errorsChan:       make(chan error, config.BufferSize),
+		llmResponsesChan: make(chan *LLMResponseWrapper, config.BufferSize),
+		closed:           false,
+		cancelCtx:        ctx,
+		cancel:           cancel,
+		config:           config,
+	}
+
+	// Setup PostgreSQL listener with reconnection logic
+	if err := psq.setupListener(); err != nil {
+		psq.Close()
+		return nil, fmt.Errorf("failed to setup listener: %w", err)
+	}
+
+	// Start consumers for each message type
+	if err := psq.startConsumers(); err != nil {
+		psq.Close()
+		return nil, fmt.Errorf("failed to start consumers: %w", err)
+	}
+
+	slog.Info("PostgreSQL queue created successfully", "session_id", sessionID)
+	return psq, nil
 }
 
 // NewPostgreSQLQueueLegacy creates the old PostgreSQL queue implementation
@@ -480,15 +513,13 @@ func (f *PostgreSQLQueueFactory) CreateQueue(sessionID string, config map[string
 		}
 	}
 
-	// Use the optimized implementation that reuses connections
-	return NewOptimizedPostgreSQLQueue(sessionID, f.db, pgConfig)
+	return NewPostgreSQLQueue(sessionID, f.db, pgConfig)
 }
 
 // Helper function for creating a PostgreSQL queue with default settings
 func NewDefaultPostgreSQLQueue(sessionID string, db *gorm.DB) (MessageQueue, error) {
 	config := DefaultPostgreSQLConfig()
-	// Use the optimized implementation
-	return NewOptimizedPostgreSQLQueue(sessionID, db, config)
+	return NewPostgreSQLQueue(sessionID, db, config)
 }
 
 // DeferredPostgreSQLQueueFactory creates PostgreSQL queues by connecting to the database at queue creation time
@@ -541,11 +572,11 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 		}
 	}
 
-	// Use the optimized implementation that reuses connections
-	slog.Info("Creating optimized PostgreSQL queue",
+	// Create with connection pooling configured
+	slog.Info("Creating PostgreSQL queue with connection pooling",
 		"session_id", sessionID,
 		"max_connections", 25,
 		"connection_pooling", true)
 
-	return NewOptimizedPostgreSQLQueue(sessionID, db, psqlConfig)
+	return NewPostgreSQLQueue(sessionID, db, psqlConfig)
 }
