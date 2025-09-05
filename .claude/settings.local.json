@@ -18,7 +18,10 @@
       "Bash(npm run build:*)",
       "Bash(make:*)",
       "Bash(git log:*)",
-      "Bash(go vet:*)"
+      "Bash(go vet:*)",
+      "Bash(go mod:*)",
+      "Bash(INTEGRATION_TEST=1 go test ./startup/... -v)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }
