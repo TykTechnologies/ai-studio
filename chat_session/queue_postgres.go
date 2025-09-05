@@ -74,7 +74,7 @@ const (
 	PostgreSQLMessageTypeLLMResponse  = "llm_response"
 )
 
-// NewPostgreSQLQueue creates a new PostgreSQL-based message queue  
+// NewPostgreSQLQueue creates a new PostgreSQL-based message queue
 func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
 	// Get the underlying SQL database connection
 	sqlDB, err := db.DB()
@@ -144,13 +144,12 @@ func (psq *PostgreSQLQueue) setupListener() error {
 	return nil
 }
 
-
 // createListener creates a PostgreSQL listener with proper error handling
 func (psq *PostgreSQLQueue) createListener() *pq.Listener {
 	// Get database connection string from environment or config
 	// We'll use the same database connection info as the main application
 	var dsn string
-	
+
 	// Try to get DSN from environment first (most reliable)
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
 		dsn = databaseURL
@@ -200,7 +199,7 @@ func (psq *PostgreSQLQueue) consumeNotifications() {
 			if notification == nil {
 				continue
 			}
-			
+
 			if err := psq.handleNotification(notification); err != nil {
 				slog.Error("failed to handle notification", "session_id", psq.sessionID, "error", err)
 			}
@@ -353,7 +352,7 @@ func (psq *PostgreSQLQueue) publishToPostgreSQL(ctx context.Context, messageType
 
 	// Send NOTIFY command with timeout
 	channel := psq.getChannelName(messageType)
-	
+
 	// Use a transaction with timeout context
 	tx, err := psq.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -511,6 +510,12 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 		return nil, fmt.Errorf("PostgreSQL database not accessible: %w", err)
 	}
 
+	// Configure connection pool to prevent exhaustion
+	// Limit connections per queue factory instance
+	sqlDB.SetMaxOpenConns(25)                 // Reduced from default to prevent exhaustion
+	sqlDB.SetMaxIdleConns(5)                  // Keep fewer idle connections
+	sqlDB.SetConnMaxLifetime(5 * time.Minute) // Recycle connections regularly
+
 	psqlConfig := f.config
 
 	// Apply configuration overrides
@@ -519,6 +524,12 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 			psqlConfig.BufferSize = bufferSize
 		}
 	}
+
+	// Create with connection pooling configured
+	slog.Info("Creating PostgreSQL queue with connection pooling",
+		"session_id", sessionID,
+		"max_connections", 25,
+		"connection_pooling", true)
 
 	return NewPostgreSQLQueue(sessionID, db, psqlConfig)
 }
