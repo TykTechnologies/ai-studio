@@ -75,21 +75,7 @@ const (
 )
 
 // NewPostgreSQLQueue creates a new PostgreSQL-based message queue
-// This function now returns the optimized implementation to prevent connection exhaustion.
-// The original implementation created multiple connections per session which could exhaust PostgreSQL connection limits.
-func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (MessageQueue, error) {
-	// Log info about using the optimized version
-	slog.Info("Using optimized PostgreSQL queue implementation",
-		"session_id", sessionID,
-		"connection_reuse", true)
-
-	// Use the optimized implementation that reuses connections
-	return NewOptimizedPostgreSQLQueue(sessionID, db, config)
-}
-
-// NewPostgreSQLQueueLegacy creates the old PostgreSQL queue implementation
-// This is kept for reference but should not be used in production
-func NewPostgreSQLQueueLegacy(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
+func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
 	// Get the underlying SQL database connection
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -480,15 +466,13 @@ func (f *PostgreSQLQueueFactory) CreateQueue(sessionID string, config map[string
 		}
 	}
 
-	// Use the optimized implementation that reuses connections
-	return NewOptimizedPostgreSQLQueue(sessionID, f.db, pgConfig)
+	return NewPostgreSQLQueue(sessionID, f.db, pgConfig)
 }
 
 // Helper function for creating a PostgreSQL queue with default settings
 func NewDefaultPostgreSQLQueue(sessionID string, db *gorm.DB) (MessageQueue, error) {
 	config := DefaultPostgreSQLConfig()
-	// Use the optimized implementation
-	return NewOptimizedPostgreSQLQueue(sessionID, db, config)
+	return NewPostgreSQLQueue(sessionID, db, config)
 }
 
 // DeferredPostgreSQLQueueFactory creates PostgreSQL queues by connecting to the database at queue creation time
@@ -541,11 +525,11 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 		}
 	}
 
-	// Use the optimized implementation that reuses connections
-	slog.Info("Creating optimized PostgreSQL queue",
+	// Create with connection pooling configured
+	slog.Info("Creating PostgreSQL queue with connection pooling",
 		"session_id", sessionID,
 		"max_connections", 25,
 		"connection_pooling", true)
 
-	return NewOptimizedPostgreSQLQueue(sessionID, db, psqlConfig)
+	return NewPostgreSQLQueue(sessionID, db, psqlConfig)
 }
