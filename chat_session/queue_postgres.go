@@ -74,8 +74,22 @@ const (
 	PostgreSQLMessageTypeLLMResponse  = "llm_response"
 )
 
-// NewPostgreSQLQueue creates a new PostgreSQL-based message queue  
-func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
+// NewPostgreSQLQueue creates a new PostgreSQL-based message queue
+// This function now returns the optimized implementation to prevent connection exhaustion.
+// The original implementation created multiple connections per session which could exhaust PostgreSQL connection limits.
+func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) (MessageQueue, error) {
+	// Log info about using the optimized version
+	slog.Info("Using optimized PostgreSQL queue implementation",
+		"session_id", sessionID,
+		"connection_reuse", true)
+
+	// Use the optimized implementation that reuses connections
+	return NewOptimizedPostgreSQLQueue(sessionID, db, config)
+}
+
+// NewPostgreSQLQueueLegacy creates the old PostgreSQL queue implementation
+// This is kept for reference but should not be used in production
+func NewPostgreSQLQueueLegacy(sessionID string, db *gorm.DB, config PostgreSQLConfig) (*PostgreSQLQueue, error) {
 	// Get the underlying SQL database connection
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -144,13 +158,12 @@ func (psq *PostgreSQLQueue) setupListener() error {
 	return nil
 }
 
-
 // createListener creates a PostgreSQL listener with proper error handling
 func (psq *PostgreSQLQueue) createListener() *pq.Listener {
 	// Get database connection string from environment or config
 	// We'll use the same database connection info as the main application
 	var dsn string
-	
+
 	// Try to get DSN from environment first (most reliable)
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
 		dsn = databaseURL
@@ -200,7 +213,7 @@ func (psq *PostgreSQLQueue) consumeNotifications() {
 			if notification == nil {
 				continue
 			}
-			
+
 			if err := psq.handleNotification(notification); err != nil {
 				slog.Error("failed to handle notification", "session_id", psq.sessionID, "error", err)
 			}
@@ -353,7 +366,7 @@ func (psq *PostgreSQLQueue) publishToPostgreSQL(ctx context.Context, messageType
 
 	// Send NOTIFY command with timeout
 	channel := psq.getChannelName(messageType)
-	
+
 	// Use a transaction with timeout context
 	tx, err := psq.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -467,13 +480,15 @@ func (f *PostgreSQLQueueFactory) CreateQueue(sessionID string, config map[string
 		}
 	}
 
-	return NewPostgreSQLQueue(sessionID, f.db, pgConfig)
+	// Use the optimized implementation that reuses connections
+	return NewOptimizedPostgreSQLQueue(sessionID, f.db, pgConfig)
 }
 
 // Helper function for creating a PostgreSQL queue with default settings
 func NewDefaultPostgreSQLQueue(sessionID string, db *gorm.DB) (MessageQueue, error) {
 	config := DefaultPostgreSQLConfig()
-	return NewPostgreSQLQueue(sessionID, db, config)
+	// Use the optimized implementation
+	return NewOptimizedPostgreSQLQueue(sessionID, db, config)
 }
 
 // DeferredPostgreSQLQueueFactory creates PostgreSQL queues by connecting to the database at queue creation time
@@ -511,6 +526,12 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 		return nil, fmt.Errorf("PostgreSQL database not accessible: %w", err)
 	}
 
+	// Configure connection pool to prevent exhaustion
+	// Limit connections per queue factory instance
+	sqlDB.SetMaxOpenConns(25)                 // Reduced from default to prevent exhaustion
+	sqlDB.SetMaxIdleConns(5)                  // Keep fewer idle connections
+	sqlDB.SetConnMaxLifetime(5 * time.Minute) // Recycle connections regularly
+
 	psqlConfig := f.config
 
 	// Apply configuration overrides
@@ -520,5 +541,11 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 		}
 	}
 
-	return NewPostgreSQLQueue(sessionID, db, psqlConfig)
+	// Use the optimized implementation that reuses connections
+	slog.Info("Creating optimized PostgreSQL queue",
+		"session_id", sessionID,
+		"max_connections", 25,
+		"connection_pooling", true)
+
+	return NewOptimizedPostgreSQLQueue(sessionID, db, psqlConfig)
 }
