@@ -31,6 +31,8 @@ examples/file-based-demo/analytics/*.json
 utils/uc/*.json
 utils/uc/uc
 CLAUDE.md
+staging/*
+staging
 
 # Vow - AI accountability files
 .vow-challenge

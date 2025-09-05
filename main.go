@@ -25,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/startup"
 	"github.com/go-mail/mail"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -48,6 +49,11 @@ func main() {
 	})
 
 	appConf := config.Get()
+
+	// Perform connectivity tests before proceeding with initialization
+	if err := startup.TestConnectivity(appConf); err != nil {
+		log.Fatalf("Connectivity tests failed: %v", err)
+	}
 
 	var dialector gorm.Dialector
 	switch appConf.DatabaseType {
