@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Suppression Test</title>
+</head>
+<body>
+    <h1>Console Suppression Test</h1>
+    <p>Check the browser console to see if logs are suppressed.</p>
+    
+    <script>
+        // Simulate production environment
+        process = { env: { NODE_ENV: 'production' } };
+        
+        // Apply console suppression (similar to what's in index.js)
+        if (process.env.NODE_ENV === 'production') {
+            const noop = () => {};
+            const originalConsole = {
+                log: console.log,
+                warn: console.warn,
+                info: console.info
+            };
+            
+            console.log = noop;
+            console.info = noop;
+            console.warn = noop;
+            
+            console.restoreConsole = () => {
+                console.log = originalConsole.log;
+                console.warn = originalConsole.warn;
+                console.info = originalConsole.info;
+            };
+        }
+        
+        // Test console calls
+        console.log('This log should be suppressed in production');
+        console.warn('This warning should be suppressed in production');
+        console.error('This error should always appear');
+        console.info('This info should be suppressed in production');
+        
+        document.body.innerHTML += '<p>Console suppression test completed. Check console output.</p>';
+    </script>
+</body>
+</html>
