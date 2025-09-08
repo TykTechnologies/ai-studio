@@ -17,6 +17,7 @@ type App struct {
 	Credential      Credential
 	MonthlyBudget   *float64     `json:"monthly_budget" gorm:"column:monthly_budget"`
 	BudgetStartDate *time.Time   `json:"budget_start_date" gorm:"column:budget_start_date"`
+	IsOrphaned      bool         `json:"is_orphaned" gorm:"default:false"`
 	Datasources     []Datasource `json:"datasources" gorm:"many2many:app_datasources;"`
 	LLMs            []LLM        `json:"llms" gorm:"many2many:app_llms;"`
 	Tools           []Tool       `json:"tools" gorm:"many2many:app_tools;"`
