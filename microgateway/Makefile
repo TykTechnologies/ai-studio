@@ -2,6 +2,7 @@
 
 # Variables
 BINARY_NAME=microgateway
+CLI_BINARY_NAME=mgw
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_HASH=$(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -17,15 +18,22 @@ GOMOD=$(GOCMD) mod
 
 # Directories
 CMD_DIR=./cmd/microgateway
+CLI_CMD_DIR=./cmd/mgw
 DIST_DIR=./dist
 
-.PHONY: all build clean test coverage lint help deps tidy docker-build docker-compose-up
+.PHONY: all build build-cli build-both build-all build-cli-all clean test coverage lint help deps tidy docker-build docker-compose-up
 
 all: test build ## Run tests and build
 
-build: ## Build the binary
+build: ## Build the microgateway binary
 	@mkdir -p $(DIST_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME) $(CMD_DIR)
+
+build-cli: ## Build the CLI binary
+	@mkdir -p $(DIST_DIR)
+	$(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME) $(CLI_CMD_DIR)
+
+build-both: build build-cli ## Build both server and CLI binaries
 
 build-all: ## Build for all platforms
 	@mkdir -p $(DIST_DIR)
@@ -33,6 +41,13 @@ build-all: ## Build for all platforms
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 $(CMD_DIR)
 	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 $(CMD_DIR)
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe $(CMD_DIR)
+
+build-cli-all: ## Build CLI for all platforms
+	@mkdir -p $(DIST_DIR)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME)-linux-amd64 $(CLI_CMD_DIR)
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME)-darwin-amd64 $(CLI_CMD_DIR)
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME)-darwin-arm64 $(CLI_CMD_DIR)
+	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME)-windows-amd64.exe $(CLI_CMD_DIR)
 
 clean: ## Clean build artifacts
 	$(GOCLEAN)

@@ -31,23 +31,55 @@ docker-compose -f deployments/docker-compose.yml up
 ### Using Binary
 
 ```bash
-# Build the binary
-make build
+# Build both server and CLI
+make build-both
 
 # Create configuration
 cp configs/.env.example .env
 # Edit .env with your settings
 
 # Run migrations
-make migrate
+./dist/microgateway -migrate
 
 # Start the gateway
-make run
+./dist/microgateway
+
+# Use the CLI (in another terminal)
+export MGW_URL="http://localhost:8080" 
+export MGW_TOKEN="your-admin-token"
+./dist/mgw system health
 ```
 
-## Configuration
+## CLI Tool
 
-The gateway is configured through environment variables. See `configs/.env.example` for all available options.
+The microgateway includes a comprehensive CLI tool (`mgw`) for easy management:
+
+```bash
+# Build CLI
+make build-cli
+
+# Basic usage
+./dist/mgw llm list                                    # List LLMs
+./dist/mgw app create --name="My App" --email=me@example.com  # Create app
+./dist/mgw token create --app-id=1 --name="API Key"   # Generate token
+./dist/mgw analytics summary 1                        # View analytics
+
+# See CLI_EXAMPLES.md for complete usage examples
+```
+
+## Documentation
+
+### Complete Documentation Set
+- **[User Guide](USER_GUIDE.md)** - Complete setup and usage guide
+- **[API Reference](API_REFERENCE.md)** - Full API documentation with examples
+- **[Configuration Guide](CONFIGURATION.md)** - All configuration options and settings
+- **[Features Overview](FEATURES.md)** - Comprehensive feature documentation
+- **[CLI Examples](CLI_EXAMPLES.md)** - CLI usage examples and workflows
+- **[Build & Deploy](BUILD_DEPLOY.md)** - Compilation and deployment instructions
+
+### Configuration
+
+The gateway is configured through environment variables. See **[CONFIGURATION.md](CONFIGURATION.md)** for complete details.
 
 Key configuration areas:
 - **Server**: Port, TLS, timeouts

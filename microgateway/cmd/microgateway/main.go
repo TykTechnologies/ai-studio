@@ -28,10 +28,13 @@ var (
 func main() {
 	// Parse command line flags
 	var (
-		envFile = flag.String("env", ".env", "Path to environment file")
-		migrate = flag.Bool("migrate", false, "Run database migrations and exit")
-		version = flag.Bool("version", false, "Show version and exit")
-		_       = flag.String("config", "", "Path to config file (optional)")
+		envFile          = flag.String("env", ".env", "Path to environment file")
+		migrate          = flag.Bool("migrate", false, "Run database migrations and exit")
+		version          = flag.Bool("version", false, "Show version and exit")
+		createAdminToken = flag.Bool("create-admin-token", false, "Create admin token and exit")
+		adminName        = flag.String("admin-name", "Admin User", "Name for admin token")
+		adminExpires     = flag.String("admin-expires", "720h", "Admin token expiration (e.g., 24h, 720h)")
+		_                = flag.String("config", "", "Path to config file (optional)")
 	)
 	flag.Parse()
 
@@ -100,6 +103,22 @@ func main() {
 	serviceContainer, err := services.NewServiceContainer(db, cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize services")
+	}
+
+	// Create admin token if requested
+	if *createAdminToken {
+		token, err := createAdminTokenCommand(serviceContainer, *adminName, *adminExpires)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to create admin token")
+		}
+		
+		fmt.Printf("✅ Admin token created successfully!\n")
+		fmt.Printf("Token: %s\n", token)
+		fmt.Printf("Name: %s\n", *adminName)
+		fmt.Printf("Expires: %s\n", *adminExpires)
+		fmt.Printf("\nSave this token - it won't be shown again!\n")
+		fmt.Printf("Use it with the CLI: export MGW_TOKEN=\"%s\"\n", token)
+		os.Exit(0)
 	}
 
 	// Create and configure server
@@ -186,4 +205,56 @@ func setupLogging(cfg config.ObservabilityConfig) {
 
 	// Set global timestamp format
 	zerolog.TimeFieldFormat = time.RFC3339Nano
+}
+
+// createAdminTokenCommand creates an admin token for management API access
+func createAdminTokenCommand(serviceContainer *services.ServiceContainer, name, expiresStr string) (string, error) {
+	// Parse expiration duration
+	expires, err := time.ParseDuration(expiresStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid expiration format '%s' (use format like '24h', '720h'): %w", expiresStr, err)
+	}
+
+	// Ensure admin app exists (ID = 1, reserved for admin operations)
+	adminApp, err := ensureAdminAppExists(serviceContainer)
+	if err != nil {
+		return "", fmt.Errorf("failed to create admin app: %w", err)
+	}
+
+	// Generate admin token with admin scope
+	scopes := []string{"admin"}
+	token, err := serviceContainer.AuthProvider.GenerateToken(adminApp.ID, name, scopes, expires)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate admin token: %w", err)
+	}
+
+	return token, nil
+}
+
+// ensureAdminAppExists creates the admin app if it doesn't exist
+func ensureAdminAppExists(serviceContainer *services.ServiceContainer) (*database.App, error) {
+	// Try to get existing admin app (ID = 1)
+	adminApp, err := serviceContainer.Management.GetApp(1)
+	if err == nil {
+		// Admin app already exists
+		return adminApp, nil
+	}
+
+	// Create admin app
+	adminAppReq := &services.CreateAppRequest{
+		Name:           "Admin System",
+		Description:    "Administrative access for microgateway management",
+		OwnerEmail:     "admin@microgateway.local",
+		MonthlyBudget:  0, // No budget limit for admin
+		BudgetResetDay: 1,
+		RateLimitRPM:   0, // No rate limit for admin
+	}
+
+	adminApp, err = serviceContainer.Management.CreateApp(adminAppReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create admin app: %w", err)
+	}
+
+	log.Info().Uint("app_id", adminApp.ID).Msg("Created admin app for token management")
+	return adminApp, nil
 }
