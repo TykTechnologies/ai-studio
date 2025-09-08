@@ -375,6 +375,7 @@ type AppResponse struct {
 		ToolIDs         []uint     `json:"tool_ids"`
 		MonthlyBudget   *float64   `json:"monthly_budget"`
 		BudgetStartDate *time.Time `json:"budget_start_date"`
+		IsOrphaned      bool       `json:"is_orphaned"`
 	} `json:"attributes"`
 }
 
@@ -889,6 +890,7 @@ type AppDetailResponse struct {
 		ToolIDs         []uint           `json:"tool_ids"`
 		MonthlyBudget   *float64         `json:"monthly_budget"`
 		BudgetStartDate *time.Time       `json:"budget_start_date"`
+		IsOrphaned      bool             `json:"is_orphaned"`
 		Credential      CredentialDetail `json:"credential"`
 	} `json:"attributes"`
 }
