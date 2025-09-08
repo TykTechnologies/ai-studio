@@ -334,6 +334,7 @@ func serializeApp(app *models.App) AppResponse {
 			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
+			IsOrphaned      bool       `json:"is_orphaned"`
 		}{
 			Name:            app.Name,
 			Description:     app.Description,
@@ -344,6 +345,7 @@ func serializeApp(app *models.App) AppResponse {
 			ToolIDs:         getToolIDs(app.Tools),
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
+			IsOrphaned:      app.IsOrphaned,
 		},
 	}
 }

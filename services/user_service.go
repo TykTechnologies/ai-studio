@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
 )
 
 type UserDTO struct {
@@ -183,6 +184,40 @@ func (s *Service) DeleteUser(user *models.User) error {
 	tx := s.DB.Begin()
 	if tx.Error != nil {
 		return tx.Error
+	}
+
+	// Get all apps owned by this user and deactivate their credentials
+	var userApps []models.App
+	if err := tx.Where("user_id = ?", user.ID).Find(&userApps).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to find user's apps: %w", err)
+	}
+
+	// Deactivate credentials for all user's apps and mark them as orphaned
+	for _, app := range userApps {
+		// Mark the app as orphaned since its user is being deleted
+		if err := tx.Model(&app).Update("is_orphaned", true).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to mark app %d as orphaned: %w", app.ID, err)
+		}
+
+		if app.CredentialID != 0 {
+			var credential models.Credential
+			if err := tx.First(&credential, app.CredentialID).Error; err != nil {
+				if !errors.Is(err, gorm.ErrRecordNotFound) {
+					tx.Rollback()
+					return fmt.Errorf("failed to find credential for app %d: %w", app.ID, err)
+				}
+				// If credential doesn't exist, continue with next app
+				continue
+			}
+
+			// Deactivate the credential to revoke access
+			if err := credential.Deactivate(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to deactivate credential for app %d: %w", app.ID, err)
+			}
+		}
 	}
 
 	if err := user.DeleteGroupAssociation(tx); err != nil {

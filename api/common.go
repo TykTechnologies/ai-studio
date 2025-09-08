@@ -516,6 +516,7 @@ func (a *API) createUserApp(c *gin.Context) {
 			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
+			IsOrphaned      bool       `json:"is_orphaned"`
 		}{
 			Name:          app.Name,
 			Description:   app.Description,
@@ -532,6 +533,7 @@ func (a *API) createUserApp(c *gin.Context) {
 			}(),
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
+			IsOrphaned:      app.IsOrphaned,
 		},
 	}
 
@@ -762,6 +764,7 @@ func (a *API) getUserApps(c *gin.Context) {
 				ToolIDs         []uint     `json:"tool_ids"`
 				MonthlyBudget   *float64   `json:"monthly_budget"`
 				BudgetStartDate *time.Time `json:"budget_start_date"`
+				IsOrphaned      bool       `json:"is_orphaned"`
 			}{
 				Name:            app.Name,
 				Description:     app.Description,
@@ -790,6 +793,7 @@ func (a *API) getUserApps(c *gin.Context) {
 					}
 					return ids
 				}(),
+				IsOrphaned: app.IsOrphaned,
 			},
 		}
 	}
@@ -892,6 +896,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			ToolIDs         []uint           `json:"tool_ids"`
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
+			IsOrphaned      bool             `json:"is_orphaned"`
 			Credential      CredentialDetail `json:"credential"`
 		}{
 			Name:         app.Name,
@@ -926,6 +931,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			},
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
+			IsOrphaned:      app.IsOrphaned,
 		},
 	}
 
