@@ -41,3 +41,5 @@ envs/*
 .vow-cooldown
 
 .claude/settings.local.json
+microgateway/dist
+microgateway/bin/microgateway
