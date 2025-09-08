@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -17,6 +18,7 @@ import (
 type Server struct {
 	config   *config.Config
 	services *services.ServiceContainer
+	gateway  aigateway.Gateway
 	router   *gin.Engine
 	server   *http.Server
 }
@@ -30,10 +32,31 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Create service adapters for AI Gateway integration
+	gatewayServiceAdapter := services.NewGatewayServiceAdapter(
+		serviceContainer.GatewayService,
+		serviceContainer.Management,
+		serviceContainer.AnalyticsService,
+	)
+
+	budgetServiceAdapter := services.NewBudgetServiceAdapter(
+		serviceContainer.BudgetService,
+		serviceContainer.GatewayService,
+	)
+
+	// Create AI Gateway instance
+	gateway := aigateway.NewWithAnalytics(
+		gatewayServiceAdapter,
+		budgetServiceAdapter,
+		nil, // Use default analytics for now
+		&aigateway.Config{Port: cfg.Server.Port},
+	)
+
 	// Setup API router
 	routerConfig := &api.RouterConfig{
 		AuthProvider:  serviceContainer.AuthProvider,
 		Services:      serviceContainer,
+		Gateway:       gateway, // Pass gateway to router
 		EnableSwagger: cfg.IsDevelopment(),
 		EnableMetrics: cfg.Observability.EnableMetrics,
 	}
@@ -52,6 +75,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 	return &Server{
 		config:   cfg,
 		services: serviceContainer,
+		gateway:  gateway,
 		router:   router,
 		server:   server,
 	}, nil

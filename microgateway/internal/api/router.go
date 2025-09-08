@@ -4,6 +4,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/middleware"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
@@ -15,6 +16,7 @@ import (
 type RouterConfig struct {
 	AuthProvider  auth.AuthProvider
 	Services      *services.ServiceContainer
+	Gateway       aigateway.Gateway
 	EnableSwagger bool
 	EnableMetrics bool
 }
@@ -110,15 +112,16 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		}
 	}
 
-	// Gateway proxy endpoints would be integrated with the AI Gateway library
-	// For now, we'll add placeholder routes
-	gateway := router.Group("/")
-	gateway.Use(auth.RequireAuth(config.AuthProvider))
-	{
-		gateway.Any("/llm/rest/:llmSlug/*path", handlers.ProxyToGateway(config.Services))
-		gateway.Any("/llm/stream/:llmSlug/*path", handlers.ProxyToGateway(config.Services))
-		gateway.Any("/tools/:toolSlug/*path", handlers.ProxyToGateway(config.Services))
-		gateway.Any("/datasource/:dsSlug/*path", handlers.ProxyToGateway(config.Services))
+	// Gateway proxy endpoints - mount the AI Gateway handler
+	if config.Gateway != nil {
+		gateway := router.Group("/")
+		gateway.Use(auth.RequireAuth(config.AuthProvider))
+		{
+			// Mount the AI Gateway handler for LLM, tools, and datasource endpoints
+			gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
+			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
+			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
+		}
 	}
 
 	// Metrics endpoint if enabled

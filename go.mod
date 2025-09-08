@@ -18,6 +18,7 @@ require (
 	github.com/gorilla/sessions v1.2.1
 	github.com/gosimple/slug v1.15.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.10.9
 	github.com/liushuangls/go-anthropic/v2 v2.8.0
 	github.com/lu4p/cat v0.1.5
 	github.com/mark3labs/mcp-go v0.31.0
@@ -140,7 +141,6 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/lonelycode/go-uuid v0.0.0-20141202165402-ed3ca8a15a93 // indirect
 	github.com/lonelycode/osin v0.0.0-20160423095202-da239c9dacb6 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
