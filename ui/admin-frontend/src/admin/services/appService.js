@@ -57,3 +57,12 @@ export const activateCredential = async (appId) => {
     throw handleApiError(error);
   }
 };
+
+export const deactivateCredential = async (appId) => {
+  try {
+    const response = await apiClient.post(`/apps/${appId}/deactivate-credential`);
+    return response.data?.data;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};

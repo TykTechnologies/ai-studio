@@ -20,6 +20,7 @@ import {
   ListItem,
   ListItemText,
 } from "@mui/material";
+import WarningIcon from "@mui/icons-material/Warning";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { Line } from "react-chartjs-2";
@@ -601,7 +602,24 @@ const AppDetails = () => {
           </Grid>
           <Grid item xs={9}>
             <FieldValue>
-              {user ? user.attributes.name : "Loading..."}
+              {app.attributes.is_orphaned ? (
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Chip
+                    icon={<WarningIcon />}
+                    label="Orphaned App"
+                    color="warning"
+                    size="small"
+                    variant="outlined"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    (Original user has been deleted)
+                  </Typography>
+                </Box>
+              ) : user ? (
+                user.attributes.name
+              ) : (
+                "Loading..."
+              )}
             </FieldValue>
           </Grid>
           <Grid item xs={3}>
