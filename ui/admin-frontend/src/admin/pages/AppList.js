@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
+import { deactivateCredential } from "../services/appService";
 import {
   Table,
   TableBody,
@@ -14,10 +15,14 @@ import {
   MenuItem,
   Snackbar,
   Box,
+  Chip,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
+import WarningIcon from "@mui/icons-material/Warning";
+import SecurityIcon from "@mui/icons-material/Security";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import ConfirmationDialog from "../components/common/ConfirmationDialog";
 import {
   StyledPaper,
   TitleBox,
@@ -43,6 +48,11 @@ const AppList = () => {
     open: false,
     message: "",
     severity: "success",
+  });
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    appId: null,
+    appName: "",
   });
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("desc");
@@ -179,6 +189,24 @@ const AppList = () => {
     return credential.active ? "Approved" : "Inactive";
   };
 
+  const getUserDisplay = (app) => {
+    if (app.attributes.is_orphaned) {
+      return (
+        <Box display="flex" alignItems="center" gap={1}>
+          <Chip
+            icon={<WarningIcon />}
+            label="Orphaned App"
+            color="warning"
+            size="small"
+            variant="outlined"
+          />
+        </Box>
+      );
+    }
+    
+    return users[app.attributes.user_id] || "Unknown";
+  };
+
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/apps/${id}`);
@@ -197,6 +225,41 @@ const AppList = () => {
       });
     }
     handleMenuClose();
+  };
+
+  const handleDisableCredentials = (app) => {
+    setConfirmDialog({
+      open: true,
+      appId: app.id,
+      appName: app.attributes.name,
+    });
+    handleMenuClose();
+  };
+
+  const handleConfirmDisableCredentials = async () => {
+    try {
+      await deactivateCredential(confirmDialog.appId);
+      setSnackbar({
+        open: true,
+        message: "App credentials disabled successfully",
+        severity: "success",
+      });
+      // Refresh credentials and apps data
+      fetchCredentials();
+      fetchApps();
+    } catch (error) {
+      console.error("Error disabling credentials", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to disable credentials",
+        severity: "error",
+      });
+    }
+    setConfirmDialog({ open: false, appId: null, appName: "" });
+  };
+
+  const handleCancelDisableCredentials = () => {
+    setConfirmDialog({ open: false, appId: null, appName: "" });
   };
 
   const handleAppClick = (app) => {
@@ -320,7 +383,7 @@ const AppList = () => {
                       <StyledTableCell>{app.attributes.name}</StyledTableCell>
                       <StyledTableCell>{app.attributes.description}</StyledTableCell>
                       <StyledTableCell>
-                        {users[app.attributes.user_id] || "Unknown"}
+                        {getUserDisplay(app)}
                       </StyledTableCell>
                       <StyledTableCell>
                         {getApprovalStatus(app)}
@@ -363,6 +426,13 @@ const AppList = () => {
         >
           Edit app
         </MenuItem>
+        <MenuItem
+          onClick={() => handleDisableCredentials(selectedApp)}
+          disabled={!selectedApp || getApprovalStatus(selectedApp) !== "Approved"}
+        >
+          <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />
+          Disable credentials
+        </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedApp?.id)}>
           Delete app
         </MenuItem>
@@ -382,6 +452,22 @@ const AppList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <ConfirmationDialog
+        open={confirmDialog.open}
+        title="Disable App Credentials"
+        message={`Are you sure you want to disable credentials for "${confirmDialog.appName}"? This will prevent the app from accessing the API.`}
+        confirmText="The app will lose access immediately."
+        buttonLabel="Disable Credentials"
+        onConfirm={handleConfirmDisableCredentials}
+        onCancel={handleCancelDisableCredentials}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
+      />
     </>
   );
 };
