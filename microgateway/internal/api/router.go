@@ -25,10 +25,8 @@ type RouterConfig struct {
 
 // SetupRouter configures and returns the main application router
 func SetupRouter(config *RouterConfig) *gin.Engine {
-	router := gin.New()
-
-	// Essential middleware only
-	router.Use(gin.Recovery())
+	// Use gin.Default() which includes logging and recovery middleware
+	router := gin.Default()
 
 	// Health endpoints (no auth required)
 	router.GET("/health", handlers.HealthCheck(config.Services))

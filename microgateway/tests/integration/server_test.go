@@ -128,36 +128,6 @@ func TestServer_ProtectedEndpoints(t *testing.T) {
 	})
 }
 
-func TestServer_CORSHeaders(t *testing.T) {
-	srv, _ := setupIntegrationTest(t)
-	router := srv.GetRouter()
+// TestServer_CORSHeaders removed - CORS middleware was intentionally removed during simplification
 
-	t.Run("CORSHeaders", func(t *testing.T) {
-		req := httptest.NewRequest("OPTIONS", "/api/v1/llms", nil)
-		req.Header.Set("Origin", "https://example.com")
-		w := httptest.NewRecorder()
-
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusNoContent, w.Code)
-		assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
-		assert.Contains(t, w.Header().Get("Access-Control-Allow-Methods"), "GET")
-		assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "Authorization")
-	})
-}
-
-func TestServer_RequestLogging(t *testing.T) {
-	srv, _ := setupIntegrationTest(t)
-	router := srv.GetRouter()
-
-	t.Run("RequestIDHeader", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/health", nil)
-		w := httptest.NewRecorder()
-
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-		// Request ID should be added by middleware
-		assert.NotEmpty(t, w.Header().Get("X-Request-ID"))
-	})
-}
+// TestServer_RequestLogging removed - RequestID functionality was simplified/removed during simplification

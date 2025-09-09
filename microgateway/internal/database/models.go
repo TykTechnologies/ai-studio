@@ -35,23 +35,23 @@ type TokenCache struct {
 // LLM represents an LLM configuration
 type LLM struct {
 	gorm.Model
-	Name            string         `gorm:"not null"`
-	Slug            string         `gorm:"uniqueIndex;not null"`
-	Vendor          string         `gorm:"not null"`
-	Endpoint        string
-	APIKeyEncrypted string
-	DefaultModel    string
-	MaxTokens       int    `gorm:"default:4096"`
-	TimeoutSeconds  int    `gorm:"default:30"`
-	RetryCount      int    `gorm:"default:3"`
-	IsActive        bool   `gorm:"default:true;index:idx_llm_active"`
-	MonthlyBudget   float64
-	RateLimitRPM    int
-	Metadata        datatypes.JSON `gorm:"type:json"`
+	Name            string         `gorm:"not null" json:"name"`
+	Slug            string         `gorm:"uniqueIndex;not null" json:"slug"`
+	Vendor          string         `gorm:"not null" json:"vendor"`
+	Endpoint        string         `json:"endpoint"`
+	APIKeyEncrypted string         `json:"api_key_encrypted"`
+	DefaultModel    string         `json:"default_model"`
+	MaxTokens       int            `gorm:"default:4096" json:"max_tokens"`
+	TimeoutSeconds  int            `gorm:"default:30" json:"timeout_seconds"`
+	RetryCount      int            `gorm:"default:3" json:"retry_count"`
+	IsActive        bool           `gorm:"default:true;index:idx_llm_active" json:"is_active"`
+	MonthlyBudget   float64        `json:"monthly_budget"`
+	RateLimitRPM    int            `json:"rate_limit_rpm"`
+	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
 	
 	// Authentication configuration for pluggable auth mechanisms
-	AuthMechanism   string         `gorm:"default:'token'"` // "token", "oauth", "api-key", "custom"
-	AuthConfig      datatypes.JSON `gorm:"type:json"`       // Provider-specific configuration
+	AuthMechanism   string         `gorm:"default:'token'" json:"auth_mechanism"` // "token", "oauth", "api-key", "custom"
+	AuthConfig      datatypes.JSON `gorm:"type:json" json:"auth_config"`          // Provider-specific configuration
 
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`
@@ -63,16 +63,16 @@ type LLM struct {
 // App represents an application
 type App struct {
 	gorm.Model
-	Name            string         `gorm:"not null"`
-	Description     string
-	OwnerEmail      string         `gorm:"index"`
-	IsActive        bool           `gorm:"default:true;index"`
-	MonthlyBudget   float64
-	BudgetStartDate *time.Time
-	BudgetResetDay  int            `gorm:"default:1"`
-	RateLimitRPM    int
-	AllowedIPs      datatypes.JSON `gorm:"type:json"`
-	Metadata        datatypes.JSON `gorm:"type:json"`
+	Name            string         `gorm:"not null" json:"name"`
+	Description     string         `json:"description"`
+	OwnerEmail      string         `gorm:"index" json:"owner_email"`
+	IsActive        bool           `gorm:"default:true;index" json:"is_active"`
+	MonthlyBudget   float64        `json:"monthly_budget"`
+	BudgetStartDate *time.Time     `json:"budget_start_date"`
+	BudgetResetDay  int            `gorm:"default:1" json:"budget_reset_day"`
+	RateLimitRPM    int            `json:"rate_limit_rpm"`
+	AllowedIPs      datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
+	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
 
 	// Relationships
 	Credentials []Credential     `gorm:"foreignKey:AppID"`

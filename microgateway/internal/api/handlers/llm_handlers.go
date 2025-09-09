@@ -4,6 +4,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/gin-gonic/gin"
@@ -254,9 +255,15 @@ func GetLLMStats(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 
 // isNotFoundError checks if an error indicates a resource was not found
 func isNotFoundError(err error) bool {
-	return err != nil && (err.Error() == "LLM not found" || 
-		err.Error() == "app not found" ||
-		err.Error() == "credential not found")
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "LLM not found") ||
+		   strings.Contains(errMsg, "app not found") ||
+		   strings.Contains(errMsg, "credential not found") ||
+		   strings.Contains(errMsg, "not found") ||
+		   strings.Contains(errMsg, "record not found")
 }
 
 // isConflictError checks if an error indicates a conflict (duplicate resource)

@@ -375,3 +375,5 @@ func DeleteCredential(serviceContainer *services.ServiceContainer) gin.HandlerFu
 		})
 	}
 }
+
+// Helper functions defined in llm_handlers.go

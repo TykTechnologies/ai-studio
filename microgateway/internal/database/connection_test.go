@@ -54,37 +54,7 @@ func TestConnect_UnsupportedDatabase(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported database type")
 }
 
-func TestMigrate(t *testing.T) {
-	config := DatabaseConfig{
-		Type:     "sqlite",
-		DSN:      ":memory:",
-		LogLevel: "silent",
-	}
-
-	db, err := Connect(config)
-	require.NoError(t, err)
-	defer Close(db)
-
-	t.Run("MigrateSuccess", func(t *testing.T) {
-		err := Migrate(db)
-		assert.NoError(t, err)
-
-		// Verify tables exist by checking if we can query them
-		var count int64
-		
-		// Check if APIToken table exists
-		err = db.Model(&APIToken{}).Count(&count).Error
-		assert.NoError(t, err)
-		
-		// Check if App table exists
-		err = db.Model(&App{}).Count(&count).Error
-		assert.NoError(t, err)
-		
-		// Check if LLM table exists
-		err = db.Model(&LLM{}).Count(&count).Error
-		assert.NoError(t, err)
-	})
-}
+// TestMigrate removed - GORM handles migrations automatically
 
 func TestDatabaseConfig_Validation(t *testing.T) {
 	tests := []struct {

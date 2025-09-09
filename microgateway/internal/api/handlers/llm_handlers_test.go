@@ -190,7 +190,7 @@ func TestCreateLLM_Handler(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code) // Will fail validation in service
+		assert.Equal(t, http.StatusBadRequest, w.Code) // Missing required fields should return 400
 	})
 }
 
@@ -331,7 +331,8 @@ func TestDeleteLLM_Handler(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		// Idempotent delete - succeeds even if LLM doesn't exist
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }
 

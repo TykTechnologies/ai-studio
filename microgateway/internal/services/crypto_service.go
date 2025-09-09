@@ -175,7 +175,7 @@ func ValidateEncryptionKey(key string) error {
 
 	// Check for common weak keys
 	weakKeys := []string{
-		"change-me-in-production00000000",
+		"change-me-in-production000000000",
 		"00000000000000000000000000000000",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}

@@ -156,12 +156,17 @@ func TestRepository_App_Operations(t *testing.T) {
 	})
 
 	t.Run("ListApps", func(t *testing.T) {
-		// Create another app
+		// Create another app (create as active first due to GORM default)
 		app2 := &App{
 			Name:     "Test App 2",
-			IsActive: false,
+			IsActive: true,
 		}
 		err := repo.CreateApp(app2)
+		require.NoError(t, err)
+		
+		// Now update to inactive
+		app2.IsActive = false
+		err = repo.UpdateApp(app2)
 		require.NoError(t, err)
 
 		// List active apps
