@@ -226,16 +226,34 @@ func (a *GatewayServiceAdapter) CallToolOperation(toolID uint, operationID strin
 	return nil, fmt.Errorf("tool operations not supported in microgateway")
 }
 
-// GetModelPriceByModelNameAndVendor returns model pricing (placeholder implementation)
+// GetModelPriceByModelNameAndVendor returns model pricing from database
 func (a *GatewayServiceAdapter) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
-	// Return basic pricing for common models
+	// Look up pricing in database using management service
+	dbPrice, err := a.management.GetModelPrice(modelName, vendor)
+	
+	if err != nil {
+		// Return default pricing if not found
+		log.Debug().Str("model", modelName).Str("vendor", vendor).Msg("No pricing found, using default rates")
+		return &models.ModelPrice{
+			ID:        0,
+			ModelName: modelName,
+			Vendor:    vendor,
+			CPT:       0.0003,  // Default: $0.0003 per 1K prompt tokens
+			CPIT:      0.0015,  // Default: $0.0015 per 1K completion tokens
+			Currency:  "USD",
+		}, nil
+	}
+
+	// Convert database model to midsommar model
 	return &models.ModelPrice{
-		ID:        1,
-		ModelName: modelName,
-		Vendor:    vendor,
-		CPT:       0.001,  // $0.001 per token (placeholder)
-		CPIT:      0.002,  // $0.002 per token (placeholder)
-		Currency:  "USD",
+		ID:           dbPrice.ID,
+		ModelName:    dbPrice.ModelName,
+		Vendor:       dbPrice.Vendor,
+		CPT:          dbPrice.CPT,
+		CPIT:         dbPrice.CPIT,
+		CacheWritePT: dbPrice.CacheWritePT,
+		CacheReadPT:  dbPrice.CacheReadPT,
+		Currency:     dbPrice.Currency,
 	}, nil
 }
 

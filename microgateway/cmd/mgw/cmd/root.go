@@ -66,6 +66,7 @@ func init() {
 	rootCmd.AddCommand(tokenCmd)
 	rootCmd.AddCommand(budgetCmd)
 	rootCmd.AddCommand(analyticsCmd)
+	rootCmd.AddCommand(pricingCmd)
 	rootCmd.AddCommand(systemCmd)
 }
 

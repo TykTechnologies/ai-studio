@@ -142,6 +142,8 @@ func printCompactMapTable(data interface{}, sampleMap map[string]interface{}) er
 		return printBudgetTable(v)
 	case "analytics":
 		return printAnalyticsTable(v)
+	case "pricing":
+		return printPricingTable(v)
 	default:
 		// Generic table for unknown types
 		return printGenericMapTable(v)
@@ -194,6 +196,16 @@ func detectResourceType(sampleMap map[string]interface{}) string {
 	}
 	if _, hasRequestID := sampleMap["RequestID"]; hasRequestID {
 		return "analytics"
+	}
+	if _, hasModelName := sampleMap["model_name"]; hasModelName {
+		if _, hasCPT := sampleMap["cpt"]; hasCPT {
+			return "pricing"
+		}
+	}
+	if _, hasModelName := sampleMap["ModelName"]; hasModelName {
+		if _, hasCPT := sampleMap["CPT"]; hasCPT {
+			return "pricing"
+		}
 	}
 	return "generic"
 }
@@ -398,6 +410,106 @@ func printAnalyticsTable(v reflect.Value) error {
 	return nil
 }
 
+// printPricingTable shows model prices with: ID, Vendor, Model, Input Price, Output Price, Currency
+func printPricingTable(v reflect.Value) error {
+	tbl := table.New("ID", "VENDOR", "MODEL", "INPUT ($/MTok)", "OUTPUT ($/MTok)", "CACHE_W ($/MTok)", "CACHE_R ($/MTok)")
+	
+	for i := 0; i < v.Len(); i++ {
+		if itemMap, ok := v.Index(i).Interface().(map[string]interface{}); ok {
+			id := getMapValueCaseInsensitive(itemMap, []string{"id", "ID"}, "")
+			vendor := getMapValueCaseInsensitive(itemMap, []string{"vendor", "Vendor"}, "")
+			modelName := getMapValueCaseInsensitive(itemMap, []string{"model_name", "ModelName"}, "")
+			cpit := getMapValueCaseInsensitive(itemMap, []string{"cpit", "CPIT"}, 0.0)
+			cpt := getMapValueCaseInsensitive(itemMap, []string{"cpt", "CPT"}, 0.0)
+			cacheWritePT := getMapValueCaseInsensitive(itemMap, []string{"cache_write_pt", "CacheWritePT"}, 0.0)
+			cacheReadPT := getMapValueCaseInsensitive(itemMap, []string{"cache_read_pt", "CacheReadPT"}, 0.0)
+			
+			// Convert from per-token to per-million for display
+			cpitFloat := 0.0
+			if val, ok := cpit.(float64); ok {
+				cpitFloat = val * 1000000  // Convert to per-million for display
+			}
+			
+			cptFloat := 0.0
+			if val, ok := cpt.(float64); ok {
+				cptFloat = val * 1000000  // Convert to per-million for display
+			}
+			
+			cacheWriteFloat := 0.0
+			if val, ok := cacheWritePT.(float64); ok {
+				cacheWriteFloat = val * 1000000  // Convert to per-million for display
+			}
+			
+			cacheReadFloat := 0.0
+			if val, ok := cacheReadPT.(float64); ok {
+				cacheReadFloat = val * 1000000  // Convert to per-million for display
+			}
+			
+			// Truncate model name if too long
+			modelDisplay := fmt.Sprintf("%v", modelName)
+			if len(modelDisplay) > 20 {
+				modelDisplay = modelDisplay[:17] + "..."
+			}
+			
+			tbl.AddRow(id, vendor, modelDisplay, 
+				fmt.Sprintf("$%.2f", cpitFloat),
+				fmt.Sprintf("$%.2f", cptFloat),
+				fmt.Sprintf("$%.2f", cacheWriteFloat),
+				fmt.Sprintf("$%.2f", cacheReadFloat))
+		}
+	}
+	
+	tbl.Print()
+	return nil
+}
+
+// printPricingItem prints a single pricing item with proper per-million conversion
+func printPricingItem(dataMap map[string]interface{}, w *tabwriter.Writer) error {
+	id := getMapValueCaseInsensitive(dataMap, []string{"id", "ID"}, "")
+	vendor := getMapValueCaseInsensitive(dataMap, []string{"vendor", "Vendor"}, "")
+	modelName := getMapValueCaseInsensitive(dataMap, []string{"model_name", "ModelName"}, "")
+	cpit := getMapValueCaseInsensitive(dataMap, []string{"cpit", "CPIT"}, 0.0)
+	cpt := getMapValueCaseInsensitive(dataMap, []string{"cpt", "CPT"}, 0.0)
+	cacheWritePT := getMapValueCaseInsensitive(dataMap, []string{"cache_write_pt", "CacheWritePT"}, 0.0)
+	cacheReadPT := getMapValueCaseInsensitive(dataMap, []string{"cache_read_pt", "CacheReadPT"}, 0.0)
+	currency := getMapValueCaseInsensitive(dataMap, []string{"currency", "Currency"}, "USD")
+	createdAt := getMapValueCaseInsensitive(dataMap, []string{"created_at", "CreatedAt"}, "")
+
+	// Convert to per-million for display
+	cpitFloat := 0.0
+	if val, ok := cpit.(float64); ok {
+		cpitFloat = val * 1000000
+	}
+	
+	cptFloat := 0.0
+	if val, ok := cpt.(float64); ok {
+		cptFloat = val * 1000000
+	}
+	
+	cacheWriteFloat := 0.0
+	if val, ok := cacheWritePT.(float64); ok {
+		cacheWriteFloat = val * 1000000
+	}
+	
+	cacheReadFloat := 0.0
+	if val, ok := cacheReadPT.(float64); ok {
+		cacheReadFloat = val * 1000000
+	}
+
+	// Print pricing details
+	fmt.Fprintf(w, "ID:\t%v\n", id)
+	fmt.Fprintf(w, "Vendor:\t%v\n", vendor)
+	fmt.Fprintf(w, "Model:\t%v\n", modelName)
+	fmt.Fprintf(w, "Input Price ($/MTok):\t$%.2f\n", cpitFloat)
+	fmt.Fprintf(w, "Output Price ($/MTok):\t$%.2f\n", cptFloat)
+	fmt.Fprintf(w, "Cache Write Price ($/MTok):\t$%.2f\n", cacheWriteFloat)
+	fmt.Fprintf(w, "Cache Read Price ($/MTok):\t$%.2f\n", cacheReadFloat)
+	fmt.Fprintf(w, "Currency:\t%v\n", currency)
+	fmt.Fprintf(w, "Created At:\t%v\n", createdAt)
+	
+	return w.Flush()
+}
+
 // printGenericMapTable prints a generic table for unknown resource types
 func printGenericMapTable(v reflect.Value) error {
 	if v.Len() == 0 {
@@ -531,6 +643,11 @@ func printTableItem(data interface{}) error {
 
 	// Handle map[string]interface{} specially
 	if dataMap, ok := data.(map[string]interface{}); ok {
+		// Special handling for pricing data
+		if detectResourceType(dataMap) == "pricing" {
+			return printPricingItem(dataMap, w)
+		}
+		
 		for key, value := range dataMap {
 			fmt.Fprintf(w, "%s:\t%v\n", key, formatInterfaceValue(value))
 		}

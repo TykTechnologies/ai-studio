@@ -103,6 +103,16 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			analytics.GET("/summary", handlers.GetAnalyticsSummary(config.Services))
 			analytics.GET("/costs", handlers.GetCostAnalysis(config.Services))
 		}
+
+		// Model Pricing management
+		pricing := protected.Group("/pricing")
+		{
+			pricing.GET("", handlers.ListModelPrices(config.Services))
+			pricing.POST("", handlers.CreateModelPrice(config.Services))
+			pricing.GET("/:id", handlers.GetModelPrice(config.Services))
+			pricing.PUT("/:id", handlers.UpdateModelPrice(config.Services))
+			pricing.DELETE("/:id", handlers.DeleteModelPrice(config.Services))
+		}
 	}
 
 	// Gateway endpoints - mount the AI Gateway handler with middleware

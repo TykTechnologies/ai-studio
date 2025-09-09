@@ -535,3 +535,105 @@ func (s *ManagementService) GetAppStats(appID uint) (map[string]interface{}, err
 		"token_count":      tokenCount,
 	}, nil
 }
+
+// Model Pricing Management Implementation
+
+// GetModelPrice retrieves pricing for a specific model and vendor
+func (s *ManagementService) GetModelPrice(modelName, vendor string) (*database.ModelPrice, error) {
+	var price database.ModelPrice
+	err := s.db.Where("model_name = ? AND vendor = ?", modelName, vendor).
+		Order("created_at DESC").
+		First(&price).Error
+	
+	if err != nil {
+		return nil, fmt.Errorf("pricing not found for model %s from vendor %s: %w", modelName, vendor, err)
+	}
+	
+	return &price, nil
+}
+
+// CreateModelPrice creates a new model pricing entry
+func (s *ManagementService) CreateModelPrice(req *CreateModelPriceRequest) (*database.ModelPrice, error) {
+	// Set defaults
+	currency := req.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+
+	price := &database.ModelPrice{
+		Vendor:       req.Vendor,
+		ModelName:    req.ModelName,
+		CPT:          req.CPT,          // Cost per token (completion/output)
+		CPIT:         req.CPIT,         // Cost per input token (prompt)  
+		CacheWritePT: req.CacheWritePT, // Cost per cache write token
+		CacheReadPT:  req.CacheReadPT,  // Cost per cache read token
+		Currency:     currency,
+	}
+
+	if err := s.db.Create(price).Error; err != nil {
+		return nil, fmt.Errorf("failed to create model price: %w", err)
+	}
+
+	return price, nil
+}
+
+// ListModelPrices lists all model prices, optionally filtered by vendor
+func (s *ManagementService) ListModelPrices(vendor string) ([]database.ModelPrice, error) {
+	var prices []database.ModelPrice
+	query := s.db.Order("vendor, model_name, created_at DESC")  // Use created_at instead of effective_date
+	
+	if vendor != "" {
+		query = query.Where("vendor = ?", vendor)
+	}
+	
+	if err := query.Find(&prices).Error; err != nil {
+		return nil, fmt.Errorf("failed to list model prices: %w", err)
+	}
+	
+	return prices, nil
+}
+
+// UpdateModelPrice updates an existing model price
+func (s *ManagementService) UpdateModelPrice(id uint, req *UpdateModelPriceRequest) (*database.ModelPrice, error) {
+	var price database.ModelPrice
+	if err := s.db.First(&price, id).Error; err != nil {
+		return nil, fmt.Errorf("model price not found: %w", err)
+	}
+
+	// Update fields
+	if req.CPT != nil {
+		price.CPT = *req.CPT
+	}
+	if req.CPIT != nil {
+		price.CPIT = *req.CPIT
+	}
+	if req.CacheWritePT != nil {
+		price.CacheWritePT = *req.CacheWritePT
+	}
+	if req.CacheReadPT != nil {
+		price.CacheReadPT = *req.CacheReadPT
+	}
+	if req.Currency != nil {
+		price.Currency = *req.Currency
+	}
+
+	if err := s.db.Save(&price).Error; err != nil {
+		return nil, fmt.Errorf("failed to update model price: %w", err)
+	}
+
+	return &price, nil
+}
+
+// DeleteModelPrice deletes a model price entry
+func (s *ManagementService) DeleteModelPrice(id uint) error {
+	result := s.db.Delete(&database.ModelPrice{}, id)
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete model price: %w", result.Error)
+	}
+	
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("model price not found")
+	}
+	
+	return nil
+}

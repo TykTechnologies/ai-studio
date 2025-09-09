@@ -77,20 +77,21 @@ CREATE TABLE app_llms (
 ALTER TABLE app_llms ADD CONSTRAINT fk_app_llms_app_id FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE;
 ALTER TABLE app_llms ADD CONSTRAINT fk_app_llms_llm_id FOREIGN KEY (llm_id) REFERENCES llms(id) ON DELETE CASCADE;
 
--- Model pricing table
+-- Model pricing table (matches AI Gateway interface)
 CREATE TABLE model_prices (
     id SERIAL PRIMARY KEY,
     vendor VARCHAR(100) NOT NULL,
     model_name VARCHAR(255) NOT NULL,
-    prompt_price DECIMAL(10,8) NOT NULL, -- Price per token
-    completion_price DECIMAL(10,8) NOT NULL,
+    cpt DECIMAL(12,10) NOT NULL,            -- Cost per token (completion/output)
+    cpit DECIMAL(12,10) NOT NULL,           -- Cost per input token (prompt)
+    cache_write_pt DECIMAL(12,10) DEFAULT 0, -- Cost per cache write token
+    cache_read_pt DECIMAL(12,10) DEFAULT 0,  -- Cost per cache read token
     currency VARCHAR(3) DEFAULT 'USD',
-    per_tokens INTEGER DEFAULT 1000, -- Price per X tokens
-    effective_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
-CREATE UNIQUE INDEX idx_model_price ON model_prices(vendor, model_name, effective_date);
+CREATE UNIQUE INDEX idx_model_price ON model_prices(vendor, model_name);
 CREATE INDEX idx_price_lookup ON model_prices(vendor, model_name);
 
 -- Budget tracking table

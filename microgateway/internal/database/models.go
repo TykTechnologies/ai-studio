@@ -104,16 +104,16 @@ type AppLLM struct {
 	CreatedAt    time.Time
 }
 
-// ModelPrice represents LLM model pricing information
+// ModelPrice represents LLM model pricing information (full AI Gateway interface)
 type ModelPrice struct {
 	gorm.Model
-	Vendor          string    `gorm:"not null"`
-	ModelName       string    `gorm:"not null"`
-	PromptPrice     float64   `gorm:"not null"`
-	CompletionPrice float64   `gorm:"not null"`
-	Currency        string    `gorm:"default:USD"`
-	PerTokens       int       `gorm:"default:1000"`
-	EffectiveDate   time.Time `gorm:"not null"`
+	Vendor       string  `gorm:"not null"`
+	ModelName    string  `gorm:"not null"`
+	CPT          float64 `gorm:"not null"`     // Cost per token (completion/output)
+	CPIT         float64 `gorm:"not null"`     // Cost per input token (prompt)  
+	CacheWritePT float64 `gorm:"default:0"`   // Cost per cache write token
+	CacheReadPT  float64 `gorm:"default:0"`   // Cost per cache read token
+	Currency     string  `gorm:"default:USD"`
 }
 
 // BudgetUsage tracks budget consumption

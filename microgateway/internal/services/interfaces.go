@@ -90,6 +90,13 @@ type ManagementServiceInterface interface {
 	// App-LLM Association Management
 	GetAppLLMs(appID uint) ([]database.LLM, error)
 	UpdateAppLLMs(appID uint, llmIDs []uint) error
+	
+	// Model Pricing Management
+	GetModelPrice(modelName, vendor string) (*database.ModelPrice, error)
+	CreateModelPrice(req *CreateModelPriceRequest) (*database.ModelPrice, error)
+	ListModelPrices(vendor string) ([]database.ModelPrice, error)
+	UpdateModelPrice(id uint, req *UpdateModelPriceRequest) (*database.ModelPrice, error)
+	DeleteModelPrice(id uint) error
 }
 
 // TokenServiceInterface defines the interface for token operations
@@ -297,6 +304,26 @@ type GenerateTokenRequest struct {
 	Name      string        `json:"name" binding:"required"`
 	Scopes    []string      `json:"scopes"`
 	ExpiresIn time.Duration `json:"expires_in"`
+}
+
+// CreateModelPriceRequest for creating model pricing (matches AI Gateway interface)
+type CreateModelPriceRequest struct {
+	Vendor       string  `json:"vendor" binding:"required"`
+	ModelName    string  `json:"model_name" binding:"required"`
+	CPT          float64 `json:"cpt" binding:"required,min=0"`          // Cost per token (completion/output)
+	CPIT         float64 `json:"cpit" binding:"required,min=0"`         // Cost per input token (prompt)  
+	CacheWritePT float64 `json:"cache_write_pt"`                       // Cost per cache write token
+	CacheReadPT  float64 `json:"cache_read_pt"`                        // Cost per cache read token
+	Currency     string  `json:"currency"`
+}
+
+// UpdateModelPriceRequest for updating model pricing
+type UpdateModelPriceRequest struct {
+	CPT          *float64 `json:"cpt,omitempty"`          // Cost per token (completion/output)
+	CPIT         *float64 `json:"cpit,omitempty"`         // Cost per input token (prompt)
+	CacheWritePT *float64 `json:"cache_write_pt,omitempty"` // Cost per cache write token
+	CacheReadPT  *float64 `json:"cache_read_pt,omitempty"`  // Cost per cache read token
+	Currency     *string  `json:"currency,omitempty"`
 }
 
 // TokenResponse for token generation response

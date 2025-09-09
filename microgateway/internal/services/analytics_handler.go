@@ -72,7 +72,10 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 
 	// Parse token usage and cost from response body if available
 	tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
-	cost := h.parseCostFromResponse(proxyLog.ResponseBody)
+	
+	// Extract model name from request body for accurate pricing
+	model := h.extractModelFromRequest(proxyLog.RequestBody)
+	cost := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
 	
 	// Create analytics event directly from proxy log
 	event := &database.AnalyticsEvent{
@@ -210,11 +213,13 @@ func (h *MicrogatewaAnalyticsHandler) SetAsGlobalHandler() {
 	analytics.SetHandler(h)
 }
 
-// TokenUsage represents parsed token usage from response
+// TokenUsage represents parsed token usage from response (includes cache tokens)
 type TokenUsage struct {
-	PromptTokens   int
-	ResponseTokens int
-	TotalTokens    int
+	PromptTokens      int
+	ResponseTokens    int
+	TotalTokens       int
+	CacheWriteTokens  int // For prompt caching features
+	CacheReadTokens   int // For prompt caching features
 }
 
 // parseTokensFromResponse extracts token usage from response body JSON
@@ -250,6 +255,14 @@ func (h *MicrogatewaAnalyticsHandler) parseTokensFromResponse(responseBody strin
 		} else {
 			tokens.TotalTokens = tokens.PromptTokens + tokens.ResponseTokens
 		}
+
+		// Parse cache token usage (for prompt caching)
+		if cwt, ok := usage["cache_creation_input_tokens"].(float64); ok {
+			tokens.CacheWriteTokens = int(cwt)
+		}
+		if crt, ok := usage["cache_read_input_tokens"].(float64); ok {
+			tokens.CacheReadTokens = int(crt)
+		}
 		
 		return tokens
 	}
@@ -257,19 +270,53 @@ func (h *MicrogatewaAnalyticsHandler) parseTokensFromResponse(responseBody strin
 	return TokenUsage{}
 }
 
-// parseCostFromResponse calculates cost based on token usage and standard pricing
-func (h *MicrogatewaAnalyticsHandler) parseCostFromResponse(responseBody string) float64 {
+// parseCostFromResponse calculates cost using actual database pricing or defaults
+func (h *MicrogatewaAnalyticsHandler) parseCostFromResponse(responseBody, vendor, model string) float64 {
 	tokens := h.parseTokensFromResponse(responseBody)
 	
-	// Use simple estimated pricing - could be enhanced with actual pricing lookup
-	// Anthropic Claude pricing (rough estimates)
-	const promptTokenPrice = 0.0003   // $0.0003 per 1K prompt tokens
-	const responseTokenPrice = 0.0015 // $0.0015 per 1K response tokens
+	// Try to get actual pricing from database
+	var price database.ModelPrice
+	err := h.db.Where("model_name = ? AND vendor = ?", model, vendor).
+		Order("created_at DESC").
+		First(&price).Error
 	
-	promptCost := float64(tokens.PromptTokens) * promptTokenPrice / 1000
-	responseCost := float64(tokens.ResponseTokens) * responseTokenPrice / 1000
+	if err != nil {
+		// Use default pricing if not found (per-token rates)
+		const defaultCPIT = 3.0 / 1000000   // $3.00 per million input tokens
+		const defaultCPT = 15.0 / 1000000   // $15.00 per million output tokens
+		
+		promptCost := float64(tokens.PromptTokens) * defaultCPIT
+		responseCost := float64(tokens.ResponseTokens) * defaultCPT
+		
+		return promptCost + responseCost
+	}
 	
-	return promptCost + responseCost
+	// Use actual database pricing (stored as per-token rates)
+	promptCost := float64(tokens.PromptTokens) * price.CPIT
+	responseCost := float64(tokens.ResponseTokens) * price.CPT
+	cacheWriteCost := float64(tokens.CacheWriteTokens) * price.CacheWritePT
+	cacheReadCost := float64(tokens.CacheReadTokens) * price.CacheReadPT
+	
+	return promptCost + responseCost + cacheWriteCost + cacheReadCost
+}
+
+// extractModelFromRequest parses the model name from request JSON
+func (h *MicrogatewaAnalyticsHandler) extractModelFromRequest(requestBody string) string {
+	if requestBody == "" {
+		return "unknown"
+	}
+
+	var request map[string]interface{}
+	if err := json.Unmarshal([]byte(requestBody), &request); err != nil {
+		log.Debug().Err(err).Msg("Failed to parse request body for model extraction")
+		return "unknown"
+	}
+
+	if model, ok := request["model"].(string); ok {
+		return model
+	}
+
+	return "unknown"
 }
 
 // extractEndpointFromVendor creates the actual endpoint path by looking up LLM configuration

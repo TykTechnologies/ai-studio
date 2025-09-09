@@ -180,3 +180,37 @@ type AnalyticsEvent struct {
 	ErrorMessage   string    `json:"error_message,omitempty" yaml:"error_message,omitempty"`
 	CreatedAt      time.Time `json:"created_at" yaml:"created_at"`
 }
+
+// CreateModelPriceRequest for CLI pricing create command (matches AI Gateway interface)
+type CreateModelPriceRequest struct {
+	Vendor       string  `json:"vendor" yaml:"vendor"`
+	ModelName    string  `json:"model_name" yaml:"model_name"`
+	CPT          float64 `json:"cpt" yaml:"cpt"`                    // Cost per token (completion/output)
+	CPIT         float64 `json:"cpit" yaml:"cpit"`                  // Cost per input token (prompt)  
+	CacheWritePT float64 `json:"cache_write_pt" yaml:"cache_write_pt"` // Cost per cache write token
+	CacheReadPT  float64 `json:"cache_read_pt" yaml:"cache_read_pt"`   // Cost per cache read token
+	Currency     string  `json:"currency,omitempty" yaml:"currency,omitempty"`
+}
+
+// UpdateModelPriceRequest for CLI pricing update command
+type UpdateModelPriceRequest struct {
+	CPT          *float64 `json:"cpt,omitempty" yaml:"cpt,omitempty"`                    // Cost per token (completion/output)
+	CPIT         *float64 `json:"cpit,omitempty" yaml:"cpit,omitempty"`                  // Cost per input token (prompt)
+	CacheWritePT *float64 `json:"cache_write_pt,omitempty" yaml:"cache_write_pt,omitempty"` // Cost per cache write token
+	CacheReadPT  *float64 `json:"cache_read_pt,omitempty" yaml:"cache_read_pt,omitempty"`   // Cost per cache read token
+	Currency     *string  `json:"currency,omitempty" yaml:"currency,omitempty"`
+}
+
+// ModelPrice represents a model price configuration (for display)
+type ModelPrice struct {
+	ID           uint      `json:"id" yaml:"id"`
+	Vendor       string    `json:"vendor" yaml:"vendor"`
+	ModelName    string    `json:"model_name" yaml:"model_name"`
+	CPT          float64   `json:"cpt" yaml:"cpt"`                    // Cost per token (completion/output)
+	CPIT         float64   `json:"cpit" yaml:"cpit"`                  // Cost per input token (prompt)  
+	CacheWritePT float64   `json:"cache_write_pt" yaml:"cache_write_pt"` // Cost per cache write token
+	CacheReadPT  float64   `json:"cache_read_pt" yaml:"cache_read_pt"`   // Cost per cache read token
+	Currency     string    `json:"currency" yaml:"currency"`
+	CreatedAt    time.Time `json:"created_at" yaml:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" yaml:"updated_at"`
+}
