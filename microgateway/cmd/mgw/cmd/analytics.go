@@ -47,6 +47,42 @@ var analyticsEventsCmd = &cobra.Command{
 	},
 }
 
+// analyticsRequestCmd shows request details for a specific analytics event
+var analyticsRequestCmd = &cobra.Command{
+	Use:   "request <event-id>",
+	Short: "Show request details for an analytics event",
+	Long:  "Display the full request payload for a specific analytics event (if detailed analytics is enabled).",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		eventID := args[0]
+		
+		resp, err := cli.GetClient().Get("/api/v1/analytics/events/" + eventID + "/request")
+		if err != nil {
+			return fmt.Errorf("failed to get request details: %w", err)
+		}
+
+		return cli.PrintOutput(resp.Data)
+	},
+}
+
+// analyticsResponseCmd shows response details for a specific analytics event
+var analyticsResponseCmd = &cobra.Command{
+	Use:   "response <event-id>",
+	Short: "Show response details for an analytics event", 
+	Long:  "Display the full response payload for a specific analytics event (if detailed analytics is enabled).",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		eventID := args[0]
+		
+		resp, err := cli.GetClient().Get("/api/v1/analytics/events/" + eventID + "/response")
+		if err != nil {
+			return fmt.Errorf("failed to get response details: %w", err)
+		}
+
+		return cli.PrintOutput(resp.Data)
+	},
+}
+
 // analyticsSummaryCmd gets analytics summary
 var analyticsSummaryCmd = &cobra.Command{
 	Use:   "summary <app-id>",
@@ -132,6 +168,8 @@ var analyticsCostsCmd = &cobra.Command{
 func init() {
 	// Add subcommands
 	analyticsCmd.AddCommand(analyticsEventsCmd)
+	analyticsCmd.AddCommand(analyticsRequestCmd)
+	analyticsCmd.AddCommand(analyticsResponseCmd)
 	analyticsCmd.AddCommand(analyticsSummaryCmd)
 	analyticsCmd.AddCommand(analyticsCostsCmd)
 

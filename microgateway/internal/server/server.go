@@ -45,8 +45,8 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 		serviceContainer.GatewayService,
 	)
 
-	// Create analytics handler for microgateway
-	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB)
+	// Create analytics handler for microgateway with configuration
+	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB, &cfg.Analytics)
 	analyticsHandler.SetAsGlobalHandler()
 
 	// Create AI Gateway instance for mounting (not standalone)

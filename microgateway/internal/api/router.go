@@ -98,6 +98,8 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		analytics := protected.Group("/analytics")
 		{
 			analytics.GET("/events", handlers.GetAnalyticsEvents(config.Services))
+			analytics.GET("/events/:id/request", handlers.GetAnalyticsEventRequest(config.Services))
+			analytics.GET("/events/:id/response", handlers.GetAnalyticsEventResponse(config.Services))
 			analytics.GET("/summary", handlers.GetAnalyticsSummary(config.Services))
 			analytics.GET("/costs", handlers.GetCostAnalysis(config.Services))
 		}

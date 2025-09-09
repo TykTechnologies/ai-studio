@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/gin-gonic/gin"
 )
@@ -225,6 +226,76 @@ func FlushAnalytics(serviceContainer *services.ServiceContainer) gin.HandlerFunc
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Analytics buffer flushed successfully",
+		})
+	}
+}
+
+// GetAnalyticsEventRequest returns the request payload for a specific analytics event
+func GetAnalyticsEventRequest(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		eventID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid event ID",
+				"message": "Event ID must be a valid number",
+			})
+			return
+		}
+
+		// Get analytics event with request body
+		var event database.AnalyticsEvent
+		err = serviceContainer.DB.First(&event, eventID).Error
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Event not found",
+				"message": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": gin.H{
+				"event_id":     event.ID,
+				"request_body": event.RequestBody,
+				"endpoint":     event.Endpoint,
+				"method":       event.Method,
+				"timestamp":    event.CreatedAt,
+			},
+		})
+	}
+}
+
+// GetAnalyticsEventResponse returns the response payload for a specific analytics event
+func GetAnalyticsEventResponse(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		eventID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid event ID",
+				"message": "Event ID must be a valid number",
+			})
+			return
+		}
+
+		// Get analytics event with response body
+		var event database.AnalyticsEvent
+		err = serviceContainer.DB.First(&event, eventID).Error
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Event not found",
+				"message": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": gin.H{
+				"event_id":      event.ID,
+				"response_body": event.ResponseBody,
+				"endpoint":      event.Endpoint,
+				"status_code":   event.StatusCode,
+				"timestamp":     event.CreatedAt,
+			},
 		})
 	}
 }

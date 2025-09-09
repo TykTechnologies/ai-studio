@@ -78,11 +78,16 @@ type GatewayConfig struct {
 
 // AnalyticsConfig holds analytics configuration
 type AnalyticsConfig struct {
-	Enabled        bool          `env:"ANALYTICS_ENABLED" envDefault:"true"`
-	BufferSize     int           `env:"ANALYTICS_BUFFER_SIZE" envDefault:"1000"`
-	FlushInterval  time.Duration `env:"ANALYTICS_FLUSH_INTERVAL" envDefault:"10s"`
-	RetentionDays  int           `env:"ANALYTICS_RETENTION_DAYS" envDefault:"90"`
-	EnableRealtime bool          `env:"ANALYTICS_REALTIME" envDefault:"false"`
+	Enabled             bool          `env:"ANALYTICS_ENABLED" envDefault:"true"`
+	BufferSize          int           `env:"ANALYTICS_BUFFER_SIZE" envDefault:"1000"`
+	FlushInterval       time.Duration `env:"ANALYTICS_FLUSH_INTERVAL" envDefault:"10s"`
+	RetentionDays       int           `env:"ANALYTICS_RETENTION_DAYS" envDefault:"90"`
+	EnableRealtime      bool          `env:"ANALYTICS_REALTIME" envDefault:"false"`
+	
+	// Detailed payload storage (disabled by default for privacy/storage)
+	StoreRequestBodies  bool          `env:"ANALYTICS_STORE_REQUESTS" envDefault:"false"`
+	StoreResponseBodies bool          `env:"ANALYTICS_STORE_RESPONSES" envDefault:"false"`
+	MaxBodySize         int           `env:"ANALYTICS_MAX_BODY_SIZE" envDefault:"4096"`
 }
 
 // SecurityConfig holds security-related configuration

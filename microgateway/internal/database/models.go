@@ -154,6 +154,11 @@ type AnalyticsEvent struct {
 	LatencyMs      int
 	ErrorMessage   string
 	Metadata       datatypes.JSON `gorm:"type:json"`
+	
+	// Detailed payload storage (configurable)
+	RequestBody    string         `gorm:"type:text"` // Store request payload
+	ResponseBody   string         `gorm:"type:text"` // Store response payload
+	
 	CreatedAt      time.Time      `gorm:"index:idx_analytics_app"`
 }
 

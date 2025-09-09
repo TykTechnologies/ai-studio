@@ -2,11 +2,14 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
@@ -15,52 +18,32 @@ import (
 // MicrogatewaAnalyticsHandler implements the midsommar analytics interface
 // and converts analytics data to microgateway's analytics_events format
 type MicrogatewaAnalyticsHandler struct {
-	db *gorm.DB
+	db            *gorm.DB
+	config        *config.AnalyticsConfig
+	pendingEvents map[string]uint // Map request ID to event ID for matching
+	mu            sync.RWMutex
 }
 
 // NewMicrogatewaAnalyticsHandler creates a new analytics handler for the microgateway
-func NewMicrogatewaAnalyticsHandler(db *gorm.DB) *MicrogatewaAnalyticsHandler {
+func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig) *MicrogatewaAnalyticsHandler {
 	return &MicrogatewaAnalyticsHandler{
-		db: db,
+		db:            db,
+		config:        analyticsConfig,
+		pendingEvents: make(map[string]uint),
 	}
 }
 
 // RecordChatRecord implements the midsommar analytics interface
-// Converts LLMChatRecord to microgateway AnalyticsEvent
+// This is for AI Studio chat features - for microgateway, we use RecordProxyLog exclusively
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
 	log.Debug().
 		Uint("app_id", record.AppID).
 		Uint("llm_id", record.LLMID).
 		Str("model", record.Name).
-		Int("total_tokens", record.TotalTokens).
-		Float64("cost", record.Cost).
-		Msg("Recording analytics from LLMChatRecord")
-
-	event := &database.AnalyticsEvent{
-		RequestID:      fmt.Sprintf("req_%d_%d", record.AppID, time.Now().UnixNano()),
-		AppID:          record.AppID,
-		LLMID:          &record.LLMID,
-		CredentialID:   nil, // We don't use credentials in token-only system
-		Endpoint:       fmt.Sprintf("/llm/rest/%s/chat/completions", record.Name),
-		Method:         "POST",
-		StatusCode:     200, // Assume success if we got analytics
-		RequestTokens:  record.PromptTokens,
-		ResponseTokens: record.ResponseTokens,
-		TotalTokens:    record.TotalTokens,
-		Cost:           record.Cost / 10000, // Convert from cents to dollars
-		LatencyMs:      record.TotalTimeMS,
-		ErrorMessage:   "",
-		CreatedAt:      record.TimeStamp,
-	}
-
-	if err := h.db.Create(event).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to record analytics event")
-	} else {
-		log.Debug().
-			Uint("event_id", event.ID).
-			Str("request_id", event.RequestID).
-			Msg("Analytics event recorded successfully")
-	}
+		Msg("RecordChatRecord called - this is for AI Studio chat, not microgateway proxy")
+	
+	// For microgateway, we handle all analytics via RecordProxyLog
+	// This method is here for interface compatibility but not used
 }
 
 // RecordChatLogEntry implements the midsommar analytics interface
@@ -75,17 +58,118 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(entry *models.LLMChatLo
 }
 
 // RecordProxyLog implements the midsommar analytics interface  
-// Records proxy-level request/response information
+// Creates analytics events directly from AI Gateway proxy logs
 func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) {
-	log.Debug().
+	log.Info().
 		Uint("app_id", proxyLog.AppID).
 		Uint("user_id", proxyLog.UserID).
 		Str("vendor", proxyLog.Vendor).
 		Int("response_code", proxyLog.ResponseCode).
-		Msg("Recording proxy log")
+		Time("proxy_timestamp", proxyLog.TimeStamp).
+		Int("request_body_size", len(proxyLog.RequestBody)).
+		Int("response_body_size", len(proxyLog.ResponseBody)).
+		Msg("Creating analytics event directly from proxy log")
 
-	// We could create a separate proxy analytics event or enhance the existing analytics event
-	// For now, we'll rely on the RecordChatRecord for the main analytics
+	// Parse token usage and cost from response body if available
+	tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
+	cost := h.parseCostFromResponse(proxyLog.ResponseBody)
+	
+	// Create analytics event directly from proxy log
+	event := &database.AnalyticsEvent{
+		RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+		AppID:          proxyLog.AppID,
+		LLMID:          nil, // Could be extracted from request context if needed
+		CredentialID:   nil, // Not used in token-only system
+		Endpoint:       h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
+		Method:         "POST",
+		StatusCode:     proxyLog.ResponseCode,
+		RequestTokens:  tokens.PromptTokens,
+		ResponseTokens: tokens.ResponseTokens,
+		TotalTokens:    tokens.TotalTokens,
+		Cost:           cost,
+		LatencyMs:      0, // Not available in proxy log
+		ErrorMessage:   "",
+		CreatedAt:      proxyLog.TimeStamp,
+	}
+
+	// Add request/response bodies if configured
+	if h.config.StoreRequestBodies {
+		event.RequestBody = h.truncateBody(proxyLog.RequestBody, h.config.MaxBodySize)
+		log.Debug().Int("request_size", len(event.RequestBody)).Msg("Storing request body")
+	}
+	
+	if h.config.StoreResponseBodies {
+		event.ResponseBody = h.truncateBody(proxyLog.ResponseBody, h.config.MaxBodySize)
+		log.Debug().Int("response_size", len(event.ResponseBody)).Msg("Storing response body")
+	}
+
+	// Create the analytics event
+	if err := h.db.Create(event).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to create analytics event from proxy log")
+	} else {
+		log.Info().
+			Uint("event_id", event.ID).
+			Str("request_id", event.RequestID).
+			Int("total_tokens", event.TotalTokens).
+			Float64("cost", event.Cost).
+			Msg("Analytics event created successfully from proxy log")
+	}
+}
+
+// truncateBody truncates request/response bodies to the configured maximum size
+func (h *MicrogatewaAnalyticsHandler) truncateBody(body string, maxSize int) string {
+	if maxSize <= 0 {
+		return "" // Disabled
+	}
+	
+	if len(body) <= maxSize {
+		return body
+	}
+	
+	return body[:maxSize] + "... [truncated]"
+}
+
+// storeEventForMatching stores an event ID for later matching with proxy log
+func (h *MicrogatewaAnalyticsHandler) storeEventForMatching(requestID string, eventID uint) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pendingEvents[requestID] = eventID
+	
+	// Clean up old entries (older than 1 minute)
+	// This prevents memory leaks from unmatched events
+	go func() {
+		time.Sleep(60 * time.Second)
+		h.mu.Lock()
+		delete(h.pendingEvents, requestID)
+		h.mu.Unlock()
+	}()
+}
+
+// findEventForMatching finds an event ID by request pattern matching
+func (h *MicrogatewaAnalyticsHandler) findEventForMatching(proxyLog *models.ProxyLog) (uint, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	
+	// Try to match by pattern (app ID and timestamp closeness)
+	expectedPattern := fmt.Sprintf("req_%d_", proxyLog.AppID)
+	
+	for requestID, eventID := range h.pendingEvents {
+		if len(requestID) >= len(expectedPattern) && requestID[:len(expectedPattern)] == expectedPattern {
+			// Check if timestamps are close (within 10 seconds)
+			var event database.AnalyticsEvent
+			if err := h.db.First(&event, eventID).Error; err == nil {
+				timeDiff := proxyLog.TimeStamp.Sub(event.CreatedAt)
+				if timeDiff < 0 {
+					timeDiff = -timeDiff
+				}
+				if timeDiff < 10*time.Second {
+					return eventID, true
+				}
+			}
+		}
+	}
+	
+	return 0, false
 }
 
 // RecordToolCall implements the midsommar analytics interface
@@ -124,6 +208,94 @@ func (h *MicrogatewaAnalyticsHandler) RecordToolCall(name string, timestamp time
 func (h *MicrogatewaAnalyticsHandler) SetAsGlobalHandler() {
 	log.Info().Msg("Setting microgateway analytics handler as global handler")
 	analytics.SetHandler(h)
+}
+
+// TokenUsage represents parsed token usage from response
+type TokenUsage struct {
+	PromptTokens   int
+	ResponseTokens int
+	TotalTokens    int
+}
+
+// parseTokensFromResponse extracts token usage from response body JSON
+func (h *MicrogatewaAnalyticsHandler) parseTokensFromResponse(responseBody string) TokenUsage {
+	if responseBody == "" {
+		return TokenUsage{}
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal([]byte(responseBody), &response); err != nil {
+		log.Debug().Err(err).Msg("Failed to parse response body for token extraction")
+		return TokenUsage{}
+	}
+
+	// Try to extract usage information (OpenAI/Anthropic format)
+	if usage, ok := response["usage"].(map[string]interface{}); ok {
+		tokens := TokenUsage{}
+		
+		if pt, ok := usage["input_tokens"].(float64); ok {
+			tokens.PromptTokens = int(pt)
+		} else if pt, ok := usage["prompt_tokens"].(float64); ok {
+			tokens.PromptTokens = int(pt)
+		}
+		
+		if rt, ok := usage["output_tokens"].(float64); ok {
+			tokens.ResponseTokens = int(rt)
+		} else if rt, ok := usage["completion_tokens"].(float64); ok {
+			tokens.ResponseTokens = int(rt)
+		}
+		
+		if tt, ok := usage["total_tokens"].(float64); ok {
+			tokens.TotalTokens = int(tt)
+		} else {
+			tokens.TotalTokens = tokens.PromptTokens + tokens.ResponseTokens
+		}
+		
+		return tokens
+	}
+
+	return TokenUsage{}
+}
+
+// parseCostFromResponse calculates cost based on token usage and standard pricing
+func (h *MicrogatewaAnalyticsHandler) parseCostFromResponse(responseBody string) float64 {
+	tokens := h.parseTokensFromResponse(responseBody)
+	
+	// Use simple estimated pricing - could be enhanced with actual pricing lookup
+	// Anthropic Claude pricing (rough estimates)
+	const promptTokenPrice = 0.0003   // $0.0003 per 1K prompt tokens
+	const responseTokenPrice = 0.0015 // $0.0015 per 1K response tokens
+	
+	promptCost := float64(tokens.PromptTokens) * promptTokenPrice / 1000
+	responseCost := float64(tokens.ResponseTokens) * responseTokenPrice / 1000
+	
+	return promptCost + responseCost
+}
+
+// extractEndpointFromVendor creates the actual endpoint path by looking up LLM configuration
+func (h *MicrogatewaAnalyticsHandler) extractEndpointFromVendor(vendor string, appID uint) string {
+	// Try to find the LLM being used by looking up active LLMs for this vendor
+	var llm database.LLM
+	err := h.db.Where("vendor = ? AND is_active = ?", vendor, true).
+		First(&llm).Error
+	
+	if err != nil {
+		log.Debug().Err(err).Str("vendor", vendor).Msg("Could not find LLM for vendor, using generic endpoint")
+		return fmt.Sprintf("/llm/rest/%s-model/v1/messages", vendor)
+	}
+	
+	// Use the actual LLM slug for the endpoint
+	// Different vendors have different API paths
+	switch vendor {
+	case "anthropic":
+		return fmt.Sprintf("/llm/rest/%s/v1/messages", llm.Slug)
+	case "openai":
+		return fmt.Sprintf("/llm/rest/%s/v1/chat/completions", llm.Slug)
+	case "google", "vertex":
+		return fmt.Sprintf("/llm/rest/%s/v1/chat/completions", llm.Slug)
+	default:
+		return fmt.Sprintf("/llm/rest/%s/chat/completions", llm.Slug)
+	}
 }
 
 // Helper function for min
