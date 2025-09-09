@@ -4,6 +4,7 @@ package services
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -37,10 +38,10 @@ func (s *DatabaseGatewayService) GetActiveLLMs() ([]interface{}, error) {
 		return nil, fmt.Errorf("failed to get active LLMs: %w", err)
 	}
 
-	// Convert to interface slice
+	// Convert to interface slice (store pointers)
 	result := make([]interface{}, len(llms))
-	for i, llm := range llms {
-		result[i] = llm
+	for i := range llms {
+		result[i] = &llms[i]
 	}
 
 	return result, nil
@@ -196,4 +197,69 @@ func (s *DatabaseGatewayService) GetLLMStats(llmID uint) (map[string]interface{}
 		"total_tokens":  totalTokens,
 		"total_cost":    totalCost,
 	}, nil
+}
+
+// ValidateAPIToken validates an API token and returns token information
+func (s *DatabaseGatewayService) ValidateAPIToken(token string) (*TokenValidationResult, error) {
+	var apiToken database.APIToken
+	err := s.db.Where("token = ? AND is_active = ?", token, true).
+		Preload("App").
+		First(&apiToken).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("invalid or expired token")
+		}
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	// Check expiration
+	if apiToken.ExpiresAt != nil && apiToken.ExpiresAt.Before(time.Now()) {
+		return nil, fmt.Errorf("token expired")
+	}
+
+	// Check if app is active
+	if apiToken.App != nil && !apiToken.App.IsActive {
+		return nil, fmt.Errorf("app is inactive")
+	}
+
+	return &TokenValidationResult{
+		TokenID:   apiToken.ID,
+		TokenName: apiToken.Name,
+		AppID:     apiToken.AppID,
+		App:       apiToken.App,
+	}, nil
+}
+
+// TokenValidationResult represents the result of token validation
+type TokenValidationResult struct {
+	TokenID   uint
+	TokenName string
+	AppID     uint
+	App       *database.App
+}
+
+// GetAppByTokenID returns the app associated with a token ID
+func (s *DatabaseGatewayService) GetAppByTokenID(tokenID uint) (*database.App, error) {
+	var token database.APIToken
+	err := s.db.Where("id = ? AND is_active = ?", tokenID, true).
+		Preload("App").
+		First(&token).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("token not found")
+		}
+		return nil, fmt.Errorf("failed to get token: %w", err)
+	}
+
+	if token.App == nil {
+		return nil, fmt.Errorf("app not found for token")
+	}
+
+	if !token.App.IsActive {
+		return nil, fmt.Errorf("app is inactive")
+	}
+
+	return token.App, nil
 }

@@ -140,6 +140,7 @@ require (
 	github.com/pmylund/go-cache v2.1.0+incompatible // indirect
 	github.com/redis/go-redis/v9 v9.5.3 // indirect
 	github.com/redis/rueidis v1.0.34 // indirect
+	github.com/rodaine/table v1.3.0 // indirect
 	github.com/russellhaering/goxmldsig v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
@@ -219,8 +220,11 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/gosimple/slug v1.15.0
 	github.com/joho/godotenv v1.5.1
+	github.com/rodaine/table v1.3.0
 	github.com/rs/zerolog v1.34.0
+	github.com/spf13/cobra v1.10.1
 	golang.org/x/crypto v0.37.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/datatypes v1.2.6
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0

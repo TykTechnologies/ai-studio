@@ -112,16 +112,19 @@ The management API is available at `/api/v1` and requires admin authentication.
 - `PUT /api/v1/apps/{id}` - Update app
 - `DELETE /api/v1/apps/{id}` - Delete app
 
-### Gateway API
+### AI Gateway (Mounted)
 
-The gateway proxies requests to configured LLMs:
+The AI Gateway is mounted on the same port as the management API and provides LLM proxy endpoints:
 
 ```bash
-# OpenAI-compatible endpoint
+# OpenAI-compatible chat endpoint (recommended)
 POST /llm/rest/{llm-slug}/chat/completions
 
 # Streaming endpoint
 POST /llm/stream/{llm-slug}/chat/completions
+
+# Legacy completions endpoint (deprecated)
+POST /llm/rest/{llm-slug}/completions
 ```
 
 ## Development

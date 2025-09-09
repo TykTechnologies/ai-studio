@@ -7,6 +7,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/rs/zerolog/log"
 )
 
 // GatewayServiceAdapter adapts our DatabaseGatewayService to implement services.ServiceInterface
@@ -14,6 +15,7 @@ type GatewayServiceAdapter struct {
 	gatewayService GatewayServiceInterface
 	management     ManagementServiceInterface
 	analytics      AnalyticsServiceInterface
+	crypto         CryptoServiceInterface
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface
@@ -21,18 +23,38 @@ func NewGatewayServiceAdapter(
 	gatewayService GatewayServiceInterface,
 	management ManagementServiceInterface,
 	analytics AnalyticsServiceInterface,
+	crypto CryptoServiceInterface,
 ) services.ServiceInterface {
-	return &GatewayServiceAdapter{
+	adapter := &GatewayServiceAdapter{
 		gatewayService: gatewayService,
 		management:     management,
 		analytics:      analytics,
+		crypto:         crypto,
 	}
+	
+	log.Info().Msg("GatewayServiceAdapter created - testing LLM loading...")
+	
+	// Test LLM loading immediately to debug
+	llms, err := adapter.GetActiveLLMs()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to load LLMs in adapter creation")
+	} else {
+		log.Info().Int("llm_count", len(llms)).Msg("LLMs loaded successfully in adapter")
+		for i, llm := range llms {
+			log.Debug().Int("index", i).Uint("llm_id", llm.ID).Str("name", llm.Name).Str("vendor", string(llm.Vendor)).Msg("LLM loaded")
+		}
+	}
+	
+	return adapter
 }
 
 // GetActiveLLMs returns all active LLMs
 func (a *GatewayServiceAdapter) GetActiveLLMs() ([]models.LLM, error) {
+	log.Debug().Msg("GatewayServiceAdapter.GetActiveLLMs() called by AI Gateway")
+	
 	llmInterfaces, err := a.gatewayService.GetActiveLLMs()
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to get active LLMs from gateway service")
 		return nil, err
 	}
 
@@ -47,6 +69,7 @@ func (a *GatewayServiceAdapter) GetActiveLLMs() ([]models.LLM, error) {
 		}
 	}
 
+	log.Debug().Int("llm_count", len(llms)).Msg("Successfully retrieved active LLMs for AI Gateway")
 	return llms, nil
 }
 
@@ -76,19 +99,51 @@ func (a *GatewayServiceAdapter) GetDatasourceByID(id uint) (*models.Datasource, 
 	return nil, fmt.Errorf("datasource with ID %d not found", id)
 }
 
-// GetCredentialBySecret returns a credential by secret
+// GetCredentialBySecret validates API tokens and returns a mock credential for compatibility
+// The AI Gateway expects this method but we use API tokens, so we validate the token and return credential info
 func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Credential, error) {
-	credInterface, err := a.gatewayService.GetCredentialBySecret(secret)
-	if err != nil {
-		return nil, err
+	secretPrefix := secret
+	if len(secret) > 8 {
+		secretPrefix = secret[:8]
+	}
+	log.Debug().Str("secret_prefix", secretPrefix).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
+	
+	// The "secret" parameter is actually an API token from the Authorization header
+	// We need to validate it using our token authentication system
+	
+	// Get the token auth provider from the gateway service
+	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
+		log.Debug().Msg("Using DatabaseGatewayService to validate token")
+		
+		// The secret here is actually an API token, so we need to validate it
+		// by checking if it exists in our api_tokens table
+		
+		// For now, let's try to get the token info by treating the secret as a token
+		tokenResult, err := gatewayService.ValidateAPIToken(secret)
+		if err != nil {
+			tokenPrefix := secret
+			if len(secret) > 8 {
+				tokenPrefix = secret[:8]
+			}
+			log.Error().Err(err).Str("token_prefix", tokenPrefix).Msg("Token validation failed")
+			return nil, fmt.Errorf("invalid token: %w", err)
+		}
+
+		log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("Token validated successfully")
+
+		// Create a mock credential that represents the validated app token
+		mockCredential := &models.Credential{
+			ID:     tokenResult.TokenID,    // Use token ID
+			KeyID:  tokenResult.TokenName,  // Use token name as key ID
+			Secret: secret,                 // The actual token (don't expose this normally)
+			Active: true,
+		}
+
+		return mockCredential, nil
 	}
 
-	if dbCred, ok := credInterface.(*database.Credential); ok {
-		cred := a.convertDatabaseCredentialToModel(dbCred)
-		return &cred, nil
-	}
-
-	return nil, fmt.Errorf("unexpected credential type")
+	log.Error().Msg("Gateway service type not supported for token validation")
+	return nil, fmt.Errorf("gateway service type not supported for token validation")
 }
 
 // AuthenticateUser authenticates a user (not implemented for microgateway)
@@ -132,18 +187,28 @@ func (a *GatewayServiceAdapter) GetOAuthClient(clientID string) (*models.OAuthCl
 }
 
 // GetAppByCredentialID returns an app by credential ID
+// NOTE: In our token-only system, the "credential ID" is actually a token ID from our mock credential
 func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, error) {
-	appInterface, err := a.gatewayService.GetAppByCredentialID(credID)
-	if err != nil {
-		return nil, err
+	log.Debug().Uint("credential_id", credID).Msg("GatewayServiceAdapter.GetAppByCredentialID() called by AI Gateway")
+	
+	// Since we're using token-only auth, the credID is actually a token ID
+	// We need to get the app ID from the token record, not from credentials table
+	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
+		log.Debug().Msg("Looking up app by token ID (not credential ID)")
+		
+		app, err := gatewayService.GetAppByTokenID(credID)
+		if err != nil {
+			log.Error().Err(err).Uint("token_id", credID).Msg("Failed to get app by token ID")
+			return nil, fmt.Errorf("app not found for token ID %d: %w", credID, err)
+		}
+
+		modelApp := a.convertDatabaseAppToModel(app)
+		log.Info().Uint("app_id", modelApp.ID).Str("app_name", modelApp.Name).Msg("Successfully retrieved app for token")
+		return &modelApp, nil
 	}
 
-	if dbApp, ok := appInterface.(*database.App); ok {
-		app := a.convertDatabaseAppToModel(dbApp)
-		return &app, nil
-	}
-
-	return nil, fmt.Errorf("unexpected app type")
+	log.Error().Uint("credential_id", credID).Msg("Gateway service type not supported")
+	return nil, fmt.Errorf("gateway service type not supported for app lookup")
 }
 
 // GetToolByID returns a tool by ID (not implemented)
@@ -186,16 +251,38 @@ func (a *GatewayServiceAdapter) GetAllFilters(pageSize int, pageNumber int, all 
 
 // Conversion helper functions
 func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) models.LLM {
-	return models.LLM{
+	// Decrypt the API key for the AI Gateway to use
+	apiKey := ""
+	if dbLLM.APIKeyEncrypted != "" {
+		decryptedKey, err := a.crypto.Decrypt(dbLLM.APIKeyEncrypted)
+		if err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to decrypt API key")
+			apiKey = "" // Don't provide invalid key
+		} else {
+			apiKey = decryptedKey
+		}
+	}
+
+	llm := models.LLM{
 		ID:          dbLLM.ID,
-		Name:        dbLLM.Name,
+		Name:        dbLLM.Slug, // Use slug as name for AI Gateway routing
 		Vendor:      models.Vendor(dbLLM.Vendor),
-		APIKey:      "", // Don't expose encrypted API keys
+		APIKey:      apiKey,
 		APIEndpoint: dbLLM.Endpoint,
 		DefaultModel: dbLLM.DefaultModel,
 		Active:      dbLLM.IsActive,
 		MonthlyBudget: &dbLLM.MonthlyBudget,
 	}
+
+	log.Debug().
+		Uint("llm_id", llm.ID).
+		Str("name", llm.Name).
+		Str("vendor", string(llm.Vendor)).
+		Str("endpoint", llm.APIEndpoint).
+		Bool("active", llm.Active).
+		Msg("Converted database LLM to models.LLM")
+
+	return llm
 }
 
 func (a *GatewayServiceAdapter) convertDatabaseCredentialToModel(dbCred *database.Credential) models.Credential {

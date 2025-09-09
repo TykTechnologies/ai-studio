@@ -48,6 +48,10 @@ type LLM struct {
 	MonthlyBudget   float64
 	RateLimitRPM    int
 	Metadata        datatypes.JSON `gorm:"type:json"`
+	
+	// Authentication configuration for pluggable auth mechanisms
+	AuthMechanism   string         `gorm:"default:'token'"` // "token", "oauth", "api-key", "custom"
+	AuthConfig      datatypes.JSON `gorm:"type:json"`       // Provider-specific configuration
 
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`

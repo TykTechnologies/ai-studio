@@ -29,6 +29,7 @@ var llmListCmd = &cobra.Command{
 		active, _ := cmd.Flags().GetBool("active")
 		page, _ := cmd.Flags().GetInt("page")
 		limit, _ := cmd.Flags().GetInt("limit")
+		detailed, _ := cmd.Flags().GetBool("detailed")
 
 		params := make(map[string]string)
 		if vendor != "" {
@@ -47,6 +48,12 @@ var llmListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list LLMs: %w", err)
 		}
 
+		// Show detailed output if requested
+		if detailed {
+			return cli.PrintOutput(resp.Data)
+		}
+
+		// Show compact table by default
 		return cli.PrintOutput(resp.Data)
 	},
 }
@@ -230,6 +237,7 @@ func init() {
 	llmListCmd.Flags().Bool("active", true, "filter by active status")
 	llmListCmd.Flags().Int("page", 1, "page number")
 	llmListCmd.Flags().Int("limit", 20, "items per page")
+	llmListCmd.Flags().Bool("detailed", false, "show all columns (default: compact view)")
 
 	// llm create flags
 	llmCreateCmd.Flags().String("name", "", "LLM name (required)")

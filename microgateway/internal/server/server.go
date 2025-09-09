@@ -37,6 +37,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 		serviceContainer.GatewayService,
 		serviceContainer.Management,
 		serviceContainer.AnalyticsService,
+		serviceContainer.Crypto,
 	)
 
 	budgetServiceAdapter := services.NewBudgetServiceAdapter(
@@ -44,19 +45,27 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 		serviceContainer.GatewayService,
 	)
 
-	// Create AI Gateway instance
+	// Create AI Gateway instance for mounting (not standalone)
+	log.Info().Msg("Creating AI Gateway for mounting in management server")
 	gateway := aigateway.NewWithAnalytics(
 		gatewayServiceAdapter,
 		budgetServiceAdapter,
 		nil, // Use default analytics for now
-		&aigateway.Config{Port: cfg.Server.Port},
+		&aigateway.Config{Port: cfg.Server.Port}, // Same port as management API
 	)
+	
+	// Manually trigger resource loading since we're mounting, not calling Start()
+	log.Info().Msg("Loading AI Gateway resources...")
+	if err := gateway.Reload(); err != nil {
+		return nil, fmt.Errorf("failed to load AI Gateway resources: %w", err)
+	}
+	log.Info().Msg("AI Gateway resources loaded successfully")
 
-	// Setup API router
+	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
 		AuthProvider:  serviceContainer.AuthProvider,
 		Services:      serviceContainer,
-		Gateway:       gateway, // Pass gateway to router
+		Gateway:       gateway, // Mount gateway back in router
 		EnableSwagger: cfg.IsDevelopment(),
 		EnableMetrics: cfg.Observability.EnableMetrics,
 	}
@@ -81,8 +90,16 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 	}, nil
 }
 
-// Start starts the HTTP server
+// Start starts the unified HTTP server with mounted AI Gateway
 func (s *Server) Start() error {
+	log.Info().
+		Int("port", s.config.Server.Port).
+		Msg("Starting unified server with management API and mounted AI Gateway")
+	log.Info().
+		Str("management_endpoints", "/api/v1/*").
+		Str("gateway_endpoints", "/llm/* /tools/* /datasource/*").
+		Msg("Available endpoints on single port")
+
 	if s.config.Server.TLSEnabled {
 		log.Info().Msg("Starting server with TLS")
 		return s.server.ListenAndServeTLS(
@@ -97,14 +114,14 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
-	log.Info().Msg("Shutting down HTTP server...")
+	log.Info().Msg("Shutting down unified server...")
 
-	// Stop accepting new connections and close existing ones
+	// The AI Gateway is mounted, so shutting down the main server handles everything
 	if err := s.server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("server shutdown failed: %w", err)
 	}
 
-	log.Info().Msg("HTTP server stopped")
+	log.Info().Msg("Server stopped successfully")
 	return nil
 }
 

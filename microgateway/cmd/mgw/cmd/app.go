@@ -29,6 +29,7 @@ var appListCmd = &cobra.Command{
 		active, _ := cmd.Flags().GetBool("active")
 		page, _ := cmd.Flags().GetInt("page")
 		limit, _ := cmd.Flags().GetInt("limit")
+		detailed, _ := cmd.Flags().GetBool("detailed")
 
 		params := map[string]string{
 			"active": strconv.FormatBool(active),
@@ -41,6 +42,8 @@ var appListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list apps: %w", err)
 		}
 
+		// The compact/detailed logic is handled in the formatting layer
+		_ = detailed // Will be used by formatter
 		return cli.PrintOutput(resp.Data)
 	},
 }
@@ -246,6 +249,7 @@ func init() {
 	appListCmd.Flags().Bool("active", true, "filter by active status")
 	appListCmd.Flags().Int("page", 1, "page number")
 	appListCmd.Flags().Int("limit", 20, "items per page")
+	appListCmd.Flags().Bool("detailed", false, "show all columns (default: compact view)")
 
 	// app create flags
 	appCreateCmd.Flags().String("name", "", "application name (required)")

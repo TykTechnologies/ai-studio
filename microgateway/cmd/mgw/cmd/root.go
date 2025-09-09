@@ -63,7 +63,6 @@ func init() {
 	// Add subcommands
 	rootCmd.AddCommand(llmCmd)
 	rootCmd.AddCommand(appCmd)
-	rootCmd.AddCommand(credentialCmd)
 	rootCmd.AddCommand(tokenCmd)
 	rootCmd.AddCommand(budgetCmd)
 	rootCmd.AddCommand(analyticsCmd)

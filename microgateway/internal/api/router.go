@@ -75,11 +75,6 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			apps.PUT("/:id", handlers.UpdateApp(config.Services))
 			apps.DELETE("/:id", handlers.DeleteApp(config.Services))
 
-			// Credentials sub-resource
-			apps.GET("/:id/credentials", handlers.ListCredentials(config.Services))
-			apps.POST("/:id/credentials", handlers.CreateCredential(config.Services))
-			apps.DELETE("/:id/credentials/:credId", handlers.DeleteCredential(config.Services))
-
 			// LLM associations
 			apps.GET("/:id/llms", handlers.GetAppLLMs(config.Services))
 			apps.PUT("/:id/llms", handlers.UpdateAppLLMs(config.Services))
@@ -112,7 +107,7 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		}
 	}
 
-	// Gateway proxy endpoints - mount the AI Gateway handler
+	// Gateway endpoints - mount the AI Gateway handler with middleware
 	if config.Gateway != nil {
 		gateway := router.Group("/")
 		gateway.Use(auth.RequireAuth(config.AuthProvider))
