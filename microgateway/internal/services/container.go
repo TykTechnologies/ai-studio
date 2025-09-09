@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
@@ -23,48 +22,33 @@ type ServiceContainer struct {
 	GatewayService   GatewayServiceInterface
 	BudgetService    BudgetServiceInterface
 	AnalyticsService AnalyticsServiceInterface
-	FilterService    FilterServiceInterface
 
 	// Management services
 	Management ManagementServiceInterface
 	Token      TokenServiceInterface
 
-	// Authentication
+	// Authentication (simplified)
 	AuthProvider auth.AuthProvider
-	Cache        *auth.TokenCache
 
 	// Utilities
 	Crypto CryptoServiceInterface
-
-	// Background tasks
-	backgroundCancel context.CancelFunc
-	backgroundWg     sync.WaitGroup
 }
 
-// NewServiceContainer creates a new service container with all dependencies
+// NewServiceContainer creates a new service container with essential dependencies only
 func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, error) {
 	// Initialize repository
 	repo := database.NewRepository(db)
 
-	// Initialize cache
-	var cache *auth.TokenCache
-	if cfg.Cache.Enabled {
-		cache = auth.NewTokenCache(cfg.Cache.MaxSize, cfg.Cache.TTL)
-	} else {
-		cache = auth.NewTokenCache(0, 0) // Disabled cache
-	}
-
 	// Initialize crypto service
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
 
-	// Initialize auth provider
-	authProvider := auth.NewTokenAuthProvider(db, cache)
+	// Initialize auth provider (no caching)
+	authProvider := auth.NewTokenAuthProvider(db)
 
-	// Initialize core services
-	gatewayService := NewDatabaseGatewayService(db, repo, cache)
+	// Initialize core services (simplified)
+	gatewayService := NewDatabaseGatewayService(db, repo)
 	budgetService := NewDatabaseBudgetService(db, repo)
 	analyticsService := NewDatabaseAnalyticsService(db, repo, cfg.Analytics)
-	filterService := NewFilterService(db, repo)
 
 	// Initialize management services
 	management := NewManagementService(db, repo, crypto)
@@ -77,84 +61,40 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		GatewayService:   gatewayService,
 		BudgetService:    budgetService,
 		AnalyticsService: analyticsService,
-		FilterService:    filterService,
 
 		Management: management,
 		Token:      tokenService,
 
 		AuthProvider: authProvider,
-		Cache:        cache,
-
-		Crypto: crypto,
+		Crypto:       crypto,
 	}, nil
 }
 
-// StartBackgroundTasks starts all background tasks
+// StartBackgroundTasks starts minimal essential tasks only
 func (sc *ServiceContainer) StartBackgroundTasks(ctx context.Context) {
-	backgroundCtx, cancel := context.WithCancel(ctx)
-	sc.backgroundCancel = cancel
-
-	log.Info().Msg("Starting background tasks")
-
-	// Start analytics buffer flush task
-	if analyticsService, ok := sc.AnalyticsService.(*DatabaseAnalyticsService); ok {
-		sc.backgroundWg.Add(1)
-		go func() {
-			defer sc.backgroundWg.Done()
-			analyticsService.StartBufferFlush(backgroundCtx)
-		}()
-	}
-
-	// Start budget monitoring task
-	if budgetService, ok := sc.BudgetService.(*DatabaseBudgetService); ok {
-		sc.backgroundWg.Add(1)
-		go func() {
-			defer sc.backgroundWg.Done()
-			budgetService.StartMonitoring(backgroundCtx)
-		}()
-	}
-
-	// Start cache cleanup task
-	// Cache has its own cleanup routine, no need to start it here
-
-	// Start token cleanup task
+	log.Info().Msg("Starting essential background tasks")
+	
+	// Only start token cleanup (essential for security)
 	if tokenAuthProvider, ok := sc.AuthProvider.(*auth.TokenAuthProvider); ok {
-		sc.backgroundWg.Add(1)
 		go func() {
-			defer sc.backgroundWg.Done()
-			sc.startTokenCleanup(backgroundCtx, tokenAuthProvider)
+			sc.startTokenCleanup(ctx, tokenAuthProvider)
 		}()
 	}
 
-	log.Info().Msg("Background tasks started")
+	log.Info().Msg("Essential background tasks started")
 }
 
-// StopBackgroundTasks stops all background tasks gracefully
+// StopBackgroundTasks stops background tasks gracefully  
 func (sc *ServiceContainer) StopBackgroundTasks() {
-	if sc.backgroundCancel != nil {
-		log.Info().Msg("Stopping background tasks")
-		sc.backgroundCancel()
-		sc.backgroundWg.Wait()
-		log.Info().Msg("Background tasks stopped")
-	}
+	log.Info().Msg("Stopping background tasks")
+	// Token cleanup will stop when context is cancelled
 }
 
 // Cleanup performs final cleanup of all services
 func (sc *ServiceContainer) Cleanup() {
 	log.Info().Msg("Starting service container cleanup")
 
-	// Flush any remaining analytics
-	if analyticsService, ok := sc.AnalyticsService.(*DatabaseAnalyticsService); ok {
-		if err := analyticsService.Flush(); err != nil {
-			log.Error().Err(err).Msg("Failed to flush analytics during cleanup")
-		}
-	}
-
-	// Close cache
-	if sc.Cache != nil {
-		sc.Cache.Close()
-	}
-
+	// Simple cleanup - no complex operations needed
 	log.Info().Msg("Service container cleanup completed")
 }
 
@@ -169,14 +109,9 @@ func (sc *ServiceContainer) Health() error {
 	return nil
 }
 
-// GetStats returns statistics about all services
+// GetStats returns basic statistics about services
 func (sc *ServiceContainer) GetStats() map[string]interface{} {
 	stats := make(map[string]interface{})
-
-	// Cache stats
-	if sc.Cache != nil {
-		stats["cache"] = sc.Cache.GetStats()
-	}
 
 	// Auth provider stats
 	if tokenAuthProvider, ok := sc.AuthProvider.(*auth.TokenAuthProvider); ok {

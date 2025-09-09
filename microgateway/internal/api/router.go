@@ -6,7 +6,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/api/middleware"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/gin-gonic/gin"
@@ -25,11 +24,8 @@ type RouterConfig struct {
 func SetupRouter(config *RouterConfig) *gin.Engine {
 	router := gin.New()
 
-	// Global middleware
+	// Essential middleware only
 	router.Use(gin.Recovery())
-	router.Use(middleware.RequestLogger())
-	router.Use(middleware.CORS())
-	router.Use(middleware.RequestID())
 
 	// Health endpoints (no auth required)
 	router.GET("/health", handlers.HealthCheck(config.Services))

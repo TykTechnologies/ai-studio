@@ -14,31 +14,19 @@ import (
 
 // TokenAuthProvider implements AuthProvider using database-backed token authentication
 type TokenAuthProvider struct {
-	db    *gorm.DB
-	cache *TokenCache
+	db *gorm.DB
 }
 
 // NewTokenAuthProvider creates a new token authentication provider
-func NewTokenAuthProvider(db *gorm.DB, cache *TokenCache) *TokenAuthProvider {
+func NewTokenAuthProvider(db *gorm.DB) *TokenAuthProvider {
 	return &TokenAuthProvider{
-		db:    db,
-		cache: cache,
+		db: db,
 	}
 }
 
 // ValidateToken checks if a token is valid and returns authentication result
 func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
-	// Check cache first
-	if cached := p.cache.Get(token); cached != nil {
-		return &AuthResult{
-			Valid:     true,
-			AppID:     cached.AppID,
-			Scopes:    cached.Scopes,
-			ExpiresAt: cached.ExpiresAt,
-		}, nil
-	}
-
-	// Query database
+	// Query database directly (no caching for simplicity)
 	var apiToken database.APIToken
 	err := p.db.Where("token = ? AND is_active = ?", token, true).
 		Preload("App").
@@ -83,23 +71,12 @@ func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
 		}
 	}
 
-	result := &AuthResult{
+	return &AuthResult{
 		Valid:     true,
 		AppID:     apiToken.AppID,
 		Scopes:    scopes,
 		ExpiresAt: apiToken.ExpiresAt,
-	}
-
-	// Cache the result
-	p.cache.Set(token, &CachedToken{
-		Token:     token,
-		AppID:     apiToken.AppID,
-		Scopes:    scopes,
-		ExpiresAt: apiToken.ExpiresAt,
-		CreatedAt: time.Now(),
-	})
-
-	return result, nil
+	}, nil
 }
 
 // GenerateToken creates a new API token

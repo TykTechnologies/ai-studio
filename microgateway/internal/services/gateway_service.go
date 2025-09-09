@@ -6,25 +6,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"gorm.io/gorm"
 )
 
-// DatabaseGatewayService implements GatewayServiceInterface using database storage
+// DatabaseGatewayService implements GatewayServiceInterface using database storage  
 type DatabaseGatewayService struct {
-	db    *gorm.DB
-	repo  *database.Repository
-	cache *auth.TokenCache
-	mu    sync.RWMutex
+	db   *gorm.DB
+	repo *database.Repository
+	mu   sync.RWMutex
 }
 
 // NewDatabaseGatewayService creates a new database-backed gateway service
-func NewDatabaseGatewayService(db *gorm.DB, repo *database.Repository, cache *auth.TokenCache) GatewayServiceInterface {
+func NewDatabaseGatewayService(db *gorm.DB, repo *database.Repository) GatewayServiceInterface {
 	return &DatabaseGatewayService{
-		db:    db,
-		repo:  repo,
-		cache: cache,
+		db:   db,
+		repo: repo,
 	}
 }
 
@@ -63,32 +60,10 @@ func (s *DatabaseGatewayService) GetLLMBySlug(slug string) (interface{}, error) 
 	return llm, nil
 }
 
-// GetCredentialBySecret validates a credential secret and returns the credential
+// GetCredentialBySecret validates a credential secret and returns the credential  
+// NOTE: This is legacy - we use token authentication only now
 func (s *DatabaseGatewayService) GetCredentialBySecret(secret string) (interface{}, error) {
-	// Check cache first
-	if cached := s.cache.GetCredential(secret); cached != nil {
-		return cached, nil
-	}
-
-	// Hash the secret for lookup
-	secretHash := s.hashSecret(secret)
-
-	// Query database
-	cred, err := s.repo.GetCredentialBySecret(secretHash)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("invalid credentials")
-		}
-		return nil, fmt.Errorf("credential lookup failed: %w", err)
-	}
-
-	// Update last used timestamp
-	go s.repo.UpdateCredentialLastUsed(cred.ID)
-
-	// Cache the result
-	s.cache.SetCredential(secret, cred.KeyID, cred.AppID, s.cache.GetStats().TTL)
-
-	return cred, nil
+	return nil, fmt.Errorf("credential authentication not supported - use token authentication")
 }
 
 // GetAppByCredentialID returns the app associated with a credential
@@ -144,14 +119,12 @@ func (s *DatabaseGatewayService) ValidateAppAccess(appID uint, llmSlug string) e
 	return nil
 }
 
-// Reload reloads the gateway configuration (clears cache)
+// Reload reloads the gateway configuration
 func (s *DatabaseGatewayService) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Clear cache to force reload from database
-	s.cache.Clear()
-
+	// No cache to clear in simplified version
 	return nil
 }
 

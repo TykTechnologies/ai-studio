@@ -17,14 +17,7 @@ CREATE TABLE api_tokens (
 CREATE INDEX idx_token_active ON api_tokens(token, is_active);
 CREATE INDEX idx_app_tokens ON api_tokens(app_id, is_active);
 
--- Token cache table for persistent cache backing
-CREATE TABLE token_cache (
-    token VARCHAR(255) PRIMARY KEY,
-    cache_data JSON NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX idx_cache_expiry ON token_cache(expires_at);
+-- Note: Token caching removed for simplicity - using direct database queries
 
 -- Extended LLMs table
 CREATE TABLE llms (
@@ -69,26 +62,8 @@ CREATE TABLE apps (
 CREATE INDEX idx_app_active ON apps(is_active);
 CREATE INDEX idx_app_owner ON apps(owner_email);
 
--- Credentials table
-CREATE TABLE credentials (
-    id SERIAL PRIMARY KEY,
-    app_id INTEGER NOT NULL,
-    key_id VARCHAR(255) UNIQUE NOT NULL,
-    secret_hash VARCHAR(255) NOT NULL, -- Hashed secret
-    name VARCHAR(255),
-    is_active BOOLEAN DEFAULT true,
-    expires_at TIMESTAMP,
-    last_used_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP
-);
-CREATE INDEX idx_cred_app ON credentials(app_id, is_active);
-CREATE INDEX idx_cred_secret ON credentials(secret_hash, is_active);
-
 -- Add foreign key constraints
 ALTER TABLE api_tokens ADD CONSTRAINT fk_api_tokens_app_id FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE;
-ALTER TABLE credentials ADD CONSTRAINT fk_credentials_app_id FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE;
 
 -- App-LLM associations
 CREATE TABLE app_llms (
