@@ -231,7 +231,7 @@ func UpdateLLMFilters(serviceContainer *services.ServiceContainer) gin.HandlerFu
 		}
 
 		var req struct {
-			FilterIDs []uint `json:"filter_ids" binding:"required"`
+			FilterIDs []uint `json:"filter_ids"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{

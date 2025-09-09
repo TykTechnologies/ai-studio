@@ -143,3 +143,16 @@ func (s *Server) Health() error {
 	// Check if services are healthy
 	return s.services.Health()
 }
+
+// Reload reloads the AI Gateway configuration
+func (s *Server) Reload() error {
+	log.Info().Msg("Reloading AI Gateway configuration...")
+	
+	if err := s.gateway.Reload(); err != nil {
+		log.Error().Err(err).Msg("Failed to reload AI Gateway configuration")
+		return fmt.Errorf("failed to reload AI Gateway: %w", err)
+	}
+	
+	log.Info().Msg("AI Gateway configuration reloaded successfully")
+	return nil
+}

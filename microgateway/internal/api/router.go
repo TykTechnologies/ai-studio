@@ -131,6 +131,13 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		// LLM-Filter associations (extend existing LLM routes)
 		llms.GET("/:id/filters", handlers.GetLLMFilters(config.Services))
 		llms.PUT("/:id/filters", handlers.UpdateLLMFilters(config.Services))
+
+		// System management endpoints
+		system := protected.Group("/system")
+		{
+			system.POST("/reload", handlers.ReloadConfiguration(config.Gateway))
+			system.GET("/info", handlers.GetSystemInfo(config.Services, config.Version, config.BuildHash, config.BuildTime))
+		}
 	}
 
 	// Gateway endpoints - mount the AI Gateway handler with middleware

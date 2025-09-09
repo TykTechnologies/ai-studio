@@ -119,6 +119,30 @@ var systemVersionCmd = &cobra.Command{
 	},
 }
 
+// systemReloadCmd reloads gateway configuration
+var systemReloadCmd = &cobra.Command{
+	Use:   "reload",
+	Short: "Reload AI Gateway configuration",
+	Long: `Reload the AI Gateway configuration to pick up changes to LLMs, filters, and their associations.
+
+This is required after:
+- Creating, updating, or activating LLMs
+- Creating or modifying filters 
+- Adding or removing filter associations with LLMs
+- Any database changes that affect gateway routing
+
+The reload is instant and doesn't require restarting the microgateway process.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		resp, err := cli.GetClient().Post("/api/v1/system/reload", nil)
+		if err != nil {
+			return fmt.Errorf("failed to reload configuration: %w", err)
+		}
+
+		cli.PrintSuccess(resp.Message)
+		return nil
+	},
+}
+
 func init() {
 	// Add subcommands
 	systemCmd.AddCommand(systemHealthCmd)
@@ -126,4 +150,5 @@ func init() {
 	systemCmd.AddCommand(systemMetricsCmd)
 	systemCmd.AddCommand(systemConfigCmd)
 	systemCmd.AddCommand(systemVersionCmd)
+	systemCmd.AddCommand(systemReloadCmd)
 }

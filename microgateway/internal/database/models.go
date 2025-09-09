@@ -164,12 +164,15 @@ type AnalyticsEvent struct {
 
 // Filter represents a filter script
 type Filter struct {
-	gorm.Model
-	Name       string `gorm:"not null" json:"name"`
-	Description string `json:"description"`
-	Script     string `gorm:"not null;type:text" json:"script"`
-	IsActive   bool   `gorm:"default:true" json:"is_active"`
-	OrderIndex int    `gorm:"default:0" json:"order_index"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	Name        string    `gorm:"not null" json:"name"`
+	Description string    `json:"description"`
+	Script      string    `gorm:"not null;type:text" json:"script"`
+	IsActive    bool      `gorm:"default:true" json:"is_active"`
+	OrderIndex  int       `gorm:"default:0" json:"order_index"`
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_filters;" json:"llms,omitempty"`

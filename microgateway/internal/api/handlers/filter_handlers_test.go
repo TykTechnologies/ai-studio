@@ -253,6 +253,34 @@ func TestLLMFilters_Handler(t *testing.T) {
 		filterData := data[0].(map[string]interface{})
 		assert.Equal(t, "LLM Test Filter", filterData["name"])
 	})
+
+	t.Run("RemoveAllFilters", func(t *testing.T) {
+		reqData := map[string]interface{}{
+			"filter_ids": []uint{}, // Empty array to remove all filters
+		}
+
+		jsonData, _ := json.Marshal(reqData)
+		req := httptest.NewRequest("PUT", "/llms/"+strconv.Itoa(int(llm.ID))+"/filters", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		// Verify no filters are associated
+		req2 := httptest.NewRequest("GET", "/llms/"+strconv.Itoa(int(llm.ID))+"/filters", nil)
+		w2 := httptest.NewRecorder()
+
+		router.ServeHTTP(w2, req2)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w2.Body.Bytes(), &response)
+		require.NoError(t, err)
+		
+		data := response["data"].([]interface{})
+		assert.Len(t, data, 0) // No filters
+	})
 }
 
 func TestUpdateFilter_Handler(t *testing.T) {
