@@ -24,7 +24,7 @@ type Server struct {
 }
 
 // New creates a new server instance
-func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Server, error) {
+func New(cfg *config.Config, serviceContainer *services.ServiceContainer, version, buildHash, buildTime string) (*Server, error) {
 	// Set gin mode based on log level
 	if cfg.IsDevelopment() {
 		gin.SetMode(gin.DebugMode)
@@ -72,6 +72,9 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 		Gateway:       gateway, // Mount gateway back in router
 		EnableSwagger: cfg.IsDevelopment(),
 		EnableMetrics: cfg.Observability.EnableMetrics,
+		Version:       version,
+		BuildHash:     buildHash,
+		BuildTime:     buildTime,
 	}
 
 	router := api.SetupRouter(routerConfig)

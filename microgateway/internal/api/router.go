@@ -18,6 +18,9 @@ type RouterConfig struct {
 	Gateway       aigateway.Gateway
 	EnableSwagger bool
 	EnableMetrics bool
+	Version       string
+	BuildHash     string
+	BuildTime     string
 }
 
 // SetupRouter configures and returns the main application router
@@ -34,9 +37,11 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	// Root endpoint
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"service": "microgateway",
-			"version": "v1.0.0", // TODO: Get from build info
-			"status":  "running",
+			"service":    "microgateway",
+			"version":    config.Version,
+			"build_hash": config.BuildHash,
+			"build_time": config.BuildTime,
+			"status":     "running",
 		})
 	})
 
@@ -45,6 +50,7 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	{
 		// Public endpoints
 		v1.POST("/auth/token", handlers.GenerateToken(config.Services))
+		v1.POST("/auth/validate", handlers.ValidateTokenEndpoint(config.Services))
 
 		// Protected management endpoints
 		protected := v1.Group("/")

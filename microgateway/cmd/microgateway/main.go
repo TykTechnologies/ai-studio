@@ -122,7 +122,7 @@ func main() {
 	}
 
 	// Create and configure server
-	srv, err := server.New(cfg, serviceContainer)
+	srv, err := server.New(cfg, serviceContainer, Version, BuildHash, BuildTime)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create server")
 	}
