@@ -47,11 +47,15 @@ func TestDatabaseGatewayService_GetActiveLLMs(t *testing.T) {
 		Slug:         "inactive-llm",
 		Vendor:       "anthropic",
 		DefaultModel: "claude-3",
-		IsActive:     false,
+		IsActive:     true, // Create as active first
 	}
 
 	repo.CreateLLM(activeLLM)
 	repo.CreateLLM(inactiveLLM)
+	
+	// Now update to inactive
+	inactiveLLM.IsActive = false
+	repo.UpdateLLM(inactiveLLM)
 
 	t.Run("GetActiveLLMs", func(t *testing.T) {
 		llms, err := service.GetActiveLLMs()
@@ -59,7 +63,7 @@ func TestDatabaseGatewayService_GetActiveLLMs(t *testing.T) {
 		assert.Len(t, llms, 1)
 
 		// Verify it's the active one
-		llm := llms[0].(database.LLM)
+		llm := llms[0].(*database.LLM)
 		assert.Equal(t, "Active LLM", llm.Name)
 		assert.True(t, llm.IsActive)
 	})

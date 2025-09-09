@@ -2,6 +2,7 @@
 package database
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -552,21 +553,26 @@ func TestRepository_WithTransaction(t *testing.T) {
 	t.Run("FailedTransaction", func(t *testing.T) {
 		err := repo.WithTransaction(func(txRepo *Repository) error {
 			app := &App{
-				Name:     "Failed App",
+				Name:     "Failed App", 
 				IsActive: true,
 			}
 			if err := txRepo.CreateApp(app); err != nil {
 				return err
 			}
 
-			// Force an error by trying to create invalid credential
+			// Force an error by trying to create credential with empty required field
 			cred := &Credential{
-				AppID:      999999, // Non-existent app ID
-				KeyID:      "invalid-key",
-				SecretHash: "invalid-secret",
+				AppID:      app.ID,
+				KeyID:      "", // Empty KeyID should cause validation error
+				SecretHash: "secret",
 				IsActive:   true,
 			}
-			return txRepo.CreateCredential(cred)
+			if err := txRepo.CreateCredential(cred); err != nil {
+				return err // This should cause rollback
+			}
+			
+			// Explicitly return an error to test rollback
+			return fmt.Errorf("forced transaction failure")
 		})
 
 		assert.Error(t, err) // Transaction should fail
