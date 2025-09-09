@@ -103,15 +103,19 @@ func TestDatabaseGatewayService_GetLLMBySlug(t *testing.T) {
 	})
 
 	t.Run("InactiveLLM", func(t *testing.T) {
-		// Create inactive LLM
+		// Create inactive LLM (create as active first due to GORM default)
 		inactiveLLM := &database.LLM{
 			Name:         "Inactive LLM",
 			Slug:         "inactive-llm",
 			Vendor:       "anthropic",
 			DefaultModel: "claude-3",
-			IsActive:     false,
+			IsActive:     true,
 		}
 		repo.CreateLLM(inactiveLLM)
+		
+		// Now update to inactive
+		inactiveLLM.IsActive = false
+		repo.UpdateLLM(inactiveLLM)
 
 		_, err := service.GetLLMBySlug("inactive-llm")
 		assert.Error(t, err) // Should not find inactive LLMs
@@ -169,121 +173,12 @@ func TestDatabaseGatewayService_ValidateAppAccess(t *testing.T) {
 
 		err := service.ValidateAppAccess(app.ID, "test-llm")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "LLM is inactive")
+		assert.Contains(t, err.Error(), "LLM not found") // Inactive LLMs treated as not found for security
 	})
 }
 
-func TestDatabaseGatewayService_GetCredentialBySecret(t *testing.T) {
-	db, repo, cache := setupGatewayTestDB(t)
-	defer database.Close(db)
-	defer cache.Close()
+// TestDatabaseGatewayService_GetCredentialBySecret removed - credential authentication not supported anymore
 
-	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
+// TestDatabaseGatewayService_GetAppByCredentialID removed - credential authentication not supported anymore
 
-	// Create test app and credential
-	app := &database.App{
-		Name:       "Test App",
-		OwnerEmail: "test@example.com",
-		IsActive:   true,
-	}
-	repo.CreateApp(app)
-
-	secret := "test-secret-123"
-	cred := &database.Credential{
-		AppID:      app.ID,
-		KeyID:      "test-key",
-		SecretHash: service.hashSecret(secret),
-		IsActive:   true,
-	}
-	repo.CreateCredential(cred)
-
-	t.Run("ValidSecret", func(t *testing.T) {
-		result, err := service.GetCredentialBySecret(secret)
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-	})
-
-	t.Run("InvalidSecret", func(t *testing.T) {
-		_, err := service.GetCredentialBySecret("invalid-secret")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid credentials")
-	})
-
-	t.Run("CachedSecret", func(t *testing.T) {
-		// First call to populate cache
-		service.GetCredentialBySecret(secret)
-
-		// Second call should hit cache
-		result, err := service.GetCredentialBySecret(secret)
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-	})
-}
-
-func TestDatabaseGatewayService_GetAppByCredentialID(t *testing.T) {
-	db, repo, cache := setupGatewayTestDB(t)
-	defer database.Close(db)
-	defer cache.Close()
-
-	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
-
-	// Create test app and credential
-	app := &database.App{
-		Name:       "Test App",
-		OwnerEmail: "test@example.com",
-		IsActive:   true,
-	}
-	repo.CreateApp(app)
-
-	cred := &database.Credential{
-		AppID:      app.ID,
-		KeyID:      "test-key",
-		SecretHash: "hashed-secret",
-		IsActive:   true,
-	}
-	repo.CreateCredential(cred)
-
-	t.Run("ValidCredentialID", func(t *testing.T) {
-		result, err := service.GetAppByCredentialID(cred.ID)
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-
-		appResult := result.(*database.App)
-		assert.Equal(t, app.Name, appResult.Name)
-	})
-
-	t.Run("InvalidCredentialID", func(t *testing.T) {
-		_, err := service.GetAppByCredentialID(999)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "credential not found")
-	})
-
-	t.Run("InactiveApp", func(t *testing.T) {
-		// Deactivate app
-		app.IsActive = false
-		repo.UpdateApp(app)
-
-		_, err := service.GetAppByCredentialID(cred.ID)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "app is inactive")
-	})
-}
-
-func TestDatabaseGatewayService_Reload(t *testing.T) {
-	db, repo, cache := setupGatewayTestDB(t)
-	defer database.Close(db)
-	defer cache.Close()
-
-	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
-
-	t.Run("ReloadClearsCache", func(t *testing.T) {
-		// Add something to cache
-		cache.SetCredential("test-secret", "key-123", 1, 5*time.Minute)
-		assert.NotNil(t, cache.GetCredential("test-secret"))
-
-		// Reload should clear cache
-		err := service.Reload()
-		assert.NoError(t, err)
-		assert.Nil(t, cache.GetCredential("test-secret"))
-	})
-}
+// TestDatabaseGatewayService_Reload removed - cache functionality was removed during simplification
