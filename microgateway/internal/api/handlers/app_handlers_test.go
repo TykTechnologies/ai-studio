@@ -27,11 +27,15 @@ func TestListApps_Handler(t *testing.T) {
 	app2 := &database.App{
 		Name:       "Test App 2", 
 		OwnerEmail: "test2@example.com",
-		IsActive:   false,
+		IsActive:   true, // Create as active first
 	}
 	
 	container.Repository.CreateApp(app1)
 	container.Repository.CreateApp(app2)
+	
+	// Now explicitly set app2 to inactive
+	app2.IsActive = false
+	container.Repository.UpdateApp(app2)
 
 	// Setup route
 	router.GET("/apps", ListApps(container))

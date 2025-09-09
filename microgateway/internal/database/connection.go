@@ -71,7 +71,6 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 func Migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&APIToken{},
-		&TokenCache{},
 		&LLM{},
 		&App{},
 		&Credential{},

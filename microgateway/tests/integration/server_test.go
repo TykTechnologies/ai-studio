@@ -61,7 +61,7 @@ func setupIntegrationTest(t *testing.T) (*server.Server, *services.ServiceContai
 	require.NoError(t, err)
 
 	// Create server
-	srv, err := server.New(cfg, serviceContainer)
+	srv, err := server.New(cfg, serviceContainer, "test", "test-hash", "test-time")
 	require.NoError(t, err)
 
 	return srv, serviceContainer

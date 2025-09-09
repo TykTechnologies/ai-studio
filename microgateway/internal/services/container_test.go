@@ -68,7 +68,6 @@ func TestServiceContainer_Creation(t *testing.T) {
 		assert.NotNil(t, container.Management)
 		assert.NotNil(t, container.Token)
 		assert.NotNil(t, container.AuthProvider)
-		assert.NotNil(t, container.Cache)
 		assert.NotNil(t, container.Crypto)
 	})
 
@@ -113,11 +112,14 @@ func TestServiceContainer_GetStats(t *testing.T) {
 	t.Run("GetStats", func(t *testing.T) {
 		stats := container.GetStats()
 		assert.NotNil(t, stats)
-		assert.Contains(t, stats, "cache")
 		
-		// Cache stats should be present (interface{} type for now)
-		if cacheStats, ok := stats["cache"]; ok {
-			assert.NotNil(t, cacheStats)
+		// Should contain analytics and tokens stats
+		assert.Contains(t, stats, "analytics")
+		assert.Contains(t, stats, "tokens")
+		
+		// Verify analytics stats structure
+		if analyticsStats, ok := stats["analytics"]; ok {
+			assert.NotNil(t, analyticsStats)
 		}
 	})
 }
@@ -137,11 +139,11 @@ func TestServiceContainer_Cleanup(t *testing.T) {
 // Integration test for the service container
 func TestServiceContainer_Integration(t *testing.T) {
 	container, db := setupTestServiceContainer(t)
-	defer func() { 
+	defer func() {
 		container.Cleanup()
 		if err := database.Close(db); err != nil {
 			t.Logf("Failed to close database: %v", err)
-		} 
+		}
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

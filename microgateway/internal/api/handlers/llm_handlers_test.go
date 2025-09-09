@@ -70,11 +70,15 @@ func TestListLLMs_Handler(t *testing.T) {
 		Slug:         "test-claude", 
 		Vendor:       "anthropic",
 		DefaultModel: "claude-3",
-		IsActive:     false,
+		IsActive:     true, // Create as active first
 	}
 	
 	container.Repository.CreateLLM(llm1)
 	container.Repository.CreateLLM(llm2)
+	
+	// Now explicitly set llm2 to inactive
+	llm2.IsActive = false
+	container.Repository.UpdateLLM(llm2)
 
 	// Setup route
 	router.GET("/llms", ListLLMs(container))

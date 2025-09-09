@@ -58,14 +58,19 @@ func TestRepository_LLM_Operations(t *testing.T) {
 	})
 
 	t.Run("ListLLMs", func(t *testing.T) {
-		// Create another LLM (inactive)
+		// Create another LLM (create as active first)
 		llm2 := &LLM{
 			Name:     "Test Claude",
 			Slug:     "test-claude",
 			Vendor:   "anthropic",
-			IsActive: false,
+			IsActive: true,
 		}
 		err := repo.CreateLLM(llm2)
+		require.NoError(t, err)
+		
+		// Now update to inactive
+		llm2.IsActive = false
+		err = repo.UpdateLLM(llm2)
 		require.NoError(t, err)
 
 		// List active LLMs

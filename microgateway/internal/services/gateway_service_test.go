@@ -32,7 +32,7 @@ func TestDatabaseGatewayService_GetActiveLLMs(t *testing.T) {
 	defer database.Close(db)
 	defer cache.Close()
 
-	service := NewDatabaseGatewayService(db, repo, cache).(*DatabaseGatewayService)
+	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
 
 	// Create test LLMs
 	activeLLM := &database.LLM{
@@ -70,7 +70,7 @@ func TestDatabaseGatewayService_GetLLMBySlug(t *testing.T) {
 	defer database.Close(db)
 	defer cache.Close()
 
-	service := NewDatabaseGatewayService(db, repo, cache).(*DatabaseGatewayService)
+	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
 
 	// Create test LLM
 	llm := &database.LLM{
@@ -119,7 +119,7 @@ func TestDatabaseGatewayService_ValidateAppAccess(t *testing.T) {
 	defer database.Close(db)
 	defer cache.Close()
 
-	service := NewDatabaseGatewayService(db, repo, cache).(*DatabaseGatewayService)
+	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
 
 	// Create test app and LLM
 	app := &database.App{
@@ -174,7 +174,7 @@ func TestDatabaseGatewayService_GetCredentialBySecret(t *testing.T) {
 	defer database.Close(db)
 	defer cache.Close()
 
-	service := NewDatabaseGatewayService(db, repo, cache).(*DatabaseGatewayService)
+	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
 
 	// Create test app and credential
 	app := &database.App{
@@ -208,7 +208,7 @@ func TestDatabaseGatewayService_GetCredentialBySecret(t *testing.T) {
 	t.Run("CachedSecret", func(t *testing.T) {
 		// First call to populate cache
 		service.GetCredentialBySecret(secret)
-		
+
 		// Second call should hit cache
 		result, err := service.GetCredentialBySecret(secret)
 		assert.NoError(t, err)
@@ -221,7 +221,7 @@ func TestDatabaseGatewayService_GetAppByCredentialID(t *testing.T) {
 	defer database.Close(db)
 	defer cache.Close()
 
-	service := NewDatabaseGatewayService(db, repo, cache).(*DatabaseGatewayService)
+	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
 
 	// Create test app and credential
 	app := &database.App{
@@ -270,7 +270,7 @@ func TestDatabaseGatewayService_Reload(t *testing.T) {
 	defer database.Close(db)
 	defer cache.Close()
 
-	service := NewDatabaseGatewayService(db, repo, cache).(*DatabaseGatewayService)
+	service := NewDatabaseGatewayService(db, repo).(*DatabaseGatewayService)
 
 	t.Run("ReloadClearsCache", func(t *testing.T) {
 		// Add something to cache
