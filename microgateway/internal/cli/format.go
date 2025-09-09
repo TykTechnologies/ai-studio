@@ -359,13 +359,14 @@ func printAnalyticsTable(v reflect.Value) error {
 	
 	for i := 0; i < v.Len(); i++ {
 		if itemMap, ok := v.Index(i).Interface().(map[string]interface{}); ok {
-			id := getMapValue(itemMap, "id", "")
-			endpoint := getMapValue(itemMap, "endpoint", "")
-			method := getMapValue(itemMap, "method", "")
-			status := getMapValue(itemMap, "status_code", 0)
-			tokens := getMapValue(itemMap, "total_tokens", 0)
-			cost := getMapValue(itemMap, "cost", 0.0)
-			latency := getMapValue(itemMap, "latency_ms", 0)
+			// Handle Title Case field names from JSON
+			id := getMapValueCaseInsensitive(itemMap, []string{"id", "ID"}, "")
+			endpoint := getMapValueCaseInsensitive(itemMap, []string{"endpoint", "Endpoint"}, "")
+			method := getMapValueCaseInsensitive(itemMap, []string{"method", "Method"}, "")
+			status := getMapValueCaseInsensitive(itemMap, []string{"status_code", "StatusCode"}, 0)
+			tokens := getMapValueCaseInsensitive(itemMap, []string{"total_tokens", "TotalTokens"}, 0)
+			cost := getMapValueCaseInsensitive(itemMap, []string{"cost", "Cost"}, 0.0)
+			latency := getMapValueCaseInsensitive(itemMap, []string{"latency_ms", "LatencyMs"}, 0)
 			
 			// Truncate long endpoints
 			endpointStr := fmt.Sprintf("%v", endpoint)
@@ -374,8 +375,20 @@ func printAnalyticsTable(v reflect.Value) error {
 			}
 			endpoint = endpointStr
 			
-			costStr := fmt.Sprintf("$%.3f", cost)
-			latencyStr := fmt.Sprintf("%dms", latency)
+			// Format cost and latency
+			costFloat := 0.0
+			if costVal, ok := cost.(float64); ok {
+				costFloat = costVal
+			}
+			costStr := fmt.Sprintf("$%.3f", costFloat)
+			
+			latencyInt := 0
+			if latencyVal, ok := latency.(float64); ok {
+				latencyInt = int(latencyVal)
+			} else if latencyVal, ok := latency.(int); ok {
+				latencyInt = latencyVal
+			}
+			latencyStr := fmt.Sprintf("%dms", latencyInt)
 			
 			tbl.AddRow(id, endpoint, method, status, tokens, costStr, latencyStr)
 		}

@@ -45,12 +45,16 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer) (*Serv
 		serviceContainer.GatewayService,
 	)
 
+	// Create analytics handler for microgateway
+	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB)
+	analyticsHandler.SetAsGlobalHandler()
+
 	// Create AI Gateway instance for mounting (not standalone)
 	log.Info().Msg("Creating AI Gateway for mounting in management server")
 	gateway := aigateway.NewWithAnalytics(
 		gatewayServiceAdapter,
 		budgetServiceAdapter,
-		nil, // Use default analytics for now
+		analyticsHandler, // Use microgateway analytics handler
 		&aigateway.Config{Port: cfg.Server.Port}, // Same port as management API
 	)
 	
