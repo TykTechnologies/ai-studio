@@ -99,6 +99,10 @@ func (c *Client) makeRequest(method, endpoint string, body interface{}) (*APIRes
 	// Check for errors
 	if resp.StatusCode >= 400 {
 		if apiResp.Error != "" {
+			// Include detailed message if available
+			if apiResp.Message != "" {
+				return nil, fmt.Errorf("API error (%d): %s - %s", resp.StatusCode, apiResp.Error, apiResp.Message)
+			}
 			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, apiResp.Error)
 		}
 		return nil, fmt.Errorf("HTTP error: %d", resp.StatusCode)

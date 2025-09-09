@@ -3,6 +3,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -18,7 +19,7 @@ type FilterServiceInterface interface {
 	GetFilter(id uint) (*database.Filter, error)
 	
 	// ListFilters lists filters with pagination
-	ListFilters(page, limit int, filterType string, isActive bool) ([]database.Filter, int64, error)
+	ListFilters(page, limit int, isActive bool) ([]database.Filter, int64, error)
 	
 	// UpdateFilter updates an existing filter
 	UpdateFilter(id uint, req *UpdateFilterRequest) (*database.Filter, error)
@@ -52,35 +53,35 @@ func NewFilterService(db *gorm.DB, repo *database.Repository) FilterServiceInter
 
 // CreateFilterRequest for creating filters
 type CreateFilterRequest struct {
-	Name       string `json:"name" binding:"required"`
-	Type       string `json:"type" binding:"required,oneof=request response both"`
-	Script     string `json:"script" binding:"required"`
-	IsActive   bool   `json:"is_active"`
-	OrderIndex int    `json:"order_index"`
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	Script      string `json:"script" binding:"required"`
+	IsActive    bool   `json:"is_active"`
+	OrderIndex  int    `json:"order_index"`
 }
 
 // UpdateFilterRequest for updating filters
 type UpdateFilterRequest struct {
-	Name       *string `json:"name"`
-	Type       *string `json:"type"`
-	Script     *string `json:"script"`
-	IsActive   *bool   `json:"is_active"`
-	OrderIndex *int    `json:"order_index"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Script      *string `json:"script"`
+	IsActive    *bool   `json:"is_active"`
+	OrderIndex  *int    `json:"order_index"`
 }
 
 // CreateFilter creates a new filter
 func (s *FilterService) CreateFilter(req *CreateFilterRequest) (*database.Filter, error) {
-	// Validate script syntax (placeholder - would integrate with actual scripting engine)
-	if err := s.validateFilterScript(req.Script, req.Type); err != nil {
-		return nil, fmt.Errorf("invalid filter script: %w", err)
+	// Only check for empty scripts
+	if strings.TrimSpace(req.Script) == "" {
+		return nil, fmt.Errorf("script cannot be empty")
 	}
 
 	filter := &database.Filter{
-		Name:       req.Name,
-		Type:       req.Type,
-		Script:     req.Script,
-		IsActive:   req.IsActive,
-		OrderIndex: req.OrderIndex,
+		Name:        req.Name,
+		Description: req.Description,
+		Script:      req.Script,
+		IsActive:    req.IsActive,
+		OrderIndex:  req.OrderIndex,
 	}
 
 	if err := s.db.Create(filter).Error; err != nil {
@@ -104,17 +105,12 @@ func (s *FilterService) GetFilter(id uint) (*database.Filter, error) {
 	return &filter, nil
 }
 
-// ListFilters lists filters with pagination and filtering
-func (s *FilterService) ListFilters(page, limit int, filterType string, isActive bool) ([]database.Filter, int64, error) {
+// ListFilters lists filters with pagination
+func (s *FilterService) ListFilters(page, limit int, isActive bool) ([]database.Filter, int64, error) {
 	var filters []database.Filter
 	var total int64
 
-	query := s.db.Model(&database.Filter{})
-	
-	if filterType != "" {
-		query = query.Where("type = ?", filterType)
-	}
-	query = query.Where("is_active = ?", isActive)
+	query := s.db.Model(&database.Filter{}).Where("is_active = ?", isActive)
 
 	// Get total count
 	if err := query.Count(&total).Error; err != nil {
@@ -143,14 +139,10 @@ func (s *FilterService) UpdateFilter(id uint, req *UpdateFilterRequest) (*databa
 	if req.Name != nil {
 		filter.Name = *req.Name
 	}
-	if req.Type != nil {
-		filter.Type = *req.Type
+	if req.Description != nil {
+		filter.Description = *req.Description
 	}
 	if req.Script != nil {
-		// Validate script
-		if err := s.validateFilterScript(*req.Script, filter.Type); err != nil {
-			return nil, fmt.Errorf("invalid filter script: %w", err)
-		}
 		filter.Script = *req.Script
 	}
 	if req.IsActive != nil {
@@ -246,50 +238,4 @@ func (s *FilterService) ExecuteFilter(filterID uint, payload map[string]interfac
 	return payload, nil
 }
 
-// validateFilterScript validates filter script syntax
-func (s *FilterService) validateFilterScript(script, filterType string) error {
-	// Basic validation - in production this would parse and validate the script
-	if script == "" {
-		return fmt.Errorf("script cannot be empty")
-	}
-
-	// Check for basic script structure
-	switch filterType {
-	case "request":
-		if !contains(script, "request") {
-			return fmt.Errorf("request filter script must reference 'request' object")
-		}
-	case "response":
-		if !contains(script, "response") {
-			return fmt.Errorf("response filter script must reference 'response' object")
-		}
-	case "both":
-		// Both types allowed
-	default:
-		return fmt.Errorf("invalid filter type: %s", filterType)
-	}
-
-	// TODO: Add actual script parsing and validation
-	// This would use the scripting engine to validate syntax
-
-	return nil
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || 
-		(len(s) > len(substr) && 
-			(s[:len(substr)] == substr || 
-			 s[len(s)-len(substr):] == substr ||
-			 findInString(s, substr))))
-}
-
-// findInString is a simple substring search
-func findInString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
+// Script validation removed - AI Gateway handles Tengo script execution and validation at runtime

@@ -16,6 +16,7 @@ type GatewayServiceAdapter struct {
 	management     ManagementServiceInterface
 	analytics      AnalyticsServiceInterface
 	crypto         CryptoServiceInterface
+	filterService  FilterServiceInterface
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface
@@ -24,12 +25,14 @@ func NewGatewayServiceAdapter(
 	management ManagementServiceInterface,
 	analytics AnalyticsServiceInterface,
 	crypto CryptoServiceInterface,
+	filterService FilterServiceInterface,
 ) services.ServiceInterface {
 	adapter := &GatewayServiceAdapter{
 		gatewayService: gatewayService,
 		management:     management,
 		analytics:      analytics,
 		crypto:         crypto,
+		filterService:  filterService,
 	}
 	
 	log.Info().Msg("GatewayServiceAdapter created - testing LLM loading...")
@@ -257,14 +260,51 @@ func (a *GatewayServiceAdapter) GetModelPriceByModelNameAndVendor(modelName, ven
 	}, nil
 }
 
-// GetFilterByID returns a filter by ID (not implemented for now)
+// GetFilterByID returns a filter by ID
 func (a *GatewayServiceAdapter) GetFilterByID(id uint) (*models.Filter, error) {
-	return nil, fmt.Errorf("filter with ID %d not found", id)
+	dbFilter, err := a.filterService.GetFilter(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.Filter{
+		ID:          dbFilter.ID,
+		Name:        dbFilter.Name,
+		Description: dbFilter.Description,
+		Script:      []byte(dbFilter.Script),
+	}, nil
 }
 
-// GetAllFilters returns all filters (not implemented for now)
+// GetAllFilters returns all filters with pagination
 func (a *GatewayServiceAdapter) GetAllFilters(pageSize int, pageNumber int, all bool) ([]models.Filter, int64, int, error) {
-	return []models.Filter{}, 0, 0, nil
+	// Calculate limit and offset
+	limit := pageSize
+	if all {
+		limit = 1000 // Large number to get all
+	}
+	
+	dbFilters, total, err := a.filterService.ListFilters(pageNumber, limit, true)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	// Convert database filters to models
+	modelFilters := make([]models.Filter, len(dbFilters))
+	for i, dbFilter := range dbFilters {
+		modelFilters[i] = models.Filter{
+			ID:          dbFilter.ID,
+			Name:        dbFilter.Name,
+			Description: dbFilter.Description,
+			Script:      []byte(dbFilter.Script),
+		}
+	}
+
+	totalPages := 1
+	if pageSize > 0 && !all {
+		totalPages = int((total + int64(pageSize) - 1) / int64(pageSize))
+	}
+
+	return modelFilters, total, totalPages, nil
 }
 
 // Conversion helper functions
@@ -281,15 +321,27 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		}
 	}
 
+	// Convert associated filters
+	filters := make([]*models.Filter, len(dbLLM.Filters))
+	for i, dbFilter := range dbLLM.Filters {
+		filters[i] = &models.Filter{
+			ID:          dbFilter.ID,
+			Name:        dbFilter.Name,
+			Description: dbFilter.Description,
+			Script:      []byte(dbFilter.Script),
+		}
+	}
+
 	llm := models.LLM{
-		ID:          dbLLM.ID,
-		Name:        dbLLM.Slug, // Use slug as name for AI Gateway routing
-		Vendor:      models.Vendor(dbLLM.Vendor),
-		APIKey:      apiKey,
-		APIEndpoint: dbLLM.Endpoint,
-		DefaultModel: dbLLM.DefaultModel,
-		Active:      dbLLM.IsActive,
+		ID:            dbLLM.ID,
+		Name:          dbLLM.Slug, // Use slug as name for AI Gateway routing
+		Vendor:        models.Vendor(dbLLM.Vendor),
+		APIKey:        apiKey,
+		APIEndpoint:   dbLLM.Endpoint,
+		DefaultModel:  dbLLM.DefaultModel,
+		Active:        dbLLM.IsActive,
 		MonthlyBudget: &dbLLM.MonthlyBudget,
+		Filters:       filters,
 	}
 
 	log.Debug().

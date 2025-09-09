@@ -165,23 +165,23 @@ type AnalyticsEvent struct {
 // Filter represents a filter script
 type Filter struct {
 	gorm.Model
-	Name       string `gorm:"not null"`
-	Type       string `gorm:"not null"` // 'request', 'response', 'both'
-	Script     string `gorm:"not null;type:text"`
-	IsActive   bool   `gorm:"default:true"`
-	OrderIndex int    `gorm:"default:0"`
+	Name       string `gorm:"not null" json:"name"`
+	Description string `json:"description"`
+	Script     string `gorm:"not null;type:text" json:"script"`
+	IsActive   bool   `gorm:"default:true" json:"is_active"`
+	OrderIndex int    `gorm:"default:0" json:"order_index"`
 
 	// Relationships
-	LLMs []LLM `gorm:"many2many:llm_filters;"`
+	LLMs []LLM `gorm:"many2many:llm_filters;" json:"llms,omitempty"`
 }
 
 // LLMFilter represents the many-to-many relationship between LLMs and filters
 type LLMFilter struct {
-	LLMID      uint      `gorm:"primaryKey"`
-	FilterID   uint      `gorm:"primaryKey"`
-	IsActive   bool      `gorm:"default:true"`
-	OrderIndex int       `gorm:"default:0"`
-	CreatedAt  time.Time
+	LLMID      uint      `gorm:"primaryKey" json:"llm_id"`
+	FilterID   uint      `gorm:"primaryKey" json:"filter_id"`
+	IsActive   bool      `gorm:"default:true" json:"is_active"`
+	OrderIndex int       `gorm:"default:0" json:"order_index"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // TableName methods to ensure consistent table naming

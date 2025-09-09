@@ -117,6 +117,20 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			pricing.PUT("/:id", handlers.UpdateModelPrice(config.Services))
 			pricing.DELETE("/:id", handlers.DeleteModelPrice(config.Services))
 		}
+
+		// Filter management
+		filters := protected.Group("/filters")
+		{
+			filters.GET("", handlers.ListFilters(config.Services))
+			filters.POST("", handlers.CreateFilter(config.Services))
+			filters.GET("/:id", handlers.GetFilter(config.Services))
+			filters.PUT("/:id", handlers.UpdateFilter(config.Services))
+			filters.DELETE("/:id", handlers.DeleteFilter(config.Services))
+		}
+
+		// LLM-Filter associations (extend existing LLM routes)
+		llms.GET("/:id/filters", handlers.GetLLMFilters(config.Services))
+		llms.PUT("/:id/filters", handlers.UpdateLLMFilters(config.Services))
 	}
 
 	// Gateway endpoints - mount the AI Gateway handler with middleware

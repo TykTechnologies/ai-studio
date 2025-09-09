@@ -223,6 +223,139 @@ var llmStatsCmd = &cobra.Command{
 	},
 }
 
+// llmFiltersCmd shows filters associated with an LLM
+var llmFiltersCmd = &cobra.Command{
+	Use:   "filters <llm-id>",
+	Short: "Show filters associated with an LLM",
+	Long:  "Display all filters currently associated with a specific LLM.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		llmID := args[0]
+		
+		resp, err := cli.GetClient().Get("/api/v1/llms/" + llmID + "/filters")
+		if err != nil {
+			return fmt.Errorf("failed to get LLM filters: %w", err)
+		}
+
+		return cli.PrintOutput(resp.Data)
+	},
+}
+
+// llmAddFilterCmd adds a filter to an LLM
+var llmAddFilterCmd = &cobra.Command{
+	Use:   "add-filter <llm-id> <filter-id>",
+	Short: "Add a filter to an LLM",
+	Long:  "Associate a filter with an LLM. The filter will be applied to all requests to this LLM.",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		llmID := args[0]
+		filterID := args[1]
+		
+		// Get current filters
+		resp, err := cli.GetClient().Get("/api/v1/llms/" + llmID + "/filters")
+		if err != nil {
+			return fmt.Errorf("failed to get current filters: %w", err)
+		}
+		
+		// Extract current filter IDs
+		var currentFilters []uint
+		if data, ok := resp.Data.([]interface{}); ok {
+			for _, item := range data {
+				if filterMap, ok := item.(map[string]interface{}); ok {
+					if id, ok := filterMap["id"].(float64); ok {
+						currentFilters = append(currentFilters, uint(id))
+					}
+				}
+			}
+		}
+		
+		// Add new filter ID
+		newFilterID, err := strconv.ParseUint(filterID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid filter ID: %s", filterID)
+		}
+		
+		// Check if already exists
+		for _, existingID := range currentFilters {
+			if existingID == uint(newFilterID) {
+				return fmt.Errorf("filter %s is already associated with LLM %s", filterID, llmID)
+			}
+		}
+		
+		currentFilters = append(currentFilters, uint(newFilterID))
+		
+		// Update filter associations
+		reqData := map[string]interface{}{
+			"filter_ids": currentFilters,
+		}
+		
+		updateResp, err := cli.GetClient().Put("/api/v1/llms/"+llmID+"/filters", reqData)
+		if err != nil {
+			return fmt.Errorf("failed to add filter: %w", err)
+		}
+		
+		cli.PrintSuccess(updateResp.Message)
+		return nil
+	},
+}
+
+// llmRemoveFilterCmd removes a filter from an LLM
+var llmRemoveFilterCmd = &cobra.Command{
+	Use:   "remove-filter <llm-id> <filter-id>",
+	Short: "Remove a filter from an LLM",
+	Long:  "Remove filter association from an LLM.",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		llmID := args[0]
+		filterID := args[1]
+		
+		// Get current filters
+		resp, err := cli.GetClient().Get("/api/v1/llms/" + llmID + "/filters")
+		if err != nil {
+			return fmt.Errorf("failed to get current filters: %w", err)
+		}
+		
+		// Extract current filter IDs and remove the specified one
+		var newFilters []uint
+		removeFilterID, err := strconv.ParseUint(filterID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid filter ID: %s", filterID)
+		}
+		
+		found := false
+		if data, ok := resp.Data.([]interface{}); ok {
+			for _, item := range data {
+				if filterMap, ok := item.(map[string]interface{}); ok {
+					if id, ok := filterMap["id"].(float64); ok {
+						if uint(id) != uint(removeFilterID) {
+							newFilters = append(newFilters, uint(id))
+						} else {
+							found = true
+						}
+					}
+				}
+			}
+		}
+		
+		if !found {
+			return fmt.Errorf("filter %s is not associated with LLM %s", filterID, llmID)
+		}
+		
+		// Update filter associations
+		reqData := map[string]interface{}{
+			"filter_ids": newFilters,
+		}
+		
+		updateResp, err := cli.GetClient().Put("/api/v1/llms/"+llmID+"/filters", reqData)
+		if err != nil {
+			return fmt.Errorf("failed to remove filter: %w", err)
+		}
+		
+		cli.PrintSuccess(updateResp.Message)
+		return nil
+	},
+}
+
 func init() {
 	// Add subcommands
 	llmCmd.AddCommand(llmListCmd)
@@ -231,6 +364,9 @@ func init() {
 	llmCmd.AddCommand(llmUpdateCmd)
 	llmCmd.AddCommand(llmDeleteCmd)
 	llmCmd.AddCommand(llmStatsCmd)
+	llmCmd.AddCommand(llmFiltersCmd)
+	llmCmd.AddCommand(llmAddFilterCmd)
+	llmCmd.AddCommand(llmRemoveFilterCmd)
 
 	// llm list flags
 	llmListCmd.Flags().String("vendor", "", "filter by vendor (openai, anthropic, google, vertex, ollama)")

@@ -24,8 +24,9 @@ type ServiceContainer struct {
 	AnalyticsService AnalyticsServiceInterface
 
 	// Management services
-	Management ManagementServiceInterface
-	Token      TokenServiceInterface
+	Management    ManagementServiceInterface
+	Token         TokenServiceInterface
+	FilterService FilterServiceInterface
 
 	// Authentication (simplified)
 	AuthProvider auth.AuthProvider
@@ -53,6 +54,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	// Initialize management services
 	management := NewManagementService(db, repo, crypto)
 	tokenService := NewTokenService(authProvider)
+	filterService := NewFilterService(db, repo)
 
 	return &ServiceContainer{
 		DB:         db,
@@ -62,8 +64,9 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		BudgetService:    budgetService,
 		AnalyticsService: analyticsService,
 
-		Management: management,
-		Token:      tokenService,
+		Management:    management,
+		Token:         tokenService,
+		FilterService: filterService,
 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
