@@ -789,16 +789,33 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	
+	executedCount := 0
+	
 	// Find plugins that handle this hook type
 	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
 		if !pm.pluginHandlesHookType(hookTypes, hookType) {
+			log.Debug().
+				Str("plugin", pluginName).
+				Str("hook_type", hookType).
+				Strs("plugin_hook_types", hookTypes).
+				Msg("Plugin does not handle this hook type - skipping")
 			continue
 		}
 		
 		globalPlugin, exists := pm.globalDataPlugins[pluginName]
-		if !exists || !globalPlugin.IsHealthy {
+		if !exists {
+			log.Warn().Str("plugin", pluginName).Msg("Plugin not found in global plugins map")
 			continue
 		}
+		if !globalPlugin.IsHealthy {
+			log.Warn().Str("plugin", pluginName).Msg("Plugin is unhealthy - skipping")
+			continue
+		}
+		
+		log.Debug().
+			Str("plugin", pluginName).
+			Str("hook_type", hookType).
+			Msg("Executing data collection plugin")
 		
 		// Execute plugin based on hook type
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -814,8 +831,20 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 			
 			// Mark plugin as unhealthy after consecutive failures
 			// TODO: Add failure counting and health check logic
+		} else {
+			log.Debug().
+				Str("plugin", pluginName).
+				Str("hook_type", hookType).
+				Msg("Data collection plugin executed successfully")
+			executedCount++
 		}
 	}
+	
+	log.Debug().
+		Str("hook_type", hookType).
+		Int("executed_count", executedCount).
+		Int("total_plugins", len(pm.globalDataPlugins)).
+		Msg("Data collection plugin execution summary")
 	
 	return nil
 }
@@ -873,6 +902,13 @@ func (pm *PluginManager) executeProxyLogPlugin(ctx context.Context, plugin *Glob
 
 // executeAnalyticsPlugin executes analytics data collection
 func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *GlobalPlugin, data *interfaces.AnalyticsData) error {
+	log.Debug().
+		Str("plugin", plugin.Config.Name).
+		Int("total_tokens", data.TotalTokens).
+		Float64("cost", data.Cost).
+		Str("model", data.ModelName).
+		Msg("Executing analytics plugin with data")
+
 	// Convert to protobuf request
 	req := &pb.AnalyticsRequest{
 		LlmId:                   uint32(data.LLMID),
@@ -913,6 +949,13 @@ func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *Glo
 
 // executeBudgetUsagePlugin executes budget usage data collection
 func (pm *PluginManager) executeBudgetUsagePlugin(ctx context.Context, plugin *GlobalPlugin, data *interfaces.BudgetUsageData) error {
+	log.Debug().
+		Str("plugin", plugin.Config.Name).
+		Int64("tokens_used", data.TokensUsed).
+		Float64("cost", data.Cost).
+		Uint("app_id", data.AppID).
+		Msg("Executing budget usage plugin with data")
+
 	// Convert to protobuf request
 	req := &pb.BudgetUsageRequest{
 		AppId:            uint32(data.AppID),

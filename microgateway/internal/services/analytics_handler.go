@@ -88,16 +88,13 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 			RequestID:    fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
 		}
 		
-		// Execute plugins - this is non-blocking and logs errors internally
+		// Execute proxy log plugins
 		if err := h.pluginManager.ExecuteDataCollectionPlugins("proxy_log", pluginData); err != nil {
 			log.Error().Err(err).Msg("Failed to execute proxy log data collection plugins")
 		}
 		
-		// Check if any plugins are configured to replace database storage for proxy logs
-		if h.pluginManager.ShouldReplaceDatabaseStorage("proxy_log") {
-			log.Debug().Msg("Proxy log database storage replaced by plugin - skipping database analytics creation")
-			return
-		}
+		// Note: proxy log replacement only affects proxy log storage, not analytics processing
+		// We continue with analytics processing regardless of proxy log replacement
 	}
 
 	// Parse token usage and cost from response body if available

@@ -49,46 +49,25 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		serviceContainer.GatewayService,
 	)
 
-	// Use plugin manager from service container
+	// Use plugin manager from service container (already loaded with global plugins)
 	pluginManager := serviceContainer.PluginManager
-	
-	// Debug plugin configuration
-	log.Info().
-		Str("config_path", cfg.Plugins.ConfigPath).
-		Str("config_service_url", cfg.Plugins.ConfigServiceURL).
-		Msg("Plugin configuration check")
-	
-	// Load global data collection plugins if configured
-	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
-		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins...")
-		
-		// Load plugin configuration
-		ctx := context.Background()
-		if err := cfg.LoadPluginConfig(ctx); err != nil {
-			log.Error().Err(err).Msg("Failed to load plugin configuration")
-		} else {
-			log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded successfully")
-			
-			if len(cfg.Plugins.DataCollectionPlugins) > 0 {
-				// Load global plugins
-				if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
-					log.Error().Err(err).Msg("Failed to load global data collection plugins")
-				} else {
-					log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded")
-				}
-			} else {
-				log.Info().Msg("No data collection plugins configured")
-			}
-		}
-	} else {
-		log.Info().Msg("No plugin configuration specified - skipping data collection plugins")
-	}
 
-	// Create analytics handler for microgateway with plugin manager
+	// Create analytics handler for microgateway with plugin manager that has loaded plugins
 	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB, &cfg.Analytics, pluginManager)
 	analyticsHandler.SetAsGlobalHandler()
 
-	log.Info().Msg("Plugin manager configured for data collection")
+	// Debug: Verify plugin manager state after service container initialization
+	proxyPlugins := pluginManager.GetGlobalPluginsForHookType("proxy_log")
+	analyticsPlugins := pluginManager.GetGlobalPluginsForHookType("analytics")
+	budgetPlugins := pluginManager.GetGlobalPluginsForHookType("budget")
+	
+	log.Info().
+		Int("proxy_plugins", len(proxyPlugins)).
+		Int("analytics_plugins", len(analyticsPlugins)).
+		Int("budget_plugins", len(budgetPlugins)).
+		Msg("Plugin manager state verification in server")
+
+	log.Info().Msg("Analytics handler configured with plugin manager")
 
 	// Note: Response hooks are implemented directly in the AI Gateway, not in microgateway plugin system
 

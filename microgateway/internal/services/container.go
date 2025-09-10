@@ -62,6 +62,32 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	
 	// Initialize plugin manager
 	pluginManager := plugins.NewPluginManager(pluginServiceAdapter)
+	
+	// Load global data collection plugins if configured
+	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
+		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins in service container...")
+		
+		// Load plugin configuration
+		ctx := context.Background()
+		if err := cfg.LoadPluginConfig(ctx); err != nil {
+			log.Error().Err(err).Msg("Failed to load plugin configuration")
+		} else {
+			log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded in service container")
+			
+			if len(cfg.Plugins.DataCollectionPlugins) > 0 {
+				// Load global plugins
+				if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
+					log.Error().Err(err).Msg("Failed to load global data collection plugins")
+				} else {
+					log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded in service container")
+				}
+			} else {
+				log.Info().Msg("No data collection plugins configured")
+			}
+		}
+	} else {
+		log.Info().Msg("No plugin configuration specified - skipping data collection plugins")
+	}
 
 	// Initialize core services with plugin manager support
 	gatewayService := NewDatabaseGatewayService(db, repo)
