@@ -67,6 +67,7 @@ func init() {
 	rootCmd.AddCommand(budgetCmd)
 	rootCmd.AddCommand(analyticsCmd)
 	rootCmd.AddCommand(pricingCmd)
+	rootCmd.AddCommand(pluginCmd)
 	rootCmd.AddCommand(systemCmd)
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // RouterConfig holds configuration for the API router
@@ -16,6 +17,7 @@ type RouterConfig struct {
 	AuthProvider  auth.AuthProvider
 	Services      *services.ServiceContainer
 	Gateway       aigateway.Gateway
+	PluginManager PluginManagerInterface
 	EnableSwagger bool
 	EnableMetrics bool
 	Version       string
@@ -132,6 +134,21 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		llms.GET("/:id/filters", handlers.GetLLMFilters(config.Services))
 		llms.PUT("/:id/filters", handlers.UpdateLLMFilters(config.Services))
 
+		// LLM-Plugin associations (extend existing LLM routes)
+		llms.GET("/:id/plugins", handlers.GetLLMPlugins(config.Services))
+		llms.PUT("/:id/plugins", handlers.UpdateLLMPlugins(config.Services))
+
+		// Plugin management
+		plugins := protected.Group("/plugins")
+		{
+			plugins.GET("", handlers.ListPlugins(config.Services))
+			plugins.POST("", handlers.CreatePlugin(config.Services))
+			plugins.GET("/:id", handlers.GetPlugin(config.Services))
+			plugins.PUT("/:id", handlers.UpdatePlugin(config.Services))
+			plugins.DELETE("/:id", handlers.DeletePlugin(config.Services))
+			plugins.POST("/:id/test", handlers.TestPlugin(config.Services))
+		}
+
 		// System management endpoints
 		system := protected.Group("/system")
 		{
@@ -143,9 +160,26 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	// Gateway endpoints - mount the AI Gateway handler with middleware
 	if config.Gateway != nil {
 		gateway := router.Group("/")
-		gateway.Use(auth.RequireAuth(config.AuthProvider))
-		{
-			// Mount the AI Gateway handler for LLM, tools, and datasource endpoints
+		
+		log.Debug().Bool("has_plugin_manager", config.PluginManager != nil).Msg("Router setup - checking plugin manager availability")
+		
+		// Create plugin-aware handlers for LLM endpoints
+		if config.PluginManager != nil {
+			log.Info().Msg("Adding plugin-aware handlers for gateway endpoints")
+			log.Debug().Msg("Plugin manager is available for router setup")
+			pluginMiddlewareConfig := &PluginMiddlewareConfig{
+				PluginManager: config.PluginManager,
+				Services:      config.Services,
+			}
+			
+			// Create plugin-aware LLM handler
+			gateway.Any("/llm/*path", CreatePluginAwareLLMHandler(config.Gateway.Handler(), pluginMiddlewareConfig))
+			
+			// Tools and datasources don't need plugin processing
+			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
+			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
+		} else {
+			// No plugin manager, use standard handlers
 			gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
 			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))

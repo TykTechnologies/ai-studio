@@ -3,9 +3,11 @@ package auth
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // ContextKey represents the type for context keys
@@ -22,9 +24,35 @@ const (
 	ScopesKey ContextKey = "scopes"
 )
 
+// PluginAwareAuthProvider extends AuthProvider with plugin awareness
+type PluginAwareAuthProvider interface {
+	AuthProvider
+	HasAuthPluginsForLLM(llmSlug string) (bool, error)
+}
+
+// llmSlugRegex extracts LLM slug from path
+var llmSlugRegex = regexp.MustCompile(`^/llm/(rest|stream)/([^/]+)/`)
+
 // RequireAuth middleware validates API tokens and sets auth context
 func RequireAuth(provider AuthProvider) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Check if this is an LLM request and if auth plugins are present
+		if isLLMRequest(c) {
+			llmSlug := extractLLMSlug(c)
+			if llmSlug != "" {
+				if pluginProvider, ok := provider.(PluginAwareAuthProvider); ok {
+					hasAuthPlugins, err := pluginProvider.HasAuthPluginsForLLM(llmSlug)
+					if err != nil {
+						log.Debug().Err(err).Str("llm_slug", llmSlug).Msg("Failed to check for auth plugins")
+					} else if hasAuthPlugins {
+						log.Debug().Str("llm_slug", llmSlug).Msg("Auth plugins detected for LLM, skipping regular auth")
+						c.Next()
+						return
+					}
+				}
+			}
+		}
+
 		token := extractToken(c)
 		if token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -217,4 +245,23 @@ func HasScope(c *gin.Context, scope string) bool {
 // IsAdmin checks if the current user has admin privileges
 func IsAdmin(c *gin.Context) bool {
 	return HasScope(c, "admin") || HasScope(c, "*")
+}
+
+// isLLMRequest checks if the current request is an LLM request
+func isLLMRequest(c *gin.Context) bool {
+	return strings.HasPrefix(c.Request.URL.Path, "/llm/")
+}
+
+// extractLLMSlug extracts the LLM slug from Gin path parameter
+func extractLLMSlug(c *gin.Context) string {
+	path := c.Param("path")
+	if path == "" {
+		return ""
+	}
+	// path would be something like "rest/claude-sonnet-4/v1/messages"
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) >= 2 {
+		return parts[1] // Return "claude-sonnet-4"
+	}
+	return ""
 }

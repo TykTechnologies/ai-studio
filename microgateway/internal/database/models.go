@@ -56,6 +56,7 @@ type LLM struct {
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`
 	Filters []Filter        `gorm:"many2many:llm_filters;"`
+	Plugins []Plugin        `gorm:"many2many:llm_plugins;"`
 	Usage   []BudgetUsage   `gorm:"foreignKey:LLMID"`
 	Events  []AnalyticsEvent `gorm:"foreignKey:LLMID"`
 }
@@ -187,6 +188,35 @@ type LLMFilter struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// Plugin represents a plugin configuration
+type Plugin struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	Name        string         `gorm:"not null" json:"name"`
+	Slug        string         `gorm:"uniqueIndex;not null" json:"slug"`
+	Description string         `json:"description"`
+	Command     string         `gorm:"not null;size:500" json:"command"`
+	Checksum    string         `gorm:"size:255" json:"checksum"`
+	Config      datatypes.JSON `gorm:"type:json" json:"config"`
+	HookType    string         `gorm:"not null;size:50;index:idx_plugins_hook_type" json:"hook_type"`
+	IsActive    bool           `gorm:"index:idx_plugins_is_active" json:"is_active"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+
+	// Relationships
+	LLMs []LLM `gorm:"many2many:llm_plugins;" json:"llms,omitempty"`
+}
+
+// LLMPlugin represents the many-to-many relationship between LLMs and plugins
+type LLMPlugin struct {
+	LLMID          uint           `gorm:"primaryKey;index:idx_llm_plugins_llm_id" json:"llm_id"`
+	PluginID       uint           `gorm:"primaryKey" json:"plugin_id"`
+	OrderIndex     int            `gorm:"default:0;index:idx_llm_plugins_order" json:"order_index"`
+	IsActive       bool           `gorm:"default:true" json:"is_active"`
+	ConfigOverride datatypes.JSON `gorm:"type:json" json:"config_override"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
 // TableName methods to ensure consistent table naming
 func (APIToken) TableName() string     { return "api_tokens" }
 func (TokenCache) TableName() string   { return "token_cache" }
@@ -199,3 +229,5 @@ func (BudgetUsage) TableName() string  { return "budget_usage" }
 func (AnalyticsEvent) TableName() string { return "analytics_events" }
 func (Filter) TableName() string       { return "filters" }
 func (LLMFilter) TableName() string    { return "llm_filters" }
+func (Plugin) TableName() string       { return "plugins" }
+func (LLMPlugin) TableName() string    { return "llm_plugins" }

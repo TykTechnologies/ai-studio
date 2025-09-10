@@ -80,6 +80,8 @@ func Migrate(db *gorm.DB) error {
 		&AnalyticsEvent{},
 		&Filter{},
 		&LLMFilter{},
+		&Plugin{},
+		&LLMPlugin{},
 	)
 }
 

@@ -268,3 +268,29 @@ func (p *TokenAuthProvider) GetStats() (*TokenStats, error) {
 
 	return &stats, nil
 }
+
+// HasAuthPluginsForLLM checks if the LLM has active auth plugins
+func (p *TokenAuthProvider) HasAuthPluginsForLLM(llmSlug string) (bool, error) {
+	// First get the LLM ID from the slug
+	var llm database.LLM
+	if err := p.db.Where("slug = ? AND is_active = ?", llmSlug, true).First(&llm).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return false, nil // LLM not found, no auth plugins
+		}
+		return false, fmt.Errorf("failed to get LLM by slug: %w", err)
+	}
+
+	// Check if there are any active auth plugins for this LLM
+	var count int64
+	err := p.db.Table("llm_plugins").
+		Joins("JOIN plugins ON plugins.id = llm_plugins.plugin_id").
+		Where("llm_plugins.llm_id = ? AND llm_plugins.is_active = ? AND plugins.is_active = ? AND plugins.hook_type = ?", 
+			llm.ID, true, true, "auth").
+		Count(&count).Error
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check for auth plugins: %w", err)
+	}
+
+	return count > 0, nil
+}

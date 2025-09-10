@@ -356,6 +356,139 @@ var llmRemoveFilterCmd = &cobra.Command{
 	},
 }
 
+// llmPluginsCmd shows plugins associated with an LLM
+var llmPluginsCmd = &cobra.Command{
+	Use:   "plugins <llm-id>",
+	Short: "Show plugins associated with an LLM",
+	Long:  "Display all plugins currently associated with a specific LLM, ordered by execution order.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		llmID := args[0]
+		
+		resp, err := cli.GetClient().Get("/api/v1/llms/" + llmID + "/plugins")
+		if err != nil {
+			return fmt.Errorf("failed to get LLM plugins: %w", err)
+		}
+
+		return cli.PrintOutput(resp.Data)
+	},
+}
+
+// llmAddPluginCmd adds a plugin to an LLM
+var llmAddPluginCmd = &cobra.Command{
+	Use:   "add-plugin <llm-id> <plugin-id>",
+	Short: "Add a plugin to an LLM",
+	Long:  "Associate a plugin with an LLM. The plugin will be executed during requests to this LLM.",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		llmID := args[0]
+		pluginID := args[1]
+		
+		// Get current plugins
+		resp, err := cli.GetClient().Get("/api/v1/llms/" + llmID + "/plugins")
+		if err != nil {
+			return fmt.Errorf("failed to get current plugins: %w", err)
+		}
+		
+		// Extract current plugin IDs
+		var currentPlugins []uint
+		if data, ok := resp.Data.([]interface{}); ok {
+			for _, item := range data {
+				if pluginMap, ok := item.(map[string]interface{}); ok {
+					if id, ok := pluginMap["id"].(float64); ok {
+						currentPlugins = append(currentPlugins, uint(id))
+					}
+				}
+			}
+		}
+		
+		// Add new plugin ID
+		newPluginID, err := strconv.ParseUint(pluginID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid plugin ID: %s", pluginID)
+		}
+		
+		// Check if already exists
+		for _, existingID := range currentPlugins {
+			if existingID == uint(newPluginID) {
+				return fmt.Errorf("plugin %s is already associated with LLM %s", pluginID, llmID)
+			}
+		}
+		
+		currentPlugins = append(currentPlugins, uint(newPluginID))
+		
+		// Update plugin associations
+		reqData := map[string]interface{}{
+			"plugin_ids": currentPlugins,
+		}
+		
+		updateResp, err := cli.GetClient().Put("/api/v1/llms/"+llmID+"/plugins", reqData)
+		if err != nil {
+			return fmt.Errorf("failed to add plugin: %w", err)
+		}
+		
+		cli.PrintSuccess(updateResp.Message)
+		return nil
+	},
+}
+
+// llmRemovePluginCmd removes a plugin from an LLM
+var llmRemovePluginCmd = &cobra.Command{
+	Use:   "remove-plugin <llm-id> <plugin-id>",
+	Short: "Remove a plugin from an LLM",
+	Long:  "Remove plugin association from an LLM.",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		llmID := args[0]
+		pluginID := args[1]
+		
+		// Get current plugins
+		resp, err := cli.GetClient().Get("/api/v1/llms/" + llmID + "/plugins")
+		if err != nil {
+			return fmt.Errorf("failed to get current plugins: %w", err)
+		}
+		
+		// Extract current plugin IDs and remove the specified one
+		var newPlugins []uint
+		removePluginID, err := strconv.ParseUint(pluginID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid plugin ID: %s", pluginID)
+		}
+		
+		found := false
+		if data, ok := resp.Data.([]interface{}); ok {
+			for _, item := range data {
+				if pluginMap, ok := item.(map[string]interface{}); ok {
+					if id, ok := pluginMap["id"].(float64); ok {
+						if uint(id) != uint(removePluginID) {
+							newPlugins = append(newPlugins, uint(id))
+						} else {
+							found = true
+						}
+					}
+				}
+			}
+		}
+		
+		if !found {
+			return fmt.Errorf("plugin %s is not associated with LLM %s", pluginID, llmID)
+		}
+		
+		// Update plugin associations
+		reqData := map[string]interface{}{
+			"plugin_ids": newPlugins,
+		}
+		
+		updateResp, err := cli.GetClient().Put("/api/v1/llms/"+llmID+"/plugins", reqData)
+		if err != nil {
+			return fmt.Errorf("failed to remove plugin: %w", err)
+		}
+		
+		cli.PrintSuccess(updateResp.Message)
+		return nil
+	},
+}
+
 func init() {
 	// Add subcommands
 	llmCmd.AddCommand(llmListCmd)
@@ -367,6 +500,9 @@ func init() {
 	llmCmd.AddCommand(llmFiltersCmd)
 	llmCmd.AddCommand(llmAddFilterCmd)
 	llmCmd.AddCommand(llmRemoveFilterCmd)
+	llmCmd.AddCommand(llmPluginsCmd)
+	llmCmd.AddCommand(llmAddPluginCmd)
+	llmCmd.AddCommand(llmRemovePluginCmd)
 
 	// llm list flags
 	llmListCmd.Flags().String("vendor", "", "filter by vendor (openai, anthropic, google, vertex, ollama)")

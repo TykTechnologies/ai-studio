@@ -17,6 +17,7 @@ type GatewayServiceAdapter struct {
 	analytics      AnalyticsServiceInterface
 	crypto         CryptoServiceInterface
 	filterService  FilterServiceInterface
+	pluginService  PluginServiceInterface
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface
@@ -26,6 +27,7 @@ func NewGatewayServiceAdapter(
 	analytics AnalyticsServiceInterface,
 	crypto CryptoServiceInterface,
 	filterService FilterServiceInterface,
+	pluginService PluginServiceInterface,
 ) services.ServiceInterface {
 	adapter := &GatewayServiceAdapter{
 		gatewayService: gatewayService,
@@ -33,6 +35,7 @@ func NewGatewayServiceAdapter(
 		analytics:      analytics,
 		crypto:         crypto,
 		filterService:  filterService,
+		pluginService:  pluginService,
 	}
 	
 	log.Info().Msg("GatewayServiceAdapter created - testing LLM loading...")
@@ -111,38 +114,48 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 	}
 	log.Debug().Str("secret_prefix", secretPrefix).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
 	
-	// The "secret" parameter is actually an API token from the Authorization header
-	// We need to validate it using our token authentication system
-	
-	// Get the token auth provider from the gateway service
+	// First try regular token validation
 	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
 		log.Debug().Msg("Using DatabaseGatewayService to validate token")
 		
-		// The secret here is actually an API token, so we need to validate it
-		// by checking if it exists in our api_tokens table
-		
-		// For now, let's try to get the token info by treating the secret as a token
 		tokenResult, err := gatewayService.ValidateAPIToken(secret)
-		if err != nil {
-			tokenPrefix := secret
-			if len(secret) > 8 {
-				tokenPrefix = secret[:8]
-			}
-			log.Error().Err(err).Str("token_prefix", tokenPrefix).Msg("Token validation failed")
+		if err == nil {
+			// Regular token validation succeeded
+			log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("Token validated successfully")
+
+			return &models.Credential{
+				ID:     tokenResult.TokenID,
+				KeyID:  tokenResult.TokenName,
+				Secret: secret,
+				Active: true,
+			}, nil
+		}
+
+		// Regular token validation failed, check if there are any auth plugins
+		log.Debug().Err(err).Str("token_prefix", secretPrefix).Msg("Regular token validation failed, checking for auth plugins")
+		
+		// Check if there are any LLMs with auth plugins
+		hasAuthPlugins, pluginErr := a.hasAnyAuthPlugins()
+		if pluginErr != nil {
+			log.Error().Err(pluginErr).Msg("Failed to check for auth plugins")
 			return nil, fmt.Errorf("invalid token: %w", err)
 		}
 
-		log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("Token validated successfully")
-
-		// Create a mock credential that represents the validated app token
-		mockCredential := &models.Credential{
-			ID:     tokenResult.TokenID,    // Use token ID
-			KeyID:  tokenResult.TokenName,  // Use token name as key ID
-			Secret: secret,                 // The actual token (don't expose this normally)
-			Active: true,
+		if hasAuthPlugins {
+			// Auth plugins are available, return a plugin credential that will be handled by plugin middleware
+			log.Debug().Str("token_prefix", secretPrefix).Msg("Auth plugins available, allowing plugin authentication")
+			
+			return &models.Credential{
+				ID:     999999, // Special ID indicating plugin auth
+				KeyID:  "plugin-auth",
+				Secret: secret,
+				Active: true,
+			}, nil
 		}
 
-		return mockCredential, nil
+		// No auth plugins available, return original error
+		log.Error().Err(err).Str("token_prefix", secretPrefix).Msg("Token validation failed and no auth plugins available")
+		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
 	log.Error().Msg("Gateway service type not supported for token validation")
@@ -152,6 +165,21 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 // AuthenticateUser authenticates a user (not implemented for microgateway)
 func (a *GatewayServiceAdapter) AuthenticateUser(email, password string) (*models.User, error) {
 	return nil, fmt.Errorf("user authentication not supported in microgateway")
+}
+
+// hasAnyAuthPlugins checks if there are any active auth plugins in the system
+func (a *GatewayServiceAdapter) hasAnyAuthPlugins() (bool, error) {
+	// Check if there are any active auth plugins in the system
+	var count int64
+	err := a.pluginService.(*PluginService).db.Table("plugins").
+		Where("hook_type = ? AND is_active = ?", "auth", true).
+		Count(&count).Error
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check for auth plugins: %w", err)
+	}
+
+	return count > 0, nil
 }
 
 // GetUserByAPIKey returns a user by API key (not implemented)
@@ -193,6 +221,18 @@ func (a *GatewayServiceAdapter) GetOAuthClient(clientID string) (*models.OAuthCl
 // NOTE: In our token-only system, the "credential ID" is actually a token ID from our mock credential
 func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, error) {
 	log.Debug().Uint("credential_id", credID).Msg("GatewayServiceAdapter.GetAppByCredentialID() called by AI Gateway")
+	
+	// Check if this is the special plugin auth credential ID
+	if credID == 999999 {
+		log.Debug().Msg("Plugin auth credential detected, delegating to auth plugin for app lookup")
+		
+		// TODO: Delegate to auth plugin for app lookup
+		// For now, return a default app until we implement plugin delegation
+		return &models.App{
+			ID:   1, // Default app ID for plugin auth
+			Name: "Plugin Authenticated App",
+		}, nil
+	}
 	
 	// Since we're using token-only auth, the credID is actually a token ID
 	// We need to get the app ID from the token record, not from credentials table

@@ -135,6 +135,26 @@ type CryptoServiceInterface interface {
 	GenerateKeyPair() (keyID, secret string, err error)
 }
 
+// PluginServiceInterface defines the interface for plugin operations
+type PluginServiceInterface interface {
+	// CRUD operations
+	CreatePlugin(req *CreatePluginRequest) (*database.Plugin, error)
+	GetPlugin(id uint) (*database.Plugin, error)
+	ListPlugins(page, limit int, hookType string, isActive bool) ([]database.Plugin, int64, error)
+	UpdatePlugin(id uint, req *UpdatePluginRequest) (*database.Plugin, error)
+	DeletePlugin(id uint) error
+	
+	// LLM associations
+	GetPluginsForLLM(llmID uint) ([]database.Plugin, error)
+	UpdateLLMPlugins(llmID uint, pluginIDs []uint) error
+	GetLLMPluginConfig(llmID, pluginID uint) (map[string]interface{}, error)
+	
+	// Validation
+	ValidatePluginChecksum(pluginID uint, filePath string) error
+	TestPlugin(pluginID uint, testData interface{}) (interface{}, error)
+	PluginSlugExists(slug string) (bool, error)
+}
+
 // Data structures used by service interfaces
 
 // CacheStats represents cache statistics
@@ -346,4 +366,27 @@ type TokenInfo struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 	LastUsed  *time.Time `json:"last_used,omitempty"`
+}
+
+// CreatePluginRequest for creating a new plugin
+type CreatePluginRequest struct {
+	Name        string                 `json:"name" binding:"required"`
+	Slug        string                 `json:"slug" binding:"required"`
+	Description string                 `json:"description"`
+	Command     string                 `json:"command" binding:"required"`
+	Checksum    string                 `json:"checksum"`
+	Config      map[string]interface{} `json:"config"`
+	HookType    string                 `json:"hook_type" binding:"required"`
+	IsActive    bool                   `json:"is_active"`
+}
+
+// UpdatePluginRequest for updating a plugin
+type UpdatePluginRequest struct {
+	Name        *string                `json:"name"`
+	Description *string                `json:"description"`
+	Command     *string                `json:"command"`
+	Checksum    *string                `json:"checksum"`
+	Config      map[string]interface{} `json:"config"`
+	HookType    *string                `json:"hook_type"`
+	IsActive    *bool                  `json:"is_active"`
 }
