@@ -25,12 +25,12 @@ type PluginConfigLoader interface {
 // PluginConfig holds all plugin-related configuration
 type PluginConfig struct {
 	// File-based configuration
-	ConfigPath string `env:"CONFIG_PATH" envDefault:""`
+	ConfigPath string `env:"PLUGINS_CONFIG_PATH" envDefault:""`
 	
 	// Service-based configuration  
-	ConfigServiceURL   string        `env:"CONFIG_SERVICE_URL" envDefault:""`
-	ConfigServiceToken string        `env:"CONFIG_SERVICE_TOKEN" envDefault:""`
-	ConfigPollInterval time.Duration `env:"CONFIG_POLL_INTERVAL" envDefault:"30s"`
+	ConfigServiceURL   string        `env:"PLUGINS_CONFIG_SERVICE_URL" envDefault:""`
+	ConfigServiceToken string        `env:"PLUGINS_CONFIG_SERVICE_TOKEN" envDefault:""`
+	ConfigPollInterval time.Duration `env:"PLUGINS_CONFIG_POLL_INTERVAL" envDefault:"30s"`
 	
 	// Runtime configuration (populated by loader)
 	Loader                PluginConfigLoader                    `env:"-"`

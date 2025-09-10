@@ -35,7 +35,7 @@ type Config struct {
 	Observability ObservabilityConfig
 
 	// Plugin Configuration
-	Plugins PluginConfig `env:"PLUGINS_"`
+	Plugins PluginConfig
 }
 
 // ServerConfig holds HTTP server configuration

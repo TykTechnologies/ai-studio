@@ -185,6 +185,11 @@ type DataCollectionGRPCServer struct {
 	Impl interfaces.DataCollectionPlugin
 }
 
+func (s *DataCollectionGRPCServer) Initialize(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
+	s.BaseImpl = s.Impl
+	return s.BaseGRPCServer.Initialize(ctx, req)
+}
+
 func (s *DataCollectionGRPCServer) HandleProxyLog(ctx context.Context, req *pb.ProxyLogRequest) (*pb.DataCollectionResponse, error) {
 	proxyLogData := &interfaces.ProxyLogData{
 		AppID:        uint(req.AppId),

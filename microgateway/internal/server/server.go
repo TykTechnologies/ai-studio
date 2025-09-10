@@ -52,22 +52,36 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	// Use plugin manager from service container
 	pluginManager := serviceContainer.PluginManager
 	
+	// Debug plugin configuration
+	log.Info().
+		Str("config_path", cfg.Plugins.ConfigPath).
+		Str("config_service_url", cfg.Plugins.ConfigServiceURL).
+		Msg("Plugin configuration check")
+	
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
-		log.Info().Msg("Loading global data collection plugins...")
+		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins...")
 		
 		// Load plugin configuration
 		ctx := context.Background()
 		if err := cfg.LoadPluginConfig(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to load plugin configuration")
-		} else if len(cfg.Plugins.DataCollectionPlugins) > 0 {
-			// Load global plugins
-			if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
-				log.Error().Err(err).Msg("Failed to load global data collection plugins")
+		} else {
+			log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded successfully")
+			
+			if len(cfg.Plugins.DataCollectionPlugins) > 0 {
+				// Load global plugins
+				if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
+					log.Error().Err(err).Msg("Failed to load global data collection plugins")
+				} else {
+					log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded")
+				}
 			} else {
-				log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded")
+				log.Info().Msg("No data collection plugins configured")
 			}
 		}
+	} else {
+		log.Info().Msg("No plugin configuration specified - skipping data collection plugins")
 	}
 
 	// Create analytics handler for microgateway with plugin manager
