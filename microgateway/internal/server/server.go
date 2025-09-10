@@ -75,6 +75,12 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	}
 	log.Info().Msg("AI Gateway resources loaded successfully")
 
+	// Create and register gRPC response plugin adapter with AI Gateway
+	log.Info().Msg("Setting up gRPC response plugin adapter")
+	responsePluginAdapter := api.NewGRPCResponsePluginAdapter(serviceContainer, pluginManager)
+	gateway.AddResponseHook(responsePluginAdapter)
+	log.Info().Msg("gRPC response plugin adapter registered with AI Gateway")
+
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
 		AuthProvider:  serviceContainer.AuthProvider,

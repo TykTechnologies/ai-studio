@@ -207,19 +207,6 @@ func executePreAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Co
 	return false
 }
 
-// executeResponsePlugins - DEPRECATED: This function doesn't work and is not used
-// Response plugins are implemented in the AI Gateway library (pkg/aigateway), not in microgateway
-// The microgateway only handles pre_auth, auth, and post_auth plugins
-func executeResponsePlugins(_ PluginManagerInterface, _ uint, c *gin.Context, _ map[string]interface{}, responseBuffer *bufferingResponseWriter) {
-	log.Error().Msg("DEPRECATED: executeResponsePlugins called - response plugins not supported in microgateway")
-	
-	// Send the response without modification since response plugins don't work here
-	c.Writer.WriteHeader(responseBuffer.statusCode)
-	for key, value := range responseBuffer.headers {
-		c.Writer.Header().Set(key, value)
-	}
-	c.Writer.Write(responseBuffer.body.Bytes())
-}
 
 // applyRequestModifications applies plugin modifications to the request
 func applyRequestModifications(c *gin.Context, resp map[string]interface{}) {
@@ -488,33 +475,6 @@ func createBasicPluginRequest(c *gin.Context, pluginCtx map[string]interface{}) 
 	}
 }
 
-// bufferingResponseWriter - DEPRECATED: No longer used
-// Response processing is now handled by AI Gateway response hooks
-// This type is kept only to avoid breaking the deprecated executeResponsePlugins function signature
-type bufferingResponseWriter struct {
-	gin.ResponseWriter
-	statusCode int
-	headers    map[string]string
-	body      *bytes.Buffer
-}
-
-func (w *bufferingResponseWriter) Write(data []byte) (int, error) {
-	return w.body.Write(data)
-}
-
-func (w *bufferingResponseWriter) WriteHeader(code int) {
-	w.statusCode = code
-	// Capture headers
-	for key, values := range w.Header() {
-		if len(values) > 0 {
-			w.headers[key] = values[0]
-		}
-	}
-}
-
-func (w *bufferingResponseWriter) Header() http.Header {
-	return w.ResponseWriter.Header()
-}
 
 func generateRequestID() string {
 	return "req_" + strconv.FormatInt(time.Now().UnixNano(), 36)

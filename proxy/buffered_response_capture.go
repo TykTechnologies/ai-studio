@@ -88,8 +88,8 @@ func (rc *bufferedResponseCapture) ModifyStatusCode(statusCode int) {
 	rc.statusCode = statusCode
 }
 
-// Flush sends the buffered response to the client (call this after hooks are done)
-func (rc *bufferedResponseCapture) Flush() {
+// WriteToClient writes the buffered response to the client (call this after hooks modify the data)
+func (rc *bufferedResponseCapture) WriteToClient() {
 	if rc.written {
 		return // Already written
 	}

@@ -33,16 +33,16 @@ func TestRESTOnlyResponseHookIntegration(t *testing.T) {
 		Name:   "test-app",
 	}
 
-	// Test the complete flow
+	// Test the complete flow with buffered response
 	rec := httptest.NewRecorder()
-	capture := newResponseCapture(rec)
+	bufferedCapture := newBufferedResponseCapture(rec)
 
-	// Simulate what reverse proxy does - write response to capture
-	capture.Header().Set("Content-Type", "application/json")
-	capture.WriteHeader(http.StatusOK)
-	capture.Write([]byte(`{"message": "hello"}`))
+	// Simulate what reverse proxy does - write response to buffered capture
+	bufferedCapture.Header().Set("Content-Type", "application/json")
+	bufferedCapture.WriteHeader(http.StatusOK)
+	bufferedCapture.Write([]byte(`{"message": "hello"}`))
 
-	// Execute hooks (simulating what executeResponseHooks does)
+	// Execute hooks (simulating what executeBufferedResponseHooks does)
 	ctx := context.Background()
 	pluginCtx := &PluginContext{
 		RequestID: "test-req-123",
@@ -63,12 +63,12 @@ func TestRESTOnlyResponseHookIntegration(t *testing.T) {
 	require.NoError(t, err)
 	
 	if headerResp.Modified {
-		capture.ModifyHeaders(headerResp.Headers)
+		bufferedCapture.ModifyHeaders(headerResp.Headers)
 	}
 
 	// Test body hooks
 	writeReq := &ResponseWriteRequest{
-		Body:    capture.CapturedBody(),
+		Body:    bufferedCapture.CapturedBody(),
 		Headers: headerResp.Headers,
 		Context: pluginCtx,
 	}
@@ -77,19 +77,19 @@ func TestRESTOnlyResponseHookIntegration(t *testing.T) {
 	require.NoError(t, err)
 	
 	if writeResp.Modified {
-		capture.ModifyBody(writeResp.Body)
-		capture.ModifyHeaders(writeResp.Headers)
+		bufferedCapture.ModifyBody(writeResp.Body)
+		bufferedCapture.ModifyHeaders(writeResp.Headers)
 	}
 
-	// Flush the modified response
-	capture.Flush()
+	// Write the modified response to client
+	bufferedCapture.WriteToClient()
 
 	// Verify the hook modifications were applied
 	assert.True(t, headerResp.Modified)
 	assert.True(t, writeResp.Modified)
 	
 	// Check the final response includes hook modifications
-	finalBody := capture.CapturedBody()
+	finalBody := bufferedCapture.CapturedBody()
 	var response map[string]interface{}
 	err = json.Unmarshal(finalBody, &response)
 	require.NoError(t, err)

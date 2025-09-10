@@ -447,24 +447,19 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	
 	// Use buffered response capture only if hooks are actually configured
 	if p.responseHookManager != nil && p.hasResponseHooks() {
-		log.Printf("DEBUG: Using buffered response capture for hooks")
 		bufferedCapture := newBufferedResponseCapture(w)
 		httpProxy.ServeHTTP(bufferedCapture, r)
 		
-		// Execute REST-only response hooks before sending to client
-		log.Printf("DEBUG: About to execute response hooks, captured body size: %d", bufferedCapture.buffer.Len())
+		// Execute REST-only response hooks (hooks modify the buffered response in-place)
 		if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
 			log.Printf("Response hook execution failed: %v", err)
 		}
 		
-		// Flush the (potentially modified) response to client
-		log.Printf("DEBUG: About to flush response to client, captured body size: %d, status: %d", bufferedCapture.buffer.Len(), bufferedCapture.statusCode)
-		bufferedCapture.Flush()
-		log.Printf("DEBUG: Response flushed to client")
+		// AI Gateway proxy writes the final (potentially modified) response to client
+		bufferedCapture.WriteToClient()
 		
 		go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
 	} else {
-		log.Printf("DEBUG: Using standard response capture (no hooks)")
 		capture := newResponseCapture(w)
 		httpProxy.ServeHTTP(capture, r)
 		go p.analyzeResponse(llm, app, capture.statusCode, capture.buffer.Bytes(), reqBody, r)
@@ -474,9 +469,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 // executeBufferedResponseHooks executes response hooks on the buffered response (REST-only)
 func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, llm *models.LLM, app *models.App, r *http.Request) error {
-	log.Printf("DEBUG: executeBufferedResponseHooks called")
 	if p.responseHookManager == nil {
-		log.Printf("DEBUG: No response hook manager configured")
 		return nil // No hooks configured
 	}
 	
@@ -515,14 +508,20 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		return fmt.Errorf("header hook failed: %w", err)
 	}
 	
+	// Apply header modifications if any
 	if headerResp.Modified {
 		capture.ModifyHeaders(headerResp.Headers)
 	}
 	
-	// Execute OnBeforeWrite hook
+	// Execute OnBeforeWrite hook with current headers
+	currentHeaders := headerResp.Headers
+	if !headerResp.Modified {
+		currentHeaders = headerReq.Headers // Use original if not modified
+	}
+	
 	writeReq := &ResponseWriteRequest{
 		Body:    capture.CapturedBody(),
-		Headers: headerResp.Headers,
+		Headers: currentHeaders,
 		Context: pluginCtx,
 	}
 	
@@ -531,8 +530,10 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		return fmt.Errorf("body hook failed: %w", err)
 	}
 	
+	// Apply body modifications if any
 	if writeResp.Modified {
 		capture.ModifyBody(writeResp.Body)
+		// Also apply any header changes from the write hook
 		capture.ModifyHeaders(writeResp.Headers)
 	}
 	

@@ -43,3 +43,8 @@ envs/*
 .claude/settings.local.json
 microgateway/dist
 microgateway/bin/microgateway
+microgateway/plugins/examples/custom_auth/custom_auth
+microgateway/plugins/examples/message_modifier/message_modifier
+microgateway/plugins/examples/rate_limiter/rate_limiter
+microgateway/plugins/examples/request_enricher/request_enricher
+microgateway/plugins/examples/response_modifier/response_modifier

@@ -44,32 +44,33 @@ func (h *TestResponseHook) OnBeforeWrite(ctx context.Context, req *ResponseWrite
 	}, nil
 }
 
-// TestResponseCaptureBuffering tests the new buffering behavior
-func TestResponseCaptureBuffering(t *testing.T) {
+// TestBufferedResponseCapture tests the buffered response capture for hooks
+func TestBufferedResponseCapture(t *testing.T) {
 	rec := httptest.NewRecorder()
-	capture := newResponseCapture(rec)
+	bufferedCapture := newBufferedResponseCapture(rec)
 
-	// Write response but don't flush yet
-	capture.Header().Set("Content-Type", "application/json")
-	capture.WriteHeader(http.StatusOK)
-	capture.Write([]byte(`{"test": true}`))
+	// Write response but don't write to client yet
+	bufferedCapture.Header().Set("Content-Type", "application/json")
+	bufferedCapture.WriteHeader(http.StatusOK)
+	bufferedCapture.Write([]byte(`{"test": true}`))
 
-	// Response should not be written to client yet (captured data available)
-	// Note: httptest.ResponseRecorder may write status immediately, but real response writer won't
-	// The key test is that capture.written = false and data is available for modification
+	// Note: httptest.ResponseRecorder may record status immediately, but the key is that
+	// buffered capture doesn't write to real client until WriteToClient() is called
+	// The important test is that data is available for modification
 	
-	// Captured data should be available
-	assert.Equal(t, http.StatusOK, capture.statusCode)
-	assert.Equal(t, `{"test": true}`, string(capture.CapturedBody()))
-	assert.Equal(t, "application/json", capture.header.Get("Content-Type"))
-	assert.False(t, capture.written) // Should not be marked as written yet
+	// Captured data should be available for hooks
+	assert.Equal(t, http.StatusOK, bufferedCapture.statusCode)
+	assert.Equal(t, `{"test": true}`, string(bufferedCapture.CapturedBody()))
+	assert.Equal(t, "application/json", bufferedCapture.header.Get("Content-Type"))
+	assert.False(t, bufferedCapture.written) // Should not be marked as written yet
 
-	// Now flush to client
-	capture.Flush()
-	assert.True(t, capture.written) // Should now be marked as written
+	// Now write to client
+	bufferedCapture.WriteToClient()
+	assert.True(t, bufferedCapture.written) // Should now be marked as written
 	
-	// Response should be available in recorder (httptest behavior)
-	assert.Equal(t, `{"test": true}`, string(capture.CapturedBody()))
+	// Response should now be available in recorder
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, `{"test": true}`, rec.Body.String())
 }
 
 // TestResponseHookManager tests the hook manager functionality
@@ -103,58 +104,58 @@ func TestResponseHookManager(t *testing.T) {
 	assert.Equal(t, `{"original": true} [MODIFIED]`, string(writeResp.Body))
 }
 
-// TestResponseCaptureModification tests the modification methods
-func TestResponseCaptureModification(t *testing.T) {
+// TestBufferedResponseModification tests the modification methods
+func TestBufferedResponseModification(t *testing.T) {
 	rec := httptest.NewRecorder()
-	capture := newResponseCapture(rec)
+	bufferedCapture := newBufferedResponseCapture(rec)
 
 	// Set initial response
-	capture.Header().Set("Content-Type", "application/json")
-	capture.WriteHeader(http.StatusOK)
-	capture.Write([]byte(`{"original": true}`))
+	bufferedCapture.Header().Set("Content-Type", "application/json")
+	bufferedCapture.WriteHeader(http.StatusOK)
+	bufferedCapture.Write([]byte(`{"original": true}`))
 
 	// Modify headers
 	newHeaders := map[string]string{
 		"Content-Type":   "application/json",
 		"X-Hook-Applied": "true",
 	}
-	capture.ModifyHeaders(newHeaders)
+	bufferedCapture.ModifyHeaders(newHeaders)
 
 	// Modify body
-	capture.ModifyBody([]byte(`{"modified": true}`))
+	bufferedCapture.ModifyBody([]byte(`{"modified": true}`))
 
 	// Modify status
-	capture.ModifyStatusCode(http.StatusCreated)
+	bufferedCapture.ModifyStatusCode(http.StatusCreated)
 
-	// Flush and verify
-	capture.Flush()
+	// Write to client and verify
+	bufferedCapture.WriteToClient()
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
 	assert.Equal(t, `{"modified": true}`, rec.Body.String())
 	assert.Equal(t, "true", rec.Header().Get("X-Hook-Applied"))
 }
 
-// TestResponseCaptureDoubleFlush tests that double flush is safe
-func TestResponseCaptureDoubleFlush(t *testing.T) {
+// TestBufferedResponseDoubleWrite tests that double write is safe
+func TestBufferedResponseDoubleWrite(t *testing.T) {
 	rec := httptest.NewRecorder()
-	capture := newResponseCapture(rec)
+	bufferedCapture := newBufferedResponseCapture(rec)
 
-	capture.Header().Set("Content-Type", "text/plain")
-	capture.WriteHeader(http.StatusOK)
-	capture.Write([]byte("test"))
+	bufferedCapture.Header().Set("Content-Type", "text/plain")
+	bufferedCapture.WriteHeader(http.StatusOK)
+	bufferedCapture.Write([]byte("test"))
 
-	// First flush
-	capture.Flush()
+	// First write to client
+	bufferedCapture.WriteToClient()
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "test", rec.Body.String())
 
-	// Modifications after flush should be ignored
-	capture.ModifyBody([]byte("modified"))
-	capture.ModifyStatusCode(http.StatusBadRequest)
+	// Modifications after write should be ignored
+	bufferedCapture.ModifyBody([]byte("modified"))
+	bufferedCapture.ModifyStatusCode(http.StatusBadRequest)
 
-	// Second flush should be safe and not change anything
+	// Second write should be safe and not change anything
 	assert.NotPanics(t, func() {
-		capture.Flush()
+		bufferedCapture.WriteToClient()
 	})
 	
 	// Response should remain unchanged
