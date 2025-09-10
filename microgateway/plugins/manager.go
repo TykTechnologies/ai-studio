@@ -14,7 +14,6 @@ import (
 	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
-	"google.golang.org/grpc"
 )
 
 // LoadedPlugin represents a loaded plugin instance
@@ -60,7 +59,7 @@ func NewPluginManager(pluginService services.PluginServiceInterface) *PluginMana
 		service:         pluginService,
 		handshakeConfig: HandshakeConfig,
 		pluginMap: map[string]plugin.Plugin{
-			"plugin": &SimpleGRPCPlugin{},
+			"plugin": &PluginGRPC{},
 		},
 	}
 }
@@ -88,6 +87,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Start plugin process
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  pm.handshakeConfig,
+		Plugins:          pm.pluginMap,
 		Cmd:              exec.Command(pluginData.Command),
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 	})
@@ -525,6 +525,7 @@ func (pm *PluginManager) ReattachPlugin(pluginID uint, config *plugin.ReattachCo
 	// Create client with reattach config
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  pm.handshakeConfig,
+		Plugins:          pm.pluginMap,
 		Reattach:         config,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 	})
