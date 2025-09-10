@@ -1,0 +1,63 @@
+# Example plugin configuration for data collection plugins
+# This file can be referenced via PLUGINS_CONFIG_PATH environment variable
+
+version: "1.0"
+
+# Data collection plugins for intercepting database writes
+data_collection_plugins:
+  # Example Elasticsearch plugin
+  - name: "elasticsearch-collector"
+    path: "./plugins/elasticsearch_collector"
+    enabled: true
+    priority: 100
+    replace_database: false  # Supplement database storage, don't replace
+    hook_types: 
+      - "proxy_log"
+      - "analytics" 
+      - "budget"
+    config:
+      # Environment variable substitution supported
+      elasticsearch_url: "${ELASTICSEARCH_URL:-http://localhost:9200}"
+      username: "${ELASTICSEARCH_USERNAME}"
+      password: "${ELASTICSEARCH_PASSWORD}"
+      
+      # Index configuration with date suffixes
+      indices:
+        proxy_logs: "microgateway-proxy-logs-${NODE_ENV:-dev}"
+        analytics: "microgateway-analytics-${NODE_ENV:-dev}"
+        budget: "microgateway-budget-${NODE_ENV:-dev}"
+      
+      # Batch settings
+      batch_size: 100
+      flush_interval: "30s"
+      
+      # Mapping templates
+      use_index_templates: true
+      
+  # Example webhook plugin (disabled)
+  - name: "webhook-collector"  
+    path: "./plugins/webhook_collector"
+    enabled: false
+    priority: 200
+    replace_database: false
+    hook_types:
+      - "analytics"  # Only handle analytics data
+    config:
+      webhook_url: "${ANALYTICS_WEBHOOK_URL}"
+      webhook_secret: "${ANALYTICS_WEBHOOK_SECRET}"
+      timeout: "10s"
+      retry_attempts: 3
+
+  # Example custom file-based collector
+  - name: "file-collector"
+    path: "./plugins/file_collector"  
+    enabled: false
+    priority: 50
+    replace_database: true  # Replace database storage completely
+    hook_types:
+      - "proxy_log"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected}"
+      file_format: "jsonl"  # JSON Lines format
+      rotation_size: "100MB"
+      compression: true

@@ -5,10 +5,11 @@ package interfaces
 type HookType string
 
 const (
-	HookTypePreAuth    HookType = "pre_auth"
-	HookTypeAuth       HookType = "auth"
-	HookTypePostAuth   HookType = "post_auth"
-	HookTypeOnResponse HookType = "on_response"
+	HookTypePreAuth        HookType = "pre_auth"
+	HookTypeAuth           HookType = "auth"
+	HookTypePostAuth       HookType = "post_auth"
+	HookTypeOnResponse     HookType = "on_response"
+	HookTypeDataCollection HookType = "data_collection"
 )
 
 // BasePlugin defines the base interface that all plugins must implement

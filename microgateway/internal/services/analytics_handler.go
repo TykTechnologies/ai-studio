@@ -11,6 +11,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -22,14 +24,16 @@ type MicrogatewaAnalyticsHandler struct {
 	config        *config.AnalyticsConfig
 	pendingEvents map[string]uint // Map request ID to event ID for matching
 	mu            sync.RWMutex
+	pluginManager *plugins.PluginManager // For global data collection plugins
 }
 
 // NewMicrogatewaAnalyticsHandler creates a new analytics handler for the microgateway
-func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig) *MicrogatewaAnalyticsHandler {
+func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig, pluginManager *plugins.PluginManager) *MicrogatewaAnalyticsHandler {
 	return &MicrogatewaAnalyticsHandler{
 		db:            db,
 		config:        analyticsConfig,
 		pendingEvents: make(map[string]uint),
+		pluginManager: pluginManager,
 	}
 }
 
@@ -68,7 +72,33 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		Time("proxy_timestamp", proxyLog.TimeStamp).
 		Int("request_body_size", len(proxyLog.RequestBody)).
 		Int("response_body_size", len(proxyLog.ResponseBody)).
-		Msg("Creating analytics event directly from proxy log")
+		Msg("Processing proxy log - executing data collection plugins")
+
+	// Execute data collection plugins for proxy logs
+	if h.pluginManager != nil {
+		// Convert to plugin format
+		pluginData := &interfaces.ProxyLogData{
+			AppID:        proxyLog.AppID,
+			UserID:       proxyLog.UserID,
+			Vendor:       proxyLog.Vendor,
+			RequestBody:  []byte(proxyLog.RequestBody),
+			ResponseBody: []byte(proxyLog.ResponseBody),
+			ResponseCode: proxyLog.ResponseCode,
+			Timestamp:    proxyLog.TimeStamp,
+			RequestID:    fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+		}
+		
+		// Execute plugins - this is non-blocking and logs errors internally
+		if err := h.pluginManager.ExecuteDataCollectionPlugins("proxy_log", pluginData); err != nil {
+			log.Error().Err(err).Msg("Failed to execute proxy log data collection plugins")
+		}
+		
+		// Check if any plugins are configured to replace database storage for proxy logs
+		if h.pluginManager.ShouldReplaceDatabaseStorage("proxy_log") {
+			log.Debug().Msg("Proxy log database storage replaced by plugin - skipping database analytics creation")
+			return
+		}
+	}
 
 	// Parse token usage and cost from response body if available
 	tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
@@ -76,6 +106,38 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 	// Extract model name from request body for accurate pricing
 	model := h.extractModelFromRequest(proxyLog.RequestBody)
 	cost := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
+	
+	// Execute analytics data collection plugins
+	if h.pluginManager != nil {
+		// Convert to analytics plugin format
+		analyticsData := &interfaces.AnalyticsData{
+			LLMID:          0, // Could be extracted from request context if needed
+			ModelName:      model,
+			Vendor:         proxyLog.Vendor,
+			PromptTokens:   tokens.PromptTokens,
+			ResponseTokens: tokens.ResponseTokens,
+			TotalTokens:    tokens.TotalTokens,
+			Cost:           cost,
+			Currency:       "USD",
+			AppID:          proxyLog.AppID,
+			UserID:         proxyLog.UserID,
+			Timestamp:      proxyLog.TimeStamp,
+			ToolCalls:      0, // Could be parsed from request if needed
+			Choices:        1, // Default to 1 choice
+			RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+		}
+		
+		// Execute analytics plugins
+		if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
+			log.Error().Err(err).Msg("Failed to execute analytics data collection plugins")
+		}
+		
+		// Check if any plugins are configured to replace database storage for analytics
+		if h.pluginManager.ShouldReplaceDatabaseStorage("analytics") {
+			log.Debug().Msg("Analytics database storage replaced by plugin - skipping database write")
+			return
+		}
+	}
 	
 	// Create analytics event directly from proxy log
 	event := &database.AnalyticsEvent{

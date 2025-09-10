@@ -49,13 +49,32 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		serviceContainer.GatewayService,
 	)
 
-	// Create analytics handler for microgateway with configuration
-	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB, &cfg.Analytics)
+	// Use plugin manager from service container
+	pluginManager := serviceContainer.PluginManager
+	
+	// Load global data collection plugins if configured
+	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
+		log.Info().Msg("Loading global data collection plugins...")
+		
+		// Load plugin configuration
+		ctx := context.Background()
+		if err := cfg.LoadPluginConfig(ctx); err != nil {
+			log.Error().Err(err).Msg("Failed to load plugin configuration")
+		} else if len(cfg.Plugins.DataCollectionPlugins) > 0 {
+			// Load global plugins
+			if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
+				log.Error().Err(err).Msg("Failed to load global data collection plugins")
+			} else {
+				log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded")
+			}
+		}
+	}
+
+	// Create analytics handler for microgateway with plugin manager
+	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB, &cfg.Analytics, pluginManager)
 	analyticsHandler.SetAsGlobalHandler()
 
-	// Create plugin manager first
-	pluginManager := plugins.NewPluginManager(serviceContainer.PluginService)
-	log.Info().Msg("Plugin manager created")
+	log.Info().Msg("Plugin manager configured for data collection")
 
 	// Note: Response hooks are implemented directly in the AI Gateway, not in microgateway plugin system
 

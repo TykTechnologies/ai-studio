@@ -2,11 +2,13 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/caarlos0/env/v9"
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog/log"
 )
 
 // Config holds the complete application configuration
@@ -31,6 +33,9 @@ type Config struct {
 
 	// Observability Configuration
 	Observability ObservabilityConfig
+
+	// Plugin Configuration
+	Plugins PluginConfig `env:"PLUGINS_"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -223,4 +228,26 @@ func (c *Config) IsDevelopment() bool {
 // IsProduction returns true if the application is running in production mode
 func (c *Config) IsProduction() bool {
 	return !c.IsDevelopment() && c.Server.TLSEnabled
+}
+
+// LoadPluginConfig initializes and loads plugin configuration using appropriate loader
+func (c *Config) LoadPluginConfig(ctx context.Context) error {
+	// Create appropriate plugin config loader based on configuration
+	loader, err := NewPluginConfigLoader(c)
+	if err != nil {
+		return fmt.Errorf("failed to create plugin config loader: %w", err)
+	}
+	
+	c.Plugins.Loader = loader
+	
+	// Load initial configuration
+	plugins, err := loader.LoadDataCollectionPlugins(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin configuration: %w", err)
+	}
+	
+	c.Plugins.DataCollectionPlugins = plugins
+	
+	log.Info().Int("count", len(plugins)).Msg("Loaded plugin configurations")
+	return nil
 }

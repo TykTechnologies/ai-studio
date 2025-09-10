@@ -9,12 +9,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 )
+
+// PluginServiceInterface defines minimal interface needed by plugin manager
+// This avoids circular dependency with services package
+type PluginServiceInterface interface {
+	GetPlugin(id uint) (PluginData, error)
+	GetPluginsByLLMID(llmID uint) ([]PluginData, error)
+	GetPluginsForLLM(llmID uint) ([]PluginData, error)
+}
+
+// PluginData represents plugin data from database (minimal interface)
+type PluginData struct {
+	ID          uint
+	Name        string
+	Slug        string
+	HookType    string
+	Command     string
+	Config      []byte  // JSON-encoded config (matches datatypes.JSON from database)
+	Checksum    string
+	IsActive    bool
+}
 
 // LoadedPlugin represents a loaded plugin instance
 type LoadedPlugin struct {
@@ -27,18 +46,32 @@ type LoadedPlugin struct {
 	Config      map[string]interface{}
 	Checksum    string
 	IsHealthy   bool
+	IsGlobal    bool   // True for global plugins (vs per-LLM plugins)
+}
+
+// GlobalPlugin represents a global data collection plugin instance
+type GlobalPlugin struct {
+	Config         DataCollectionPluginConfig
+	Client         *plugin.Client
+	GRPCClient     pb.PluginServiceClient
+	LoadedPlugin   *LoadedPlugin
+	IsHealthy      bool
 }
 
 // PluginManager manages the lifecycle of plugins
 type PluginManager struct {
-	mu              sync.RWMutex
-	loadedPlugins   map[uint]*LoadedPlugin     // Plugin ID -> loaded plugin
-	llmPluginMap    map[uint][]uint             // LLM ID -> Plugin IDs (ordered)
-	pluginClients   map[uint]*plugin.Client     // Plugin ID -> go-plugin client
-	reattachConfigs map[uint]*plugin.ReattachConfig // For reconnection
-	service         services.PluginServiceInterface      // Database service
-	handshakeConfig plugin.HandshakeConfig
-	pluginMap       map[string]plugin.Plugin
+	mu                      sync.RWMutex
+	loadedPlugins           map[uint]*LoadedPlugin           // Plugin ID -> loaded plugin
+	llmPluginMap            map[uint][]uint                  // LLM ID -> Plugin IDs (ordered)
+	pluginClients           map[uint]*plugin.Client          // Plugin ID -> go-plugin client
+	reattachConfigs         map[uint]*plugin.ReattachConfig  // For reconnection
+	service                 PluginServiceInterface // Database service
+	handshakeConfig         plugin.HandshakeConfig
+	pluginMap               map[string]plugin.Plugin
+	
+	// Global data collection plugins
+	globalDataPlugins       map[string]*GlobalPlugin         // Plugin name -> global plugin
+	dataCollectionHookTypes map[string][]string              // Plugin name -> hook types it handles
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -50,17 +83,19 @@ var HandshakeConfig = plugin.HandshakeConfig{
 }
 
 // NewPluginManager creates a new plugin manager instance
-func NewPluginManager(pluginService services.PluginServiceInterface) *PluginManager {
+func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 	return &PluginManager{
-		loadedPlugins:   make(map[uint]*LoadedPlugin),
-		llmPluginMap:    make(map[uint][]uint),
-		pluginClients:   make(map[uint]*plugin.Client),
-		reattachConfigs: make(map[uint]*plugin.ReattachConfig),
-		service:         pluginService,
-		handshakeConfig: HandshakeConfig,
+		loadedPlugins:           make(map[uint]*LoadedPlugin),
+		llmPluginMap:            make(map[uint][]uint),
+		pluginClients:           make(map[uint]*plugin.Client),
+		reattachConfigs:         make(map[uint]*plugin.ReattachConfig),
+		service:                 pluginService,
+		handshakeConfig:         HandshakeConfig,
 		pluginMap: map[string]plugin.Plugin{
 			"plugin": &PluginGRPC{},
 		},
+		globalDataPlugins:       make(map[string]*GlobalPlugin),
+		dataCollectionHookTypes: make(map[string][]string),
 	}
 }
 
@@ -245,7 +280,7 @@ func (pm *PluginManager) ReloadPlugin(pluginID uint) error {
 // GetPluginsForLLM returns loaded plugins for a specific LLM and hook type
 func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*LoadedPlugin, error) {
 	// Get plugins from database (this ensures we have the latest associations)
-	plugins, err := pm.service.GetPluginsForLLM(llmID)
+	pluginsData, err := pm.service.GetPluginsForLLM(llmID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugins for LLM: %w", err)
 	}
@@ -253,7 +288,7 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 	var result []*LoadedPlugin
 
 	// Filter by hook type and ensure plugins are loaded
-	for _, pluginData := range plugins {
+	for _, pluginData := range pluginsData {
 		if interfaces.HookType(pluginData.HookType) != hookType {
 			continue
 		}
@@ -613,7 +648,7 @@ func (pm *PluginManager) IsPluginLoaded(pluginID uint) bool {
 
 // RefreshLLMPluginMapping refreshes the LLM to plugin mapping from the database
 func (pm *PluginManager) RefreshLLMPluginMapping(llmID uint) error {
-	plugins, err := pm.service.GetPluginsForLLM(llmID)
+	pluginsData, err := pm.service.GetPluginsForLLM(llmID)
 	if err != nil {
 		return fmt.Errorf("failed to get plugins for LLM: %w", err)
 	}
@@ -626,7 +661,7 @@ func (pm *PluginManager) RefreshLLMPluginMapping(llmID uint) error {
 
 	// Build new mapping
 	var pluginIDs []uint
-	for _, plugin := range plugins {
+	for _, plugin := range pluginsData {
 		pluginIDs = append(pluginIDs, plugin.ID)
 	}
 
@@ -636,3 +671,347 @@ func (pm *PluginManager) RefreshLLMPluginMapping(llmID uint) error {
 
 	return nil
 }
+// LoadGlobalDataCollectionPlugins loads global data collection plugins from configuration
+func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectionPluginConfig) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	
+	for _, cfg := range configs {
+		if !cfg.Enabled {
+			log.Debug().Str("plugin", cfg.Name).Msg("Skipping disabled plugin")
+			continue
+		}
+		
+		// Load plugin from path
+		globalPlugin, err := pm.loadGlobalPluginFromConfig(cfg)
+		if err != nil {
+			log.Error().
+				Str("plugin", cfg.Name).
+				Str("path", cfg.Path).
+				Err(err).
+				Msg("Failed to load global data collection plugin")
+			continue
+		}
+		
+		// Store global plugin
+		pm.globalDataPlugins[cfg.Name] = globalPlugin
+		pm.dataCollectionHookTypes[cfg.Name] = cfg.HookTypes
+		
+		log.Info().
+			Str("plugin", cfg.Name).
+			Strs("hook_types", cfg.HookTypes).
+			Bool("replace_database", cfg.ReplaceDatabase).
+			Msg("Loaded global data collection plugin")
+	}
+	
+	return nil
+}
+
+// loadGlobalPluginFromConfig loads a global plugin from configuration
+func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConfig) (*GlobalPlugin, error) {
+	// Start plugin process
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  pm.handshakeConfig,
+		Plugins:          pm.pluginMap,
+		Cmd:              exec.Command(cfg.Path),
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+	})
+	
+	// Connect via gRPC
+	rpcClient, err := client.Client()
+	if err != nil {
+		client.Kill()
+		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
+	}
+	
+	// Get the plugin client
+	raw, err := rpcClient.Dispense("plugin")
+	if err != nil {
+		client.Kill()
+		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
+	}
+	
+	pluginClient := raw.(pb.PluginServiceClient)
+	
+	// Initialize the plugin
+	initReq := &pb.InitRequest{
+		Config: make(map[string]string),
+	}
+	
+	// Convert config map to string map for protobuf
+	for key, value := range cfg.Config {
+		if str, ok := value.(string); ok {
+			initReq.Config[key] = str
+		} else {
+			// Try to JSON encode non-string values
+			if jsonBytes, err := json.Marshal(value); err == nil {
+				initReq.Config[key] = string(jsonBytes)
+			}
+		}
+	}
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	initResp, err := pluginClient.Initialize(ctx, initReq)
+	if err != nil {
+		client.Kill()
+		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
+	}
+	
+	if !initResp.Success {
+		client.Kill()
+		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
+	}
+	
+	// Create global plugin instance
+	globalPlugin := &GlobalPlugin{
+		Config:     cfg,
+		Client:     client,
+		GRPCClient: pluginClient,
+		IsHealthy:  true,
+		LoadedPlugin: &LoadedPlugin{
+			Name:       cfg.Name,
+			HookType:   interfaces.HookTypeDataCollection,
+			Client:     client,
+			GRPCClient: pluginClient,
+			Config:     cfg.Config,
+			IsHealthy:  true,
+			IsGlobal:   true,
+		},
+	}
+	
+	return globalPlugin, nil
+}
+
+// ExecuteDataCollectionPlugins executes global data collection plugins for the specified hook type
+func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data interface{}) error {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	
+	// Find plugins that handle this hook type
+	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
+		if !pm.pluginHandlesHookType(hookTypes, hookType) {
+			continue
+		}
+		
+		globalPlugin, exists := pm.globalDataPlugins[pluginName]
+		if !exists || !globalPlugin.IsHealthy {
+			continue
+		}
+		
+		// Execute plugin based on hook type
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := pm.executeDataCollectionPlugin(ctx, globalPlugin, hookType, data)
+		cancel()
+		
+		if err != nil {
+			log.Error().
+				Str("plugin", pluginName).
+				Str("hook_type", hookType).
+				Err(err).
+				Msg("Data collection plugin execution failed")
+			
+			// Mark plugin as unhealthy after consecutive failures
+			// TODO: Add failure counting and health check logic
+		}
+	}
+	
+	return nil
+}
+
+// executeDataCollectionPlugin executes a specific plugin for the given data type
+func (pm *PluginManager) executeDataCollectionPlugin(ctx context.Context, plugin *GlobalPlugin, hookType string, data interface{}) error {
+	switch hookType {
+	case "proxy_log":
+		if proxyData, ok := data.(*interfaces.ProxyLogData); ok {
+			return pm.executeProxyLogPlugin(ctx, plugin, proxyData)
+		}
+	case "analytics":
+		if analyticsData, ok := data.(*interfaces.AnalyticsData); ok {
+			return pm.executeAnalyticsPlugin(ctx, plugin, analyticsData)
+		}
+	case "budget":
+		if budgetData, ok := data.(*interfaces.BudgetUsageData); ok {
+			return pm.executeBudgetUsagePlugin(ctx, plugin, budgetData)
+		}
+	}
+	
+	return fmt.Errorf("unsupported hook type: %s", hookType)
+}
+
+// executeProxyLogPlugin executes proxy log data collection
+func (pm *PluginManager) executeProxyLogPlugin(ctx context.Context, plugin *GlobalPlugin, data *interfaces.ProxyLogData) error {
+	// Convert to protobuf request
+	req := &pb.ProxyLogRequest{
+		AppId:        uint32(data.AppID),
+		UserId:       uint32(data.UserID),
+		Vendor:       data.Vendor,
+		RequestBody:  data.RequestBody,
+		ResponseBody: data.ResponseBody,
+		ResponseCode: int32(data.ResponseCode),
+		Timestamp:    data.Timestamp.Unix(),
+		RequestId:    data.RequestID,
+		Context: &pb.PluginContext{
+			RequestId: data.RequestID,
+			AppId:     uint32(data.AppID),
+			UserId:    uint32(data.UserID),
+		},
+	}
+	
+	resp, err := plugin.GRPCClient.HandleProxyLog(ctx, req)
+	if err != nil {
+		return err
+	}
+	
+	if !resp.Success {
+		return fmt.Errorf("plugin execution failed: %s", resp.ErrorMessage)
+	}
+	
+	return nil
+}
+
+// executeAnalyticsPlugin executes analytics data collection
+func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *GlobalPlugin, data *interfaces.AnalyticsData) error {
+	// Convert to protobuf request
+	req := &pb.AnalyticsRequest{
+		LlmId:                   uint32(data.LLMID),
+		ModelName:              data.ModelName,
+		Vendor:                 data.Vendor,
+		PromptTokens:           int32(data.PromptTokens),
+		ResponseTokens:         int32(data.ResponseTokens),
+		CacheWritePromptTokens: int32(data.CacheWritePromptTokens),
+		CacheReadPromptTokens:  int32(data.CacheReadPromptTokens),
+		TotalTokens:            int32(data.TotalTokens),
+		Cost:                   data.Cost,
+		Currency:               data.Currency,
+		AppId:                  uint32(data.AppID),
+		UserId:                 uint32(data.UserID),
+		Timestamp:              data.Timestamp.Unix(),
+		ToolCalls:              int32(data.ToolCalls),
+		Choices:                int32(data.Choices),
+		RequestId:              data.RequestID,
+		Context: &pb.PluginContext{
+			RequestId: data.RequestID,
+			LlmId:     uint32(data.LLMID),
+			AppId:     uint32(data.AppID),
+			UserId:    uint32(data.UserID),
+		},
+	}
+	
+	resp, err := plugin.GRPCClient.HandleAnalytics(ctx, req)
+	if err != nil {
+		return err
+	}
+	
+	if !resp.Success {
+		return fmt.Errorf("plugin execution failed: %s", resp.ErrorMessage)
+	}
+	
+	return nil
+}
+
+// executeBudgetUsagePlugin executes budget usage data collection
+func (pm *PluginManager) executeBudgetUsagePlugin(ctx context.Context, plugin *GlobalPlugin, data *interfaces.BudgetUsageData) error {
+	// Convert to protobuf request
+	req := &pb.BudgetUsageRequest{
+		AppId:            uint32(data.AppID),
+		LlmId:            uint32(data.LLMID),
+		TokensUsed:       data.TokensUsed,
+		Cost:             data.Cost,
+		RequestsCount:    int32(data.RequestsCount),
+		PromptTokens:     data.PromptTokens,
+		CompletionTokens: data.CompletionTokens,
+		PeriodStart:      data.PeriodStart.Unix(),
+		PeriodEnd:        data.PeriodEnd.Unix(),
+		Timestamp:        data.Timestamp.Unix(),
+		RequestId:        data.RequestID,
+		Context: &pb.PluginContext{
+			RequestId: data.RequestID,
+			AppId:     uint32(data.AppID),
+		},
+	}
+	
+	resp, err := plugin.GRPCClient.HandleBudgetUsage(ctx, req)
+	if err != nil {
+		return err
+	}
+	
+	if !resp.Success {
+		return fmt.Errorf("plugin execution failed: %s", resp.ErrorMessage)
+	}
+	
+	return nil
+}
+
+// pluginHandlesHookType checks if a plugin handles the specified hook type
+func (pm *PluginManager) pluginHandlesHookType(hookTypes []string, hookType string) bool {
+	for _, ht := range hookTypes {
+		if ht == hookType {
+			return true
+		}
+	}
+	return false
+}
+
+// UnloadGlobalPlugins unloads all global data collection plugins
+func (pm *PluginManager) UnloadGlobalPlugins() {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	
+	for name, plugin := range pm.globalDataPlugins {
+		if plugin.Client != nil {
+			plugin.Client.Kill()
+		}
+		log.Info().Str("plugin", name).Msg("Unloaded global data collection plugin")
+	}
+	
+	pm.globalDataPlugins = make(map[string]*GlobalPlugin)
+	pm.dataCollectionHookTypes = make(map[string][]string)
+}
+
+
+// ShouldReplaceDatabaseStorage checks if any plugin is configured to replace database storage for the given hook type
+func (pm *PluginManager) ShouldReplaceDatabaseStorage(hookType string) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	
+	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
+		if !pm.pluginHandlesHookType(hookTypes, hookType) {
+			continue
+		}
+		
+		globalPlugin, exists := pm.globalDataPlugins[pluginName]
+		if !exists || !globalPlugin.IsHealthy {
+			continue
+		}
+		
+		// Check if this plugin is configured to replace database storage
+		if globalPlugin.Config.ReplaceDatabase {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// GetGlobalPluginsForHookType returns all global plugins that handle the specified hook type
+func (pm *PluginManager) GetGlobalPluginsForHookType(hookType string) []*GlobalPlugin {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	
+	var plugins []*GlobalPlugin
+	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
+		if !pm.pluginHandlesHookType(hookTypes, hookType) {
+			continue
+		}
+		
+		globalPlugin, exists := pm.globalDataPlugins[pluginName]
+		if exists && globalPlugin.IsHealthy {
+			plugins = append(plugins, globalPlugin)
+		}
+	}
+	
+	return plugins
+}
+

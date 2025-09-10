@@ -1421,6 +1421,486 @@ func (x *User) GetMetadata() map[string]string {
 	return nil
 }
 
+type ProxyLogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppId         uint32                 `protobuf:"varint,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	UserId        uint32                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Vendor        string                 `protobuf:"bytes,3,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	RequestBody   []byte                 `protobuf:"bytes,4,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`
+	ResponseBody  []byte                 `protobuf:"bytes,5,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"`
+	ResponseCode  int32                  `protobuf:"varint,6,opt,name=response_code,json=responseCode,proto3" json:"response_code,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Unix timestamp in seconds
+	RequestId     string                 `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Context       *PluginContext         `protobuf:"bytes,9,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProxyLogRequest) Reset() {
+	*x = ProxyLogRequest{}
+	mi := &file_plugins_proto_plugin_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProxyLogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProxyLogRequest) ProtoMessage() {}
+
+func (x *ProxyLogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugins_proto_plugin_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProxyLogRequest.ProtoReflect.Descriptor instead.
+func (*ProxyLogRequest) Descriptor() ([]byte, []int) {
+	return file_plugins_proto_plugin_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ProxyLogRequest) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *ProxyLogRequest) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *ProxyLogRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *ProxyLogRequest) GetRequestBody() []byte {
+	if x != nil {
+		return x.RequestBody
+	}
+	return nil
+}
+
+func (x *ProxyLogRequest) GetResponseBody() []byte {
+	if x != nil {
+		return x.ResponseBody
+	}
+	return nil
+}
+
+func (x *ProxyLogRequest) GetResponseCode() int32 {
+	if x != nil {
+		return x.ResponseCode
+	}
+	return 0
+}
+
+func (x *ProxyLogRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ProxyLogRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ProxyLogRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type AnalyticsRequest struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	LlmId                  uint32                 `protobuf:"varint,1,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
+	ModelName              string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	Vendor                 string                 `protobuf:"bytes,3,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	PromptTokens           int32                  `protobuf:"varint,4,opt,name=prompt_tokens,json=promptTokens,proto3" json:"prompt_tokens,omitempty"`
+	ResponseTokens         int32                  `protobuf:"varint,5,opt,name=response_tokens,json=responseTokens,proto3" json:"response_tokens,omitempty"`
+	CacheWritePromptTokens int32                  `protobuf:"varint,6,opt,name=cache_write_prompt_tokens,json=cacheWritePromptTokens,proto3" json:"cache_write_prompt_tokens,omitempty"`
+	CacheReadPromptTokens  int32                  `protobuf:"varint,7,opt,name=cache_read_prompt_tokens,json=cacheReadPromptTokens,proto3" json:"cache_read_prompt_tokens,omitempty"`
+	TotalTokens            int32                  `protobuf:"varint,8,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`
+	Cost                   float64                `protobuf:"fixed64,9,opt,name=cost,proto3" json:"cost,omitempty"`
+	Currency               string                 `protobuf:"bytes,10,opt,name=currency,proto3" json:"currency,omitempty"`
+	AppId                  uint32                 `protobuf:"varint,11,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	UserId                 uint32                 `protobuf:"varint,12,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Timestamp              int64                  `protobuf:"varint,13,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Unix timestamp in seconds
+	ToolCalls              int32                  `protobuf:"varint,14,opt,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	Choices                int32                  `protobuf:"varint,15,opt,name=choices,proto3" json:"choices,omitempty"`
+	RequestId              string                 `protobuf:"bytes,16,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Context                *PluginContext         `protobuf:"bytes,17,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *AnalyticsRequest) Reset() {
+	*x = AnalyticsRequest{}
+	mi := &file_plugins_proto_plugin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnalyticsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnalyticsRequest) ProtoMessage() {}
+
+func (x *AnalyticsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugins_proto_plugin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnalyticsRequest.ProtoReflect.Descriptor instead.
+func (*AnalyticsRequest) Descriptor() ([]byte, []int) {
+	return file_plugins_proto_plugin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AnalyticsRequest) GetLlmId() uint32 {
+	if x != nil {
+		return x.LlmId
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *AnalyticsRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *AnalyticsRequest) GetPromptTokens() int32 {
+	if x != nil {
+		return x.PromptTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetResponseTokens() int32 {
+	if x != nil {
+		return x.ResponseTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetCacheWritePromptTokens() int32 {
+	if x != nil {
+		return x.CacheWritePromptTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetCacheReadPromptTokens() int32 {
+	if x != nil {
+		return x.CacheReadPromptTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetTotalTokens() int32 {
+	if x != nil {
+		return x.TotalTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetCost() float64 {
+	if x != nil {
+		return x.Cost
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *AnalyticsRequest) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetToolCalls() int32 {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetChoices() int32 {
+	if x != nil {
+		return x.Choices
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *AnalyticsRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type BudgetUsageRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AppId            uint32                 `protobuf:"varint,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	LlmId            uint32                 `protobuf:"varint,2,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
+	TokensUsed       int64                  `protobuf:"varint,3,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
+	Cost             float64                `protobuf:"fixed64,4,opt,name=cost,proto3" json:"cost,omitempty"`
+	RequestsCount    int32                  `protobuf:"varint,5,opt,name=requests_count,json=requestsCount,proto3" json:"requests_count,omitempty"`
+	PromptTokens     int64                  `protobuf:"varint,6,opt,name=prompt_tokens,json=promptTokens,proto3" json:"prompt_tokens,omitempty"`
+	CompletionTokens int64                  `protobuf:"varint,7,opt,name=completion_tokens,json=completionTokens,proto3" json:"completion_tokens,omitempty"`
+	PeriodStart      int64                  `protobuf:"varint,8,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"` // Unix timestamp in seconds
+	PeriodEnd        int64                  `protobuf:"varint,9,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`       // Unix timestamp in seconds
+	Timestamp        int64                  `protobuf:"varint,10,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                       // Unix timestamp in seconds
+	RequestId        string                 `protobuf:"bytes,11,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Context          *PluginContext         `protobuf:"bytes,12,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BudgetUsageRequest) Reset() {
+	*x = BudgetUsageRequest{}
+	mi := &file_plugins_proto_plugin_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BudgetUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BudgetUsageRequest) ProtoMessage() {}
+
+func (x *BudgetUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugins_proto_plugin_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BudgetUsageRequest.ProtoReflect.Descriptor instead.
+func (*BudgetUsageRequest) Descriptor() ([]byte, []int) {
+	return file_plugins_proto_plugin_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *BudgetUsageRequest) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetLlmId() uint32 {
+	if x != nil {
+		return x.LlmId
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetTokensUsed() int64 {
+	if x != nil {
+		return x.TokensUsed
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetCost() float64 {
+	if x != nil {
+		return x.Cost
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetRequestsCount() int32 {
+	if x != nil {
+		return x.RequestsCount
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetPromptTokens() int64 {
+	if x != nil {
+		return x.PromptTokens
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetCompletionTokens() int64 {
+	if x != nil {
+		return x.CompletionTokens
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetPeriodStart() int64 {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetPeriodEnd() int64 {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *BudgetUsageRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *BudgetUsageRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type DataCollectionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Handled       bool                   `protobuf:"varint,2,opt,name=handled,proto3" json:"handled,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataCollectionResponse) Reset() {
+	*x = DataCollectionResponse{}
+	mi := &file_plugins_proto_plugin_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataCollectionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataCollectionResponse) ProtoMessage() {}
+
+func (x *DataCollectionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_plugins_proto_plugin_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataCollectionResponse.ProtoReflect.Descriptor instead.
+func (*DataCollectionResponse) Descriptor() ([]byte, []int) {
+	return file_plugins_proto_plugin_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *DataCollectionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DataCollectionResponse) GetHandled() bool {
+	if x != nil {
+		return x.Handled
+	}
+	return false
+}
+
+func (x *DataCollectionResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *DataCollectionResponse) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 var File_plugins_proto_plugin_proto protoreflect.FileDescriptor
 
 const file_plugins_proto_plugin_proto_rawDesc = "" +
@@ -1574,7 +2054,65 @@ const file_plugins_proto_plugin_proto_rawDesc = "" +
 	"\bmetadata\x18\x05 \x03(\v2\x1a.plugin.User.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\x9e\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb4\x02\n" +
+	"\x0fProxyLogRequest\x12\x15\n" +
+	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\rR\x06userId\x12\x16\n" +
+	"\x06vendor\x18\x03 \x01(\tR\x06vendor\x12!\n" +
+	"\frequest_body\x18\x04 \x01(\fR\vrequestBody\x12#\n" +
+	"\rresponse_body\x18\x05 \x01(\fR\fresponseBody\x12#\n" +
+	"\rresponse_code\x18\x06 \x01(\x05R\fresponseCode\x12\x1c\n" +
+	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\b \x01(\tR\trequestId\x12/\n" +
+	"\acontext\x18\t \x01(\v2\x15.plugin.PluginContextR\acontext\"\xcc\x04\n" +
+	"\x10AnalyticsRequest\x12\x15\n" +
+	"\x06llm_id\x18\x01 \x01(\rR\x05llmId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12\x16\n" +
+	"\x06vendor\x18\x03 \x01(\tR\x06vendor\x12#\n" +
+	"\rprompt_tokens\x18\x04 \x01(\x05R\fpromptTokens\x12'\n" +
+	"\x0fresponse_tokens\x18\x05 \x01(\x05R\x0eresponseTokens\x129\n" +
+	"\x19cache_write_prompt_tokens\x18\x06 \x01(\x05R\x16cacheWritePromptTokens\x127\n" +
+	"\x18cache_read_prompt_tokens\x18\a \x01(\x05R\x15cacheReadPromptTokens\x12!\n" +
+	"\ftotal_tokens\x18\b \x01(\x05R\vtotalTokens\x12\x12\n" +
+	"\x04cost\x18\t \x01(\x01R\x04cost\x12\x1a\n" +
+	"\bcurrency\x18\n" +
+	" \x01(\tR\bcurrency\x12\x15\n" +
+	"\x06app_id\x18\v \x01(\rR\x05appId\x12\x17\n" +
+	"\auser_id\x18\f \x01(\rR\x06userId\x12\x1c\n" +
+	"\ttimestamp\x18\r \x01(\x03R\ttimestamp\x12\x1d\n" +
+	"\n" +
+	"tool_calls\x18\x0e \x01(\x05R\ttoolCalls\x12\x18\n" +
+	"\achoices\x18\x0f \x01(\x05R\achoices\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x10 \x01(\tR\trequestId\x12/\n" +
+	"\acontext\x18\x11 \x01(\v2\x15.plugin.PluginContextR\acontext\"\xa0\x03\n" +
+	"\x12BudgetUsageRequest\x12\x15\n" +
+	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
+	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +
+	"\vtokens_used\x18\x03 \x01(\x03R\n" +
+	"tokensUsed\x12\x12\n" +
+	"\x04cost\x18\x04 \x01(\x01R\x04cost\x12%\n" +
+	"\x0erequests_count\x18\x05 \x01(\x05R\rrequestsCount\x12#\n" +
+	"\rprompt_tokens\x18\x06 \x01(\x03R\fpromptTokens\x12+\n" +
+	"\x11completion_tokens\x18\a \x01(\x03R\x10completionTokens\x12!\n" +
+	"\fperiod_start\x18\b \x01(\x03R\vperiodStart\x12\x1d\n" +
+	"\n" +
+	"period_end\x18\t \x01(\x03R\tperiodEnd\x12\x1c\n" +
+	"\ttimestamp\x18\n" +
+	" \x01(\x03R\ttimestamp\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\v \x01(\tR\trequestId\x12/\n" +
+	"\acontext\x18\f \x01(\v2\x15.plugin.PluginContextR\acontext\"\xf8\x01\n" +
+	"\x16DataCollectionResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\ahandled\x18\x02 \x01(\bR\ahandled\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12H\n" +
+	"\bmetadata\x18\x04 \x03(\v2,.plugin.DataCollectionResponse.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\x87\a\n" +
 	"\rPluginService\x127\n" +
 	"\n" +
 	"Initialize\x12\x13.plugin.InitRequest\x1a\x14.plugin.InitResponse\x121\n" +
@@ -1586,7 +2124,10 @@ const file_plugins_proto_plugin_proto_rawDesc = "" +
 	"\x13GetUserByCredential\x12\x16.plugin.GetUserRequest\x1a\x17.plugin.GetUserResponse\x12B\n" +
 	"\x0fProcessPostAuth\x12\x17.plugin.EnrichedRequest\x1a\x16.plugin.PluginResponse\x12G\n" +
 	"\x14OnBeforeWriteHeaders\x12\x16.plugin.HeadersRequest\x1a\x17.plugin.HeadersResponse\x12L\n" +
-	"\rOnBeforeWrite\x12\x1c.plugin.ResponseWriteRequest\x1a\x1d.plugin.ResponseWriteResponseBAZ?github.com/TykTechnologies/midsommar/microgateway/plugins/protob\x06proto3"
+	"\rOnBeforeWrite\x12\x1c.plugin.ResponseWriteRequest\x1a\x1d.plugin.ResponseWriteResponse\x12I\n" +
+	"\x0eHandleProxyLog\x12\x17.plugin.ProxyLogRequest\x1a\x1e.plugin.DataCollectionResponse\x12K\n" +
+	"\x0fHandleAnalytics\x12\x18.plugin.AnalyticsRequest\x1a\x1e.plugin.DataCollectionResponse\x12O\n" +
+	"\x11HandleBudgetUsage\x12\x1a.plugin.BudgetUsageRequest\x1a\x1e.plugin.DataCollectionResponseBAZ?github.com/TykTechnologies/midsommar/microgateway/plugins/protob\x06proto3"
 
 var (
 	file_plugins_proto_plugin_proto_rawDescOnce sync.Once
@@ -1600,93 +2141,108 @@ func file_plugins_proto_plugin_proto_rawDescGZIP() []byte {
 	return file_plugins_proto_plugin_proto_rawDescData
 }
 
-var file_plugins_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_plugins_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_plugins_proto_plugin_proto_goTypes = []any{
-	(*InitRequest)(nil),           // 0: plugin.InitRequest
-	(*InitResponse)(nil),          // 1: plugin.InitResponse
-	(*PingRequest)(nil),           // 2: plugin.PingRequest
-	(*PingResponse)(nil),          // 3: plugin.PingResponse
-	(*ShutdownRequest)(nil),       // 4: plugin.ShutdownRequest
-	(*ShutdownResponse)(nil),      // 5: plugin.ShutdownResponse
-	(*PluginContext)(nil),         // 6: plugin.PluginContext
-	(*PluginRequest)(nil),         // 7: plugin.PluginRequest
-	(*PluginResponse)(nil),        // 8: plugin.PluginResponse
-	(*AuthRequest)(nil),           // 9: plugin.AuthRequest
-	(*AuthResponse)(nil),          // 10: plugin.AuthResponse
-	(*EnrichedRequest)(nil),       // 11: plugin.EnrichedRequest
-	(*HeadersRequest)(nil),        // 12: plugin.HeadersRequest
-	(*HeadersResponse)(nil),       // 13: plugin.HeadersResponse
-	(*ResponseWriteRequest)(nil),  // 14: plugin.ResponseWriteRequest
-	(*ResponseWriteResponse)(nil), // 15: plugin.ResponseWriteResponse
-	(*GetAppRequest)(nil),         // 16: plugin.GetAppRequest
-	(*GetAppResponse)(nil),        // 17: plugin.GetAppResponse
-	(*GetUserRequest)(nil),        // 18: plugin.GetUserRequest
-	(*GetUserResponse)(nil),       // 19: plugin.GetUserResponse
-	(*App)(nil),                   // 20: plugin.App
-	(*User)(nil),                  // 21: plugin.User
-	nil,                           // 22: plugin.InitRequest.ConfigEntry
-	nil,                           // 23: plugin.PluginContext.MetadataEntry
-	nil,                           // 24: plugin.PluginContext.TraceContextEntry
-	nil,                           // 25: plugin.PluginRequest.HeadersEntry
-	nil,                           // 26: plugin.PluginResponse.HeadersEntry
-	nil,                           // 27: plugin.AuthResponse.ClaimsEntry
-	nil,                           // 28: plugin.EnrichedRequest.AuthClaimsEntry
-	nil,                           // 29: plugin.HeadersRequest.HeadersEntry
-	nil,                           // 30: plugin.HeadersResponse.HeadersEntry
-	nil,                           // 31: plugin.ResponseWriteRequest.HeadersEntry
-	nil,                           // 32: plugin.ResponseWriteResponse.HeadersEntry
-	nil,                           // 33: plugin.App.MetadataEntry
-	nil,                           // 34: plugin.User.MetadataEntry
+	(*InitRequest)(nil),            // 0: plugin.InitRequest
+	(*InitResponse)(nil),           // 1: plugin.InitResponse
+	(*PingRequest)(nil),            // 2: plugin.PingRequest
+	(*PingResponse)(nil),           // 3: plugin.PingResponse
+	(*ShutdownRequest)(nil),        // 4: plugin.ShutdownRequest
+	(*ShutdownResponse)(nil),       // 5: plugin.ShutdownResponse
+	(*PluginContext)(nil),          // 6: plugin.PluginContext
+	(*PluginRequest)(nil),          // 7: plugin.PluginRequest
+	(*PluginResponse)(nil),         // 8: plugin.PluginResponse
+	(*AuthRequest)(nil),            // 9: plugin.AuthRequest
+	(*AuthResponse)(nil),           // 10: plugin.AuthResponse
+	(*EnrichedRequest)(nil),        // 11: plugin.EnrichedRequest
+	(*HeadersRequest)(nil),         // 12: plugin.HeadersRequest
+	(*HeadersResponse)(nil),        // 13: plugin.HeadersResponse
+	(*ResponseWriteRequest)(nil),   // 14: plugin.ResponseWriteRequest
+	(*ResponseWriteResponse)(nil),  // 15: plugin.ResponseWriteResponse
+	(*GetAppRequest)(nil),          // 16: plugin.GetAppRequest
+	(*GetAppResponse)(nil),         // 17: plugin.GetAppResponse
+	(*GetUserRequest)(nil),         // 18: plugin.GetUserRequest
+	(*GetUserResponse)(nil),        // 19: plugin.GetUserResponse
+	(*App)(nil),                    // 20: plugin.App
+	(*User)(nil),                   // 21: plugin.User
+	(*ProxyLogRequest)(nil),        // 22: plugin.ProxyLogRequest
+	(*AnalyticsRequest)(nil),       // 23: plugin.AnalyticsRequest
+	(*BudgetUsageRequest)(nil),     // 24: plugin.BudgetUsageRequest
+	(*DataCollectionResponse)(nil), // 25: plugin.DataCollectionResponse
+	nil,                            // 26: plugin.InitRequest.ConfigEntry
+	nil,                            // 27: plugin.PluginContext.MetadataEntry
+	nil,                            // 28: plugin.PluginContext.TraceContextEntry
+	nil,                            // 29: plugin.PluginRequest.HeadersEntry
+	nil,                            // 30: plugin.PluginResponse.HeadersEntry
+	nil,                            // 31: plugin.AuthResponse.ClaimsEntry
+	nil,                            // 32: plugin.EnrichedRequest.AuthClaimsEntry
+	nil,                            // 33: plugin.HeadersRequest.HeadersEntry
+	nil,                            // 34: plugin.HeadersResponse.HeadersEntry
+	nil,                            // 35: plugin.ResponseWriteRequest.HeadersEntry
+	nil,                            // 36: plugin.ResponseWriteResponse.HeadersEntry
+	nil,                            // 37: plugin.App.MetadataEntry
+	nil,                            // 38: plugin.User.MetadataEntry
+	nil,                            // 39: plugin.DataCollectionResponse.MetadataEntry
 }
 var file_plugins_proto_plugin_proto_depIdxs = []int32{
-	22, // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
-	23, // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
-	24, // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
-	25, // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
+	26, // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
+	27, // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
+	28, // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
+	29, // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
 	6,  // 4: plugin.PluginRequest.context:type_name -> plugin.PluginContext
-	26, // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
+	30, // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
 	7,  // 6: plugin.AuthRequest.request:type_name -> plugin.PluginRequest
 	6,  // 7: plugin.AuthRequest.context:type_name -> plugin.PluginContext
-	27, // 8: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
+	31, // 8: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
 	7,  // 9: plugin.EnrichedRequest.request:type_name -> plugin.PluginRequest
-	28, // 10: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
-	29, // 11: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
+	32, // 10: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
+	33, // 11: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
 	6,  // 12: plugin.HeadersRequest.context:type_name -> plugin.PluginContext
-	30, // 13: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
-	31, // 14: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
+	34, // 13: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
+	35, // 14: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
 	6,  // 15: plugin.ResponseWriteRequest.context:type_name -> plugin.PluginContext
-	32, // 16: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
+	36, // 16: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
 	6,  // 17: plugin.GetAppRequest.context:type_name -> plugin.PluginContext
 	20, // 18: plugin.GetAppResponse.app:type_name -> plugin.App
 	6,  // 19: plugin.GetUserRequest.context:type_name -> plugin.PluginContext
 	21, // 20: plugin.GetUserResponse.user:type_name -> plugin.User
-	33, // 21: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
-	34, // 22: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
-	0,  // 23: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
-	2,  // 24: plugin.PluginService.Ping:input_type -> plugin.PingRequest
-	4,  // 25: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
-	7,  // 26: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
-	9,  // 27: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
-	16, // 28: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
-	18, // 29: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
-	11, // 30: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
-	12, // 31: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
-	14, // 32: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
-	1,  // 33: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
-	3,  // 34: plugin.PluginService.Ping:output_type -> plugin.PingResponse
-	5,  // 35: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
-	8,  // 36: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
-	10, // 37: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
-	17, // 38: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
-	19, // 39: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
-	8,  // 40: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
-	13, // 41: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
-	15, // 42: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
-	33, // [33:43] is the sub-list for method output_type
-	23, // [23:33] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	37, // 21: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
+	38, // 22: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
+	6,  // 23: plugin.ProxyLogRequest.context:type_name -> plugin.PluginContext
+	6,  // 24: plugin.AnalyticsRequest.context:type_name -> plugin.PluginContext
+	6,  // 25: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
+	39, // 26: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
+	0,  // 27: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
+	2,  // 28: plugin.PluginService.Ping:input_type -> plugin.PingRequest
+	4,  // 29: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
+	7,  // 30: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
+	9,  // 31: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
+	16, // 32: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
+	18, // 33: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
+	11, // 34: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
+	12, // 35: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
+	14, // 36: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
+	22, // 37: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
+	23, // 38: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
+	24, // 39: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
+	1,  // 40: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
+	3,  // 41: plugin.PluginService.Ping:output_type -> plugin.PingResponse
+	5,  // 42: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
+	8,  // 43: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
+	10, // 44: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
+	17, // 45: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
+	19, // 46: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
+	8,  // 47: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
+	13, // 48: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
+	15, // 49: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
+	25, // 50: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
+	25, // 51: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
+	25, // 52: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
+	40, // [40:53] is the sub-list for method output_type
+	27, // [27:40] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_plugins_proto_plugin_proto_init() }
@@ -1700,7 +2256,7 @@ func file_plugins_proto_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugins_proto_plugin_proto_rawDesc), len(file_plugins_proto_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   35,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

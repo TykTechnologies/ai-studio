@@ -27,6 +27,8 @@ func ServePlugin(impl interface{}) {
 		pluginMap["plugin"] = &PostAuthPluginGRPC{Impl: p}
 	case interfaces.ResponsePlugin:
 		pluginMap["plugin"] = &ResponsePluginGRPC{Impl: p}
+	case interfaces.DataCollectionPlugin:
+		pluginMap["plugin"] = &DataCollectionPluginGRPC{Impl: p}
 	default:
 		panic("unsupported plugin type")
 	}
@@ -42,11 +44,12 @@ func ServePlugin(impl interface{}) {
 type (
 	HookType = interfaces.HookType
 	
-	BasePlugin      = interfaces.BasePlugin
-	PreAuthPlugin   = interfaces.PreAuthPlugin
-	AuthPlugin      = interfaces.AuthPlugin
-	PostAuthPlugin  = interfaces.PostAuthPlugin
-	ResponsePlugin  = interfaces.ResponsePlugin
+	BasePlugin           = interfaces.BasePlugin
+	PreAuthPlugin        = interfaces.PreAuthPlugin
+	AuthPlugin           = interfaces.AuthPlugin
+	PostAuthPlugin       = interfaces.PostAuthPlugin
+	ResponsePlugin       = interfaces.ResponsePlugin
+	DataCollectionPlugin = interfaces.DataCollectionPlugin
 	
 	PluginContext         = interfaces.PluginContext
 	PluginRequest         = interfaces.PluginRequest
@@ -59,12 +62,19 @@ type (
 	HeadersResponse       = interfaces.HeadersResponse
 	ResponseWriteRequest  = interfaces.ResponseWriteRequest
 	ResponseWriteResponse = interfaces.ResponseWriteResponse
+	
+	// Data collection types
+	ProxyLogData            = interfaces.ProxyLogData
+	AnalyticsData           = interfaces.AnalyticsData
+	BudgetUsageData         = interfaces.BudgetUsageData
+	DataCollectionResponse  = interfaces.DataCollectionResponse
 )
 
 // Re-export constants for convenience
 const (
-	HookTypePreAuth    = interfaces.HookTypePreAuth
-	HookTypeAuth       = interfaces.HookTypeAuth
-	HookTypePostAuth   = interfaces.HookTypePostAuth
-	HookTypeOnResponse = interfaces.HookTypeOnResponse
+	HookTypePreAuth        = interfaces.HookTypePreAuth
+	HookTypeAuth           = interfaces.HookTypeAuth
+	HookTypePostAuth       = interfaces.HookTypePostAuth
+	HookTypeOnResponse     = interfaces.HookTypeOnResponse
+	HookTypeDataCollection = interfaces.HookTypeDataCollection
 )

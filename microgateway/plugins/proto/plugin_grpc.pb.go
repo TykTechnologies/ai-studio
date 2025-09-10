@@ -29,6 +29,9 @@ const (
 	PluginService_ProcessPostAuth_FullMethodName      = "/plugin.PluginService/ProcessPostAuth"
 	PluginService_OnBeforeWriteHeaders_FullMethodName = "/plugin.PluginService/OnBeforeWriteHeaders"
 	PluginService_OnBeforeWrite_FullMethodName        = "/plugin.PluginService/OnBeforeWrite"
+	PluginService_HandleProxyLog_FullMethodName       = "/plugin.PluginService/HandleProxyLog"
+	PluginService_HandleAnalytics_FullMethodName      = "/plugin.PluginService/HandleAnalytics"
+	PluginService_HandleBudgetUsage_FullMethodName    = "/plugin.PluginService/HandleBudgetUsage"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -53,6 +56,10 @@ type PluginServiceClient interface {
 	// Response hooks (new clean interface)
 	OnBeforeWriteHeaders(ctx context.Context, in *HeadersRequest, opts ...grpc.CallOption) (*HeadersResponse, error)
 	OnBeforeWrite(ctx context.Context, in *ResponseWriteRequest, opts ...grpc.CallOption) (*ResponseWriteResponse, error)
+	// Data collection hooks
+	HandleProxyLog(ctx context.Context, in *ProxyLogRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
+	HandleAnalytics(ctx context.Context, in *AnalyticsRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
+	HandleBudgetUsage(ctx context.Context, in *BudgetUsageRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -163,6 +170,36 @@ func (c *pluginServiceClient) OnBeforeWrite(ctx context.Context, in *ResponseWri
 	return out, nil
 }
 
+func (c *pluginServiceClient) HandleProxyLog(ctx context.Context, in *ProxyLogRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DataCollectionResponse)
+	err := c.cc.Invoke(ctx, PluginService_HandleProxyLog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) HandleAnalytics(ctx context.Context, in *AnalyticsRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DataCollectionResponse)
+	err := c.cc.Invoke(ctx, PluginService_HandleAnalytics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) HandleBudgetUsage(ctx context.Context, in *BudgetUsageRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DataCollectionResponse)
+	err := c.cc.Invoke(ctx, PluginService_HandleBudgetUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -185,6 +222,10 @@ type PluginServiceServer interface {
 	// Response hooks (new clean interface)
 	OnBeforeWriteHeaders(context.Context, *HeadersRequest) (*HeadersResponse, error)
 	OnBeforeWrite(context.Context, *ResponseWriteRequest) (*ResponseWriteResponse, error)
+	// Data collection hooks
+	HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error)
+	HandleAnalytics(context.Context, *AnalyticsRequest) (*DataCollectionResponse, error)
+	HandleBudgetUsage(context.Context, *BudgetUsageRequest) (*DataCollectionResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -224,6 +265,15 @@ func (UnimplementedPluginServiceServer) OnBeforeWriteHeaders(context.Context, *H
 }
 func (UnimplementedPluginServiceServer) OnBeforeWrite(context.Context, *ResponseWriteRequest) (*ResponseWriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBeforeWrite not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleProxyLog not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleAnalytics(context.Context, *AnalyticsRequest) (*DataCollectionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleAnalytics not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleBudgetUsage(context.Context, *BudgetUsageRequest) (*DataCollectionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleBudgetUsage not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -426,6 +476,60 @@ func _PluginService_OnBeforeWrite_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_HandleProxyLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProxyLogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).HandleProxyLog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_HandleProxyLog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).HandleProxyLog(ctx, req.(*ProxyLogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_HandleAnalytics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnalyticsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).HandleAnalytics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_HandleAnalytics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).HandleAnalytics(ctx, req.(*AnalyticsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_HandleBudgetUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BudgetUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).HandleBudgetUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_HandleBudgetUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).HandleBudgetUsage(ctx, req.(*BudgetUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -472,6 +576,18 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBeforeWrite",
 			Handler:    _PluginService_OnBeforeWrite_Handler,
+		},
+		{
+			MethodName: "HandleProxyLog",
+			Handler:    _PluginService_HandleProxyLog_Handler,
+		},
+		{
+			MethodName: "HandleAnalytics",
+			Handler:    _PluginService_HandleAnalytics_Handler,
+		},
+		{
+			MethodName: "HandleBudgetUsage",
+			Handler:    _PluginService_HandleBudgetUsage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

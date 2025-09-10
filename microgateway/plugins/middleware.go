@@ -12,16 +12,25 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
+// ServiceContainerInterface defines minimal interface needed to break circular dependency
+type ServiceContainerInterface interface {
+	GetGatewayService() GatewayServiceInterface
+}
+
+// GatewayServiceInterface defines minimal interface for gateway service
+type GatewayServiceInterface interface {
+	GetLLMBySlug(slug string) (interface{}, error)
+}
+
 // PluginMiddlewareConfig holds configuration for plugin middleware
 type PluginMiddlewareConfig struct {
 	PluginManager *PluginManager
-	Services      *services.ServiceContainer
+	Services      ServiceContainerInterface
 }
 
 // llmSlugRegex extracts LLM slug from path
@@ -44,7 +53,7 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 		}
 
 		// Get LLM information
-		llmInterface, err := config.Services.GatewayService.GetLLMBySlug(llmSlug)
+		llmInterface, err := config.Services.GetGatewayService().GetLLMBySlug(llmSlug)
 		if err != nil {
 			log.Error().Err(err).Str("llm_slug", llmSlug).Msg("Failed to get LLM by slug")
 			c.Next()

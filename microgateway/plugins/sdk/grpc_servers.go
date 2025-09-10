@@ -3,6 +3,7 @@ package sdk
 
 import (
 	"context"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
@@ -176,4 +177,142 @@ func (s *ResponseGRPCServer) OnBeforeWrite(ctx context.Context, req *pb.Response
 		Body:     result.Body,
 		Headers:  result.Headers,
 	}, nil
+}
+
+// Data collection plugin gRPC server
+type DataCollectionGRPCServer struct {
+	BaseGRPCServer
+	Impl interfaces.DataCollectionPlugin
+}
+
+func (s *DataCollectionGRPCServer) HandleProxyLog(ctx context.Context, req *pb.ProxyLogRequest) (*pb.DataCollectionResponse, error) {
+	proxyLogData := &interfaces.ProxyLogData{
+		AppID:        uint(req.AppId),
+		UserID:       uint(req.UserId),
+		Vendor:       req.Vendor,
+		RequestBody:  req.RequestBody,
+		ResponseBody: req.ResponseBody,
+		ResponseCode: int(req.ResponseCode),
+		Timestamp:    timeFromUnix(req.Timestamp),
+		RequestID:    req.RequestId,
+	}
+	
+	pluginCtx := convertPBPluginContext(req.Context)
+	
+	result, err := s.Impl.HandleProxyLog(ctx, proxyLogData, pluginCtx)
+	if err != nil {
+		return &pb.DataCollectionResponse{
+			Success:      false,
+			Handled:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+	
+	// Convert metadata to protobuf map
+	metadata := make(map[string]string)
+	for k, v := range result.Metadata {
+		if str, ok := v.(string); ok {
+			metadata[k] = str
+		}
+	}
+	
+	return &pb.DataCollectionResponse{
+		Success:      result.Success,
+		Handled:      result.Handled,
+		ErrorMessage: result.ErrorMessage,
+		Metadata:     metadata,
+	}, nil
+}
+
+func (s *DataCollectionGRPCServer) HandleAnalytics(ctx context.Context, req *pb.AnalyticsRequest) (*pb.DataCollectionResponse, error) {
+	analyticsData := &interfaces.AnalyticsData{
+		LLMID:                   uint(req.LlmId),
+		ModelName:              req.ModelName,
+		Vendor:                 req.Vendor,
+		PromptTokens:           int(req.PromptTokens),
+		ResponseTokens:         int(req.ResponseTokens),
+		CacheWritePromptTokens: int(req.CacheWritePromptTokens),
+		CacheReadPromptTokens:  int(req.CacheReadPromptTokens),
+		TotalTokens:            int(req.TotalTokens),
+		Cost:                   req.Cost,
+		Currency:               req.Currency,
+		AppID:                  uint(req.AppId),
+		UserID:                 uint(req.UserId),
+		Timestamp:              timeFromUnix(req.Timestamp),
+		ToolCalls:              int(req.ToolCalls),
+		Choices:                int(req.Choices),
+		RequestID:              req.RequestId,
+	}
+	
+	pluginCtx := convertPBPluginContext(req.Context)
+	
+	result, err := s.Impl.HandleAnalytics(ctx, analyticsData, pluginCtx)
+	if err != nil {
+		return &pb.DataCollectionResponse{
+			Success:      false,
+			Handled:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+	
+	// Convert metadata to protobuf map
+	metadata := make(map[string]string)
+	for k, v := range result.Metadata {
+		if str, ok := v.(string); ok {
+			metadata[k] = str
+		}
+	}
+	
+	return &pb.DataCollectionResponse{
+		Success:      result.Success,
+		Handled:      result.Handled,
+		ErrorMessage: result.ErrorMessage,
+		Metadata:     metadata,
+	}, nil
+}
+
+func (s *DataCollectionGRPCServer) HandleBudgetUsage(ctx context.Context, req *pb.BudgetUsageRequest) (*pb.DataCollectionResponse, error) {
+	budgetData := &interfaces.BudgetUsageData{
+		AppID:            uint(req.AppId),
+		LLMID:            uint(req.LlmId),
+		TokensUsed:       req.TokensUsed,
+		Cost:             req.Cost,
+		RequestsCount:    int(req.RequestsCount),
+		PromptTokens:     req.PromptTokens,
+		CompletionTokens: req.CompletionTokens,
+		PeriodStart:      timeFromUnix(req.PeriodStart),
+		PeriodEnd:        timeFromUnix(req.PeriodEnd),
+		Timestamp:        timeFromUnix(req.Timestamp),
+		RequestID:        req.RequestId,
+	}
+	
+	pluginCtx := convertPBPluginContext(req.Context)
+	
+	result, err := s.Impl.HandleBudgetUsage(ctx, budgetData, pluginCtx)
+	if err != nil {
+		return &pb.DataCollectionResponse{
+			Success:      false,
+			Handled:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+	
+	// Convert metadata to protobuf map
+	metadata := make(map[string]string)
+	for k, v := range result.Metadata {
+		if str, ok := v.(string); ok {
+			metadata[k] = str
+		}
+	}
+	
+	return &pb.DataCollectionResponse{
+		Success:      result.Success,
+		Handled:      result.Handled,
+		ErrorMessage: result.ErrorMessage,
+		Metadata:     metadata,
+	}, nil
+}
+// Helper function to convert Unix timestamp to time.Time
+func timeFromUnix(ts int64) time.Time {
+	return time.Unix(ts, 0)
 }

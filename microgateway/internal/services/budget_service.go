@@ -7,20 +7,25 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 // DatabaseBudgetService implements BudgetServiceInterface using database storage
 type DatabaseBudgetService struct {
-	db   *gorm.DB
-	repo *database.Repository
+	db            *gorm.DB
+	repo          *database.Repository
+	pluginManager *plugins.PluginManager // For global data collection plugins
 }
 
 // NewDatabaseBudgetService creates a new database-backed budget service
-func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository) BudgetServiceInterface {
+func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository, pluginManager *plugins.PluginManager) BudgetServiceInterface {
 	return &DatabaseBudgetService{
-		db:   db,
-		repo: repo,
+		db:            db,
+		repo:          repo,
+		pluginManager: pluginManager,
 	}
 }
 
@@ -68,6 +73,40 @@ func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int6
 	now := time.Now()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+	// Execute budget usage data collection plugins
+	if s.pluginManager != nil {
+		llmIDVal := uint(0)
+		if llmID != nil {
+			llmIDVal = *llmID
+		}
+		
+		// Convert to plugin format
+		budgetData := &interfaces.BudgetUsageData{
+			AppID:            appID,
+			LLMID:            llmIDVal,
+			TokensUsed:       tokens,
+			Cost:             cost,
+			RequestsCount:    1,
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			PeriodStart:      periodStart,
+			PeriodEnd:        periodEnd,
+			Timestamp:        now,
+			RequestID:        fmt.Sprintf("budget_%d_%d", appID, now.UnixNano()),
+		}
+		
+		// Execute budget plugins
+		if err := s.pluginManager.ExecuteDataCollectionPlugins("budget", budgetData); err != nil {
+			log.Error().Err(err).Msg("Failed to execute budget data collection plugins")
+		}
+		
+		// Check if any plugins are configured to replace database storage for budget
+		if s.pluginManager.ShouldReplaceDatabaseStorage("budget") {
+			log.Debug().Msg("Budget database storage replaced by plugin - skipping database write")
+			return nil
+		}
+	}
 
 	// Get or create usage record
 	usage, err := s.repo.GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)

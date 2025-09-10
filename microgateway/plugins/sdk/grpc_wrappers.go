@@ -69,3 +69,18 @@ func (p *ResponsePluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Serve
 func (p *ResponsePluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return pb.NewPluginServiceClient(c), nil
 }
+
+// DataCollectionPluginGRPC implements the plugin.Plugin interface for data collection plugins
+type DataCollectionPluginGRPC struct {
+	plugin.Plugin
+	Impl interfaces.DataCollectionPlugin
+}
+
+func (p *DataCollectionPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	pb.RegisterPluginServiceServer(s, &DataCollectionGRPCServer{Impl: p.Impl})
+	return nil
+}
+
+func (p *DataCollectionPluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return pb.NewPluginServiceClient(c), nil
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -34,6 +35,9 @@ type ServiceContainer struct {
 
 	// Utilities
 	Crypto CryptoServiceInterface
+	
+	// Plugin management
+	PluginManager *plugins.PluginManager
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only
@@ -47,16 +51,22 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	// Initialize auth provider (no caching)
 	authProvider := auth.NewTokenAuthProvider(db)
 
-	// Initialize core services (simplified)
-	gatewayService := NewDatabaseGatewayService(db, repo)
-	budgetService := NewDatabaseBudgetService(db, repo)
-	analyticsService := NewDatabaseAnalyticsService(db, repo, cfg.Analytics)
-
-	// Initialize management services
+	// Initialize management services first (needed for plugin manager)
 	management := NewManagementService(db, repo, crypto)
 	tokenService := NewTokenService(authProvider)
 	filterService := NewFilterService(db, repo)
 	pluginService := NewPluginService(db, repo)
+
+	// Create plugin service adapter to break circular dependency
+	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
+	
+	// Initialize plugin manager
+	pluginManager := plugins.NewPluginManager(pluginServiceAdapter)
+
+	// Initialize core services with plugin manager support
+	gatewayService := NewDatabaseGatewayService(db, repo)
+	budgetService := NewDatabaseBudgetService(db, repo, pluginManager)
+	analyticsService := NewDatabaseAnalyticsService(db, repo, cfg.Analytics)
 
 	return &ServiceContainer{
 		DB:         db,
@@ -73,6 +83,8 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
+		
+		PluginManager: pluginManager,
 	}, nil
 }
 
