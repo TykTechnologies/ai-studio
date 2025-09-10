@@ -5,18 +5,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
-	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/gin-gonic/gin"
-	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
 )
 
@@ -62,8 +57,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	pluginManager := plugins.NewPluginManager(serviceContainer.PluginService)
 	log.Info().Msg("Plugin manager created")
 
-	// Create response hooks for plugin processing
-	responseHooks := createResponseHooks(pluginManager)
+	// Response hooks disabled - using baseline plugin system
 
 	// Create AI Gateway instance for mounting (not standalone)
 	log.Info().Msg("Creating AI Gateway for mounting in management server")
@@ -71,10 +65,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		gatewayServiceAdapter,
 		budgetServiceAdapter,
 		analyticsHandler, // Use microgateway analytics handler
-		&aigateway.Config{
-			Port:          cfg.Server.Port, // Same port as management API
-			ResponseHooks: responseHooks,
-		},
+		&aigateway.Config{Port: cfg.Server.Port}, // Same port as management API
 	)
 	
 	// Manually trigger resource loading since we're mounting, not calling Start()
@@ -185,156 +176,4 @@ func (s *Server) Reload() error {
 	
 	log.Info().Msg("AI Gateway configuration reloaded successfully")
 	return nil
-}
-
-// createResponseHooks creates response hooks that integrate with the plugin system
-func createResponseHooks(pluginManager *plugins.PluginManager) *proxy.ResponseHooks {
-	return &proxy.ResponseHooks{
-		OnBeforeWriteHeaders: func(headers http.Header, llm *models.LLM, app *models.App) http.Header {
-			// Fast path: Execute header-only response plugins for this LLM
-			return executeResponseHeadersViaHook(pluginManager, headers, llm, app)
-		},
-		OnBeforeWrite: func(body []byte, headers http.Header, isStreamChunk bool, llm *models.LLM, app *models.App) ([]byte, http.Header) {
-			// Full path: Execute complete response plugins for this LLM
-			return executeResponsePluginsViaHook(pluginManager, body, headers, isStreamChunk, llm, app)
-		},
-	}
-}
-
-// executeResponseHeadersViaHook executes header-only response plugin modifications
-func executeResponseHeadersViaHook(pluginManager *plugins.PluginManager, headers http.Header, llm *models.LLM, app *models.App) http.Header {
-	// Fast path: Check if LLM has response plugins, return quickly if not
-	if !hasResponsePluginsForLLM(pluginManager, llm.ID) {
-		return nil // No plugins = use original headers
-	}
-	
-	log.Debug().Uint("llm_id", llm.ID).Msg("Header hook: LLM has response plugins, processing headers")
-	
-	// Convert headers to plugin format
-	headerMap := make(map[string]string)
-	for key, values := range headers {
-		if len(values) > 0 {
-			headerMap[key] = values[0]
-		}
-	}
-	
-	// Create response data for header processing
-	respData := &interfaces.ResponseData{
-		RequestID:  generateHookRequestID(),
-		StatusCode: 200, // Default, actual status set elsewhere
-		Headers:    headerMap,
-		Body:       nil, // Headers-only processing
-		Context: &interfaces.PluginContext{
-			LLMID:   llm.ID,
-			LLMSlug: slug.Make(llm.Name), // Generate slug from name same as AI Gateway library
-			Vendor:  string(llm.Vendor),
-			AppID:   app.ID,
-			UserID:  app.UserID,
-		},
-	}
-	
-	// Execute response plugins for this LLM
-	result, err := pluginManager.ExecutePluginChain(llm.ID, interfaces.HookTypeOnResponse, respData, respData.Context)
-	if err != nil {
-		log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Header hook: Response plugin chain failed")
-		return nil // Use original headers on error
-	}
-	
-	// Extract modified headers from plugin result
-	if modifiedResp, ok := result.(*interfaces.ResponseData); ok && modifiedResp.Headers != nil {
-		modifiedHeaders := make(http.Header)
-		for key, value := range modifiedResp.Headers {
-			modifiedHeaders.Set(key, value)
-		}
-		log.Debug().Int("modified_headers", len(modifiedHeaders)).Uint("llm_id", llm.ID).Msg("Header hook: Response plugins modified headers")
-		return modifiedHeaders
-	}
-	
-	return nil // Use original headers
-}
-
-// executeResponsePluginsViaHook executes complete response plugins via the AI Gateway hook system
-func executeResponsePluginsViaHook(pluginManager *plugins.PluginManager, body []byte, headers http.Header, isStreamChunk bool, llm *models.LLM, app *models.App) ([]byte, http.Header) {
-	// Fast path: Check if LLM has response plugins, return quickly if not
-	if !hasResponsePluginsForLLM(pluginManager, llm.ID) {
-		return nil, nil // No plugins = use originals
-	}
-	
-	log.Debug().Int("body_len", len(body)).Bool("is_stream_chunk", isStreamChunk).Uint("llm_id", llm.ID).Msg("Response hook: LLM has response plugins, processing complete response")
-	
-	// Convert headers to plugin format
-	headerMap := make(map[string]string)
-	for key, values := range headers {
-		if len(values) > 0 {
-			headerMap[key] = values[0]
-		}
-	}
-	
-	// Create response data structure for plugins
-	respData := &interfaces.ResponseData{
-		RequestID:  generateHookRequestID(),
-		StatusCode: 200, // Default, actual status set elsewhere
-		Headers:    headerMap,
-		Body:       body,
-		Context: &interfaces.PluginContext{
-			LLMID:   llm.ID,
-			LLMSlug: slug.Make(llm.Name), // Generate slug from name same as AI Gateway library
-			Vendor:  string(llm.Vendor),
-			AppID:   app.ID,
-			UserID:  app.UserID,
-		},
-	}
-	
-	// Execute response plugins for this LLM
-	result, err := pluginManager.ExecutePluginChain(llm.ID, interfaces.HookTypeOnResponse, respData, respData.Context)
-	if err != nil {
-		log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Response hook: Response plugin chain failed")
-		return nil, nil // Use originals on error
-	}
-	
-	// Extract modifications from plugin result
-	if modifiedResp, ok := result.(*interfaces.ResponseData); ok {
-		var modifiedBody []byte
-		var modifiedHeaders http.Header
-		
-		// Extract modified body
-		if modifiedResp.Body != nil {
-			modifiedBody = modifiedResp.Body
-		}
-		
-		// Extract modified headers
-		if modifiedResp.Headers != nil {
-			modifiedHeaders = make(http.Header)
-			for key, value := range modifiedResp.Headers {
-				modifiedHeaders.Set(key, value)
-			}
-		}
-		
-		log.Debug().
-			Int("original_body_len", len(body)).
-			Int("modified_body_len", len(modifiedBody)).
-			Int("modified_headers", len(modifiedHeaders)).
-			Uint("llm_id", llm.ID).
-			Bool("is_stream_chunk", isStreamChunk).
-			Msg("Response hook: Response plugins completed, returning modifications")
-		
-		return modifiedBody, modifiedHeaders
-	}
-	
-	log.Debug().Uint("llm_id", llm.ID).Msg("Response hook: No modifications from plugins")
-	return nil, nil // Use originals
-}
-
-// hasResponsePluginsForLLM checks if the LLM has any active response plugins (fast path optimization)
-func hasResponsePluginsForLLM(pluginManager *plugins.PluginManager, llmID uint) bool {
-	loadedPlugins, err := pluginManager.GetPluginsForLLM(llmID, interfaces.HookTypeOnResponse)
-	if err != nil {
-		log.Debug().Err(err).Uint("llm_id", llmID).Msg("Failed to check for response plugins")
-		return false
-	}
-	return len(loadedPlugins) > 0
-}
-
-func generateHookRequestID() string {
-	return fmt.Sprintf("hook_%d", time.Now().UnixNano())
 }
