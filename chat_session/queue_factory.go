@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"gorm.io/gorm"
 )
 
 // CreateQueueFactory creates appropriate queue factory based on configuration
@@ -172,6 +173,48 @@ func createPostgreSQLQueueFactory(cfg config.QueueConfig) (QueueFactory, error) 
 	return NewDeferredPostgreSQLQueueFactory(psqlConfig), nil
 }
 
+// createSharedPostgreSQLQueueFactory creates PostgreSQL queue factory with shared database connection
+func createSharedPostgreSQLQueueFactory(cfg config.QueueConfig, db *gorm.DB) (QueueFactory, error) {
+	// Convert config to PostgreSQL config
+	psqlConfig := PostgreSQLConfig{
+		BufferSize:          cfg.BufferSize,
+		ReconnectInterval:   2 * time.Second, // Default values
+		MaxReconnectRetries: 10,
+		NotifyTimeout:       5 * time.Second,
+	}
+
+	// Parse duration strings from config
+	if cfg.PostgreSQL.ReconnectInterval != "" {
+		if duration, err := time.ParseDuration(cfg.PostgreSQL.ReconnectInterval); err == nil {
+			psqlConfig.ReconnectInterval = duration
+		} else {
+			slog.Warn("invalid PostgreSQL reconnect interval, using default", "value", cfg.PostgreSQL.ReconnectInterval, "error", err)
+		}
+	}
+
+	if cfg.PostgreSQL.NotifyTimeout != "" {
+		if duration, err := time.ParseDuration(cfg.PostgreSQL.NotifyTimeout); err == nil {
+			psqlConfig.NotifyTimeout = duration
+		} else {
+			slog.Warn("invalid PostgreSQL notify timeout, using default", "value", cfg.PostgreSQL.NotifyTimeout, "error", err)
+		}
+	}
+
+	if cfg.PostgreSQL.MaxReconnectRetries > 0 {
+		psqlConfig.MaxReconnectRetries = cfg.PostgreSQL.MaxReconnectRetries
+	}
+
+	slog.Info("creating shared PostgreSQL queue factory",
+		"buffer_size", psqlConfig.BufferSize,
+		"reconnect_interval", psqlConfig.ReconnectInterval,
+		"max_reconnect_retries", psqlConfig.MaxReconnectRetries,
+		"notify_timeout", psqlConfig.NotifyTimeout,
+		"shared_connection", true,
+	)
+
+	return NewSharedPostgreSQLQueueFactory(db, psqlConfig), nil
+}
+
 // CreateDefaultQueueFactory creates the default queue factory based on global configuration
 func CreateDefaultQueueFactory() QueueFactory {
 	cfg := config.Get()
@@ -179,6 +222,35 @@ func CreateDefaultQueueFactory() QueueFactory {
 	factory, err := CreateQueueFactory(cfg.QueueConfig)
 	if err != nil {
 		slog.Warn("failed to create configured queue factory, using in-memory", "error", err)
+		return NewDefaultQueueFactory(cfg.QueueConfig.BufferSize)
+	}
+
+	return factory
+}
+
+// CreateQueueFactoryWithSharedDB creates a queue factory with shared database connection
+// This prevents connection exhaustion by reusing the application's connection pool
+func CreateQueueFactoryWithSharedDB(cfg config.QueueConfig, db *gorm.DB) (QueueFactory, error) {
+	switch cfg.Type {
+	case "nats":
+		return createNATSQueueFactory(cfg)
+	case "postgres":
+		// Use shared database connection for PostgreSQL queues
+		return createSharedPostgreSQLQueueFactory(cfg, db)
+	case "inmemory":
+		return NewDefaultQueueFactory(cfg.BufferSize), nil
+	default:
+		return nil, fmt.Errorf("unsupported queue type: %s", cfg.Type)
+	}
+}
+
+// CreateDefaultQueueFactoryWithSharedDB creates the default queue factory with shared database
+func CreateDefaultQueueFactoryWithSharedDB(db *gorm.DB) QueueFactory {
+	cfg := config.Get()
+
+	factory, err := CreateQueueFactoryWithSharedDB(cfg.QueueConfig, db)
+	if err != nil {
+		slog.Warn("failed to create configured queue factory with shared DB, using in-memory", "error", err)
 		return NewDefaultQueueFactory(cfg.QueueConfig.BufferSize)
 	}
 

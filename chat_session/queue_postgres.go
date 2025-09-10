@@ -533,3 +533,37 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 
 	return NewPostgreSQLQueue(sessionID, db, psqlConfig)
 }
+
+// SharedPostgreSQLQueueFactory creates PostgreSQL queues using a shared database connection
+// This prevents connection exhaustion by reusing the application's existing connection pool
+type SharedPostgreSQLQueueFactory struct {
+	db     *gorm.DB
+	config PostgreSQLConfig
+}
+
+// NewSharedPostgreSQLQueueFactory creates a shared PostgreSQL factory that reuses database connections
+func NewSharedPostgreSQLQueueFactory(db *gorm.DB, config PostgreSQLConfig) *SharedPostgreSQLQueueFactory {
+	return &SharedPostgreSQLQueueFactory{
+		db:     db,
+		config: config,
+	}
+}
+
+// CreateQueue creates a new PostgreSQL queue using the shared database connection
+func (f *SharedPostgreSQLQueueFactory) CreateQueue(sessionID string, config map[string]interface{}) (MessageQueue, error) {
+	psqlConfig := f.config
+
+	// Apply configuration overrides
+	if config != nil {
+		if bufferSize, ok := config["bufferSize"].(int); ok && bufferSize > 0 {
+			psqlConfig.BufferSize = bufferSize
+		}
+	}
+
+	// Create with shared connection - no new database connections
+	slog.Info("Creating PostgreSQL queue with shared connection pool",
+		"session_id", sessionID,
+		"connection_shared", true)
+
+	return NewPostgreSQLQueue(sessionID, f.db, psqlConfig)
+}
