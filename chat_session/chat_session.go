@@ -87,10 +87,11 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 			return nil, fmt.Errorf("failed to create queue: %w", err)
 		}
 	} else {
-		// Use default factory based on configuration
-		queue, err = CreateDefaultQueue(id)
+		// Use default factory with shared database connection to prevent connection exhaustion
+		factory := CreateDefaultQueueFactoryWithSharedDB(db)
+		queue, err = factory.CreateQueue(id, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create default queue: %w", err)
+			return nil, fmt.Errorf("failed to create queue with shared database: %w", err)
 		}
 	}
 
