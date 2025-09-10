@@ -26,6 +26,7 @@ type MidsommarLLM struct {
 	MonthlyBudget float64                `json:"monthly_budget"`
 	RateLimit     int                    `json:"rate_limit_rpm"`
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	AllowedModels []string               `json:"allowed_models,omitempty"`
 }
 
 type MidsommarCredential struct {
@@ -60,6 +61,11 @@ func ConvertToMidsommarLLM(dbLLM database.LLM) MidsommarLLM {
 		json.Unmarshal(dbLLM.Metadata, &metadata)
 	}
 
+	var allowedModels []string
+	if len(dbLLM.AllowedModels) > 0 {
+		json.Unmarshal(dbLLM.AllowedModels, &allowedModels)
+	}
+
 	return MidsommarLLM{
 		ID:            dbLLM.ID,
 		Name:          dbLLM.Name,
@@ -74,6 +80,7 @@ func ConvertToMidsommarLLM(dbLLM database.LLM) MidsommarLLM {
 		MonthlyBudget: dbLLM.MonthlyBudget,
 		RateLimit:     dbLLM.RateLimitRPM,
 		Metadata:      metadata,
+		AllowedModels: allowedModels,
 	}
 }
 
@@ -148,6 +155,11 @@ func ConvertFromMidsommarLLM(llm MidsommarLLM) database.LLM {
 		metadata, _ = json.Marshal(llm.Metadata)
 	}
 
+	var allowedModels []byte
+	if llm.AllowedModels != nil {
+		allowedModels, _ = json.Marshal(llm.AllowedModels)
+	}
+
 	return database.LLM{
 		Name:           llm.Name,
 		Slug:           llm.Slug,
@@ -161,6 +173,7 @@ func ConvertFromMidsommarLLM(llm MidsommarLLM) database.LLM {
 		MonthlyBudget:  llm.MonthlyBudget,
 		RateLimitRPM:   llm.RateLimit,
 		Metadata:       metadata,
+		AllowedModels:  allowedModels,
 	}
 }
 

@@ -28,7 +28,7 @@ func TestDatabaseBudgetService_CheckBudget(t *testing.T) {
 	db, repo := setupBudgetTestDB(t)
 	defer database.Close(db)
 
-	service := NewDatabaseBudgetService(db, repo).(*DatabaseBudgetService)
+	service := NewDatabaseBudgetService(db, repo, nil).(*DatabaseBudgetService)
 
 	// Create test app with budget
 	app := &database.App{
@@ -86,7 +86,7 @@ func TestDatabaseBudgetService_RecordUsage(t *testing.T) {
 	db, repo := setupBudgetTestDB(t)
 	defer database.Close(db)
 
-	service := NewDatabaseBudgetService(db, repo).(*DatabaseBudgetService)
+	service := NewDatabaseBudgetService(db, repo, nil).(*DatabaseBudgetService)
 
 	// Create test app
 	app := &database.App{
@@ -134,7 +134,7 @@ func TestDatabaseBudgetService_GetBudgetStatus(t *testing.T) {
 	db, repo := setupBudgetTestDB(t)
 	defer database.Close(db)
 
-	service := NewDatabaseBudgetService(db, repo).(*DatabaseBudgetService)
+	service := NewDatabaseBudgetService(db, repo, nil).(*DatabaseBudgetService)
 
 	// Create test app with budget
 	app := &database.App{
@@ -166,7 +166,7 @@ func TestDatabaseBudgetService_UpdateBudget(t *testing.T) {
 	db, repo := setupBudgetTestDB(t)
 	defer database.Close(db)
 
-	service := NewDatabaseBudgetService(db, repo).(*DatabaseBudgetService)
+	service := NewDatabaseBudgetService(db, repo, nil).(*DatabaseBudgetService)
 
 	// Create test app
 	app := &database.App{

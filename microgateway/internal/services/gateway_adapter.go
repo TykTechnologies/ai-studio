@@ -2,6 +2,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -372,6 +373,15 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		}
 	}
 
+	// Convert allowed models from JSON
+	var allowedModels []string
+	if len(dbLLM.AllowedModels) > 0 {
+		if err := json.Unmarshal(dbLLM.AllowedModels, &allowedModels); err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to unmarshal allowed models")
+			allowedModels = []string{} // Default to empty slice on error
+		}
+	}
+
 	llm := models.LLM{
 		ID:            dbLLM.ID,
 		Name:          dbLLM.Slug, // Use slug as name for AI Gateway routing
@@ -382,6 +392,7 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		Active:        dbLLM.IsActive,
 		MonthlyBudget: &dbLLM.MonthlyBudget,
 		Filters:       filters,
+		AllowedModels: allowedModels,
 	}
 
 	log.Debug().

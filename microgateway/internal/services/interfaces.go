@@ -271,6 +271,7 @@ type CreateLLMRequest struct {
 	MonthlyBudget  float64                `json:"monthly_budget"`
 	RateLimitRPM   int                    `json:"rate_limit_rpm"`
 	Metadata       map[string]interface{} `json:"metadata"`
+	AllowedModels  []string               `json:"allowed_models"`
 }
 
 // UpdateLLMRequest for updating an LLM
@@ -286,6 +287,7 @@ type UpdateLLMRequest struct {
 	MonthlyBudget  *float64                `json:"monthly_budget"`
 	RateLimitRPM   *int                    `json:"rate_limit_rpm"`
 	Metadata       map[string]interface{}  `json:"metadata"`
+	AllowedModels  []string                `json:"allowed_models"`
 }
 
 // CreateAppRequest for creating a new app

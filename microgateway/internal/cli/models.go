@@ -22,6 +22,7 @@ type CreateLLMRequest struct {
 	MonthlyBudget  float64                `json:"monthly_budget,omitempty" yaml:"monthly_budget,omitempty"`
 	RateLimitRPM   int                    `json:"rate_limit_rpm,omitempty" yaml:"rate_limit_rpm,omitempty"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	AllowedModels  []string               `json:"allowed_models,omitempty" yaml:"allowed_models,omitempty"`
 }
 
 // UpdateLLMRequest for CLI llm update command
@@ -37,6 +38,7 @@ type UpdateLLMRequest struct {
 	MonthlyBudget  *float64                `json:"monthly_budget,omitempty" yaml:"monthly_budget,omitempty"`
 	RateLimitRPM   *int                    `json:"rate_limit_rpm,omitempty" yaml:"rate_limit_rpm,omitempty"`
 	Metadata       map[string]interface{}  `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	AllowedModels  []string                `json:"allowed_models,omitempty" yaml:"allowed_models,omitempty"`
 }
 
 // CreateAppRequest for CLI app create command
@@ -103,6 +105,7 @@ type LLM struct {
 	MonthlyBudget  float64                `json:"monthly_budget" yaml:"monthly_budget"`
 	RateLimitRPM   int                    `json:"rate_limit_rpm" yaml:"rate_limit_rpm"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	AllowedModels  []string               `json:"allowed_models,omitempty" yaml:"allowed_models,omitempty"`
 	CreatedAt      time.Time              `json:"created_at" yaml:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at" yaml:"updated_at"`
 }

@@ -75,6 +75,7 @@ var llmCreateCmd = &cobra.Command{
 		active, _ := cmd.Flags().GetBool("active")
 		budget, _ := cmd.Flags().GetFloat64("budget")
 		rateLimit, _ := cmd.Flags().GetInt("rate-limit")
+		allowedModels, _ := cmd.Flags().GetStringSlice("allowed-models")
 
 		if name == "" {
 			return fmt.Errorf("name is required")
@@ -98,6 +99,7 @@ var llmCreateCmd = &cobra.Command{
 			IsActive:       active,
 			MonthlyBudget:  budget,
 			RateLimitRPM:   rateLimit,
+			AllowedModels:  allowedModels,
 		}
 
 		resp, err := cli.GetClient().Post("/api/v1/llms", req)
@@ -174,6 +176,10 @@ var llmUpdateCmd = &cobra.Command{
 		if cmd.Flags().Changed("rate-limit") {
 			val, _ := cmd.Flags().GetInt("rate-limit")
 			req.RateLimitRPM = &val
+		}
+		if cmd.Flags().Changed("allowed-models") {
+			val, _ := cmd.Flags().GetStringSlice("allowed-models")
+			req.AllowedModels = val
 		}
 
 		resp, err := cli.GetClient().Put("/api/v1/llms/"+id, req)
@@ -523,6 +529,7 @@ func init() {
 	llmCreateCmd.Flags().Bool("active", true, "whether LLM is active")
 	llmCreateCmd.Flags().Float64("budget", 0, "monthly budget limit")
 	llmCreateCmd.Flags().Int("rate-limit", 0, "requests per minute limit")
+	llmCreateCmd.Flags().StringSlice("allowed-models", nil, "regex patterns for allowed models (e.g. gpt-4.*,claude-.*)")
 	llmCreateCmd.MarkFlagRequired("name")
 	llmCreateCmd.MarkFlagRequired("vendor")
 	llmCreateCmd.MarkFlagRequired("model")
@@ -538,4 +545,5 @@ func init() {
 	llmUpdateCmd.Flags().Bool("active", true, "whether LLM is active")
 	llmUpdateCmd.Flags().Float64("budget", 0, "monthly budget limit")
 	llmUpdateCmd.Flags().Int("rate-limit", 0, "requests per minute limit")
+	llmUpdateCmd.Flags().StringSlice("allowed-models", nil, "regex patterns for allowed models (e.g. gpt-4.*,claude-.*)")
 }

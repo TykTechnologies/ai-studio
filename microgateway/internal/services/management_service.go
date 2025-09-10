@@ -66,6 +66,15 @@ func (s *ManagementService) CreateLLM(req *CreateLLMRequest) (*database.LLM, err
 		}
 	}
 
+	// Marshal allowed models
+	var allowedModels []byte
+	if req.AllowedModels != nil {
+		allowedModels, err = json.Marshal(req.AllowedModels)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal allowed models: %w", err)
+		}
+	}
+
 	// Create LLM model
 	llm := &database.LLM{
 		Name:            req.Name,
@@ -81,6 +90,7 @@ func (s *ManagementService) CreateLLM(req *CreateLLMRequest) (*database.LLM, err
 		MonthlyBudget:   req.MonthlyBudget,
 		RateLimitRPM:    req.RateLimitRPM,
 		Metadata:        metadata,
+		AllowedModels:   allowedModels,
 	}
 
 	// Save to database
@@ -164,6 +174,13 @@ func (s *ManagementService) UpdateLLM(id uint, req *UpdateLLMRequest) (*database
 			return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 		}
 		llm.Metadata = metadata
+	}
+	if req.AllowedModels != nil {
+		allowedModels, err := json.Marshal(req.AllowedModels)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal allowed models: %w", err)
+		}
+		llm.AllowedModels = allowedModels
 	}
 
 	// Save changes

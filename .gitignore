@@ -48,3 +48,6 @@ microgateway/plugins/examples/message_modifier/message_modifier
 microgateway/plugins/examples/rate_limiter/rate_limiter
 microgateway/plugins/examples/request_enricher/request_enricher
 microgateway/plugins/examples/response_modifier/response_modifier
+microgateway/plugins/examples/file_analytics_collector/file_analytics_collector
+microgateway/plugins/examples/file_budget_collector/file_budget_collector
+microgateway/plugins/examples/file_proxy_collector/file_proxy_collector

@@ -48,6 +48,7 @@ type LLM struct {
 	MonthlyBudget   float64        `json:"monthly_budget"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
 	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
+	AllowedModels   datatypes.JSON `gorm:"type:json" json:"allowed_models"` // JSON array of regex patterns for allowed models
 	
 	// Authentication configuration for pluggable auth mechanisms
 	AuthMechanism   string         `gorm:"default:'token'" json:"auth_mechanism"` // "token", "oauth", "api-key", "custom"

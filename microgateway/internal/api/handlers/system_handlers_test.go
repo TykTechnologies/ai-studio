@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,7 @@ func (m *MockGateway) Start() error                                      { retur
 func (m *MockGateway) Stop(ctx context.Context) error                    { return nil }
 func (m *MockGateway) Handler() http.Handler                             { return http.NotFoundHandler() }
 func (m *MockGateway) GetPort() int                                      { return 8080 }
+func (m *MockGateway) AddResponseHook(hook proxy.ResponseHook)           { /* no-op for testing */ }
 
 func TestReloadConfiguration_Handler(t *testing.T) {
 	_, router := setupTestHandlers(t)
