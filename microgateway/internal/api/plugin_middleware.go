@@ -354,7 +354,12 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 		}
 		log.Debug().Msg("Pre-auth plugins completed")
 
-		// Note: Auth plugins are handled by the AI Gateway's authentication layer, not here
+		// Execute auth plugins
+		log.Debug().Msg("About to execute auth plugins")
+		if blocked := executeAuthPlugins(config.PluginManager, llmID, c, pluginCtx); blocked {
+			return // Request was blocked by auth plugin
+		}
+		log.Debug().Msg("Auth plugins completed")
 		
 		// Execute post-auth plugins
 		log.Debug().Msg("About to execute post-auth plugins")
@@ -403,12 +408,45 @@ func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Conte
 	}
 	
 	// Execute auth plugin chain
-	_, err := manager.ExecutePluginChain(llmID, "auth", authReq, pluginCtx)
+	result, err := manager.ExecutePluginChain(llmID, "auth", authReq, pluginCtx)
 	if err != nil {
 		log.Error().Err(err).Msg("Auth plugin chain failed")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Plugin execution failed",
 			"message": "Authentication plugin error",
+		})
+		c.Abort()
+		return true
+	}
+	
+	// Check authentication result
+	if authResult, ok := result.(map[string]interface{}); ok {
+		if authenticated, hasAuth := authResult["authenticated"].(bool); hasAuth {
+			if !authenticated {
+				// Auth plugin rejected the token
+				log.Debug().Str("credential", extractToken(c)).Msg("Auth plugin rejected authentication")
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":   "Unauthorized",
+					"message": "Authentication failed",
+				})
+				c.Abort()
+				return true
+			}
+			log.Debug().Str("credential", extractToken(c)).Msg("Auth plugin accepted authentication")
+		} else {
+			log.Error().Interface("auth_result", authResult).Msg("Auth plugin returned invalid result format")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Authentication error",
+				"message": "Invalid auth plugin response",
+			})
+			c.Abort()
+			return true
+		}
+	} else {
+		log.Error().Interface("result", result).Msg("Auth plugin returned unexpected result type")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Authentication error", 
+			"message": "Invalid auth plugin response type",
 		})
 		c.Abort()
 		return true

@@ -303,6 +303,42 @@ func convertMapToPluginRequest(input interface{}, hookType string) interface{} {
 			log.Debug().Interface("enriched_request", enriched).Int("body_len", len(enriched.PluginRequest.Body)).Msg("Post-auth: EnrichedRequest created with full context")
 			return enriched
 
+		case "auth":
+			// For auth plugins, create AuthRequest structure
+			authReq := &interfaces.AuthRequest{}
+			if credential, ok := inputMap["credential"].(string); ok {
+				authReq.Credential = credential
+			}
+			if authType, ok := inputMap["auth_type"].(string); ok {
+				authReq.AuthType = authType
+			}
+			if requestData, ok := inputMap["request"].(map[string]interface{}); ok {
+				// Convert nested request to PluginRequest
+				pluginReq := &interfaces.PluginRequest{}
+				if method, ok := requestData["method"].(string); ok {
+					pluginReq.Method = method
+				}
+				if path, ok := requestData["path"].(string); ok {
+					pluginReq.Path = path
+				}
+				if headers, ok := requestData["headers"].(map[string]string); ok {
+					pluginReq.Headers = headers
+				}
+				if body, ok := requestData["body"].([]byte); ok {
+					pluginReq.Body = body
+					log.Debug().Int("body_len", len(body)).Msg("Auth: Successfully extracted body from nested request")
+				}
+				if remoteAddr, ok := requestData["remote_addr"].(string); ok {
+					pluginReq.RemoteAddr = remoteAddr
+				}
+				if ctx, ok := requestData["context"].(map[string]interface{}); ok {
+					pluginReq.Context = convertMapToPluginContext(ctx)
+				}
+				authReq.Request = pluginReq
+			}
+			log.Debug().Interface("auth_request", authReq).Str("credential", authReq.Credential).Msg("Auth: AuthRequest created with credential")
+			return authReq
+
 		case "on_response":
 			resp := &interfaces.ResponseData{}
 			if requestID, ok := inputMap["request_id"].(string); ok {
