@@ -57,7 +57,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	pluginManager := plugins.NewPluginManager(serviceContainer.PluginService)
 	log.Info().Msg("Plugin manager created")
 
-	// Response hooks disabled - using baseline plugin system
+	// Note: Response hooks are implemented directly in the AI Gateway, not in microgateway plugin system
 
 	// Create AI Gateway instance for mounting (not standalone)
 	log.Info().Msg("Creating AI Gateway for mounting in management server")

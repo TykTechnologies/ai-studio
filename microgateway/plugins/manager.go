@@ -380,10 +380,10 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			}
 
 		case interfaces.HookTypeOnResponse:
-			// Response plugins are now handled via AI Gateway hooks, not here
-			// The AI Gateway calls the plugins directly via hooks
-			// Just return the input unchanged since hooks handle this
-			return result, nil
+			// NOTE: Response plugins are NOT supported in microgateway plugin system
+			// Response hooks are implemented directly in the AI Gateway library (pkg/aigateway)
+			// This microgateway plugin system only handles pre_auth, auth, and post_auth hooks
+			return nil, fmt.Errorf("response plugins not supported in microgateway - use AI Gateway response hooks instead")
 
 		default:
 			return nil, fmt.Errorf("unsupported hook type: %s", hookType)

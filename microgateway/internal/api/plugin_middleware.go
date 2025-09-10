@@ -207,60 +207,18 @@ func executePreAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Co
 	return false
 }
 
-// executeResponsePlugins executes response plugins before sending response to client
-func executeResponsePlugins(manager PluginManagerInterface, llmID uint, c *gin.Context, pluginCtx map[string]interface{}, responseBuffer *bufferingResponseWriter) {
-	// Create response data from buffered response
-	respData := map[string]interface{}{
-		"request_id":   pluginCtx["request_id"],
-		"status_code":  responseBuffer.statusCode,
-		"headers":      responseBuffer.headers,
-		"body":         responseBuffer.body.Bytes(),
-		"context":      pluginCtx,
-		"latency_ms":   int64(0), // Would need to be calculated from request start time
-	}
-
-	// Execute response plugin chain
-	log.Debug().Msg("Calling plugin manager ExecutePluginChain for on_response")
-	result, err := manager.ExecutePluginChain(llmID, "on_response", respData, pluginCtx)
-	if err != nil {
-		log.Error().Err(err).Msg("Response plugin chain failed")
-		return
-	}
-	log.Debug().Interface("result_type", result).Msg("Response plugin chain completed, checking result type")
-
-	// Check if response was modified
-	if pluginResp, ok := result.(map[string]interface{}); ok {
-		log.Debug().Interface("plugin_response", pluginResp).Msg("Response plugin returned response, checking for modifications")
-		if modified, ok := pluginResp["modified"].(bool); ok && modified {
-			log.Debug().Msg("Response plugin returned Modified: true, applying response modifications")
-			// Apply modified response
-			if modifiedBody, ok := pluginResp["body"].([]byte); ok {
-				responseBuffer.body = bytes.NewBuffer(modifiedBody)
-			}
-			if modifiedHeaders, ok := pluginResp["headers"].(map[string]string); ok {
-				responseBuffer.headers = modifiedHeaders
-			}
-			if modifiedStatus, ok := pluginResp["status_code"].(int); ok {
-				responseBuffer.statusCode = modifiedStatus
-			}
-		} else {
-			log.Debug().Bool("has_modified", ok).Interface("modified_value", pluginResp["modified"]).Msg("Response plugin did not modify response")
-		}
-	} else {
-		log.Error().Interface("result", result).Msg("CRITICAL: Response plugin result is not a map[string]interface{} - data conversion failed")
-	}
-
-	// Send the final response to the client
+// executeResponsePlugins - DEPRECATED: This function doesn't work and is not used
+// Response plugins are implemented in the AI Gateway library (pkg/aigateway), not in microgateway
+// The microgateway only handles pre_auth, auth, and post_auth plugins
+func executeResponsePlugins(_ PluginManagerInterface, _ uint, c *gin.Context, _ map[string]interface{}, responseBuffer *bufferingResponseWriter) {
+	log.Error().Msg("DEPRECATED: executeResponsePlugins called - response plugins not supported in microgateway")
+	
+	// Send the response without modification since response plugins don't work here
 	c.Writer.WriteHeader(responseBuffer.statusCode)
 	for key, value := range responseBuffer.headers {
 		c.Writer.Header().Set(key, value)
 	}
 	c.Writer.Write(responseBuffer.body.Bytes())
-
-	log.Debug().
-		Str("request_id", pluginCtx["request_id"].(string)).
-		Int("status_code", responseBuffer.statusCode).
-		Msg("Response plugin processing completed and response sent to client")
 }
 
 // applyRequestModifications applies plugin modifications to the request
@@ -368,30 +326,15 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 		}
 		log.Debug().Msg("Post-auth plugins completed")
 
-		// Store plugin context for post-processing
+		// Store plugin context for post-processing (not used for response hooks)
 		c.Set("plugin_context", pluginCtx)
 		c.Set("llm_id", llmID)
 
-		// Create a buffering response writer to capture response for plugin processing
-		responseBuffer := &bufferingResponseWriter{
-			ResponseWriter: c.Writer,
-			statusCode:     200,
-			headers:       make(map[string]string),
-			body:          &bytes.Buffer{},
-		}
-		
-		// Replace the response writer temporarily
-		originalWriter := c.Writer
-		c.Writer = responseBuffer
+		// Note: Response processing is now handled by AI Gateway response hooks
+		// No need for microgateway response buffering - AI Gateway handles this internally
 
-		// Call AI Gateway handler
+		// Call AI Gateway handler directly - it will handle response hooks
 		aiGatewayHandler.ServeHTTP(c.Writer, c.Request)
-
-		// Restore original writer
-		c.Writer = originalWriter
-		
-		// Execute response plugins before sending to client
-		executeResponsePlugins(config.PluginManager, llmID, c, pluginCtx, responseBuffer)
 	}
 }
 
@@ -545,7 +488,9 @@ func createBasicPluginRequest(c *gin.Context, pluginCtx map[string]interface{}) 
 	}
 }
 
-// bufferingResponseWriter captures response data for plugin processing
+// bufferingResponseWriter - DEPRECATED: No longer used
+// Response processing is now handled by AI Gateway response hooks
+// This type is kept only to avoid breaking the deprecated executeResponsePlugins function signature
 type bufferingResponseWriter struct {
 	gin.ResponseWriter
 	statusCode int
