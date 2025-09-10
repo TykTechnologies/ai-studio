@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package microgateway;
+
+import "common.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/TykTechnologies/midsommar/microgateway/proto";
+
+// ConfigurationSyncService defines the gRPC service for hub-and-spoke configuration synchronization
+service ConfigurationSyncService {
+  // RegisterEdge registers an edge instance with the control instance
+  rpc RegisterEdge(EdgeRegistrationRequest) returns (EdgeRegistrationResponse);
+  
+  // GetFullConfiguration retrieves a complete configuration snapshot for an edge
+  rpc GetFullConfiguration(ConfigurationRequest) returns (ConfigurationSnapshot);
+  
+  // SubscribeToChanges establishes a bidirectional stream for real-time configuration updates
+  rpc SubscribeToChanges(stream EdgeMessage) returns (stream ControlMessage);
+  
+  // SendHeartbeat sends periodic health status updates
+  rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // UnregisterEdge unregisters an edge instance
+  rpc UnregisterEdge(EdgeUnregistrationRequest) returns (google.protobuf.Empty);
+}
+
+// EdgeRegistrationRequest is sent when an edge instance connects
+message EdgeRegistrationRequest {
+  string edge_id = 1;          // Unique identifier for this edge instance
+  string edge_namespace = 2;   // Namespace this edge serves (empty = global only)
+  string version = 3;          // Microgateway version
+  string build_hash = 4;       // Build hash for version checking
+  map<string, string> metadata = 5; // Additional edge metadata (region, environment, etc.)
+  HealthStatus health = 6;     // Initial health status
+}
+
+// EdgeRegistrationResponse is returned after successful registration
+message EdgeRegistrationResponse {
+  bool success = 1;
+  string message = 2;
+  string session_id = 3;       // Session ID for this connection
+  ConfigurationSnapshot initial_config = 4; // Initial configuration snapshot
+}
+
+// ConfigurationRequest requests configuration for a specific namespace
+message ConfigurationRequest {
+  string edge_namespace = 1;   // Namespace to filter for (empty = global only)
+  google.protobuf.Timestamp last_sync_time = 2; // Optional: only get changes since this time
+}
+
+// EdgeMessage is sent from edge to control
+message EdgeMessage {
+  oneof message {
+    EdgeRegistrationRequest registration = 1;
+    HeartbeatRequest heartbeat = 2;
+    ConfigurationRequest config_request = 3;
+    EdgeUnregistrationRequest unregistration = 4;
+  }
+}
+
+// ControlMessage is sent from control to edge
+message ControlMessage {
+  oneof message {
+    EdgeRegistrationResponse registration_response = 1;
+    ConfigurationSnapshot configuration = 2;
+    ConfigurationChange change = 3;
+    HeartbeatResponse heartbeat_response = 4;
+    ErrorMessage error = 5;
+  }
+}
+
+// HeartbeatRequest contains health and status information from edge
+message HeartbeatRequest {
+  string edge_id = 1;
+  string session_id = 2;
+  HealthStatus health = 3;
+  EdgeMetrics metrics = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+// HeartbeatResponse acknowledges heartbeat and may contain control directives
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  string message = 2;
+  // Control directives (if any)
+  bool request_full_sync = 3;  // Request edge to perform full configuration sync
+  bool shutdown_requested = 4; // Request graceful shutdown
+}
+
+// EdgeUnregistrationRequest is sent when edge is shutting down
+message EdgeUnregistrationRequest {
+  string edge_id = 1;
+  string session_id = 2;
+  string reason = 3; // Shutdown reason
+}
+
+// EdgeMetrics contains operational metrics from edge instance
+message EdgeMetrics {
+  uint64 requests_processed = 1;    // Total requests processed
+  uint64 active_connections = 2;    // Current active connections
+  double cpu_usage_percent = 3;     // CPU usage percentage
+  uint64 memory_usage_bytes = 4;    // Memory usage in bytes
+  uint64 uptime_seconds = 5;        // Uptime in seconds
+  map<string, double> custom_metrics = 6; // Custom metrics
+}
+
+// ErrorMessage represents an error from control to edge
+message ErrorMessage {
+  string code = 1;        // Error code
+  string message = 2;     // Human readable error message
+  bool fatal = 3;         // Whether this error requires edge restart
+}
+
+// Authentication and authorization messages
+message AuthenticationRequest {
+  string token = 1;       // Authentication token
+  string edge_id = 2;     // Edge instance ID
+  string challenge = 3;   // Optional challenge for enhanced security
+}
+
+message AuthenticationResponse {
+  bool authenticated = 1;
+  string message = 2;
+  string session_token = 3; // Session token for subsequent requests
+  int64 expires_at = 4;     // Session expiration timestamp
+}

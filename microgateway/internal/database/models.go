@@ -22,6 +22,9 @@ type APIToken struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	DeletedAt  gorm.DeletedAt `gorm:"index"`
+	
+	// Hub-and-Spoke Configuration
+	Namespace  string         `gorm:"default:'';index:idx_token_namespace"` // Empty = global, specific = filtered to edge
 }
 
 // TokenCache for persistent cache backing
@@ -53,6 +56,9 @@ type LLM struct {
 	// Authentication configuration for pluggable auth mechanisms
 	AuthMechanism   string         `gorm:"default:'token'" json:"auth_mechanism"` // "token", "oauth", "api-key", "custom"
 	AuthConfig      datatypes.JSON `gorm:"type:json" json:"auth_config"`          // Provider-specific configuration
+	
+	// Hub-and-Spoke Configuration
+	Namespace       string         `gorm:"default:'';index:idx_llm_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`
@@ -75,6 +81,9 @@ type App struct {
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
 	AllowedIPs      datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
 	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
+	
+	// Hub-and-Spoke Configuration
+	Namespace       string         `gorm:"default:'';index:idx_app_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 
 	// Relationships
 	Credentials []Credential     `gorm:"foreignKey:AppID"`
@@ -116,6 +125,9 @@ type ModelPrice struct {
 	CacheWritePT float64 `gorm:"default:0"`   // Cost per cache write token
 	CacheReadPT  float64 `gorm:"default:0"`   // Cost per cache read token
 	Currency     string  `gorm:"default:USD"`
+	
+	// Hub-and-Spoke Configuration
+	Namespace    string  `gorm:"default:'';index:idx_model_price_namespace"` // Empty = global, specific = filtered to edge
 }
 
 // BudgetUsage tracks budget consumption
@@ -175,6 +187,9 @@ type Filter struct {
 	Script      string    `gorm:"not null;type:text" json:"script"`
 	IsActive    bool      `gorm:"default:true" json:"is_active"`
 	OrderIndex  int       `gorm:"default:0" json:"order_index"`
+	
+	// Hub-and-Spoke Configuration
+	Namespace   string    `gorm:"default:'';index:idx_filter_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_filters;" json:"llms,omitempty"`
@@ -203,6 +218,9 @@ type Plugin struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	
+	// Hub-and-Spoke Configuration
+	Namespace   string         `gorm:"default:'';index:idx_plugin_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_plugins;" json:"llms,omitempty"`
@@ -232,3 +250,35 @@ func (Filter) TableName() string       { return "filters" }
 func (LLMFilter) TableName() string    { return "llm_filters" }
 func (Plugin) TableName() string       { return "plugins" }
 func (LLMPlugin) TableName() string    { return "llm_plugins" }
+
+// EdgeInstance represents a registered edge instance (for control mode)
+type EdgeInstance struct {
+	ID            uint           `gorm:"primaryKey"`
+	EdgeID        string         `gorm:"uniqueIndex;not null"`
+	Namespace     string         `gorm:"index:idx_edge_namespace;not null;default:''"`
+	Version       string         `gorm:"size:100"`
+	BuildHash     string         `gorm:"size:64"`
+	Metadata      datatypes.JSON `gorm:"type:json"`
+	LastHeartbeat *time.Time     `gorm:"index:idx_edge_heartbeat"`
+	Status        string         `gorm:"size:50;default:'registered';index:idx_edge_namespace"`
+	SessionID     string         `gorm:"size:255"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// ConfigurationChange represents a configuration change for propagation
+type ConfigurationChange struct {
+	ID                 uint           `gorm:"primaryKey"`
+	ChangeType         string         `gorm:"size:20;not null;index:idx_config_changes_type"` // CREATE, UPDATE, DELETE
+	EntityType         string         `gorm:"size:50;not null;index:idx_config_changes_type"` // LLM, APP, TOKEN, etc.
+	EntityID           uint           `gorm:"not null;index:idx_config_changes_type"`
+	EntityData         datatypes.JSON `gorm:"type:json"` // Complete serialized entity data
+	Namespace          string         `gorm:"not null;default:'';index:idx_config_changes_namespace"`
+	PropagatedToEdges  datatypes.JSON `gorm:"type:json"` // Array of edge_ids that received this change
+	Processed          bool           `gorm:"default:false;index:idx_config_changes_processed"`
+	CreatedAt          time.Time      `gorm:"index:idx_config_changes_namespace,idx_config_changes_processed"`
+}
+
+// TableName methods for new models
+func (EdgeInstance) TableName() string       { return "edge_instances" }
+func (ConfigurationChange) TableName() string { return "configuration_changes" }

@@ -36,6 +36,9 @@ type Config struct {
 
 	// Plugin Configuration
 	Plugins PluginConfig
+	
+	// Hub-and-Spoke Configuration
+	HubSpoke HubSpokeConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -79,6 +82,36 @@ type GatewayConfig struct {
 	RateLimitRPM    int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
 	EnableFilters   bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
 	EnableAnalytics bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
+}
+
+// HubSpokeConfig holds hub-and-spoke architecture configuration
+type HubSpokeConfig struct {
+	// Gateway Mode: "standalone" (default), "control", or "edge"
+	Mode string `env:"GATEWAY_MODE" envDefault:"standalone"`
+	
+	// Control Instance Configuration (for control mode)
+	GRPCPort       int           `env:"GRPC_PORT" envDefault:"9090"`
+	GRPCHost       string        `env:"GRPC_HOST" envDefault:"0.0.0.0"`
+	TLSEnabled     bool          `env:"GRPC_TLS_ENABLED" envDefault:"false"`
+	TLSCertPath    string        `env:"GRPC_TLS_CERT_PATH"`
+	TLSKeyPath     string        `env:"GRPC_TLS_KEY_PATH"`
+	AuthToken      string        `env:"GRPC_AUTH_TOKEN" envDefault:""`
+	
+	// Edge Instance Configuration (for edge mode)
+	ControlEndpoint    string        `env:"CONTROL_ENDPOINT" envDefault:""`
+	EdgeID            string        `env:"EDGE_ID" envDefault:""`
+	EdgeNamespace     string        `env:"EDGE_NAMESPACE" envDefault:""`
+	ReconnectInterval time.Duration `env:"EDGE_RECONNECT_INTERVAL" envDefault:"5s"`
+	HeartbeatInterval time.Duration `env:"EDGE_HEARTBEAT_INTERVAL" envDefault:"30s"`
+	SyncTimeout       time.Duration `env:"EDGE_SYNC_TIMEOUT" envDefault:"10s"`
+	
+	// Authentication
+	ClientToken       string        `env:"EDGE_AUTH_TOKEN" envDefault:""`
+	ClientTLSEnabled  bool          `env:"EDGE_TLS_ENABLED" envDefault:"false"`
+	ClientTLSCertPath string        `env:"EDGE_TLS_CERT_PATH"`
+	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
+	ClientTLSCAPath   string        `env:"EDGE_TLS_CA_PATH"`
+	SkipTLSVerify     bool          `env:"EDGE_SKIP_TLS_VERIFY" envDefault:"false"`
 }
 
 // AnalyticsConfig holds analytics configuration
@@ -204,6 +237,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid log format: %s (must be 'json' or 'text')", c.Observability.LogFormat)
 	}
 
+	// Validate hub-and-spoke configuration
+	if err := c.validateHubSpokeConfig(); err != nil {
+		return fmt.Errorf("hub-spoke configuration error: %w", err)
+	}
+
 	return nil
 }
 
@@ -250,4 +288,57 @@ func (c *Config) LoadPluginConfig(ctx context.Context) error {
 	
 	log.Info().Int("count", len(plugins)).Msg("Loaded plugin configurations")
 	return nil
+}
+
+// validateHubSpokeConfig validates hub-and-spoke specific configuration
+func (c *Config) validateHubSpokeConfig() error {
+	// Validate gateway mode
+	validModes := []string{"standalone", "control", "edge"}
+	validMode := false
+	for _, mode := range validModes {
+		if c.HubSpoke.Mode == mode {
+			validMode = true
+			break
+		}
+	}
+	if !validMode {
+		return fmt.Errorf("invalid gateway mode: %s (must be one of: %v)", c.HubSpoke.Mode, validModes)
+	}
+	
+	// Validate control mode specific settings
+	if c.HubSpoke.Mode == "control" {
+		if c.HubSpoke.GRPCPort < 1 || c.HubSpoke.GRPCPort > 65535 {
+			return fmt.Errorf("invalid gRPC port: %d", c.HubSpoke.GRPCPort)
+		}
+		if c.HubSpoke.GRPCPort == c.Server.Port {
+			return fmt.Errorf("gRPC port cannot be the same as HTTP server port")
+		}
+	}
+	
+	// Validate edge mode specific settings
+	if c.HubSpoke.Mode == "edge" {
+		if c.HubSpoke.ControlEndpoint == "" {
+			return fmt.Errorf("control endpoint is required for edge mode")
+		}
+		if c.HubSpoke.EdgeID == "" {
+			return fmt.Errorf("edge ID is required for edge mode")
+		}
+	}
+	
+	return nil
+}
+
+// IsStandalone returns true if the gateway is in standalone mode
+func (c *Config) IsStandalone() bool {
+	return c.HubSpoke.Mode == "standalone"
+}
+
+// IsControl returns true if the gateway is in control mode
+func (c *Config) IsControl() bool {
+	return c.HubSpoke.Mode == "control"
+}
+
+// IsEdge returns true if the gateway is in edge mode
+func (c *Config) IsEdge() bool {
+	return c.HubSpoke.Mode == "edge"
 }

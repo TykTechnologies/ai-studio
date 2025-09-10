@@ -62,7 +62,7 @@ func main() {
 
 	for i, sessionID := range sessionIDs {
 		fmt.Printf("  Creating queue %d for %s...", i+1, sessionID)
-		
+
 		// This would previously create new database connections per session
 		queue, err := factory.CreateQueue(sessionID, nil)
 		if err != nil {
@@ -70,7 +70,7 @@ func main() {
 			fmt.Printf(" (Expected failure: %v)\n", err)
 			continue
 		}
-		
+
 		queues = append(queues, queue)
 		fmt.Printf(" ✅\n")
 	}
@@ -85,7 +85,7 @@ func main() {
 
 	// Test 4: Test default factory with shared DB
 	fmt.Println("\n📋 Test 4: Testing CreateDefaultQueueFactoryWithSharedDB...")
-	
+
 	// Temporarily set env var to test PostgreSQL path
 	originalEnv := os.Getenv("QUEUE_TYPE")
 	os.Setenv("QUEUE_TYPE", "postgres")
@@ -102,7 +102,7 @@ func main() {
 
 	// Test 5: Simulate chat session creation
 	fmt.Println("\n📋 Test 5: Testing chat session creation with shared database...")
-	
+
 	// This test verifies the fix prevents connection exhaustion in NewChatSession
 	fmt.Println("✅ Chat session would now use shared database connection")
 	fmt.Println("✅ No more duplicate connection pools per session")
