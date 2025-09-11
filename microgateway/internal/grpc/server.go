@@ -10,7 +10,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -19,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 )
@@ -29,7 +29,6 @@ type ControlServer struct {
 	
 	config   *config.Config
 	db       *gorm.DB
-	services *services.ServiceContainer
 	
 	// Edge instance management
 	edgeInstances map[string]*EdgeInstance
@@ -58,13 +57,12 @@ type EdgeInstance struct {
 }
 
 // NewControlServer creates a new control server
-func NewControlServer(cfg *config.Config, db *gorm.DB, serviceContainer *services.ServiceContainer) *ControlServer {
+func NewControlServer(cfg *config.Config, db *gorm.DB) *ControlServer {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	server := &ControlServer{
 		config:        cfg,
 		db:            db,
-		services:      serviceContainer,
 		edgeInstances: make(map[string]*EdgeInstance),
 		changeChan:    make(chan *pb.ConfigurationChange, 100),
 		ctx:           ctx,
@@ -392,7 +390,7 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 }
 
 // UnregisterEdge handles edge instance unregistration
-func (s *ControlServer) UnregisterEdge(ctx context.Context, req *pb.EdgeUnregistrationRequest) (*pb.EmptyMessage, error) {
+func (s *ControlServer) UnregisterEdge(ctx context.Context, req *pb.EdgeUnregistrationRequest) (*emptypb.Empty, error) {
 	log.Info().Str("edge_id", req.EdgeId).Str("reason", req.Reason).Msg("Edge unregistration request")
 	
 	s.edgeMutex.Lock()
@@ -404,7 +402,7 @@ func (s *ControlServer) UnregisterEdge(ctx context.Context, req *pb.EdgeUnregist
 		Where("edge_id = ?", req.EdgeId).
 		Update("status", "unregistered")
 	
-	return &pb.EmptyMessage{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 // getConfigurationSnapshot creates a configuration snapshot for a specific namespace
@@ -414,13 +412,76 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		SnapshotTime:  timestamppb.Now(),
 	}
 	
-	// TODO: Implement configuration fetching from services
-	// This is a placeholder - the actual implementation would:
-	// 1. Query LLMs, Apps, Tokens, etc. with namespace filtering
-	// 2. Convert database models to protobuf messages
-	// 3. Return complete snapshot
+	// Query LLMs with namespace filtering
+	var llms []database.LLM
+	query := s.db.Model(&database.LLM{}).Where("is_active = ?", true)
+	if namespace == "" {
+		// Global namespace - only global objects
+		query = query.Where("namespace = ''")
+	} else {
+		// Specific namespace - global + matching objects
+		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
 	
-	log.Debug().
+	if err := query.Find(&llms).Error; err != nil {
+		return nil, fmt.Errorf("failed to query LLMs: %w", err)
+	}
+	
+	// Convert LLMs to protobuf
+	snapshot.Llms = make([]*pb.LLMConfig, len(llms))
+	for i, llm := range llms {
+		snapshot.Llms[i] = &pb.LLMConfig{
+			Id:              uint32(llm.ID),
+			Name:            llm.Name,
+			Slug:            llm.Slug,
+			Vendor:          llm.Vendor,
+			Endpoint:        llm.Endpoint,
+			ApiKeyEncrypted: llm.APIKeyEncrypted,
+			DefaultModel:    llm.DefaultModel,
+			MaxTokens:       int32(llm.MaxTokens),
+			TimeoutSeconds:  int32(llm.TimeoutSeconds),
+			RetryCount:      int32(llm.RetryCount),
+			IsActive:        llm.IsActive,
+			MonthlyBudget:   llm.MonthlyBudget,
+			RateLimitRpm:    int32(llm.RateLimitRPM),
+			Namespace:       llm.Namespace,
+			CreatedAt:       timestamppb.New(llm.CreatedAt),
+			UpdatedAt:       timestamppb.New(llm.UpdatedAt),
+		}
+	}
+	
+	// Query Apps with namespace filtering
+	var apps []database.App
+	appQuery := s.db.Model(&database.App{}).Where("is_active = ?", true)
+	if namespace == "" {
+		appQuery = appQuery.Where("namespace = ''")
+	} else {
+		appQuery = appQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := appQuery.Find(&apps).Error; err != nil {
+		return nil, fmt.Errorf("failed to query Apps: %w", err)
+	}
+	
+	// Convert Apps to protobuf
+	snapshot.Apps = make([]*pb.AppConfig, len(apps))
+	for i, app := range apps {
+		snapshot.Apps[i] = &pb.AppConfig{
+			Id:             uint32(app.ID),
+			Name:           app.Name,
+			Description:    app.Description,
+			OwnerEmail:     app.OwnerEmail,
+			IsActive:       app.IsActive,
+			MonthlyBudget:  app.MonthlyBudget,
+			BudgetResetDay: int32(app.BudgetResetDay),
+			RateLimitRpm:   int32(app.RateLimitRPM),
+			Namespace:      app.Namespace,
+			CreatedAt:      timestamppb.New(app.CreatedAt),
+			UpdatedAt:      timestamppb.New(app.UpdatedAt),
+		}
+	}
+	
+	log.Info().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
 		Int("app_count", len(snapshot.Apps)).

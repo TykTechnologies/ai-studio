@@ -7,14 +7,12 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/grpc"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
 	"gorm.io/gorm"
 )
 
 // GRPCProvider implements ConfigurationProvider using gRPC communication with control instance
 type GRPCProvider struct {
-	edgeClient       *grpc.EdgeClient
 	namespace        string
 	namespaceFilter  NamespaceFilter
 	
@@ -22,26 +20,38 @@ type GRPCProvider struct {
 	configCache      *pb.ConfigurationSnapshot
 	cacheMutex       sync.RWMutex
 	lastUpdate       time.Time
+	
+	// Connection status
+	connected        bool
+	
+	// Edge client reference (will be set after creation)
+	edgeClient       interface{} // Avoid import cycle, will be cast when needed
 }
 
 // NewGRPCProvider creates a new gRPC-backed configuration provider for edge instances
-func NewGRPCProvider(edgeClient *grpc.EdgeClient, namespace string) *GRPCProvider {
+func NewGRPCProvider(namespace string) *GRPCProvider {
 	provider := &GRPCProvider{
-		edgeClient:      edgeClient,
 		namespace:       namespace,
 		namespaceFilter: &DefaultNamespaceFilter{},
-	}
-	
-	// Set up callback for configuration updates
-	edgeClient.SetOnConfigChange(provider.onConfigurationUpdate)
-	
-	// Initialize cache if available
-	if config := edgeClient.GetCurrentConfiguration(); config != nil {
-		provider.configCache = config
-		provider.lastUpdate = time.Now()
+		connected:       false, // Will be set to true when edge client connects
 	}
 	
 	return provider
+}
+
+// SetEdgeClient sets the edge client reference (avoids import cycle)
+func (p *GRPCProvider) SetEdgeClient(edgeClient interface{}) {
+	p.edgeClient = edgeClient
+	p.connected = true
+}
+
+// SetConfigurationCache updates the configuration cache from edge client
+func (p *GRPCProvider) SetConfigurationCache(config *pb.ConfigurationSnapshot) {
+	p.cacheMutex.Lock()
+	p.configCache = config
+	p.lastUpdate = time.Now()
+	p.connected = true
+	p.cacheMutex.Unlock()
 }
 
 // GetProviderType returns the provider type
@@ -51,7 +61,7 @@ func (p *GRPCProvider) GetProviderType() ProviderType {
 
 // IsHealthy checks if the gRPC connection to control is healthy
 func (p *GRPCProvider) IsHealthy() bool {
-	return p.edgeClient.IsConnected() && p.configCache != nil
+	return p.connected && p.configCache != nil
 }
 
 // GetNamespace returns the provider's namespace
@@ -74,21 +84,7 @@ func (p *GRPCProvider) ensureCacheValid() error {
 	p.cacheMutex.RUnlock()
 	
 	if !hasCache {
-		// Try to request configuration from control
-		if err := p.edgeClient.RequestFullSync(); err != nil {
-			return fmt.Errorf("no configuration cache and failed to sync: %w", err)
-		}
-		
-		// Wait a bit for the sync to complete
-		time.Sleep(100 * time.Millisecond)
-		
-		p.cacheMutex.RLock()
-		hasCache = p.configCache != nil
-		p.cacheMutex.RUnlock()
-		
-		if !hasCache {
-			return fmt.Errorf("no configuration available")
-		}
+		return fmt.Errorf("no configuration cache available")
 	}
 	
 	return nil

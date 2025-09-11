@@ -12,8 +12,11 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/grpc"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -59,6 +62,7 @@ func main() {
 		Str("version", Version).
 		Str("build", BuildHash).
 		Str("build_time", BuildTime).
+		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Msg("Starting Microgateway")
 
 	// Connect to database
@@ -99,10 +103,70 @@ func main() {
 		log.Fatal().Err(err).Msg("Database health check failed")
 	}
 
-	// Initialize service container
-	serviceContainer, err := services.NewServiceContainer(db, cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize services")
+	// Initialize edge client FIRST if in edge mode (before creating services)
+	var edgeClient *grpc.SimpleEdgeClient
+	if cfg.IsEdge() {
+		log.Info().
+			Str("control_endpoint", cfg.HubSpoke.ControlEndpoint).
+			Str("edge_id", cfg.HubSpoke.EdgeID).
+			Msg("Connecting to control server before initializing services")
+		
+		edgeClient = grpc.NewSimpleEdgeClient(cfg)
+		
+		if err := edgeClient.Start(); err != nil {
+			log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")
+		}
+		
+		log.Info().Msg("Successfully connected to control server")
+	}
+
+	// Initialize hub-spoke service container based on gateway mode
+	var serviceContainer *services.ServiceContainer
+	var hubSpokeContainer *services.HubSpokeServiceContainer
+	
+	// Always use hub-spoke container for control and edge modes
+	if cfg.IsControl() || cfg.IsEdge() {
+		log.Info().
+			Str("gateway_mode", cfg.HubSpoke.Mode).
+			Msg("Initializing hub-spoke service container")
+		hubSpokeContainer, err = services.NewHubSpokeServiceContainer(db, cfg)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to initialize hub-spoke services")
+		}
+		serviceContainer = hubSpokeContainer.ServiceContainer
+		
+		// Connect edge client to provider if in edge mode
+		if cfg.IsEdge() && edgeClient != nil {
+			if grpcProvider, ok := hubSpokeContainer.ConfigProvider.(*providers.GRPCProvider); ok {
+				log.Info().Msg("Connecting edge client to gRPC provider")
+				
+				// Set up callback for configuration updates
+				edgeClient.SetOnConfigChange(func(config *pb.ConfigurationSnapshot) {
+					log.Info().
+						Int("llm_count", len(config.Llms)).
+						Int("app_count", len(config.Apps)).
+						Msg("Received configuration update from control")
+					grpcProvider.SetConfigurationCache(config)
+				})
+				
+				grpcProvider.SetEdgeClient(edgeClient)
+				
+				// If edge client already has configuration, set it
+				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {
+					log.Info().Msg("Setting initial configuration from edge client")
+					grpcProvider.SetConfigurationCache(initialConfig)
+				}
+				
+				log.Info().Msg("Edge client connected to gRPC provider")
+			}
+		}
+	} else {
+		// Standalone instances use traditional service container
+		log.Info().Msg("Initializing traditional service container for standalone mode")
+		serviceContainer, err = services.NewServiceContainer(db, cfg)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to initialize services")
+		}
 	}
 
 	// Create admin token if requested
@@ -148,10 +212,34 @@ func main() {
 		}
 	}()
 
-	// Start background tasks
+	// Start gRPC control server if in control mode
+	var controlServer *grpc.ControlServer
+	
+	if cfg.IsControl() {
+		log.Info().
+			Int("grpc_port", cfg.HubSpoke.GRPCPort).
+			Msg("Starting gRPC control server for configuration synchronization")
+		
+		controlServer = grpc.NewControlServer(cfg, db)
+		
+		go func() {
+			if err := controlServer.Start(); err != nil {
+				log.Error().Err(err).Msg("gRPC control server failed to start")
+			}
+		}()
+	}
+	
+	// Start background tasks and hub-spoke specific services
 	go func() {
 		log.Info().Msg("Starting background tasks")
 		serviceContainer.StartBackgroundTasks(ctx)
+		
+		// Start hub-spoke specific services if available
+		if hubSpokeContainer != nil {
+			if err := hubSpokeContainer.StartHubSpokeServices(ctx); err != nil {
+				log.Error().Err(err).Msg("Failed to start hub-spoke services")
+			}
+		}
 	}()
 
 	// Wait for shutdown signal or server error
@@ -169,9 +257,26 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 
-	// Stop background tasks
+	// Stop background tasks and hub-spoke services
 	log.Info().Msg("Stopping background tasks")
 	serviceContainer.StopBackgroundTasks()
+	
+	// Stop gRPC components
+	if controlServer != nil {
+		log.Info().Msg("Stopping gRPC control server")
+		controlServer.Stop()
+	}
+	
+	if edgeClient != nil {
+		log.Info().Msg("Stopping gRPC edge client")
+		edgeClient.Stop()
+	}
+	
+	// Stop hub-spoke specific services
+	if hubSpokeContainer != nil {
+		log.Info().Msg("Stopping hub-spoke services")
+		hubSpokeContainer.StopHubSpokeServices()
+	}
 
 	// Shutdown server
 	if err := srv.Shutdown(shutdownCtx); err != nil {

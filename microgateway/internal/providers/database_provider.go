@@ -104,7 +104,14 @@ func (p *DatabaseProvider) ListLLMs(namespace string, active bool) ([]database.L
 		targetNamespace = p.namespace
 	}
 	
-	if targetNamespace != "" {
+	// Namespace filtering logic:
+	// - If provider namespace is empty (""), only show global objects (namespace = "")
+	// - If provider namespace is specific, show global + matching namespace objects
+	if targetNamespace == "" {
+		// Global provider - only global objects
+		query = query.Where("namespace = ''")
+	} else {
+		// Specific namespace provider - global + matching objects
 		query = query.Where("(namespace = '' OR namespace = ?)", targetNamespace)
 	}
 	
@@ -145,7 +152,10 @@ func (p *DatabaseProvider) ListApps(namespace string, active bool) ([]database.A
 		targetNamespace = p.namespace
 	}
 	
-	if targetNamespace != "" {
+	// Apply same namespace logic as ListLLMs
+	if targetNamespace == "" {
+		query = query.Where("namespace = ''")
+	} else {
 		query = query.Where("(namespace = '' OR namespace = ?)", targetNamespace)
 	}
 	
@@ -237,7 +247,7 @@ func (p *DatabaseProvider) GetFilter(id uint) (*database.Filter, error) {
 // GetFiltersForLLM retrieves filters associated with an LLM, respecting namespace
 func (p *DatabaseProvider) GetFiltersForLLM(llmID uint) ([]database.Filter, error) {
 	// First check if we can access the LLM
-	llm, err := p.GetLLM(llmID)
+	_, err := p.GetLLM(llmID)
 	if err != nil {
 		return nil, err
 	}

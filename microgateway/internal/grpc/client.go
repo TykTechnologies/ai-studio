@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -28,7 +27,7 @@ type EdgeClient struct {
 	
 	// gRPC connection
 	conn       *grpc.ClientConn
-	client     pb.ConfigurationSyncServiceServer
+	client     pb.ConfigurationSyncServiceClient
 	stream     pb.ConfigurationSyncService_SubscribeToChangesClient
 	
 	// Configuration cache

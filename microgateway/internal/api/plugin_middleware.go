@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -124,6 +125,29 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 // executePreAuthPlugins executes pre-authentication plugins
 func executePreAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Context, pluginCtx map[string]interface{}) bool {
 	log.Debug().Uint("llm_id", llmID).Msg("Starting executePreAuthPlugins")
+	
+	// Early check: do we have any pre-auth plugins for this LLM?
+	plugins, err := manager.GetPluginsForLLM(llmID, "pre_auth")
+	if err != nil {
+		log.Debug().Err(err).Uint("llm_id", llmID).Msg("Failed to get pre-auth plugins, skipping")
+		return false
+	}
+	
+	// Skip all processing if no plugins are configured for this hook type
+	// Check if the result is an empty slice or nil
+	if plugins == nil {
+		log.Debug().Uint("llm_id", llmID).Msg("No pre-auth plugins found (nil), skipping processing")
+		return false
+	}
+	
+	// Use reflection to check if it's an empty slice of any type
+	if reflect.ValueOf(plugins).Kind() == reflect.Slice {
+		sliceLen := reflect.ValueOf(plugins).Len()
+		if sliceLen == 0 {
+			log.Debug().Uint("llm_id", llmID).Msg("No pre-auth plugins found (empty slice), skipping processing")
+			return false
+		}
+	}
 	
 	// Read request body for processing
 	var bodyBytes []byte
@@ -329,6 +353,29 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Context, pluginCtx map[string]interface{}) bool {
 	log.Debug().Uint("llm_id", llmID).Msg("Starting executeAuthPlugins")
 	
+	// Early check: do we have any auth plugins for this LLM?
+	plugins, err := manager.GetPluginsForLLM(llmID, "auth")
+	if err != nil {
+		log.Debug().Err(err).Uint("llm_id", llmID).Msg("Failed to get auth plugins, skipping")
+		return false
+	}
+	
+	// Skip all processing if no plugins are configured for this hook type
+	// Check if the result is an empty slice or nil
+	if plugins == nil {
+		log.Debug().Uint("llm_id", llmID).Msg("No auth plugins found (nil), skipping processing")
+		return false
+	}
+	
+	// Use reflection to check if it's an empty slice of any type
+	if reflect.ValueOf(plugins).Kind() == reflect.Slice {
+		sliceLen := reflect.ValueOf(plugins).Len()
+		if sliceLen == 0 {
+			log.Debug().Uint("llm_id", llmID).Msg("No auth plugins found (empty slice), skipping processing")
+			return false
+		}
+	}
+	
 	// Create auth request
 	authReq := map[string]interface{}{
 		"credential": extractToken(c),
@@ -389,6 +436,29 @@ func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Conte
 // executePostAuthPlugins executes post-authentication plugins
 func executePostAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Context, pluginCtx map[string]interface{}) bool {
 	log.Debug().Uint("llm_id", llmID).Msg("Starting executePostAuthPlugins")
+	
+	// Early check: do we have any post-auth plugins for this LLM?
+	plugins, err := manager.GetPluginsForLLM(llmID, "post_auth")
+	if err != nil {
+		log.Debug().Err(err).Uint("llm_id", llmID).Msg("Failed to get post-auth plugins, skipping")
+		return false
+	}
+	
+	// Skip all processing if no plugins are configured for this hook type
+	// Check if the result is an empty slice or nil
+	if plugins == nil {
+		log.Debug().Uint("llm_id", llmID).Msg("No post-auth plugins found (nil), skipping processing")
+		return false
+	}
+	
+	// Use reflection to check if it's an empty slice of any type
+	if reflect.ValueOf(plugins).Kind() == reflect.Slice {
+		sliceLen := reflect.ValueOf(plugins).Len()
+		if sliceLen == 0 {
+			log.Debug().Uint("llm_id", llmID).Msg("No post-auth plugins found (empty slice), skipping processing")
+			return false
+		}
+	}
 	
 	// Create enriched request  
 	basicReq := createBasicPluginRequest(c, pluginCtx)
