@@ -123,7 +123,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		gatewayService = NewDatabaseGatewayService(db, repo)
 	} else {
 		// Edge: use HybridGatewayService - DatabaseGatewayService + on-demand token validation
-		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace)
+		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace, cfg.HubSpoke)
 		log.Info().Msg("Edge instance using HybridGatewayService with synced SQLite + on-demand token validation")
 	}
 	

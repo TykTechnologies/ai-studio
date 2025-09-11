@@ -112,6 +112,12 @@ type HubSpokeConfig struct {
 	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
 	ClientTLSCAPath   string        `env:"EDGE_TLS_CA_PATH"`
 	SkipTLSVerify     bool          `env:"EDGE_SKIP_TLS_VERIFY" envDefault:"false"`
+	
+	// Token Validation Cache Configuration
+	TokenCacheEnabled    bool          `env:"EDGE_TOKEN_CACHE_ENABLED" envDefault:"true"`
+	TokenCacheTTL        time.Duration `env:"EDGE_TOKEN_CACHE_TTL" envDefault:"5m"`
+	TokenCacheMaxSize    int           `env:"EDGE_TOKEN_CACHE_MAX_SIZE" envDefault:"1000"`
+	TokenCacheCleanupInt time.Duration `env:"EDGE_TOKEN_CACHE_CLEANUP_INTERVAL" envDefault:"1m"`
 }
 
 // AnalyticsConfig holds analytics configuration
