@@ -172,7 +172,7 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 				Services:      config.Services,
 			}
 			
-			// Create plugin-aware LLM handler
+			// Create plugin-aware LLM handler that bypasses AI Gateway auth when auth plugins are configured
 			gateway.Any("/llm/*path", CreatePluginAwareLLMHandler(config.Gateway.Handler(), pluginMiddlewareConfig))
 			
 			// Tools and datasources don't need plugin processing

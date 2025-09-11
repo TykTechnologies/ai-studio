@@ -106,8 +106,8 @@ func (a *GatewayServiceAdapter) GetDatasourceByID(id uint) (*models.Datasource, 
 	return nil, fmt.Errorf("datasource with ID %d not found", id)
 }
 
-// GetCredentialBySecret validates API tokens and returns a mock credential for compatibility
-// The AI Gateway expects this method but we use API tokens, so we validate the token and return credential info
+// GetCredentialBySecret validates API tokens and returns credential info
+// This method is called by the AI Gateway during credential validation
 func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Credential, error) {
 	secretPrefix := secret
 	if len(secret) > 8 {
@@ -115,7 +115,7 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 	}
 	log.Debug().Str("secret_prefix", secretPrefix).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
 	
-	// First try regular token validation
+	// Try regular token validation first
 	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
 		log.Debug().Msg("Using DatabaseGatewayService to validate token")
 		
@@ -132,30 +132,11 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 			}, nil
 		}
 
-		// Regular token validation failed, check if there are any auth plugins
-		log.Debug().Err(err).Str("token_prefix", secretPrefix).Msg("Regular token validation failed, checking for auth plugins")
+		// Regular token validation failed
+		// For auth plugin support, we return an error here
+		// The plugin middleware will handle auth plugins if configured for the specific LLM
+		log.Debug().Err(err).Str("token_prefix", secretPrefix).Msg("Regular token validation failed")
 		
-		// Check if there are any LLMs with auth plugins
-		hasAuthPlugins, pluginErr := a.hasAnyAuthPlugins()
-		if pluginErr != nil {
-			log.Error().Err(pluginErr).Msg("Failed to check for auth plugins")
-			return nil, fmt.Errorf("invalid token: %w", err)
-		}
-
-		if hasAuthPlugins {
-			// Auth plugins are available, return a plugin credential that will be handled by plugin middleware
-			log.Debug().Str("token_prefix", secretPrefix).Msg("Auth plugins available, allowing plugin authentication")
-			
-			return &models.Credential{
-				ID:     999999, // Special ID indicating plugin auth
-				KeyID:  "plugin-auth",
-				Secret: secret,
-				Active: true,
-			}, nil
-		}
-
-		// No auth plugins available, return original error
-		log.Error().Err(err).Str("token_prefix", secretPrefix).Msg("Token validation failed and no auth plugins available")
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
@@ -168,16 +149,32 @@ func (a *GatewayServiceAdapter) AuthenticateUser(email, password string) (*model
 	return nil, fmt.Errorf("user authentication not supported in microgateway")
 }
 
-// hasAnyAuthPlugins checks if there are any active auth plugins in the system
-func (a *GatewayServiceAdapter) hasAnyAuthPlugins() (bool, error) {
-	// Check if there are any active auth plugins in the system
+// hasAuthPluginsForLLM checks if there are any active auth plugins for a specific LLM
+func (a *GatewayServiceAdapter) hasAuthPluginsForLLM(llmSlug string) (bool, error) {
+	// First get the LLM by slug to get its ID
+	llmInterface, err := a.gatewayService.GetLLMBySlug(llmSlug)
+	if err != nil {
+		return false, fmt.Errorf("failed to get LLM by slug: %w", err)
+	}
+	
+	var llmID uint
+	if dbLLM, ok := llmInterface.(*database.LLM); ok {
+		llmID = dbLLM.ID
+	} else {
+		return false, fmt.Errorf("unexpected LLM type")
+	}
+	
+	// Check if there are any active auth plugins for this specific LLM
+	// Use GORM model query to properly handle soft deletes
 	var count int64
-	err := a.pluginService.(*PluginService).db.Table("plugins").
-		Where("hook_type = ? AND is_active = ?", "auth", true).
+	err = a.pluginService.(*PluginService).db.Model(&database.Plugin{}).
+		Joins("JOIN llm_plugins lp ON lp.plugin_id = plugins.id").
+		Where("lp.llm_id = ? AND lp.is_active = ? AND plugins.hook_type = ? AND plugins.is_active = ?", 
+			llmID, true, "auth", true).
 		Count(&count).Error
 
 	if err != nil {
-		return false, fmt.Errorf("failed to check for auth plugins: %w", err)
+		return false, fmt.Errorf("failed to check for auth plugins for LLM: %w", err)
 	}
 
 	return count > 0, nil
@@ -219,26 +216,14 @@ func (a *GatewayServiceAdapter) GetOAuthClient(clientID string) (*models.OAuthCl
 }
 
 // GetAppByCredentialID returns an app by credential ID
-// NOTE: In our token-only system, the "credential ID" is actually a token ID from our mock credential
+// NOTE: In our token-only system, the "credential ID" is actually a token ID from our credential
 func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, error) {
 	log.Debug().Uint("credential_id", credID).Msg("GatewayServiceAdapter.GetAppByCredentialID() called by AI Gateway")
-	
-	// Check if this is the special plugin auth credential ID
-	if credID == 999999 {
-		log.Debug().Msg("Plugin auth credential detected, delegating to auth plugin for app lookup")
-		
-		// TODO: Delegate to auth plugin for app lookup
-		// For now, return a default app until we implement plugin delegation
-		return &models.App{
-			ID:   1, // Default app ID for plugin auth
-			Name: "Plugin Authenticated App",
-		}, nil
-	}
 	
 	// Since we're using token-only auth, the credID is actually a token ID
 	// We need to get the app ID from the token record, not from credentials table
 	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
-		log.Debug().Msg("Looking up app by token ID (not credential ID)")
+		log.Debug().Msg("Looking up app by token ID (credential ID)")
 		
 		app, err := gatewayService.GetAppByTokenID(credID)
 		if err != nil {

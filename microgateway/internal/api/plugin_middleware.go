@@ -360,10 +360,10 @@ func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Conte
 		return false
 	}
 	
-	// Skip all processing if no plugins are configured for this hook type
-	// Check if the result is an empty slice or nil
+	// Skip auth plugin processing if no plugins are configured for this hook type
+	// When no auth plugins are found, let the AI Gateway handle auth normally
 	if plugins == nil {
-		log.Debug().Uint("llm_id", llmID).Msg("No auth plugins found (nil), skipping processing")
+		log.Debug().Uint("llm_id", llmID).Msg("No auth plugins found (nil), skipping auth plugin processing")
 		return false
 	}
 	
@@ -371,7 +371,7 @@ func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Conte
 	if reflect.ValueOf(plugins).Kind() == reflect.Slice {
 		sliceLen := reflect.ValueOf(plugins).Len()
 		if sliceLen == 0 {
-			log.Debug().Uint("llm_id", llmID).Msg("No auth plugins found (empty slice), skipping processing")
+			log.Debug().Uint("llm_id", llmID).Msg("No auth plugins found (empty slice), skipping auth plugin processing")
 			return false
 		}
 	}
@@ -409,7 +409,28 @@ func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Conte
 				c.Abort()
 				return true
 			}
+			
+			// Auth plugin accepted authentication - set auth context for AI Gateway
 			log.Debug().Str("credential", extractToken(c)).Msg("Auth plugin accepted authentication")
+			
+			// Extract app information from plugin response
+			var appID uint = 1 // Default app ID
+			if appIDStr, ok := authResult["app_id"].(string); ok {
+				if id, err := strconv.ParseUint(appIDStr, 10, 32); err == nil {
+					appID = uint(id)
+				}
+			}
+			
+			// Set auth context that the AI Gateway expects
+			authResult := &auth.AuthResult{
+				Valid:  true,
+				AppID:  appID,
+				Scopes: []string{"llm:access"}, // Default scope for plugin auth
+			}
+			c.Set(string(auth.AuthResultKey), authResult)
+			c.Set(string(auth.AppIDKey), appID)
+			c.Set(string(auth.ScopesKey), []string{"llm:access"})
+			
 		} else {
 			log.Error().Interface("auth_result", authResult).Msg("Auth plugin returned invalid result format")
 			c.JSON(http.StatusInternalServerError, gin.H{
