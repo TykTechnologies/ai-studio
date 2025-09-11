@@ -8,7 +8,7 @@ option go_package = "github.com/TykTechnologies/midsommar/microgateway/proto";
 
 // Common data structures for hub-and-spoke configuration synchronization
 
-// LLMConfig represents an LLM configuration
+// LLMConfig represents an LLM configuration with embedded relationships
 message LLMConfig {
   uint32 id = 1;
   string name = 2;
@@ -27,12 +27,17 @@ message LLMConfig {
   string allowed_models = 15; // JSON string
   string auth_mechanism = 16;
   string auth_config = 17; // JSON string
-  string namespace = 18; // NEW: Namespace for filtering
+  string namespace = 18; // Namespace for filtering
   google.protobuf.Timestamp created_at = 19;
   google.protobuf.Timestamp updated_at = 20;
+  
+  // Embedded relationship data (from join tables)
+  repeated uint32 app_ids = 21;     // From app_llms join table
+  repeated uint32 filter_ids = 22;  // From llm_filters join table  
+  repeated uint32 plugin_ids = 23;  // From llm_plugins join table
 }
 
-// AppConfig represents an application configuration
+// AppConfig represents an application configuration with embedded relationships
 message AppConfig {
   uint32 id = 1;
   string name = 2;
@@ -45,10 +50,14 @@ message AppConfig {
   int32 rate_limit_rpm = 9;
   string allowed_ips = 10; // JSON string
   string metadata = 11; // JSON string
-  string namespace = 12; // NEW: Namespace for filtering
-  repeated uint32 llm_ids = 13; // Associated LLM IDs
+  string namespace = 12; // Namespace for filtering
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
+  
+  // Embedded relationship data (from join tables) - THE CRITICAL MISSING PIECE
+  repeated uint32 llm_ids = 16;        // From app_llms join table - FOR LLM ACCESS VALIDATION
+  repeated uint32 credential_ids = 17; // From credentials table
+  repeated uint32 token_ids = 18;      // From api_tokens table  
 }
 
 // TokenConfig represents an API token configuration
@@ -114,9 +123,10 @@ message PluginConfig {
 
 // ConfigurationSnapshot represents a complete configuration state
 message ConfigurationSnapshot {
-  repeated LLMConfig llms = 1;
-  repeated AppConfig apps = 2;
-  repeated TokenConfig tokens = 3;
+  string version = 1; // NEW: Configuration version for tracking
+  repeated LLMConfig llms = 2;
+  repeated AppConfig apps = 3;
+  // tokens removed - will be validated on-demand via gRPC
   repeated ModelPriceConfig model_prices = 4;
   repeated FilterConfig filters = 5;
   repeated PluginConfig plugins = 6;

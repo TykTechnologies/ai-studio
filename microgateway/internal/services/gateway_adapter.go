@@ -146,7 +146,7 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 	if len(secret) > 8 {
 		secretPrefix = secret[:8]
 	}
-	log.Debug().Str("secret_prefix", secretPrefix).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
+	log.Info().Str("secret_prefix", secretPrefix).Str("gateway_type", fmt.Sprintf("%T", a.gatewayService)).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
 	
 	// Check if we have LLM context and that LLM has auth plugins - route directly if so
 	llmID, llmSlug, hasContext := GetCurrentLLMContext()
@@ -166,6 +166,7 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 
 // tryRegularTokenValidation performs standard microgateway token validation
 func (a *GatewayServiceAdapter) tryRegularTokenValidation(secret string) (*models.Credential, error) {
+	// Handle DatabaseGatewayService (standalone/control mode)
 	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
 		log.Debug().Msg("Using DatabaseGatewayService for regular token validation")
 		
@@ -183,6 +184,48 @@ func (a *GatewayServiceAdapter) tryRegularTokenValidation(secret string) (*model
 		}
 		
 		log.Debug().Err(err).Msg("Regular token validation failed")
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	// Handle HybridGatewayService (edge mode with on-demand token validation)
+	if hybridService, ok := a.gatewayService.(*HybridGatewayService); ok {
+		log.Info().Msg("Using HybridGatewayService for on-demand token validation")
+		
+		tokenResult, err := hybridService.ValidateAPIToken(secret)
+		if err == nil {
+			// On-demand token validation succeeded
+			log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("On-demand token validated successfully")
+
+			return &models.Credential{
+				ID:     tokenResult.TokenID,
+				KeyID:  tokenResult.TokenName,
+				Secret: secret,
+				Active: true,
+			}, nil
+		}
+		
+		log.Info().Err(err).Msg("HybridGatewayService token validation failed")
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	// Handle HubSpokeGatewayService (legacy - should not be used anymore)
+	if hubSpokeService, ok := a.gatewayService.(*HubSpokeGatewayService); ok {
+		log.Info().Msg("Using HubSpokeGatewayService for regular token validation")
+		
+		tokenResult, err := hubSpokeService.ValidateAPIToken(secret)
+		if err == nil {
+			// Regular token validation succeeded
+			log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("Regular token validated successfully")
+
+			return &models.Credential{
+				ID:     tokenResult.TokenID,
+				KeyID:  tokenResult.TokenName,
+				Secret: secret,
+				Active: true,
+			}, nil
+		}
+		
+		log.Info().Err(err).Msg("HubSpokeGatewayService token validation failed")
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
@@ -211,16 +254,18 @@ func (a *GatewayServiceAdapter) hasAuthPluginsForLLM(llmSlug string) (bool, erro
 	}
 	
 	// Check if there are any active auth plugins for this specific LLM
-	// Use GORM model query to properly handle soft deletes
-	var count int64
-	err = a.pluginService.(*PluginService).db.Model(&database.Plugin{}).
-		Joins("JOIN llm_plugins lp ON lp.plugin_id = plugins.id").
-		Where("lp.llm_id = ? AND lp.is_active = ? AND plugins.hook_type = ? AND plugins.is_active = ?", 
-			llmID, true, "auth", true).
-		Count(&count).Error
-
+	// Use the plugin service interface to work with both database and provider-aware implementations
+	plugins, err := a.pluginService.GetPluginsForLLM(llmID)
 	if err != nil {
-		return false, fmt.Errorf("failed to check for auth plugins for LLM: %w", err)
+		return false, fmt.Errorf("failed to get plugins for LLM: %w", err)
+	}
+
+	// Count active auth plugins
+	count := 0
+	for _, plugin := range plugins {
+		if plugin.HookType == "auth" && plugin.IsActive {
+			count++
+		}
 	}
 
 	return count > 0, nil
@@ -228,16 +273,13 @@ func (a *GatewayServiceAdapter) hasAuthPluginsForLLM(llmSlug string) (bool, erro
 
 // hasAnyAuthPlugins checks if there are any active auth plugins in the system (fallback method)
 func (a *GatewayServiceAdapter) hasAnyAuthPlugins() (bool, error) {
-	var count int64
-	err := a.pluginService.(*PluginService).db.Model(&database.Plugin{}).
-		Where("hook_type = ? AND is_active = ?", "auth", true).
-		Count(&count).Error
-
+	// Use the plugin service interface to work with both database and provider-aware implementations
+	plugins, _, err := a.pluginService.ListPlugins(1, 1, "auth", true)
 	if err != nil {
-		return false, fmt.Errorf("failed to check for auth plugins: %w", err)
+		return false, fmt.Errorf("failed to list auth plugins: %w", err)
 	}
 
-	return count > 0, nil
+	return len(plugins) > 0, nil
 }
 
 // tryAuthPluginsWithContext attempts to authenticate with available auth plugins
@@ -422,7 +464,7 @@ func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, 
 	// Since we're using token-only auth, the credID is actually a token ID
 	// We need to get the app ID from the token record, not from credentials table
 	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
-		log.Debug().Msg("Looking up app by token ID (credential ID)")
+		log.Debug().Msg("Looking up app by token ID (credential ID) using DatabaseGatewayService")
 		
 		app, err := gatewayService.GetAppByTokenID(credID)
 		if err != nil {
@@ -432,6 +474,36 @@ func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, 
 
 		modelApp := a.convertDatabaseAppToModel(app)
 		log.Info().Uint("app_id", modelApp.ID).Str("app_name", modelApp.Name).Msg("Successfully retrieved app for token")
+		return &modelApp, nil
+	}
+
+	// Handle HybridGatewayService (edge mode)
+	if hybridService, ok := a.gatewayService.(*HybridGatewayService); ok {
+		log.Info().Uint("credential_id", credID).Msg("Looking up app by token ID (credential ID) using HybridGatewayService")
+		
+		app, err := hybridService.GetAppByTokenID(credID)
+		if err != nil {
+			log.Error().Err(err).Uint("token_id", credID).Msg("Failed to get app by token ID via HybridGatewayService")
+			return nil, fmt.Errorf("app not found for token ID %d: %w", credID, err)
+		}
+
+		modelApp := a.convertDatabaseAppToModel(app)
+		log.Info().Uint("app_id", modelApp.ID).Str("app_name", modelApp.Name).Int("llm_count", len(modelApp.LLMs)).Msg("Successfully retrieved app with LLM relationships via HybridGatewayService")
+		return &modelApp, nil
+	}
+
+	// Handle HubSpokeGatewayService (legacy - should not be used anymore)
+	if hubSpokeService, ok := a.gatewayService.(*HubSpokeGatewayService); ok {
+		log.Info().Uint("credential_id", credID).Msg("Looking up app by token ID (credential ID) using HubSpokeGatewayService")
+		
+		app, err := hubSpokeService.GetAppByTokenID(credID)
+		if err != nil {
+			log.Error().Err(err).Uint("token_id", credID).Msg("Failed to get app by token ID via HubSpokeGatewayService")
+			return nil, fmt.Errorf("app not found for token ID %d: %w", credID, err)
+		}
+
+		modelApp := a.convertDatabaseAppToModel(app)
+		log.Info().Uint("app_id", modelApp.ID).Str("app_name", modelApp.Name).Msg("Successfully retrieved app for token via HubSpokeGatewayService")
 		return &modelApp, nil
 	}
 

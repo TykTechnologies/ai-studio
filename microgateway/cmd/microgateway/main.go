@@ -143,18 +143,46 @@ func main() {
 				// Set up callback for configuration updates
 				edgeClient.SetOnConfigChange(func(config *pb.ConfigurationSnapshot) {
 					log.Info().
+						Str("version", config.Version).
 						Int("llm_count", len(config.Llms)).
 						Int("app_count", len(config.Apps)).
-						Msg("Received configuration update from control")
+						Msg("Received configuration update from control, syncing to local SQLite")
+					
+					// Create sync service and sync to local SQLite with join tables
+					syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
+					if err := syncService.SyncConfiguration(config); err != nil {
+						log.Error().Err(err).Msg("Failed to sync configuration to local SQLite")
+					} else {
+						log.Info().Msg("Configuration synced to local SQLite successfully")
+					}
+					
+					// Also update gRPC provider cache for compatibility
 					grpcProvider.SetConfigurationCache(config)
 				})
 				
 				grpcProvider.SetEdgeClient(edgeClient)
 				
-				// If edge client already has configuration, set it
+				// If edge client already has configuration, sync it to SQLite
 				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {
-					log.Info().Msg("Setting initial configuration from edge client")
+					log.Info().
+						Str("version", initialConfig.Version).
+						Msg("Setting initial configuration from edge client, syncing to local SQLite")
+					
+					// Sync initial configuration to SQLite
+					syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
+					if err := syncService.SyncConfiguration(initialConfig); err != nil {
+						log.Error().Err(err).Msg("Failed to sync initial configuration to local SQLite")
+					} else {
+						log.Info().Msg("Initial configuration synced to local SQLite successfully")
+					}
+					
 					grpcProvider.SetConfigurationCache(initialConfig)
+				}
+				
+				// Also connect edge client to hybrid gateway service for on-demand token validation
+				if hybridGateway, ok := hubSpokeContainer.GatewayService.(*services.HybridGatewayService); ok {
+					hybridGateway.SetEdgeClient(edgeClient)
+					log.Info().Msg("Edge client connected to hybrid gateway service for token validation")
 				}
 				
 				log.Info().Msg("Edge client connected to gRPC provider")

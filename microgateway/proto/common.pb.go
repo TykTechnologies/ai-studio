@@ -178,7 +178,7 @@ func (HealthStatus_Status) EnumDescriptor() ([]byte, []int) {
 	return file_proto_common_proto_rawDescGZIP(), []int{8, 0}
 }
 
-// LLMConfig represents an LLM configuration
+// LLMConfig represents an LLM configuration with embedded relationships
 type LLMConfig struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Id              uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -198,11 +198,15 @@ type LLMConfig struct {
 	AllowedModels   string                 `protobuf:"bytes,15,opt,name=allowed_models,json=allowedModels,proto3" json:"allowed_models,omitempty"` // JSON string
 	AuthMechanism   string                 `protobuf:"bytes,16,opt,name=auth_mechanism,json=authMechanism,proto3" json:"auth_mechanism,omitempty"`
 	AuthConfig      string                 `protobuf:"bytes,17,opt,name=auth_config,json=authConfig,proto3" json:"auth_config,omitempty"` // JSON string
-	Namespace       string                 `protobuf:"bytes,18,opt,name=namespace,proto3" json:"namespace,omitempty"`                     // NEW: Namespace for filtering
+	Namespace       string                 `protobuf:"bytes,18,opt,name=namespace,proto3" json:"namespace,omitempty"`                     // Namespace for filtering
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Embedded relationship data (from join tables)
+	AppIds        []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`          // From app_llms join table
+	FilterIds     []uint32 `protobuf:"varint,22,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"` // From llm_filters join table
+	PluginIds     []uint32 `protobuf:"varint,23,rep,packed,name=plugin_ids,json=pluginIds,proto3" json:"plugin_ids,omitempty"` // From llm_plugins join table
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
@@ -375,7 +379,28 @@ func (x *LLMConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// AppConfig represents an application configuration
+func (x *LLMConfig) GetAppIds() []uint32 {
+	if x != nil {
+		return x.AppIds
+	}
+	return nil
+}
+
+func (x *LLMConfig) GetFilterIds() []uint32 {
+	if x != nil {
+		return x.FilterIds
+	}
+	return nil
+}
+
+func (x *LLMConfig) GetPluginIds() []uint32 {
+	if x != nil {
+		return x.PluginIds
+	}
+	return nil
+}
+
+// AppConfig represents an application configuration with embedded relationships
 type AppConfig struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Id              uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -389,12 +414,15 @@ type AppConfig struct {
 	RateLimitRpm    int32                  `protobuf:"varint,9,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3" json:"rate_limit_rpm,omitempty"`
 	AllowedIps      string                 `protobuf:"bytes,10,opt,name=allowed_ips,json=allowedIps,proto3" json:"allowed_ips,omitempty"` // JSON string
 	Metadata        string                 `protobuf:"bytes,11,opt,name=metadata,proto3" json:"metadata,omitempty"`                       // JSON string
-	Namespace       string                 `protobuf:"bytes,12,opt,name=namespace,proto3" json:"namespace,omitempty"`                     // NEW: Namespace for filtering
-	LlmIds          []uint32               `protobuf:"varint,13,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`     // Associated LLM IDs
+	Namespace       string                 `protobuf:"bytes,12,opt,name=namespace,proto3" json:"namespace,omitempty"`                     // Namespace for filtering
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Embedded relationship data (from join tables) - THE CRITICAL MISSING PIECE
+	LlmIds        []uint32 `protobuf:"varint,16,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`                      // From app_llms join table - FOR LLM ACCESS VALIDATION
+	CredentialIds []uint32 `protobuf:"varint,17,rep,packed,name=credential_ids,json=credentialIds,proto3" json:"credential_ids,omitempty"` // From credentials table
+	TokenIds      []uint32 `protobuf:"varint,18,rep,packed,name=token_ids,json=tokenIds,proto3" json:"token_ids,omitempty"`                // From api_tokens table
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AppConfig) Reset() {
@@ -511,13 +539,6 @@ func (x *AppConfig) GetNamespace() string {
 	return ""
 }
 
-func (x *AppConfig) GetLlmIds() []uint32 {
-	if x != nil {
-		return x.LlmIds
-	}
-	return nil
-}
-
 func (x *AppConfig) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
@@ -528,6 +549,27 @@ func (x *AppConfig) GetCreatedAt() *timestamppb.Timestamp {
 func (x *AppConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *AppConfig) GetLlmIds() []uint32 {
+	if x != nil {
+		return x.LlmIds
+	}
+	return nil
+}
+
+func (x *AppConfig) GetCredentialIds() []uint32 {
+	if x != nil {
+		return x.CredentialIds
+	}
+	return nil
+}
+
+func (x *AppConfig) GetTokenIds() []uint32 {
+	if x != nil {
+		return x.TokenIds
 	}
 	return nil
 }
@@ -1042,10 +1084,11 @@ func (x *PluginConfig) GetUpdatedAt() *timestamppb.Timestamp {
 
 // ConfigurationSnapshot represents a complete configuration state
 type ConfigurationSnapshot struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Llms          []*LLMConfig           `protobuf:"bytes,1,rep,name=llms,proto3" json:"llms,omitempty"`
-	Apps          []*AppConfig           `protobuf:"bytes,2,rep,name=apps,proto3" json:"apps,omitempty"`
-	Tokens        []*TokenConfig         `protobuf:"bytes,3,rep,name=tokens,proto3" json:"tokens,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Version string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"` // NEW: Configuration version for tracking
+	Llms    []*LLMConfig           `protobuf:"bytes,2,rep,name=llms,proto3" json:"llms,omitempty"`
+	Apps    []*AppConfig           `protobuf:"bytes,3,rep,name=apps,proto3" json:"apps,omitempty"`
+	// tokens removed - will be validated on-demand via gRPC
 	ModelPrices   []*ModelPriceConfig    `protobuf:"bytes,4,rep,name=model_prices,json=modelPrices,proto3" json:"model_prices,omitempty"`
 	Filters       []*FilterConfig        `protobuf:"bytes,5,rep,name=filters,proto3" json:"filters,omitempty"`
 	Plugins       []*PluginConfig        `protobuf:"bytes,6,rep,name=plugins,proto3" json:"plugins,omitempty"`
@@ -1085,6 +1128,13 @@ func (*ConfigurationSnapshot) Descriptor() ([]byte, []int) {
 	return file_proto_common_proto_rawDescGZIP(), []int{6}
 }
 
+func (x *ConfigurationSnapshot) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
 func (x *ConfigurationSnapshot) GetLlms() []*LLMConfig {
 	if x != nil {
 		return x.Llms
@@ -1095,13 +1145,6 @@ func (x *ConfigurationSnapshot) GetLlms() []*LLMConfig {
 func (x *ConfigurationSnapshot) GetApps() []*AppConfig {
 	if x != nil {
 		return x.Apps
-	}
-	return nil
-}
-
-func (x *ConfigurationSnapshot) GetTokens() []*TokenConfig {
-	if x != nil {
-		return x.Tokens
 	}
 	return nil
 }
@@ -1299,7 +1342,7 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xba\x05\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x06\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -1326,7 +1369,12 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9c\x04\n" +
+	"updated_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x17\n" +
+	"\aapp_ids\x18\x15 \x03(\rR\x06appIds\x12\x1d\n" +
+	"\n" +
+	"filter_ids\x18\x16 \x03(\rR\tfilterIds\x12\x1d\n" +
+	"\n" +
+	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\"\xe0\x04\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1342,12 +1390,14 @@ const file_proto_common_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"allowedIps\x12\x1a\n" +
 	"\bmetadata\x18\v \x01(\tR\bmetadata\x12\x1c\n" +
-	"\tnamespace\x18\f \x01(\tR\tnamespace\x12\x17\n" +
-	"\allm_ids\x18\r \x03(\rR\x06llmIds\x129\n" +
+	"\tnamespace\x18\f \x01(\tR\tnamespace\x129\n" +
 	"\n" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe8\x02\n" +
+	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x17\n" +
+	"\allm_ids\x18\x10 \x03(\rR\x06llmIds\x12%\n" +
+	"\x0ecredential_ids\x18\x11 \x03(\rR\rcredentialIds\x12\x1b\n" +
+	"\ttoken_ids\x18\x12 \x03(\rR\btokenIds\"\xe8\x02\n" +
 	"\vTokenConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x12\n" +
@@ -1412,11 +1462,11 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xbb\x03\n" +
-	"\x15ConfigurationSnapshot\x12+\n" +
-	"\x04llms\x18\x01 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
-	"\x04apps\x18\x02 \x03(\v2\x17.microgateway.AppConfigR\x04apps\x121\n" +
-	"\x06tokens\x18\x03 \x03(\v2\x19.microgateway.TokenConfigR\x06tokens\x12A\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa2\x03\n" +
+	"\x15ConfigurationSnapshot\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
+	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
+	"\x04apps\x18\x03 \x03(\v2\x17.microgateway.AppConfigR\x04apps\x12A\n" +
 	"\fmodel_prices\x18\x04 \x03(\v2\x1e.microgateway.ModelPriceConfigR\vmodelPrices\x124\n" +
 	"\afilters\x18\x05 \x03(\v2\x1a.microgateway.FilterConfigR\afilters\x124\n" +
 	"\aplugins\x18\x06 \x03(\v2\x1a.microgateway.PluginConfigR\aplugins\x12%\n" +
@@ -1508,22 +1558,21 @@ var file_proto_common_proto_depIdxs = []int32{
 	13, // 11: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
 	3,  // 12: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
 	4,  // 13: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
-	5,  // 14: microgateway.ConfigurationSnapshot.tokens:type_name -> microgateway.TokenConfig
-	6,  // 15: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
-	7,  // 16: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
-	8,  // 17: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
-	13, // 18: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	0,  // 19: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
-	1,  // 20: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
-	13, // 21: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 22: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
-	13, // 23: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
-	12, // 24: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	6,  // 14: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
+	7,  // 15: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
+	8,  // 16: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
+	13, // 17: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	0,  // 18: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
+	1,  // 19: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
+	13, // 20: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
+	2,  // 21: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
+	13, // 22: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
+	12, // 23: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_proto_init() }

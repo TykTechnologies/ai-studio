@@ -90,6 +90,7 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	// Store initial configuration if provided
 	if resp.InitialConfig != nil {
 		log.Info().
+			Str("version", resp.InitialConfig.Version).
 			Int32("llm_count", int32(len(resp.InitialConfig.Llms))).
 			Int32("app_count", int32(len(resp.InitialConfig.Apps))).
 			Msg("Received initial configuration from control")
@@ -122,6 +123,44 @@ func (c *SimpleEdgeClient) IsConnected() bool {
 // GetCurrentConfiguration returns the cached configuration
 func (c *SimpleEdgeClient) GetCurrentConfiguration() *pb.ConfigurationSnapshot {
 	return c.configCache
+}
+
+// ValidateTokenOnDemand validates a token by calling the control instance
+func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidationResponse, error) {
+	if c.conn == nil || c.client == nil {
+		return nil, fmt.Errorf("not connected to control instance")
+	}
+
+	tokenPrefix := token
+	if len(token) > 8 {
+		tokenPrefix = token[:8]
+	}
+
+	log.Info().Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: making on-demand token validation request to control")
+
+	ctx := context.Background()
+
+	// Create token validation request
+	req := &pb.TokenValidationRequest{
+		Token:         token,
+		EdgeId:        c.config.HubSpoke.EdgeID,
+		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
+	}
+
+	// Call control instance
+	resp, err := c.client.ValidateToken(ctx, req)
+	if err != nil {
+		log.Info().Err(err).Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: token validation gRPC call failed")
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	log.Info().
+		Str("token_prefix", tokenPrefix).
+		Bool("valid", resp.Valid).
+		Uint32("app_id", resp.AppId).
+		Msg("SimpleEdgeClient: received token validation response from control")
+
+	return resp, nil
 }
 
 // Stop closes the connection to control server

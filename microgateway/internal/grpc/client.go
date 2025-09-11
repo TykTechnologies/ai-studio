@@ -426,10 +426,10 @@ func (c *EdgeClient) updateConfigCache(snapshot *pb.ConfigurationSnapshot) {
 	c.cacheMutex.Unlock()
 	
 	log.Info().
+		Str("version", snapshot.Version).
 		Int32("llm_count", int32(len(snapshot.Llms))).
 		Int32("app_count", int32(len(snapshot.Apps))).
-		Int32("token_count", int32(len(snapshot.Tokens))).
-		Msg("Updated configuration cache")
+		Msg("Updated configuration cache (tokens validated on-demand)")
 	
 	// Notify listeners
 	if c.onConfigChange != nil {
@@ -473,6 +473,41 @@ func (c *EdgeClient) RequestFullSync() error {
 // IsConnected returns true if connected to control instance
 func (c *EdgeClient) IsConnected() bool {
 	return c.connected
+}
+
+// ValidateTokenOnDemand validates a token by calling the control instance
+func (c *EdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidationResponse, error) {
+	if !c.connected || c.client == nil {
+		return nil, fmt.Errorf("not connected to control instance")
+	}
+
+	ctx := context.Background()
+	
+	// Add authentication if configured
+	if c.config.HubSpoke.ClientToken != "" {
+		md := metadata.New(map[string]string{
+			"authorization": "Bearer " + c.config.HubSpoke.ClientToken,
+		})
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
+	// Create token validation request
+	req := &pb.TokenValidationRequest{
+		Token:         token,
+		EdgeId:        c.edgeID,
+		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
+	}
+
+	// Call control instance with timeout
+	ctx, cancel := context.WithTimeout(ctx, c.config.HubSpoke.SyncTimeout)
+	defer cancel()
+
+	resp, err := c.client.ValidateToken(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	return resp, nil
 }
 
 // getHostname returns the system hostname

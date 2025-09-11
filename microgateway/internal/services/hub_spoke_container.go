@@ -73,16 +73,8 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	// Initialize crypto service
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
 
-	// Initialize auth provider
-	// For edge instances, we might want to use a provider-aware auth provider
-	// For now, keep the existing database-backed auth
-	var authProvider auth.AuthProvider
-	if configProvider.GetProviderType() == providers.ProviderTypeDatabase {
-		authProvider = auth.NewTokenAuthProvider(db)
-	} else {
-		// For gRPC providers, create a provider-aware auth provider
-		authProvider = NewProviderAwareAuthProvider(configProvider)
-	}
+	// Always use database-backed auth since edge instances now sync to SQLite
+	authProvider := auth.NewTokenAuthProvider(db)
 
 	// Initialize management services
 	// For edge instances, these should be read-only or use the configuration provider
@@ -90,17 +82,14 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	var filterService FilterServiceInterface  
 	var pluginService PluginServiceInterface
 
-	if configProvider.GetProviderType() == providers.ProviderTypeDatabase {
-		// Full management services for control/standalone
-		management = NewManagementService(db, repo, crypto)
-		filterService = NewFilterService(db, repo)
-		pluginService = NewPluginService(db, repo)
-	} else {
-		// Read-only services for edge instances
-		management = NewProviderAwareManagementService(configProvider, crypto)
-		filterService = NewProviderAwareFilterService(configProvider)
-		pluginService = NewProviderAwarePluginService(configProvider)
-	}
+	// Always use full database services since edge instances now sync to SQLite
+	management = NewManagementService(db, repo, crypto)
+	filterService = NewFilterService(db, repo)
+	pluginService = NewPluginService(db, repo)
+	
+	log.Info().
+		Str("provider_type", string(configProvider.GetProviderType())).
+		Msg("Using full database services (edge instances now use synced SQLite)")
 
 	tokenService := NewTokenService(authProvider)
 
@@ -127,20 +116,20 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	}
 
 	// Initialize core services with provider support
-	gatewayService := NewHubSpokeGatewayService(configProvider)
-	
-	var budgetService BudgetServiceInterface
-	var analyticsService AnalyticsServiceInterface
+	var gatewayService GatewayServiceInterface
 	
 	if configProvider.GetProviderType() == providers.ProviderTypeDatabase {
-		// Full services for control/standalone
-		budgetService = NewDatabaseBudgetService(db, repo, pluginManager)
-		analyticsService = NewDatabaseAnalyticsService(db, repo, cfg.Analytics)
+		// Control/standalone: use database provider directly
+		gatewayService = NewDatabaseGatewayService(db, repo)
 	} else {
-		// Simplified services for edge instances
-		budgetService = NewProviderAwareBudgetService(configProvider)
-		analyticsService = NewProviderAwareAnalyticsService(configProvider, cfg.Analytics)
+		// Edge: use HybridGatewayService - DatabaseGatewayService + on-demand token validation
+		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace)
+		log.Info().Msg("Edge instance using HybridGatewayService with synced SQLite + on-demand token validation")
 	}
+	
+	// Always use full database services since edge instances now sync to SQLite
+	budgetService := NewDatabaseBudgetService(db, repo, pluginManager)
+	analyticsService := NewDatabaseAnalyticsService(db, repo, cfg.Analytics)
 
 	return &ServiceContainer{
 		DB:         db,

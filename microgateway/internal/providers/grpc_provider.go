@@ -196,42 +196,16 @@ func (p *GRPCProvider) ListApps(namespace string, active bool) ([]database.App, 
 	return apps, nil
 }
 
-// GetToken retrieves a token from the gRPC cache
+// GetToken retrieves a token - NOT SUPPORTED in flattened config approach
+// Tokens are now validated on-demand via gRPC calls to control instance
 func (p *GRPCProvider) GetToken(token string) (*database.APIToken, error) {
-	if err := p.ensureCacheValid(); err != nil {
-		return nil, err
-	}
-	
-	p.cacheMutex.RLock()
-	defer p.cacheMutex.RUnlock()
-	
-	for _, pbToken := range p.configCache.Tokens {
-		if pbToken.Token == token && p.namespaceFilter.MatchesNamespace(pbToken.Namespace, p.namespace) {
-			return p.convertPBTokenToDatabase(pbToken), nil
-		}
-	}
-	
-	return nil, gorm.ErrRecordNotFound
+	return nil, fmt.Errorf("token lookup not supported - tokens are validated on-demand via control instance")
 }
 
-// ValidateToken validates a token from the gRPC cache
+// ValidateToken validates a token - NOT SUPPORTED in flattened config approach  
+// Tokens are now validated on-demand via gRPC calls to control instance
 func (p *GRPCProvider) ValidateToken(token string) (*database.APIToken, error) {
-	apiToken, err := p.GetToken(token)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Check if token is active
-	if !apiToken.IsActive {
-		return nil, fmt.Errorf("token is inactive")
-	}
-	
-	// Check expiration
-	if apiToken.ExpiresAt != nil && apiToken.ExpiresAt.Before(time.Now()) {
-		return nil, fmt.Errorf("token is expired")
-	}
-	
-	return apiToken, nil
+	return nil, fmt.Errorf("token validation not supported - tokens are validated on-demand via control instance")
 }
 
 // GetModelPrice retrieves model pricing from the gRPC cache
@@ -488,16 +462,37 @@ func (p *GRPCProvider) convertPBTokenToDatabase(pbToken *pb.TokenConfig) *databa
 		updatedAt = pbToken.UpdatedAt.AsTime()
 	}
 	
+	// Parse timestamps from string fields
+	var expiresAt, lastUsedAt *time.Time
+	if pbToken.ExpiresAt != "" {
+		if t, err := time.Parse(time.RFC3339, pbToken.ExpiresAt); err == nil {
+			expiresAt = &t
+		}
+	}
+	if pbToken.LastUsedAt != "" {
+		if t, err := time.Parse(time.RFC3339, pbToken.LastUsedAt); err == nil {
+			lastUsedAt = &t
+		}
+	}
+	
+	// Convert scopes string to JSON bytes
+	var scopesJSON []byte
+	if pbToken.Scopes != "" {
+		scopesJSON = []byte(pbToken.Scopes)
+	}
+	
 	return &database.APIToken{
-		ID:        uint(pbToken.Id),
-		Token:     pbToken.Token,
-		Name:      pbToken.Name,
-		AppID:     uint(pbToken.AppId),
-		IsActive:  pbToken.IsActive,
-		Namespace: pbToken.Namespace,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
-		// Note: Scopes JSON field would need proper conversion
+		ID:         uint(pbToken.Id),
+		Token:      pbToken.Token,
+		Name:       pbToken.Name,
+		AppID:      uint(pbToken.AppId),
+		Scopes:     scopesJSON,
+		IsActive:   pbToken.IsActive,
+		ExpiresAt:  expiresAt,
+		LastUsedAt: lastUsedAt,
+		Namespace:  pbToken.Namespace,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
 	}
 }
 

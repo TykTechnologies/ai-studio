@@ -25,6 +25,7 @@ const (
 	ConfigurationSyncService_SubscribeToChanges_FullMethodName   = "/microgateway.ConfigurationSyncService/SubscribeToChanges"
 	ConfigurationSyncService_SendHeartbeat_FullMethodName        = "/microgateway.ConfigurationSyncService/SendHeartbeat"
 	ConfigurationSyncService_UnregisterEdge_FullMethodName       = "/microgateway.ConfigurationSyncService/UnregisterEdge"
+	ConfigurationSyncService_ValidateToken_FullMethodName        = "/microgateway.ConfigurationSyncService/ValidateToken"
 )
 
 // ConfigurationSyncServiceClient is the client API for ConfigurationSyncService service.
@@ -43,6 +44,8 @@ type ConfigurationSyncServiceClient interface {
 	SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	// UnregisterEdge unregisters an edge instance
 	UnregisterEdge(ctx context.Context, in *EdgeUnregistrationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// ValidateToken validates an API token on-demand (NEW)
+	ValidateToken(ctx context.Context, in *TokenValidationRequest, opts ...grpc.CallOption) (*TokenValidationResponse, error)
 }
 
 type configurationSyncServiceClient struct {
@@ -106,6 +109,16 @@ func (c *configurationSyncServiceClient) UnregisterEdge(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *configurationSyncServiceClient) ValidateToken(ctx context.Context, in *TokenValidationRequest, opts ...grpc.CallOption) (*TokenValidationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TokenValidationResponse)
+	err := c.cc.Invoke(ctx, ConfigurationSyncService_ValidateToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConfigurationSyncServiceServer is the server API for ConfigurationSyncService service.
 // All implementations must embed UnimplementedConfigurationSyncServiceServer
 // for forward compatibility.
@@ -122,6 +135,8 @@ type ConfigurationSyncServiceServer interface {
 	SendHeartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	// UnregisterEdge unregisters an edge instance
 	UnregisterEdge(context.Context, *EdgeUnregistrationRequest) (*emptypb.Empty, error)
+	// ValidateToken validates an API token on-demand (NEW)
+	ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error)
 	mustEmbedUnimplementedConfigurationSyncServiceServer()
 }
 
@@ -146,6 +161,9 @@ func (UnimplementedConfigurationSyncServiceServer) SendHeartbeat(context.Context
 }
 func (UnimplementedConfigurationSyncServiceServer) UnregisterEdge(context.Context, *EdgeUnregistrationRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterEdge not implemented")
+}
+func (UnimplementedConfigurationSyncServiceServer) ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateToken not implemented")
 }
 func (UnimplementedConfigurationSyncServiceServer) mustEmbedUnimplementedConfigurationSyncServiceServer() {
 }
@@ -248,6 +266,24 @@ func _ConfigurationSyncService_UnregisterEdge_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigurationSyncService_ValidateToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TokenValidationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigurationSyncServiceServer).ValidateToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigurationSyncService_ValidateToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigurationSyncServiceServer).ValidateToken(ctx, req.(*TokenValidationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConfigurationSyncService_ServiceDesc is the grpc.ServiceDesc for ConfigurationSyncService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -270,6 +306,10 @@ var ConfigurationSyncService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnregisterEdge",
 			Handler:    _ConfigurationSyncService_UnregisterEdge_Handler,
+		},
+		{
+			MethodName: "ValidateToken",
+			Handler:    _ConfigurationSyncService_ValidateToken_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

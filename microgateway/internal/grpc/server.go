@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -232,8 +233,11 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		dbEdge.Metadata = []byte("{}")
 	}
 	
-	if err := s.db.Create(dbEdge).Error; err != nil {
-		log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to store edge instance")
+	// Use upsert to handle edge instances that reconnect with the same ID
+	// This updates existing records or creates new ones
+	result := s.db.Where("edge_id = ?", req.EdgeId).Assign(dbEdge).FirstOrCreate(dbEdge)
+	if result.Error != nil {
+		log.Error().Err(result.Error).Str("edge_id", req.EdgeId).Msg("Failed to store edge instance")
 		return nil, status.Error(codes.Internal, "failed to register edge instance")
 	}
 	
@@ -405,9 +409,104 @@ func (s *ControlServer) UnregisterEdge(ctx context.Context, req *pb.EdgeUnregist
 	return &emptypb.Empty{}, nil
 }
 
+// ValidateToken validates an API token on-demand (NEW)
+func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidationRequest) (*pb.TokenValidationResponse, error) {
+	tokenPrefix := req.Token
+	if len(req.Token) > 8 {
+		tokenPrefix = req.Token[:8]
+	}
+	
+	log.Info().
+		Str("token_prefix", tokenPrefix).
+		Str("edge_id", req.EdgeId).
+		Str("edge_namespace", req.EdgeNamespace).
+		Msg("Control server: on-demand token validation request")
+
+	// Query token with namespace filtering
+	var apiToken database.APIToken
+	tokenQuery := s.db.Where("token = ? AND is_active = ?", req.Token, true).Preload("App")
+	
+	// Apply namespace filtering - token must be global or match edge namespace
+	if req.EdgeNamespace == "" {
+		// Global edge - only sees global tokens
+		tokenQuery = tokenQuery.Where("namespace = ''")
+	} else {
+		// Specific namespace edge - sees global + matching tokens
+		tokenQuery = tokenQuery.Where("(namespace = '' OR namespace = ?)", req.EdgeNamespace)
+	}
+	
+	err := tokenQuery.First(&apiToken).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.Info().
+				Str("token_prefix", tokenPrefix).
+				Str("edge_namespace", req.EdgeNamespace).
+				Msg("Control server: token not found or not accessible from edge namespace")
+			
+			return &pb.TokenValidationResponse{
+				Valid:        false,
+				ErrorMessage: "Token not found or not accessible from this namespace",
+			}, nil
+		}
+		
+		log.Error().Err(err).Str("token_prefix", tokenPrefix).Msg("Control server: token validation database error")
+		return nil, status.Error(codes.Internal, "token validation failed")
+	}
+
+	// Check expiration
+	if apiToken.ExpiresAt != nil && apiToken.ExpiresAt.Before(time.Now()) {
+		log.Info().Str("token_prefix", tokenPrefix).Msg("Control server: token is expired")
+		return &pb.TokenValidationResponse{
+			Valid:        false,
+			ErrorMessage: "Token is expired",
+		}, nil
+	}
+
+	// Check if app is active
+	if apiToken.App != nil && !apiToken.App.IsActive {
+		log.Info().Str("token_prefix", tokenPrefix).Uint("app_id", apiToken.AppID).Msg("Control server: token's app is inactive")
+		return &pb.TokenValidationResponse{
+			Valid:        false,
+			ErrorMessage: "Associated app is inactive",
+		}, nil
+	}
+
+	// Parse scopes
+	var scopes []string
+	if len(apiToken.Scopes) > 0 {
+		if err := json.Unmarshal(apiToken.Scopes, &scopes); err != nil {
+			log.Warn().Err(err).Str("token_prefix", tokenPrefix).Msg("Failed to parse token scopes")
+			scopes = []string{}
+		}
+	}
+
+	var expiresAt *timestamppb.Timestamp
+	if apiToken.ExpiresAt != nil {
+		expiresAt = timestamppb.New(*apiToken.ExpiresAt)
+	}
+
+	log.Info().
+		Str("token_prefix", tokenPrefix).
+		Uint("app_id", apiToken.AppID).
+		Str("app_name", apiToken.App.Name).
+		Msg("Control server: token validation successful")
+
+	return &pb.TokenValidationResponse{
+		Valid:     true,
+		AppId:     uint32(apiToken.AppID),
+		AppName:   apiToken.App.Name,
+		Scopes:    scopes,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
 // getConfigurationSnapshot creates a configuration snapshot for a specific namespace
 func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.ConfigurationSnapshot, error) {
+	// Generate version based on timestamp for now (in production, use proper versioning)
+	version := fmt.Sprintf("v1.0.0-%d", time.Now().Unix())
+	
 	snapshot := &pb.ConfigurationSnapshot{
+		Version:       version,
 		EdgeNamespace: namespace,
 		SnapshotTime:  timestamppb.Now(),
 	}
@@ -427,9 +526,42 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to query LLMs: %w", err)
 	}
 	
-	// Convert LLMs to protobuf
+	// Convert LLMs to protobuf with embedded relationships
 	snapshot.Llms = make([]*pb.LLMConfig, len(llms))
 	for i, llm := range llms {
+		// Query app_llms join table to get which apps can access this LLM
+		var appLLMs []database.AppLLM
+		if err := s.db.Where("llm_id = ? AND is_active = ?", llm.ID, true).Find(&appLLMs).Error; err != nil {
+			log.Warn().Err(err).Uint("llm_id", llm.ID).Msg("Failed to query app_llms join table")
+		}
+		
+		appIDs := make([]uint32, len(appLLMs))
+		for j, appLLM := range appLLMs {
+			appIDs[j] = uint32(appLLM.AppID)
+		}
+
+		// Query llm_plugins join table
+		var llmPlugins []database.LLMPlugin
+		if err := s.db.Where("llm_id = ? AND is_active = ?", llm.ID, true).Find(&llmPlugins).Error; err != nil {
+			log.Warn().Err(err).Uint("llm_id", llm.ID).Msg("Failed to query llm_plugins join table")
+		}
+		
+		pluginIDs := make([]uint32, len(llmPlugins))
+		for j, llmPlugin := range llmPlugins {
+			pluginIDs[j] = uint32(llmPlugin.PluginID)
+		}
+
+		// Query llm_filters join table
+		var llmFilters []database.LLMFilter
+		if err := s.db.Where("llm_id = ? AND is_active = ?", llm.ID, true).Find(&llmFilters).Error; err != nil {
+			log.Warn().Err(err).Uint("llm_id", llm.ID).Msg("Failed to query llm_filters join table")
+		}
+		
+		filterIDs := make([]uint32, len(llmFilters))
+		for j, llmFilter := range llmFilters {
+			filterIDs[j] = uint32(llmFilter.FilterID)
+		}
+
 		snapshot.Llms[i] = &pb.LLMConfig{
 			Id:              uint32(llm.ID),
 			Name:            llm.Name,
@@ -447,7 +579,20 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:       llm.Namespace,
 			CreatedAt:       timestamppb.New(llm.CreatedAt),
 			UpdatedAt:       timestamppb.New(llm.UpdatedAt),
+			
+			// Embedded relationship data
+			AppIds:    appIDs,    // Which apps can access this LLM
+			FilterIds: filterIDs, // Which filters apply to this LLM
+			PluginIds: pluginIDs, // Which plugins apply to this LLM
 		}
+
+		log.Debug().
+			Uint("llm_id", llm.ID).
+			Str("llm_slug", llm.Slug).
+			Int("app_count", len(appIDs)).
+			Int("filter_count", len(filterIDs)).
+			Int("plugin_count", len(pluginIDs)).
+			Msg("LLM relationships embedded in sync")
 	}
 	
 	// Query Apps with namespace filtering
@@ -463,9 +608,43 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to query Apps: %w", err)
 	}
 	
-	// Convert Apps to protobuf
+	// Convert Apps to protobuf with embedded relationships
 	snapshot.Apps = make([]*pb.AppConfig, len(apps))
 	for i, app := range apps {
+		// Query app_llms join table to get LLM associations - THE CRITICAL MISSING PIECE
+		var appLLMs []database.AppLLM
+		if err := s.db.Where("app_id = ? AND is_active = ?", app.ID, true).Find(&appLLMs).Error; err != nil {
+			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app_llms join table")
+		}
+		
+		// Extract LLM IDs that this app can access
+		llmIDs := make([]uint32, len(appLLMs))
+		for j, appLLM := range appLLMs {
+			llmIDs[j] = uint32(appLLM.LLMID)
+		}
+
+		// Query credentials for this app
+		var credentials []database.Credential
+		if err := s.db.Where("app_id = ?", app.ID).Find(&credentials).Error; err != nil {
+			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app credentials")
+		}
+		
+		credentialIDs := make([]uint32, len(credentials))
+		for j, cred := range credentials {
+			credentialIDs[j] = uint32(cred.ID)
+		}
+
+		// Query tokens for this app (even though we do on-demand validation, include for completeness)
+		var tokens []database.APIToken
+		if err := s.db.Where("app_id = ?", app.ID).Find(&tokens).Error; err != nil {
+			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app tokens")
+		}
+		
+		tokenIDs := make([]uint32, len(tokens))
+		for j, token := range tokens {
+			tokenIDs[j] = uint32(token.ID)
+		}
+		
 		snapshot.Apps[i] = &pb.AppConfig{
 			Id:             uint32(app.ID),
 			Name:           app.Name,
@@ -478,14 +657,30 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:      app.Namespace,
 			CreatedAt:      timestamppb.New(app.CreatedAt),
 			UpdatedAt:      timestamppb.New(app.UpdatedAt),
+			
+			// Embedded relationship data - THE CRITICAL FIX
+			LlmIds:        llmIDs,        // From app_llms join table - enables LLM access validation
+			CredentialIds: credentialIDs, // From credentials table
+			TokenIds:      tokenIDs,      // From api_tokens table
 		}
+
+		log.Debug().
+			Uint("app_id", app.ID).
+			Str("app_name", app.Name).
+			Int("llm_count", len(llmIDs)).
+			Int("credential_count", len(credentialIDs)).
+			Int("token_count", len(tokenIDs)).
+			Msg("App relationships embedded in sync")
 	}
+	
+	// Note: Tokens are now validated on-demand via gRPC, not synced to edges
 	
 	log.Info().
 		Str("namespace", namespace).
+		Str("version", version).
 		Int("llm_count", len(snapshot.Llms)).
 		Int("app_count", len(snapshot.Apps)).
-		Msg("Created configuration snapshot")
+		Msg("Created configuration snapshot (tokens validated on-demand)")
 	
 	return snapshot, nil
 }

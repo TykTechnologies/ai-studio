@@ -959,6 +959,151 @@ func (x *AuthenticationResponse) GetExpiresAt() int64 {
 	return 0
 }
 
+// Token validation messages for on-demand validation (NEW)
+type TokenValidationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                      // The API token to validate
+	EdgeId        string                 `protobuf:"bytes,2,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`                      // Edge ID making the request
+	EdgeNamespace string                 `protobuf:"bytes,3,opt,name=edge_namespace,json=edgeNamespace,proto3" json:"edge_namespace,omitempty"` // Edge namespace for filtering
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TokenValidationRequest) Reset() {
+	*x = TokenValidationRequest{}
+	mi := &file_proto_config_sync_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TokenValidationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TokenValidationRequest) ProtoMessage() {}
+
+func (x *TokenValidationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TokenValidationRequest.ProtoReflect.Descriptor instead.
+func (*TokenValidationRequest) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *TokenValidationRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *TokenValidationRequest) GetEdgeId() string {
+	if x != nil {
+		return x.EdgeId
+	}
+	return ""
+}
+
+func (x *TokenValidationRequest) GetEdgeNamespace() string {
+	if x != nil {
+		return x.EdgeNamespace
+	}
+	return ""
+}
+
+type TokenValidationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Valid         bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`                                  // Whether token is valid
+	AppId         uint32                 `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`                     // App ID if valid (0 if invalid)
+	AppName       string                 `protobuf:"bytes,3,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`                // App name for logging
+	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                                 // Token scopes if valid
+	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Error message if invalid
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`          // Token expiration
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TokenValidationResponse) Reset() {
+	*x = TokenValidationResponse{}
+	mi := &file_proto_config_sync_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TokenValidationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TokenValidationResponse) ProtoMessage() {}
+
+func (x *TokenValidationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TokenValidationResponse.ProtoReflect.Descriptor instead.
+func (*TokenValidationResponse) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *TokenValidationResponse) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
+func (x *TokenValidationResponse) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *TokenValidationResponse) GetAppName() string {
+	if x != nil {
+		return x.AppName
+	}
+	return ""
+}
+
+func (x *TokenValidationResponse) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *TokenValidationResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *TokenValidationResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
 var File_proto_config_sync_proto protoreflect.FileDescriptor
 
 const file_proto_config_sync_proto_rawDesc = "" +
@@ -1037,13 +1182,26 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +
 	"\rsession_token\x18\x03 \x01(\tR\fsessionToken\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x04 \x01(\x03R\texpiresAt2\xd2\x03\n" +
+	"expires_at\x18\x04 \x01(\x03R\texpiresAt\"n\n" +
+	"\x16TokenValidationRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
+	"\aedge_id\x18\x02 \x01(\tR\x06edgeId\x12%\n" +
+	"\x0eedge_namespace\x18\x03 \x01(\tR\redgeNamespace\"\xd9\x01\n" +
+	"\x17TokenValidationResponse\x12\x14\n" +
+	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x19\n" +
+	"\bapp_name\x18\x03 \x01(\tR\aappName\x12\x16\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12#\n" +
+	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\x129\n" +
+	"\n" +
+	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xb0\x04\n" +
 	"\x18ConfigurationSyncService\x12]\n" +
 	"\fRegisterEdge\x12%.microgateway.EdgeRegistrationRequest\x1a&.microgateway.EdgeRegistrationResponse\x12_\n" +
 	"\x14GetFullConfiguration\x12\".microgateway.ConfigurationRequest\x1a#.microgateway.ConfigurationSnapshot\x12Q\n" +
 	"\x12SubscribeToChanges\x12\x19.microgateway.EdgeMessage\x1a\x1c.microgateway.ControlMessage(\x010\x01\x12P\n" +
 	"\rSendHeartbeat\x12\x1e.microgateway.HeartbeatRequest\x1a\x1f.microgateway.HeartbeatResponse\x12Q\n" +
-	"\x0eUnregisterEdge\x12'.microgateway.EdgeUnregistrationRequest\x1a\x16.google.protobuf.EmptyB9Z7github.com/TykTechnologies/midsommar/microgateway/protob\x06proto3"
+	"\x0eUnregisterEdge\x12'.microgateway.EdgeUnregistrationRequest\x1a\x16.google.protobuf.Empty\x12\\\n" +
+	"\rValidateToken\x12$.microgateway.TokenValidationRequest\x1a%.microgateway.TokenValidationResponseB9Z7github.com/TykTechnologies/midsommar/microgateway/protob\x06proto3"
 
 var (
 	file_proto_config_sync_proto_rawDescOnce sync.Once
@@ -1057,7 +1215,7 @@ func file_proto_config_sync_proto_rawDescGZIP() []byte {
 	return file_proto_config_sync_proto_rawDescData
 }
 
-var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_proto_config_sync_proto_goTypes = []any{
 	(*EdgeRegistrationRequest)(nil),   // 0: microgateway.EdgeRegistrationRequest
 	(*EdgeRegistrationResponse)(nil),  // 1: microgateway.EdgeRegistrationResponse
@@ -1071,47 +1229,52 @@ var file_proto_config_sync_proto_goTypes = []any{
 	(*ErrorMessage)(nil),              // 9: microgateway.ErrorMessage
 	(*AuthenticationRequest)(nil),     // 10: microgateway.AuthenticationRequest
 	(*AuthenticationResponse)(nil),    // 11: microgateway.AuthenticationResponse
-	nil,                               // 12: microgateway.EdgeRegistrationRequest.MetadataEntry
-	nil,                               // 13: microgateway.EdgeMetrics.CustomMetricsEntry
-	(*HealthStatus)(nil),              // 14: microgateway.HealthStatus
-	(*ConfigurationSnapshot)(nil),     // 15: microgateway.ConfigurationSnapshot
-	(*timestamppb.Timestamp)(nil),     // 16: google.protobuf.Timestamp
-	(*ConfigurationChange)(nil),       // 17: microgateway.ConfigurationChange
-	(*emptypb.Empty)(nil),             // 18: google.protobuf.Empty
+	(*TokenValidationRequest)(nil),    // 12: microgateway.TokenValidationRequest
+	(*TokenValidationResponse)(nil),   // 13: microgateway.TokenValidationResponse
+	nil,                               // 14: microgateway.EdgeRegistrationRequest.MetadataEntry
+	nil,                               // 15: microgateway.EdgeMetrics.CustomMetricsEntry
+	(*HealthStatus)(nil),              // 16: microgateway.HealthStatus
+	(*ConfigurationSnapshot)(nil),     // 17: microgateway.ConfigurationSnapshot
+	(*timestamppb.Timestamp)(nil),     // 18: google.protobuf.Timestamp
+	(*ConfigurationChange)(nil),       // 19: microgateway.ConfigurationChange
+	(*emptypb.Empty)(nil),             // 20: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
-	12, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
-	14, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
-	15, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
-	16, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
+	14, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
+	16, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
+	17, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
+	18, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
 	5,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
 	2,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
 	7,  // 7: microgateway.EdgeMessage.unregistration:type_name -> microgateway.EdgeUnregistrationRequest
 	1,  // 8: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
-	15, // 9: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
-	17, // 10: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
+	17, // 9: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
+	19, // 10: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
 	6,  // 11: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
 	9,  // 12: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
-	14, // 13: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
+	16, // 13: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
 	8,  // 14: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
-	16, // 15: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	13, // 16: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
-	0,  // 17: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	2,  // 18: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	3,  // 19: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	5,  // 20: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	7,  // 21: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	1,  // 22: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	15, // 23: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	4,  // 24: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	6,  // 25: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	18, // 26: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	22, // [22:27] is the sub-list for method output_type
-	17, // [17:22] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	18, // 15: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	15, // 16: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
+	18, // 17: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 18: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	2,  // 19: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	3,  // 20: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	5,  // 21: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	7,  // 22: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	12, // 23: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	1,  // 24: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	17, // 25: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	4,  // 26: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	6,  // 27: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	20, // 28: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	13, // 29: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	24, // [24:30] is the sub-list for method output_type
+	18, // [18:24] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }
@@ -1139,7 +1302,7 @@ func file_proto_config_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_sync_proto_rawDesc), len(file_proto_config_sync_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

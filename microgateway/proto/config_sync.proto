@@ -24,6 +24,9 @@ service ConfigurationSyncService {
   
   // UnregisterEdge unregisters an edge instance
   rpc UnregisterEdge(EdgeUnregistrationRequest) returns (google.protobuf.Empty);
+  
+  // ValidateToken validates an API token on-demand (NEW)
+  rpc ValidateToken(TokenValidationRequest) returns (TokenValidationResponse);
 }
 
 // EdgeRegistrationRequest is sent when an edge instance connects
@@ -125,4 +128,20 @@ message AuthenticationResponse {
   string message = 2;
   string session_token = 3; // Session token for subsequent requests
   int64 expires_at = 4;     // Session expiration timestamp
+}
+
+// Token validation messages for on-demand validation (NEW)
+message TokenValidationRequest {
+  string token = 1;       // The API token to validate
+  string edge_id = 2;     // Edge ID making the request
+  string edge_namespace = 3; // Edge namespace for filtering
+}
+
+message TokenValidationResponse {
+  bool valid = 1;           // Whether token is valid
+  uint32 app_id = 2;        // App ID if valid (0 if invalid)
+  string app_name = 3;      // App name for logging
+  repeated string scopes = 4; // Token scopes if valid
+  string error_message = 5; // Error message if invalid
+  google.protobuf.Timestamp expires_at = 6; // Token expiration
 }
