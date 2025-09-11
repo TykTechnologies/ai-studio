@@ -324,12 +324,8 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 		}
 		log.Debug().Msg("Pre-auth plugins completed")
 
-		// Execute auth plugins
-		log.Debug().Msg("About to execute auth plugins")
-		if blocked := executeAuthPlugins(config.PluginManager, llmID, c, pluginCtx); blocked {
-			return // Request was blocked by auth plugin
-		}
-		log.Debug().Msg("Auth plugins completed")
+		// Note: Auth plugins are now handled directly by AI Gateway credential validation
+		log.Debug().Msg("Skipping auth plugins - handled by AI Gateway")
 		
 		// Execute post-auth plugins
 		log.Debug().Msg("About to execute post-auth plugins")
@@ -442,6 +438,12 @@ func executeAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.Conte
 			c.Set(string(auth.AppIDKey), appID)
 			c.Set(string(auth.ScopesKey), []string{"llm:access"})
 			
+			// Also set in HTTP request context for AI Gateway access
+			ctx := context.WithValue(c.Request.Context(), string(auth.AuthResultKey), authResult)
+			ctx = context.WithValue(ctx, string(auth.AppIDKey), appID)
+			ctx = context.WithValue(ctx, "plugin_authenticated", true)
+			c.Request = c.Request.WithContext(ctx)
+			
 		} else {
 			log.Error().Interface("auth_result", authResult).Msg("Auth plugin returned invalid result format")
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -543,13 +545,19 @@ func executePostAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.C
 	return false
 }
 
-// extractToken extracts the bearer token from the Authorization header
+// extractToken extracts the token from Authorization or X-Api-Key headers
 func extractToken(c *gin.Context) string {
+	// Check Authorization header first
 	authHeader := c.GetHeader("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		return strings.TrimPrefix(authHeader, "Bearer ")
+	if authHeader != "" {
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			return strings.TrimPrefix(authHeader, "Bearer ")
+		}
+		return authHeader
 	}
-	return authHeader
+	
+	// Fallback to X-Api-Key header for microgateway tokens
+	return c.GetHeader("X-Api-Key")
 }
 
 // createBasicPluginRequest creates a basic plugin request structure

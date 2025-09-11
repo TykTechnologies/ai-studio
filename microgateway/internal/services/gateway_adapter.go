@@ -148,14 +148,31 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 	}
 	log.Debug().Str("secret_prefix", secretPrefix).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
 	
-	// Try regular token validation first
+	// Check if we have LLM context and that LLM has auth plugins - route directly if so
+	llmID, llmSlug, hasContext := GetCurrentLLMContext()
+	if hasContext {
+		hasAuthPlugins, err := a.hasAuthPluginsForLLM(llmSlug)
+		if err == nil && hasAuthPlugins {
+			log.Debug().Uint("llm_id", llmID).Str("llm_slug", llmSlug).Msg("LLM has auth plugins, routing directly to auth plugin validation")
+			// Route directly to auth plugin validation for this specific LLM
+			return a.tryAuthPluginsForSpecificLLM(secret, llmID, llmSlug)
+		}
+		log.Debug().Uint("llm_id", llmID).Str("llm_slug", llmSlug).Bool("has_auth_plugins", hasAuthPlugins).Msg("LLM context available, using regular validation")
+	}
+	
+	// No LLM context or no auth plugins for this LLM - use regular token validation
+	return a.tryRegularTokenValidation(secret)
+}
+
+// tryRegularTokenValidation performs standard microgateway token validation
+func (a *GatewayServiceAdapter) tryRegularTokenValidation(secret string) (*models.Credential, error) {
 	if gatewayService, ok := a.gatewayService.(*DatabaseGatewayService); ok {
-		log.Debug().Msg("Using DatabaseGatewayService to validate token")
+		log.Debug().Msg("Using DatabaseGatewayService for regular token validation")
 		
 		tokenResult, err := gatewayService.ValidateAPIToken(secret)
 		if err == nil {
 			// Regular token validation succeeded
-			log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("Token validated successfully")
+			log.Info().Uint("token_id", tokenResult.TokenID).Str("token_name", tokenResult.TokenName).Uint("app_id", tokenResult.AppID).Msg("Regular token validated successfully")
 
 			return &models.Credential{
 				ID:     tokenResult.TokenID,
@@ -164,18 +181,8 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 				Active: true,
 			}, nil
 		}
-
-		// Regular token validation failed - check if there are auth plugins that can handle this
-		log.Debug().Err(err).Str("token_prefix", secretPrefix).Msg("Regular token validation failed, checking for auth plugins")
 		
-		// Try to authenticate with auth plugins (LLM-specific if context available)
-		credential, pluginErr := a.tryAuthPluginsWithContext(secret)
-		if pluginErr == nil && credential != nil {
-			log.Info().Str("token_prefix", secretPrefix).Msg("Auth plugin validated token successfully")
-			return credential, nil
-		}
-		
-		log.Debug().Err(pluginErr).Str("token_prefix", secretPrefix).Msg("Auth plugins also rejected token")
+		log.Debug().Err(err).Msg("Regular token validation failed")
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
@@ -395,10 +402,20 @@ func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, 
 		llmID := credID - 1000
 		log.Debug().Uint("llm_id", llmID).Msg("Plugin auth credential detected, returning plugin app")
 		
-		// Return a plugin-authenticated app
+		// Get the LLM information to include in the plugin app
+		dbLLM, err := a.management.GetLLM(llmID)
+		if err != nil {
+			log.Error().Err(err).Uint("llm_id", llmID).Msg("Failed to get LLM for plugin auth app")
+			return nil, fmt.Errorf("failed to get LLM for plugin auth: %w", err)
+		}
+		
+		llm := a.convertDatabaseLLMToModel(dbLLM)
+		
+		// Return a plugin-authenticated app with access to the specific LLM
 		return &models.App{
 			ID:   1, // Default app ID for plugin auth  
 			Name: fmt.Sprintf("Plugin Auth App (LLM %d)", llmID),
+			LLMs: []models.LLM{llm}, // Grant access to the specific LLM that has the auth plugin
 		}, nil
 	}
 	
@@ -565,6 +582,8 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 	log.Debug().
 		Uint("llm_id", llm.ID).
 		Str("name", llm.Name).
+		Str("db_slug", dbLLM.Slug).
+		Str("db_name", dbLLM.Name).
 		Str("vendor", string(llm.Vendor)).
 		Str("endpoint", llm.APIEndpoint).
 		Bool("active", llm.Active).
@@ -583,6 +602,27 @@ func (a *GatewayServiceAdapter) convertDatabaseCredentialToModel(dbCred *databas
 }
 
 func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) models.App {
+	// Convert LLM associations to models.LLM slice
+	llms := make([]models.LLM, len(dbApp.LLMs))
+	for i, dbLLM := range dbApp.LLMs {
+		llms[i] = a.convertDatabaseLLMToModel(&dbLLM)
+	}
+	
+	log.Debug().
+		Uint("app_id", dbApp.ID).
+		Str("app_name", dbApp.Name).
+		Int("llm_count", len(llms)).
+		Msg("Converting database app to model with LLM associations")
+		
+	// Log each LLM for debugging
+	for _, llm := range llms {
+		log.Debug().
+			Uint("app_id", dbApp.ID).
+			Uint("llm_id", llm.ID).
+			Str("llm_name", llm.Name).
+			Msg("App has access to LLM")
+	}
+	
 	return models.App{
 		ID:              dbApp.ID,
 		Name:            dbApp.Name,
@@ -591,5 +631,6 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		CredentialID:    dbApp.ID, // Use app ID as credential reference
 		MonthlyBudget:   &dbApp.MonthlyBudget,
 		BudgetStartDate: dbApp.BudgetStartDate,
+		LLMs:            llms, // Include LLM associations for access control
 	}
 }

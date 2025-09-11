@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -216,7 +217,7 @@ type TokenValidationResult struct {
 func (s *DatabaseGatewayService) GetAppByTokenID(tokenID uint) (*database.App, error) {
 	var token database.APIToken
 	err := s.db.Where("id = ? AND is_active = ?", tokenID, true).
-		Preload("App").
+		Preload("App.LLMs").
 		First(&token).Error
 
 	if err != nil {
@@ -232,6 +233,22 @@ func (s *DatabaseGatewayService) GetAppByTokenID(tokenID uint) (*database.App, e
 
 	if !token.App.IsActive {
 		return nil, fmt.Errorf("app is inactive")
+	}
+
+	// Debug: Log the LLM associations that were loaded
+	log.Debug().
+		Uint("token_id", tokenID).
+		Uint("app_id", token.App.ID).
+		Str("app_name", token.App.Name).
+		Int("llm_associations_count", len(token.App.LLMs)).
+		Msg("Retrieved app by token ID with LLM associations")
+		
+	for _, llm := range token.App.LLMs {
+		log.Debug().
+			Uint("app_id", token.App.ID).
+			Uint("llm_id", llm.ID).
+			Str("llm_slug", llm.Slug).
+			Msg("App-LLM association loaded from database")
 	}
 
 	return token.App, nil
