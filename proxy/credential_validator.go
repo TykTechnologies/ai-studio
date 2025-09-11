@@ -44,12 +44,6 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		// --- Bearer Token Authentication ---
 		authHeader := r.Header.Get("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
-			// Check if this is a microgateway LLM request - reject Bearer format
-			if len(pathParts) >= 2 && pathParts[1] == "llm" {
-				respondWithError(w, http.StatusBadRequest, "Bearer token format not supported for LLM requests. Use raw token format: Authorization: <token>", nil, false)
-				return
-			}
-			
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 			// First try OAuth access token lookup using interface method
@@ -112,10 +106,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 
 						ctx = context.WithValue(ctx, "tool", tool)
 						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
+						
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
 					}
-
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
+					
+					// Not a tool request - fall through to API Key authentication
 				}
 			}
 
