@@ -673,14 +673,152 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Msg("App relationships embedded in sync")
 	}
 	
-	// Note: Tokens are now validated on-demand via gRPC, not synced to edges
+	// Query Filters with namespace filtering
+	var filters []database.Filter
+	filterQuery := s.db.Model(&database.Filter{}).Where("is_active = ?", true)
+	if namespace == "" {
+		filterQuery = filterQuery.Where("namespace = ''")
+	} else {
+		filterQuery = filterQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := filterQuery.Find(&filters).Error; err != nil {
+		return nil, fmt.Errorf("failed to query Filters: %w", err)
+	}
+	
+	// Convert Filters to protobuf with embedded relationships
+	snapshot.Filters = make([]*pb.FilterConfig, len(filters))
+	for i, filter := range filters {
+		// Query llm_filters join table to get which LLMs use this filter
+		var llmFilters []database.LLMFilter
+		if err := s.db.Where("filter_id = ? AND is_active = ?", filter.ID, true).Find(&llmFilters).Error; err != nil {
+			log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Failed to query llm_filters join table")
+		}
+		
+		llmIDs := make([]uint32, len(llmFilters))
+		for j, llmFilter := range llmFilters {
+			llmIDs[j] = uint32(llmFilter.LLMID)
+		}
+
+		snapshot.Filters[i] = &pb.FilterConfig{
+			Id:          uint32(filter.ID),
+			Name:        filter.Name,
+			Description: filter.Description,
+			Script:      filter.Script,
+			IsActive:    filter.IsActive,
+			OrderIndex:  int32(filter.OrderIndex),
+			Namespace:   filter.Namespace,
+			CreatedAt:   timestamppb.New(filter.CreatedAt),
+			UpdatedAt:   timestamppb.New(filter.UpdatedAt),
+			LlmIds:      llmIDs, // Which LLMs use this filter
+		}
+
+		log.Debug().
+			Uint("filter_id", filter.ID).
+			Str("filter_name", filter.Name).
+			Int("llm_count", len(llmIDs)).
+			Msg("Filter relationships embedded in sync")
+	}
+
+	// Query Plugins with namespace filtering
+	var plugins []database.Plugin
+	pluginQuery := s.db.Model(&database.Plugin{}).Where("is_active = ?", true)
+	if namespace == "" {
+		pluginQuery = pluginQuery.Where("namespace = ''")
+	} else {
+		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := pluginQuery.Find(&plugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to query Plugins: %w", err)
+	}
+	
+	// Convert Plugins to protobuf with embedded relationships
+	snapshot.Plugins = make([]*pb.PluginConfig, len(plugins))
+	for i, plugin := range plugins {
+		// Query llm_plugins join table to get which LLMs use this plugin
+		var llmPlugins []database.LLMPlugin
+		if err := s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Find(&llmPlugins).Error; err != nil {
+			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to query llm_plugins join table")
+		}
+		
+		llmIDs := make([]uint32, len(llmPlugins))
+		for j, llmPlugin := range llmPlugins {
+			llmIDs[j] = uint32(llmPlugin.LLMID)
+		}
+
+		snapshot.Plugins[i] = &pb.PluginConfig{
+			Id:          uint32(plugin.ID),
+			Name:        plugin.Name,
+			Slug:        plugin.Slug,
+			Description: plugin.Description,
+			Command:     plugin.Command,
+			Checksum:    plugin.Checksum,
+			HookType:    plugin.HookType,
+			IsActive:    plugin.IsActive,
+			Namespace:   plugin.Namespace,
+			CreatedAt:   timestamppb.New(plugin.CreatedAt),
+			UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
+			LlmIds:      llmIDs, // Which LLMs use this plugin
+			// TODO: Handle Config JSON field
+		}
+
+		log.Debug().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Str("hook_type", plugin.HookType).
+			Int("llm_count", len(llmIDs)).
+			Msg("Plugin relationships embedded in sync")
+	}
+
+	// Query Model Prices with namespace filtering
+	var modelPrices []database.ModelPrice
+	priceQuery := s.db.Model(&database.ModelPrice{})
+	if namespace == "" {
+		priceQuery = priceQuery.Where("namespace = ''")
+	} else {
+		priceQuery = priceQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := priceQuery.Find(&modelPrices).Error; err != nil {
+		return nil, fmt.Errorf("failed to query ModelPrices: %w", err)
+	}
+	
+	// Convert Model Prices to protobuf
+	snapshot.ModelPrices = make([]*pb.ModelPriceConfig, len(modelPrices))
+	for i, price := range modelPrices {
+		snapshot.ModelPrices[i] = &pb.ModelPriceConfig{
+			Id:           uint32(price.ID),
+			Vendor:       price.Vendor,
+			ModelName:    price.ModelName,
+			Cpt:          price.CPT,
+			Cpit:         price.CPIT,
+			CacheWritePt: price.CacheWritePT,
+			CacheReadPt:  price.CacheReadPT,
+			Currency:     price.Currency,
+			Namespace:    price.Namespace,
+			CreatedAt:    timestamppb.New(price.CreatedAt),
+			UpdatedAt:    timestamppb.New(price.UpdatedAt),
+		}
+
+		log.Debug().
+			Uint("price_id", price.ID).
+			Str("vendor", price.Vendor).
+			Str("model", price.ModelName).
+			Msg("Model price synced")
+	}
+	
+	// Note: Tokens are validated on-demand via gRPC, not synced to edges
 	
 	log.Info().
 		Str("namespace", namespace).
 		Str("version", version).
 		Int("llm_count", len(snapshot.Llms)).
 		Int("app_count", len(snapshot.Apps)).
-		Msg("Created configuration snapshot (tokens validated on-demand)")
+		Int("filter_count", len(snapshot.Filters)).
+		Int("plugin_count", len(snapshot.Plugins)).
+		Int("model_price_count", len(snapshot.ModelPrices)).
+		Msg("Created complete configuration snapshot (tokens validated on-demand)")
 	
 	return snapshot, nil
 }

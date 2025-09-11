@@ -56,13 +56,17 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync Apps: %w", err)
 	}
 
-	// 4. Sync other entities
+	// 4. Sync other critical entities
 	if err := s.syncFilters(tx, config.Filters); err != nil {
 		return fmt.Errorf("failed to sync Filters: %w", err)
 	}
 	
 	if err := s.syncPlugins(tx, config.Plugins); err != nil {
 		return fmt.Errorf("failed to sync Plugins: %w", err)
+	}
+
+	if err := s.syncModelPrices(tx, config.ModelPrices); err != nil {
+		return fmt.Errorf("failed to sync ModelPrices: %w", err)
 	}
 
 	// 5. Commit transaction
@@ -110,6 +114,10 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	
 	if err := tx.Exec("DELETE FROM plugins WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear plugins: %w", err)
+	}
+
+	if err := tx.Exec("DELETE FROM model_prices WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
+		return fmt.Errorf("failed to clear model_prices: %w", err)
 	}
 
 	log.Info().Msg("Existing configuration data cleared")
@@ -290,6 +298,42 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 				return fmt.Errorf("failed to create llm_plugin relationship (llm=%d, plugin=%d): %w", llmID, pbPlugin.Id, err)
 			}
 		}
+	}
+
+	return nil
+}
+
+// syncModelPrices syncs ModelPrice entities
+func (s *EdgeSyncService) syncModelPrices(tx *gorm.DB, modelPrices []*pb.ModelPriceConfig) error {
+	log.Info().Int("count", len(modelPrices)).Msg("Syncing Model Prices to local SQLite")
+
+	for _, pbPrice := range modelPrices {
+		// Insert ModelPrice record
+		price := &database.ModelPrice{
+			Model: gorm.Model{
+				ID:        uint(pbPrice.Id),
+				CreatedAt: pbPrice.CreatedAt.AsTime(),
+				UpdatedAt: pbPrice.UpdatedAt.AsTime(),
+			},
+			Vendor:       pbPrice.Vendor,
+			ModelName:    pbPrice.ModelName,
+			CPT:          pbPrice.Cpt,
+			CPIT:         pbPrice.Cpit,
+			CacheWritePT: pbPrice.CacheWritePt,
+			CacheReadPT:  pbPrice.CacheReadPt,
+			Currency:     pbPrice.Currency,
+			Namespace:    pbPrice.Namespace,
+		}
+
+		if err := tx.Create(price).Error; err != nil {
+			return fmt.Errorf("failed to insert ModelPrice %d: %w", pbPrice.Id, err)
+		}
+
+		log.Debug().
+			Uint32("price_id", pbPrice.Id).
+			Str("vendor", pbPrice.Vendor).
+			Str("model", pbPrice.ModelName).
+			Msg("Model price synced to SQLite")
 	}
 
 	return nil
