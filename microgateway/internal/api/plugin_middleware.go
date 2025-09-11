@@ -3,6 +3,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"reflect"
@@ -341,11 +342,21 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 		c.Set("plugin_context", pluginCtx)
 		c.Set("llm_id", llmID)
 
+		// Store LLM context in HTTP request context for AI Gateway access
+		ctx := context.WithValue(c.Request.Context(), "llm_id", llmID)
+		ctx = context.WithValue(ctx, "llm_slug", llmSlug)
+		
+		// Set current LLM context for auth plugin routing in service adapter
+		services.SetCurrentLLMContext(llmID, llmSlug)
+		
+		// Clear context when done (defer to ensure cleanup even on panic)
+		defer services.ClearCurrentLLMContext()
+		
 		// Note: Response processing is now handled by AI Gateway response hooks
 		// No need for microgateway response buffering - AI Gateway handles this internally
 
-		// Call AI Gateway handler directly - it will handle response hooks
-		aiGatewayHandler.ServeHTTP(c.Writer, c.Request)
+		// Call AI Gateway handler directly with enhanced request context
+		aiGatewayHandler.ServeHTTP(c.Writer, c.Request.WithContext(ctx))
 	}
 }
 
