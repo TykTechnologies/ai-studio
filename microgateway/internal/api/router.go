@@ -14,15 +14,16 @@ import (
 
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
-	AuthProvider  auth.AuthProvider
-	Services      *services.ServiceContainer
-	Gateway       aigateway.Gateway
-	PluginManager PluginManagerInterface
-	EnableSwagger bool
-	EnableMetrics bool
-	Version       string
-	BuildHash     string
-	BuildTime     string
+	AuthProvider     auth.AuthProvider
+	Services         *services.ServiceContainer
+	Gateway          aigateway.Gateway
+	PluginManager    PluginManagerInterface
+	ReloadCoordinator *services.ReloadCoordinator
+	EnableSwagger    bool
+	EnableMetrics    bool
+	Version          string
+	BuildHash        string
+	BuildTime        string
 }
 
 // SetupRouter configures and returns the main application router
@@ -154,6 +155,24 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		{
 			system.POST("/reload", handlers.ReloadConfiguration(config.Gateway))
 			system.GET("/info", handlers.GetSystemInfo(config.Services, config.Version, config.BuildHash, config.BuildTime))
+		}
+
+		// Hub-and-spoke management endpoints (TODO: Wire reload coordinator)
+		if config.ReloadCoordinator != nil {
+			namespace := protected.Group("/namespace")
+			{
+				namespace.POST("/reload", handlers.InitiateNamespaceReload(config.ReloadCoordinator))
+				namespace.GET("/reload/operations", handlers.ListActiveReloadOperations(config.ReloadCoordinator))
+				namespace.GET("/reload/:operation_id/status", handlers.GetReloadOperationStatus(config.ReloadCoordinator))
+			}
+
+			edge := protected.Group("/edge")
+			{
+				edge.POST("/reload", handlers.InitiateEdgeReload(config.ReloadCoordinator))
+				edge.GET("/status", handlers.GetEdgeInstanceStatus(config.Services))
+				edge.GET("/:edge_id/status", handlers.GetSingleEdgeStatus(config.Services))
+				edge.GET("/reload/:operation_id/status", handlers.GetReloadOperationStatus(config.ReloadCoordinator))
+			}
 		}
 	}
 

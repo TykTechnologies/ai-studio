@@ -69,6 +69,10 @@ func init() {
 	rootCmd.AddCommand(pricingCmd)
 	rootCmd.AddCommand(pluginCmd)
 	rootCmd.AddCommand(systemCmd)
+	
+	// Hub-and-spoke commands
+	rootCmd.AddCommand(namespaceCmd)
+	rootCmd.AddCommand(edgeCmd)
 }
 
 // initConfig reads in config file and ENV variables if set.

@@ -95,15 +95,16 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
-		AuthProvider:  serviceContainer.AuthProvider,
-		Services:      serviceContainer,
-		Gateway:       gateway, // Mount gateway back in router
-		PluginManager: api.NewPluginManagerAdapter(pluginManager),
-		EnableSwagger: cfg.IsDevelopment(),
-		EnableMetrics: cfg.Observability.EnableMetrics,
-		Version:       version,
-		BuildHash:     buildHash,
-		BuildTime:     buildTime,
+		AuthProvider:     serviceContainer.AuthProvider,
+		Services:         serviceContainer,
+		Gateway:          gateway, // Mount gateway back in router
+		PluginManager:    api.NewPluginManagerAdapter(pluginManager),
+		ReloadCoordinator: nil, // Will be set for control instances
+		EnableSwagger:    cfg.IsDevelopment(),
+		EnableMetrics:    cfg.Observability.EnableMetrics,
+		Version:          version,
+		BuildHash:        buildHash,
+		BuildTime:        buildTime,
 	}
 
 	router := api.SetupRouter(routerConfig)
@@ -117,14 +118,42 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	return &Server{
+	srv := &Server{
 		config:        cfg,
 		services:      serviceContainer,
 		gateway:       gateway,
 		pluginManager: pluginManager,
 		router:        router,
 		server:        server,
-	}, nil
+	}
+
+	return srv, nil
+}
+
+// SetReloadCoordinator sets the reload coordinator for hub-and-spoke operations (control mode only)
+func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordinator) {
+	// Since router is already created, we need to recreate it with the reload coordinator
+	log.Info().Msg("Recreating router with reload coordinator for hub-and-spoke endpoints")
+	
+	// Update router config with reload coordinator
+	routerConfig := &api.RouterConfig{
+		AuthProvider:     s.services.AuthProvider,
+		Services:         s.services,
+		Gateway:          s.gateway,
+		PluginManager:    api.NewPluginManagerAdapter(s.pluginManager),
+		ReloadCoordinator: reloadCoordinator, // Add reload coordinator
+		EnableSwagger:    s.config.IsDevelopment(),
+		EnableMetrics:    s.config.Observability.EnableMetrics,
+		Version:          "dev", // TODO: Get from server
+		BuildHash:        "unknown",
+		BuildTime:        "unknown",
+	}
+
+	// Recreate router with reload coordinator
+	s.router = api.SetupRouter(routerConfig)
+	s.server.Handler = s.router
+	
+	log.Info().Msg("Router recreated with reload coordinator - hub-and-spoke endpoints now available")
 }
 
 // Start starts the unified HTTP server with mounted AI Gateway

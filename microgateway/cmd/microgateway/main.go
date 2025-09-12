@@ -185,6 +185,23 @@ func main() {
 					log.Info().Msg("Edge client connected to hybrid gateway service for token validation")
 				}
 				
+				// Create and connect edge reload handler for distributed reload operations
+				syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
+				reloadHandler := services.NewEdgeReloadHandler(
+					edgeClient,
+					syncService,
+					db,
+					cfg.HubSpoke.EdgeID,
+					func(response *pb.ConfigurationReloadResponse) {
+						// Send reload status back to control via edge client
+						if err := edgeClient.SendReloadStatus(response); err != nil {
+							log.Error().Err(err).Msg("Failed to send reload status to control")
+						}
+					},
+				)
+				edgeClient.SetReloadHandler(reloadHandler)
+				log.Info().Msg("Edge reload handler created and connected to edge client")
+				
 				log.Info().Msg("Edge client connected to gRPC provider")
 			}
 		}
@@ -242,6 +259,7 @@ func main() {
 
 	// Start gRPC control server if in control mode
 	var controlServer *grpc.ControlServer
+	var reloadCoordinator *services.ReloadCoordinator
 	
 	if cfg.IsControl() {
 		log.Info().
@@ -249,6 +267,15 @@ func main() {
 			Msg("Starting gRPC control server for configuration synchronization")
 		
 		controlServer = grpc.NewControlServer(cfg, db)
+		
+		// Create reload coordinator and connect it to control server
+		reloadCoordinator = services.NewReloadCoordinator(controlServer)
+		controlServer.SetReloadCoordinator(reloadCoordinator)
+		
+		// Update server with reload coordinator for API endpoints
+		srv.SetReloadCoordinator(reloadCoordinator)
+		
+		log.Info().Msg("Reload coordinator created and connected to control server")
 		
 		go func() {
 			if err := controlServer.Start(); err != nil {

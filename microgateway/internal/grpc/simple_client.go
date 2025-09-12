@@ -20,8 +20,19 @@ type SimpleEdgeClient struct {
 	client      pb.ConfigurationSyncServiceClient
 	configCache *pb.ConfigurationSnapshot
 	
+	// Bidirectional streaming
+	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
+	streamCtx    context.Context
+	streamCancel context.CancelFunc
+	
 	// Callback for configuration updates
 	onConfigChange func(*pb.ConfigurationSnapshot)
+	
+	// Reload handling (use interface to avoid import cycle)
+	reloadHandler interface{}
+	
+	// Connection state
+	connected bool
 }
 
 // NewSimpleEdgeClient creates a basic edge client
@@ -47,13 +58,19 @@ func (c *SimpleEdgeClient) Start() error {
 	c.conn = conn
 	c.client = pb.NewConfigurationSyncServiceClient(conn)
 
-	// Test basic connectivity
+	// Test basic connectivity and register
 	if err := c.registerWithControl(); err != nil {
 		conn.Close()
 		return fmt.Errorf("failed to register with control: %w", err)
 	}
 
-	log.Info().Msg("Successfully connected to control server")
+	// Establish bidirectional streaming connection
+	if err := c.establishStream(); err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to establish streaming: %w", err)
+	}
+
+	log.Info().Msg("Successfully connected to control server with streaming")
 	return nil
 }
 
@@ -163,11 +180,201 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 	return resp, nil
 }
 
+// SetReloadHandler sets the reload handler for processing reload requests
+func (c *SimpleEdgeClient) SetReloadHandler(handler interface{}) {
+	c.reloadHandler = handler
+	log.Info().Msg("Reload handler set for edge client")
+}
+
+// RequestFullSync requests a full configuration sync from control (for reload operations)
+func (c *SimpleEdgeClient) RequestFullSync() error {
+	log.Info().Msg("Requesting full configuration sync from control")
+
+	ctx := context.Background()
+	req := &pb.ConfigurationRequest{
+		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
+	}
+
+	resp, err := c.client.GetFullConfiguration(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to request full sync: %w", err)
+	}
+
+	// Update local cache and trigger callback
+	c.configCache = resp
+	if c.onConfigChange != nil {
+		c.onConfigChange(resp)
+	}
+
+	log.Info().
+		Str("version", resp.Version).
+		Int("llm_count", len(resp.Llms)).
+		Int("app_count", len(resp.Apps)).
+		Msg("Full configuration sync completed")
+
+	return nil
+}
+
+// establishStream establishes bidirectional streaming with control server
+func (c *SimpleEdgeClient) establishStream() error {
+	log.Info().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Establishing bidirectional stream with control")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c.streamCtx = ctx
+	c.streamCancel = cancel
+
+	// Start streaming
+	stream, err := c.client.SubscribeToChanges(ctx)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("failed to start streaming: %w", err)
+	}
+
+	c.stream = stream
+
+	// Send initial registration via stream to establish connection
+	regMsg := &pb.EdgeMessage{
+		Message: &pb.EdgeMessage_Registration{
+			Registration: &pb.EdgeRegistrationRequest{
+				EdgeId:        c.config.HubSpoke.EdgeID,
+				EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
+				Version:       "dev",
+				BuildHash:     "unknown",
+				Health: &pb.HealthStatus{
+					Status:    pb.HealthStatus_HEALTHY,
+					Message:   "Streaming connection established",
+					Timestamp: timestamppb.Now(),
+				},
+			},
+		},
+	}
+
+	if err := c.stream.Send(regMsg); err != nil {
+		cancel()
+		return fmt.Errorf("failed to send stream registration: %w", err)
+	}
+
+	// Start message handling goroutines
+	go c.handleIncomingMessages()
+	c.connected = true
+
+	log.Info().Msg("Bidirectional stream established successfully")
+	return nil
+}
+
+// handleIncomingMessages processes messages from control server
+func (c *SimpleEdgeClient) handleIncomingMessages() {
+	defer func() {
+		c.connected = false
+		if c.streamCancel != nil {
+			c.streamCancel()
+		}
+	}()
+
+	for {
+		msg, err := c.stream.Recv()
+		if err != nil {
+			log.Error().Err(err).Msg("Stream receive error")
+			return
+		}
+
+		switch m := msg.Message.(type) {
+		case *pb.ControlMessage_RegistrationResponse:
+			log.Info().
+				Bool("success", m.RegistrationResponse.Success).
+				Str("message", m.RegistrationResponse.Message).
+				Msg("Received stream registration response")
+
+		case *pb.ControlMessage_Configuration:
+			log.Info().
+				Str("version", m.Configuration.Version).
+				Int("llm_count", len(m.Configuration.Llms)).
+				Int("app_count", len(m.Configuration.Apps)).
+				Msg("Received configuration update via stream")
+
+			c.configCache = m.Configuration
+			if c.onConfigChange != nil {
+				c.onConfigChange(m.Configuration)
+			}
+
+		case *pb.ControlMessage_ReloadRequest:
+			log.Info().
+				Str("operation_id", m.ReloadRequest.OperationId).
+				Str("target_namespace", m.ReloadRequest.TargetNamespace).
+				Msg("Received reload request via stream")
+
+			c.HandleReloadRequest(m.ReloadRequest)
+
+		case *pb.ControlMessage_HeartbeatResponse:
+			log.Debug().Bool("acknowledged", m.HeartbeatResponse.Acknowledged).Msg("Heartbeat acknowledged")
+
+		case *pb.ControlMessage_Error:
+			log.Error().
+				Str("code", m.Error.Code).
+				Str("message", m.Error.Message).
+				Bool("fatal", m.Error.Fatal).
+				Msg("Received error from control")
+		}
+	}
+}
+
+// SendReloadStatus sends a reload status update to control server via stream
+func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResponse) error {
+	if c.stream == nil {
+		return fmt.Errorf("no stream available for sending reload status")
+	}
+
+	log.Info().
+		Str("operation_id", response.OperationId).
+		Str("phase", response.Phase.String()).
+		Bool("success", response.Success).
+		Msg("Sending reload status to control via stream")
+
+	msg := &pb.EdgeMessage{
+		Message: &pb.EdgeMessage_ReloadResponse{
+			ReloadResponse: response,
+		},
+	}
+
+	if err := c.stream.Send(msg); err != nil {
+		log.Error().Err(err).Msg("Failed to send reload status via stream")
+		return fmt.Errorf("failed to send reload status: %w", err)
+	}
+
+	return nil
+}
+
+// HandleReloadRequest processes reload requests (to be called when reload messages are received)
+func (c *SimpleEdgeClient) HandleReloadRequest(req *pb.ConfigurationReloadRequest) {
+	log.Info().
+		Str("operation_id", req.OperationId).
+		Msg("SimpleEdgeClient received reload request")
+
+	if c.reloadHandler != nil {
+		if handler, ok := c.reloadHandler.(interface{ HandleReloadRequest(*pb.ConfigurationReloadRequest) }); ok {
+			handler.HandleReloadRequest(req)
+		} else {
+			log.Error().Msg("Reload handler does not implement HandleReloadRequest method")
+		}
+	} else {
+		log.Warn().Msg("No reload handler set - reload request ignored")
+	}
+}
+
 // Stop closes the connection to control server
 func (c *SimpleEdgeClient) Stop() error {
+	log.Info().Msg("Stopping SimpleEdgeClient")
+
+	// Cancel stream context first
+	if c.streamCancel != nil {
+		c.streamCancel()
+	}
+
+	// Close connection
 	if c.conn != nil {
 		log.Info().Msg("Closing connection to control server")
 		return c.conn.Close()
 	}
+	
 	return nil
 }

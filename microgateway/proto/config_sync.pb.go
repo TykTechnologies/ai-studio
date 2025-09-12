@@ -23,6 +23,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ReloadPhase int32
+
+const (
+	ReloadPhase_PONG         ReloadPhase = 0 // Edge acknowledges reload request
+	ReloadPhase_PULL_STARTED ReloadPhase = 1 // Edge starts pulling new config
+	ReloadPhase_UPDATING     ReloadPhase = 2 // Edge applying new config to SQLite
+	ReloadPhase_UPDATED      ReloadPhase = 3 // Edge SQLite update complete
+	ReloadPhase_READY        ReloadPhase = 4 // Edge operational with new config
+	ReloadPhase_FAILED       ReloadPhase = 5 // Edge failed during reload
+)
+
+// Enum value maps for ReloadPhase.
+var (
+	ReloadPhase_name = map[int32]string{
+		0: "PONG",
+		1: "PULL_STARTED",
+		2: "UPDATING",
+		3: "UPDATED",
+		4: "READY",
+		5: "FAILED",
+	}
+	ReloadPhase_value = map[string]int32{
+		"PONG":         0,
+		"PULL_STARTED": 1,
+		"UPDATING":     2,
+		"UPDATED":      3,
+		"READY":        4,
+		"FAILED":       5,
+	}
+)
+
+func (x ReloadPhase) Enum() *ReloadPhase {
+	p := new(ReloadPhase)
+	*p = x
+	return p
+}
+
+func (x ReloadPhase) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReloadPhase) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_config_sync_proto_enumTypes[0].Descriptor()
+}
+
+func (ReloadPhase) Type() protoreflect.EnumType {
+	return &file_proto_config_sync_proto_enumTypes[0]
+}
+
+func (x ReloadPhase) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReloadPhase.Descriptor instead.
+func (ReloadPhase) EnumDescriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{0}
+}
+
 // EdgeRegistrationRequest is sent when an edge instance connects
 type EdgeRegistrationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -239,6 +297,7 @@ type EdgeMessage struct {
 	//	*EdgeMessage_Heartbeat
 	//	*EdgeMessage_ConfigRequest
 	//	*EdgeMessage_Unregistration
+	//	*EdgeMessage_ReloadResponse
 	Message       isEdgeMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -317,6 +376,15 @@ func (x *EdgeMessage) GetUnregistration() *EdgeUnregistrationRequest {
 	return nil
 }
 
+func (x *EdgeMessage) GetReloadResponse() *ConfigurationReloadResponse {
+	if x != nil {
+		if x, ok := x.Message.(*EdgeMessage_ReloadResponse); ok {
+			return x.ReloadResponse
+		}
+	}
+	return nil
+}
+
 type isEdgeMessage_Message interface {
 	isEdgeMessage_Message()
 }
@@ -337,6 +405,10 @@ type EdgeMessage_Unregistration struct {
 	Unregistration *EdgeUnregistrationRequest `protobuf:"bytes,4,opt,name=unregistration,proto3,oneof"`
 }
 
+type EdgeMessage_ReloadResponse struct {
+	ReloadResponse *ConfigurationReloadResponse `protobuf:"bytes,5,opt,name=reload_response,json=reloadResponse,proto3,oneof"` // NEW: Reload status reporting
+}
+
 func (*EdgeMessage_Registration) isEdgeMessage_Message() {}
 
 func (*EdgeMessage_Heartbeat) isEdgeMessage_Message() {}
@@ -344,6 +416,8 @@ func (*EdgeMessage_Heartbeat) isEdgeMessage_Message() {}
 func (*EdgeMessage_ConfigRequest) isEdgeMessage_Message() {}
 
 func (*EdgeMessage_Unregistration) isEdgeMessage_Message() {}
+
+func (*EdgeMessage_ReloadResponse) isEdgeMessage_Message() {}
 
 // ControlMessage is sent from control to edge
 type ControlMessage struct {
@@ -355,6 +429,7 @@ type ControlMessage struct {
 	//	*ControlMessage_Change
 	//	*ControlMessage_HeartbeatResponse
 	//	*ControlMessage_Error
+	//	*ControlMessage_ReloadRequest
 	Message       isControlMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -442,6 +517,15 @@ func (x *ControlMessage) GetError() *ErrorMessage {
 	return nil
 }
 
+func (x *ControlMessage) GetReloadRequest() *ConfigurationReloadRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ControlMessage_ReloadRequest); ok {
+			return x.ReloadRequest
+		}
+	}
+	return nil
+}
+
 type isControlMessage_Message interface {
 	isControlMessage_Message()
 }
@@ -466,6 +550,10 @@ type ControlMessage_Error struct {
 	Error *ErrorMessage `protobuf:"bytes,5,opt,name=error,proto3,oneof"`
 }
 
+type ControlMessage_ReloadRequest struct {
+	ReloadRequest *ConfigurationReloadRequest `protobuf:"bytes,6,opt,name=reload_request,json=reloadRequest,proto3,oneof"` // NEW: Initiate reload
+}
+
 func (*ControlMessage_RegistrationResponse) isControlMessage_Message() {}
 
 func (*ControlMessage_Configuration) isControlMessage_Message() {}
@@ -475,6 +563,8 @@ func (*ControlMessage_Change) isControlMessage_Message() {}
 func (*ControlMessage_HeartbeatResponse) isControlMessage_Message() {}
 
 func (*ControlMessage_Error) isControlMessage_Message() {}
+
+func (*ControlMessage_ReloadRequest) isControlMessage_Message() {}
 
 // HeartbeatRequest contains health and status information from edge
 type HeartbeatRequest struct {
@@ -1104,6 +1194,191 @@ func (x *TokenValidationResponse) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Distributed configuration reload messages (NEW)
+type ConfigurationReloadRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	OperationId     string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`             // Unique operation ID for tracking
+	TargetNamespace string                 `protobuf:"bytes,2,opt,name=target_namespace,json=targetNamespace,proto3" json:"target_namespace,omitempty"` // Namespace to reload ("" = all)
+	TargetEdges     []string               `protobuf:"bytes,3,rep,name=target_edges,json=targetEdges,proto3" json:"target_edges,omitempty"`             // Specific edge IDs (empty = all in namespace)
+	InitiatedBy     string                 `protobuf:"bytes,4,opt,name=initiated_by,json=initiatedBy,proto3" json:"initiated_by,omitempty"`             // CLI user/admin who initiated
+	TimeoutSeconds  int64                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`   // Operation timeout
+	InitiatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=initiated_at,json=initiatedAt,proto3" json:"initiated_at,omitempty"`             // When reload was initiated
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ConfigurationReloadRequest) Reset() {
+	*x = ConfigurationReloadRequest{}
+	mi := &file_proto_config_sync_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigurationReloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigurationReloadRequest) ProtoMessage() {}
+
+func (x *ConfigurationReloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigurationReloadRequest.ProtoReflect.Descriptor instead.
+func (*ConfigurationReloadRequest) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ConfigurationReloadRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadRequest) GetTargetNamespace() string {
+	if x != nil {
+		return x.TargetNamespace
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadRequest) GetTargetEdges() []string {
+	if x != nil {
+		return x.TargetEdges
+	}
+	return nil
+}
+
+func (x *ConfigurationReloadRequest) GetInitiatedBy() string {
+	if x != nil {
+		return x.InitiatedBy
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadRequest) GetTimeoutSeconds() int64 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+func (x *ConfigurationReloadRequest) GetInitiatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.InitiatedAt
+	}
+	return nil
+}
+
+type ConfigurationReloadResponse struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	OperationId         string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`                           // Operation ID from request
+	EdgeId              string                 `protobuf:"bytes,2,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`                                          // Edge reporting status
+	Phase               ReloadPhase            `protobuf:"varint,3,opt,name=phase,proto3,enum=microgateway.ReloadPhase" json:"phase,omitempty"`                           // Current reload phase
+	Success             bool                   `protobuf:"varint,4,opt,name=success,proto3" json:"success,omitempty"`                                                     // Success status (valid for READY/FAILED phases)
+	Message             string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`                                                      // Status message or error details
+	ConfigVersionBefore string                 `protobuf:"bytes,6,opt,name=config_version_before,json=configVersionBefore,proto3" json:"config_version_before,omitempty"` // Config version before reload
+	ConfigVersionAfter  string                 `protobuf:"bytes,7,opt,name=config_version_after,json=configVersionAfter,proto3" json:"config_version_after,omitempty"`    // Config version after reload (if successful)
+	Timestamp           *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                                  // When this status was reported
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ConfigurationReloadResponse) Reset() {
+	*x = ConfigurationReloadResponse{}
+	mi := &file_proto_config_sync_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigurationReloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigurationReloadResponse) ProtoMessage() {}
+
+func (x *ConfigurationReloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigurationReloadResponse.ProtoReflect.Descriptor instead.
+func (*ConfigurationReloadResponse) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ConfigurationReloadResponse) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadResponse) GetEdgeId() string {
+	if x != nil {
+		return x.EdgeId
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadResponse) GetPhase() ReloadPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return ReloadPhase_PONG
+}
+
+func (x *ConfigurationReloadResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ConfigurationReloadResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadResponse) GetConfigVersionBefore() string {
+	if x != nil {
+		return x.ConfigVersionBefore
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadResponse) GetConfigVersionAfter() string {
+	if x != nil {
+		return x.ConfigVersionAfter
+	}
+	return ""
+}
+
+func (x *ConfigurationReloadResponse) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
 var File_proto_config_sync_proto protoreflect.FileDescriptor
 
 const file_proto_config_sync_proto_rawDesc = "" +
@@ -1128,19 +1403,21 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0einitial_config\x18\x04 \x01(\v2#.microgateway.ConfigurationSnapshotR\rinitialConfig\"\x7f\n" +
 	"\x14ConfigurationRequest\x12%\n" +
 	"\x0eedge_namespace\x18\x01 \x01(\tR\redgeNamespace\x12@\n" +
-	"\x0elast_sync_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSyncTime\"\xc5\x02\n" +
+	"\x0elast_sync_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSyncTime\"\x9b\x03\n" +
 	"\vEdgeMessage\x12K\n" +
 	"\fregistration\x18\x01 \x01(\v2%.microgateway.EdgeRegistrationRequestH\x00R\fregistration\x12>\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x1e.microgateway.HeartbeatRequestH\x00R\theartbeat\x12K\n" +
 	"\x0econfig_request\x18\x03 \x01(\v2\".microgateway.ConfigurationRequestH\x00R\rconfigRequest\x12Q\n" +
-	"\x0eunregistration\x18\x04 \x01(\v2'.microgateway.EdgeUnregistrationRequestH\x00R\x0eunregistrationB\t\n" +
-	"\amessage\"\x8a\x03\n" +
+	"\x0eunregistration\x18\x04 \x01(\v2'.microgateway.EdgeUnregistrationRequestH\x00R\x0eunregistration\x12T\n" +
+	"\x0freload_response\x18\x05 \x01(\v2).microgateway.ConfigurationReloadResponseH\x00R\x0ereloadResponseB\t\n" +
+	"\amessage\"\xdd\x03\n" +
 	"\x0eControlMessage\x12]\n" +
 	"\x15registration_response\x18\x01 \x01(\v2&.microgateway.EdgeRegistrationResponseH\x00R\x14registrationResponse\x12K\n" +
 	"\rconfiguration\x18\x02 \x01(\v2#.microgateway.ConfigurationSnapshotH\x00R\rconfiguration\x12;\n" +
 	"\x06change\x18\x03 \x01(\v2!.microgateway.ConfigurationChangeH\x00R\x06change\x12P\n" +
 	"\x12heartbeat_response\x18\x04 \x01(\v2\x1f.microgateway.HeartbeatResponseH\x00R\x11heartbeatResponse\x122\n" +
-	"\x05error\x18\x05 \x01(\v2\x1a.microgateway.ErrorMessageH\x00R\x05errorB\t\n" +
+	"\x05error\x18\x05 \x01(\v2\x1a.microgateway.ErrorMessageH\x00R\x05error\x12Q\n" +
+	"\x0ereload_request\x18\x06 \x01(\v2(.microgateway.ConfigurationReloadRequestH\x00R\rreloadRequestB\t\n" +
 	"\amessage\"\xed\x01\n" +
 	"\x10HeartbeatRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
@@ -1194,7 +1471,31 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12#\n" +
 	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\x129\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xb0\x04\n" +
+	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\x98\x02\n" +
+	"\x1aConfigurationReloadRequest\x12!\n" +
+	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12)\n" +
+	"\x10target_namespace\x18\x02 \x01(\tR\x0ftargetNamespace\x12!\n" +
+	"\ftarget_edges\x18\x03 \x03(\tR\vtargetEdges\x12!\n" +
+	"\finitiated_by\x18\x04 \x01(\tR\vinitiatedBy\x12'\n" +
+	"\x0ftimeout_seconds\x18\x05 \x01(\x03R\x0etimeoutSeconds\x12=\n" +
+	"\finitiated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vinitiatedAt\"\xde\x02\n" +
+	"\x1bConfigurationReloadResponse\x12!\n" +
+	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12\x17\n" +
+	"\aedge_id\x18\x02 \x01(\tR\x06edgeId\x12/\n" +
+	"\x05phase\x18\x03 \x01(\x0e2\x19.microgateway.ReloadPhaseR\x05phase\x12\x18\n" +
+	"\asuccess\x18\x04 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\x122\n" +
+	"\x15config_version_before\x18\x06 \x01(\tR\x13configVersionBefore\x120\n" +
+	"\x14config_version_after\x18\a \x01(\tR\x12configVersionAfter\x128\n" +
+	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp*[\n" +
+	"\vReloadPhase\x12\b\n" +
+	"\x04PONG\x10\x00\x12\x10\n" +
+	"\fPULL_STARTED\x10\x01\x12\f\n" +
+	"\bUPDATING\x10\x02\x12\v\n" +
+	"\aUPDATED\x10\x03\x12\t\n" +
+	"\x05READY\x10\x04\x12\n" +
+	"\n" +
+	"\x06FAILED\x10\x052\xb0\x04\n" +
 	"\x18ConfigurationSyncService\x12]\n" +
 	"\fRegisterEdge\x12%.microgateway.EdgeRegistrationRequest\x1a&.microgateway.EdgeRegistrationResponse\x12_\n" +
 	"\x14GetFullConfiguration\x12\".microgateway.ConfigurationRequest\x1a#.microgateway.ConfigurationSnapshot\x12Q\n" +
@@ -1215,66 +1516,75 @@ func file_proto_config_sync_proto_rawDescGZIP() []byte {
 	return file_proto_config_sync_proto_rawDescData
 }
 
-var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_proto_config_sync_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_proto_config_sync_proto_goTypes = []any{
-	(*EdgeRegistrationRequest)(nil),   // 0: microgateway.EdgeRegistrationRequest
-	(*EdgeRegistrationResponse)(nil),  // 1: microgateway.EdgeRegistrationResponse
-	(*ConfigurationRequest)(nil),      // 2: microgateway.ConfigurationRequest
-	(*EdgeMessage)(nil),               // 3: microgateway.EdgeMessage
-	(*ControlMessage)(nil),            // 4: microgateway.ControlMessage
-	(*HeartbeatRequest)(nil),          // 5: microgateway.HeartbeatRequest
-	(*HeartbeatResponse)(nil),         // 6: microgateway.HeartbeatResponse
-	(*EdgeUnregistrationRequest)(nil), // 7: microgateway.EdgeUnregistrationRequest
-	(*EdgeMetrics)(nil),               // 8: microgateway.EdgeMetrics
-	(*ErrorMessage)(nil),              // 9: microgateway.ErrorMessage
-	(*AuthenticationRequest)(nil),     // 10: microgateway.AuthenticationRequest
-	(*AuthenticationResponse)(nil),    // 11: microgateway.AuthenticationResponse
-	(*TokenValidationRequest)(nil),    // 12: microgateway.TokenValidationRequest
-	(*TokenValidationResponse)(nil),   // 13: microgateway.TokenValidationResponse
-	nil,                               // 14: microgateway.EdgeRegistrationRequest.MetadataEntry
-	nil,                               // 15: microgateway.EdgeMetrics.CustomMetricsEntry
-	(*HealthStatus)(nil),              // 16: microgateway.HealthStatus
-	(*ConfigurationSnapshot)(nil),     // 17: microgateway.ConfigurationSnapshot
-	(*timestamppb.Timestamp)(nil),     // 18: google.protobuf.Timestamp
-	(*ConfigurationChange)(nil),       // 19: microgateway.ConfigurationChange
-	(*emptypb.Empty)(nil),             // 20: google.protobuf.Empty
+	(ReloadPhase)(0),                    // 0: microgateway.ReloadPhase
+	(*EdgeRegistrationRequest)(nil),     // 1: microgateway.EdgeRegistrationRequest
+	(*EdgeRegistrationResponse)(nil),    // 2: microgateway.EdgeRegistrationResponse
+	(*ConfigurationRequest)(nil),        // 3: microgateway.ConfigurationRequest
+	(*EdgeMessage)(nil),                 // 4: microgateway.EdgeMessage
+	(*ControlMessage)(nil),              // 5: microgateway.ControlMessage
+	(*HeartbeatRequest)(nil),            // 6: microgateway.HeartbeatRequest
+	(*HeartbeatResponse)(nil),           // 7: microgateway.HeartbeatResponse
+	(*EdgeUnregistrationRequest)(nil),   // 8: microgateway.EdgeUnregistrationRequest
+	(*EdgeMetrics)(nil),                 // 9: microgateway.EdgeMetrics
+	(*ErrorMessage)(nil),                // 10: microgateway.ErrorMessage
+	(*AuthenticationRequest)(nil),       // 11: microgateway.AuthenticationRequest
+	(*AuthenticationResponse)(nil),      // 12: microgateway.AuthenticationResponse
+	(*TokenValidationRequest)(nil),      // 13: microgateway.TokenValidationRequest
+	(*TokenValidationResponse)(nil),     // 14: microgateway.TokenValidationResponse
+	(*ConfigurationReloadRequest)(nil),  // 15: microgateway.ConfigurationReloadRequest
+	(*ConfigurationReloadResponse)(nil), // 16: microgateway.ConfigurationReloadResponse
+	nil,                                 // 17: microgateway.EdgeRegistrationRequest.MetadataEntry
+	nil,                                 // 18: microgateway.EdgeMetrics.CustomMetricsEntry
+	(*HealthStatus)(nil),                // 19: microgateway.HealthStatus
+	(*ConfigurationSnapshot)(nil),       // 20: microgateway.ConfigurationSnapshot
+	(*timestamppb.Timestamp)(nil),       // 21: google.protobuf.Timestamp
+	(*ConfigurationChange)(nil),         // 22: microgateway.ConfigurationChange
+	(*emptypb.Empty)(nil),               // 23: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
-	14, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
-	16, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
-	17, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
-	18, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
-	0,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
-	5,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
-	2,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
-	7,  // 7: microgateway.EdgeMessage.unregistration:type_name -> microgateway.EdgeUnregistrationRequest
-	1,  // 8: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
-	17, // 9: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
-	19, // 10: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
-	6,  // 11: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
-	9,  // 12: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
-	16, // 13: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
-	8,  // 14: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
-	18, // 15: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	15, // 16: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
-	18, // 17: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	0,  // 18: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	2,  // 19: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	3,  // 20: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	5,  // 21: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	7,  // 22: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	12, // 23: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
-	1,  // 24: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	17, // 25: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	4,  // 26: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	6,  // 27: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	20, // 28: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	13, // 29: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
-	24, // [24:30] is the sub-list for method output_type
-	18, // [18:24] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	17, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
+	19, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
+	20, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
+	21, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
+	1,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
+	6,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
+	3,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
+	8,  // 7: microgateway.EdgeMessage.unregistration:type_name -> microgateway.EdgeUnregistrationRequest
+	16, // 8: microgateway.EdgeMessage.reload_response:type_name -> microgateway.ConfigurationReloadResponse
+	2,  // 9: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
+	20, // 10: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
+	22, // 11: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
+	7,  // 12: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
+	10, // 13: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
+	15, // 14: microgateway.ControlMessage.reload_request:type_name -> microgateway.ConfigurationReloadRequest
+	19, // 15: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
+	9,  // 16: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
+	21, // 17: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	18, // 18: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
+	21, // 19: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 20: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
+	0,  // 21: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
+	21, // 22: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
+	1,  // 23: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	3,  // 24: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	4,  // 25: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	6,  // 26: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	8,  // 27: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	13, // 28: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	2,  // 29: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	20, // 30: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	5,  // 31: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	7,  // 32: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	23, // 33: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	14, // 34: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	29, // [29:35] is the sub-list for method output_type
+	23, // [23:29] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }
@@ -1288,6 +1598,7 @@ func file_proto_config_sync_proto_init() {
 		(*EdgeMessage_Heartbeat)(nil),
 		(*EdgeMessage_ConfigRequest)(nil),
 		(*EdgeMessage_Unregistration)(nil),
+		(*EdgeMessage_ReloadResponse)(nil),
 	}
 	file_proto_config_sync_proto_msgTypes[4].OneofWrappers = []any{
 		(*ControlMessage_RegistrationResponse)(nil),
@@ -1295,19 +1606,21 @@ func file_proto_config_sync_proto_init() {
 		(*ControlMessage_Change)(nil),
 		(*ControlMessage_HeartbeatResponse)(nil),
 		(*ControlMessage_Error)(nil),
+		(*ControlMessage_ReloadRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_sync_proto_rawDesc), len(file_proto_config_sync_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   16,
+			NumEnums:      1,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_config_sync_proto_goTypes,
 		DependencyIndexes: file_proto_config_sync_proto_depIdxs,
+		EnumInfos:         file_proto_config_sync_proto_enumTypes,
 		MessageInfos:      file_proto_config_sync_proto_msgTypes,
 	}.Build()
 	File_proto_config_sync_proto = out.File

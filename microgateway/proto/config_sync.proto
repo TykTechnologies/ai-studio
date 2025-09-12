@@ -60,6 +60,7 @@ message EdgeMessage {
     HeartbeatRequest heartbeat = 2;
     ConfigurationRequest config_request = 3;
     EdgeUnregistrationRequest unregistration = 4;
+    ConfigurationReloadResponse reload_response = 5; // NEW: Reload status reporting
   }
 }
 
@@ -71,6 +72,7 @@ message ControlMessage {
     ConfigurationChange change = 3;
     HeartbeatResponse heartbeat_response = 4;
     ErrorMessage error = 5;
+    ConfigurationReloadRequest reload_request = 6; // NEW: Initiate reload
   }
 }
 
@@ -144,4 +146,34 @@ message TokenValidationResponse {
   repeated string scopes = 4; // Token scopes if valid
   string error_message = 5; // Error message if invalid
   google.protobuf.Timestamp expires_at = 6; // Token expiration
+}
+
+// Distributed configuration reload messages (NEW)
+message ConfigurationReloadRequest {
+  string operation_id = 1;        // Unique operation ID for tracking
+  string target_namespace = 2;    // Namespace to reload ("" = all)
+  repeated string target_edges = 3; // Specific edge IDs (empty = all in namespace)
+  string initiated_by = 4;        // CLI user/admin who initiated
+  int64 timeout_seconds = 5;      // Operation timeout
+  google.protobuf.Timestamp initiated_at = 6; // When reload was initiated
+}
+
+message ConfigurationReloadResponse {
+  string operation_id = 1;        // Operation ID from request
+  string edge_id = 2;             // Edge reporting status
+  ReloadPhase phase = 3;          // Current reload phase
+  bool success = 4;               // Success status (valid for READY/FAILED phases)
+  string message = 5;             // Status message or error details
+  string config_version_before = 6; // Config version before reload
+  string config_version_after = 7;  // Config version after reload (if successful)
+  google.protobuf.Timestamp timestamp = 8; // When this status was reported
+}
+
+enum ReloadPhase {
+  PONG = 0;           // Edge acknowledges reload request
+  PULL_STARTED = 1;   // Edge starts pulling new config
+  UPDATING = 2;       // Edge applying new config to SQLite
+  UPDATED = 3;        // Edge SQLite update complete
+  READY = 4;          // Edge operational with new config
+  FAILED = 5;         // Edge failed during reload
 }
