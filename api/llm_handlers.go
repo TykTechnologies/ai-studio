@@ -38,22 +38,45 @@ func (a *API) createLLM(c *gin.Context) {
 		filters = append(filters, &models.Filter{ID: uint(f)})
 	}
 
-	llm, err := a.service.CreateLLM(
-		input.Data.Attributes.Name,
-		input.Data.Attributes.APIKey,
-		input.Data.Attributes.APIEndpoint,
-		input.Data.Attributes.PrivacyScore,
-		input.Data.Attributes.ShortDescription,
-		input.Data.Attributes.LongDescription,
-		input.Data.Attributes.LogoURL,
-		models.Vendor(input.Data.Attributes.Vendor),
-		input.Data.Attributes.Active,
-		filters,
-		input.Data.Attributes.DefaultModel,
-		input.Data.Attributes.AllowedModels,
-		input.Data.Attributes.MonthlyBudget,
-		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
-	)
+	// Use namespace-aware service method if namespace is provided
+	var llm *models.LLM
+	var err error
+	if input.Data.Attributes.Namespace != "" {
+		llm, err = a.service.CreateLLMWithNamespace(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.APIKey,
+			input.Data.Attributes.APIEndpoint,
+			input.Data.Attributes.PrivacyScore,
+			input.Data.Attributes.ShortDescription,
+			input.Data.Attributes.LongDescription,
+			input.Data.Attributes.LogoURL,
+			models.Vendor(input.Data.Attributes.Vendor),
+			input.Data.Attributes.Active,
+			filters,
+			input.Data.Attributes.DefaultModel,
+			input.Data.Attributes.AllowedModels,
+			input.Data.Attributes.MonthlyBudget,
+			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
+			input.Data.Attributes.Namespace,
+		)
+	} else {
+		llm, err = a.service.CreateLLM(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.APIKey,
+			input.Data.Attributes.APIEndpoint,
+			input.Data.Attributes.PrivacyScore,
+			input.Data.Attributes.ShortDescription,
+			input.Data.Attributes.LongDescription,
+			input.Data.Attributes.LogoURL,
+			models.Vendor(input.Data.Attributes.Vendor),
+			input.Data.Attributes.Active,
+			filters,
+			input.Data.Attributes.DefaultModel,
+			input.Data.Attributes.AllowedModels,
+			input.Data.Attributes.MonthlyBudget,
+			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
+		)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

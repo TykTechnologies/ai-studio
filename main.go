@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
+	"github.com/TykTechnologies/midsommar/v2/grpc"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -35,7 +36,7 @@ import (
 var staticFiles embed.FS
 
 func printWelcome() {
-	fmt.Printf("Starting Tyk AI Portal %v\n", VERSION)
+	fmt.Printf("Starting Tyk AI Portal %v\n", "v2.0-hub-spoke")
 	fmt.Println("Copyright Tyk Technologies, 2024")
 }
 
@@ -141,7 +142,7 @@ func main() {
 	budgetService := services.NewBudgetService(db, notificationService)
 
 	// Initialize and start telemetry
-	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, VERSION)
+	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, "v2.0-hub-spoke")
 	telemetryManager.Start()
 	defer telemetryManager.Stop()
 
@@ -153,6 +154,34 @@ func main() {
 
 	// Always enable gateway
 	go p.Start()
+
+	// Initialize gRPC control server if enabled
+	var controlServer *grpc.ControlServer
+	if appConf.GatewayMode == "control" {
+		grpcConfig := &grpc.Config{
+			GRPCPort:    appConf.GRPCPort,
+			GRPCHost:    appConf.GRPCHost,
+			TLSEnabled:  appConf.GRPCTLSEnabled,
+			TLSCertPath: appConf.GRPCTLSCertPath,
+			TLSKeyPath:  appConf.GRPCTLSKeyPath,
+			AuthToken:   appConf.GRPCAuthToken,
+		}
+		
+		controlServer = grpc.NewControlServer(grpcConfig, db)
+		go func() {
+			log.Printf("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
+			if err := controlServer.Start(); err != nil {
+				log.Fatalf("Failed to start gRPC control server: %v", err)
+			}
+		}()
+		
+		// Graceful shutdown of gRPC server
+		defer func() {
+			if controlServer != nil {
+				controlServer.Stop()
+			}
+		}()
+	}
 
 	noDocsArg := false
 	docsPortArg := 8989

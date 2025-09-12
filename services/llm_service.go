@@ -40,6 +40,38 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		AllowedModels:    allowedModels,
 		MonthlyBudget:    monthlyBudget,
 		BudgetStartDate:  budgetStartDate,
+		Namespace:        "", // Default to global namespace
+	}
+
+	if err := llm.Create(s.DB); err != nil {
+		return nil, err
+	}
+
+	return llm, nil
+}
+
+// CreateLLMWithNamespace creates a new LLM with namespace support
+func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, privacyScore int,
+	shortDescription, longDescription, logoURL string,
+	vendor models.Vendor, active bool, filters []*models.Filter,
+	defaultModel string, allowedModels []string, monthlyBudget *float64,
+	budgetStartDate *time.Time, namespace string) (*models.LLM, error) {
+	llm := &models.LLM{
+		Name:             name,
+		APIKey:           apiKey,
+		APIEndpoint:      apiEndpoint,
+		PrivacyScore:     privacyScore,
+		ShortDescription: shortDescription,
+		LongDescription:  longDescription,
+		LogoURL:          logoURL,
+		Vendor:           vendor,
+		Active:           active,
+		Filters:          filters,
+		DefaultModel:     defaultModel,
+		AllowedModels:    allowedModels,
+		MonthlyBudget:    monthlyBudget,
+		BudgetStartDate:  budgetStartDate,
+		Namespace:        namespace,
 	}
 
 	if err := llm.Create(s.DB); err != nil {
@@ -215,6 +247,56 @@ func (s *Service) GetLLMsByNameStub(name string) (models.LLMs, error) {
 		return nil, err
 	}
 	return llms, nil
+}
+
+// GetLLMsInNamespace returns LLMs in a specific namespace (including global)
+func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
+	llms := models.LLMs{}
+	
+	query := s.DB.Preload("Filters")
+	if namespace == "" {
+		// Global namespace - only global LLMs
+		query = query.Where("namespace = ''")
+	} else {
+		// Specific namespace - global + matching namespace
+		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := query.Find(&llms).Error; err != nil {
+		return nil, err
+	}
+
+	for i := range llms {
+		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
+		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	}
+
+	return []models.LLM(llms), nil
+}
+
+// GetActiveLLMsInNamespace returns active LLMs in a specific namespace (including global)
+func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, error) {
+	llms := models.LLMs{}
+	
+	query := s.DB.Preload("Filters").Where("active = ?", true)
+	if namespace == "" {
+		// Global namespace - only global LLMs
+		query = query.Where("namespace = ''")
+	} else {
+		// Specific namespace - global + matching namespace
+		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := query.Find(&llms).Error; err != nil {
+		return nil, err
+	}
+
+	for i := range llms {
+		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
+		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	}
+
+	return []models.LLM(llms), nil
 }
 
 func (s *Service) GetLLMsByMaxPrivacyScore(score int) (models.LLMs, error) {

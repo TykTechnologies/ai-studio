@@ -8,6 +8,8 @@ type Filter struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Script      []byte `json:"script"`
+	// Hub-and-Spoke Configuration
+	Namespace   string `json:"namespace" gorm:"default:'';index:idx_filter_namespace"`
 }
 
 func NewFilter() *Filter {

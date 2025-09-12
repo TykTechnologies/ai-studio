@@ -673,6 +673,18 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
+	// Edge Management routes (Hub-and-Spoke)
+	v1.GET("/edges", a.listEdges)
+	v1.GET("/edges/:edge_id", a.getEdge)
+	v1.POST("/edges/:edge_id/reload", a.triggerEdgeReload)
+	v1.GET("/edges/reload-operations", a.listReloadOperations)
+	v1.DELETE("/edges/:edge_id", a.deleteEdge)
+
+	// Namespace Management routes (Hub-and-Spoke)
+	v1.GET("/namespaces", a.listNamespaces)
+	v1.POST("/namespaces/:namespace/reload", a.triggerNamespaceReload)
+	v1.GET("/namespaces/:namespace/edges", a.getNamespaceEdges)
+
 	// SSO routes
 	if a.config.TIBEnabled {
 		public.GET("/auth/:id/:provider", a.handleTIBAuth)

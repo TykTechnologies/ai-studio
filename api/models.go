@@ -118,6 +118,7 @@ type LLMInput struct {
 			AllowedModels    []string `json:"allowed_models"`
 			MonthlyBudget    *float64 `json:"monthly_budget"`
 			BudgetStartDate  *string  `json:"budget_start_date"`
+			Namespace        string   `json:"namespace,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -356,6 +357,7 @@ type AppInput struct {
 			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
+			Namespace       string     `json:"namespace,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }

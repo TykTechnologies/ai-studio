@@ -33,6 +33,9 @@ func InitModels(db *gorm.DB) error {
 		&AuthCode{},
 		&AccessToken{},
 		&PendingOAuthRequest{},
+		// Hub-and-Spoke Models
+		&EdgeInstance{},        // Edge instance tracking
+		&ConfigurationChange{}, // Configuration change tracking
 	); err != nil {
 		return err
 	}

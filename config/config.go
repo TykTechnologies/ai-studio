@@ -39,6 +39,15 @@ type AppConf struct {
 	ProxyOAuthMetadataURL string
 	TelemetryEnabled      bool
 	QueueConfig           QueueConfig
+	
+	// Hub-and-Spoke Configuration
+	GatewayMode        string
+	GRPCPort           int
+	GRPCHost           string
+	GRPCTLSEnabled     bool
+	GRPCTLSCertPath    string
+	GRPCTLSKeyPath     string
+	GRPCAuthToken      string
 }
 
 // QueueConfig holds configuration for message queues
@@ -287,6 +296,38 @@ func getConfigFromEnv() *AppConf {
 
 	// Queue configuration
 	conf.QueueConfig = getQueueConfig()
+
+	// Hub-and-Spoke configuration
+	conf.GatewayMode = os.Getenv("GATEWAY_MODE")
+	if conf.GatewayMode == "" {
+		conf.GatewayMode = "standalone" // Default to standalone mode
+	}
+
+	grpcPortStr := os.Getenv("GRPC_PORT")
+	if grpcPortStr != "" {
+		if port, err := strconv.Atoi(grpcPortStr); err == nil {
+			conf.GRPCPort = port
+		} else {
+			log.Printf("Warning: Invalid GRPC_PORT value: %s. Using default: 9090", grpcPortStr)
+			conf.GRPCPort = 9090
+		}
+	} else {
+		conf.GRPCPort = 9090 // Default gRPC port
+	}
+
+	conf.GRPCHost = os.Getenv("GRPC_HOST")
+	if conf.GRPCHost == "" {
+		conf.GRPCHost = "0.0.0.0" // Default to listen on all interfaces
+	}
+
+	grpcTLSStr := os.Getenv("GRPC_TLS_ENABLED")
+	if grpcTLSStr == "true" || grpcTLSStr == "1" {
+		conf.GRPCTLSEnabled = true
+	}
+
+	conf.GRPCTLSCertPath = os.Getenv("GRPC_TLS_CERT_PATH")
+	conf.GRPCTLSKeyPath = os.Getenv("GRPC_TLS_KEY_PATH")
+	conf.GRPCAuthToken = os.Getenv("GRPC_AUTH_TOKEN")
 
 	return conf
 }

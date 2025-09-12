@@ -24,6 +24,8 @@ type LLM struct {
 	// Budget
 	MonthlyBudget   *float64   `json:"monthly_budget" gorm:"column:monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date" gorm:"column:budget_start_date"`
+	// Hub-and-Spoke Configuration
+	Namespace       string     `json:"namespace" gorm:"default:'';index:idx_llm_namespace"`
 
 	Filters       []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
 	AllowedModels []string  `json:"allowed_models" gorm:"serializer:json"`

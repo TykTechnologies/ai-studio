@@ -27,6 +27,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		UserID:          userID,
 		MonthlyBudget:   monthlyBudget,
 		BudgetStartDate: budgetStartDate,
+		Namespace:       "", // Default to global namespace
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -96,6 +97,69 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 	// 	return nil, fmt.Errorf("failed to reload app: %w", err)
 	// }
 	// return app, nil
+
+	// Fetch into a new instance before returning to ensure all associations are freshly loaded
+	finalApp := &models.App{}
+	if err := finalApp.Get(s.DB, app.ID); err != nil {
+		return nil, fmt.Errorf("failed to fetch final app state for app ID %d: %w", app.ID, err)
+	}
+	return finalApp, nil
+}
+
+// CreateAppWithNamespace creates a new app with namespace support
+func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string) (*models.App, error) {
+	// toolIDs is already of type []uint, no conversion needed
+
+	// Check if datasources have higher privacy score than LLMs
+	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
+		return nil, err
+	}
+
+	app := &models.App{
+		Name:            name,
+		Description:     description,
+		UserID:          userID,
+		MonthlyBudget:   monthlyBudget,
+		BudgetStartDate: budgetStartDate,
+		Namespace:       namespace,
+	}
+
+	if err := app.Create(s.DB); err != nil {
+		return nil, err
+	}
+
+	// Add datasources to the app
+	for _, dsID := range datasourceIDs {
+		ds, err := s.GetDatasourceByID(dsID)
+		if err != nil {
+			return nil, err
+		}
+		if err := app.AddDatasource(s.DB, ds); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add LLMs to the app
+	for _, llmID := range llmIDs {
+		llm, err := s.GetLLMByID(llmID)
+		if err != nil {
+			return nil, err
+		}
+		if err := app.AddLLM(s.DB, llm); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add Tools to the app
+	for _, toolID := range toolIDs {
+		tool, err := s.GetToolByID(toolID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
+		}
+		if err := app.AddTool(s.DB, tool); err != nil {
+			return nil, fmt.Errorf("failed to add tool %d to app: %w", toolID, err)
+		}
+	}
 
 	// Fetch into a new instance before returning to ensure all associations are freshly loaded
 	finalApp := &models.App{}
@@ -553,4 +617,44 @@ func (s *Service) CountApps() (int64, error) {
 func (s *Service) CountAppsByUserID(userID uint) (int64, error) {
 	app := models.NewApp()
 	return app.CountByUserID(s.DB, userID)
+}
+
+// GetAppsInNamespace returns apps in a specific namespace (including global)
+func (s *Service) GetAppsInNamespace(namespace string) ([]models.App, error) {
+	var apps []models.App
+	
+	query := s.DB.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools")
+	if namespace == "" {
+		// Global namespace - only global apps
+		query = query.Where("namespace = ''")
+	} else {
+		// Specific namespace - global + matching namespace
+		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := query.Find(&apps).Error; err != nil {
+		return nil, err
+	}
+
+	return apps, nil
+}
+
+// GetActiveAppsInNamespace returns active apps in a specific namespace (including global)
+func (s *Service) GetActiveAppsInNamespace(namespace string) ([]models.App, error) {
+	var apps []models.App
+	
+	query := s.DB.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Where("is_active = ?", true)
+	if namespace == "" {
+		// Global namespace - only global apps
+		query = query.Where("namespace = ''")
+	} else {
+		// Specific namespace - global + matching namespace
+		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	
+	if err := query.Find(&apps).Error; err != nil {
+		return nil, err
+	}
+
+	return apps, nil
 }

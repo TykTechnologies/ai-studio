@@ -49,16 +49,33 @@ func (a *API) createApp(c *gin.Context) {
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 
-	app, err := a.service.CreateApp(
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.UserID,
-		datasourceIDs,
-		llmIDs,
-		toolIDs, // Pass toolIDs to service method
-		input.Data.Attributes.MonthlyBudget,
-		input.Data.Attributes.BudgetStartDate,
-	)
+	// Use namespace-aware service method if namespace is provided
+	var app *models.App
+	var err error
+	if input.Data.Attributes.Namespace != "" {
+		app, err = a.service.CreateAppWithNamespace(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs, // Pass toolIDs to service method
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+			input.Data.Attributes.Namespace,
+		)
+	} else {
+		app, err = a.service.CreateApp(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs, // Pass toolIDs to service method
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+		)
+	}
 	if err != nil {
 		if err == services.ERRPrivacyScoreMismatch {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
