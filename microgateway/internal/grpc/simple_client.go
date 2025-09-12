@@ -20,6 +20,11 @@ type SimpleEdgeClient struct {
 	client      pb.ConfigurationSyncServiceClient
 	configCache *pb.ConfigurationSnapshot
 	
+	// Build information
+	version    string
+	buildHash  string
+	buildTime  string
+	
 	// Bidirectional streaming
 	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
 	streamCtx    context.Context
@@ -36,9 +41,12 @@ type SimpleEdgeClient struct {
 }
 
 // NewSimpleEdgeClient creates a basic edge client
-func NewSimpleEdgeClient(cfg *config.Config) *SimpleEdgeClient {
+func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime string) *SimpleEdgeClient {
 	return &SimpleEdgeClient{
-		config: cfg,
+		config:    cfg,
+		version:   version,
+		buildHash: buildHash,
+		buildTime: buildTime,
 	}
 }
 
@@ -82,10 +90,11 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	req := &pb.EdgeRegistrationRequest{
 		EdgeId:        c.config.HubSpoke.EdgeID,
 		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
-		Version:       "dev",
-		BuildHash:     "unknown",
+		Version:       c.version,
+		BuildHash:     c.buildHash,
 		Metadata: map[string]string{
-			"test": "true",
+			"test":       "true",
+			"build_time": c.buildTime,
 		},
 		Health: &pb.HealthStatus{
 			Status:    pb.HealthStatus_HEALTHY,
@@ -238,8 +247,12 @@ func (c *SimpleEdgeClient) establishStream() error {
 			Registration: &pb.EdgeRegistrationRequest{
 				EdgeId:        c.config.HubSpoke.EdgeID,
 				EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
-				Version:       "dev",
-				BuildHash:     "unknown",
+				Version:       c.version,
+				BuildHash:     c.buildHash,
+				Metadata: map[string]string{
+					"test":       "true",
+					"build_time": c.buildTime,
+				},
 				Health: &pb.HealthStatus{
 					Status:    pb.HealthStatus_HEALTHY,
 					Message:   "Streaming connection established",

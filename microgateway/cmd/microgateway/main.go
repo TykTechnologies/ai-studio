@@ -111,7 +111,7 @@ func main() {
 			Str("edge_id", cfg.HubSpoke.EdgeID).
 			Msg("Connecting to control server before initializing services")
 		
-		edgeClient = grpc.NewSimpleEdgeClient(cfg)
+		edgeClient = grpc.NewSimpleEdgeClient(cfg, Version, BuildHash, BuildTime)
 		
 		if err := edgeClient.Start(); err != nil {
 			log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")

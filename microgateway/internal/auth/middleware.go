@@ -16,10 +16,10 @@ type ContextKey string
 const (
 	// AuthResultKey is the context key for auth result
 	AuthResultKey ContextKey = "auth_result"
-	
+
 	// AppIDKey is the context key for app ID
 	AppIDKey ContextKey = "app_id"
-	
+
 	// ScopesKey is the context key for scopes
 	ScopesKey ContextKey = "scopes"
 )
@@ -139,23 +139,6 @@ func OptionalAuth(provider AuthProvider) gin.HandlerFunc {
 			c.Set(string(AppIDKey), authResult.AppID)
 			c.Set(string(ScopesKey), authResult.Scopes)
 		}
-
-		c.Next()
-	}
-}
-
-// RateLimitByApp middleware implements per-app rate limiting
-func RateLimitByApp() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authResult := GetAuthResult(c)
-		if authResult == nil {
-			c.Next()
-			return
-		}
-
-		// TODO: Implement rate limiting logic
-		// This would integrate with a rate limiter (Redis, in-memory, etc.)
-		// For now, we'll just pass through
 
 		c.Next()
 	}

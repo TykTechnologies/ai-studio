@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
 	"github.com/rs/zerolog/log"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -149,7 +150,20 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			MonthlyBudget:   pbLLM.MonthlyBudget,
 			RateLimitRPM:    int(pbLLM.RateLimitRpm),
 			Namespace:       pbLLM.Namespace,
-			// TODO: Handle JSON fields (Metadata, AllowedModels, AuthConfig)
+		}
+
+		// Handle JSON fields with proper conversion
+		if pbLLM.Metadata != "" {
+			llm.Metadata = datatypes.JSON(pbLLM.Metadata)
+		}
+		if pbLLM.AllowedModels != "" {
+			llm.AllowedModels = datatypes.JSON(pbLLM.AllowedModels)
+		}
+		if pbLLM.AuthConfig != "" {
+			llm.AuthConfig = datatypes.JSON(pbLLM.AuthConfig)
+		}
+		if pbLLM.AuthMechanism != "" {
+			llm.AuthMechanism = pbLLM.AuthMechanism
 		}
 
 		if err := tx.Create(llm).Error; err != nil {
@@ -185,7 +199,21 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			BudgetResetDay:  int(pbApp.BudgetResetDay),
 			RateLimitRPM:    int(pbApp.RateLimitRpm),
 			Namespace:       pbApp.Namespace,
-			// TODO: Handle JSON fields and other timestamps
+		}
+
+		// Handle JSON fields with proper conversion
+		if pbApp.AllowedIps != "" {
+			app.AllowedIPs = datatypes.JSON(pbApp.AllowedIps)
+		}
+		if pbApp.Metadata != "" {
+			app.Metadata = datatypes.JSON(pbApp.Metadata)
+		}
+
+		// Handle budget start date if available  
+		if pbApp.BudgetStartDate != "" {
+			if startDate, err := time.Parse(time.RFC3339, pbApp.BudgetStartDate); err == nil {
+				app.BudgetStartDate = &startDate
+			}
 		}
 
 		if err := tx.Create(app).Error; err != nil {
@@ -277,7 +305,11 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 			Namespace:   pbPlugin.Namespace,
 			CreatedAt:   pbPlugin.CreatedAt.AsTime(),
 			UpdatedAt:   pbPlugin.UpdatedAt.AsTime(),
-			// TODO: Handle Config JSON field
+		}
+
+		// Handle Config JSON field with proper conversion
+		if pbPlugin.Config != "" {
+			plugin.Config = datatypes.JSON(pbPlugin.Config)
 		}
 
 		if err := tx.Create(plugin).Error; err != nil {

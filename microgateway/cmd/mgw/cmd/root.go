@@ -4,9 +4,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/cli"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -75,6 +78,61 @@ func init() {
 	rootCmd.AddCommand(edgeCmd)
 }
 
+// CLIConfig represents the CLI configuration structure
+type CLIConfig struct {
+	URL    string `yaml:"url" json:"url"`
+	Token  string `yaml:"token" json:"token"`
+	Format string `yaml:"format" json:"format"`
+}
+
+// loadConfigFile loads configuration from a file
+func loadConfigFile(configPath string) error {
+	// Check if file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return fmt.Errorf("config file does not exist")
+	}
+
+	// Read file content
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config CLIConfig
+	
+	// Determine file format by extension
+	ext := strings.ToLower(filepath.Ext(configPath))
+	
+	switch ext {
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return fmt.Errorf("failed to parse YAML config: %w", err)
+		}
+	case ".json":
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return fmt.Errorf("failed to parse JSON config: %w", err)
+		}
+	default:
+		// Try YAML as default
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return fmt.Errorf("failed to parse config (unknown format, tried YAML): %w", err)
+		}
+	}
+
+	// Apply configuration values if not already set via flags or environment
+	if url == "" && config.URL != "" {
+		url = config.URL
+	}
+	if token == "" && config.Token != "" {
+		token = config.Token
+	}
+	if format == "table" && config.Format != "" { // Only override default, not explicit flag
+		format = config.Format
+	}
+
+	return nil
+}
+
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
 	// Set defaults from environment
@@ -100,8 +158,11 @@ func initConfig() {
 		}
 	}
 
-	// TODO: Load from config file if specified
+	// Load from config file if specified
 	if cfgFile != "" {
-		// Load configuration from file
+		if err := loadConfigFile(cfgFile); err != nil {
+			fmt.Printf("Error loading config file '%s': %v\n", cfgFile, err)
+			os.Exit(1)
+		}
 	}
 }

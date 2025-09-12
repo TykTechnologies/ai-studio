@@ -59,7 +59,7 @@ func TestSimpleEdgeClient_StreamingConnection(t *testing.T) {
 	}
 
 	// Create and start edge client
-	edgeClient := grpc.NewSimpleEdgeClient(edgeConfig)
+	edgeClient := grpc.NewSimpleEdgeClient(edgeConfig, "test", "test-hash", "test-time")
 	
 	err = edgeClient.Start()
 	require.NoError(t, err, "Edge client should start successfully with streaming")
@@ -98,7 +98,7 @@ func TestSimpleEdgeClient_ReloadMessageHandling(t *testing.T) {
 		},
 	}
 
-	edgeClient := grpc.NewSimpleEdgeClient(edgeConfig)
+	edgeClient := grpc.NewSimpleEdgeClient(edgeConfig, "test", "test-hash", "test-time")
 	
 	// Mock reload handler
 	reloadRequestReceived := false

@@ -682,6 +682,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			CreatedAt:       timestamppb.New(llm.CreatedAt),
 			UpdatedAt:       timestamppb.New(llm.UpdatedAt),
 			
+			// JSON fields as strings
+			Metadata:      string(llm.Metadata),
+			AllowedModels: string(llm.AllowedModels),
+			AuthMechanism: llm.AuthMechanism,
+			AuthConfig:    string(llm.AuthConfig),
+			
 			// Embedded relationship data
 			AppIds:    appIDs,    // Which apps can access this LLM
 			FilterIds: filterIDs, // Which filters apply to this LLM
@@ -747,6 +753,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			tokenIDs[j] = uint32(token.ID)
 		}
 		
+		// Convert budget start date to string if available
+		var budgetStartDate string
+		if app.BudgetStartDate != nil {
+			budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
+		}
+
 		snapshot.Apps[i] = &pb.AppConfig{
 			Id:             uint32(app.ID),
 			Name:           app.Name,
@@ -759,6 +771,11 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:      app.Namespace,
 			CreatedAt:      timestamppb.New(app.CreatedAt),
 			UpdatedAt:      timestamppb.New(app.UpdatedAt),
+			
+			// JSON fields as strings
+			BudgetStartDate: budgetStartDate,
+			AllowedIps:      string(app.AllowedIPs),
+			Metadata:        string(app.Metadata),
 			
 			// Embedded relationship data - THE CRITICAL FIX
 			LlmIds:        llmIDs,        // From app_llms join table - enables LLM access validation
@@ -856,13 +873,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Description: plugin.Description,
 			Command:     plugin.Command,
 			Checksum:    plugin.Checksum,
+			Config:      string(plugin.Config), // JSON field as string
 			HookType:    plugin.HookType,
 			IsActive:    plugin.IsActive,
 			Namespace:   plugin.Namespace,
 			CreatedAt:   timestamppb.New(plugin.CreatedAt),
 			UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
 			LlmIds:      llmIDs, // Which LLMs use this plugin
-			// TODO: Handle Config JSON field
 		}
 
 		log.Debug().
