@@ -123,6 +123,25 @@ type LLMInput struct {
 	} `json:"data"`
 }
 
+// PluginInput represents the input for plugin-related operations
+// @Description Plugin input model
+type PluginInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name        string                 `json:"name"`
+			Slug        string                 `json:"slug"`
+			Description string                 `json:"description"`
+			Command     string                 `json:"command"`
+			Checksum    string                 `json:"checksum,omitempty"`
+			Config      map[string]interface{} `json:"config"`
+			HookType    string                 `json:"hook_type"`
+			IsActive    bool                   `json:"is_active"`
+			Namespace   string                 `json:"namespace,omitempty"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
 // LLMResponse represents the response for LLM-related operations
 // @Description LLM response model
 type LLMResponse struct {

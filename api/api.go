@@ -627,6 +627,18 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/filters/:id", a.deleteFilter)
 	v1.GET("/filters", a.listFilters)
 
+	// Plugin routes
+	v1.POST("/plugins", a.createPlugin)
+	v1.GET("/plugins/:id", a.getPlugin)
+	v1.PATCH("/plugins/:id", a.updatePlugin)
+	v1.DELETE("/plugins/:id", a.deletePlugin)
+	v1.GET("/plugins", a.listPlugins)
+	v1.POST("/plugins/:id/test", a.testPlugin)
+
+	// LLM-Plugin association routes (extend existing LLM routes)
+	v1.GET("/llms/:id/plugins", a.getLLMPlugins)
+	v1.PUT("/llms/:id/plugins", a.updateLLMPlugins)
+
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)

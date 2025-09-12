@@ -12,6 +12,7 @@ type Service struct {
 	// Hub-and-Spoke Services
 	EdgeService      *EdgeService
 	NamespaceService *NamespaceService
+	PluginService    *PluginService
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -22,6 +23,7 @@ func NewService(db *gorm.DB) *Service {
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
 	namespaceService := NewNamespaceService(db, edgeService)
+	pluginService := NewPluginService(db)
 	
 	return &Service{
 		DB:                  db,
@@ -29,6 +31,7 @@ func NewService(db *gorm.DB) *Service {
 		Budget:              budgetService,
 		EdgeService:         edgeService,
 		NamespaceService:    namespaceService,
+		PluginService:       pluginService,
 	}
 }
 

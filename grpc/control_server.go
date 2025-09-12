@@ -7,6 +7,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -681,12 +682,63 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		snapshot.ModelPrices = append(snapshot.ModelPrices, pbPrice)
 	}
 
+	// Get Plugins for namespace
+	var plugins []models.Plugin
+	pluginQuery := s.db.Preload("LLMs")
+	if namespace == "" {
+		pluginQuery = pluginQuery.Where("namespace = '' AND is_active = ?", true)
+	} else {
+		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?) AND is_active = ?", namespace, true)
+	}
+	
+	if err := pluginQuery.Find(&plugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get Plugins: %w", err)
+	}
+
+	// Convert Plugins to protobuf
+	for _, plugin := range plugins {
+		// Get associated LLM IDs for this plugin
+		var llmPlugins []models.LLMPlugin
+		s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Find(&llmPlugins)
+		
+		llmIDs := make([]uint32, len(llmPlugins))
+		for i, lp := range llmPlugins {
+			llmIDs[i] = uint32(lp.LLMID)
+		}
+		
+		// Convert config to JSON string
+		var configJSON string
+		if plugin.Config != nil {
+			if configBytes, err := json.Marshal(plugin.Config); err == nil {
+				configJSON = string(configBytes)
+			}
+		}
+		
+		pbPlugin := &pb.PluginConfig{
+			Id:          uint32(plugin.ID),
+			Name:        plugin.Name,
+			Slug:        plugin.Slug,
+			Description: plugin.Description,
+			Command:     plugin.Command,
+			Checksum:    plugin.Checksum,
+			Config:      configJSON,
+			HookType:    plugin.HookType,
+			IsActive:    plugin.IsActive,
+			Namespace:   plugin.Namespace,
+			LlmIds:      llmIDs,
+			CreatedAt:   timestamppb.New(plugin.CreatedAt),
+			UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
+		}
+		snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
+	}
+
 	log.Info().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
 		Int("app_count", len(snapshot.Apps)).
 		Int("filter_count", len(snapshot.Filters)).
 		Int("price_count", len(snapshot.ModelPrices)).
+		Int("plugin_count", len(snapshot.Plugins)).
 		Msg("Generated configuration snapshot for edge")
 
 	return snapshot, nil

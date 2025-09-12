@@ -31,6 +31,7 @@ type NamespaceInfo struct {
 	AppCount     int64  `json:"app_count"`
 	TokenCount   int64  `json:"token_count"`
 	FilterCount  int64  `json:"filter_count"`
+	PluginCount  int64  `json:"plugin_count"`
 }
 
 // ReloadOperation represents a configuration reload operation
@@ -82,6 +83,7 @@ func (s *NamespaceService) ListNamespaces() ([]NamespaceInfo, error) {
 	s.db.Model(&models.App{}).Where("namespace = ''").Count(&globalInfo.AppCount)
 	s.db.Model(&models.Credential{}).Where("active = ?", true).Count(&globalInfo.TokenCount) // Use credentials instead
 	s.db.Model(&models.Filter{}).Where("namespace = ''").Count(&globalInfo.FilterCount)
+	s.db.Model(&models.Plugin{}).Where("namespace = ''").Count(&globalInfo.PluginCount)
 	
 	result = append(result, globalInfo)
 
@@ -99,6 +101,7 @@ func (s *NamespaceService) ListNamespaces() ([]NamespaceInfo, error) {
 		// Note: Credentials are global in AI Studio, so count all active credentials
 		s.db.Model(&models.Credential{}).Where("active = ?", true).Count(&nsInfo.TokenCount)
 		s.db.Model(&models.Filter{}).Where("namespace = ?", ns).Count(&nsInfo.FilterCount)
+		s.db.Model(&models.Plugin{}).Where("namespace = ?", ns).Count(&nsInfo.PluginCount)
 
 		result = append(result, nsInfo)
 	}
@@ -318,6 +321,7 @@ func (s *NamespaceService) GetActiveNamespaces() ([]NamespaceInfo, error) {
 		// Note: Credentials are global in AI Studio, so count all active credentials
 		s.db.Model(&models.Credential{}).Where("active = ?", true).Count(&nsInfo.TokenCount)
 		s.db.Model(&models.Filter{}).Where("namespace = ?", ns).Count(&nsInfo.FilterCount)
+		s.db.Model(&models.Plugin{}).Where("namespace = ?", ns).Count(&nsInfo.PluginCount)
 
 		result = append(result, nsInfo)
 	}
