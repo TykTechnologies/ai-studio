@@ -316,13 +316,13 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 			return fmt.Errorf("failed to insert Plugin %d: %w", pbPlugin.Id, err)
 		}
 
-		// Recreate llm_plugins join table relationships
-		for _, llmID := range pbPlugin.LlmIds {
+		// Recreate llm_plugins join table relationships with order preservation
+		for index, llmID := range pbPlugin.LlmIds {
 			llmPlugin := &database.LLMPlugin{
 				LLMID:      uint(llmID),
 				PluginID:   uint(pbPlugin.Id),
 				IsActive:   true,
-				OrderIndex: 0, // TODO: Get from embedded data if available
+				OrderIndex: index, // Use position in slice as order index
 				CreatedAt:  time.Now(),
 			}
 

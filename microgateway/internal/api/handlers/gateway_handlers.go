@@ -4,27 +4,14 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
-// ProxyToGateway handles gateway proxy requests (to be integrated with AI Gateway library)
-func ProxyToGateway(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// TODO: Integrate with actual AI Gateway library
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"error":    "Gateway proxy not implemented yet",
-			"endpoint": c.Request.URL.Path,
-			"method":   c.Request.Method,
-			"message":  "This endpoint will be implemented when integrating with the AI Gateway library",
-		})
-	}
-}
 
-// PrometheusMetrics returns Prometheus-format metrics
+// PrometheusMetrics returns basic Prometheus-format metrics
+// Note: Returns static metrics for now - real metrics collection can be added later
 func PrometheusMetrics() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Implement actual Prometheus metrics
 		c.Header("Content-Type", "text/plain")
 		c.String(http.StatusOK, `# HELP microgateway_info Microgateway service info
 # TYPE microgateway_info gauge
@@ -41,10 +28,10 @@ microgateway_build_info{version="dev",build_hash="unknown"} 1
 	}
 }
 
-// SwaggerHandler serves Swagger documentation
+// SwaggerHandler serves basic Swagger documentation
+// Note: Returns static API documentation - can be enhanced with generated docs later
 func SwaggerHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Implement actual Swagger documentation
 		c.JSON(http.StatusOK, gin.H{
 			"swagger": "2.0",
 			"info": gin.H{

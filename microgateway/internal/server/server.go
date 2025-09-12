@@ -23,6 +23,11 @@ type Server struct {
 	pluginManager *plugins.PluginManager
 	router        *gin.Engine
 	server        *http.Server
+	
+	// Build information
+	version   string
+	buildHash string
+	buildTime string
 }
 
 // New creates a new server instance
@@ -125,6 +130,9 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		pluginManager: pluginManager,
 		router:        router,
 		server:        server,
+		version:       version,
+		buildHash:     buildHash,
+		buildTime:     buildTime,
 	}
 
 	return srv, nil
@@ -144,9 +152,9 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 		ReloadCoordinator: reloadCoordinator, // Add reload coordinator
 		EnableSwagger:    s.config.IsDevelopment(),
 		EnableMetrics:    s.config.Observability.EnableMetrics,
-		Version:          "dev", // TODO: Get from server
-		BuildHash:        "unknown",
-		BuildTime:        "unknown",
+		Version:          s.version,
+		BuildHash:        s.buildHash,
+		BuildTime:        s.buildTime,
 	}
 
 	// Recreate router with reload coordinator

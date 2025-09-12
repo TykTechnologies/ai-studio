@@ -3,10 +3,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/cli"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // pluginCmd represents the plugin command
@@ -109,9 +111,20 @@ var pluginCreateCmd = &cobra.Command{
 			"is_active":   active,
 		}
 
-		// TODO: Parse config file if provided
+		// Parse config file if provided
 		if configFile != "" {
-			fmt.Printf("Note: Config file parsing not implemented yet: %s\n", configFile)
+			configData, err := parseConfigFile(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to parse config file: %w", err)
+			}
+			// Merge config file data into request
+			if req["config"] == nil {
+				req["config"] = make(map[string]interface{})
+			}
+			for key, value := range configData {
+				req["config"].(map[string]interface{})[key] = value
+			}
+			fmt.Printf("✓ Loaded configuration from %s\n", configFile)
 		}
 
 		resp, err := cli.GetClient().Post("/api/v1/plugins", req)
@@ -283,4 +296,21 @@ func init() {
 
 	// plugin test flags
 	pluginTestCmd.Flags().String("test-file", "", "JSON file containing test data")
+}
+
+// parseConfigFile parses a YAML or JSON config file
+func parseConfigFile(filePath string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+	
+	var config map[string]interface{}
+	
+	// Try to parse as YAML first (supports both YAML and JSON)
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file as YAML: %w", err)
+	}
+	
+	return config, nil
 }

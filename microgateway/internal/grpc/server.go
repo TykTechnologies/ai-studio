@@ -855,9 +855,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Convert Plugins to protobuf with embedded relationships
 	snapshot.Plugins = make([]*pb.PluginConfig, len(plugins))
 	for i, plugin := range plugins {
-		// Query llm_plugins join table to get which LLMs use this plugin
+		// Query llm_plugins join table to get which LLMs use this plugin (ordered by OrderIndex)
 		var llmPlugins []database.LLMPlugin
-		if err := s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Find(&llmPlugins).Error; err != nil {
+		if err := s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Order("order_index ASC").Find(&llmPlugins).Error; err != nil {
 			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to query llm_plugins join table")
 		}
 		

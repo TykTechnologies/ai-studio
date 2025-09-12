@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -185,9 +186,42 @@ var filterTestCmd = &cobra.Command{
 	Long:  "Test a filter script execution with a sample payload from a file or stdin.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement filter testing
-		// This would send test payload to a special test endpoint
-		return fmt.Errorf("filter testing not implemented yet")
+		filterID := args[0]
+		testFile, _ := cmd.Flags().GetString("test-file")
+		
+		// Prepare test payload
+		var payload map[string]interface{}
+		if testFile != "" {
+			// Read payload from file
+			data, err := os.ReadFile(testFile)
+			if err != nil {
+				return fmt.Errorf("failed to read test file: %w", err)
+			}
+			if err := json.Unmarshal(data, &payload); err != nil {
+				return fmt.Errorf("failed to parse test file as JSON: %w", err)
+			}
+		} else {
+			// Use default test payload
+			payload = map[string]interface{}{
+				"message": "Hello, World!",
+				"user_id": 123,
+				"timestamp": "2024-01-01T00:00:00Z",
+			}
+		}
+		
+		// Send test request
+		req := map[string]interface{}{
+			"payload": payload,
+		}
+		
+		endpoint := fmt.Sprintf("/api/v1/filters/%s/test", filterID)
+		resp, err := cli.GetClient().Post(endpoint, req)
+		if err != nil {
+			return fmt.Errorf("failed to test filter: %w", err)
+		}
+		
+		fmt.Printf("✓ Filter test completed\n")
+		return cli.PrintOutput(resp.Data)
 	},
 }
 

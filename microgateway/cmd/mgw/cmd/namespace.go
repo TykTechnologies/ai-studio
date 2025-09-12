@@ -251,8 +251,47 @@ func watchReloadProgress(operationID string, timeoutSeconds int) error {
 // printReloadStatusTable prints a formatted table of edge reload status
 func printReloadStatusTable(data interface{}) {
 	fmt.Printf("\n📊 Reload Status:\n")
-	// TODO: Implement proper table formatting based on operation data structure
-	fmt.Printf("%+v\n", data)
+	
+	// Handle different data structures
+	switch v := data.(type) {
+	case map[string]interface{}:
+		// Pretty print operation status
+		if operationID, ok := v["operation_id"].(string); ok {
+			fmt.Printf("Operation ID: %s\n", operationID)
+		}
+		if status, ok := v["status"].(string); ok {
+			fmt.Printf("Status: %s\n", status)
+		}
+		if message, ok := v["message"].(string); ok {
+			fmt.Printf("Message: %s\n", message)
+		}
+		if edges, ok := v["edges"].([]interface{}); ok {
+			fmt.Printf("\nEdge Status:\n")
+			fmt.Printf("%-20s %-15s %-30s\n", "Edge ID", "Status", "Message")
+			fmt.Printf("%-20s %-15s %-30s\n", "-------", "------", "-------")
+			for _, edge := range edges {
+				if edgeMap, ok := edge.(map[string]interface{}); ok {
+					edgeID := getStringValue(edgeMap, "edge_id", "unknown")
+					edgeStatus := getStringValue(edgeMap, "status", "unknown")
+					edgeMessage := getStringValue(edgeMap, "message", "")
+					fmt.Printf("%-20s %-15s %-30s\n", edgeID, edgeStatus, edgeMessage)
+				}
+			}
+		}
+	default:
+		// Fallback to previous behavior for unknown structures
+		fmt.Printf("%+v\n", data)
+	}
+}
+
+// getStringValue safely extracts a string value from a map
+func getStringValue(m map[string]interface{}, key, defaultValue string) string {
+	if value, exists := m[key]; exists {
+		if str, ok := value.(string); ok {
+			return str
+		}
+	}
+	return defaultValue
 }
 
 // isReloadComplete checks if the reload operation is finished
