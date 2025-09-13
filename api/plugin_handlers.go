@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -46,7 +47,7 @@ type PluginListResponse struct {
 // @Accept json
 // @Produce json
 // @Param hook_type query string false "Filter by hook type (pre_auth, auth, post_auth, on_response, data_collection)"
-// @Param active query bool false "Filter by active status" default(true)
+// @Param is_active query bool false "Filter by active status"
 // @Param namespace query string false "Filter by namespace"
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(20)
@@ -58,7 +59,14 @@ func (a *API) listPlugins(c *gin.Context) {
 	// Parse query parameters
 	hookType := c.Query("hook_type")
 	namespace := c.Query("namespace")
-	isActive := c.DefaultQuery("active", "true") == "true"
+	// Handle is_active parameter - if not provided, show all plugins
+	isActiveParam := c.Query("is_active")
+	var isActive bool
+	var filterByActive bool
+	if isActiveParam != "" {
+		isActive = isActiveParam == "true"
+		filterByActive = true
+	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
@@ -74,31 +82,34 @@ func (a *API) listPlugins(c *gin.Context) {
 	var totalCount int64
 	var err error
 
-	if namespace != "" {
-		// Use namespace-aware method
-		plugins, err = a.service.PluginService.GetActivePluginsInNamespace(namespace)
-		totalCount = int64(len(plugins))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
-		}
-	} else {
-		// Use standard pagination method
+	// Use filtering based on whether is_active parameter was provided
+	if filterByActive {
 		plugins, totalCount, err = a.service.PluginService.ListPlugins(page, limit, hookType, isActive)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
-			})
-			return
+	} else {
+		// Get all plugins (both active and inactive)
+		plugins, totalCount, err = a.service.PluginService.ListAllPlugins(page, limit, hookType)
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// Apply namespace filtering if specified
+	if namespace != "" {
+		var filteredPlugins []models.Plugin
+		for _, plugin := range plugins {
+			// Include global plugins (empty namespace) and plugins matching the specific namespace
+			if plugin.Namespace == "" || plugin.Namespace == namespace {
+				filteredPlugins = append(filteredPlugins, plugin)
+			}
 		}
+		plugins = filteredPlugins
+		totalCount = int64(len(plugins))
 	}
 
 	// Calculate pagination
@@ -156,12 +167,25 @@ func (a *API) createPlugin(c *gin.Context) {
 
 	plugin, err := a.service.PluginService.CreatePlugin(&req)
 	if err != nil {
-		if err.Error() == "plugin slug '"+req.Slug+"' already exists" {
+		errMsg := err.Error()
+		if errMsg == "plugin slug '"+req.Slug+"' already exists" {
 			c.JSON(http.StatusConflict, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
 				}{{Title: "Conflict", Detail: err.Error()}},
+			})
+			return
+		}
+		
+		// Check for validation errors that should return 400 instead of 500
+		if strings.Contains(errMsg, "cannot be empty") || 
+		   strings.Contains(errMsg, "invalid hook type") {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: err.Error()}},
 			})
 			return
 		}

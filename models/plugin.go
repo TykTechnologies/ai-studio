@@ -29,6 +29,11 @@ type Plugin struct {
 	LLMs []LLM `json:"llms,omitempty" gorm:"many2many:llm_plugins;"`
 }
 
+// TableName returns the table name for the Plugin model
+func (Plugin) TableName() string {
+	return "plugins"
+}
+
 type Plugins []Plugin
 
 // Plugin hook type constants

@@ -321,6 +321,208 @@ func TestPluginService_DeletePlugin(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin not found")
 }
 
+// TestPluginService_ListPluginsComprehensiveFiltering tests all filtering scenarios
+func TestPluginService_ListPluginsComprehensiveFiltering(t *testing.T) {
+	db := setupTestDB(t)
+	repo := database.NewRepository(db)
+	service := NewPluginService(db, repo)
+
+	// Create comprehensive test data set
+	testPlugins := []struct {
+		name      string
+		slug      string
+		hookType  string
+		isActive  bool
+		namespace string
+	}{
+		// Different hook types with varying active states and namespaces
+		{"PreAuth Active Global", "preauth-active-global", "pre_auth", true, ""},
+		{"PreAuth Inactive Global", "preauth-inactive-global", "pre_auth", false, ""},
+		{"PreAuth Active TenantA", "preauth-active-tenant-a", "pre_auth", true, "tenant-a"},
+		{"Auth Active Global", "auth-active-global", "auth", true, ""},
+		{"Auth Inactive TenantA", "auth-inactive-tenant-a", "auth", false, "tenant-a"},
+		{"PostAuth Active TenantB", "postauth-active-tenant-b", "post_auth", true, "tenant-b"},
+		{"PostAuth Inactive Global", "postauth-inactive-global", "post_auth", false, ""},
+		{"OnResponse Active Global", "onresponse-active-global", "on_response", true, ""},
+		{"OnResponse Active TenantA", "onresponse-active-tenant-a", "on_response", true, "tenant-a"},
+		{"OnResponse Inactive TenantB", "onresponse-inactive-tenant-b", "on_response", false, "tenant-b"},
+	}
+
+	createdPlugins := make([]*database.Plugin, 0)
+
+	// Create all test plugins
+	for _, testPlugin := range testPlugins {
+		plugin, err := service.CreatePlugin(&CreatePluginRequest{
+			Name:        testPlugin.name,
+			Slug:        testPlugin.slug,
+			Command:     fmt.Sprintf("./bin/%s", testPlugin.slug),
+			HookType:    testPlugin.hookType,
+			IsActive:    testPlugin.isActive,
+		})
+		// Set namespace manually after creation since CreatePluginRequest doesn't have namespace in microgateway
+		if err == nil && testPlugin.namespace != "" {
+			plugin.Namespace = testPlugin.namespace
+			db.Save(plugin)
+		}
+		require.NoError(t, err, "Failed to create plugin %s", testPlugin.name)
+		createdPlugins = append(createdPlugins, plugin)
+	}
+
+	// Test 1: Filter by hook type only (active plugins)
+	t.Run("Filter by hook type", func(t *testing.T) {
+		hookTypeTests := []struct {
+			hookType      string
+			expectedCount int
+		}{
+			{"pre_auth", 2},     // PreAuth Active Global + PreAuth Active TenantA
+			{"auth", 1},         // Auth Active Global
+			{"post_auth", 1},    // PostAuth Active TenantB
+			{"on_response", 2},  // OnResponse Active Global + OnResponse Active TenantA
+			{"nonexistent", 0},  // No plugins with this hook type
+		}
+
+		for _, test := range hookTypeTests {
+			result, total, err := service.ListPlugins(1, 10, test.hookType, true)
+			assert.NoError(t, err)
+			assert.Equal(t, test.expectedCount, len(result), "Hook type %s should return %d active plugins", test.hookType, test.expectedCount)
+			assert.Equal(t, int64(test.expectedCount), total)
+
+			// Verify all returned plugins have correct hook type and are active
+			for _, plugin := range result {
+				assert.Equal(t, test.hookType, plugin.HookType)
+				assert.True(t, plugin.IsActive)
+			}
+		}
+	})
+
+	// Test 2: Filter by active status only
+	t.Run("Filter by active status", func(t *testing.T) {
+		// Test active plugins
+		result, total, err := service.ListPlugins(1, 20, "", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 6, len(result)) // 6 active plugins
+		assert.Equal(t, int64(6), total)
+		for _, plugin := range result {
+			assert.True(t, plugin.IsActive)
+		}
+
+		// Test inactive plugins
+		result, total, err = service.ListPlugins(1, 20, "", false)
+		assert.NoError(t, err)
+		assert.Equal(t, 4, len(result)) // 4 inactive plugins
+		assert.Equal(t, int64(4), total)
+		for _, plugin := range result {
+			assert.False(t, plugin.IsActive)
+		}
+	})
+
+	// Test 3: Combined filters (hook type + active status)
+	t.Run("Combined filters: hook type and active status", func(t *testing.T) {
+		tests := []struct {
+			hookType      string
+			isActive      bool
+			expectedCount int
+			description   string
+		}{
+			{"pre_auth", true, 2, "Active pre_auth plugins"},
+			{"pre_auth", false, 1, "Inactive pre_auth plugins"},
+			{"auth", true, 1, "Active auth plugins"},
+			{"auth", false, 1, "Inactive auth plugins"},
+			{"post_auth", true, 1, "Active post_auth plugins"},
+			{"post_auth", false, 1, "Inactive post_auth plugins"},
+			{"on_response", true, 2, "Active on_response plugins"},
+			{"on_response", false, 1, "Inactive on_response plugins"},
+		}
+
+		for _, test := range tests {
+			result, total, err := service.ListPlugins(1, 10, test.hookType, test.isActive)
+			assert.NoError(t, err)
+			assert.Equal(t, test.expectedCount, len(result), test.description)
+			assert.Equal(t, int64(test.expectedCount), total)
+
+			for _, plugin := range result {
+				assert.Equal(t, test.hookType, plugin.HookType)
+				assert.Equal(t, test.isActive, plugin.IsActive)
+			}
+		}
+	})
+
+	// Test 4: Pagination scenarios
+	t.Run("Pagination with filters", func(t *testing.T) {
+		// Test first page with limit 3
+		result, total, err := service.ListPlugins(1, 3, "", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(result))
+		assert.Equal(t, int64(6), total) // Total active plugins
+
+		// Test second page
+		result, total, err = service.ListPlugins(2, 3, "", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(result))
+		assert.Equal(t, int64(6), total)
+
+		// Test third page (should have no results beyond total)
+		result, total, err = service.ListPlugins(3, 3, "", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(result)) // No more results
+		assert.Equal(t, int64(6), total)
+
+		// Test pagination with hook type filter
+		result, total, err = service.ListPlugins(1, 1, "pre_auth", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(result))
+		assert.Equal(t, int64(2), total) // Total pre_auth active plugins
+		assert.Equal(t, "pre_auth", result[0].HookType)
+		assert.True(t, result[0].IsActive)
+
+		// Second page of pre_auth plugins
+		result, total, err = service.ListPlugins(2, 1, "pre_auth", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(result))
+		assert.Equal(t, int64(2), total)
+		assert.Equal(t, "pre_auth", result[0].HookType)
+		assert.True(t, result[0].IsActive)
+	})
+
+	// Test 5: Edge cases
+	t.Run("Edge cases", func(t *testing.T) {
+		// Test invalid page (0 or negative)
+		result, total, err := service.ListPlugins(0, 10, "", true)
+		assert.NoError(t, err)
+		// Should handle gracefully - implementation dependent
+
+		// Test very large limit
+		result, total, err = service.ListPlugins(1, 1000, "", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 6, len(result)) // Should return all active plugins
+		assert.Equal(t, int64(6), total)
+
+		// Test page beyond available data
+		result, total, err = service.ListPlugins(100, 10, "", true)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(result))
+		assert.Equal(t, int64(6), total) // Total count should still be correct
+	})
+
+	// Test 6: Verify namespace handling (note: this tests the database layer)
+	t.Run("Namespace verification in created plugins", func(t *testing.T) {
+		// Verify that our test plugins were created with correct namespaces
+		for i, testPlugin := range testPlugins {
+			assert.Equal(t, testPlugin.namespace, createdPlugins[i].Namespace, "Plugin %s should have namespace %s", testPlugin.name, testPlugin.namespace)
+		}
+
+		// Count plugins by namespace (direct database query)
+		var globalCount, tenantACount, tenantBCount int64
+		db.Model(&database.Plugin{}).Where("namespace = ?", "").Count(&globalCount)
+		db.Model(&database.Plugin{}).Where("namespace = ?", "tenant-a").Count(&tenantACount)
+		db.Model(&database.Plugin{}).Where("namespace = ?", "tenant-b").Count(&tenantBCount)
+
+		assert.Equal(t, int64(5), globalCount, "Should have 5 global plugins")
+		assert.Equal(t, int64(3), tenantACount, "Should have 3 tenant-a plugins")
+		assert.Equal(t, int64(2), tenantBCount, "Should have 2 tenant-b plugins")
+	})
+}
+
 func TestPluginService_LLMPluginAssociations(t *testing.T) {
 	db := setupTestDB(t)
 	repo := database.NewRepository(db)

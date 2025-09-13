@@ -64,6 +64,9 @@ import SSOProfiles from "./pages/SSOProfiles";
 import SSOProfileEditor from "./components/sso-profiles/SSOProfileEditor";
 import SSOProfileDetails from "./components/sso-profiles/SSOProfileDetails";
 
+import EdgeGatewaysPage from "./pages/EdgeGatewaysPage";
+import PluginsPage from "./pages/PluginsPage";
+
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
@@ -89,6 +92,8 @@ const mainAdminRoutes = (
     <Route path="llm-settings/:id" element={<LLMSettingsDetails />} />
     <Route path="llm-settings/edit/:id" element={<LLMSettingsForm />} />
     <Route path="llm-settings/new" element={<LLMSettingsForm />} />
+
+    <Route path="plugins/*" element={<PluginsPage />} />
 
     <Route path="model-prices" element={<ModelPriceList />} />
     <Route path="model-prices/:id" element={<ModelPriceDetail />} />
@@ -127,6 +132,8 @@ const mainAdminRoutes = (
     <Route path="apps/:id" element={<AppDetails />} />
     <Route path="apps/edit/:id" element={<AppForm />} />
     <Route path="apps/new" element={<AppForm />} />
+
+    <Route path="edge-gateways/*" element={<EdgeGatewaysPage />} />
 
     <Route path="chats" element={<ChatList />} />
     <Route path="chats/:id" element={<ChatDetails />} />

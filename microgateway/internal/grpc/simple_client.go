@@ -4,6 +4,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
@@ -269,6 +270,10 @@ func (c *SimpleEdgeClient) establishStream() error {
 
 	// Start message handling goroutines
 	go c.handleIncomingMessages()
+	
+	// Start heartbeat worker
+	go c.heartbeatWorker()
+	
 	c.connected = true
 
 	log.Info().Msg("Bidirectional stream established successfully")
@@ -390,4 +395,70 @@ func (c *SimpleEdgeClient) Stop() error {
 	}
 	
 	return nil
+}
+
+// heartbeatWorker sends periodic heartbeats to the control instance
+func (c *SimpleEdgeClient) heartbeatWorker() {
+	ticker := time.NewTicker(c.config.HubSpoke.HeartbeatInterval)
+	defer ticker.Stop()
+	
+	log.Info().
+		Dur("interval", c.config.HubSpoke.HeartbeatInterval).
+		Msg("Starting heartbeat worker")
+	
+	for {
+		select {
+		case <-ticker.C:
+			if c.connected && c.stream != nil {
+				c.sendHeartbeat()
+			} else {
+				log.Debug().
+					Bool("connected", c.connected).
+					Bool("stream_not_nil", c.stream != nil).
+					Msg("Skipping heartbeat - not connected or stream is nil")
+			}
+		case <-c.streamCtx.Done():
+			log.Info().Msg("Heartbeat worker stopping")
+			return
+		}
+	}
+}
+
+// sendHeartbeat sends a heartbeat message to the control instance
+func (c *SimpleEdgeClient) sendHeartbeat() {
+	heartbeat := &pb.EdgeMessage{
+		Message: &pb.EdgeMessage_Heartbeat{
+			Heartbeat: &pb.HeartbeatRequest{
+				EdgeId:    c.config.HubSpoke.EdgeID,
+				SessionId: "", // SimpleEdgeClient doesn't track session ID
+				Health: &pb.HealthStatus{
+					Status:    pb.HealthStatus_HEALTHY,
+					Message:   "Operational",
+					Timestamp: timestamppb.Now(),
+				},
+				Metrics:   c.collectBasicMetrics(),
+				Timestamp: timestamppb.Now(),
+			},
+		},
+	}
+	
+	if err := c.stream.Send(heartbeat); err != nil {
+		log.Error().Err(err).Msg("Failed to send heartbeat")
+	} else {
+		log.Debug().
+			Str("edge_id", c.config.HubSpoke.EdgeID).
+			Msg("Heartbeat sent successfully")
+	}
+}
+
+// collectBasicMetrics gathers basic runtime metrics for heartbeat
+func (c *SimpleEdgeClient) collectBasicMetrics() *pb.EdgeMetrics {
+	// Simple metrics collection for SimpleEdgeClient
+	return &pb.EdgeMetrics{
+		RequestsProcessed: 0, // SimpleEdgeClient doesn't track requests
+		ActiveConnections: 0, // SimpleEdgeClient doesn't track connections
+		CpuUsagePercent:   0, // Simplified - no CPU monitoring
+		MemoryUsageBytes:  0, // Simplified - no memory monitoring
+		UptimeSeconds:     0, // Simplified - no uptime tracking
+	}
 }

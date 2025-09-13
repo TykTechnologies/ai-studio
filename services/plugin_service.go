@@ -50,6 +50,7 @@ type PluginServiceInterface interface {
 	CreatePlugin(req *CreatePluginRequest) (*models.Plugin, error)
 	GetPlugin(id uint) (*models.Plugin, error)
 	ListPlugins(page, limit int, hookType string, isActive bool) ([]models.Plugin, int64, error)
+	ListAllPlugins(page, limit int, hookType string) ([]models.Plugin, int64, error)
 	UpdatePlugin(id uint, req *UpdatePluginRequest) (*models.Plugin, error)
 	DeletePlugin(id uint) error
 	
@@ -129,6 +130,37 @@ func (s *PluginService) ListPlugins(page, limit int, hookType string, isActive b
 	}
 
 	return []models.Plugin(plugins), totalCount, nil
+}
+
+// ListAllPlugins lists all plugins (both active and inactive) with pagination and filtering
+func (s *PluginService) ListAllPlugins(page, limit int, hookType string) ([]models.Plugin, int64, error) {
+	var plugins []models.Plugin
+	var totalCount int64
+
+	query := s.db.Model(&models.Plugin{})
+
+	// Apply hook type filter if specified
+	if hookType != "" {
+		query = query.Where("hook_type = ?", hookType)
+	}
+	// Note: No is_active filter - this returns both active and inactive
+
+	// Get total count
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count plugins: %w", err)
+	}
+
+	// Get paginated results
+	offset := (page - 1) * limit
+	err := query.Offset(offset).Limit(limit).
+		Order("created_at DESC").
+		Find(&plugins).Error
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list all plugins: %w", err)
+	}
+
+	return plugins, totalCount, nil
 }
 
 // UpdatePlugin updates an existing plugin (adapted from microgateway)

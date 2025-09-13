@@ -98,6 +98,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				AllowedModels    []string `json:"allowed_models"`
 				MonthlyBudget    *float64 `json:"monthly_budget"`
 				BudgetStartDate  *string  `json:"budget_start_date"`
+				Namespace        string   `json:"namespace,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -116,6 +117,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				AllowedModels    []string `json:"allowed_models"`
 				MonthlyBudget    *float64 `json:"monthly_budget"`
 				BudgetStartDate  *string  `json:"budget_start_date"`
+				Namespace        string   `json:"namespace,omitempty"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
@@ -124,7 +126,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				ShortDescription: "A test LLM",
 				LongDescription:  "This is a test LLM for API testing",
 				LogoURL:          "https://testllm.com/logo.png",
-				Vendor:           "Test Vendor",
+				Vendor:           "openai",
 			},
 		},
 	}

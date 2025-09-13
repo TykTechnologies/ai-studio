@@ -37,6 +37,8 @@ import {
   PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
+import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import pluginService from "../../services/pluginService";
 import {
   getVendorName,
   getVendorLogo,
@@ -68,14 +70,18 @@ const LLMForm = () => {
     allowed_models: [],
     monthly_budget: null,
     budget_start_date: null,
+    namespace: "", // Added for edge availability
+    plugins: [], // Added for plugin assignment
   });
   const [vendors, setVendors] = useState([]);
   const [filters, setFilters] = useState(null);
+  const [availablePlugins, setAvailablePlugins] = useState([]);
   const [originalName, setOriginalName] = useState("");
   const [nameChanged, setNameChanged] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   
   const [filtersLoading, setFiltersLoading] = useState(true);
+  const [pluginsLoading, setPluginsLoading] = useState(true);
 
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -92,6 +98,7 @@ const LLMForm = () => {
   useEffect(() => {
     setVendors(getVendorCodes());
     fetchFilters();
+    fetchPlugins();
     if (id) {
       fetchLLM();
     }
@@ -138,6 +145,23 @@ const LLMForm = () => {
     }
   };
 
+  const fetchPlugins = async () => {
+    setPluginsLoading(true);
+    try {
+      const response = await pluginService.listPlugins(1, 100, '', true);
+      setAvailablePlugins(response.data || []);
+    } catch (error) {
+      console.error("Error fetching plugins", error);
+      setSnackbar({
+        open: true,
+        message: `Failed to fetch plugins: ${error.message || "Unknown error"}`,
+        severity: "error",
+      });
+    } finally {
+      setPluginsLoading(false);
+    }
+  };
+
   const fetchLLM = async () => {
     try {
       const response = await apiClient.get(`/llms/${id}`);
@@ -145,6 +169,8 @@ const LLMForm = () => {
       setLLM({
         ...llmData,
         filters: llmData.filters.map((filter) => filter.id.toString()),
+        namespace: llmData.namespace || "",
+        plugins: llmData.plugins?.map((plugin) => plugin.id.toString()) || [],
       });
       setOriginalName(llmData.name);
     } catch (error) {
@@ -197,6 +223,17 @@ const LLMForm = () => {
 
   const handleSwitchChange = (e) => {
     setLLM({ ...llm, active: e.target.checked });
+  };
+
+  const handleNamespaceChange = (namespaces) => {
+    // Convert array to comma-delimited string, or empty string for global
+    const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
+    setLLM({ ...llm, namespace: namespaceString });
+  };
+
+  const handlePluginChange = (e) => {
+    const { value } = e.target;
+    setLLM({ ...llm, plugins: value });
   };
 
   const validateForm = () => {
@@ -612,6 +649,105 @@ const LLMForm = () => {
               )}
             </AccordionDetails>
           </StyledAccordion>
+
+          {/* Plugin Assignment Section */}
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Plugins</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="textSecondary" paragraph>
+                Select plugins to attach to this LLM. Plugins are executed in the order they are selected.
+                Each plugin type (hook type) determines when the plugin is executed in the request lifecycle.
+              </Typography>
+              
+              <FormControl fullWidth>
+                <InputLabel>Plugins</InputLabel>
+                <Select
+                  multiple
+                  value={llm.plugins}
+                  onChange={handlePluginChange}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.map((pluginId) => {
+                        const plugin = availablePlugins.find((p) => p.id.toString() === pluginId);
+                        return (
+                          <Chip
+                            key={pluginId}
+                            label={plugin ? plugin.name : pluginId}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                        );
+                      })}
+                    </Box>
+                  )}
+                >
+                  {pluginService.getAvailableHookTypes().map((hookType) => {
+                    const pluginsForType = availablePlugins.filter(p => p.hookType === hookType.value);
+                    if (pluginsForType.length === 0) return null;
+                    
+                    return [
+                      <MenuItem key={`header-${hookType.value}`} disabled>
+                        <Typography variant="subtitle2" color="primary">
+                          {hookType.label}
+                        </Typography>
+                      </MenuItem>,
+                      ...pluginsForType.map((plugin) => (
+                        <MenuItem key={plugin.id} value={plugin.id.toString()}>
+                          <Box sx={{ pl: 2 }}>
+                            <Typography variant="body2">
+                              {plugin.name}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {plugin.description || 'No description'}
+                            </Typography>
+                          </Box>
+                        </MenuItem>
+                      ))
+                    ];
+                  })}
+                </Select>
+              </FormControl>
+              
+              {llm.plugins.length > 0 && (
+                <Box mt={2}>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    Selected Plugins (execution order):
+                  </Typography>
+                  <Stack spacing={1}>
+                    {llm.plugins.map((pluginId, index) => {
+                      const plugin = availablePlugins.find((p) => p.id.toString() === pluginId);
+                      return plugin ? (
+                        <Box key={pluginId} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography variant="body2" sx={{ minWidth: 24 }}>
+                            {index + 1}.
+                          </Typography>
+                          <Chip
+                            label={pluginService.getHookTypeLabel(plugin.hookType)}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                          <Typography variant="body2" sx={{ flex: 1 }}>
+                            {plugin.name}
+                          </Typography>
+                        </Box>
+                      ) : null;
+                    })}
+                  </Stack>
+                </Box>
+              )}
+            </AccordionDetails>
+          </StyledAccordion>
+
+          {/* Edge Availability Section */}
+          <EdgeAvailabilitySection
+            value={llm.namespace}
+            onChange={handleNamespaceChange}
+            defaultExpanded={false}
+          />
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">

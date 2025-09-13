@@ -28,6 +28,7 @@ import {
   PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
+import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 
 const AppForm = () => {
   const [app, setApp] = useState({
@@ -39,6 +40,7 @@ const AppForm = () => {
     tool_ids: [], // Added for tools
     monthly_budget: null,
     budget_start_date: null,
+    namespace: "", // Added for edge availability
   });
   const [credential, setCredential] = useState(null);
   const [users, setUsers] = useState([]);
@@ -78,6 +80,7 @@ const AppForm = () => {
         tool_ids: Array.isArray(appData.tool_ids)
           ? appData.tool_ids.map(String)
           : [],
+        namespace: appData.namespace || "",
       });
       if (appData.credential_id) {
         fetchCredential(appData.credential_id);
@@ -200,6 +203,12 @@ const AppForm = () => {
   const handleMultiSelectChange = (e) => {
     const { name, value } = e.target;
     setApp({ ...app, [name]: value });
+  };
+
+  const handleNamespaceChange = (namespaces) => {
+    // Convert array to comma-delimited string, or empty string for global
+    const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
+    setApp({ ...app, namespace: namespaceString });
   };
 
   const validateForm = () => {
@@ -464,6 +473,13 @@ const AppForm = () => {
               </FormControl>
             </Grid>
           </Grid>
+
+          {/* Edge Availability Section */}
+          <EdgeAvailabilitySection
+            value={app.namespace}
+            onChange={handleNamespaceChange}
+            defaultExpanded={false}
+          />
 
           {credential && (
             <StyledAccordion>

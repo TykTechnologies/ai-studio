@@ -683,28 +683,93 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Get Plugins for namespace
+	log.Info().Str("namespace", namespace).Msg("Starting plugin query for configuration snapshot")
+	
+	// First, let's test without Preload to eliminate interference
 	var plugins []models.Plugin
-	pluginQuery := s.db.Preload("LLMs")
+	var pluginQuery *gorm.DB
+	
+	// Test basic plugin count first
+	var totalActivePlugins int64
+	if err := s.db.Model(&models.Plugin{}).Where("is_active = ?", true).Count(&totalActivePlugins).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to count total active plugins")
+	} else {
+		log.Info().Int64("total_active_plugins", totalActivePlugins).Msg("Total active plugins in database")
+	}
+	
+	// Test with namespace filter but WITHOUT is_active check (like filters do)
+	var pluginsWithoutActiveCheck []models.Plugin
+	testQuery := s.db.Model(&models.Plugin{})
 	if namespace == "" {
+		testQuery = testQuery.Where("namespace = ''")
+	} else {
+		testQuery = testQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	if err := testQuery.Find(&pluginsWithoutActiveCheck).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to query plugins without is_active check")
+	} else {
+		log.Info().Int("plugins_without_active_check", len(pluginsWithoutActiveCheck)).Msg("Plugins found WITHOUT is_active filter")
+	}
+	
+	// Now test with namespace filter AND is_active check  
+	pluginQuery = s.db.Model(&models.Plugin{})
+	if namespace == "" {
+		log.Info().Msg("Querying plugins for global namespace only")
 		pluginQuery = pluginQuery.Where("namespace = '' AND is_active = ?", true)
 	} else {
+		log.Info().
+			Str("target_namespace", namespace).
+			Str("expected_plugin_namespace", "tenant-a").
+			Bool("namespaces_match", namespace == "tenant-a").
+			Msg("Querying plugins for specific namespace (global + tenant)")
 		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?) AND is_active = ?", namespace, true)
+		
+		// Additional debug: Test the exact plugin we expect
+		var specificPlugin models.Plugin
+		if err := s.db.Where("id = ? AND namespace = ? AND is_active = ?", 2, namespace, true).First(&specificPlugin).Error; err != nil {
+			log.Error().Err(err).Uint("plugin_id", 2).Str("namespace", namespace).Msg("Failed to find specific plugin by ID, namespace, and active status")
+		} else {
+			log.Info().
+				Uint("plugin_id", specificPlugin.ID).
+				Str("plugin_name", specificPlugin.Name).
+				Str("plugin_namespace", specificPlugin.Namespace).
+				Bool("plugin_active", specificPlugin.IsActive).
+				Msg("Successfully found specific plugin by ID")
+		}
 	}
+	
+	// Debug: Log the actual SQL query being executed
+	pluginQuery = pluginQuery.Debug()
 	
 	if err := pluginQuery.Find(&plugins).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Plugins: %w", err)
 	}
+	
+	log.Info().
+		Str("namespace", namespace).
+		Int("found_plugins", len(plugins)).
+		Int64("total_active", totalActivePlugins).
+		Msg("Plugin query completed")
 
 	// Convert Plugins to protobuf
 	for _, plugin := range plugins {
-		// Get associated LLM IDs for this plugin
+		// Get associated LLM IDs for this plugin (ordered by order_index for consistent execution order)
 		var llmPlugins []models.LLMPlugin
-		s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Find(&llmPlugins)
+		if err := s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Order("order_index ASC").Find(&llmPlugins).Error; err != nil {
+			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to query llm_plugins join table")
+		}
 		
 		llmIDs := make([]uint32, len(llmPlugins))
 		for i, lp := range llmPlugins {
 			llmIDs[i] = uint32(lp.LLMID)
 		}
+
+		log.Debug().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Str("hook_type", plugin.HookType).
+			Int("llm_count", len(llmIDs)).
+			Msg("Plugin relationships embedded in sync")
 		
 		// Convert config to JSON string
 		var configJSON string
