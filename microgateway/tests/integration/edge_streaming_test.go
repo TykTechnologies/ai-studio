@@ -9,7 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/grpc"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"

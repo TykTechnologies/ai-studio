@@ -11,7 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"

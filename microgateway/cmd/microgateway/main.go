@@ -16,7 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

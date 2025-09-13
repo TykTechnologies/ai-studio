@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -119,16 +122,14 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		return nil, fmt.Errorf("plugin %d is not active", pluginID)
 	}
 
-	// Start plugin process
-	client := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig:  pm.handshakeConfig,
-		Plugins:          pm.pluginMap,
-		Cmd:              exec.Command(pluginData.Command),
-		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-	})
+	// Create plugin client based on command scheme
+	client, err := pm.createPluginClient(pluginData.Command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin client: %w", err)
+	}
 
-	// Connect via gRPC
-	rpcClient, err := client.Client()
+	// Connect via gRPC with timeout and retry for external services
+	rpcClient, err := pm.connectWithRetry(client, pluginData.Command)
 	if err != nil {
 		client.Kill()
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
@@ -559,6 +560,169 @@ func (pm *PluginManager) SaveReattachConfig(pluginID uint) error {
 	return nil
 }
 
+// createPluginClient creates a plugin client based on command scheme
+func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
+	if strings.HasPrefix(command, "grpc://") {
+		// External gRPC service - use ReattachConfig
+		reattachConfig, err := pm.parseGRPCReattachConfig(command)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse gRPC address: %w", err)
+		}
+
+		log.Info().
+			Str("command", command).
+			Str("address", reattachConfig.Addr.String()).
+			Msg("Creating client for external gRPC plugin")
+
+		return plugin.NewClient(&plugin.ClientConfig{
+			HandshakeConfig:  pm.handshakeConfig,
+			Plugins:          pm.pluginMap,
+			Reattach:         reattachConfig,
+			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		}), nil
+	} else {
+		// Local executable - use exec.Command
+		cmdPath := command
+		if strings.HasPrefix(command, "file://") {
+			cmdPath = strings.TrimPrefix(command, "file://")
+		}
+
+		log.Info().
+			Str("command", command).
+			Str("path", cmdPath).
+			Msg("Creating client for local plugin executable")
+
+		return plugin.NewClient(&plugin.ClientConfig{
+			HandshakeConfig:  pm.handshakeConfig,
+			Plugins:          pm.pluginMap,
+			Cmd:              exec.Command(cmdPath),
+			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		}), nil
+	}
+}
+
+// parseGRPCReattachConfig parses a gRPC URL and creates a ReattachConfig
+func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.ReattachConfig, error) {
+	// Remove grpc:// prefix
+	address := strings.TrimPrefix(grpcURL, "grpc://")
+
+	// Parse host:port
+	host, portStr, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("invalid gRPC address format '%s': %w", address, err)
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port in gRPC address '%s': %w", address, err)
+	}
+
+	// Create TCP address
+	tcpAddr := &net.TCPAddr{
+		IP:   net.ParseIP(host),
+		Port: port,
+	}
+
+	// If host is not an IP, resolve it
+	if tcpAddr.IP == nil {
+		tcpAddr, err = net.ResolveTCPAddr("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve gRPC address '%s': %w", address, err)
+		}
+	}
+
+	return &plugin.ReattachConfig{
+		Protocol: plugin.ProtocolGRPC,
+		Addr:     tcpAddr,
+		Pid:      0, // Not applicable for network connections
+	}, nil
+}
+
+// connectWithRetry connects to a plugin with retry logic for external services
+func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string) (plugin.ClientProtocol, error) {
+	isExternal := strings.HasPrefix(command, "grpc://")
+
+	if !isExternal {
+		// For local plugins, use standard connection
+		return client.Client()
+	}
+
+	// For external gRPC services, implement retry logic
+	maxRetries := 3
+	retryDelay := time.Second * 2
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			log.Info().
+				Str("command", command).
+				Int("attempt", attempt+1).
+				Int("max_retries", maxRetries).
+				Dur("delay", retryDelay).
+				Msg("Retrying connection to external gRPC plugin")
+			time.Sleep(retryDelay)
+		}
+
+		// Create context with timeout for connection attempt
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Attempt connection
+		rpcClient, err := client.Client()
+		if err != nil {
+			lastErr = err
+			log.Warn().
+				Str("command", command).
+				Int("attempt", attempt+1).
+				Err(err).
+				Msg("Failed to connect to external gRPC plugin")
+			continue
+		}
+
+		// Test the connection with a ping
+		raw, err := rpcClient.Dispense("plugin")
+		if err != nil {
+			lastErr = err
+			log.Warn().
+				Str("command", command).
+				Int("attempt", attempt+1).
+				Err(err).
+				Msg("Failed to dispense plugin interface")
+			continue
+		}
+
+		pluginClient, ok := raw.(pb.PluginServiceClient)
+		if !ok {
+			lastErr = fmt.Errorf("plugin does not implement PluginServiceClient interface")
+			continue
+		}
+
+		// Test with a ping request
+		_, pingErr := pluginClient.Ping(ctx, &pb.PingRequest{
+			Timestamp: time.Now().Unix(),
+		})
+
+		if pingErr != nil {
+			lastErr = pingErr
+			log.Warn().
+				Str("command", command).
+				Int("attempt", attempt+1).
+				Err(pingErr).
+				Msg("Plugin ping failed during connection test")
+			continue
+		}
+
+		log.Info().
+			Str("command", command).
+			Int("attempt", attempt+1).
+			Msg("Successfully connected to external gRPC plugin")
+
+		return rpcClient, nil
+	}
+
+	return nil, fmt.Errorf("failed to connect to external gRPC plugin after %d attempts: %w", maxRetries, lastErr)
+}
+
 // ReattachPlugin reattaches to an existing plugin process
 func (pm *PluginManager) ReattachPlugin(pluginID uint, config *plugin.ReattachConfig) error {
 	pm.mu.Lock()
@@ -726,16 +890,14 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 
 // loadGlobalPluginFromConfig loads a global plugin from configuration
 func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConfig) (*GlobalPlugin, error) {
-	// Start plugin process
-	client := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig:  pm.handshakeConfig,
-		Plugins:          pm.pluginMap,
-		Cmd:              exec.Command(cfg.Path),
-		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-	})
+	// Create plugin client based on path scheme
+	client, err := pm.createPluginClient(cfg.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin client for global plugin: %w", err)
+	}
 	
-	// Connect via gRPC
-	rpcClient, err := client.Client()
+	// Connect via gRPC with timeout and retry for external services
+	rpcClient, err := pm.connectWithRetry(client, cfg.Path)
 	if err != nil {
 		client.Kill()
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)

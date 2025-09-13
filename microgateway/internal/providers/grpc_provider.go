@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"gorm.io/gorm"
 )
 
