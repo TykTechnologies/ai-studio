@@ -36,7 +36,10 @@ type Config struct {
 
 	// Plugin Configuration
 	Plugins PluginConfig
-	
+
+	// OCI Plugin Configuration
+	OCIPlugins OCIPluginConfig
+
 	// Hub-and-Spoke Configuration
 	HubSpoke HubSpokeConfig
 }

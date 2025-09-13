@@ -14,6 +14,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 )
@@ -71,10 +72,13 @@ type PluginManager struct {
 	service                 PluginServiceInterface // Database service
 	handshakeConfig         plugin.HandshakeConfig
 	pluginMap               map[string]plugin.Plugin
-	
+
 	// Global data collection plugins
 	globalDataPlugins       map[string]*GlobalPlugin         // Plugin name -> global plugin
 	dataCollectionHookTypes map[string][]string              // Plugin name -> hook types it handles
+
+	// OCI plugin support
+	ociClient               *ociplugins.OCIPluginClient      // OCI plugin client for fetching
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -99,7 +103,24 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 		},
 		globalDataPlugins:       make(map[string]*GlobalPlugin),
 		dataCollectionHookTypes: make(map[string][]string),
+		ociClient:               nil, // Will be initialized when needed
 	}
+}
+
+// NewPluginManagerWithOCI creates a new plugin manager with OCI support
+func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *ociplugins.OCIConfig) (*PluginManager, error) {
+	pm := NewPluginManager(pluginService)
+
+	if ociConfig != nil {
+		// Initialize OCI client
+		ociClient, err := ociplugins.NewOCIPluginClient(ociConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OCI plugin client: %w", err)
+		}
+		pm.ociClient = ociClient
+	}
+
+	return pm, nil
 }
 
 // LoadPlugin loads a plugin by ID
@@ -562,7 +583,10 @@ func (pm *PluginManager) SaveReattachConfig(pluginID uint) error {
 
 // createPluginClient creates a plugin client based on command scheme
 func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
-	if strings.HasPrefix(command, "grpc://") {
+	if strings.HasPrefix(command, "oci://") {
+		// OCI plugin - fetch from registry first
+		return pm.createOCIPluginClient(command)
+	} else if strings.HasPrefix(command, "grpc://") {
 		// External gRPC service - use ReattachConfig
 		reattachConfig, err := pm.parseGRPCReattachConfig(command)
 		if err != nil {
@@ -599,6 +623,47 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		}), nil
 	}
+}
+
+// createOCIPluginClient fetches an OCI plugin and creates a client
+func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, error) {
+	if pm.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not initialized - microgateway must be configured with OCI support")
+	}
+
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OCI command: %w", err)
+	}
+
+	log.Info().
+		Str("command", command).
+		Str("registry", ref.Registry).
+		Str("repository", ref.Repository).
+		Str("digest", ref.Digest).
+		Str("architecture", params.Architecture).
+		Msg("Fetching OCI plugin")
+
+	// Fetch plugin from OCI registry
+	localPlugin, err := pm.ociClient.FetchPlugin(context.Background(), ref, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
+	}
+
+	log.Info().
+		Str("command", command).
+		Str("local_path", localPlugin.ExecutablePath).
+		Bool("verified", localPlugin.Verified).
+		Msg("OCI plugin fetched successfully")
+
+	// Create go-plugin client with the fetched executable
+	return plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  pm.handshakeConfig,
+		Plugins:          pm.pluginMap,
+		Cmd:              exec.Command(localPlugin.ExecutablePath),
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+	}), nil
 }
 
 // parseGRPCReattachConfig parses a gRPC URL and creates a ReattachConfig
