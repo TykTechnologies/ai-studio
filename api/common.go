@@ -82,41 +82,7 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 		return
 	}
 
-	response := make([]LLMResponse, len(llms))
-	for i, llm := range llms {
-		response[i] = LLMResponse{
-			Type: "llm",
-			ID:   strconv.FormatUint(uint64(llm.ID), 10),
-			Attributes: struct {
-				Name             string           `json:"name"`
-				APIKey           string           `json:"api_key"`
-				APIEndpoint      string           `json:"api_endpoint"`
-				PrivacyScore     int              `json:"privacy_score"`
-				ShortDescription string           `json:"short_description"`
-				LongDescription  string           `json:"long_description"`
-				LogoURL          string           `json:"logo_url"`
-				Vendor           string           `json:"vendor"`
-				Active           bool             `json:"active"`
-				Filters          []FilterResponse `json:"filters"`
-				DefaultModel     string           `json:"default_model"`
-				AllowedModels    []string         `json:"allowed_models"`
-				MonthlyBudget    *float64         `json:"monthly_budget"`
-				BudgetStartDate  *time.Time       `json:"budget_start_date"`
-			}{
-				Name:             llm.Name,
-				PrivacyScore:     llm.PrivacyScore,
-				ShortDescription: llm.ShortDescription,
-				LongDescription:  llm.LongDescription,
-				LogoURL:          llm.LogoURL,
-				Vendor:           string(llm.Vendor),
-				Active:           llm.Active,
-				DefaultModel:     llm.DefaultModel,
-				AllowedModels:    llm.AllowedModels,
-				MonthlyBudget:    llm.MonthlyBudget,
-				BudgetStartDate:  llm.BudgetStartDate,
-			},
-		}
-	}
+	response := a.serializeLLMs(llms)
 
 	c.JSON(http.StatusOK, response)
 }
@@ -674,41 +640,7 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 		return
 	}
 
-	response := make([]LLMResponse, len(llms))
-	for i, llm := range llms {
-		response[i] = LLMResponse{
-			Type: "llm",
-			ID:   strconv.FormatUint(uint64(llm.ID), 10),
-			Attributes: struct {
-				Name             string           `json:"name"`
-				APIKey           string           `json:"api_key"`
-				APIEndpoint      string           `json:"api_endpoint"`
-				PrivacyScore     int              `json:"privacy_score"`
-				ShortDescription string           `json:"short_description"`
-				LongDescription  string           `json:"long_description"`
-				LogoURL          string           `json:"logo_url"`
-				Vendor           string           `json:"vendor"`
-				Active           bool             `json:"active"`
-				Filters          []FilterResponse `json:"filters"`
-				DefaultModel     string           `json:"default_model"`
-				AllowedModels    []string         `json:"allowed_models"`
-				MonthlyBudget    *float64         `json:"monthly_budget"`
-				BudgetStartDate  *time.Time       `json:"budget_start_date"`
-			}{
-				Name:             llm.Name,
-				PrivacyScore:     llm.PrivacyScore,
-				ShortDescription: llm.ShortDescription,
-				LongDescription:  llm.LongDescription,
-				LogoURL:          llm.LogoURL,
-				Vendor:           string(llm.Vendor),
-				Active:           llm.Active,
-				DefaultModel:     llm.DefaultModel,
-				AllowedModels:    llm.AllowedModels,
-				MonthlyBudget:    llm.MonthlyBudget,
-				BudgetStartDate:  llm.BudgetStartDate,
-			},
-		}
-	}
+	response := a.serializeLLMs(llms)
 
 	c.JSON(http.StatusOK, response)
 }

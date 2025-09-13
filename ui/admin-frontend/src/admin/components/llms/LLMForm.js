@@ -81,7 +81,7 @@ const LLMForm = () => {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   
   const [filtersLoading, setFiltersLoading] = useState(true);
-  const [pluginsLoading, setPluginsLoading] = useState(true);
+  const [, setPluginsLoading] = useState(true);
 
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -164,13 +164,17 @@ const LLMForm = () => {
 
   const fetchLLM = async () => {
     try {
-      const response = await apiClient.get(`/llms/${id}`);
-      const llmData = response.data.data.attributes;
+      const llmResponse = await apiClient.get(`/llms/${id}`);
+      const llmData = llmResponse.data.data.attributes;
+      
+      // Get plugins from the LLM response (now included in the API response)
+      const pluginsData = llmData.plugins || [];
+      
       setLLM({
         ...llmData,
         filters: llmData.filters.map((filter) => filter.id.toString()),
         namespace: llmData.namespace || "",
-        plugins: llmData.plugins?.map((plugin) => plugin.id.toString()) || [],
+        plugins: pluginsData.map((plugin) => plugin.id.toString()),
       });
       setOriginalName(llmData.name);
     } catch (error) {
@@ -236,6 +240,11 @@ const LLMForm = () => {
     setLLM({ ...llm, plugins: value });
   };
 
+  const handlePluginRemove = (pluginIdToRemove) => {
+    const updatedPlugins = llm.plugins.filter(id => id !== pluginIdToRemove);
+    setLLM({ ...llm, plugins: updatedPlugins });
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!llm.name.trim()) newErrors.name = "Name is required";
@@ -260,11 +269,14 @@ const LLMForm = () => {
   };
 
   const saveLLM = async () => {
+    // Remove plugins from the main LLM data since they're managed separately
+    const { plugins, ...llmDataWithoutPlugins } = llm;
+    
     const llmData = {
       data: {
         type: "LLM",
         attributes: {
-          ...llm,
+          ...llmDataWithoutPlugins,
           privacy_score: Number(llm.privacy_score),
           active: Boolean(llm.active),
           filters: llm.filters.map((filterId) => parseInt(filterId, 10)),
@@ -273,10 +285,22 @@ const LLMForm = () => {
     };
 
     try {
+      let llmResponse;
       if (id) {
-        await apiClient.patch(`/llms/${id}`, llmData);
+        llmResponse = await apiClient.patch(`/llms/${id}`, llmData);
       } else {
-        await apiClient.post("/llms", llmData);
+        llmResponse = await apiClient.post("/llms", llmData);
+      }
+
+      // Get the LLM ID from the response or use the existing ID
+      const llmId = id || llmResponse.data?.data?.id;
+      
+      // Update plugins separately if LLM was saved successfully
+      if (llmId) {
+        const pluginIds = plugins ? plugins.map((pluginId) => parseInt(pluginId, 10)) : [];
+        await apiClient.put(`/llms/${llmId}/plugins`, {
+          plugin_ids: pluginIds,
+        });
       }
 
       setSnackbar({
@@ -678,6 +702,7 @@ const LLMForm = () => {
                             size="small"
                             color="primary"
                             variant="outlined"
+                            onDelete={() => handlePluginRemove(pluginId)}
                           />
                         );
                       })}

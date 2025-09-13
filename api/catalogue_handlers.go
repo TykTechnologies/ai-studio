@@ -390,7 +390,7 @@ func (a *API) listCatalogueLLMs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
 func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {

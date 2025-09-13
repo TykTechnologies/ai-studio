@@ -162,6 +162,8 @@ type LLMResponse struct {
 		AllowedModels    []string         `json:"allowed_models"`
 		MonthlyBudget    *float64         `json:"monthly_budget"`
 		BudgetStartDate  *time.Time       `json:"budget_start_date"`
+		Namespace        string           `json:"namespace"`
+		Plugins          []PluginResponse `json:"plugins"`
 	} `json:"attributes"`
 }
 

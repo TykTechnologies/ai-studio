@@ -93,7 +93,7 @@ func (a *API) createLLM(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeLLM(llm)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.serializeLLM(llm)})
 }
 
 // @Summary Get an LLM by ID
@@ -130,7 +130,7 @@ func (a *API) getLLM(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLM(llm)})
 }
 
 // @Summary Update an LLM
@@ -229,7 +229,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLM(llm)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLM(llm)})
 }
 
 func parseBudgetStartDate(dateStr *string) *time.Time {
@@ -317,7 +317,7 @@ func (a *API) listLLMs(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
 // @Summary Search LLMs by name
@@ -354,7 +354,7 @@ func (a *API) searchLLMs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
 // @Summary Get LLMs by maximum privacy score
@@ -391,7 +391,7 @@ func (a *API) getLLMsByMaxPrivacyScore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
 // @Summary Get LLMs by minimum privacy score
@@ -428,7 +428,7 @@ func (a *API) getLLMsByMinPrivacyScore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
 // @Summary Get LLMs by privacy score range
@@ -487,10 +487,47 @@ func (a *API) getLLMsByPrivacyScoreRange(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
-func serializeLLM(llm *models.LLM) LLMResponse {
+func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
+	// Load plugins for this LLM
+	var plugins []PluginResponse
+	if pluginModels, err := a.service.PluginService.GetPluginsForLLM(llm.ID); err == nil {
+		plugins = make([]PluginResponse, len(pluginModels))
+		for i, plugin := range pluginModels {
+			plugins[i] = PluginResponse{
+				Type: "plugins",
+				ID:   strconv.FormatUint(uint64(plugin.ID), 10),
+				Attributes: struct {
+					Name        string                 `json:"name"`
+					Slug        string                 `json:"slug"`
+					Description string                 `json:"description"`
+					Command     string                 `json:"command"`
+					Checksum    string                 `json:"checksum,omitempty"`
+					Config      map[string]interface{} `json:"config"`
+					HookType    string                 `json:"hook_type"`
+					IsActive    bool                   `json:"is_active"`
+					Namespace   string                 `json:"namespace"`
+					CreatedAt   string                 `json:"created_at"`
+					UpdatedAt   string                 `json:"updated_at"`
+				}{
+					Name:        plugin.Name,
+					Slug:        plugin.Slug,
+					Description: plugin.Description,
+					Command:     plugin.Command,
+					Checksum:    plugin.Checksum,
+					Config:      plugin.Config,
+					HookType:    plugin.HookType,
+					IsActive:    plugin.IsActive,
+					Namespace:   plugin.Namespace,
+					CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				},
+			}
+		}
+	}
+
 	return LLMResponse{
 		Type: "llms",
 		ID:   strconv.FormatUint(uint64(llm.ID), 10),
@@ -509,6 +546,8 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			AllowedModels    []string         `json:"allowed_models"`
 			MonthlyBudget    *float64         `json:"monthly_budget"`
 			BudgetStartDate  *time.Time       `json:"budget_start_date"`
+			Namespace        string           `json:"namespace"`
+			Plugins          []PluginResponse `json:"plugins"`
 		}{
 			Name:             llm.Name,
 			APIKey:           llm.APIKey,
@@ -524,14 +563,16 @@ func serializeLLM(llm *models.LLM) LLMResponse {
 			AllowedModels:    llm.AllowedModels,
 			MonthlyBudget:    llm.MonthlyBudget,
 			BudgetStartDate:  llm.BudgetStartDate,
+			Namespace:        llm.Namespace,
+			Plugins:          plugins,
 		},
 	}
 }
 
-func serializeLLMs(llms models.LLMs) []LLMResponse {
+func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 	result := make([]LLMResponse, len(llms))
 	for i, llm := range llms {
-		result[i] = serializeLLM(&llm)
+		result[i] = a.serializeLLM(&llm)
 	}
 	return result
 }
