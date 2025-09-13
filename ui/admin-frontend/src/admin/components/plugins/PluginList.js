@@ -22,6 +22,8 @@ import {
   TextField,
   InputAdornment,
   TablePagination,
+  Menu,
+  Snackbar,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -29,6 +31,7 @@ import {
   Visibility as ViewIcon,
   Delete as DeleteIcon,
   Search as SearchIcon,
+  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import pluginService from '../../services/pluginService';
@@ -37,6 +40,10 @@ import {
   ContentBox,
   PrimaryButton,
   DangerButton,
+  StyledPaper,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
 } from '../../styles/sharedStyles';
 
 const PluginList = () => {
@@ -53,6 +60,15 @@ const PluginList = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
+  
+  // Menu state for actions
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedPlugin, setSelectedPlugin] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const fetchPlugins = useCallback(async () => {
     setLoading(true);
@@ -97,15 +113,43 @@ const PluginList = () => {
     navigate(`/admin/plugins/${id}`);
   };
 
+  const handleMenuOpen = (event, plugin) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedPlugin(plugin);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
   const handleDelete = async (id, name) => {
     if (window.confirm(`Are you sure you want to delete the plugin "${name}"?`)) {
       try {
         await pluginService.deletePlugin(id);
+        setSnackbar({
+          open: true,
+          message: 'Plugin deleted successfully',
+          severity: 'success',
+        });
         fetchPlugins(); // Refresh the list
       } catch (err) {
         setError(err.message);
+        setSnackbar({
+          open: true,
+          message: 'Failed to delete plugin',
+          severity: 'error',
+        });
       }
     }
+    handleMenuClose();
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
   };
 
   const handleHookTypeFilterChange = (event) => {
@@ -136,22 +180,19 @@ const PluginList = () => {
   const availableHookTypes = pluginService.getAvailableHookTypes();
 
   return (
-    <Box>
-      <TitleBox>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h4" component="h1">
-            Plugins
-          </Typography>
-          <PrimaryButton
-            startIcon={<AddIcon />}
-            onClick={handleCreate}
-          >
-            Create Plugin
-          </PrimaryButton>
-        </Box>
+    <Box sx={{ p: 0 }}>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">Plugins</Typography>
+        <PrimaryButton
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleCreate}
+        >
+          Create Plugin
+        </PrimaryButton>
       </TitleBox>
 
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
         {/* Filters and Search */}
         <Box mb={3} display="flex" gap={2} flexWrap="wrap" alignItems="center">
           <TextField
@@ -211,31 +252,35 @@ const PluginList = () => {
           </Box>
         ) : (
           <>
-            <TableContainer component={Paper} variant="outlined">
+            <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Hook Type</TableCell>
-                    <TableCell>Namespace</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Hook Type</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Namespace</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Status</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredPlugins.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} align="center">
+                      <StyledTableCell colSpan={6} align="center">
                         <Typography variant="body2" color="textSecondary" py={4}>
                           {searchTerm ? 'No plugins match your search criteria' : 'No plugins found'}
                         </Typography>
-                      </TableCell>
+                      </StyledTableCell>
                     </TableRow>
                   ) : (
                     filteredPlugins.map((plugin) => (
-                      <TableRow key={plugin.id} hover>
-                        <TableCell>
+                      <StyledTableRow 
+                        key={plugin.id} 
+                        onClick={() => handleView(plugin.id)}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        <StyledTableCell>
                           <Box>
                             <Typography variant="body2" fontWeight="medium">
                               {plugin.name}
@@ -244,71 +289,57 @@ const PluginList = () => {
                               {plugin.slug}
                             </Typography>
                           </Box>
-                        </TableCell>
-                        <TableCell>
+                        </StyledTableCell>
+                        <StyledTableCell>
                           <Chip
                             label={pluginService.getHookTypeLabel(plugin.hookType)}
                             size="small"
                             variant="outlined"
                             color="primary"
                           />
-                        </TableCell>
-                        <TableCell>
+                        </StyledTableCell>
+                        <StyledTableCell>
                           <Chip
                             label={plugin.namespace}
                             size="small"
                             variant="outlined"
                             color={plugin.namespace === 'global' ? 'default' : 'secondary'}
                           />
-                        </TableCell>
-                        <TableCell>
+                        </StyledTableCell>
+                        <StyledTableCell>
                           <Chip
                             label={plugin.isActive ? 'Active' : 'Inactive'}
                             size="small"
                             color={plugin.isActive ? 'success' : 'default'}
                             variant={plugin.isActive ? 'filled' : 'outlined'}
                           />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              maxWidth: 300, 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
                             {plugin.description || 'No description'}
                           </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Box display="flex" gap={1}>
-                            <Tooltip title="View Details">
-                              <IconButton
-                                size="small"
-                                onClick={() => handleView(plugin.id)}
-                              >
-                                <ViewIcon />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Edit">
-                              <IconButton
-                                size="small"
-                                onClick={() => handleEdit(plugin.id)}
-                              >
-                                <EditIcon />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete">
-                              <IconButton
-                                size="small"
-                                onClick={() => handleDelete(plugin.id, plugin.name)}
-                                sx={{ color: 'error.main' }}
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
+                        </StyledTableCell>
+                        <StyledTableCell align="right">
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, plugin)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </StyledTableCell>
+                      </StyledTableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
-            </TableContainer>
+            </StyledPaper>
 
             <TablePagination
               rowsPerPageOptions={[10, 25, 50, 100]}
@@ -321,7 +352,50 @@ const PluginList = () => {
             />
           </>
         )}
-      </ContentBox>
+        
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
+        >
+          <MenuItem
+            onClick={() => {
+              handleView(selectedPlugin?.id);
+              handleMenuClose();
+            }}
+          >
+            View Details
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              handleEdit(selectedPlugin?.id);
+              handleMenuClose();
+            }}
+          >
+            Edit Plugin
+          </MenuItem>
+          <MenuItem 
+            onClick={() => handleDelete(selectedPlugin?.id, selectedPlugin?.name)}
+          >
+            Delete Plugin
+          </MenuItem>
+        </Menu>
+
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            onClose={handleCloseSnackbar}
+            severity={snackbar.severity}
+            sx={{ width: "100%" }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Box>
     </Box>
   );
 };

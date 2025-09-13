@@ -23,11 +23,14 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Menu,
+  Snackbar,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   Visibility as ViewIcon,
   CloudSync as PushIcon,
+  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import edgeGatewayService from '../../services/edgeGatewayService';
@@ -37,6 +40,11 @@ import {
   TitleBox,
   ContentBox,
   PrimaryButton,
+  SecondaryOutlineButton,
+  StyledPaper,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
 } from '../../styles/sharedStyles';
 
 const EdgeGatewayList = () => {
@@ -49,6 +57,10 @@ const EdgeGatewayList = () => {
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [pushModalOpen, setPushModalOpen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  
+  // Menu state for actions
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedEdge, setSelectedEdge] = useState(null);
 
   const fetchEdgeGateways = useCallback(async () => {
     setLoading(true);
@@ -83,6 +95,16 @@ const EdgeGatewayList = () => {
     fetchEdgeGateways();
   };
 
+  const handleMenuOpen = (event, edge) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedEdge(edge);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
   const handleViewDetail = (edgeId) => {
     navigate(`/admin/edge-gateways/${edgeId}`);
   };
@@ -111,33 +133,32 @@ const EdgeGatewayList = () => {
   const availableNamespaces = getAvailableNamespaces();
 
   return (
-    <Box>
-      <TitleBox>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h4" component="h1">
-            Edge Gateways
+    <Box sx={{ p: 0 }}>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">Edge Gateways</Typography>
+        <Box display="flex" gap={2} alignItems="center">
+          <Typography variant="caption" color="textSecondary">
+            Last updated: {lastRefresh.toLocaleTimeString()}
           </Typography>
-          <Box display="flex" gap={2} alignItems="center">
-            <Typography variant="caption" color="textSecondary">
-              Last updated: {lastRefresh.toLocaleTimeString()}
-            </Typography>
-            <PrimaryButton
-              startIcon={<PushIcon />}
-              onClick={() => setPushModalOpen(true)}
-              disabled={loading}
-            >
-              Push Configuration
-            </PrimaryButton>
-            <Tooltip title="Refresh">
-              <IconButton onClick={handleRefresh} disabled={loading}>
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
+          <SecondaryOutlineButton
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            Refresh
+          </SecondaryOutlineButton>
+          <PrimaryButton
+            variant="contained"
+            startIcon={<PushIcon />}
+            onClick={() => setPushModalOpen(true)}
+            disabled={loading}
+          >
+            Push Configuration
+          </PrimaryButton>
         </Box>
       </TitleBox>
 
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
         {/* Namespace Filter */}
         <Box mb={3}>
           <FormControl size="small" style={{ minWidth: 200 }}>
@@ -169,51 +190,55 @@ const EdgeGatewayList = () => {
             <CircularProgress />
           </Box>
         ) : (
-          <TableContainer component={Paper} variant="outlined">
+          <StyledPaper>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Edge ID</TableCell>
-                  <TableCell>Namespace</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Version</TableCell>
-                  <TableCell>Last Heartbeat</TableCell>
-                  <TableCell>Session ID</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <StyledTableHeaderCell>Edge ID</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Namespace</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Status</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Version</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Last Heartbeat</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Session ID</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {edgeGateways.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <StyledTableCell colSpan={7} align="center">
                       <Typography variant="body2" color="textSecondary" py={4}>
                         {selectedNamespace 
                           ? `No edge gateways found in ${selectedNamespace} namespace`
                           : 'No edge gateways found'
                         }
                       </Typography>
-                    </TableCell>
+                    </StyledTableCell>
                   </TableRow>
                 ) : (
                   edgeGateways.map((edge) => (
-                    <TableRow key={edge.id} hover>
-                      <TableCell>
+                    <StyledTableRow 
+                      key={edge.id} 
+                      onClick={() => handleViewDetail(edge.edgeId)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <StyledTableCell>
                         <Typography variant="body2" fontWeight="medium">
                           {edge.edgeId}
                         </Typography>
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Chip
                           label={edge.namespace}
                           size="small"
                           variant="outlined"
                           color={edge.namespace === 'global' ? 'default' : 'primary'}
                         />
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         {getStatusChip(edge)}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Typography variant="body2">
                           {edge.version || 'Unknown'}
                         </Typography>
@@ -222,35 +247,47 @@ const EdgeGatewayList = () => {
                             {edge.buildHash.substring(0, 8)}
                           </Typography>
                         )}
-                      </TableCell>
-                      <TableCell>
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Typography variant="body2">
                           {formatHeartbeat(edge.lastHeartbeat)}
                         </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        <Typography variant="body2" sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {edge.sessionId || 'N/A'}
                         </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="View Details">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleViewDetail(edge.edgeId)}
-                          >
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, edge)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </StyledTableCell>
+                    </StyledTableRow>
                   ))
                 )}
               </TableBody>
             </Table>
-          </TableContainer>
+          </StyledPaper>
         )}
-      </ContentBox>
+        
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
+        >
+          <MenuItem
+            onClick={() => {
+              handleViewDetail(selectedEdge?.edgeId);
+              handleMenuClose();
+            }}
+          >
+            View Details
+          </MenuItem>
+        </Menu>
+      </Box>
 
       <PushConfigurationModal
         open={pushModalOpen}

@@ -218,43 +218,27 @@ const PluginDetail = () => {
 
   return (
     <Box>
-      <TitleBox>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Box display="flex" alignItems="center" gap={2}>
-            <SecondaryLinkButton
-              component={Link}
-              to="/admin/plugins"
-              startIcon={<BackIcon />}
-            >
-              Back to Plugins
-            </SecondaryLinkButton>
-            <Typography variant="h4">
-              {plugin.name}
-            </Typography>
-            <Chip
-              label={plugin.isActive ? 'Active' : 'Inactive'}
-              color={plugin.isActive ? 'success' : 'default'}
-              variant={plugin.isActive ? 'filled' : 'outlined'}
-            />
-          </Box>
-          <Box display="flex" gap={2}>
-            <PrimaryButton
-              startIcon={<EditIcon />}
-              onClick={handleEdit}
-            >
-              Edit
-            </PrimaryButton>
-            <DangerButton
-              startIcon={<DeleteIcon />}
-              onClick={handleDelete}
-            >
-              Delete
-            </DangerButton>
-          </Box>
+      <TitleBox top="64px">
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="headingXLarge">
+            {plugin.name}
+          </Typography>
+          <Chip
+            label={plugin.isActive ? 'Active' : 'Inactive'}
+            color={plugin.isActive ? 'success' : 'default'}
+            variant={plugin.isActive ? 'filled' : 'outlined'}
+          />
         </Box>
+        <SecondaryLinkButton
+          component={Link}
+          to="/admin/plugins"
+          startIcon={<BackIcon />}
+        >
+          Back to Plugins
+        </SecondaryLinkButton>
       </TitleBox>
 
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
@@ -406,7 +390,29 @@ const PluginDetail = () => {
             </Card>
           </Grid>
         </Grid>
-      </ContentBox>
+
+        <Box
+          mt={4}
+          display="flex"
+          justifyContent="flex-end"
+          alignItems="center"
+          gap={2}
+        >
+          <PrimaryButton
+            variant="contained"
+            startIcon={<EditIcon />}
+            onClick={handleEdit}
+          >
+            Edit
+          </PrimaryButton>
+          <DangerButton
+            startIcon={<DeleteIcon />}
+            onClick={handleDelete}
+          >
+            Delete
+          </DangerButton>
+        </Box>
+      </Box>
     </Box>
   );
 };

@@ -31,6 +31,7 @@ import {
   ContentBox,
   SecondaryLinkButton,
   PrimaryButton,
+  SecondaryOutlineButton,
 } from '../../styles/sharedStyles';
 
 const EdgeGatewayDetail = () => {
@@ -123,23 +124,21 @@ const EdgeGatewayDetail = () => {
   if (error && !edgeGateway) {
     return (
       <Box>
-        <TitleBox>
-          <Box display="flex" alignItems="center" gap={2}>
-            <SecondaryLinkButton
-              component={Link}
-              to="/admin/edge-gateways"
-              startIcon={<BackIcon />}
-            >
-              Back to Edge Gateways
-            </SecondaryLinkButton>
-            <Typography variant="h4">Edge Gateway Details</Typography>
-          </Box>
+        <TitleBox top="64px">
+          <Typography variant="headingXLarge">Edge Gateway Details</Typography>
+          <SecondaryLinkButton
+            component={Link}
+            to="/admin/edge-gateways"
+            startIcon={<BackIcon />}
+          >
+            Back to Edge Gateways
+          </SecondaryLinkButton>
         </TitleBox>
-        <ContentBox>
+        <Box sx={{ p: 3 }}>
           <Alert severity="error">
             {error}
           </Alert>
-        </ContentBox>
+        </Box>
       </Box>
     );
   }
@@ -147,23 +146,21 @@ const EdgeGatewayDetail = () => {
   if (!edgeGateway) {
     return (
       <Box>
-        <TitleBox>
-          <Box display="flex" alignItems="center" gap={2}>
-            <SecondaryLinkButton
-              component={Link}
-              to="/admin/edge-gateways"
-              startIcon={<BackIcon />}
-            >
-              Back to Edge Gateways
-            </SecondaryLinkButton>
-            <Typography variant="h4">Edge Gateway Not Found</Typography>
-          </Box>
+        <TitleBox top="64px">
+          <Typography variant="headingXLarge">Edge Gateway Not Found</Typography>
+          <SecondaryLinkButton
+            component={Link}
+            to="/admin/edge-gateways"
+            startIcon={<BackIcon />}
+          >
+            Back to Edge Gateways
+          </SecondaryLinkButton>
         </TitleBox>
-        <ContentBox>
+        <Box sx={{ p: 3 }}>
           <Alert severity="warning">
             Edge gateway not found or you don't have permission to view it.
           </Alert>
-        </ContentBox>
+        </Box>
       </Box>
     );
   }
@@ -172,46 +169,27 @@ const EdgeGatewayDetail = () => {
 
   return (
     <Box>
-      <TitleBox>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Box display="flex" alignItems="center" gap={2}>
-            <SecondaryLinkButton
-              component={Link}
-              to="/admin/edge-gateways"
-              startIcon={<BackIcon />}
-            >
-              Back to Edge Gateways
-            </SecondaryLinkButton>
-            <Typography variant="h4">
-              {edgeGateway.edgeId}
-            </Typography>
-            <Chip
-              label={statusInfo.label}
-              color={statusInfo.color}
-              size="small"
-            />
-          </Box>
-          <Box display="flex" gap={2} alignItems="center">
-            <Typography variant="caption" color="textSecondary">
-              Last updated: {lastRefresh.toLocaleTimeString()}
-            </Typography>
-            <PrimaryButton
-              startIcon={<PushIcon />}
-              onClick={() => setPushModalOpen(true)}
-              size="small"
-            >
-              Push Config
-            </PrimaryButton>
-            <Tooltip title="Refresh">
-              <IconButton onClick={handleRefresh} disabled={loading}>
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
+      <TitleBox top="64px">
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="headingXLarge">
+            {edgeGateway.edgeId}
+          </Typography>
+          <Chip
+            label={statusInfo.label}
+            color={statusInfo.color}
+            size="small"
+          />
         </Box>
+        <SecondaryLinkButton
+          component={Link}
+          to="/admin/edge-gateways"
+          startIcon={<BackIcon />}
+        >
+          Back to Edge Gateways
+        </SecondaryLinkButton>
       </TitleBox>
 
-      <ContentBox>
+      <Box sx={{ p: 3 }}>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
@@ -357,7 +335,34 @@ const EdgeGatewayDetail = () => {
             </Card>
           </Grid>
         </Grid>
-      </ContentBox>
+
+        <Box
+          mt={4}
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+        >
+          <Typography variant="caption" color="textSecondary">
+            Last updated: {lastRefresh.toLocaleTimeString()}
+          </Typography>
+          <Box display="flex" gap={2}>
+            <SecondaryOutlineButton
+              startIcon={<RefreshIcon />}
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              Refresh
+            </SecondaryOutlineButton>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<PushIcon />}
+              onClick={() => setPushModalOpen(true)}
+            >
+              Push Config
+            </PrimaryButton>
+          </Box>
+        </Box>
+      </Box>
 
       <PushConfigurationModal
         open={pushModalOpen}
