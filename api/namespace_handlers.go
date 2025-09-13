@@ -195,3 +195,70 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// @Summary Get reload operation status
+// @Description Get the status of a specific reload operation
+// @Tags namespaces
+// @Accept json
+// @Produce json
+// @Param operation_id path string true "Operation ID"
+// @Success 200 {object} ReloadResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/reload-operations/{operation_id}/status [get]
+// @Security BearerAuth
+func (a *API) getReloadOperationStatus(c *gin.Context) {
+	operationID := c.Param("operation_id")
+	
+	// Get reload coordinator from namespace service
+	if a.service.NamespaceService == nil {
+		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Service Unavailable", Detail: "Namespace service not available"}},
+		})
+		return
+	}
+	
+	reloadCoordinator := a.service.NamespaceService.GetReloadCoordinator()
+	if reloadCoordinator == nil {
+		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Service Unavailable", Detail: "Reload coordinator not available (standalone mode)"}},
+		})
+		return
+	}
+	
+	// Get operation status
+	operation, err := reloadCoordinator.GetOperationStatus(operationID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: err.Error()}},
+		})
+		return
+	}
+
+	response := ReloadResponse{
+		Type: "reload-operations",
+		ID:   operation.OperationID,
+		Attributes: struct {
+			OperationID     string `json:"operation_id"`
+			TargetNamespace string `json:"target_namespace"`
+			Status          string `json:"status"`
+			Message         string `json:"message"`
+		}{
+			OperationID:     operation.OperationID,
+			TargetNamespace: operation.TargetNamespace,
+			Status:          operation.Status,
+			Message:         operation.Message,
+		},
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}

@@ -216,10 +216,47 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 // @Router /api/v1/edges/reload-operations [get]
 // @Security BearerAuth
 func (a *API) listReloadOperations(c *gin.Context) {
-	// TODO: Implement reload operation tracking
+	// Get reload coordinator from namespace service
+	if a.service.NamespaceService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Namespace service not available",
+		})
+		return
+	}
+	
+	reloadCoordinator := a.service.NamespaceService.GetReloadCoordinator()
+	if reloadCoordinator == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"data":    []interface{}{},
+			"message": "Reload coordinator not available (standalone mode)",
+		})
+		return
+	}
+	
+	// Get active operations from reload coordinator
+	operations := reloadCoordinator.ListActiveOperations()
+	
+	// Convert to API response format
+	data := make([]gin.H, len(operations))
+	for i, op := range operations {
+		data[i] = gin.H{
+			"type": "reload-operations",
+			"id":   op.OperationID,
+			"attributes": gin.H{
+				"operation_id":     op.OperationID,
+				"target_namespace": op.TargetNamespace,
+				"target_edges":     op.TargetEdges,
+				"initiated_by":     op.InitiatedBy,
+				"initiated_at":     op.InitiatedAt,
+				"status":           op.Status,
+				"progress":         op.Progress,
+				"message":          op.Message,
+			},
+		}
+	}
+	
 	c.JSON(http.StatusOK, gin.H{
-		"data":    []interface{}{},
-		"message": "Reload operation tracking pending implementation",
+		"data": data,
 	})
 }
 

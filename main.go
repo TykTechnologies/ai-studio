@@ -155,8 +155,9 @@ func main() {
 	// Always enable gateway
 	go p.Start()
 
-	// Initialize gRPC control server if enabled
+	// Initialize gRPC control server and reload coordinator if in control mode
 	var controlServer *grpc.ControlServer
+	var reloadCoordinator *services.ReloadCoordinator
 	if appConf.GatewayMode == "control" {
 		grpcConfig := &grpc.Config{
 			GRPCPort:    appConf.GRPCPort,
@@ -168,6 +169,16 @@ func main() {
 		}
 		
 		controlServer = grpc.NewControlServer(grpcConfig, db)
+		
+		// Create reload coordinator and connect it to control server
+		reloadCoordinator = services.NewReloadCoordinator(controlServer)
+		controlServer.SetReloadCoordinator(reloadCoordinator)
+		
+		// Connect reload coordinator to namespace service
+		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
+		
+		log.Printf("✅ Reload coordinator created and connected to control server and namespace service")
+		
 		go func() {
 			log.Printf("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
 			if err := controlServer.Start(); err != nil {
@@ -178,6 +189,7 @@ func main() {
 		// Graceful shutdown of gRPC server
 		defer func() {
 			if controlServer != nil {
+				log.Printf("Shutting down gRPC control server...")
 				controlServer.Stop()
 			}
 		}()

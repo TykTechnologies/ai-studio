@@ -10,8 +10,9 @@ import (
 
 // NamespaceService handles namespace operations for hub-and-spoke architecture
 type NamespaceService struct {
-	db          *gorm.DB
-	edgeService *EdgeService
+	db                *gorm.DB
+	edgeService       *EdgeService
+	reloadCoordinator *ReloadCoordinator
 }
 
 // NewNamespaceService creates a new NamespaceService
@@ -19,7 +20,18 @@ func NewNamespaceService(db *gorm.DB, edgeService *EdgeService) *NamespaceServic
 	return &NamespaceService{
 		db:          db,
 		edgeService: edgeService,
+		// reloadCoordinator will be set later via SetReloadCoordinator
 	}
+}
+
+// SetReloadCoordinator sets the reload coordinator for distributed reload operations
+func (s *NamespaceService) SetReloadCoordinator(coordinator *ReloadCoordinator) {
+	s.reloadCoordinator = coordinator
+}
+
+// GetReloadCoordinator returns the reload coordinator if available
+func (s *NamespaceService) GetReloadCoordinator() *ReloadCoordinator {
+	return s.reloadCoordinator
 }
 
 // NamespaceInfo contains information about a namespace
@@ -181,6 +193,13 @@ func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy 
 	// Create reload operation
 	operationID := fmt.Sprintf("ns-reload-%s-%d", namespace, time.Now().Unix())
 	
+	// Use reload coordinator if available, otherwise fall back to mock implementation
+	if s.reloadCoordinator != nil {
+		// Use the distributed reload coordinator for actual gRPC coordination
+		return s.reloadCoordinator.InitiateNamespaceReload(namespace, initiatedBy, 300) // 5 minute timeout
+	}
+
+	// Fallback for when no reload coordinator is set (standalone mode)
 	operation := &ReloadOperation{
 		OperationID:     operationID,
 		TargetNamespace: namespace,
@@ -190,9 +209,6 @@ func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy 
 		Progress:        0,
 		Message:         fmt.Sprintf("Reload operation initiated for namespace '%s'", namespace),
 	}
-
-	// TODO: Implement actual reload coordination with gRPC control server
-	// For now, just return the operation details
 
 	return operation, nil
 }
@@ -209,7 +225,13 @@ func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) 
 		return nil, fmt.Errorf("edge '%s' is not in a reloadable state (status: %s)", edgeID, edge.Status)
 	}
 
-	// Create reload operation
+	// Use reload coordinator if available, otherwise fall back to mock implementation
+	if s.reloadCoordinator != nil {
+		// Use the distributed reload coordinator for actual gRPC coordination
+		return s.reloadCoordinator.InitiateEdgeReload([]string{edgeID}, initiatedBy, 300) // 5 minute timeout
+	}
+
+	// Fallback for when no reload coordinator is set (standalone mode)
 	operationID := fmt.Sprintf("edge-reload-%s-%d", edgeID, time.Now().Unix())
 	
 	operation := &ReloadOperation{
@@ -222,9 +244,6 @@ func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) 
 		Progress:        0,
 		Message:         fmt.Sprintf("Reload operation initiated for edge '%s'", edgeID),
 	}
-
-	// TODO: Implement actual reload coordination with gRPC control server
-	// For now, just return the operation details
 
 	return operation, nil
 }

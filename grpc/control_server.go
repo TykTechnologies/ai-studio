@@ -60,6 +60,9 @@ type ControlServer struct {
 	
 	// gRPC server
 	grpcServer *grpc.Server
+	
+	// Reload coordination (set after creation to avoid import cycle)
+	reloadCoordinator interface{} // Will be *services.ReloadCoordinator
 }
 
 // Config holds the control server configuration
@@ -336,6 +339,24 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 							},
 						}
 						stream.Send(response)
+					}
+				}
+				
+			case *pb.EdgeMessage_ReloadResponse:
+				// Handle reload status response
+				if m.ReloadResponse != nil {
+					log.Info().
+						Str("operation_id", m.ReloadResponse.OperationId).
+						Str("edge_id", m.ReloadResponse.EdgeId).
+						Str("phase", m.ReloadResponse.Phase.String()).
+						Bool("success", m.ReloadResponse.Success).
+						Msg("Received reload status from edge")
+					
+					// Forward to reload coordinator if available
+					if s.reloadCoordinator != nil {
+						if coordinator, ok := s.reloadCoordinator.(interface{ ProcessReloadResponse(*pb.ConfigurationReloadResponse) }); ok {
+							coordinator.ProcessReloadResponse(m.ReloadResponse)
+						}
 					}
 				}
 			}
@@ -902,4 +923,70 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 
 	// Encode to base64 for transmission
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// SetReloadCoordinator sets the reload coordinator reference (avoids import cycle)
+func (s *ControlServer) SetReloadCoordinator(coordinator interface{}) {
+	s.reloadCoordinator = coordinator
+	log.Info().Msg("Reload coordinator set for control server")
+}
+
+// SendReloadRequest sends a reload request to a specific edge instance
+func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.ConfigurationReloadRequest) error {
+	s.edgeMutex.RLock()
+	edge, exists := s.edgeConnections[edgeID]
+	s.edgeMutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("edge instance not found: %s", edgeID)
+	}
+
+	if edge.Stream == nil || (edge.Status != "connected" && edge.Status != "registered") {
+		return fmt.Errorf("edge instance not available for reload: %s (status: %s, has_stream: %v)", edgeID, edge.Status, edge.Stream != nil)
+	}
+
+	// Send reload request via gRPC stream
+	message := &pb.ControlMessage{
+		Message: &pb.ControlMessage_ReloadRequest{
+			ReloadRequest: reloadReq,
+		},
+	}
+
+	if err := edge.Stream.Send(message); err != nil {
+		log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to send reload request to edge")
+		edge.Status = "unhealthy"
+		return fmt.Errorf("failed to send reload request: %w", err)
+	}
+
+	log.Info().
+		Str("edge_id", edgeID).
+		Str("operation_id", reloadReq.OperationId).
+		Msg("Reload request sent to edge via stream")
+
+	return nil
+}
+
+// GetConnectedEdges returns all connected edge instances as interface{} map
+func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
+	s.edgeMutex.RLock()
+	defer s.edgeMutex.RUnlock()
+	
+	result := make(map[string]interface{})
+	for edgeID, edge := range s.edgeConnections {
+		// Convert edge connection to interface{} map format expected by reload coordinator
+		result[edgeID] = map[string]interface{}{
+			"edge_id":        edge.EdgeID,
+			"namespace":      edge.Namespace,
+			"status":         edge.Status,
+			"version":        edge.Version,
+			"session_id":     edge.SessionID,
+			"last_heartbeat": edge.LastHeartbeat,
+		}
+	}
+	
+	log.Debug().
+		Int("connected_edges", len(result)).
+		Msg("Retrieved connected edges for reload coordinator")
+	
+	return result
 }
