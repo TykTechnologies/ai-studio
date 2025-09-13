@@ -75,8 +75,13 @@ class PluginService {
           namespace: plugin.attributes.namespace || 'global',
           createdAt: plugin.attributes.created_at,
           updatedAt: plugin.attributes.updated_at,
-          // Include associated LLMs if present
-          llms: plugin.relationships?.llms?.data || [],
+          // Include associated LLMs if present with full data
+          llms: plugin.relationships?.llms?.data?.map(llm => ({
+            id: llm.id,
+            name: llm.attributes?.name || 'Unknown LLM',
+            vendor: llm.attributes?.vendor || 'Unknown',
+            isActive: llm.attributes?.active !== undefined ? llm.attributes.active : true,
+          })) || [],
         };
       }
       

@@ -122,6 +122,7 @@ const PluginDetail = () => {
           <TableHead>
             <TableRow>
               <TableCell>LLM Name</TableCell>
+              <TableCell>Vendor</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
@@ -132,6 +133,11 @@ const PluginDetail = () => {
                 <TableCell>
                   <Typography variant="body2" fontWeight="medium">
                     {llm.name}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" color="textSecondary">
+                    {llm.vendor}
                   </Typography>
                 </TableCell>
                 <TableCell>

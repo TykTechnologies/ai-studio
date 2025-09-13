@@ -13,9 +13,9 @@ import (
 
 // PluginResponse represents a plugin in API responses
 type PluginResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
+	Type          string `json:"type"`
+	ID            string `json:"id"`
+	Attributes    struct {
 		Name        string                 `json:"name"`
 		Slug        string                 `json:"slug"`
 		Description string                 `json:"description"`
@@ -28,6 +28,19 @@ type PluginResponse struct {
 		CreatedAt   string                 `json:"created_at"`
 		UpdatedAt   string                 `json:"updated_at"`
 	} `json:"attributes"`
+	Relationships *struct {
+		LLMs struct {
+			Data []struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+				Attributes struct {
+					Name   string `json:"name"`
+					Vendor string `json:"vendor"`
+					Active bool   `json:"active"`
+				} `json:"attributes"`
+			} `json:"data"`
+		} `json:"llms"`
+	} `json:"relationships,omitempty"`
 }
 
 // PluginListResponse represents a list of plugins
@@ -514,7 +527,7 @@ func (a *API) updateLLMPlugins(c *gin.Context) {
 
 // serializePlugin converts a Plugin model to API response format
 func serializePlugin(plugin *models.Plugin) PluginResponse {
-	return PluginResponse{
+	response := PluginResponse{
 		Type: "plugins",
 		ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 		Attributes: struct {
@@ -543,4 +556,57 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
 	}
+
+	// Include LLM relationships if they exist
+	if len(plugin.LLMs) > 0 {
+		response.Relationships = &struct {
+			LLMs struct {
+				Data []struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+					Attributes struct {
+						Name   string `json:"name"`
+						Vendor string `json:"vendor"`
+						Active bool   `json:"active"`
+					} `json:"attributes"`
+				} `json:"data"`
+			} `json:"llms"`
+		}{}
+
+		response.Relationships.LLMs.Data = make([]struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+			Attributes struct {
+				Name   string `json:"name"`
+				Vendor string `json:"vendor"`
+				Active bool   `json:"active"`
+			} `json:"attributes"`
+		}, len(plugin.LLMs))
+
+		for i, llm := range plugin.LLMs {
+			response.Relationships.LLMs.Data[i] = struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+				Attributes struct {
+					Name   string `json:"name"`
+					Vendor string `json:"vendor"`
+					Active bool   `json:"active"`
+				} `json:"attributes"`
+			}{
+				Type: "llms",
+				ID:   strconv.FormatUint(uint64(llm.ID), 10),
+				Attributes: struct {
+					Name   string `json:"name"`
+					Vendor string `json:"vendor"`
+					Active bool   `json:"active"`
+				}{
+					Name:   llm.Name,
+					Vendor: string(llm.Vendor),
+					Active: llm.Active,
+				},
+			}
+		}
+	}
+
+	return response
 }
