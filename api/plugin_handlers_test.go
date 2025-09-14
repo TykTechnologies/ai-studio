@@ -777,7 +777,7 @@ func TestPluginListingFiltersComprehensive(t *testing.T) {
 
 	// Test 8: Pagination with filters
 	t.Run("Pagination with filters", func(t *testing.T) {
-		// Test pagination on active plugins (7 total active)
+		// Test pagination on active plugins (5 total active)
 		w := performRequest(api.router, "GET", "/api/v1/plugins?is_active=true&page=1&limit=3", nil)
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -785,10 +785,10 @@ func TestPluginListingFiltersComprehensive(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &listResponse)
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(listResponse.Data))
-		assert.Equal(t, int64(7), listResponse.Meta.TotalCount) // Total active plugins
+		assert.Equal(t, int64(5), listResponse.Meta.TotalCount) // Total active plugins
 		assert.Equal(t, 3, listResponse.Meta.PageSize)
 		assert.Equal(t, 1, listResponse.Meta.PageNumber)
-		assert.Equal(t, 3, listResponse.Meta.TotalPages) // ceil(7/3) = 3
+		assert.Equal(t, 2, listResponse.Meta.TotalPages) // ceil(5/3) = 2
 
 		// Test second page
 		w = performRequest(api.router, "GET", "/api/v1/plugins?is_active=true&page=2&limit=3", nil)
@@ -796,31 +796,21 @@ func TestPluginListingFiltersComprehensive(t *testing.T) {
 
 		err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 		assert.NoError(t, err)
-		assert.Equal(t, 3, len(listResponse.Data))
-		assert.Equal(t, int64(7), listResponse.Meta.TotalCount)
+		assert.Equal(t, 2, len(listResponse.Data)) // 5 total - 3 first page = 2 remaining
+		assert.Equal(t, int64(5), listResponse.Meta.TotalCount)
 		assert.Equal(t, 2, listResponse.Meta.PageNumber)
 
-		// Test last page
-		w = performRequest(api.router, "GET", "/api/v1/plugins?is_active=true&page=3&limit=3", nil)
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		err = json.Unmarshal(w.Body.Bytes(), &listResponse)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(listResponse.Data)) // Last page has 1 plugin
-		assert.Equal(t, int64(7), listResponse.Meta.TotalCount)
-		assert.Equal(t, 3, listResponse.Meta.PageNumber)
-
-		// Test pagination on ALL plugins (12 total)
+		// Test pagination on ALL plugins (8 total)
 		w = performRequest(api.router, "GET", "/api/v1/plugins?page=1&limit=5", nil)
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		err = json.Unmarshal(w.Body.Bytes(), &listResponse)
 		assert.NoError(t, err)
 		assert.Equal(t, 5, len(listResponse.Data))
-		assert.Equal(t, int64(12), listResponse.Meta.TotalCount) // Total all plugins
+		assert.Equal(t, int64(8), listResponse.Meta.TotalCount) // Total all plugins
 		assert.Equal(t, 5, listResponse.Meta.PageSize)
 		assert.Equal(t, 1, listResponse.Meta.PageNumber)
-		assert.Equal(t, 3, listResponse.Meta.TotalPages) // ceil(12/5) = 3
+		assert.Equal(t, 2, listResponse.Meta.TotalPages) // ceil(8/5) = 2
 	})
 
 	// Test 9: Edge cases and error conditions

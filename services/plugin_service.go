@@ -122,9 +122,9 @@ func (s *PluginService) GetPlugin(id uint) (*models.Plugin, error) {
 }
 
 // ListPlugins lists plugins with pagination and filtering (adapted from microgateway)
-func (s *PluginService) ListPlugins(page, limit int, hookType string, isActive bool) ([]models.Plugin, int64, error) {
+func (s *PluginService) ListPlugins(page, limit int, hookType string, isActive bool, namespace string) ([]models.Plugin, int64, error) {
 	var plugins models.Plugins
-	totalCount, _, err := plugins.ListWithPagination(s.db, limit, page, false, hookType, isActive)
+	totalCount, _, err := plugins.ListWithPagination(s.db, limit, page, false, hookType, isActive, namespace)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list plugins: %w", err)
 	}
@@ -133,34 +133,14 @@ func (s *PluginService) ListPlugins(page, limit int, hookType string, isActive b
 }
 
 // ListAllPlugins lists all plugins (both active and inactive) with pagination and filtering
-func (s *PluginService) ListAllPlugins(page, limit int, hookType string) ([]models.Plugin, int64, error) {
-	var plugins []models.Plugin
-	var totalCount int64
-
-	query := s.db.Model(&models.Plugin{})
-
-	// Apply hook type filter if specified
-	if hookType != "" {
-		query = query.Where("hook_type = ?", hookType)
-	}
-	// Note: No is_active filter - this returns both active and inactive
-
-	// Get total count
-	if err := query.Count(&totalCount).Error; err != nil {
-		return nil, 0, fmt.Errorf("failed to count plugins: %w", err)
-	}
-
-	// Get paginated results
-	offset := (page - 1) * limit
-	err := query.Offset(offset).Limit(limit).
-		Order("created_at DESC").
-		Find(&plugins).Error
-
+func (s *PluginService) ListAllPlugins(page, limit int, hookType string, namespace string) ([]models.Plugin, int64, error) {
+	var plugins models.Plugins
+	totalCount, _, err := plugins.ListAllWithPagination(s.db, limit, page, false, hookType, namespace)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list all plugins: %w", err)
 	}
 
-	return plugins, totalCount, nil
+	return []models.Plugin(plugins), totalCount, nil
 }
 
 // UpdatePlugin updates an existing plugin (adapted from microgateway)

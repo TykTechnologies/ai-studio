@@ -111,7 +111,9 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						return
 					}
 					
-					// Not a tool request - fall through to API Key authentication
+					// Not a tool request - continue with LLM request
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
 				}
 			}
 

@@ -126,7 +126,7 @@ func (plugins *Plugins) GetPluginsInNamespace(db *gorm.DB, namespace string) err
 }
 
 // ListWithPagination returns paginated list of plugins with filtering
-func (plugins *Plugins) ListWithPagination(db *gorm.DB, pageSize, pageNumber int, all bool, hookType string, isActive bool) (int64, int, error) {
+func (plugins *Plugins) ListWithPagination(db *gorm.DB, pageSize, pageNumber int, all bool, hookType string, isActive bool, namespace string) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&Plugin{})
 
@@ -135,6 +135,66 @@ func (plugins *Plugins) ListWithPagination(db *gorm.DB, pageSize, pageNumber int
 		query = query.Where("hook_type = ?", hookType)
 	}
 	query = query.Where("is_active = ?", isActive)
+
+	// Apply namespace filtering
+	if namespace == "__ALL_NAMESPACES__" {
+		// Special case: no namespace filtering, return plugins from all namespaces
+		// No additional WHERE clause needed
+	} else if namespace != "" {
+		// Specific namespace: include global plugins (empty namespace) + plugins in specified namespace
+		query = query.Where("namespace = '' OR namespace = ?", namespace)
+	} else {
+		// Empty namespace query: only return global plugins
+		query = query.Where("namespace = ''")
+	}
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := 0
+	if totalCount > 0 {
+		if all {
+			totalPages = 1
+		} else {
+			totalPages = int(totalCount) / pageSize
+			if int(totalCount)%pageSize != 0 {
+				totalPages++
+			}
+		}
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("LLMs").Order("created_at DESC").Find(plugins).Error
+	return totalCount, totalPages, err
+}
+
+// ListAllWithPagination returns paginated list of all plugins (active and inactive) with filtering
+func (plugins *Plugins) ListAllWithPagination(db *gorm.DB, pageSize, pageNumber int, all bool, hookType string, namespace string) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Plugin{})
+
+	// Apply filters
+	if hookType != "" {
+		query = query.Where("hook_type = ?", hookType)
+	}
+	// Note: No is_active filter - this returns both active and inactive
+
+	// Apply namespace filtering
+	if namespace == "__ALL_NAMESPACES__" {
+		// Special case: no namespace filtering, return plugins from all namespaces
+		// No additional WHERE clause needed
+	} else if namespace != "" {
+		// Specific namespace: include global plugins (empty namespace) + plugins in specified namespace
+		query = query.Where("namespace = '' OR namespace = ?", namespace)
+	} else {
+		// Empty namespace query: only return global plugins
+		query = query.Where("namespace = ''")
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err

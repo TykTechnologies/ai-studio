@@ -72,6 +72,8 @@ func (a *API) listPlugins(c *gin.Context) {
 	// Parse query parameters
 	hookType := c.Query("hook_type")
 	namespace := c.Query("namespace")
+	// Check if namespace parameter was actually provided
+	_, namespaceProvided := c.GetQuery("namespace")
 	// Handle is_active parameter - if not provided, show all plugins
 	isActiveParam := c.Query("is_active")
 	var isActive bool
@@ -95,12 +97,18 @@ func (a *API) listPlugins(c *gin.Context) {
 	var totalCount int64
 	var err error
 
+	// Determine namespace filter: if not provided, pass special value to indicate "no namespace filtering"
+	namespaceFilter := namespace
+	if !namespaceProvided {
+		namespaceFilter = "__ALL_NAMESPACES__" // Special value to indicate no namespace filtering
+	}
+
 	// Use filtering based on whether is_active parameter was provided
 	if filterByActive {
-		plugins, totalCount, err = a.service.PluginService.ListPlugins(page, limit, hookType, isActive)
+		plugins, totalCount, err = a.service.PluginService.ListPlugins(page, limit, hookType, isActive, namespaceFilter)
 	} else {
 		// Get all plugins (both active and inactive)
-		plugins, totalCount, err = a.service.PluginService.ListAllPlugins(page, limit, hookType)
+		plugins, totalCount, err = a.service.PluginService.ListAllPlugins(page, limit, hookType, namespaceFilter)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -110,19 +118,6 @@ func (a *API) listPlugins(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
-	}
-
-	// Apply namespace filtering if specified
-	if namespace != "" {
-		var filteredPlugins []models.Plugin
-		for _, plugin := range plugins {
-			// Include global plugins (empty namespace) and plugins matching the specific namespace
-			if plugin.Namespace == "" || plugin.Namespace == namespace {
-				filteredPlugins = append(filteredPlugins, plugin)
-			}
-		}
-		plugins = filteredPlugins
-		totalCount = int64(len(plugins))
 	}
 
 	// Calculate pagination
