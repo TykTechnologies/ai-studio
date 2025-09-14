@@ -201,7 +201,16 @@ func main() {
 				)
 				edgeClient.SetReloadHandler(reloadHandler)
 				log.Info().Msg("Edge reload handler created and connected to edge client")
-				
+
+				// Connect edge client to plugin manager for built-in plugins
+				serviceContainer.PluginManager.SetEdgeClient(edgeClient)
+				log.Info().Msg("Edge client connected to plugin manager for built-in plugin support")
+
+				// Load any deferred built-in plugins (like analytics_pulse)
+				if err := serviceContainer.PluginManager.LoadDeferredBuiltinPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
+					log.Error().Err(err).Msg("Failed to load deferred built-in plugins")
+				}
+
 				log.Info().Msg("Edge client connected to gRPC provider")
 			}
 		}

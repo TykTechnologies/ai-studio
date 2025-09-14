@@ -37,6 +37,7 @@ func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.Analyti
 	}
 }
 
+
 // RecordChatRecord implements the midsommar analytics interface
 // This is for AI Studio chat features - for microgateway, we use RecordProxyLog exclusively
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
@@ -106,9 +107,12 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 	
 	// Execute analytics data collection plugins
 	if h.pluginManager != nil {
+		// Extract LLM ID from vendor and model information
+		llmID := h.findLLMIDByVendorAndModel(proxyLog.Vendor, model)
+
 		// Convert to analytics plugin format
 		analyticsData := &interfaces.AnalyticsData{
-			LLMID:          0, // Could be extracted from request context if needed
+			LLMID:          llmID,
 			ModelName:      model,
 			Vendor:         proxyLog.Vendor,
 			PromptTokens:   tokens.PromptTokens,
@@ -122,6 +126,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 			ToolCalls:      0, // Could be parsed from request if needed
 			Choices:        1, // Default to 1 choice
 			RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+			// Include request/response data for pulse plugins
+			RequestBody:    proxyLog.RequestBody,
+			ResponseBody:   proxyLog.ResponseBody,
 		}
 		
 		// Execute analytics plugins
@@ -136,11 +143,18 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		}
 	}
 	
+	// Extract LLM ID for analytics event
+	llmID := h.findLLMIDByVendorAndModel(proxyLog.Vendor, model)
+	var llmIDPtr *uint
+	if llmID > 0 {
+		llmIDPtr = &llmID
+	}
+
 	// Create analytics event directly from proxy log
 	event := &database.AnalyticsEvent{
 		RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
 		AppID:          proxyLog.AppID,
-		LLMID:          nil, // Could be extracted from request context if needed
+		LLMID:          llmIDPtr,
 		CredentialID:   nil, // Not used in token-only system
 		Endpoint:       h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
 		Method:         "POST",
@@ -402,6 +416,39 @@ func (h *MicrogatewaAnalyticsHandler) extractEndpointFromVendor(vendor string, a
 	default:
 		return fmt.Sprintf("/llm/rest/%s/chat/completions", llm.Slug)
 	}
+}
+
+// findLLMIDByVendorAndModel finds the LLM ID based on vendor and model name
+func (h *MicrogatewaAnalyticsHandler) findLLMIDByVendorAndModel(vendor, modelName string) uint {
+	var llm database.LLM
+
+	// Try to find LLM by vendor and default model
+	err := h.db.Where("vendor = ? AND default_model = ?", vendor, modelName).
+		First(&llm).Error
+
+	if err == nil {
+		return llm.ID
+	}
+
+	// Fallback: find LLM by vendor only (first match)
+	err = h.db.Where("vendor = ? AND is_active = ?", vendor, true).
+		First(&llm).Error
+
+	if err == nil {
+		log.Debug().
+			Str("vendor", vendor).
+			Str("model", modelName).
+			Uint("llm_id", llm.ID).
+			Str("llm_name", llm.Name).
+			Msg("Found LLM by vendor (model not matched)")
+		return llm.ID
+	}
+
+	log.Debug().
+		Str("vendor", vendor).
+		Str("model", modelName).
+		Msg("Could not find LLM for vendor and model")
+	return 0
 }
 
 // Helper function for min

@@ -27,6 +27,9 @@ service ConfigurationSyncService {
   
   // ValidateToken validates an API token on-demand (NEW)
   rpc ValidateToken(TokenValidationRequest) returns (TokenValidationResponse);
+
+  // SendAnalyticsPulse sends batched analytics data from edge to control (NEW)
+  rpc SendAnalyticsPulse(AnalyticsPulse) returns (AnalyticsPulseResponse);
 }
 
 // EdgeRegistrationRequest is sent when an edge instance connects
@@ -176,4 +179,115 @@ enum ReloadPhase {
   UPDATED = 3;        // Edge SQLite update complete
   READY = 4;          // Edge operational with new config
   FAILED = 5;         // Edge failed during reload
+}
+
+// Analytics Pulse System Messages (NEW)
+
+// AnalyticsPulse contains batched analytics data from edge to control
+message AnalyticsPulse {
+  string edge_id = 1;             // Edge instance sending the pulse
+  string edge_namespace = 2;      // Edge namespace
+  google.protobuf.Timestamp pulse_timestamp = 3; // When pulse was generated
+  google.protobuf.Timestamp data_from = 4;       // Start time of data in this pulse
+  google.protobuf.Timestamp data_to = 5;         // End time of data in this pulse
+  uint64 sequence_number = 6;     // Incremental sequence for ordering
+
+  // Batched analytics data
+  repeated AnalyticsEvent analytics_events = 7;   // Analytics/token usage events
+  repeated BudgetUsageEvent budget_events = 8;    // Budget usage events
+  repeated ProxyLogSummary proxy_summaries = 9;   // Summarized proxy logs (not full payloads)
+
+  // Pulse metadata
+  bool is_compressed = 10;        // Whether data is compressed
+  uint32 total_records = 11;      // Total number of records in pulse
+  uint64 data_size_bytes = 12;    // Uncompressed data size
+}
+
+// AnalyticsPulseResponse acknowledges receipt of analytics pulse
+message AnalyticsPulseResponse {
+  bool success = 1;               // Whether pulse was successfully processed
+  string message = 2;             // Status message or error details
+  uint64 processed_records = 3;   // Number of records successfully processed
+  uint64 sequence_number = 4;     // Echo sequence number from request
+  google.protobuf.Timestamp processed_at = 5; // When control processed the pulse
+
+  // Pulse configuration updates (if any)
+  AnalyticsPulseConfig updated_config = 6; // Updated pulse configuration
+}
+
+// AnalyticsPulseConfig configures pulse behavior for an edge
+message AnalyticsPulseConfig {
+  bool enabled = 1;               // Whether analytics pulse is enabled
+  uint32 interval_seconds = 2;    // Pulse frequency in seconds (default: 300)
+  uint32 max_batch_size = 3;      // Maximum records per pulse (default: 1000)
+  bool compression_enabled = 4;   // Whether to compress pulse data (default: true)
+  uint32 max_buffer_size = 5;     // Maximum edge buffer size (default: 10000)
+  bool include_proxy_summaries = 6; // Whether to include proxy log summaries (default: true)
+
+  // Data retention settings
+  uint32 edge_retention_hours = 7; // How long edge keeps data after successful pulse (default: 24)
+  repeated string excluded_vendors = 8; // Vendor patterns to exclude from pulses
+}
+
+// Individual analytics event for pulse batching
+message AnalyticsEvent {
+  string request_id = 1;          // Unique request identifier
+  uint32 app_id = 2;              // Application ID
+  uint32 llm_id = 3;              // LLM ID (optional)
+  string endpoint = 4;            // API endpoint called
+  string method = 5;              // HTTP method
+  int32 status_code = 6;          // Response status code
+  uint32 request_tokens = 7;      // Input tokens consumed
+  uint32 response_tokens = 8;     // Output tokens generated
+  uint32 total_tokens = 9;        // Total tokens used
+  double cost = 10;               // Cost in dollars (4 decimal precision)
+  uint32 latency_ms = 11;         // Request latency in milliseconds
+  google.protobuf.Timestamp timestamp = 12; // When the event occurred
+  string error_message = 13;      // Error message if failed (optional)
+
+  // Optional request/response size summary (not full payloads)
+  uint32 request_size_bytes = 14; // Size of request body
+  uint32 response_size_bytes = 15; // Size of response body
+
+  // Model information (NEW)
+  string model_name = 16;         // Actual model name from request (e.g., "claude-sonnet-4-20250514")
+  string vendor = 17;             // Vendor name (e.g., "anthropic", "openai")
+
+  // Optional request/response data (controlled by include_request_response_data flag)
+  string request_body = 18;       // Request body (if include_request_response_data = true)
+  string response_body = 19;      // Response body (if include_request_response_data = true)
+}
+
+// Budget usage event for pulse batching
+message BudgetUsageEvent {
+  uint32 app_id = 1;              // Application ID
+  uint32 llm_id = 2;              // LLM ID (optional, 0 if not specific)
+  int64 tokens_used = 3;          // Tokens consumed in this event
+  double cost = 4;                // Cost in dollars
+  int64 prompt_tokens = 5;        // Prompt tokens used
+  int64 completion_tokens = 6;    // Completion tokens used
+  uint32 requests_count = 7;      // Number of requests in this usage event
+  google.protobuf.Timestamp timestamp = 8; // When the usage occurred
+  google.protobuf.Timestamp period_start = 9; // Budget period start
+  google.protobuf.Timestamp period_end = 10;   // Budget period end
+}
+
+// Summarized proxy log information (not full request/response)
+message ProxyLogSummary {
+  uint32 app_id = 1;              // Application ID
+  uint32 user_id = 2;             // User ID
+  string vendor = 3;              // LLM vendor
+  int32 response_code = 4;        // HTTP response code
+  uint32 request_count = 5;       // Number of requests in this summary
+  uint64 total_request_bytes = 6; // Total bytes of all requests
+  uint64 total_response_bytes = 7; // Total bytes of all responses
+  uint32 avg_latency_ms = 8;      // Average latency across requests
+  uint32 error_count = 9;         // Number of failed requests
+  google.protobuf.Timestamp first_request = 10; // Timestamp of first request in summary
+  google.protobuf.Timestamp last_request = 11;  // Timestamp of last request in summary
+
+  // Request pattern summary
+  repeated string unique_models = 12; // List of unique model names called
+  uint32 total_tokens = 13;       // Total tokens across all requests
+  double total_cost = 14;         // Total cost across all requests
 }

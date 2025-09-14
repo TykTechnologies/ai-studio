@@ -12,8 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
@@ -42,16 +44,17 @@ type PluginData struct {
 
 // LoadedPlugin represents a loaded plugin instance
 type LoadedPlugin struct {
-	ID          uint
-	Name        string
-	Slug        string
-	HookType    interfaces.HookType
-	Client      *plugin.Client
-	GRPCClient  pb.PluginServiceClient
-	Config      map[string]interface{}
-	Checksum    string
-	IsHealthy   bool
-	IsGlobal    bool   // True for global plugins (vs per-LLM plugins)
+	ID            uint
+	Name          string
+	Slug          string
+	HookType      interfaces.HookType
+	Client        *plugin.Client
+	GRPCClient    pb.PluginServiceClient
+	Config        map[string]interface{}
+	Checksum      string
+	IsHealthy     bool
+	IsGlobal      bool   // True for global plugins (vs per-LLM plugins)
+	BuiltinPlugin interfaces.DataCollectionPlugin // For built-in plugins
 }
 
 // GlobalPlugin represents a global data collection plugin instance
@@ -109,6 +112,9 @@ type PluginManager struct {
 	// Plugin health tracking
 	pluginHealth            map[uint]*PluginHealthStatus     // Plugin ID -> health status
 	preWarmingInProgress    map[uint]bool                    // Plugin ID -> pre-warming status
+
+	// Built-in plugin support
+	edgeClient              interface{}                      // Edge client for built-in plugins (interface to avoid import cycle)
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -1048,8 +1054,20 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 			continue
 		}
 		
-		// Load plugin from path
-		globalPlugin, err := pm.loadGlobalPluginFromConfig(cfg)
+		// Check if this is the built-in analytics pulse plugin
+		var globalPlugin *GlobalPlugin
+		var err error
+
+		if cfg.Name == "analytics_pulse" {
+			// Skip built-in analytics pulse plugin during initial load
+			// It will be loaded later when edge client is available
+			log.Info().Str("plugin", cfg.Name).Msg("Deferring built-in analytics pulse plugin load until edge client is available")
+			continue
+		} else {
+			// Load external plugin from path
+			globalPlugin, err = pm.loadGlobalPluginFromConfig(cfg)
+		}
+
 		if err != nil {
 			log.Error().
 				Str("plugin", cfg.Name).
@@ -1148,6 +1166,117 @@ func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConf
 	return globalPlugin, nil
 }
 
+// SetEdgeClient sets the edge client for built-in plugins that need gRPC access
+func (pm *PluginManager) SetEdgeClient(edgeClient interface{}) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.edgeClient = edgeClient
+	log.Info().Msg("Edge client set for plugin manager built-in plugins")
+}
+
+// LoadDeferredBuiltinPlugins loads any built-in plugins that were deferred during initial load
+func (pm *PluginManager) LoadDeferredBuiltinPlugins(configs []DataCollectionPluginConfig) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	for _, cfg := range configs {
+		if !cfg.Enabled {
+			continue
+		}
+
+		// Only load analytics_pulse plugin that was deferred
+		if cfg.Name == "analytics_pulse" {
+			log.Info().Str("plugin", cfg.Name).Msg("Loading deferred built-in analytics pulse plugin")
+
+			globalPlugin, err := pm.loadBuiltinAnalyticsPulsePlugin(cfg)
+			if err != nil {
+				log.Error().
+					Str("plugin", cfg.Name).
+					Err(err).
+					Msg("Failed to load deferred built-in analytics pulse plugin")
+				return err
+			}
+
+			// Store global plugin
+			pm.globalDataPlugins[cfg.Name] = globalPlugin
+			pm.dataCollectionHookTypes[cfg.Name] = cfg.HookTypes
+
+			log.Info().
+				Str("plugin", cfg.Name).
+				Strs("hook_types", cfg.HookTypes).
+				Msg("Deferred built-in analytics pulse plugin loaded successfully")
+		}
+	}
+
+	return nil
+}
+
+// loadBuiltinAnalyticsPulsePlugin loads the built-in analytics pulse plugin
+func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPluginConfig) (*GlobalPlugin, error) {
+	if pm.edgeClient == nil {
+		return nil, fmt.Errorf("edge client not available for built-in analytics pulse plugin")
+	}
+
+	// Get gRPC client from edge client
+	var grpcClient configpb.ConfigurationSyncServiceClient
+	if client, ok := pm.edgeClient.(interface{ GetGRPCClient() configpb.ConfigurationSyncServiceClient }); ok {
+		grpcClient = client.GetGRPCClient()
+	} else {
+		return nil, fmt.Errorf("edge client does not provide gRPC client interface")
+	}
+
+	// Extract edge ID and namespace from edge client
+	edgeID := "unknown"
+	edgeNamespace := ""
+
+	if edgeInfo, ok := pm.edgeClient.(interface{
+		GetEdgeID() string
+		GetEdgeNamespace() string
+	}); ok {
+		edgeID = edgeInfo.GetEdgeID()
+		edgeNamespace = edgeInfo.GetEdgeNamespace()
+	}
+
+	// Create the built-in analytics pulse plugin
+	pulsePlugin, err := plugins.NewAnalyticsPulsePlugin(edgeID, edgeNamespace, grpcClient, cfg.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create analytics pulse plugin: %w", err)
+	}
+
+	// Initialize the plugin
+	if err := pulsePlugin.Initialize(cfg.Config); err != nil {
+		return nil, fmt.Errorf("failed to initialize analytics pulse plugin: %w", err)
+	}
+
+	// Create global plugin wrapper
+	globalPlugin := &GlobalPlugin{
+		Config:     cfg,
+		Client:     nil, // Built-in plugin doesn't use go-plugin client
+		GRPCClient: nil, // Built-in plugin doesn't use external gRPC
+		IsHealthy:  true,
+		LoadedPlugin: &LoadedPlugin{
+			Name:       cfg.Name,
+			HookType:   interfaces.HookTypeDataCollection,
+			Client:     nil,
+			GRPCClient: nil,
+			Config:     cfg.Config,
+			IsHealthy:  true,
+			IsGlobal:   true,
+		},
+	}
+
+	// Store reference to built-in plugin for execution
+	globalPlugin.LoadedPlugin.BuiltinPlugin = pulsePlugin
+
+	log.Info().
+		Str("plugin", cfg.Name).
+		Str("edge_id", edgeID).
+		Str("edge_namespace", edgeNamespace).
+		Msg("Built-in analytics pulse plugin loaded successfully")
+
+	return globalPlugin, nil
+}
+
 // ExecuteDataCollectionPlugins executes global data collection plugins for the specified hook type
 func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data interface{}) error {
 	pm.mu.RLock()
@@ -1225,6 +1354,12 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 
 // executeDataCollectionPlugin executes a specific plugin for the given data type
 func (pm *PluginManager) executeDataCollectionPlugin(ctx context.Context, plugin *GlobalPlugin, hookType string, data interface{}) error {
+	// Check if this is a built-in plugin
+	if plugin.LoadedPlugin.BuiltinPlugin != nil {
+		return pm.executeBuiltinDataCollectionPlugin(ctx, plugin, hookType, data)
+	}
+
+	// Handle external plugins via gRPC
 	switch hookType {
 	case "proxy_log":
 		if proxyData, ok := data.(*interfaces.ProxyLogData); ok {
@@ -1239,8 +1374,38 @@ func (pm *PluginManager) executeDataCollectionPlugin(ctx context.Context, plugin
 			return pm.executeBudgetUsagePlugin(ctx, plugin, budgetData)
 		}
 	}
-	
+
 	return fmt.Errorf("unsupported hook type: %s", hookType)
+}
+
+// executeBuiltinDataCollectionPlugin executes a built-in data collection plugin
+func (pm *PluginManager) executeBuiltinDataCollectionPlugin(ctx context.Context, plugin *GlobalPlugin, hookType string, data interface{}) error {
+	builtinPlugin := plugin.LoadedPlugin.BuiltinPlugin
+
+	// Create plugin context
+	pluginCtx := &interfaces.PluginContext{
+		RequestID: "builtin-execution",
+	}
+
+	switch hookType {
+	case "proxy_log":
+		if proxyData, ok := data.(*interfaces.ProxyLogData); ok {
+			_, err := builtinPlugin.HandleProxyLog(ctx, proxyData, pluginCtx)
+			return err
+		}
+	case "analytics":
+		if analyticsData, ok := data.(*interfaces.AnalyticsData); ok {
+			_, err := builtinPlugin.HandleAnalytics(ctx, analyticsData, pluginCtx)
+			return err
+		}
+	case "budget":
+		if budgetData, ok := data.(*interfaces.BudgetUsageData); ok {
+			_, err := builtinPlugin.HandleBudgetUsage(ctx, budgetData, pluginCtx)
+			return err
+		}
+	}
+
+	return fmt.Errorf("unsupported hook type for built-in plugin: %s", hookType)
 }
 
 // executeProxyLogPlugin executes proxy log data collection

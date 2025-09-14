@@ -29,6 +29,7 @@ func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository, pluginMana
 	}
 }
 
+
 // CheckBudget validates if the request is within budget limits
 func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCost float64) error {
 	// Get current budget period

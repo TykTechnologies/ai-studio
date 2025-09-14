@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -60,7 +61,10 @@ type ControlServer struct {
 	
 	// gRPC server
 	grpcServer *grpc.Server
-	
+
+	// Cleanup ticker for stale connections
+	cleanupTicker *time.Ticker
+
 	// Reload coordination (set after creation to avoid import cycle)
 	reloadCoordinator interface{} // Will be *services.ReloadCoordinator
 }
@@ -78,7 +82,7 @@ type Config struct {
 // NewControlServer creates a new control server for AI Studio
 func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	server := &ControlServer{
 		config:          cfg,
 		db:              db,
@@ -87,7 +91,14 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 		ctx:             ctx,
 		cancel:          cancel,
 	}
-	
+
+	// Initialize AI Studio's analytics system for processing edge pulse data
+	analytics.StartRecording(ctx, db)
+	log.Info().Msg("AI Studio analytics system initialized for control server")
+
+	// Start cleanup routine
+	server.startCleanupRoutine()
+
 	return server
 }
 
@@ -139,9 +150,14 @@ func (s *ControlServer) Start() error {
 // Stop stops the gRPC server gracefully
 func (s *ControlServer) Stop() {
 	log.Info().Msg("Stopping AI Studio gRPC control server")
-	
+
+	// Stop cleanup routine
+	if s.cleanupTicker != nil {
+		s.cleanupTicker.Stop()
+	}
+
 	s.cancel()
-	
+
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
 	}
@@ -485,6 +501,174 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Scopes:    []string{}, // AI Studio doesn't use scopes like microgateway
 		ExpiresAt: nil,        // AI Studio credentials don't expire
 	}, nil
+}
+
+// SendAnalyticsPulse handles analytics pulse data from edge instances
+func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.AnalyticsPulse) (*pb.AnalyticsPulseResponse, error) {
+	log.Info().
+		Str("edge_id", req.EdgeId).
+		Str("edge_namespace", req.EdgeNamespace).
+		Uint64("sequence_number", req.SequenceNumber).
+		Uint32("total_records", req.TotalRecords).
+		Int("analytics_events", len(req.AnalyticsEvents)).
+		Int("budget_events", len(req.BudgetEvents)).
+		Int("proxy_summaries", len(req.ProxySummaries)).
+		Msg("AI Studio control server: received analytics pulse from edge")
+
+	processedRecords := uint64(0)
+
+	// Process analytics events using AI Studio's native analytics system
+	for _, event := range req.AnalyticsEvents {
+		// Use model name and vendor from pulse event (extracted from actual request)
+		modelName := event.ModelName
+		vendor := event.Vendor
+		if modelName == "" {
+			modelName = "unknown-model"
+		}
+		if vendor == "" {
+			vendor = s.extractVendorFromEvent(event)
+		}
+
+		// Create ProxyLog for request/response tracking
+		proxyLog := &models.ProxyLog{
+			AppID:        uint(event.AppId),
+			UserID:       0, // Edge doesn't track individual users
+			Vendor:       vendor,
+			RequestBody:  event.RequestBody,  // Now included from pulse if configured
+			ResponseBody: event.ResponseBody, // Now included from pulse if configured
+			ResponseCode: int(event.StatusCode),
+			TimeStamp:    event.Timestamp.AsTime(),
+		}
+
+		// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
+		chatRecord := &models.LLMChatRecord{
+			LLMID:           uint(event.LlmId),
+			AppID:           uint(event.AppId),
+			Name:            modelName, // Use actual model name from request
+			Vendor:          vendor,
+			TotalTokens:     int(event.TotalTokens),
+			PromptTokens:    int(event.RequestTokens),
+			ResponseTokens:  int(event.ResponseTokens),
+			Cost:            event.Cost * 10000, // Convert to cents for AI Studio format
+			Currency:        "USD",
+			TimeStamp:       event.Timestamp.AsTime(),
+			InteractionType: models.ProxyInteraction, // Mark as proxy interaction
+			UserID:          0, // Edge doesn't track individual users
+			ChatID:          "", // Not applicable for proxy
+			Choices:         1, // Default
+			ToolCalls:       0, // Default for proxy
+		}
+
+		// Use AI Studio's native analytics system for both records
+		analytics.RecordProxyLog(proxyLog)
+		analytics.RecordChatRecord(chatRecord)
+		processedRecords++
+
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Str("request_id", event.RequestId).
+			Str("model", modelName).
+			Int("total_tokens", int(event.TotalTokens)).
+			Float64("cost", event.Cost).
+			Bool("has_request_body", len(event.RequestBody) > 0).
+			Bool("has_response_body", len(event.ResponseBody) > 0).
+			Msg("Analytics event processed via AI Studio analytics system")
+	}
+
+	// Process budget events (for now just log - AI Studio budget integration would need budget service)
+	for _, budget := range req.BudgetEvents {
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Uint32("app_id", budget.AppId).
+			Uint32("llm_id", budget.LlmId).
+			Int64("tokens_used", budget.TokensUsed).
+			Float64("cost", budget.Cost).
+			Msg("Budget usage data from edge - processed")
+		processedRecords++
+	}
+
+	// Process proxy summaries (for now just log - could be stored in separate summary table)
+	for _, proxy := range req.ProxySummaries {
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Uint32("app_id", proxy.AppId).
+			Str("vendor", proxy.Vendor).
+			Uint32("request_count", proxy.RequestCount).
+			Float64("total_cost", proxy.TotalCost).
+			Msg("Proxy summary from edge - processed")
+		processedRecords++
+	}
+
+	log.Info().
+		Str("edge_id", req.EdgeId).
+		Uint64("sequence_number", req.SequenceNumber).
+		Uint64("processed_records", processedRecords).
+		Msg("Analytics pulse processed via AI Studio native analytics system")
+
+	return &pb.AnalyticsPulseResponse{
+		Success:          true,
+		Message:          "Analytics pulse processed successfully",
+		ProcessedRecords: processedRecords,
+		SequenceNumber:   req.SequenceNumber,
+		ProcessedAt:      timestamppb.Now(),
+		// UpdatedConfig: nil, // No config updates for now
+	}, nil
+}
+
+// extractVendorFromEvent extracts vendor from analytics event
+func (s *ControlServer) extractVendorFromEvent(event *pb.AnalyticsEvent) string {
+	// Fallback: lookup LLM vendor from database
+	if event.LlmId > 0 {
+		var llm models.LLM
+		if err := s.db.First(&llm, event.LlmId).Error; err == nil {
+			return string(llm.Vendor)
+		}
+	}
+
+	// Extract vendor from endpoint as fallback
+	if event.Endpoint != "" {
+		if strings.Contains(event.Endpoint, "openai") || strings.Contains(event.Endpoint, "/v1/chat") {
+			return "openai"
+		}
+		if strings.Contains(event.Endpoint, "anthropic") {
+			return "anthropic"
+		}
+		if strings.Contains(event.Endpoint, "vertex") {
+			return "vertex"
+		}
+	}
+
+	return "unknown"
+}
+
+// extractModelNameFromEvent extracts model name from analytics event
+func (s *ControlServer) extractModelNameFromEvent(event *pb.AnalyticsEvent) string {
+	// Primary source: lookup LLM default model from database
+	if event.LlmId > 0 {
+		var llm models.LLM
+		if err := s.db.First(&llm, event.LlmId).Error; err == nil {
+			if llm.DefaultModel != "" {
+				return llm.DefaultModel
+			}
+			// Fallback to LLM name if no default model
+			return llm.Name
+		}
+	}
+
+	// Extract model from endpoint as fallback
+	if event.Endpoint != "" {
+		if strings.Contains(event.Endpoint, "gpt-4") {
+			return "gpt-4"
+		}
+		if strings.Contains(event.Endpoint, "gpt-3.5") {
+			return "gpt-3.5-turbo"
+		}
+		if strings.Contains(event.Endpoint, "claude") {
+			return "claude-3-sonnet"
+		}
+	}
+
+	return "unknown-model"
 }
 
 // Authentication interceptor for unary RPCs
@@ -945,6 +1129,14 @@ func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Configura
 		return fmt.Errorf("edge instance not available for reload: %s (status: %s, has_stream: %v)", edgeID, edge.Status, edge.Stream != nil)
 	}
 
+	// Test stream connectivity before sending
+	if !s.isEdgeStreamActive(edge) {
+		log.Warn().Str("edge_id", edgeID).Msg("Edge stream is not active, marking as disconnected")
+		edge.Status = "disconnected"
+		edge.Stream = nil
+		return fmt.Errorf("edge instance stream is not active: %s", edgeID)
+	}
+
 	// Send reload request via gRPC stream
 	message := &pb.ControlMessage{
 		Message: &pb.ControlMessage_ReloadRequest{
@@ -954,7 +1146,8 @@ func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Configura
 
 	if err := edge.Stream.Send(message); err != nil {
 		log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to send reload request to edge")
-		edge.Status = "unhealthy"
+		edge.Status = "disconnected"
+		edge.Stream = nil
 		return fmt.Errorf("failed to send reload request: %w", err)
 	}
 
@@ -973,14 +1166,17 @@ func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
 	
 	result := make(map[string]interface{})
 	for edgeID, edge := range s.edgeConnections {
-		// Convert edge connection to interface{} map format expected by reload coordinator
-		result[edgeID] = map[string]interface{}{
-			"edge_id":        edge.EdgeID,
-			"namespace":      edge.Namespace,
-			"status":         edge.Status,
-			"version":        edge.Version,
-			"session_id":     edge.SessionID,
-			"last_heartbeat": edge.LastHeartbeat,
+		// Only include edges that are truly connected (have active stream)
+		if s.isEdgeStreamActive(edge) {
+			// Convert edge connection to interface{} map format expected by reload coordinator
+			result[edgeID] = map[string]interface{}{
+				"edge_id":        edge.EdgeID,
+				"namespace":      edge.Namespace,
+				"status":         edge.Status,
+				"version":        edge.Version,
+				"session_id":     edge.SessionID,
+				"last_heartbeat": edge.LastHeartbeat,
+			}
 		}
 	}
 	
@@ -989,4 +1185,78 @@ func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
 		Msg("Retrieved connected edges for reload coordinator")
 	
 	return result
+}
+
+// isEdgeStreamActive checks if an edge's stream is still active
+func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
+	if edge == nil || edge.Stream == nil {
+		return false
+	}
+
+	// Check if the stream context is still active
+	ctx := edge.Stream.Context()
+	if ctx.Err() != nil {
+		return false
+	}
+
+	// Check heartbeat age (consider stale if no heartbeat for 10 minutes)
+	heartbeatAge := time.Since(edge.LastHeartbeat)
+	if heartbeatAge > 10*time.Minute {
+		log.Warn().
+			Str("edge_id", edge.EdgeID).
+			Dur("heartbeat_age", heartbeatAge).
+			Msg("Edge heartbeat is stale")
+		return false
+	}
+
+	return true
+}
+
+// startCleanupRoutine starts the periodic cleanup of stale connections
+func (s *ControlServer) startCleanupRoutine() {
+	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
+	go func() {
+		for {
+			select {
+			case <-s.cleanupTicker.C:
+				s.cleanupStaleConnections()
+			case <-s.ctx.Done():
+				return
+			}
+		}
+	}()
+	log.Info().Msg("Started edge connection cleanup routine")
+}
+
+// cleanupStaleConnections removes disconnected and stale edge connections
+func (s *ControlServer) cleanupStaleConnections() {
+	s.edgeMutex.Lock()
+	defer s.edgeMutex.Unlock()
+
+	var toRemove []string
+	for edgeID, edge := range s.edgeConnections {
+		if !s.isEdgeStreamActive(edge) {
+			log.Info().
+				Str("edge_id", edgeID).
+				Str("status", edge.Status).
+				Time("last_heartbeat", edge.LastHeartbeat).
+				Msg("Removing stale edge connection")
+
+			// Update database status
+			var edgeInstance models.EdgeInstance
+			if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
+				edgeInstance.UpdateStatus(s.db, models.EdgeStatusDisconnected)
+			}
+
+			toRemove = append(toRemove, edgeID)
+		}
+	}
+
+	for _, edgeID := range toRemove {
+		delete(s.edgeConnections, edgeID)
+	}
+
+	if len(toRemove) > 0 {
+		log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
+	}
 }

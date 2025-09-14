@@ -58,6 +58,10 @@ type AnalyticsData struct {
 	ToolCalls              int       `json:"tool_calls"`             // Number of tool calls in request
 	Choices                int       `json:"choices"`                // Number of response choices
 	RequestID              string    `json:"request_id"`             // Unique request identifier
+
+	// Request/response data (optional - for pulse transmission)
+	RequestBody            string    `json:"request_body,omitempty"`  // Request body (optional)
+	ResponseBody           string    `json:"response_body,omitempty"` // Response body (optional)
 }
 
 // BudgetUsageData contains budget tracking information

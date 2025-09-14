@@ -39,15 +39,24 @@ type SimpleEdgeClient struct {
 	
 	// Connection state
 	connected bool
+
+	// Reconnection handling
+	reconnecting      bool
+	reconnectAttempts int
+	maxReconnects     int
+	reconnectInterval time.Duration
+
 }
 
 // NewSimpleEdgeClient creates a basic edge client
 func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime string) *SimpleEdgeClient {
 	return &SimpleEdgeClient{
-		config:    cfg,
-		version:   version,
-		buildHash: buildHash,
-		buildTime: buildTime,
+		config:            cfg,
+		version:           version,
+		buildHash:         buildHash,
+		buildTime:         buildTime,
+		maxReconnects:     -1,                // Unlimited reconnections
+		reconnectInterval: 5 * time.Second,   // 5 second retry interval
 	}
 }
 
@@ -196,6 +205,22 @@ func (c *SimpleEdgeClient) SetReloadHandler(handler interface{}) {
 	log.Info().Msg("Reload handler set for edge client")
 }
 
+
+// GetGRPCClient returns the gRPC client for use by pulse manager
+func (c *SimpleEdgeClient) GetGRPCClient() pb.ConfigurationSyncServiceClient {
+	return c.client
+}
+
+// GetEdgeID returns the edge ID
+func (c *SimpleEdgeClient) GetEdgeID() string {
+	return c.config.HubSpoke.EdgeID
+}
+
+// GetEdgeNamespace returns the edge namespace
+func (c *SimpleEdgeClient) GetEdgeNamespace() string {
+	return c.config.HubSpoke.EdgeNamespace
+}
+
 // RequestFullSync requests a full configuration sync from control (for reload operations)
 func (c *SimpleEdgeClient) RequestFullSync() error {
 	log.Info().Msg("Requesting full configuration sync from control")
@@ -287,12 +312,17 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 		if c.streamCancel != nil {
 			c.streamCancel()
 		}
+
+		// Start reconnection process if not already stopping
+		if c.conn != nil {
+			go c.attemptReconnection()
+		}
 	}()
 
 	for {
 		msg, err := c.stream.Recv()
 		if err != nil {
-			log.Error().Err(err).Msg("Stream receive error")
+			log.Error().Err(err).Msg("Stream receive error - connection lost")
 			return
 		}
 
@@ -383,7 +413,7 @@ func (c *SimpleEdgeClient) HandleReloadRequest(req *pb.ConfigurationReloadReques
 func (c *SimpleEdgeClient) Stop() error {
 	log.Info().Msg("Stopping SimpleEdgeClient")
 
-	// Cancel stream context first
+	// Cancel stream context
 	if c.streamCancel != nil {
 		c.streamCancel()
 	}
@@ -393,7 +423,7 @@ func (c *SimpleEdgeClient) Stop() error {
 		log.Info().Msg("Closing connection to control server")
 		return c.conn.Close()
 	}
-	
+
 	return nil
 }
 
@@ -460,5 +490,65 @@ func (c *SimpleEdgeClient) collectBasicMetrics() *pb.EdgeMetrics {
 		CpuUsagePercent:   0, // Simplified - no CPU monitoring
 		MemoryUsageBytes:  0, // Simplified - no memory monitoring
 		UptimeSeconds:     0, // Simplified - no uptime tracking
+	}
+}
+
+// attemptReconnection handles automatic reconnection to control server
+func (c *SimpleEdgeClient) attemptReconnection() {
+	if c.reconnecting {
+		return // Already attempting reconnection
+	}
+
+	c.reconnecting = true
+	c.reconnectAttempts = 0
+	defer func() {
+		c.reconnecting = false
+	}()
+
+	log.Info().Msg("Starting automatic reconnection to control server")
+
+	for {
+		c.reconnectAttempts++
+
+		// Check if we should stop reconnecting
+		if c.maxReconnects > 0 && c.reconnectAttempts > c.maxReconnects {
+			log.Error().
+				Int("attempts", c.reconnectAttempts).
+				Int("max_reconnects", c.maxReconnects).
+				Msg("Maximum reconnection attempts reached")
+			return
+		}
+
+		log.Info().
+			Int("attempt", c.reconnectAttempts).
+			Dur("retry_in", c.reconnectInterval).
+			Msg("Attempting to reconnect to control server")
+
+		// Wait before attempting reconnection
+		time.Sleep(c.reconnectInterval)
+
+		// Check if we should stop (connection was manually closed)
+		if c.conn == nil {
+			log.Info().Msg("Connection manually closed, stopping reconnection attempts")
+			return
+		}
+
+		// Attempt to re-establish stream
+		if err := c.establishStream(); err != nil {
+			log.Error().
+				Err(err).
+				Int("attempt", c.reconnectAttempts).
+				Msg("Failed to re-establish stream")
+			continue
+		}
+
+		// Success!
+		log.Info().
+			Int("attempts", c.reconnectAttempts).
+			Msg("Successfully reconnected to control server")
+
+		// Reset attempt counter
+		c.reconnectAttempts = 0
+		return
 	}
 }

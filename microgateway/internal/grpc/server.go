@@ -45,6 +45,9 @@ type ControlServer struct {
 	
 	// gRPC server
 	grpcServer *grpc.Server
+
+	// Cleanup ticker for stale connections
+	cleanupTicker *time.Ticker
 }
 
 // EdgeInstance represents a connected edge instance
@@ -63,7 +66,7 @@ type EdgeInstance struct {
 // NewControlServer creates a new control server
 func NewControlServer(cfg *config.Config, db *gorm.DB) *ControlServer {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	server := &ControlServer{
 		config:        cfg,
 		db:            db,
@@ -72,7 +75,10 @@ func NewControlServer(cfg *config.Config, db *gorm.DB) *ControlServer {
 		ctx:           ctx,
 		cancel:        cancel,
 	}
-	
+
+	// Start cleanup routine
+	server.startCleanupRoutine()
+
 	return server
 }
 
@@ -130,9 +136,14 @@ func (s *ControlServer) Start() error {
 // Stop stops the gRPC server gracefully
 func (s *ControlServer) Stop() {
 	log.Info().Msg("Stopping gRPC control server")
-	
+
+	// Stop cleanup routine
+	if s.cleanupTicker != nil {
+		s.cleanupTicker.Stop()
+	}
+
 	s.cancel()
-	
+
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
 	}
@@ -443,9 +454,8 @@ func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
 
 	result := make(map[string]interface{})
 	for edgeID, edge := range s.edgeInstances {
-		// Include both "connected" and "registered" edges for reload operations
-		// SimpleEdgeClient uses registration-only mode, so edges stay "registered"
-		if edge.Status == "connected" || edge.Status == "registered" {
+		// Only include edges that are truly connected (have active stream)
+		if s.isEdgeStreamActive(edge) {
 			// Create a simple struct with the data we need
 			edgeInfo := map[string]interface{}{
 				"edge_id":   edge.EdgeID,
@@ -486,8 +496,12 @@ func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Configura
 		return fmt.Errorf("edge instance not found: %s", edgeID)
 	}
 
-	if edge.Stream == nil || (edge.Status != "connected" && edge.Status != "registered") {
-		return fmt.Errorf("edge instance not available for reload: %s (status: %s, has_stream: %v)", edgeID, edge.Status, edge.Stream != nil)
+	// Test stream connectivity before sending
+	if !s.isEdgeStreamActive(edge) {
+		log.Warn().Str("edge_id", edgeID).Msg("Edge stream is not active, marking as disconnected")
+		edge.Status = "disconnected"
+		edge.Stream = nil
+		return fmt.Errorf("edge instance stream is not active: %s", edgeID)
 	}
 
 	// Send reload request via gRPC stream
@@ -499,7 +513,8 @@ func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Configura
 
 	if err := edge.Stream.Send(message); err != nil {
 		log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to send reload request to edge")
-		edge.Status = "unhealthy"
+		edge.Status = "disconnected"
+		edge.Stream = nil
 		return fmt.Errorf("failed to send reload request: %w", err)
 	}
 
@@ -990,5 +1005,78 @@ func (s *ControlServer) PropagateChange(change *pb.ConfigurationChange) {
 			Msg("Queued configuration change for propagation")
 	default:
 		log.Warn().Msg("Change propagation channel full, dropping change")
+	}
+}
+
+// isEdgeStreamActive checks if an edge's stream is still active
+func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstance) bool {
+	if edge == nil || edge.Stream == nil {
+		return false
+	}
+
+	// Check if the stream context is still active
+	ctx := edge.Stream.Context()
+	if ctx.Err() != nil {
+		return false
+	}
+
+	// Check heartbeat age (consider stale if no heartbeat for 10 minutes)
+	heartbeatAge := time.Since(edge.LastHeartbeat)
+	if heartbeatAge > 10*time.Minute {
+		log.Warn().
+			Str("edge_id", edge.EdgeID).
+			Dur("heartbeat_age", heartbeatAge).
+			Msg("Edge heartbeat is stale")
+		return false
+	}
+
+	return true
+}
+
+// startCleanupRoutine starts the periodic cleanup of stale connections
+func (s *ControlServer) startCleanupRoutine() {
+	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
+	go func() {
+		for {
+			select {
+			case <-s.cleanupTicker.C:
+				s.cleanupStaleConnections()
+			case <-s.ctx.Done():
+				return
+			}
+		}
+	}()
+	log.Info().Msg("Started edge connection cleanup routine")
+}
+
+// cleanupStaleConnections removes disconnected and stale edge connections
+func (s *ControlServer) cleanupStaleConnections() {
+	s.edgeMutex.Lock()
+	defer s.edgeMutex.Unlock()
+
+	var toRemove []string
+	for edgeID, edge := range s.edgeInstances {
+		if !s.isEdgeStreamActive(edge) {
+			log.Info().
+				Str("edge_id", edgeID).
+				Str("status", edge.Status).
+				Time("last_heartbeat", edge.LastHeartbeat).
+				Msg("Removing stale edge connection")
+
+			// Update database status
+			s.db.Model(&database.EdgeInstance{}).
+				Where("edge_id = ?", edgeID).
+				Update("status", "disconnected")
+
+			toRemove = append(toRemove, edgeID)
+		}
+	}
+
+	for _, edgeID := range toRemove {
+		delete(s.edgeInstances, edgeID)
+	}
+
+	if len(toRemove) > 0 {
+		log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
 	}
 }

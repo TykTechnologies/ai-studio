@@ -26,6 +26,7 @@ const (
 	ConfigurationSyncService_SendHeartbeat_FullMethodName        = "/microgateway.ConfigurationSyncService/SendHeartbeat"
 	ConfigurationSyncService_UnregisterEdge_FullMethodName       = "/microgateway.ConfigurationSyncService/UnregisterEdge"
 	ConfigurationSyncService_ValidateToken_FullMethodName        = "/microgateway.ConfigurationSyncService/ValidateToken"
+	ConfigurationSyncService_SendAnalyticsPulse_FullMethodName   = "/microgateway.ConfigurationSyncService/SendAnalyticsPulse"
 )
 
 // ConfigurationSyncServiceClient is the client API for ConfigurationSyncService service.
@@ -46,6 +47,8 @@ type ConfigurationSyncServiceClient interface {
 	UnregisterEdge(ctx context.Context, in *EdgeUnregistrationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ValidateToken validates an API token on-demand (NEW)
 	ValidateToken(ctx context.Context, in *TokenValidationRequest, opts ...grpc.CallOption) (*TokenValidationResponse, error)
+	// SendAnalyticsPulse sends batched analytics data from edge to control (NEW)
+	SendAnalyticsPulse(ctx context.Context, in *AnalyticsPulse, opts ...grpc.CallOption) (*AnalyticsPulseResponse, error)
 }
 
 type configurationSyncServiceClient struct {
@@ -119,6 +122,16 @@ func (c *configurationSyncServiceClient) ValidateToken(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *configurationSyncServiceClient) SendAnalyticsPulse(ctx context.Context, in *AnalyticsPulse, opts ...grpc.CallOption) (*AnalyticsPulseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnalyticsPulseResponse)
+	err := c.cc.Invoke(ctx, ConfigurationSyncService_SendAnalyticsPulse_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConfigurationSyncServiceServer is the server API for ConfigurationSyncService service.
 // All implementations must embed UnimplementedConfigurationSyncServiceServer
 // for forward compatibility.
@@ -137,6 +150,8 @@ type ConfigurationSyncServiceServer interface {
 	UnregisterEdge(context.Context, *EdgeUnregistrationRequest) (*emptypb.Empty, error)
 	// ValidateToken validates an API token on-demand (NEW)
 	ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error)
+	// SendAnalyticsPulse sends batched analytics data from edge to control (NEW)
+	SendAnalyticsPulse(context.Context, *AnalyticsPulse) (*AnalyticsPulseResponse, error)
 	mustEmbedUnimplementedConfigurationSyncServiceServer()
 }
 
@@ -164,6 +179,9 @@ func (UnimplementedConfigurationSyncServiceServer) UnregisterEdge(context.Contex
 }
 func (UnimplementedConfigurationSyncServiceServer) ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateToken not implemented")
+}
+func (UnimplementedConfigurationSyncServiceServer) SendAnalyticsPulse(context.Context, *AnalyticsPulse) (*AnalyticsPulseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendAnalyticsPulse not implemented")
 }
 func (UnimplementedConfigurationSyncServiceServer) mustEmbedUnimplementedConfigurationSyncServiceServer() {
 }
@@ -284,6 +302,24 @@ func _ConfigurationSyncService_ValidateToken_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigurationSyncService_SendAnalyticsPulse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnalyticsPulse)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigurationSyncServiceServer).SendAnalyticsPulse(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigurationSyncService_SendAnalyticsPulse_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigurationSyncServiceServer).SendAnalyticsPulse(ctx, req.(*AnalyticsPulse))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConfigurationSyncService_ServiceDesc is the grpc.ServiceDesc for ConfigurationSyncService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -310,6 +346,10 @@ var ConfigurationSyncService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateToken",
 			Handler:    _ConfigurationSyncService_ValidateToken_Handler,
+		},
+		{
+			MethodName: "SendAnalyticsPulse",
+			Handler:    _ConfigurationSyncService_SendAnalyticsPulse_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
