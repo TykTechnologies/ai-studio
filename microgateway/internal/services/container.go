@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
@@ -110,6 +111,12 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		log.Info().Msg("No plugin configuration specified - skipping data collection plugins")
 	}
 
+	// Pre-warm OCI plugins during startup
+	if err = pluginManager.PreWarmOCIPlugins(context.Background()); err != nil {
+		log.Error().Err(err).Msg("Failed to pre-warm OCI plugins during startup")
+		// Don't fail startup, but log the error for investigation
+	}
+
 	// Initialize core services with plugin manager support
 	gatewayService := NewDatabaseGatewayService(db, repo)
 	budgetService := NewDatabaseBudgetService(db, repo, pluginManager)
@@ -163,14 +170,35 @@ func (sc *ServiceContainer) Cleanup() {
 	log.Info().Msg("Service container cleanup completed")
 }
 
-// Health checks all service health
+// Health checks all service health including plugins
 func (sc *ServiceContainer) Health() error {
 	// Check database health
 	if err := database.IsHealthy(sc.DB); err != nil {
-		return err
+		return fmt.Errorf("database unhealthy: %w", err)
 	}
 
-	// All other services are healthy if database is healthy
+	// Check plugin health
+	if sc.PluginManager != nil {
+		if !sc.PluginManager.IsAllPluginsReady() {
+			healthSummary := sc.PluginManager.GetPluginHealthSummary()
+			if failedCount, ok := healthSummary["failed_plugins"].(int); ok && failedCount > 0 {
+				return fmt.Errorf("plugin health check failed: %d plugins failed", failedCount)
+			}
+			if loadingCount, ok := healthSummary["loading_plugins"].(int); ok && loadingCount > 0 {
+				return fmt.Errorf("plugin health check failed: %d plugins still loading", loadingCount)
+			}
+		}
+
+		// Check OCI plugin system health if enabled
+		if ociClient := sc.PluginManager.GetOCIClient(); ociClient != nil {
+			ociStats := sc.PluginManager.GetOCIStats()
+			if enabled, ok := ociStats["enabled"].(bool); ok && enabled {
+				// Add OCI-specific health checks here if needed
+				log.Debug().Interface("oci_stats", ociStats).Msg("OCI plugin system health check")
+			}
+		}
+	}
+
 	return nil
 }
 

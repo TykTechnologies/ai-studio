@@ -34,6 +34,7 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	// Health endpoints (no auth required)
 	router.GET("/health", handlers.HealthCheck(config.Services))
 	router.GET("/ready", handlers.ReadinessCheck(config.Services))
+	router.GET("/health/detailed", handlers.GetDetailedHealthStatus(config.Services))
 
 	// Root endpoint
 	router.GET("/", func(c *gin.Context) {
@@ -148,6 +149,11 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			plugins.PUT("/:id", handlers.UpdatePlugin(config.Services))
 			plugins.DELETE("/:id", handlers.DeletePlugin(config.Services))
 			plugins.POST("/:id/test", handlers.TestPlugin(config.Services))
+
+			// Plugin health endpoints
+			plugins.GET("/health", handlers.GetPluginHealth(config.Services))
+			plugins.GET("/oci/status", handlers.GetOCIPluginStatus(config.Services))
+			plugins.POST("/prewarm", handlers.TriggerPluginPreWarm(config.Services))
 		}
 
 		// System management endpoints

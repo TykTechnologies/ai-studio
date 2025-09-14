@@ -23,16 +23,31 @@ func ReadinessCheck(services *services.ServiceContainer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check if all critical services are ready
 		if err := services.Health(); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "not ready",
-				"error":  err.Error(),
-			})
+			response := gin.H{
+				"status":  "not ready",
+				"service": "microgateway",
+				"error":   err.Error(),
+			}
+
+			// Add plugin health details if available
+			if services.PluginManager != nil {
+				response["plugin_health"] = services.PluginManager.GetPluginHealthSummary()
+			}
+
+			c.JSON(http.StatusServiceUnavailable, response)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ready",
+		response := gin.H{
+			"status":  "ready",
 			"service": "microgateway",
-		})
+		}
+
+		// Add plugin health summary to readiness response
+		if services.PluginManager != nil {
+			response["plugin_health"] = services.PluginManager.GetPluginHealthSummary()
+		}
+
+		c.JSON(http.StatusOK, response)
 	}
 }

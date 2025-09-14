@@ -136,6 +136,12 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		}
 	}
 
+	// Pre-warm OCI plugins during startup
+	if err = pluginManager.PreWarmOCIPlugins(context.Background()); err != nil {
+		log.Error().Err(err).Msg("Failed to pre-warm OCI plugins during startup")
+		// Don't fail startup, but log the error for investigation
+	}
+
 	// Initialize core services with provider support
 	var gatewayService GatewayServiceInterface
 	

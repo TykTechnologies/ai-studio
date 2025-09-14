@@ -25,6 +25,7 @@ type PluginServiceInterface interface {
 	GetPlugin(id uint) (PluginData, error)
 	GetPluginsByLLMID(llmID uint) ([]PluginData, error)
 	GetPluginsForLLM(llmID uint) ([]PluginData, error)
+	GetAllPlugins() ([]PluginData, error) // New method for pre-warming
 }
 
 // PluginData represents plugin data from database (minimal interface)
@@ -62,6 +63,31 @@ type GlobalPlugin struct {
 	IsHealthy      bool
 }
 
+// PluginStatus represents the current status of a plugin
+type PluginStatus string
+
+const (
+	PluginStatusReady   PluginStatus = "ready"
+	PluginStatusLoading PluginStatus = "loading"
+	PluginStatusFailed  PluginStatus = "failed"
+	PluginStatusUnknown PluginStatus = "unknown"
+)
+
+// PluginHealthStatus tracks the health and readiness of a plugin
+type PluginHealthStatus struct {
+	ID           uint         `json:"id"`
+	Name         string       `json:"name"`
+	Slug         string       `json:"slug"`
+	Command      string       `json:"command"`
+	HookType     string       `json:"hook_type"`
+	Status       PluginStatus `json:"status"`
+	LastAttempt  time.Time    `json:"last_attempt"`
+	ErrorMessage string       `json:"error_message,omitempty"`
+	IsOCI        bool         `json:"is_oci"`
+	IsCached     bool         `json:"is_cached,omitempty"`     // For OCI plugins
+	LoadTime     time.Duration `json:"load_time,omitempty"`    // Time to load/pre-warm
+}
+
 // PluginManager manages the lifecycle of plugins
 type PluginManager struct {
 	mu                      sync.RWMutex
@@ -79,6 +105,10 @@ type PluginManager struct {
 
 	// OCI plugin support
 	ociClient               *ociplugins.OCIPluginClient      // OCI plugin client for fetching
+
+	// Plugin health tracking
+	pluginHealth            map[uint]*PluginHealthStatus     // Plugin ID -> health status
+	preWarmingInProgress    map[uint]bool                    // Plugin ID -> pre-warming status
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -104,6 +134,8 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 		globalDataPlugins:       make(map[string]*GlobalPlugin),
 		dataCollectionHookTypes: make(map[string][]string),
 		ociClient:               nil, // Will be initialized when needed
+		pluginHealth:            make(map[uint]*PluginHealthStatus),
+		preWarmingInProgress:    make(map[uint]bool),
 	}
 }
 
@@ -125,27 +157,54 @@ func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *oc
 
 // LoadPlugin loads a plugin by ID
 func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
+	startTime := time.Now()
+
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
 
 	// Check if plugin is already loaded
 	if existingPlugin, exists := pm.loadedPlugins[pluginID]; exists {
+		pm.mu.Unlock()
+		// Update health status for already loaded plugin (after releasing lock)
+		pm.updatePluginHealthSafe(pluginID, PluginData{
+			ID: pluginID, Name: existingPlugin.Name, Slug: existingPlugin.Slug,
+			HookType: string(existingPlugin.HookType),
+		}, PluginStatusReady, nil, time.Since(startTime))
 		return existingPlugin, nil
 	}
 
-	// Get plugin from database
+	pm.mu.Unlock()
+
+	// Get plugin from database (without holding lock)
 	pluginData, err := pm.service.GetPlugin(pluginID)
 	if err != nil {
+		pm.updatePluginHealthSafe(pluginID, PluginData{ID: pluginID}, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to get plugin from database: %w", err)
 	}
 
 	if !pluginData.IsActive {
-		return nil, fmt.Errorf("plugin %d is not active", pluginID)
+		err := fmt.Errorf("plugin %d is not active", pluginID)
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		return nil, err
+	}
+
+	// Mark as loading
+	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusLoading, nil, 0)
+
+	// Reacquire lock for the rest of the operation
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Double-check if another goroutine loaded it while we were unlocked
+	if existingPlugin, exists := pm.loadedPlugins[pluginID]; exists {
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
+		return existingPlugin, nil
 	}
 
 	// Create plugin client based on command scheme
 	client, err := pm.createPluginClient(pluginData.Command)
 	if err != nil {
+		pm.mu.Unlock()
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
 
@@ -153,6 +212,8 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	rpcClient, err := pm.connectWithRetry(client, pluginData.Command)
 	if err != nil {
 		client.Kill()
+		pm.mu.Unlock()
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
@@ -160,6 +221,8 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
 		client.Kill()
+		pm.mu.Unlock()
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
@@ -167,7 +230,10 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	grpcClient, ok := raw.(pb.PluginServiceClient)
 	if !ok {
 		client.Kill()
-		return nil, fmt.Errorf("plugin does not implement PluginServiceClient interface")
+		err := fmt.Errorf("plugin does not implement PluginServiceClient interface")
+		pm.mu.Unlock()
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		return nil, err
 	}
 
 	// Parse plugin config
@@ -191,12 +257,17 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	})
 	if err != nil {
 		client.Kill()
+		pm.mu.Unlock()
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
 	}
 
 	if !initResp.Success {
 		client.Kill()
-		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
+		err := fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
+		pm.mu.Unlock()
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		return nil, err
 	}
 
 	// Create loaded plugin instance
@@ -219,10 +290,17 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Start health monitoring
 	go pm.monitorPluginHealth(pluginID)
 
+	// Mark as ready (success) - call safe version after releasing lock
+	loadTime := time.Since(startTime)
+	pm.mu.Unlock()
+	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, loadTime)
+	pm.mu.Lock()
+
 	log.Info().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", pluginData.Name).
 		Str("hook_type", pluginData.HookType).
+		Dur("load_time", time.Since(startTime)).
 		Msg("Plugin loaded successfully")
 
 	return loadedPlugin, nil
@@ -549,6 +627,19 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	pm.pluginClients = make(map[uint]*plugin.Client)
 	pm.reattachConfigs = make(map[uint]*plugin.ReattachConfig)
 	pm.llmPluginMap = make(map[uint][]uint)
+	pm.pluginHealth = make(map[uint]*PluginHealthStatus)
+	pm.preWarmingInProgress = make(map[uint]bool)
+
+	// Shutdown OCI client if available
+	if pm.ociClient != nil {
+		log.Info().Msg("Shutting down OCI plugin client...")
+		if err := pm.ociClient.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to shutdown OCI plugin client")
+			errors = append(errors, fmt.Errorf("failed to shutdown OCI client: %w", err))
+		} else {
+			log.Info().Msg("OCI plugin client shutdown completed")
+		}
+	}
 
 	if len(errors) > 0 {
 		return fmt.Errorf("errors during shutdown: %v", errors)
@@ -637,27 +728,56 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 		return nil, fmt.Errorf("failed to parse OCI command: %w", err)
 	}
 
-	log.Info().
-		Str("command", command).
-		Str("registry", ref.Registry).
-		Str("repository", ref.Repository).
-		Str("digest", ref.Digest).
-		Str("architecture", params.Architecture).
-		Msg("Fetching OCI plugin")
+	var localPlugin *ociplugins.LocalPlugin
 
-	// Fetch plugin from OCI registry
-	localPlugin, err := pm.ociClient.FetchPlugin(context.Background(), ref, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
+	// Check if plugin is already cached (hot path optimization)
+	if pm.ociClient.HasPlugin(ref.Digest, params.Architecture) {
+		log.Debug().
+			Str("command", command).
+			Str("digest", ref.Digest).
+			Str("architecture", params.Architecture).
+			Msg("Using cached OCI plugin")
+
+		// Get cached plugin without refetching
+		localPlugin, err = pm.ociClient.GetPlugin(ref, params)
+		if err != nil {
+			log.Warn().
+				Str("command", command).
+				Err(err).
+				Msg("Failed to get cached OCI plugin, will re-fetch")
+			// Fall through to fetch logic
+		}
 	}
 
-	log.Info().
-		Str("command", command).
-		Str("local_path", localPlugin.ExecutablePath).
-		Bool("verified", localPlugin.Verified).
-		Msg("OCI plugin fetched successfully")
+	// If not cached or cache retrieval failed, fetch from registry
+	if localPlugin == nil {
+		log.Info().
+			Str("command", command).
+			Str("registry", ref.Registry).
+			Str("repository", ref.Repository).
+			Str("digest", ref.Digest).
+			Str("architecture", params.Architecture).
+			Msg("Fetching OCI plugin from registry")
 
-	// Create go-plugin client with the fetched executable
+		localPlugin, err = pm.ociClient.FetchPlugin(context.Background(), ref, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
+		}
+
+		log.Info().
+			Str("command", command).
+			Str("local_path", localPlugin.ExecutablePath).
+			Bool("verified", localPlugin.Verified).
+			Msg("OCI plugin fetched successfully from registry")
+	} else {
+		log.Debug().
+			Str("command", command).
+			Str("local_path", localPlugin.ExecutablePath).
+			Bool("verified", localPlugin.Verified).
+			Msg("Using cached OCI plugin")
+	}
+
+	// Create go-plugin client with the local executable
 	return plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  pm.handshakeConfig,
 		Plugins:          pm.pluginMap,
@@ -1397,5 +1517,197 @@ func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
 		Msg("OCI plugin pre-fetched successfully")
 
 	return nil
+}
+
+// PreWarmOCIPlugins pre-warms all OCI plugins found in the database
+func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
+	log.Info().Msg("Starting OCI plugin pre-warming")
+
+	if pm.ociClient == nil {
+		log.Debug().Msg("OCI client not available, skipping OCI plugin pre-warming")
+		return nil
+	}
+
+	// Get all plugins from database
+	allPlugins, err := pm.service.GetAllPlugins()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get plugins for pre-warming")
+		return fmt.Errorf("failed to get plugins for pre-warming: %w", err)
+	}
+
+	var ociPluginCount int
+	var preWarmErrors []error
+
+	// Pre-warm all OCI plugins
+	for _, plugin := range allPlugins {
+		if !strings.HasPrefix(plugin.Command, "oci://") {
+			continue
+		}
+
+		ociPluginCount++
+
+		log.Info().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Str("command", plugin.Command).
+			Msg("Pre-warming OCI plugin")
+
+		// Mark as loading during pre-warming
+		pm.updatePluginHealthSafe(plugin.ID, plugin, PluginStatusLoading, nil, 0)
+
+		// Pre-fetch the plugin
+		startTime := time.Now()
+		if err := pm.PreFetchOCIPlugin(plugin.Command); err != nil {
+			log.Error().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Err(err).
+				Msg("Failed to pre-warm OCI plugin")
+
+			pm.updatePluginHealthSafe(plugin.ID, plugin, PluginStatusFailed, err, time.Since(startTime))
+			preWarmErrors = append(preWarmErrors, fmt.Errorf("plugin %d (%s): %w", plugin.ID, plugin.Name, err))
+		} else {
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Dur("pre_warm_time", time.Since(startTime)).
+				Msg("OCI plugin pre-warmed successfully")
+
+			pm.updatePluginHealthSafe(plugin.ID, plugin, PluginStatusReady, nil, time.Since(startTime))
+		}
+	}
+
+	if len(preWarmErrors) > 0 {
+		log.Error().
+			Int("total_oci_plugins", ociPluginCount).
+			Int("failed_plugins", len(preWarmErrors)).
+			Msg("OCI plugin pre-warming completed with errors")
+		return fmt.Errorf("failed to pre-warm %d out of %d OCI plugins", len(preWarmErrors), ociPluginCount)
+	}
+
+	log.Info().
+		Int("oci_plugins_prewarmed", ociPluginCount).
+		Msg("OCI plugin pre-warming completed successfully")
+
+	return nil
+}
+
+// updatePluginHealthSafe updates the health status for a plugin with internal locking
+func (pm *PluginManager) updatePluginHealthSafe(pluginID uint, pluginData PluginData, status PluginStatus, err error, loadTime time.Duration) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	pm.updatePluginHealthUnsafe(pluginID, pluginData, status, err, loadTime)
+}
+
+// updatePluginHealth updates the health status for a plugin (assumes lock is held)
+func (pm *PluginManager) updatePluginHealth(pluginID uint, pluginData PluginData, status PluginStatus, err error, loadTime time.Duration) {
+	pm.updatePluginHealthUnsafe(pluginID, pluginData, status, err, loadTime)
+}
+
+// updatePluginHealthUnsafe updates the health status for a plugin (no locking - assumes lock is held)
+func (pm *PluginManager) updatePluginHealthUnsafe(pluginID uint, pluginData PluginData, status PluginStatus, err error, loadTime time.Duration) {
+
+	health := &PluginHealthStatus{
+		ID:          pluginID,
+		Name:        pluginData.Name,
+		Slug:        pluginData.Slug,
+		Command:     pluginData.Command,
+		HookType:    pluginData.HookType,
+		Status:      status,
+		LastAttempt: time.Now(),
+		IsOCI:       strings.HasPrefix(pluginData.Command, "oci://"),
+		LoadTime:    loadTime,
+	}
+
+	if err != nil {
+		health.ErrorMessage = err.Error()
+	}
+
+	// For OCI plugins, check if cached
+	if health.IsOCI && pm.ociClient != nil {
+		if ref, params, parseErr := ociplugins.ParseOCICommand(pluginData.Command); parseErr == nil {
+			health.IsCached = pm.ociClient.HasPlugin(ref.Digest, params.Architecture)
+		}
+	}
+
+	pm.pluginHealth[pluginID] = health
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", pluginData.Name).
+		Str("status", string(status)).
+		Bool("is_oci", health.IsOCI).
+		Bool("is_cached", health.IsCached).
+		Msg("Plugin health status updated")
+}
+
+// GetPluginHealth returns health status for all tracked plugins
+func (pm *PluginManager) GetPluginHealth() map[uint]*PluginHealthStatus {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	// Return a copy to avoid concurrent access issues
+	health := make(map[uint]*PluginHealthStatus)
+	for id, status := range pm.pluginHealth {
+		statusCopy := *status
+		health[id] = &statusCopy
+	}
+
+	return health
+}
+
+// IsAllPluginsReady checks if all tracked plugins are ready
+func (pm *PluginManager) IsAllPluginsReady() bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	for _, health := range pm.pluginHealth {
+		if health.Status == PluginStatusFailed || health.Status == PluginStatusLoading {
+			return false
+		}
+	}
+
+	return true
+}
+
+// GetPluginHealthSummary returns a summary of plugin health
+func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	summary := map[string]interface{}{
+		"total_plugins":     len(pm.pluginHealth),
+		"ready_plugins":     0,
+		"loading_plugins":   0,
+		"failed_plugins":    0,
+		"unknown_plugins":   0,
+		"oci_plugins":       0,
+		"cached_oci_plugins": 0,
+	}
+
+	for _, health := range pm.pluginHealth {
+		switch health.Status {
+		case PluginStatusReady:
+			summary["ready_plugins"] = summary["ready_plugins"].(int) + 1
+		case PluginStatusLoading:
+			summary["loading_plugins"] = summary["loading_plugins"].(int) + 1
+		case PluginStatusFailed:
+			summary["failed_plugins"] = summary["failed_plugins"].(int) + 1
+		case PluginStatusUnknown:
+			summary["unknown_plugins"] = summary["unknown_plugins"].(int) + 1
+		}
+
+		if health.IsOCI {
+			summary["oci_plugins"] = summary["oci_plugins"].(int) + 1
+			if health.IsCached {
+				summary["cached_oci_plugins"] = summary["cached_oci_plugins"].(int) + 1
+			}
+		}
+	}
+
+	summary["all_ready"] = summary["failed_plugins"].(int) == 0 && summary["loading_plugins"].(int) == 0
+
+	return summary
 }
 
