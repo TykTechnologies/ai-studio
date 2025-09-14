@@ -3,6 +3,7 @@ package ociplugins
 
 import (
 	"fmt"
+	"runtime"
 )
 
 // ExampleParseOCICommand demonstrates how to parse OCI plugin commands
@@ -31,7 +32,7 @@ func ExampleParseOCICommand() {
 	// Registry: nexus.example.com
 	// Repository: plugins/ner
 	// Digest: sha256:0123deadbeef456
-	// Architecture: linux/amd64
+	// Architecture: darwin/arm64
 	// Architecture: linux/arm64
 	// Public Key: test.pub
 }
@@ -65,9 +66,15 @@ func ExampleOCIPluginClient_FetchPlugin() {
 	fmt.Printf("Would fetch plugin: %s\n", ref.FullReference())
 	fmt.Printf("Target architecture: %s\n", params.Architecture)
 
+	// Note: Output will vary based on runtime architecture
+	// On macOS: Target architecture: darwin/arm64
+	// On Linux: Target architecture: linux/amd64
+	fmt.Printf("Runtime: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+
 	// Output:
 	// Would fetch plugin: nexus.example.com/plugins/ner@sha256:0123deadbeef456
-	// Target architecture: linux/amd64
+	// Target architecture: darwin/arm64
+	// Runtime: darwin/arm64
 }
 
 // ExampleOCIReference_FullReference demonstrates reference formatting

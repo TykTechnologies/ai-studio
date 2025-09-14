@@ -2,7 +2,9 @@
 package ociplugins
 
 import (
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +28,9 @@ type OCIConfig struct {
 
 	// Security settings
 	RequireSignature bool `yaml:"require_signature" json:"require_signature"`
+
+	// Registry connection settings
+	InsecureRegistries []string `yaml:"insecure_registries" json:"insecure_registries"`
 
 	// Garbage collection
 	GCInterval   time.Duration `yaml:"gc_interval" json:"gc_interval"`
@@ -126,6 +131,9 @@ func DefaultOCIConfig() *OCIConfig {
 
 	// Load registry authentication from environment variables
 	config.RegistryAuth = LoadRegistryAuthFromEnv()
+
+	// Load public keys from environment variables
+	config.DefaultPublicKeys = LoadPublicKeysFromEnv()
 
 	return config
 }
@@ -248,4 +256,88 @@ func LoadRegistryAuthForRegistry(registryName string) *RegistryAuth {
 	}
 
 	return auth
+}
+
+// LoadPublicKeysFromEnv loads public keys from environment variables
+// Supports multiple formats:
+// - OCI_PLUGINS_PUBKEY_<NUMBER> - Numbered keys with PEM content
+// - OCI_PLUGINS_PUBKEY_<NAME> - Named keys with PEM content
+// - OCI_PLUGINS_PUBKEY_FILE_<NAME> - File path references
+func LoadPublicKeysFromEnv() []string {
+	var keys []string
+
+	// Scan for numbered keys: OCI_PLUGINS_PUBKEY_1, OCI_PLUGINS_PUBKEY_2, etc.
+	for i := 1; i <= 20; i++ {
+		envKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_%d", i)
+		if keyContent := os.Getenv(envKey); keyContent != "" {
+			// Store with identifier for later resolution
+			keys = append(keys, fmt.Sprintf("env:%s", envKey))
+		}
+	}
+
+	// Scan for named keys: OCI_PLUGINS_PUBKEY_<NAME>
+	namedKeys := make(map[string]string)
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, "OCI_PLUGINS_PUBKEY_") {
+			continue
+		}
+
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 || parts[1] == "" {
+			continue
+		}
+
+		envKey := parts[0]
+
+		// Skip numbered keys (already handled) and file keys
+		if strings.Contains(envKey, "_FILE_") || isNumericEnvKey(envKey) {
+			continue
+		}
+
+		// Extract key name from OCI_PLUGINS_PUBKEY_<NAME>
+		keyName := strings.TrimPrefix(envKey, "OCI_PLUGINS_PUBKEY_")
+		if keyName != "" && keyName != envKey {
+			namedKeys[keyName] = envKey
+			keys = append(keys, fmt.Sprintf("env:%s", envKey))
+		}
+	}
+
+	// Scan for file-based keys: OCI_PLUGINS_PUBKEY_FILE_<NAME>
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, "OCI_PLUGINS_PUBKEY_FILE_") {
+			continue
+		}
+
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 || parts[1] == "" {
+			continue
+		}
+
+		filePath := parts[1]
+		keys = append(keys, fmt.Sprintf("file:%s", filePath))
+	}
+
+	return keys
+}
+
+// isNumericEnvKey checks if an environment key is numeric (OCI_PLUGINS_PUBKEY_1, etc.)
+func isNumericEnvKey(envKey string) bool {
+	suffix := strings.TrimPrefix(envKey, "OCI_PLUGINS_PUBKEY_")
+	if suffix == envKey {
+		return false
+	}
+
+	_, err := strconv.Atoi(suffix)
+	return err == nil
+}
+
+// isNumeric checks if a string is numeric
+func isNumeric(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+
+// isPEMContent checks if a string contains PEM-encoded content
+func isPEMContent(content string) bool {
+	return strings.Contains(content, "-----BEGIN") && strings.Contains(content, "-----END")
 }

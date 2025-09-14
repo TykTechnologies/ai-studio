@@ -2,6 +2,8 @@
 package ociplugins
 
 import (
+	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +29,7 @@ func TestParseOCICommand(t *testing.T) {
 				Params:     make(map[string]string),
 			},
 			expectedParams: &OCIPluginParams{
-				Architecture: "linux/amd64", // default
+				Architecture: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH), // runtime default
 				PublicKey:    "",
 				AuthConfig:   "",
 			},
@@ -44,7 +46,7 @@ func TestParseOCICommand(t *testing.T) {
 				Params:     make(map[string]string),
 			},
 			expectedParams: &OCIPluginParams{
-				Architecture: "linux/amd64",
+				Architecture: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 				PublicKey:    "",
 				AuthConfig:   "",
 			},

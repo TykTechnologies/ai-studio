@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
@@ -35,6 +36,11 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 	repo, err := remote.NewRepository(ref.FullRepo())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create remote repository: %w", err)
+	}
+
+	// Configure for insecure (HTTP) registries if needed
+	if f.isInsecureRegistry(ref.Registry) {
+		repo.PlainHTTP = true
 	}
 
 	// Configure authentication
@@ -208,6 +214,11 @@ func (f *ORASFetcher) PullManifest(ctx context.Context, ref *OCIReference, param
 		return nil, nil, fmt.Errorf("failed to create remote repository: %w", err)
 	}
 
+	// Configure for insecure (HTTP) registries if needed
+	if f.isInsecureRegistry(ref.Registry) {
+		repo.PlainHTTP = true
+	}
+
 	// Configure authentication
 	if err := f.configureAuth(repo, ref.Registry, params.AuthConfig); err != nil {
 		return nil, nil, fmt.Errorf("failed to configure authentication: %w", err)
@@ -256,6 +267,11 @@ func (f *ORASFetcher) CheckExists(ctx context.Context, ref *OCIReference, params
 		return false, fmt.Errorf("failed to create remote repository: %w", err)
 	}
 
+	// Configure for insecure (HTTP) registries if needed
+	if f.isInsecureRegistry(ref.Registry) {
+		repo.PlainHTTP = true
+	}
+
 	// Configure authentication
 	if err := f.configureAuth(repo, ref.Registry, params.AuthConfig); err != nil {
 		return false, fmt.Errorf("failed to configure authentication: %w", err)
@@ -278,4 +294,21 @@ func (f *ORASFetcher) CheckExists(ctx context.Context, ref *OCIReference, params
 	}
 
 	return true, nil
+}
+
+// isInsecureRegistry checks if a registry should use HTTP instead of HTTPS
+func (f *ORASFetcher) isInsecureRegistry(registry string) bool {
+	// Check if registry is in the insecure registries list
+	for _, insecureRegistry := range f.config.InsecureRegistries {
+		if registry == insecureRegistry {
+			return true
+		}
+	}
+
+	// Localhost registries are typically insecure for development
+	if strings.HasPrefix(registry, "localhost:") || strings.HasPrefix(registry, "127.0.0.1:") {
+		return true
+	}
+
+	return false
 }

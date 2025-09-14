@@ -1308,7 +1308,94 @@ func (pm *PluginManager) GetGlobalPluginsForHookType(hookType string) []*GlobalP
 			plugins = append(plugins, globalPlugin)
 		}
 	}
-	
+
 	return plugins
+}
+
+// GetOCIClient returns the OCI client if available
+func (pm *PluginManager) GetOCIClient() *ociplugins.OCIPluginClient {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.ociClient
+}
+
+// GetOCIStats returns OCI plugin statistics
+func (pm *PluginManager) GetOCIStats() map[string]interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	stats := make(map[string]interface{})
+
+	if pm.ociClient == nil {
+		stats["enabled"] = false
+		return stats
+	}
+
+	stats["enabled"] = true
+
+	// Get cache size
+	if cacheSize, err := pm.ociClient.GetCacheSize(); err == nil {
+		stats["cache_size_bytes"] = cacheSize
+	}
+
+	// Get cached plugin count
+	if cachedPlugins, err := pm.ociClient.ListCached(); err == nil {
+		stats["cached_plugins_count"] = len(cachedPlugins)
+
+		// Group by registry
+		registryStats := make(map[string]int)
+		archStats := make(map[string]int)
+
+		for _, plugin := range cachedPlugins {
+			registryStats[plugin.Reference.Registry]++
+			archStats[plugin.Params.Architecture]++
+		}
+
+		stats["plugins_by_registry"] = registryStats
+		stats["plugins_by_architecture"] = archStats
+	}
+
+	return stats
+}
+
+// ListCachedOCIPlugins returns all cached OCI plugins
+func (pm *PluginManager) ListCachedOCIPlugins() ([]*ociplugins.LocalPlugin, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	if pm.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not available")
+	}
+
+	return pm.ociClient.ListCached()
+}
+
+// PreFetchOCIPlugin pre-fetches an OCI plugin without loading it
+func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
+	pm.mu.RLock()
+	ociClient := pm.ociClient
+	pm.mu.RUnlock()
+
+	if ociClient == nil {
+		return fmt.Errorf("OCI client not available")
+	}
+
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(command)
+	if err != nil {
+		return fmt.Errorf("failed to parse OCI command: %w", err)
+	}
+
+	// Fetch plugin (this will cache it)
+	_, err = ociClient.FetchPlugin(context.Background(), ref, params)
+	if err != nil {
+		return fmt.Errorf("failed to pre-fetch OCI plugin: %w", err)
+	}
+
+	log.Info().
+		Str("reference", ref.FullReference()).
+		Msg("OCI plugin pre-fetched successfully")
+
+	return nil
 }
 

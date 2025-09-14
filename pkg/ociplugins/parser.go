@@ -2,8 +2,10 @@
 package ociplugins
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -67,8 +69,9 @@ func ParseOCICommand(command string) (*OCIReference, *OCIPluginParams, error) {
 	}
 
 	// Parse plugin-specific parameters
+	defaultArch := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
 	pluginParams := &OCIPluginParams{
-		Architecture: getParamWithDefault(params, "arch", "linux/amd64"),
+		Architecture: getParamWithDefault(params, "arch", defaultArch),
 		PublicKey:    params["pubkey"],
 		AuthConfig:   params["auth"],
 	}

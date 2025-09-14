@@ -45,8 +45,8 @@ type OCIPluginConfig struct {
 	MaxCacheSize int64  `env:"OCI_PLUGINS_MAX_CACHE_SIZE" envDefault:"1073741824"` // 1GB
 
 	// Default security settings
-	DefaultPublicKeys []string `env:"OCI_PLUGINS_DEFAULT_PUBKEYS"`
-	AllowedRegistries []string `env:"OCI_PLUGINS_ALLOWED_REGISTRIES"`
+	DefaultPublicKeys []string `env:"OCI_PLUGINS_DEFAULT_PUBKEYS" envSeparator:","`
+	AllowedRegistries []string `env:"OCI_PLUGINS_ALLOWED_REGISTRIES" envSeparator:","`
 
 	// Authentication (registry name -> auth config)
 	// Note: This would be better configured via environment variables or config files
@@ -59,6 +59,9 @@ type OCIPluginConfig struct {
 	// Security settings
 	RequireSignature bool `env:"OCI_PLUGINS_REQUIRE_SIGNATURE" envDefault:"true"`
 
+	// Registry connection settings
+	InsecureRegistries []string `env:"OCI_PLUGINS_INSECURE_REGISTRIES" envSeparator:","`
+
 	// Garbage collection
 	GCInterval   time.Duration `env:"OCI_PLUGINS_GC_INTERVAL" envDefault:"24h"`
 	KeepVersions int          `env:"OCI_PLUGINS_KEEP_VERSIONS" envDefault:"3"`
@@ -67,16 +70,17 @@ type OCIPluginConfig struct {
 // ToOCIConfig converts microgateway OCI config to the library config format
 func (c *OCIPluginConfig) ToOCIConfig() *ociplugins.OCIConfig {
 	return &ociplugins.OCIConfig{
-		CacheDir:          c.CacheDir,
-		MaxCacheSize:      c.MaxCacheSize,
-		DefaultPublicKeys: c.DefaultPublicKeys,
-		AllowedRegistries: c.AllowedRegistries,
-		RegistryAuth:      ociplugins.LoadRegistryAuthFromEnv(),
-		Timeout:           c.Timeout,
-		RetryAttempts:     c.RetryAttempts,
-		RequireSignature:  c.RequireSignature,
-		GCInterval:        c.GCInterval,
-		KeepVersions:      c.KeepVersions,
+		CacheDir:           c.CacheDir,
+		MaxCacheSize:       c.MaxCacheSize,
+		DefaultPublicKeys:  ociplugins.LoadPublicKeysFromEnv(),
+		AllowedRegistries:  c.AllowedRegistries,
+		RegistryAuth:       ociplugins.LoadRegistryAuthFromEnv(),
+		Timeout:            c.Timeout,
+		RetryAttempts:      c.RetryAttempts,
+		RequireSignature:   c.RequireSignature,
+		InsecureRegistries: c.InsecureRegistries,
+		GCInterval:         c.GCInterval,
+		KeepVersions:       c.KeepVersions,
 	}
 }
 

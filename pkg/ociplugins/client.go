@@ -102,7 +102,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Verify signature if required
-	if c.config.RequireSignature || params.PublicKey != "" {
+	if c.config.RequireSignature {
 		if err := c.verifier.Verify(ctx, ref, params.PublicKey); err != nil {
 			return nil, &ErrSignatureVerificationFailed{
 				Reference: ref.FullReference(),
@@ -112,6 +112,10 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		log.Debug().
 			Str("reference", ref.FullReference()).
 			Msg("Signature verification passed")
+	} else {
+		log.Debug().
+			Str("reference", ref.FullReference()).
+			Msg("Signature verification skipped (disabled)")
 	}
 
 	// Validate architecture compatibility
@@ -137,12 +141,15 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		version = pluginConfig.Version
 	}
 
+	// Track whether signature was actually verified
+	signatureVerified := c.config.RequireSignature && params.PublicKey != ""
+
 	metadata := &PluginMetadata{
 		Reference:    ref,
 		Params:       params,
 		FetchTime:    fetchTime,
 		Config:       pluginConfig,
-		Verified:     c.config.RequireSignature || params.PublicKey != "",
+		Verified:     signatureVerified,
 		Size:         int64(len(binaryData)),
 		LastAccessed: fetchTime,
 		Version:      version,

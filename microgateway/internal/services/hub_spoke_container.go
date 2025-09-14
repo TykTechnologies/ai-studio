@@ -95,16 +95,37 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 	// Create plugin service adapter
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
-	
-	// Initialize plugin manager
-	pluginManager := plugins.NewPluginManager(pluginServiceAdapter)
+
+	// Initialize plugin manager with OCI support if configured
+	var pluginManager *plugins.PluginManager
+	var err error
+
+	if cfg.OCIPlugins.CacheDir != "" {
+		// OCI support enabled
+		ociConfig := cfg.OCIPlugins.ToOCIConfig()
+		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
+			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
+		} else {
+			log.Info().
+				Str("cache_dir", ociConfig.CacheDir).
+				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
+				Bool("require_signature", ociConfig.RequireSignature).
+				Msg("OCI plugin support enabled in hub-spoke container")
+		}
+	} else {
+		// Standard plugin manager
+		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
+		log.Info().Msg("OCI plugin support disabled in hub-spoke container")
+	}
 	
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
 		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins...")
 		
 		ctx := context.Background()
-		if err := cfg.LoadPluginConfig(ctx); err != nil {
+		if err = cfg.LoadPluginConfig(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to load plugin configuration")
 		} else if len(cfg.Plugins.DataCollectionPlugins) > 0 {
 			if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {

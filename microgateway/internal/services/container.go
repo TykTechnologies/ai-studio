@@ -59,9 +59,30 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 	// Create plugin service adapter to break circular dependency
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
-	
-	// Initialize plugin manager
-	pluginManager := plugins.NewPluginManager(pluginServiceAdapter)
+
+	// Initialize plugin manager with OCI support if configured
+	var pluginManager *plugins.PluginManager
+	var err error
+
+	if cfg.OCIPlugins.CacheDir != "" {
+		// OCI support enabled
+		ociConfig := cfg.OCIPlugins.ToOCIConfig()
+		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
+			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
+		} else {
+			log.Info().
+				Str("cache_dir", ociConfig.CacheDir).
+				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
+				Bool("require_signature", ociConfig.RequireSignature).
+				Msg("OCI plugin support enabled")
+		}
+	} else {
+		// Standard plugin manager
+		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
+		log.Info().Msg("OCI plugin support disabled - using standard plugin manager")
+	}
 	
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
@@ -69,7 +90,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		
 		// Load plugin configuration
 		ctx := context.Background()
-		if err := cfg.LoadPluginConfig(ctx); err != nil {
+		if err = cfg.LoadPluginConfig(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to load plugin configuration")
 		} else {
 			log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded in service container")

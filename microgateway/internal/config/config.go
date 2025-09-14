@@ -174,6 +174,17 @@ func Load(envFile string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
 	}
 
+	// Post-process OCI plugin configuration
+	cfg.postProcessOCIConfig()
+
+	// Debug: Log OCI plugin configuration
+	log.Debug().
+		Str("cache_dir", cfg.OCIPlugins.CacheDir).
+		Bool("require_signature", cfg.OCIPlugins.RequireSignature).
+		Strs("allowed_registries", cfg.OCIPlugins.AllowedRegistries).
+		Int("public_keys", len(cfg.OCIPlugins.DefaultPublicKeys)).
+		Msg("OCI plugin configuration loaded")
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
@@ -350,4 +361,17 @@ func (c *Config) IsControl() bool {
 // IsEdge returns true if the gateway is in edge mode
 func (c *Config) IsEdge() bool {
 	return c.HubSpoke.Mode == "edge"
+}
+
+// postProcessOCIConfig loads OCI plugin configuration that can't be handled by env tags
+func (c *Config) postProcessOCIConfig() {
+	log.Debug().Msg("Post-processing OCI plugin configuration")
+
+	// The DefaultPublicKeys and RegistryAuth will be loaded by ToOCIConfig()
+	// when the OCI client is created, so we don't need to do it here
+
+	// Just ensure the basic fields are populated correctly
+	if c.OCIPlugins.CacheDir == "" {
+		c.OCIPlugins.CacheDir = "/var/lib/microgateway/plugins"
+	}
 }

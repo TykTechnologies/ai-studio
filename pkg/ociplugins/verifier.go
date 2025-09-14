@@ -4,8 +4,11 @@ package ociplugins
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 )
 
 // SignatureVerifier handles cosign signature verification
@@ -45,31 +48,125 @@ func (v *SignatureVerifier) Verify(ctx context.Context, ref *OCIReference, pubKe
 }
 
 // getPublicKeyPath retrieves the path to a public key for verification
+// Supports multiple key resolution methods:
+// - Numeric references (1, 2, 3) → OCI_PLUGINS_PUBKEY_<NUMBER>
+// - Named references (CI, PROD) → OCI_PLUGINS_PUBKEY_<NAME>
+// - Direct file paths
+// - Environment variable names
 func (v *SignatureVerifier) getPublicKeyPath(pubKeyID string) (string, error) {
-	// If no specific key ID provided, use default keys
+	// If no specific key ID provided, use first available key
 	if pubKeyID == "" {
 		if len(v.config.DefaultPublicKeys) == 0 {
 			return "", fmt.Errorf("no public key specified and no default keys configured")
 		}
-		pubKeyID = v.config.DefaultPublicKeys[0]
+		return v.resolveKeyReference(v.config.DefaultPublicKeys[0])
 	}
 
-	// Check if it's a file path that exists
-	if _, err := os.Stat(pubKeyID); err == nil {
-		return pubKeyID, nil
+	// Try to resolve the key reference
+	return v.resolveKeyReference(pubKeyID)
+}
+
+// resolveKeyReference resolves a key reference to a usable file path
+func (v *SignatureVerifier) resolveKeyReference(keyRef string) (string, error) {
+	// Case 1: Numeric reference (1, 2, 3...)
+	if _, err := strconv.Atoi(keyRef); err == nil {
+		envKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_%s", keyRef)
+		if keyContent := os.Getenv(envKey); keyContent != "" {
+			return v.writeKeyToTempFile(keyContent, fmt.Sprintf("pubkey-%s", keyRef))
+		}
+		return "", fmt.Errorf("public key %s not found in environment variable %s", keyRef, envKey)
 	}
 
-	// Check if it's one of the configured keys
-	for _, keyPath := range v.config.DefaultPublicKeys {
-		if keyPath == pubKeyID {
-			if _, err := os.Stat(keyPath); err == nil {
-				return keyPath, nil
+	// Case 2: Named reference (CI, PROD, DEV...)
+	if isAlphaNumeric(keyRef) && len(keyRef) > 1 {
+		envKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_%s", strings.ToUpper(keyRef))
+		if keyContent := os.Getenv(envKey); keyContent != "" {
+			return v.writeKeyToTempFile(keyContent, fmt.Sprintf("pubkey-%s", strings.ToLower(keyRef)))
+		}
+		// Don't treat this as an error - continue to other cases
+	}
+
+	// Case 3: Environment variable reference (env:OCI_PLUGINS_PUBKEY_CI)
+	if strings.HasPrefix(keyRef, "env:") {
+		envKey := strings.TrimPrefix(keyRef, "env:")
+		if keyContent := os.Getenv(envKey); keyContent != "" {
+			keyName := strings.ToLower(strings.TrimPrefix(envKey, "OCI_PLUGINS_PUBKEY_"))
+			return v.writeKeyToTempFile(keyContent, fmt.Sprintf("pubkey-%s", keyName))
+		}
+		return "", fmt.Errorf("environment variable %s not found or empty", envKey)
+	}
+
+	// Case 4: File path reference (file:/path/to/key.pub)
+	if strings.HasPrefix(keyRef, "file:") {
+		filePath := strings.TrimPrefix(keyRef, "file:")
+		if _, err := os.Stat(filePath); err == nil {
+			return filePath, nil
+		}
+		return "", fmt.Errorf("public key file not found: %s", filePath)
+	}
+
+	// Case 5: Direct file path
+	if strings.Contains(keyRef, "/") || strings.HasSuffix(keyRef, ".pub") || strings.HasSuffix(keyRef, ".pem") {
+		if _, err := os.Stat(keyRef); err == nil {
+			return keyRef, nil
+		}
+		return "", fmt.Errorf("public key file not found: %s", keyRef)
+	}
+
+	// Case 6: Search in configured keys only if keyRef looks like it could match
+	// This avoids false positives when searching for specific named keys
+	if keyRef != "" && !strings.Contains(keyRef, "/") && !strings.Contains(keyRef, ".") {
+		for _, configuredKey := range v.config.DefaultPublicKeys {
+			if configuredKey != keyRef { // Avoid infinite recursion
+				// Only try configured keys if the keyRef could reasonably match them
+				if strings.Contains(configuredKey, keyRef) || strings.Contains(configuredKey, strings.ToUpper(keyRef)) {
+					if resolvedPath, err := v.resolveKeyReference(configuredKey); err == nil {
+						return resolvedPath, nil
+					}
+				}
 			}
-			return "", fmt.Errorf("configured public key file not found: %s", keyPath)
 		}
 	}
 
-	return "", fmt.Errorf("public key %s not found", pubKeyID)
+	return "", fmt.Errorf("public key %s not found", keyRef)
+}
+
+// writeKeyToTempFile writes PEM content to a temporary file and returns the path
+func (v *SignatureVerifier) writeKeyToTempFile(pemContent, keyName string) (string, error) {
+	// Validate PEM content
+	if !isPEMContent(pemContent) {
+		return "", fmt.Errorf("invalid PEM content for key %s", keyName)
+	}
+
+	// Create temporary file
+	tempFile, err := ioutil.TempFile("", fmt.Sprintf("oci-pubkey-%s-*.pub", keyName))
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file for key %s: %w", keyName, err)
+	}
+
+	// Write PEM content
+	if _, err := tempFile.WriteString(pemContent); err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		return "", fmt.Errorf("failed to write key content: %w", err)
+	}
+
+	if err := tempFile.Close(); err != nil {
+		os.Remove(tempFile.Name())
+		return "", fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	return tempFile.Name(), nil
+}
+
+// isAlphaNumeric checks if string contains only letters and numbers
+func isAlphaNumeric(s string) bool {
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // VerifyBundle verifies a signature bundle for keyless signing
