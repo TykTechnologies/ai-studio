@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -99,7 +100,18 @@ func (s *ControlServer) Start() error {
 	
 	// Setup gRPC server options
 	var opts []grpc.ServerOption
-	
+
+	// Add keepalive settings for reliable bidirectional streaming
+	opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{
+		Time:    30 * time.Second, // Ping client every 30 seconds if no activity
+		Timeout: 5 * time.Second,  // Wait 5 seconds for ping response
+	}))
+
+	opts = append(opts, grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		MinTime:             10 * time.Second, // Client must wait at least 10s between pings
+		PermitWithoutStream: true,             // Allow pings when no active streams
+	}))
+
 	// Add TLS if enabled
 	if s.config.HubSpoke.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(
@@ -111,7 +123,7 @@ func (s *ControlServer) Start() error {
 		}
 		opts = append(opts, grpc.Creds(creds))
 	}
-	
+
 	// Add authentication interceptor
 	opts = append(opts, grpc.UnaryInterceptor(s.authInterceptor))
 	opts = append(opts, grpc.StreamInterceptor(s.streamAuthInterceptor))
@@ -215,10 +227,10 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		Str("namespace", req.EdgeNamespace).
 		Str("version", req.Version).
 		Msg("Edge instance registration request")
-	
-	// Validate request
-	if req.EdgeId == "" {
-		return nil, status.Error(codes.InvalidArgument, "edge_id is required")
+
+	// Comprehensive request validation
+	if err := s.validateEdgeRegistrationRequest(req); err != nil {
+		return nil, err
 	}
 	
 	// Generate session ID
@@ -304,111 +316,208 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_SubscribeToChangesServer) error {
 	var edgeID string
 	var edge *EdgeInstance
-	
-	// Handle incoming messages from edge
+	var streamCtx = stream.Context()
+
+	// Create channels for coordinated shutdown
+	done := make(chan struct{})
+	recvErr := make(chan error, 1)
+
+	// Handle incoming messages from edge with proper error handling
 	go func() {
+		defer close(done)
+
 		for {
+			// Check if context is cancelled
+			select {
+			case <-streamCtx.Done():
+				log.Debug().Str("edge_id", edgeID).Msg("Stream context cancelled, stopping message handler")
+				return
+			default:
+			}
+
 			msg, err := stream.Recv()
 			if err != nil {
 				log.Debug().Err(err).Str("edge_id", edgeID).Msg("Edge stream receive error")
-				break
+				recvErr <- err
+				return
 			}
-			
-			switch m := msg.Message.(type) {
-			case *pb.EdgeMessage_Registration:
-				// Handle registration in stream
-				if edge == nil {
-					edgeID = m.Registration.EdgeId
-					s.edgeMutex.RLock()
-					edge = s.edgeInstances[edgeID]
-					s.edgeMutex.RUnlock()
-					
-					if edge != nil {
-						edge.Stream = stream
-						edge.Status = "connected"
-						
-						// Send registration response
-						response := &pb.ControlMessage{
-							Message: &pb.ControlMessage_RegistrationResponse{
-								RegistrationResponse: &pb.EdgeRegistrationResponse{
-									Success:   true,
-									Message:   "Stream connected",
-									SessionId: edge.SessionID,
-								},
-							},
-						}
-						stream.Send(response)
-					}
-				}
-				
-			case *pb.EdgeMessage_Heartbeat:
-				// Handle heartbeat
-				if edge != nil {
-					edge.LastHeartbeat = time.Now()
-					
-					// Send heartbeat response
-					response := &pb.ControlMessage{
-						Message: &pb.ControlMessage_HeartbeatResponse{
-							HeartbeatResponse: &pb.HeartbeatResponse{
-								Acknowledged: true,
-								Message:      "Heartbeat received",
-							},
-						},
-					}
-					stream.Send(response)
-				}
-				
-			case *pb.EdgeMessage_ConfigRequest:
-				// Handle configuration request
-				if edge != nil {
-					snapshot, err := s.getConfigurationSnapshot(edge.Namespace)
-					if err != nil {
-						log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to get configuration snapshot")
-					} else {
-						response := &pb.ControlMessage{
-							Message: &pb.ControlMessage_Configuration{
-								Configuration: snapshot,
-							},
-						}
-						stream.Send(response)
-					}
-				}
-				
-			case *pb.EdgeMessage_ReloadResponse:
-				// Handle reload status response
-				if m.ReloadResponse != nil {
-					log.Info().
-						Str("operation_id", m.ReloadResponse.OperationId).
-						Str("edge_id", m.ReloadResponse.EdgeId).
-						Str("phase", m.ReloadResponse.Phase.String()).
-						Bool("success", m.ReloadResponse.Success).
-						Msg("Received reload status from edge")
-					
-					// Forward to reload coordinator if available
-					if s.reloadCoordinator != nil {
-						if coordinator, ok := s.reloadCoordinator.(interface{ ProcessReloadResponse(*pb.ConfigurationReloadResponse) }); ok {
-							coordinator.ProcessReloadResponse(m.ReloadResponse)
-						}
-					}
-				}
+
+			// Process message with error handling
+			if err := s.handleEdgeMessage(msg, stream, &edgeID, &edge); err != nil {
+				log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to handle edge message")
+				// Continue processing other messages rather than failing the entire stream
 			}
 		}
 	}()
-	
-	// Keep connection alive and handle outgoing messages
-	<-stream.Context().Done()
-	
+
+	// Wait for stream to close or error
+	select {
+	case <-done:
+		log.Debug().Str("edge_id", edgeID).Msg("Message handler completed")
+	case err := <-recvErr:
+		log.Debug().Err(err).Str("edge_id", edgeID).Msg("Stream receive error")
+	case <-streamCtx.Done():
+		log.Debug().Str("edge_id", edgeID).Msg("Stream context cancelled")
+	}
+
 	// Cleanup when stream closes
 	if edge != nil {
 		s.edgeMutex.Lock()
 		if existingEdge, exists := s.edgeInstances[edgeID]; exists && existingEdge == edge {
 			existingEdge.Status = "disconnected"
 			existingEdge.Stream = nil
+			log.Info().Str("edge_id", edgeID).Msg("Edge instance disconnected and cleaned up")
 		}
 		s.edgeMutex.Unlock()
 	}
-	
+
 	log.Debug().Str("edge_id", edgeID).Msg("Edge stream closed")
+	return nil
+}
+
+// handleEdgeMessage processes individual messages from edge instances
+func (s *ControlServer) handleEdgeMessage(msg *pb.EdgeMessage, stream pb.ConfigurationSyncService_SubscribeToChangesServer, edgeID *string, edge **EdgeInstance) error {
+	switch m := msg.Message.(type) {
+	case *pb.EdgeMessage_Registration:
+		return s.handleStreamRegistration(m, stream, edgeID, edge)
+
+	case *pb.EdgeMessage_Heartbeat:
+		return s.handleStreamHeartbeat(m, stream, *edge)
+
+	case *pb.EdgeMessage_ConfigRequest:
+		return s.handleStreamConfigRequest(m, stream, *edge, *edgeID)
+
+	case *pb.EdgeMessage_ReloadResponse:
+		return s.handleStreamReloadResponse(m)
+
+	default:
+		log.Warn().Str("edge_id", *edgeID).Msg("Unknown message type received from edge")
+	}
+
+	return nil
+}
+
+// handleStreamRegistration handles registration messages in stream
+func (s *ControlServer) handleStreamRegistration(m *pb.EdgeMessage_Registration, stream pb.ConfigurationSyncService_SubscribeToChangesServer, edgeID *string, edge **EdgeInstance) error {
+	if *edge == nil {
+		*edgeID = m.Registration.EdgeId
+		s.edgeMutex.RLock()
+		*edge = s.edgeInstances[*edgeID]
+		s.edgeMutex.RUnlock()
+
+		if *edge != nil {
+			// Safely update edge instance
+			s.edgeMutex.Lock()
+			(*edge).Stream = stream
+			(*edge).Status = "connected"
+			(*edge).LastHeartbeat = time.Now()
+			s.edgeMutex.Unlock()
+
+			// Send registration response with error handling
+			response := &pb.ControlMessage{
+				Message: &pb.ControlMessage_RegistrationResponse{
+					RegistrationResponse: &pb.EdgeRegistrationResponse{
+						Success:   true,
+						Message:   "Stream connected",
+						SessionId: (*edge).SessionID,
+					},
+				},
+			}
+
+			if err := stream.Send(response); err != nil {
+				return fmt.Errorf("failed to send registration response: %w", err)
+			}
+
+			log.Info().Str("edge_id", *edgeID).Str("session_id", (*edge).SessionID).Msg("Edge stream registration successful")
+		}
+	}
+
+	return nil
+}
+
+// handleStreamHeartbeat handles heartbeat messages in stream
+func (s *ControlServer) handleStreamHeartbeat(m *pb.EdgeMessage_Heartbeat, stream pb.ConfigurationSyncService_SubscribeToChangesServer, edge *EdgeInstance) error {
+	if edge != nil {
+		// Thread-safe heartbeat update
+		s.edgeMutex.Lock()
+		edge.LastHeartbeat = time.Now()
+		s.edgeMutex.Unlock()
+
+		// Send heartbeat response
+		response := &pb.ControlMessage{
+			Message: &pb.ControlMessage_HeartbeatResponse{
+				HeartbeatResponse: &pb.HeartbeatResponse{
+					Acknowledged: true,
+					Message:      "Heartbeat received",
+				},
+			},
+		}
+
+		if err := stream.Send(response); err != nil {
+			return fmt.Errorf("failed to send heartbeat response: %w", err)
+		}
+
+		log.Debug().Str("edge_id", edge.EdgeID).Msg("Heartbeat processed")
+	}
+
+	return nil
+}
+
+// handleStreamConfigRequest handles configuration request messages in stream
+func (s *ControlServer) handleStreamConfigRequest(m *pb.EdgeMessage_ConfigRequest, stream pb.ConfigurationSyncService_SubscribeToChangesServer, edge *EdgeInstance, edgeID string) error {
+	if edge != nil {
+		snapshot, err := s.getConfigurationSnapshot(edge.Namespace)
+		if err != nil {
+			log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to get configuration snapshot")
+
+			// Send error response
+			response := &pb.ControlMessage{
+				Message: &pb.ControlMessage_Error{
+					Error: &pb.ErrorMessage{
+						Code:    "CONFIG_ERROR",
+						Message: fmt.Sprintf("Failed to get configuration: %v", err),
+						Fatal:   false,
+					},
+				},
+			}
+
+			return stream.Send(response)
+		} else {
+			response := &pb.ControlMessage{
+				Message: &pb.ControlMessage_Configuration{
+					Configuration: snapshot,
+				},
+			}
+
+			if err := stream.Send(response); err != nil {
+				return fmt.Errorf("failed to send configuration response: %w", err)
+			}
+
+			log.Debug().Str("edge_id", edgeID).Str("config_version", snapshot.Version).Msg("Configuration sent to edge")
+		}
+	}
+
+	return nil
+}
+
+// handleStreamReloadResponse handles reload response messages in stream
+func (s *ControlServer) handleStreamReloadResponse(m *pb.EdgeMessage_ReloadResponse) error {
+	if m.ReloadResponse != nil {
+		log.Info().
+			Str("operation_id", m.ReloadResponse.OperationId).
+			Str("edge_id", m.ReloadResponse.EdgeId).
+			Str("phase", m.ReloadResponse.Phase.String()).
+			Bool("success", m.ReloadResponse.Success).
+			Msg("Received reload status from edge")
+
+		// Forward to reload coordinator if available
+		if s.reloadCoordinator != nil {
+			if coordinator, ok := s.reloadCoordinator.(interface{ ProcessReloadResponse(*pb.ConfigurationReloadResponse) }); ok {
+				coordinator.ProcessReloadResponse(m.ReloadResponse)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -528,11 +637,16 @@ func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Configura
 
 // ValidateToken validates an API token on-demand (NEW)
 func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidationRequest) (*pb.TokenValidationResponse, error) {
+	// Validate request
+	if err := s.validateTokenValidationRequest(req); err != nil {
+		return nil, err
+	}
+
 	tokenPrefix := req.Token
 	if len(req.Token) > 8 {
 		tokenPrefix = req.Token[:8]
 	}
-	
+
 	log.Info().
 		Str("token_prefix", tokenPrefix).
 		Str("edge_id", req.EdgeId).
@@ -614,6 +728,111 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		AppName:   apiToken.App.Name,
 		Scopes:    scopes,
 		ExpiresAt: expiresAt,
+	}, nil
+}
+
+// SendAnalyticsPulse handles analytics pulse data from edge instances
+func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.AnalyticsPulse) (*pb.AnalyticsPulseResponse, error) {
+	// Validate request
+	if err := s.validateAnalyticsPulseRequest(req); err != nil {
+		return nil, err
+	}
+
+	log.Info().
+		Str("edge_id", req.EdgeId).
+		Str("edge_namespace", req.EdgeNamespace).
+		Uint64("sequence_number", req.SequenceNumber).
+		Uint32("total_records", req.TotalRecords).
+		Int("analytics_events", len(req.AnalyticsEvents)).
+		Int("budget_events", len(req.BudgetEvents)).
+		Int("proxy_summaries", len(req.ProxySummaries)).
+		Msg("Microgateway control server: received analytics pulse from edge")
+
+	processedRecords := uint64(0)
+
+	// Process analytics events by storing them in local microgateway database
+	for _, event := range req.AnalyticsEvents {
+		// Create analytics event record
+		analyticsEvent := &database.AnalyticsEvent{
+			RequestID:      event.RequestId,
+			AppID:          uint(event.AppId),
+			Endpoint:       event.Endpoint,
+			Method:         event.Method,
+			StatusCode:     int(event.StatusCode),
+			RequestTokens:  int(event.RequestTokens),
+			ResponseTokens: int(event.ResponseTokens),
+			TotalTokens:    int(event.TotalTokens),
+			Cost:           event.Cost,
+			LatencyMs:      int(event.LatencyMs),
+			ErrorMessage:   event.ErrorMessage,
+			CreatedAt:      event.Timestamp.AsTime(),
+		}
+
+		// Set LLM ID if provided
+		if event.LlmId > 0 {
+			llmID := uint(event.LlmId)
+			analyticsEvent.LLMID = &llmID
+		}
+
+		// Store request/response bodies if provided
+		if len(event.RequestBody) > 0 {
+			analyticsEvent.RequestBody = event.RequestBody
+		}
+		if len(event.ResponseBody) > 0 {
+			analyticsEvent.ResponseBody = event.ResponseBody
+		}
+
+		// Create the analytics event in local database
+		if err := s.db.Create(analyticsEvent).Error; err != nil {
+			log.Error().Err(err).Str("request_id", event.RequestId).Msg("Failed to store analytics event from pulse")
+		} else {
+			processedRecords++
+			log.Debug().
+				Str("edge_id", req.EdgeId).
+				Str("request_id", event.RequestId).
+				Str("model", event.ModelName).
+				Int("total_tokens", int(event.TotalTokens)).
+				Float64("cost", event.Cost).
+				Msg("Analytics event stored from pulse")
+		}
+	}
+
+	// Process budget events (store as separate records if needed)
+	for _, budget := range req.BudgetEvents {
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Uint32("app_id", budget.AppId).
+			Uint32("llm_id", budget.LlmId).
+			Int64("tokens_used", budget.TokensUsed).
+			Float64("cost", budget.Cost).
+			Msg("Budget usage data from edge - logged")
+		processedRecords++
+	}
+
+	// Process proxy summaries (could be stored in separate summary table)
+	for _, proxy := range req.ProxySummaries {
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Uint32("app_id", proxy.AppId).
+			Str("vendor", proxy.Vendor).
+			Uint32("request_count", proxy.RequestCount).
+			Float64("total_cost", proxy.TotalCost).
+			Msg("Proxy summary from edge - logged")
+		processedRecords++
+	}
+
+	log.Info().
+		Str("edge_id", req.EdgeId).
+		Uint64("sequence_number", req.SequenceNumber).
+		Uint64("processed_records", processedRecords).
+		Msg("Analytics pulse processed by microgateway control server")
+
+	return &pb.AnalyticsPulseResponse{
+		Success:          true,
+		Message:          "Analytics pulse processed successfully",
+		ProcessedRecords: processedRecords,
+		SequenceNumber:   req.SequenceNumber,
+		ProcessedAt:      timestamppb.New(time.Now()),
 	}, nil
 }
 
@@ -1079,4 +1298,112 @@ func (s *ControlServer) cleanupStaleConnections() {
 	if len(toRemove) > 0 {
 		log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
 	}
+}
+
+// validateEdgeRegistrationRequest validates edge registration request fields
+func (s *ControlServer) validateEdgeRegistrationRequest(req *pb.EdgeRegistrationRequest) error {
+	if req.EdgeId == "" {
+		return status.Error(codes.InvalidArgument, "edge_id is required")
+	}
+
+	if len(req.EdgeId) > 64 {
+		return status.Error(codes.InvalidArgument, "edge_id must be 64 characters or less")
+	}
+
+	if len(req.EdgeNamespace) > 64 {
+		return status.Error(codes.InvalidArgument, "edge_namespace must be 64 characters or less")
+	}
+
+	if req.Version == "" {
+		return status.Error(codes.InvalidArgument, "version is required")
+	}
+
+	if len(req.Version) > 32 {
+		return status.Error(codes.InvalidArgument, "version must be 32 characters or less")
+	}
+
+	if req.Health == nil {
+		return status.Error(codes.InvalidArgument, "health status is required")
+	}
+
+	// Validate metadata size
+	if len(req.Metadata) > 10 {
+		return status.Error(codes.InvalidArgument, "metadata cannot have more than 10 entries")
+	}
+
+	for key, value := range req.Metadata {
+		if len(key) > 64 {
+			return status.Error(codes.InvalidArgument, "metadata key must be 64 characters or less")
+		}
+		if len(value) > 256 {
+			return status.Error(codes.InvalidArgument, "metadata value must be 256 characters or less")
+		}
+	}
+
+	return nil
+}
+
+// validateTokenValidationRequest validates token validation request fields
+func (s *ControlServer) validateTokenValidationRequest(req *pb.TokenValidationRequest) error {
+	if req.Token == "" {
+		return status.Error(codes.InvalidArgument, "token is required")
+	}
+
+	if len(req.Token) > 128 {
+		return status.Error(codes.InvalidArgument, "token must be 128 characters or less")
+	}
+
+	if req.EdgeId == "" {
+		return status.Error(codes.InvalidArgument, "edge_id is required")
+	}
+
+	if len(req.EdgeId) > 64 {
+		return status.Error(codes.InvalidArgument, "edge_id must be 64 characters or less")
+	}
+
+	if len(req.EdgeNamespace) > 64 {
+		return status.Error(codes.InvalidArgument, "edge_namespace must be 64 characters or less")
+	}
+
+	return nil
+}
+
+// validateAnalyticsPulseRequest validates analytics pulse request fields
+func (s *ControlServer) validateAnalyticsPulseRequest(req *pb.AnalyticsPulse) error {
+	if req.EdgeId == "" {
+		return status.Error(codes.InvalidArgument, "edge_id is required")
+	}
+
+	if len(req.EdgeId) > 64 {
+		return status.Error(codes.InvalidArgument, "edge_id must be 64 characters or less")
+	}
+
+	if req.PulseTimestamp == nil {
+		return status.Error(codes.InvalidArgument, "pulse_timestamp is required")
+	}
+
+	if req.DataFrom == nil {
+		return status.Error(codes.InvalidArgument, "data_from is required")
+	}
+
+	if req.DataTo == nil {
+		return status.Error(codes.InvalidArgument, "data_to is required")
+	}
+
+	// Validate data ranges
+	if req.DataFrom.AsTime().After(req.DataTo.AsTime()) {
+		return status.Error(codes.InvalidArgument, "data_from must be before data_to")
+	}
+
+	// Validate record limits
+	totalRecords := len(req.AnalyticsEvents) + len(req.BudgetEvents) + len(req.ProxySummaries)
+	if totalRecords > 10000 {
+		return status.Error(codes.InvalidArgument, "pulse cannot contain more than 10000 total records")
+	}
+
+	if req.TotalRecords != uint32(totalRecords) {
+		return status.Error(codes.InvalidArgument, "total_records field does not match actual record count")
+	}
+
+	return nil
 }

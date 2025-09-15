@@ -51,10 +51,11 @@ func TestSimpleEdgeClient_StreamingConnection(t *testing.T) {
 	// Setup test config for edge client
 	edgeConfig := &config.Config{
 		HubSpoke: config.HubSpokeConfig{
-			Mode:            "edge",
-			ControlEndpoint: "localhost:9999",
-			EdgeID:          "test-edge-1",
-			EdgeNamespace:   "test-namespace",
+			Mode:              "edge",
+			ControlEndpoint:   "localhost:9999",
+			EdgeID:            "test-edge-1",
+			EdgeNamespace:     "test-namespace",
+			HeartbeatInterval: 100 * time.Millisecond, // Required for heartbeat worker
 		},
 	}
 
@@ -216,3 +217,126 @@ func (m *mockControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Confi
 func (m *mockControlServer) SetReloadCoordinator(coordinator interface{}) {
 	// Mock implementation - do nothing
 }
+
+// Enhanced integration tests for bidirectional streaming improvements
+
+func TestSimpleEdgeClient_BidirectionalStreaming(t *testing.T) {
+	// Setup test database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	// Run migrations
+	err = database.Migrate(db)
+	require.NoError(t, err)
+
+	// Setup test config for control server
+	controlConfig := &config.Config{
+		HubSpoke: config.HubSpokeConfig{
+			Mode:     "control",
+			GRPCPort: 9998, // Different port from other tests
+		},
+	}
+
+	// Start control server
+	controlServer := grpc.NewControlServer(controlConfig, db)
+
+	// Start control server in background
+	go func() {
+		err := controlServer.Start()
+		if err != nil {
+			t.Logf("Control server error: %v", err)
+		}
+	}()
+
+	// Wait for server to start
+	time.Sleep(200 * time.Millisecond)
+
+	// Setup edge client
+	edgeConfig := &config.Config{
+		HubSpoke: config.HubSpokeConfig{
+			Mode:            "edge",
+			ControlEndpoint: "localhost:9998",
+			EdgeID:          "test-edge-streaming",
+			EdgeNamespace:   "test-namespace",
+			HeartbeatInterval: 100 * time.Millisecond, // Fast heartbeats for testing
+		},
+	}
+
+	edgeClient := grpc.NewSimpleEdgeClient(edgeConfig, "test", "test-hash", "test-time")
+
+	// Test configuration change callback
+	configUpdates := make(chan *pb.ConfigurationSnapshot, 5)
+	edgeClient.SetOnConfigChange(func(config *pb.ConfigurationSnapshot) {
+		configUpdates <- config
+	})
+
+	// Start edge client
+	err = edgeClient.Start()
+	require.NoError(t, err, "Edge client should start successfully")
+
+	// Verify streaming connection is established
+	assert.True(t, edgeClient.IsConnected())
+
+	// Wait for initial configuration
+	select {
+	case config := <-configUpdates:
+		assert.NotNil(t, config)
+		assert.NotEmpty(t, config.Version)
+		t.Logf("Received initial configuration version: %s", config.Version)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Should receive initial configuration within 2 seconds")
+	}
+
+	// Test full sync request
+	err = edgeClient.RequestFullSync()
+	assert.NoError(t, err, "Full sync should succeed")
+
+	// Verify configuration update received via stream
+	select {
+	case config := <-configUpdates:
+		assert.NotNil(t, config)
+		t.Logf("Received sync configuration version: %s", config.Version)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Should receive sync configuration within 2 seconds")
+	}
+
+	// Cleanup
+	edgeClient.Stop()
+	controlServer.Stop()
+}
+
+func TestSimpleEdgeClient_ErrorHandling(t *testing.T) {
+	// Test various error scenarios without starting actual servers
+	edgeConfig := &config.Config{
+		HubSpoke: config.HubSpokeConfig{
+			Mode:            "edge",
+			ControlEndpoint: "localhost:99999", // Non-existent port
+			EdgeID:          "test-edge-error",
+			EdgeNamespace:   "test",
+		},
+	}
+
+	edgeClient := grpc.NewSimpleEdgeClient(edgeConfig, "test", "test-hash", "test-time")
+
+	// Test connection failure
+	err := edgeClient.Start()
+	assert.Error(t, err, "Should fail to connect to non-existent server")
+	assert.Contains(t, err.Error(), "failed to connect to control server")
+
+	// Test token validation without connection
+	_, err = edgeClient.ValidateTokenOnDemand("test-token")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not connected to control instance")
+
+	// Test configuration retrieval without connection
+	config := edgeClient.GetCurrentConfiguration()
+	assert.Nil(t, config, "Should not have configuration when not connected")
+
+	// Test full sync without connection
+	err = edgeClient.RequestFullSync()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to request full sync")
+}
+
+// Note: Message handler tests are implemented in the grpc package unit tests
+// since they require access to unexported methods
