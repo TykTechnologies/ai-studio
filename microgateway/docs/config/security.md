@@ -28,6 +28,28 @@ ENCRYPTION_KEY=your-32-character-encryption-key!!
 ENCRYPTION_KEY=$(openssl rand -hex 16)  # 32 hex chars = 16 bytes
 ```
 
+### Hub-and-Spoke Encryption
+```bash
+# MICROGATEWAY_ENCRYPTION_KEY for gRPC communication security
+MICROGATEWAY_ENCRYPTION_KEY=your-32-character-key-for-grpc!!
+
+# ⚠️  SECURITY CRITICAL: This key encrypts API keys transmitted over gRPC
+# between AI Studio control instances and microgateway edge instances.
+# Without this key, API keys are transmitted in PLAINTEXT over gRPC.
+
+# Key requirements:
+# - Exactly 32 characters (256-bit AES-GCM)
+# - Must be the same on both control and edge instances
+# - Different from ENCRYPTION_KEY
+
+# Generate secure microgateway encryption key
+MICROGATEWAY_ENCRYPTION_KEY=$(openssl rand -hex 16)
+
+# Security warnings at startup if not configured:
+# 🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not configured!
+# API keys will be transmitted in plaintext over gRPC.
+```
+
 ### JWT Configuration
 ```bash
 # JWT token signing
@@ -375,11 +397,16 @@ TLS_MIN_VERSION=1.2
 
 JWT_SECRET=${JWT_SECRET}
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
+MICROGATEWAY_ENCRYPTION_KEY=${MICROGATEWAY_ENCRYPTION_KEY}  # NEW: Hub-spoke encryption
 BCRYPT_COST=12
 
 ENABLE_IP_WHITELIST=true
 ENABLE_RATE_LIMITING=true
 SECURITY_HEADERS_ENABLED=true
+
+# NEW: Plugin security
+PLUGIN_COMMAND_ALLOWLIST=/usr/bin,/usr/local/bin,python,docker
+PLUGIN_BLOCK_INTERNAL_URLS=true
 
 AUDIT_LOG_ENABLED=true
 LOG_SECURITY_EVENTS=true
@@ -561,6 +588,31 @@ fi
 ```
 
 ## Plugin Security
+
+### Plugin Command Validation
+```bash
+# Plugin command security validation (NEW)
+# Protects against RCE and SSRF attacks via malicious plugin commands
+
+# Optional: Allowlist permitted plugin command patterns
+PLUGIN_COMMAND_ALLOWLIST=/usr/bin,/usr/local/bin,python,node,docker
+
+# Optional: Block internal network access (default: warn only)
+PLUGIN_BLOCK_INTERNAL_URLS=false  # Set to true in production to block
+PLUGIN_BLOCK_INTERNAL_URLS=true   # Blocks grpc://127.0.0.1:8080, etc.
+
+# Security validations performed automatically:
+# ❌ BLOCKED: Path traversal attempts (../)
+# ⚠️  WARNED: Absolute paths outside standard directories
+# ⚠️  WARNED: Internal IP addresses (127.x, 192.168.x, 10.x)
+# ⚠️  WARNED: Commands not in allowlist (if configured)
+
+# Security warnings generated:
+# ⚠️  PLUGIN SECURITY WARNING: Plugin command uses absolute path outside standard directories
+# ⚠️  PLUGIN SECURITY WARNING: Plugin command may target internal network address
+# ⚠️  PLUGIN SECURITY WARNING: Plugin command not in PLUGIN_COMMAND_ALLOWLIST
+# ℹ️  PLUGIN INFO: No PLUGIN_COMMAND_ALLOWLIST configured. Set this environment variable to restrict plugin commands in production.
+```
 
 ### Plugin Verification
 ```bash

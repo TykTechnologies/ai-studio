@@ -2,9 +2,11 @@ package services
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -78,6 +80,11 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	}
 	if !isValidHookType(req.HookType) {
 		return nil, fmt.Errorf("invalid hook type: %s", req.HookType)
+	}
+
+	// Security validation for plugin command
+	if err := s.validatePluginCommand(req.Command); err != nil {
+		return nil, err
 	}
 
 	// Check if slug already exists
@@ -341,6 +348,81 @@ func isValidHookType(hookType string) bool {
 	}
 	for _, validType := range validTypes {
 		if hookType == validType {
+			return true
+		}
+	}
+	return false
+}
+
+// validatePluginCommand performs security validation on plugin commands
+func (s *PluginService) validatePluginCommand(command string) error {
+	// Get configuration from environment variables
+	allowlist := os.Getenv("PLUGIN_COMMAND_ALLOWLIST")
+	blockInternalURLs := os.Getenv("PLUGIN_BLOCK_INTERNAL_URLS") == "true"
+
+	// Check for path traversal attacks
+	if strings.Contains(command, "../") {
+		return fmt.Errorf("plugin command contains path traversal attempt (../): %s", command)
+	}
+
+	// Check for absolute paths outside allowed directories
+	if strings.HasPrefix(command, "/") && !strings.HasPrefix(command, "/usr/bin/") &&
+		!strings.HasPrefix(command, "/bin/") && !strings.HasPrefix(command, "/usr/local/bin/") {
+		log.Warn().
+			Str("command", command).
+			Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command uses absolute path outside standard directories. This may pose a security risk in production environments.")
+	}
+
+	// Check for internal network access (gRPC URLs)
+	if strings.HasPrefix(command, "grpc://") || strings.Contains(command, ":") {
+		// Extract potential URLs for validation
+		if s.containsInternalIP(command) {
+			if blockInternalURLs {
+				return fmt.Errorf("plugin command targets internal network address: %s", command)
+			} else {
+				log.Warn().
+					Str("command", command).
+					Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command may target internal network address (127.x.x.x, 192.168.x.x, 10.x.x.x). Set PLUGIN_BLOCK_INTERNAL_URLS=true to block this in production.")
+			}
+		}
+	}
+
+	// Check against allowlist if configured
+	if allowlist != "" {
+		allowed := strings.Split(allowlist, ",")
+		commandAllowed := false
+		for _, pattern := range allowed {
+			pattern = strings.TrimSpace(pattern)
+			if strings.Contains(command, pattern) || command == pattern {
+				commandAllowed = true
+				break
+			}
+		}
+		if !commandAllowed {
+			log.Warn().
+				Str("command", command).
+				Str("allowlist", allowlist).
+				Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command not in PLUGIN_COMMAND_ALLOWLIST. This command will be allowed but may pose security risks.")
+		}
+	} else {
+		log.Info().
+			Msg("ℹ️  PLUGIN INFO: No PLUGIN_COMMAND_ALLOWLIST configured. Set this environment variable to restrict plugin commands in production.")
+	}
+
+	return nil
+}
+
+// containsInternalIP checks if a command string contains internal IP addresses
+func (s *PluginService) containsInternalIP(command string) bool {
+	internalPatterns := []string{
+		"127.", "localhost", "::1",          // Loopback
+		"192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", // Private networks
+		"172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+		"172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
+	}
+
+	for _, pattern := range internalPatterns {
+		if strings.Contains(command, pattern) {
 			return true
 		}
 	}

@@ -11,6 +11,7 @@ Plugin system features:
 - **Hot Loading**: Dynamic plugin loading without service restart
 - **OCI Distribution**: Industry-standard plugin distribution via container registries
 - **Secure Execution**: Resource limits and sandboxing capabilities
+- **Command Validation**: Security validation prevents RCE and SSRF attacks
 
 ## Plugin Architecture
 
@@ -46,10 +47,11 @@ Handle data storage and analytics:
 ### Plugin Loading
 1. **Discovery**: Host discovers plugins via configuration
 2. **Download**: Download plugin binary (if using OCI distribution)
-3. **Verification**: Verify plugin signature and integrity
-4. **Launch**: Start plugin process with handshake protocol
-5. **Registration**: Register plugin hooks with the host
-6. **Ready**: Plugin ready to process requests
+3. **Security Validation**: Validate plugin command for security risks
+4. **Verification**: Verify plugin signature and integrity
+5. **Launch**: Start plugin process with handshake protocol
+6. **Registration**: Register plugin hooks with the host
+7. **Ready**: Plugin ready to process requests
 
 ### Plugin Execution
 1. **Hook Trigger**: Request triggers registered hook
@@ -366,11 +368,19 @@ import "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 - Implement plugin health checks
 
 ### Plugin Security
-- Minimize plugin privileges and resource usage
-- Validate all input data in plugins
-- Use secure communication channels
-- Regular security audits of plugin code
-- Keep plugins updated with security patches
+- **Command Validation**: Plugin commands are automatically validated for security risks
+  - Path traversal attacks (`../`) are blocked
+  - Internal network access generates warnings or can be blocked
+  - Commands outside allowlists generate security warnings
+- **Environment Configuration**: Configure security via environment variables
+  - `PLUGIN_COMMAND_ALLOWLIST`: Restrict commands to approved patterns
+  - `PLUGIN_BLOCK_INTERNAL_URLS=true`: Block internal network access
+- **Process Isolation**: Plugins run as separate processes for security
+- **Resource Limits**: Configure memory and CPU limits for plugins
+- **Input Validation**: Validate all input data in plugins
+- **Signature Verification**: Use signed plugins with integrity checks
+- **Regular Audits**: Perform security audits of plugin code
+- **Security Updates**: Keep plugins updated with security patches
 
 ---
 

@@ -83,6 +83,20 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 		edgeConnections: make(map[string]*EdgeInstanceConnection),
 	}
 
+	// Security check: Warn if MICROGATEWAY_ENCRYPTION_KEY is not configured
+	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		log.Warn().
+			Msg("🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not configured! API keys will be transmitted in plaintext over gRPC. Set a 32-character encryption key for production deployments.")
+	} else if len(encryptionKey) != 32 {
+		log.Warn().
+			Int("current_length", len(encryptionKey)).
+			Int("required_length", 32).
+			Msg("🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has incorrect length! Generate a 32-character encryption key for secure production operation.")
+	} else {
+		log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
+	}
+
 	// Initialize AI Studio's analytics system for processing edge pulse data
 	ctx := context.Background()
 	analytics.StartRecording(ctx, db)
@@ -1022,12 +1036,18 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	if encryptionKey == "" {
 		// Fallback to sending plaintext if no encryption key is configured
-		log.Warn().Msg("MICROGATEWAY_ENCRYPTION_KEY not set, sending plaintext API key")
+		log.Warn().
+			Str("function", "encryptForMicrogateway").
+			Msg("⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not set - sending plaintext API key over gRPC! This is unsafe for production environments.")
 		return plaintext, nil
 	}
 
 	if len(encryptionKey) != 32 {
-		log.Error().Int("key_length", len(encryptionKey)).Msg("MICROGATEWAY_ENCRYPTION_KEY must be exactly 32 bytes")
+		log.Error().
+			Int("key_length", len(encryptionKey)).
+			Int("required_length", 32).
+			Str("function", "encryptForMicrogateway").
+			Msg("⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has wrong length - falling back to plaintext API key transmission! Generate a 32-character key for production.")
 		return plaintext, nil // Fallback to plaintext
 	}
 

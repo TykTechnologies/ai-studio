@@ -310,20 +310,34 @@ These variables must be set for production:
 JWT_SECRET=must-be-32-characters-or-longer
 ENCRYPTION_KEY=must-be-exactly-32-characters!!
 
+# Hub-and-Spoke Security (required for hub-spoke deployments)
+MICROGATEWAY_ENCRYPTION_KEY=must-be-exactly-32-characters!!
+GRPC_AUTH_TOKEN=secure-random-token
+
+# Plugin Security (optional but recommended)
+PLUGIN_COMMAND_ALLOWLIST=/usr/bin,/usr/local/bin,python,docker
+PLUGIN_BLOCK_INTERNAL_URLS=true
+
 # Database (production)
 DATABASE_TYPE=postgres
 DATABASE_DSN=postgres://user:pass@host:port/db
-
-# Hub-and-Spoke (if used)
-GRPC_AUTH_TOKEN=secure-random-token
 ```
 
 ### Security Validation
 ```bash
-# Weak configuration warnings
+# Security configuration warnings
 Warning: Using default JWT secret. Change this in production!
 Warning: Using default encryption key. Change this in production!
 Warning: TLS not enabled. Enable TLS for production!
+
+# NEW: Hub-spoke security warnings
+🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not configured!
+⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not set - sending plaintext API key over gRPC!
+
+# NEW: Plugin security warnings
+⚠️  PLUGIN SECURITY WARNING: Plugin command uses absolute path outside standard directories
+⚠️  PLUGIN SECURITY WARNING: Plugin command may target internal network address
+ℹ️  PLUGIN INFO: No PLUGIN_COMMAND_ALLOWLIST configured
 
 # Configuration validation
 ./microgateway --validate-config
