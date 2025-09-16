@@ -266,19 +266,6 @@ type EdgeInstance struct {
 	UpdatedAt     time.Time
 }
 
-// ConfigurationChange represents a configuration change for propagation
-type ConfigurationChange struct {
-	ID                 uint           `gorm:"primaryKey"`
-	ChangeType         string         `gorm:"size:20;not null;index:idx_config_changes_type"` // CREATE, UPDATE, DELETE
-	EntityType         string         `gorm:"size:50;not null;index:idx_config_changes_type"` // LLM, APP, TOKEN, etc.
-	EntityID           uint           `gorm:"not null;index:idx_config_changes_type"`
-	EntityData         datatypes.JSON `gorm:"type:json"` // Complete serialized entity data
-	Namespace          string         `gorm:"not null;default:'';index:idx_config_changes_namespace"`
-	PropagatedToEdges  datatypes.JSON `gorm:"type:json"` // Array of edge_ids that received this change
-	Processed          bool           `gorm:"default:false;index:idx_config_changes_processed"`
-	CreatedAt          time.Time      `gorm:"index:idx_config_changes_namespace,idx_config_changes_processed"`
-}
 
 // TableName methods for new models
-func (EdgeInstance) TableName() string       { return "edge_instances" }
-func (ConfigurationChange) TableName() string { return "configuration_changes" }
+func (EdgeInstance) TableName() string { return "edge_instances" }

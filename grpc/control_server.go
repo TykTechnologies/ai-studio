@@ -53,12 +53,7 @@ type ControlServer struct {
 	// Edge instance management
 	edgeConnections map[string]*EdgeInstanceConnection
 	edgeMutex       sync.RWMutex
-	
-	// Change propagation
-	changeChan chan *pb.ConfigurationChange
-	ctx        context.Context
-	cancel     context.CancelFunc
-	
+
 	// gRPC server
 	grpcServer *grpc.Server
 
@@ -81,18 +76,14 @@ type Config struct {
 
 // NewControlServer creates a new control server for AI Studio
 func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	server := &ControlServer{
 		config:          cfg,
 		db:              db,
 		edgeConnections: make(map[string]*EdgeInstanceConnection),
-		changeChan:      make(chan *pb.ConfigurationChange, 100),
-		ctx:             ctx,
-		cancel:          cancel,
 	}
 
 	// Initialize AI Studio's analytics system for processing edge pulse data
+	ctx := context.Background()
 	analytics.StartRecording(ctx, db)
 	log.Info().Msg("AI Studio analytics system initialized for control server")
 
@@ -133,10 +124,7 @@ func (s *ControlServer) Start() error {
 	// Create gRPC server
 	s.grpcServer = grpc.NewServer(opts...)
 	pb.RegisterConfigurationSyncServiceServer(s.grpcServer, s)
-	
-	// Start change propagation worker
-	go s.changePropagationWorker()
-	
+
 	log.Info().Str("address", addr).Msg("Starting AI Studio gRPC control server")
 	
 	// Start serving
@@ -155,8 +143,6 @@ func (s *ControlServer) Stop() {
 	if s.cleanupTicker != nil {
 		s.cleanupTicker.Stop()
 	}
-
-	s.cancel()
 
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
@@ -1014,56 +1000,6 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	return snapshot, nil
 }
 
-// changePropagationWorker handles configuration change propagation
-func (s *ControlServer) changePropagationWorker() {
-	for {
-		select {
-		case change := <-s.changeChan:
-			s.propagateChange(change)
-		case <-s.ctx.Done():
-			return
-		}
-	}
-}
-
-// propagateChange sends a configuration change to relevant edge instances
-func (s *ControlServer) propagateChange(change *pb.ConfigurationChange) {
-	s.edgeMutex.RLock()
-	defer s.edgeMutex.RUnlock()
-	
-	for edgeID, edge := range s.edgeConnections {
-		// Check if edge should receive this change based on namespace
-		if change.Namespace == "" || change.Namespace == edge.Namespace {
-			if edge.Stream != nil && edge.Status == "connected" {
-				message := &pb.ControlMessage{
-					Message: &pb.ControlMessage_Change{
-						Change: change,
-					},
-				}
-				
-				if err := edge.Stream.Send(message); err != nil {
-					log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to send change to edge")
-					edge.Status = "unhealthy"
-				}
-			}
-		}
-	}
-}
-
-// PropagateChange queues a configuration change for propagation
-func (s *ControlServer) PropagateChange(change *pb.ConfigurationChange) {
-	select {
-	case s.changeChan <- change:
-		log.Debug().
-			Str("type", change.ChangeType.String()).
-			Str("entity_type", change.EntityType.String()).
-			Uint32("entity_id", change.EntityId).
-			Str("namespace", change.Namespace).
-			Msg("Queued configuration change for propagation")
-	default:
-		log.Warn().Msg("Change propagation channel full, dropping change")
-	}
-}
 
 // encryptForMicrogateway encrypts a plaintext string using microgateway's expected AES-GCM format
 func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error) {
@@ -1216,13 +1152,8 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 func (s *ControlServer) startCleanupRoutine() {
 	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
 	go func() {
-		for {
-			select {
-			case <-s.cleanupTicker.C:
-				s.cleanupStaleConnections()
-			case <-s.ctx.Done():
-				return
-			}
+		for range s.cleanupTicker.C {
+			s.cleanupStaleConnections()
 		}
 	}()
 	log.Info().Msg("Started edge connection cleanup routine")

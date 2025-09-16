@@ -84,7 +84,6 @@ func Migrate(db *gorm.DB) error {
 		&LLMPlugin{},
 		// Hub-and-Spoke models
 		&EdgeInstance{},
-		&ConfigurationChange{},
 	)
 }
 

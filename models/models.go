@@ -34,9 +34,8 @@ func InitModels(db *gorm.DB) error {
 		&AccessToken{},
 		&PendingOAuthRequest{},
 		// Hub-and-Spoke Models
-		&EdgeInstance{},        // Edge instance tracking
-		&ConfigurationChange{}, // Configuration change tracking
-		&Plugin{},              // Plugin configurations
+		&EdgeInstance{}, // Edge instance tracking
+		&Plugin{},       // Plugin configurations
 		&LLMPlugin{},           // LLM-Plugin associations
 	); err != nil {
 		return err

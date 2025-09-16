@@ -143,17 +143,17 @@ WHERE namespace = '' OR namespace = @edge_namespace;
 -- Specific namespaces only visible to matching edges
 ```
 
-### Change Detection
-```go
-// Control detects configuration changes
-type ConfigurationChange struct {
-    ChangeType  string    // CREATE, UPDATE, DELETE
-    EntityType  string    // LLM, APP, TOKEN
-    EntityID    uint      // Entity identifier
-    EntityData  interface{} // Complete entity data
-    Namespace   string    // Entity namespace
-    Timestamp   time.Time // Change timestamp
-}
+### Explicit Configuration Push
+```bash
+# Administrators trigger configuration pushes explicitly
+mgw namespace reload tenant-a    # Push to all edges in namespace
+mgw edge reload edge-1 edge-2   # Push to specific edges
+
+# Real-time status monitoring
+mgw namespace reload tenant-a --watch
+
+# API-based push operations
+curl -X POST /api/v1/namespace/reload -d '{"namespace": "tenant-a"}'
 ```
 
 ## Edge Management
@@ -590,36 +590,42 @@ Edge global receives: LLM 1 (if namespace="")
 # Cache persistence ensures continued operation
 ```
 
-## Real-Time Configuration Updates
+## Explicit Configuration Push System
 
-### Change Propagation Process
+### Push Operation Process
 ```
-1. Administrator updates configuration via control API
-2. Control detects configuration change
-3. Control identifies affected namespaces
-4. Control finds edges matching namespaces
-5. Control streams change to relevant edges
-6. Edge receives change and updates local cache
-7. Edge applies configuration change immediately
+1. Administrator modifies configuration via AI Studio GUI/API
+2. Administrator explicitly triggers push via CLI, API, or GUI
+3. ReloadCoordinator identifies target edges by namespace
+4. Control sends reload requests to target edges via gRPC
+5. Edges fetch fresh configuration from control server
+6. Edges update local SQLite cache and apply changes
+7. Real-time status tracking reports progress back to administrator
 ```
 
-### Change Types
+### Push Triggers
 ```bash
-# Supported configuration changes:
-# - LLM create/update/delete
-# - Application create/update/delete
-# - Token create/revoke
-# - Model price updates
-# - Plugin configuration changes
+# CLI-based push operations
+mgw namespace reload tenant-a              # Push to namespace
+mgw edge reload edge-1 edge-2             # Push to specific edges
+mgw namespace reload tenant-a --watch     # Monitor progress
+
+# API-based push operations
+POST /api/v1/namespace/reload {"namespace": "tenant-a"}
+GET  /api/v1/namespace/reload/{operation-id}/status
+
+# GUI-based push operations
+# Available in AI Studio edge management interface
 ```
 
-### Change Batching
+### Supported Configuration Types
 ```bash
-# Control batches rapid changes for efficiency
-CONFIG_BATCH_WINDOW=5s     # Batch changes within 5 seconds
-CONFIG_MAX_BATCH_SIZE=100  # Maximum changes per batch
-
-# Reduces network traffic and edge processing load
+# All configuration entities support push-based updates:
+# - LLM configurations (endpoints, models, budgets)
+# - Application settings (budgets, rate limits)
+# - Authentication tokens and credentials
+# - Model pricing configurations
+# - Plugin and filter configurations
 ```
 
 ## Monitoring and Alerting
@@ -632,8 +638,8 @@ curl http://control:8080/metrics | grep edge_
 # Key metrics:
 # - edge_connections_total
 # - edge_connections_active
-# - config_propagations_total
-# - config_propagation_duration_seconds
+# - edge_reload_operations_total
+# - edge_reload_operation_duration_seconds
 # - edge_heartbeat_failures_total
 ```
 

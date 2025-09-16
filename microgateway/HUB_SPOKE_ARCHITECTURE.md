@@ -49,11 +49,11 @@ Namespaces enable multi-tenant configuration isolation:
 - Authentication via bearer tokens
 - Optional TLS encryption
 
-#### Change Propagation
-- Real-time propagation of configuration changes
-- Namespace-based filtering of propagated changes
-- Reliable delivery with retry mechanisms
-- Fallback to full synchronization if needed
+#### Configuration Push System
+- Explicit push-based configuration distribution via CLI, API, or GUI
+- Namespace-based filtering ensures edges only receive relevant configurations
+- ReloadCoordinator orchestrates distributed push operations with real-time status tracking
+- Safe, administrator-controlled configuration updates prevent unintended production changes
 
 ## Configuration
 
