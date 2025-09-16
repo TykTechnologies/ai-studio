@@ -122,7 +122,8 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | `GRPC_TLS_ENABLED` | bool | `false` | Enable TLS for gRPC server |
 | `GRPC_TLS_CERT_PATH` | string | - | Path to gRPC TLS certificate |
 | `GRPC_TLS_KEY_PATH` | string | - | Path to gRPC TLS private key |
-| `GRPC_AUTH_TOKEN` | string | - | Authentication token for edges |
+| `GRPC_AUTH_TOKEN` | string | - | Current authentication token for edges |
+| `GRPC_AUTH_TOKEN_NEXT` | string | - | Next authentication token (for zero-downtime rotation) |
 
 ### Edge Instance Configuration
 
@@ -161,6 +162,32 @@ EDGE_NAMESPACE="tenant-acme"
 # Hierarchical namespace
 EDGE_NAMESPACE="acme-production-us-west"
 ```
+
+### Token Rotation Configuration
+
+The microgateway supports zero-downtime token rotation using dual-token mode:
+
+```bash
+# Step 1: Enable dual-token mode on control instance
+GRPC_AUTH_TOKEN="current-secure-token"
+GRPC_AUTH_TOKEN_NEXT="new-secure-token"
+# Control server now accepts both tokens
+
+# Step 2: Update edge instances with new token
+EDGE_AUTH_TOKEN="new-secure-token"
+# Edges reconnect with new token
+
+# Step 3: Complete rotation (after all edges updated)
+GRPC_AUTH_TOKEN="new-secure-token"
+# Remove GRPC_AUTH_TOKEN_NEXT
+# Control server now only accepts new token
+```
+
+**Rotation Benefits:**
+- ✅ Zero downtime during token updates
+- ✅ Works with hundreds of edge instances
+- ✅ Kubernetes-compatible with secrets
+- ✅ Automatic rollback if needed
 
 ## Security Configuration
 

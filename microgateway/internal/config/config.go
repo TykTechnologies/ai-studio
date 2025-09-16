@@ -110,6 +110,7 @@ type HubSpokeConfig struct {
 	
 	// Authentication
 	ClientToken       string        `env:"EDGE_AUTH_TOKEN" envDefault:""`
+	NextAuthToken     string        `env:"GRPC_AUTH_TOKEN_NEXT" envDefault:""`
 	ClientTLSEnabled  bool          `env:"EDGE_TLS_ENABLED" envDefault:"false"`
 	ClientTLSCertPath string        `env:"EDGE_TLS_CERT_PATH"`
 	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
@@ -342,6 +343,9 @@ func (c *Config) validateHubSpokeConfig() error {
 		}
 		if c.HubSpoke.EdgeID == "" {
 			return fmt.Errorf("edge ID is required for edge mode")
+		}
+		if c.HubSpoke.ClientToken == "" {
+			return fmt.Errorf("edge authentication token is required for edge mode (EDGE_AUTH_TOKEN)")
 		}
 	}
 	

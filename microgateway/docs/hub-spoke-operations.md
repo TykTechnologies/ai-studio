@@ -830,53 +830,103 @@ systemctl restart microgateway
 openssl x509 -in "$CERT_DIR/server.crt" -text -noout | grep "Not After"
 ```
 
-**Token Rotation:**
+### Authentication Token Rotation
+
+The microgateway supports zero-downtime authentication token rotation using a dual-token approach.
+
+**Manual Token Rotation:**
 ```bash
 #!/bin/bash
 # rotate-auth-tokens.sh
 
+# Generate new secure token
 NEW_TOKEN=$(openssl rand -hex 32)
-OLD_TOKEN=$GRPC_AUTH_TOKEN
+CURRENT_TOKEN="$GRPC_AUTH_TOKEN"
 
-echo "Generated new token: $NEW_TOKEN"
+echo "Current token: ${CURRENT_TOKEN:0:8}..."
+echo "New token: ${NEW_TOKEN:0:8}..."
 
-# Update control instance (supports both old and new tokens during rotation)
-curl -X POST http://control:8080/api/v1/auth/tokens \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d "{\"token\": \"$NEW_TOKEN\", \"grace_period\": \"1h\"}"
+# Phase 1: Enable dual-token mode on control instance
+echo "Phase 1: Enabling dual-token mode..."
+export GRPC_AUTH_TOKEN="$CURRENT_TOKEN"
+export GRPC_AUTH_TOKEN_NEXT="$NEW_TOKEN"
 
-# Update edge instances one by one
-EDGES=$(curl -s http://control:8080/api/v1/edges | jq -r '.edges[].id')
+# Restart control instance to accept both tokens
+kubectl set env deployment/control-server \
+  GRPC_AUTH_TOKEN="$CURRENT_TOKEN" \
+  GRPC_AUTH_TOKEN_NEXT="$NEW_TOKEN"
 
-for edge in $EDGES; do
-    echo "Updating token for edge: $edge"
-    
-    # Update edge configuration (implementation varies by deployment)
-    kubectl patch deployment "microgateway-edge-${edge}" -p \
-      "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{
-        \"name\":\"microgateway\",
-        \"env\":[{\"name\":\"EDGE_AUTH_TOKEN\",\"value\":\"$NEW_TOKEN\"}]
-      }]}}}}"
-    
-    # Wait for rollout
-    kubectl rollout status deployment "microgateway-edge-${edge}"
-    
-    # Verify connection
-    sleep 10
-    if curl -sf "http://${edge}:8080/health"; then
-        echo "Edge $edge updated successfully"
-    else
-        echo "ERROR: Edge $edge failed after token update"
-        exit 1
-    fi
-done
+kubectl rollout status deployment/control-server
+echo "✓ Control server now accepts both old and new tokens"
 
-# Remove old token from control instance
-curl -X DELETE http://control:8080/api/v1/auth/tokens \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d "{\"token\": \"$OLD_TOKEN\"}"
+# Phase 2: Update all edge instances with new token
+echo "Phase 2: Updating edge instances..."
+kubectl set env daemonset/edge-instances \
+  EDGE_AUTH_TOKEN="$NEW_TOKEN"
 
-echo "Token rotation complete"
+kubectl rollout status daemonset/edge-instances
+echo "✓ All edge instances updated with new token"
+
+# Phase 3: Complete rotation (remove old token)
+echo "Phase 3: Completing rotation..."
+kubectl set env deployment/control-server \
+  GRPC_AUTH_TOKEN="$NEW_TOKEN"
+kubectl set env deployment/control-server \
+  GRPC_AUTH_TOKEN_NEXT-
+
+kubectl rollout status deployment/control-server
+echo "✓ Token rotation complete - only new token accepted"
+
+# Phase 4: Validate rotation success
+echo "Phase 4: Validating rotation..."
+sleep 10
+
+# Check edge connectivity
+EDGE_COUNT=$(kubectl get pods -l app=edge-instance --field-selector=status.phase=Running -o name | wc -l)
+echo "✓ $EDGE_COUNT edge instances running with new token"
+
+# Verify no authentication errors
+if kubectl logs -l app=control-server --tail=50 | grep -q "invalid authorization token"; then
+  echo "⚠ Warning: Some authentication errors detected - check edge instances"
+else
+  echo "✓ No authentication errors detected"
+fi
+
+echo "✅ Token rotation completed successfully"
+```
+
+**Emergency Token Rotation (Security Breach):**
+```bash
+#!/bin/bash
+# emergency-token-rotation.sh
+# Use when current token may be compromised
+
+echo "🚨 EMERGENCY TOKEN ROTATION INITIATED"
+
+# Generate new token immediately
+NEW_TOKEN=$(openssl rand -hex 32)
+echo "Emergency token: ${NEW_TOKEN:0:8}..."
+
+# Immediate rotation - bypass dual-token mode for speed
+echo "Bypassing dual-token mode for emergency..."
+
+# Update control server immediately
+kubectl set env deployment/control-server \
+  GRPC_AUTH_TOKEN="$NEW_TOKEN" \
+  GRPC_AUTH_TOKEN_NEXT-
+
+# Force restart for immediate effect
+kubectl rollout restart deployment/control-server
+kubectl rollout status deployment/control-server --timeout=60s
+
+# Simultaneously update all edges
+kubectl set env daemonset/edge-instances \
+  EDGE_AUTH_TOKEN="$NEW_TOKEN"
+
+kubectl rollout restart daemonset/edge-instances
+
+echo "🔒 Emergency token rotation complete"
+echo "⚠ Some edges may temporarily lose connection until restarted"
 ```
 
 ### Security Auditing

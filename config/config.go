@@ -48,6 +48,7 @@ type AppConf struct {
 	GRPCTLSCertPath    string
 	GRPCTLSKeyPath     string
 	GRPCAuthToken      string
+	GRPCNextAuthToken  string
 }
 
 // QueueConfig holds configuration for message queues
@@ -328,6 +329,7 @@ func getConfigFromEnv() *AppConf {
 	conf.GRPCTLSCertPath = os.Getenv("GRPC_TLS_CERT_PATH")
 	conf.GRPCTLSKeyPath = os.Getenv("GRPC_TLS_KEY_PATH")
 	conf.GRPCAuthToken = os.Getenv("GRPC_AUTH_TOKEN")
+	conf.GRPCNextAuthToken = os.Getenv("GRPC_AUTH_TOKEN_NEXT")
 
 	return conf
 }

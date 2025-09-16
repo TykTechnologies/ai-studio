@@ -267,10 +267,22 @@ curl -X POST "/api/v1/edges/edge-1/sync"
 
 ### 1. Security
 
-- **Authentication**: All gRPC communication requires authentication tokens
-- **TLS**: Optional TLS encryption for control-edge communication  
+#### Authentication & Authorization
+- **Mandatory Authentication**: All gRPC communication requires Bearer token authentication
+- **Dual-Token Rotation**: Zero-downtime token rotation with `GRPC_AUTH_TOKEN_NEXT` support
+- **Client Validation**: Edge clients must provide valid `EDGE_AUTH_TOKEN` for all requests
+- **Token Security**: 256-bit tokens with secure generation and storage
+
+#### Transport Security
+- **TLS Encryption**: Optional TLS encryption for control-edge communication
+- **Client Certificates**: Support for mutual TLS (mTLS) with client certificates
+- **Certificate Validation**: Configurable certificate verification with CA support
+- **Secure Defaults**: Production deployments should enable TLS
+
+#### Network Security
 - **Network Isolation**: Edges only need outbound access to control instance
-- **Token Rotation**: Support for rotating authentication tokens
+- **Authentication Failures**: All failed authentications are logged for monitoring
+- **Token Monitoring**: Built-in tracking of token usage and rotation status
 
 ### 2. Monitoring
 

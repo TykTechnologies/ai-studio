@@ -160,12 +160,13 @@ func main() {
 	var reloadCoordinator *services.ReloadCoordinator
 	if appConf.GatewayMode == "control" {
 		grpcConfig := &grpc.Config{
-			GRPCPort:    appConf.GRPCPort,
-			GRPCHost:    appConf.GRPCHost,
-			TLSEnabled:  appConf.GRPCTLSEnabled,
-			TLSCertPath: appConf.GRPCTLSCertPath,
-			TLSKeyPath:  appConf.GRPCTLSKeyPath,
-			AuthToken:   appConf.GRPCAuthToken,
+			GRPCPort:      appConf.GRPCPort,
+			GRPCHost:      appConf.GRPCHost,
+			TLSEnabled:    appConf.GRPCTLSEnabled,
+			TLSCertPath:   appConf.GRPCTLSCertPath,
+			TLSKeyPath:    appConf.GRPCTLSKeyPath,
+			AuthToken:     appConf.GRPCAuthToken,
+			NextAuthToken: appConf.GRPCNextAuthToken,
 		}
 		
 		controlServer = grpc.NewControlServer(grpcConfig, db)

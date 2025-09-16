@@ -242,13 +242,15 @@ EDGE_ID=edge-tenant-abc-region-1
 Generate secure authentication tokens:
 
 ```bash
-# Generate random token
+# Generate random token (recommended method)
 openssl rand -hex 32
 
-# Or use dedicated tools
+# Alternative methods
 uuidgen
 head -c 32 /dev/urandom | base64
 ```
+
+#### Basic Authentication Setup
 
 **Control instance:**
 ```bash
@@ -259,6 +261,41 @@ GRPC_AUTH_TOKEN=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
 ```bash
 EDGE_AUTH_TOKEN=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
 ```
+
+#### Zero-Downtime Token Rotation
+
+For production environments, use dual-token rotation to update authentication tokens without service interruption:
+
+**Phase 1 - Enable dual-token mode (Control instance):**
+```bash
+# Current production token
+GRPC_AUTH_TOKEN=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
+
+# New token for rotation
+GRPC_AUTH_TOKEN_NEXT=f9e8d7c6b5a49382716051948372615038472950173846281739504827394857
+```
+
+**Phase 2 - Update edges with new token:**
+```bash
+# Update all edge instances
+EDGE_AUTH_TOKEN=f9e8d7c6b5a49382716051948372615038472950173846281739504827394857
+```
+
+**Phase 3 - Complete rotation (Control instance):**
+```bash
+# Promote new token to primary
+GRPC_AUTH_TOKEN=f9e8d7c6b5a49382716051948372615038472950173846281739504827394857
+
+# Remove rotation token (unset GRPC_AUTH_TOKEN_NEXT)
+```
+
+#### Security Best Practices
+
+- ✅ **Use strong tokens**: Minimum 32 bytes of random data
+- ✅ **Rotate regularly**: Rotate tokens every 30-90 days
+- ✅ **Secure storage**: Store tokens in secrets management systems
+- ✅ **Monitor access**: Log authentication failures and anomalies
+- ✅ **Emergency rotation**: Have procedures for immediate token rotation
 
 ### Network Security
 

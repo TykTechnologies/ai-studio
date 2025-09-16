@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"math"
 	"math/rand"
@@ -13,8 +14,10 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -116,8 +119,9 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 		},
 	}
 
-	// Register with control
-	resp, err := c.client.RegisterEdge(ctx, req)
+	// Register with control (with authentication)
+	authCtx := c.createAuthContext(ctx)
+	resp, err := c.client.RegisterEdge(authCtx, req)
 	if err != nil {
 		return fmt.Errorf("registration failed: %w", err)
 	}
@@ -186,8 +190,9 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
 	}
 
-	// Call control instance
-	resp, err := c.client.ValidateToken(ctx, req)
+	// Call control instance (with authentication)
+	authCtx := c.createAuthContext(ctx)
+	resp, err := c.client.ValidateToken(authCtx, req)
 	if err != nil {
 		log.Info().Err(err).Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: token validation gRPC call failed")
 		return nil, fmt.Errorf("token validation failed: %w", err)
@@ -232,7 +237,8 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
 	}
 
-	resp, err := c.client.GetFullConfiguration(ctx, req)
+	authCtx := c.createAuthContext(ctx)
+	resp, err := c.client.GetFullConfiguration(authCtx, req)
 	if err != nil {
 		return fmt.Errorf("failed to request full sync: %w", err)
 	}
@@ -260,8 +266,9 @@ func (c *SimpleEdgeClient) establishStream() error {
 	c.streamCtx = ctx
 	c.streamCancel = cancel
 
-	// Start streaming
-	stream, err := c.client.SubscribeToChanges(ctx)
+	// Start streaming (with authentication)
+	authCtx := c.createAuthContext(ctx)
+	stream, err := c.client.SubscribeToChanges(authCtx)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("failed to start streaming: %w", err)
@@ -788,8 +795,33 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 
 	// Setup dial options
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepaliveParams),
+	}
+
+	// Configure transport credentials (TLS or insecure)
+	if c.config.HubSpoke.ClientTLSEnabled {
+		var tlsConfig *tls.Config
+
+		if c.config.HubSpoke.SkipTLSVerify {
+			tlsConfig = &tls.Config{InsecureSkipVerify: true}
+		} else {
+			tlsConfig = &tls.Config{}
+		}
+
+		// Load client certificates if provided
+		if c.config.HubSpoke.ClientTLSCertPath != "" && c.config.HubSpoke.ClientTLSKeyPath != "" {
+			cert, err := tls.LoadX509KeyPair(c.config.HubSpoke.ClientTLSCertPath, c.config.HubSpoke.ClientTLSKeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificates: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		log.Info().Bool("skip_verify", c.config.HubSpoke.SkipTLSVerify).Msg("Using TLS credentials for gRPC connection")
+	} else {
+		log.Warn().Msg("Using insecure credentials for gRPC connection - not recommended for production")
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
 	// Dial with keepalive settings
@@ -799,4 +831,19 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 	}
 
 	return conn, nil
+}
+
+// createAuthContext creates a context with authentication metadata
+func (c *SimpleEdgeClient) createAuthContext(ctx context.Context) context.Context {
+	if c.config.HubSpoke.ClientToken == "" {
+		log.Warn().Msg("No authentication token configured for edge client - requests may be rejected")
+		return ctx
+	}
+
+	// Add Bearer token to metadata
+	md := metadata.New(map[string]string{
+		"authorization": "Bearer " + c.config.HubSpoke.ClientToken,
+	})
+
+	return metadata.NewOutgoingContext(ctx, md)
 }

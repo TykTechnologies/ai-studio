@@ -180,29 +180,39 @@ func (s *ControlServer) streamAuthInterceptor(srv interface{}, stream grpc.Serve
 	return handler(srv, stream)
 }
 
-// authenticate checks the authentication token
+// authenticate checks the authentication token (supports dual-token rotation)
 func (s *ControlServer) authenticate(ctx context.Context) error {
-	if s.config.HubSpoke.AuthToken == "" {
-		// No authentication required
+	// If no auth tokens configured, allow connection
+	if s.config.HubSpoke.AuthToken == "" && s.config.HubSpoke.NextAuthToken == "" {
+		log.Warn().Msg("No authentication tokens configured - allowing unauthenticated access")
 		return nil
 	}
-	
+
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "missing metadata")
 	}
-	
+
 	tokens := md.Get("authorization")
 	if len(tokens) == 0 {
 		return status.Error(codes.Unauthenticated, "missing authorization token")
 	}
-	
+
 	token := tokens[0]
-	if token != "Bearer "+s.config.HubSpoke.AuthToken {
-		return status.Error(codes.Unauthenticated, "invalid authorization token")
+
+	// Check current token
+	if s.config.HubSpoke.AuthToken != "" && token == "Bearer "+s.config.HubSpoke.AuthToken {
+		return nil
 	}
-	
-	return nil
+
+	// Check next token (for rotation)
+	if s.config.HubSpoke.NextAuthToken != "" && token == "Bearer "+s.config.HubSpoke.NextAuthToken {
+		log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
+		return nil
+	}
+
+	log.Warn().Msg("Authentication failed: invalid authorization token")
+	return status.Error(codes.Unauthenticated, "invalid authorization token")
 }
 
 // RegisterEdge handles edge instance registration

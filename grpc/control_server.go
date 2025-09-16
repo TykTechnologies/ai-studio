@@ -72,6 +72,7 @@ type Config struct {
 	TLSCertPath    string
 	TLSKeyPath     string
 	AuthToken      string
+	NextAuthToken  string
 }
 
 // NewControlServer creates a new control server for AI Studio
@@ -673,29 +674,39 @@ func (s *ControlServer) streamAuthInterceptor(srv interface{}, stream grpc.Serve
 	return handler(srv, stream)
 }
 
-// authenticate checks the authentication token
+// authenticate checks the authentication token (supports dual-token rotation)
 func (s *ControlServer) authenticate(ctx context.Context) error {
-	if s.config.AuthToken == "" {
-		// No authentication required
+	// If no auth tokens configured, allow connection
+	if s.config.AuthToken == "" && s.config.NextAuthToken == "" {
+		log.Warn().Msg("No authentication tokens configured - allowing unauthenticated access")
 		return nil
 	}
-	
+
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "missing metadata")
 	}
-	
+
 	tokens := md.Get("authorization")
 	if len(tokens) == 0 {
 		return status.Error(codes.Unauthenticated, "missing authorization token")
 	}
-	
+
 	token := tokens[0]
-	if token != "Bearer "+s.config.AuthToken {
-		return status.Error(codes.Unauthenticated, "invalid authorization token")
+
+	// Check current token
+	if s.config.AuthToken != "" && token == "Bearer "+s.config.AuthToken {
+		return nil
 	}
-	
-	return nil
+
+	// Check next token (for rotation)
+	if s.config.NextAuthToken != "" && token == "Bearer "+s.config.NextAuthToken {
+		log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
+		return nil
+	}
+
+	log.Warn().Msg("Authentication failed: invalid authorization token")
+	return status.Error(codes.Unauthenticated, "invalid authorization token")
 }
 
 // getConfigurationSnapshot generates a complete configuration snapshot for an edge namespace
