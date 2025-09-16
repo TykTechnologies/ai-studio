@@ -21,5 +21,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - uses: probelabs/visor@v0.1.12
+        with:
+          app-id: ${{ secrets.PROBE_APP_ID }}
+          private-key: ${{ secrets.PROBE_APP_PRIVATE_KEY }}
+          installation-id: ${{ secrets.PROBE_APP_INSTALLATION_ID }}
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
