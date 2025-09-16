@@ -32,6 +32,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// DEFAULT_ENCRYPTION_KEY is used when MICROGATEWAY_ENCRYPTION_KEY is not set
+// CRITICAL SECURITY WARNING: This MUST be changed in production!
+const DEFAULT_ENCRYPTION_KEY = "DEFAULT_INSECURE_KEY_CHANGE_ME!!"
+
 // EdgeInstance represents an active edge instance connection
 type EdgeInstanceConnection struct {
 	EdgeID        string
@@ -54,8 +58,9 @@ type ControlServer struct {
 	config *Config
 	
 	// Edge instance management
-	edgeConnections map[string]*EdgeInstanceConnection
-	edgeMutex       sync.RWMutex
+	edgeConnections    map[string]*EdgeInstanceConnection
+	edgeMutex         sync.RWMutex
+	maxConcurrentStreams int // Maximum number of concurrent gRPC streams
 
 	// gRPC server
 	grpcServer *grpc.Server
@@ -69,33 +74,47 @@ type ControlServer struct {
 
 // Config holds the control server configuration
 type Config struct {
-	GRPCPort       int
-	GRPCHost       string
-	TLSEnabled     bool
-	TLSCertPath    string
-	TLSKeyPath     string
-	AuthToken      string
-	NextAuthToken  string
+	GRPCPort             int
+	GRPCHost             string
+	TLSEnabled           bool
+	TLSCertPath          string
+	TLSKeyPath           string
+	AuthToken            string
+	NextAuthToken        string
+	MaxConcurrentStreams int // Maximum number of concurrent gRPC streams (default 1000)
 }
 
 // NewControlServer creates a new control server for AI Studio
 func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
+	// Set default connection limit if not specified
+	maxStreams := cfg.MaxConcurrentStreams
+	if maxStreams <= 0 {
+		maxStreams = 1000 // Sensible default
+	}
+
 	server := &ControlServer{
-		config:          cfg,
-		db:              db,
-		edgeConnections: make(map[string]*EdgeInstanceConnection),
+		config:               cfg,
+		db:                   db,
+		edgeConnections:      make(map[string]*EdgeInstanceConnection),
+		maxConcurrentStreams: maxStreams,
 	}
 
 	// Security check: Warn if MICROGATEWAY_ENCRYPTION_KEY is not configured
 	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	if encryptionKey == "" {
-		log.Warn().
-			Msg("🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not configured! API keys will be transmitted in plaintext over gRPC. Set a 32-character encryption key for production deployments.")
+		log.Error().
+			Str("default_key_prefix", DEFAULT_ENCRYPTION_KEY[:8]+"...").
+			Msg("🚨 CRITICAL SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not configured! Using DEFAULT INSECURE KEY. This MUST be changed for production deployments!")
+		log.Error().
+			Msg("🚨 SET MICROGATEWAY_ENCRYPTION_KEY to a secure 32-character random key immediately!")
 	} else if len(encryptionKey) != 32 {
 		log.Warn().
 			Int("current_length", len(encryptionKey)).
 			Int("required_length", 32).
 			Msg("🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has incorrect length! Generate a 32-character encryption key for secure production operation.")
+	} else if encryptionKey == DEFAULT_ENCRYPTION_KEY {
+		log.Error().
+			Msg("🚨 CRITICAL SECURITY WARNING: Using DEFAULT INSECURE encryption key! This MUST be changed for production deployments!")
 	} else {
 		log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
 	}
@@ -281,6 +300,19 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 
 // SubscribeToChanges handles bidirectional streaming for real-time updates
 func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_SubscribeToChangesServer) error {
+	// Check concurrent stream limits to prevent DoS attacks
+	s.edgeMutex.RLock()
+	currentConnections := len(s.edgeConnections)
+	s.edgeMutex.RUnlock()
+
+	if currentConnections >= s.maxConcurrentStreams {
+		log.Warn().
+			Int("current_connections", currentConnections).
+			Int("max_concurrent_streams", s.maxConcurrentStreams).
+			Msg("🚨 SECURITY: Maximum concurrent streams exceeded - rejecting new connection")
+		return status.Error(codes.ResourceExhausted, "maximum concurrent streams exceeded")
+	}
+
 	var edgeID string
 	var edgeConnection *EdgeInstanceConnection
 	
@@ -697,10 +729,10 @@ func (s *ControlServer) streamAuthInterceptor(srv interface{}, stream grpc.Serve
 
 // authenticate checks the authentication token (supports dual-token rotation)
 func (s *ControlServer) authenticate(ctx context.Context) error {
-	// If no auth tokens configured, allow connection
+	// SECURITY: Fail-closed design - reject connections if no auth tokens configured
 	if s.config.AuthToken == "" && s.config.NextAuthToken == "" {
-		log.Warn().Msg("No authentication tokens configured - allowing unauthenticated access")
-		return nil
+		log.Error().Msg("🔒 SECURITY: No authentication tokens configured - rejecting connection")
+		return status.Error(codes.Unauthenticated, "authentication required but no tokens configured")
 	}
 
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -1018,20 +1050,23 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 	// Get microgateway encryption key from environment
 	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	if encryptionKey == "" {
-		// Fallback to sending plaintext if no encryption key is configured
+		// Use default key instead of plaintext to ensure encryption is always used
+		encryptionKey = DEFAULT_ENCRYPTION_KEY
 		log.Warn().
 			Str("function", "encryptForMicrogateway").
-			Msg("⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not set - sending plaintext API key over gRPC! This is unsafe for production environments.")
-		return plaintext, nil
+			Str("default_key_prefix", encryptionKey[:8]+"...").
+			Msg("⚠️  SECURITY WARNING: Using DEFAULT INSECURE encryption key! Set MICROGATEWAY_ENCRYPTION_KEY for production.")
 	}
 
 	if len(encryptionKey) != 32 {
+		// Use default key instead of plaintext to ensure encryption is always used
+		encryptionKey = DEFAULT_ENCRYPTION_KEY
 		log.Error().
-			Int("key_length", len(encryptionKey)).
+			Int("key_length", len(os.Getenv("MICROGATEWAY_ENCRYPTION_KEY"))).
 			Int("required_length", 32).
 			Str("function", "encryptForMicrogateway").
-			Msg("⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has wrong length - falling back to plaintext API key transmission! Generate a 32-character key for production.")
-		return plaintext, nil // Fallback to plaintext
+			Str("fallback_key_prefix", encryptionKey[:8]+"...").
+			Msg("⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has wrong length - using DEFAULT INSECURE key! Generate a 32-character key for production.")
 	}
 
 	// Create AES cipher

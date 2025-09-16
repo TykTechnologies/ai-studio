@@ -33,8 +33,9 @@ type ControlServer struct {
 	db       *gorm.DB
 	
 	// Edge instance management
-	edgeInstances map[string]*EdgeInstance
-	edgeMutex     sync.RWMutex
+	edgeInstances        map[string]*EdgeInstance
+	edgeMutex            sync.RWMutex
+	maxConcurrentStreams int // Maximum number of concurrent gRPC streams
 
 	// Reload coordination (will be set after creation to avoid import cycle)
 	reloadCoordinator interface{} // *services.ReloadCoordinator
@@ -61,10 +62,17 @@ type EdgeInstance struct {
 
 // NewControlServer creates a new control server
 func NewControlServer(cfg *config.Config, db *gorm.DB) *ControlServer {
+	// Set default connection limit if not specified
+	maxStreams := cfg.HubSpoke.MaxConcurrentStreams
+	if maxStreams <= 0 {
+		maxStreams = 1000 // Sensible default
+	}
+
 	server := &ControlServer{
-		config:        cfg,
-		db:            db,
-		edgeInstances: make(map[string]*EdgeInstance),
+		config:               cfg,
+		db:                   db,
+		edgeInstances:        make(map[string]*EdgeInstance),
+		maxConcurrentStreams: maxStreams,
 	}
 
 	// Start cleanup routine
@@ -182,10 +190,10 @@ func (s *ControlServer) streamAuthInterceptor(srv interface{}, stream grpc.Serve
 
 // authenticate checks the authentication token (supports dual-token rotation)
 func (s *ControlServer) authenticate(ctx context.Context) error {
-	// If no auth tokens configured, allow connection
+	// SECURITY: Fail-closed design - reject connections if no auth tokens configured
 	if s.config.HubSpoke.AuthToken == "" && s.config.HubSpoke.NextAuthToken == "" {
-		log.Warn().Msg("No authentication tokens configured - allowing unauthenticated access")
-		return nil
+		log.Error().Msg("🔒 SECURITY: No authentication tokens configured - rejecting connection")
+		return status.Error(codes.Unauthenticated, "authentication required but no tokens configured")
 	}
 
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -309,6 +317,19 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 
 // SubscribeToChanges handles bidirectional streaming for real-time updates
 func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_SubscribeToChangesServer) error {
+	// Check concurrent stream limits to prevent DoS attacks
+	s.edgeMutex.RLock()
+	currentConnections := len(s.edgeInstances)
+	s.edgeMutex.RUnlock()
+
+	if currentConnections >= s.maxConcurrentStreams {
+		log.Warn().
+			Int("current_connections", currentConnections).
+			Int("max_concurrent_streams", s.maxConcurrentStreams).
+			Msg("🚨 SECURITY: Maximum concurrent streams exceeded - rejecting new connection")
+		return status.Error(codes.ResourceExhausted, "maximum concurrent streams exceeded")
+	}
+
 	var edgeID string
 	var edge *EdgeInstance
 	var streamCtx = stream.Context()
@@ -856,38 +877,70 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	if err := query.Find(&llms).Error; err != nil {
 		return nil, fmt.Errorf("failed to query LLMs: %w", err)
 	}
-	
+
+	// Collect all LLM IDs for bulk queries to avoid N+1 problem
+	var llmIDs []uint
+	for _, llm := range llms {
+		llmIDs = append(llmIDs, llm.ID)
+	}
+
+	// Bulk query all relationships to avoid N+1 queries
+	var allLLMAppRelations []database.AppLLM
+	var allLLMPlugins []database.LLMPlugin
+	var allLLMFilters []database.LLMFilter
+
+	if len(llmIDs) > 0 {
+		// Bulk query app_llms relationships
+		if err := s.db.Where("llm_id IN ? AND is_active = ?", llmIDs, true).Find(&allLLMAppRelations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query app_llms join table")
+		}
+
+		// Bulk query llm_plugins relationships
+		if err := s.db.Where("llm_id IN ? AND is_active = ?", llmIDs, true).Find(&allLLMPlugins).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query llm_plugins join table")
+		}
+
+		// Bulk query llm_filters relationships
+		if err := s.db.Where("llm_id IN ? AND is_active = ?", llmIDs, true).Find(&allLLMFilters).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query llm_filters join table")
+		}
+	}
+
+	// Create lookup maps for efficient relationship matching
+	appLLMsByLLMID := make(map[uint][]database.AppLLM)
+	for _, appLLM := range allLLMAppRelations {
+		appLLMsByLLMID[appLLM.LLMID] = append(appLLMsByLLMID[appLLM.LLMID], appLLM)
+	}
+
+	pluginsByLLMID := make(map[uint][]database.LLMPlugin)
+	for _, llmPlugin := range allLLMPlugins {
+		pluginsByLLMID[llmPlugin.LLMID] = append(pluginsByLLMID[llmPlugin.LLMID], llmPlugin)
+	}
+
+	filtersByLLMID := make(map[uint][]database.LLMFilter)
+	for _, llmFilter := range allLLMFilters {
+		filtersByLLMID[llmFilter.LLMID] = append(filtersByLLMID[llmFilter.LLMID], llmFilter)
+	}
+
 	// Convert LLMs to protobuf with embedded relationships
 	snapshot.Llms = make([]*pb.LLMConfig, len(llms))
 	for i, llm := range llms {
-		// Query app_llms join table to get which apps can access this LLM
-		var appLLMs []database.AppLLM
-		if err := s.db.Where("llm_id = ? AND is_active = ?", llm.ID, true).Find(&appLLMs).Error; err != nil {
-			log.Warn().Err(err).Uint("llm_id", llm.ID).Msg("Failed to query app_llms join table")
-		}
-		
+		// Get app relationships from lookup map
+		appLLMs := appLLMsByLLMID[llm.ID]
 		appIDs := make([]uint32, len(appLLMs))
 		for j, appLLM := range appLLMs {
 			appIDs[j] = uint32(appLLM.AppID)
 		}
 
-		// Query llm_plugins join table
-		var llmPlugins []database.LLMPlugin
-		if err := s.db.Where("llm_id = ? AND is_active = ?", llm.ID, true).Find(&llmPlugins).Error; err != nil {
-			log.Warn().Err(err).Uint("llm_id", llm.ID).Msg("Failed to query llm_plugins join table")
-		}
-		
+		// Get plugin relationships from lookup map
+		llmPlugins := pluginsByLLMID[llm.ID]
 		pluginIDs := make([]uint32, len(llmPlugins))
 		for j, llmPlugin := range llmPlugins {
 			pluginIDs[j] = uint32(llmPlugin.PluginID)
 		}
 
-		// Query llm_filters join table
-		var llmFilters []database.LLMFilter
-		if err := s.db.Where("llm_id = ? AND is_active = ?", llm.ID, true).Find(&llmFilters).Error; err != nil {
-			log.Warn().Err(err).Uint("llm_id", llm.ID).Msg("Failed to query llm_filters join table")
-		}
-		
+		// Get filter relationships from lookup map
+		llmFilters := filtersByLLMID[llm.ID]
 		filterIDs := make([]uint32, len(llmFilters))
 		for j, llmFilter := range llmFilters {
 			filterIDs[j] = uint32(llmFilter.FilterID)
@@ -944,39 +997,70 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	if err := appQuery.Find(&apps).Error; err != nil {
 		return nil, fmt.Errorf("failed to query Apps: %w", err)
 	}
-	
+
+	// Collect all App IDs for bulk queries to avoid N+1 problem
+	var appIDs []uint
+	for _, app := range apps {
+		appIDs = append(appIDs, app.ID)
+	}
+
+	// Bulk query all app relationships to avoid N+1 queries
+	var allAppLLMs []database.AppLLM
+	var allCredentials []database.Credential
+	var allTokens []database.APIToken
+
+	if len(appIDs) > 0 {
+		// Bulk query app_llms relationships
+		if err := s.db.Where("app_id IN ? AND is_active = ?", appIDs, true).Find(&allAppLLMs).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query app_llms join table")
+		}
+
+		// Bulk query credentials
+		if err := s.db.Where("app_id IN ?", appIDs).Find(&allCredentials).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query app credentials")
+		}
+
+		// Bulk query tokens
+		if err := s.db.Where("app_id IN ?", appIDs).Find(&allTokens).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query app tokens")
+		}
+	}
+
+	// Create lookup maps for efficient relationship matching
+	llmsByAppID := make(map[uint][]database.AppLLM)
+	for _, appLLM := range allAppLLMs {
+		llmsByAppID[appLLM.AppID] = append(llmsByAppID[appLLM.AppID], appLLM)
+	}
+
+	credentialsByAppID := make(map[uint][]database.Credential)
+	for _, credential := range allCredentials {
+		credentialsByAppID[credential.AppID] = append(credentialsByAppID[credential.AppID], credential)
+	}
+
+	tokensByAppID := make(map[uint][]database.APIToken)
+	for _, token := range allTokens {
+		tokensByAppID[token.AppID] = append(tokensByAppID[token.AppID], token)
+	}
+
 	// Convert Apps to protobuf with embedded relationships
 	snapshot.Apps = make([]*pb.AppConfig, len(apps))
 	for i, app := range apps {
-		// Query app_llms join table to get LLM associations - THE CRITICAL MISSING PIECE
-		var appLLMs []database.AppLLM
-		if err := s.db.Where("app_id = ? AND is_active = ?", app.ID, true).Find(&appLLMs).Error; err != nil {
-			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app_llms join table")
-		}
-		
-		// Extract LLM IDs that this app can access
+		// Get LLM relationships from lookup map
+		appLLMs := llmsByAppID[app.ID]
 		llmIDs := make([]uint32, len(appLLMs))
 		for j, appLLM := range appLLMs {
 			llmIDs[j] = uint32(appLLM.LLMID)
 		}
 
-		// Query credentials for this app
-		var credentials []database.Credential
-		if err := s.db.Where("app_id = ?", app.ID).Find(&credentials).Error; err != nil {
-			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app credentials")
-		}
-		
+		// Get credentials from lookup map
+		credentials := credentialsByAppID[app.ID]
 		credentialIDs := make([]uint32, len(credentials))
 		for j, cred := range credentials {
 			credentialIDs[j] = uint32(cred.ID)
 		}
 
-		// Query tokens for this app (even though we do on-demand validation, include for completeness)
-		var tokens []database.APIToken
-		if err := s.db.Where("app_id = ?", app.ID).Find(&tokens).Error; err != nil {
-			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app tokens")
-		}
-		
+		// Get tokens from lookup map
+		tokens := tokensByAppID[app.ID]
 		tokenIDs := make([]uint32, len(tokens))
 		for j, token := range tokens {
 			tokenIDs[j] = uint32(token.ID)
@@ -1033,16 +1117,32 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	if err := filterQuery.Find(&filters).Error; err != nil {
 		return nil, fmt.Errorf("failed to query Filters: %w", err)
 	}
-	
+
+	// Collect all Filter IDs for bulk queries to avoid N+1 problem
+	var filterIDs []uint
+	for _, filter := range filters {
+		filterIDs = append(filterIDs, filter.ID)
+	}
+
+	// Bulk query filter relationships to avoid N+1 queries
+	var allFilterLLMs []database.LLMFilter
+	if len(filterIDs) > 0 {
+		if err := s.db.Where("filter_id IN ? AND is_active = ?", filterIDs, true).Find(&allFilterLLMs).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query llm_filters join table")
+		}
+	}
+
+	// Create lookup map for efficient relationship matching
+	llmsByFilterID := make(map[uint][]database.LLMFilter)
+	for _, llmFilter := range allFilterLLMs {
+		llmsByFilterID[llmFilter.FilterID] = append(llmsByFilterID[llmFilter.FilterID], llmFilter)
+	}
+
 	// Convert Filters to protobuf with embedded relationships
 	snapshot.Filters = make([]*pb.FilterConfig, len(filters))
 	for i, filter := range filters {
-		// Query llm_filters join table to get which LLMs use this filter
-		var llmFilters []database.LLMFilter
-		if err := s.db.Where("filter_id = ? AND is_active = ?", filter.ID, true).Find(&llmFilters).Error; err != nil {
-			log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Failed to query llm_filters join table")
-		}
-		
+		// Get LLM relationships from lookup map
+		llmFilters := llmsByFilterID[filter.ID]
 		llmIDs := make([]uint32, len(llmFilters))
 		for j, llmFilter := range llmFilters {
 			llmIDs[j] = uint32(llmFilter.LLMID)
@@ -1080,16 +1180,32 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	if err := pluginQuery.Find(&plugins).Error; err != nil {
 		return nil, fmt.Errorf("failed to query Plugins: %w", err)
 	}
-	
+
+	// Collect all Plugin IDs for bulk queries to avoid N+1 problem
+	var pluginIDs []uint
+	for _, plugin := range plugins {
+		pluginIDs = append(pluginIDs, plugin.ID)
+	}
+
+	// Bulk query plugin relationships to avoid N+1 queries
+	var allPluginLLMs []database.LLMPlugin
+	if len(pluginIDs) > 0 {
+		if err := s.db.Where("plugin_id IN ? AND is_active = ?", pluginIDs, true).Order("order_index ASC").Find(&allPluginLLMs).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to bulk query llm_plugins join table")
+		}
+	}
+
+	// Create lookup map for efficient relationship matching
+	llmsByPluginID := make(map[uint][]database.LLMPlugin)
+	for _, llmPlugin := range allPluginLLMs {
+		llmsByPluginID[llmPlugin.PluginID] = append(llmsByPluginID[llmPlugin.PluginID], llmPlugin)
+	}
+
 	// Convert Plugins to protobuf with embedded relationships
 	snapshot.Plugins = make([]*pb.PluginConfig, len(plugins))
 	for i, plugin := range plugins {
-		// Query llm_plugins join table to get which LLMs use this plugin (ordered by OrderIndex)
-		var llmPlugins []database.LLMPlugin
-		if err := s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Order("order_index ASC").Find(&llmPlugins).Error; err != nil {
-			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to query llm_plugins join table")
-		}
-		
+		// Get LLM relationships from lookup map (already ordered by OrderIndex)
+		llmPlugins := llmsByPluginID[plugin.ID]
 		llmIDs := make([]uint32, len(llmPlugins))
 		for j, llmPlugin := range llmPlugins {
 			llmIDs[j] = uint32(llmPlugin.LLMID)
