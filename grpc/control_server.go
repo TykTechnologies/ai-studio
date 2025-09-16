@@ -41,6 +41,9 @@ type EdgeInstanceConnection struct {
 	SessionID     string
 	Stream        pb.ConfigurationSyncService_SubscribeToChangesServer
 	LastHeartbeat time.Time
+
+	// Mutex to protect concurrent access to EdgeInstanceConnection fields
+	mu sync.RWMutex
 }
 
 // ControlServer implements the ConfigurationSyncService for AI Studio control instances
@@ -323,14 +326,16 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 			case *pb.EdgeMessage_Heartbeat:
 				// Handle heartbeat
 				if edgeConnection != nil {
+					edgeConnection.mu.Lock()
 					edgeConnection.LastHeartbeat = time.Now()
-					
+					edgeConnection.mu.Unlock()
+
 					// Update database
 					var edgeInstance models.EdgeInstance
 					if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
 						edgeInstance.UpdateHeartbeat(s.db)
 					}
-					
+
 					// Send heartbeat response
 					response := &pb.ControlMessage{
 						Message: &pb.ControlMessage_HeartbeatResponse{
@@ -413,8 +418,10 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 		return nil, status.Error(codes.NotFound, "edge instance not found")
 	}
 	
-	// Update heartbeat
+	// Update heartbeat with thread safety
+	edge.mu.Lock()
 	edge.LastHeartbeat = time.Now()
+	edge.mu.Unlock()
 	
 	// Update database
 	var edgeInstance models.EdgeInstance
@@ -898,36 +905,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		snapshot.ModelPrices = append(snapshot.ModelPrices, pbPrice)
 	}
 
-	// Get Plugins for namespace
+	// Get Plugins for namespace with preloaded LLM associations to avoid N+1 queries
 	log.Info().Str("namespace", namespace).Msg("Starting plugin query for configuration snapshot")
-	
-	// First, let's test without Preload to eliminate interference
+
 	var plugins []models.Plugin
 	var pluginQuery *gorm.DB
-	
-	// Test basic plugin count first
-	var totalActivePlugins int64
-	if err := s.db.Model(&models.Plugin{}).Where("is_active = ?", true).Count(&totalActivePlugins).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to count total active plugins")
-	} else {
-		log.Info().Int64("total_active_plugins", totalActivePlugins).Msg("Total active plugins in database")
-	}
-	
-	// Test with namespace filter but WITHOUT is_active check (like filters do)
-	var pluginsWithoutActiveCheck []models.Plugin
-	testQuery := s.db.Model(&models.Plugin{})
-	if namespace == "" {
-		testQuery = testQuery.Where("namespace = ''")
-	} else {
-		testQuery = testQuery.Where("(namespace = '' OR namespace = ?)", namespace)
-	}
-	if err := testQuery.Find(&pluginsWithoutActiveCheck).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to query plugins without is_active check")
-	} else {
-		log.Info().Int("plugins_without_active_check", len(pluginsWithoutActiveCheck)).Msg("Plugins found WITHOUT is_active filter")
-	}
-	
-	// Now test with namespace filter AND is_active check  
+
 	pluginQuery = s.db.Model(&models.Plugin{})
 	if namespace == "" {
 		log.Info().Msg("Querying plugins for global namespace only")
@@ -935,46 +918,46 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	} else {
 		log.Info().
 			Str("target_namespace", namespace).
-			Str("expected_plugin_namespace", "tenant-a").
-			Bool("namespaces_match", namespace == "tenant-a").
 			Msg("Querying plugins for specific namespace (global + tenant)")
 		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?) AND is_active = ?", namespace, true)
-		
-		// Additional debug: Test the exact plugin we expect
-		var specificPlugin models.Plugin
-		if err := s.db.Where("id = ? AND namespace = ? AND is_active = ?", 2, namespace, true).First(&specificPlugin).Error; err != nil {
-			log.Error().Err(err).Uint("plugin_id", 2).Str("namespace", namespace).Msg("Failed to find specific plugin by ID, namespace, and active status")
-		} else {
-			log.Info().
-				Uint("plugin_id", specificPlugin.ID).
-				Str("plugin_name", specificPlugin.Name).
-				Str("plugin_namespace", specificPlugin.Namespace).
-				Bool("plugin_active", specificPlugin.IsActive).
-				Msg("Successfully found specific plugin by ID")
-		}
 	}
-	
-	// Debug: Log the actual SQL query being executed
-	pluginQuery = pluginQuery.Debug()
-	
+
 	if err := pluginQuery.Find(&plugins).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Plugins: %w", err)
+	}
+
+	// Preload all LLMPlugin associations in a single query to avoid N+1
+	var pluginIDs []uint
+	for _, plugin := range plugins {
+		pluginIDs = append(pluginIDs, plugin.ID)
+	}
+
+	var allLLMPlugins []models.LLMPlugin
+	if len(pluginIDs) > 0 {
+		if err := s.db.Where("plugin_id IN ? AND is_active = ?", pluginIDs, true).
+			Order("plugin_id ASC, order_index ASC").
+			Find(&allLLMPlugins).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to preload LLM plugin associations")
+		}
+	}
+
+	// Create a map of plugin_id -> []LLMPlugin for fast lookup
+	llmPluginMap := make(map[uint][]models.LLMPlugin)
+	for _, lp := range allLLMPlugins {
+		llmPluginMap[lp.PluginID] = append(llmPluginMap[lp.PluginID], lp)
 	}
 	
 	log.Info().
 		Str("namespace", namespace).
 		Int("found_plugins", len(plugins)).
-		Int64("total_active", totalActivePlugins).
 		Msg("Plugin query completed")
 
 	// Convert Plugins to protobuf
 	for _, plugin := range plugins {
-		// Get associated LLM IDs for this plugin (ordered by order_index for consistent execution order)
-		var llmPlugins []models.LLMPlugin
-		if err := s.db.Where("plugin_id = ? AND is_active = ?", plugin.ID, true).Order("order_index ASC").Find(&llmPlugins).Error; err != nil {
-			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to query llm_plugins join table")
-		}
-		
+		// Use preloaded LLM associations to avoid N+1 queries
+		llmPlugins := llmPluginMap[plugin.ID]
+		// Data is already sorted by order_index from the query
+
 		llmIDs := make([]uint32, len(llmPlugins))
 		for i, lp := range llmPlugins {
 			llmIDs[i] = uint32(lp.LLMID)
@@ -1135,6 +1118,10 @@ func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
 	for edgeID, edge := range s.edgeConnections {
 		// Only include edges that are truly connected (have active stream)
 		if s.isEdgeStreamActive(edge) {
+			edge.mu.RLock()
+			lastHeartbeat := edge.LastHeartbeat
+			edge.mu.RUnlock()
+
 			// Convert edge connection to interface{} map format expected by reload coordinator
 			result[edgeID] = map[string]interface{}{
 				"edge_id":        edge.EdgeID,
@@ -1142,7 +1129,7 @@ func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
 				"status":         edge.Status,
 				"version":        edge.Version,
 				"session_id":     edge.SessionID,
-				"last_heartbeat": edge.LastHeartbeat,
+				"last_heartbeat": lastHeartbeat,
 			}
 		}
 	}
@@ -1167,7 +1154,10 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 	}
 
 	// Check heartbeat age (consider stale if no heartbeat for 10 minutes)
+	edge.mu.RLock()
 	heartbeatAge := time.Since(edge.LastHeartbeat)
+	edge.mu.RUnlock()
+
 	if heartbeatAge > 10*time.Minute {
 		log.Warn().
 			Str("edge_id", edge.EdgeID).
@@ -1198,10 +1188,14 @@ func (s *ControlServer) cleanupStaleConnections() {
 	var toRemove []string
 	for edgeID, edge := range s.edgeConnections {
 		if !s.isEdgeStreamActive(edge) {
+			edge.mu.RLock()
+			lastHeartbeat := edge.LastHeartbeat
+			edge.mu.RUnlock()
+
 			log.Info().
 				Str("edge_id", edgeID).
 				Str("status", edge.Status).
-				Time("last_heartbeat", edge.LastHeartbeat).
+				Time("last_heartbeat", lastHeartbeat).
 				Msg("Removing stale edge connection")
 
 			// Update database status

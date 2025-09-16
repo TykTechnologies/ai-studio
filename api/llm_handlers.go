@@ -491,40 +491,37 @@ func (a *API) getLLMsByPrivacyScoreRange(c *gin.Context) {
 }
 
 func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
-	// Load plugins for this LLM
-	var plugins []PluginResponse
-	if pluginModels, err := a.service.PluginService.GetPluginsForLLM(llm.ID); err == nil {
-		plugins = make([]PluginResponse, len(pluginModels))
-		for i, plugin := range pluginModels {
-			plugins[i] = PluginResponse{
-				Type: "plugins",
-				ID:   strconv.FormatUint(uint64(plugin.ID), 10),
-				Attributes: struct {
-					Name        string                 `json:"name"`
-					Slug        string                 `json:"slug"`
-					Description string                 `json:"description"`
-					Command     string                 `json:"command"`
-					Checksum    string                 `json:"checksum,omitempty"`
-					Config      map[string]interface{} `json:"config"`
-					HookType    string                 `json:"hook_type"`
-					IsActive    bool                   `json:"is_active"`
-					Namespace   string                 `json:"namespace"`
-					CreatedAt   string                 `json:"created_at"`
-					UpdatedAt   string                 `json:"updated_at"`
-				}{
-					Name:        plugin.Name,
-					Slug:        plugin.Slug,
-					Description: plugin.Description,
-					Command:     plugin.Command,
-					Checksum:    plugin.Checksum,
-					Config:      plugin.Config,
-					HookType:    plugin.HookType,
-					IsActive:    plugin.IsActive,
-					Namespace:   plugin.Namespace,
-					CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-					UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-				},
-			}
+	// Use preloaded plugins to avoid N+1 queries
+	plugins := make([]PluginResponse, len(llm.Plugins))
+	for i, plugin := range llm.Plugins {
+		plugins[i] = PluginResponse{
+			Type: "plugins",
+			ID:   strconv.FormatUint(uint64(plugin.ID), 10),
+			Attributes: struct {
+				Name        string                 `json:"name"`
+				Slug        string                 `json:"slug"`
+				Description string                 `json:"description"`
+				Command     string                 `json:"command"`
+				Checksum    string                 `json:"checksum,omitempty"`
+				Config      map[string]interface{} `json:"config"`
+				HookType    string                 `json:"hook_type"`
+				IsActive    bool                   `json:"is_active"`
+				Namespace   string                 `json:"namespace"`
+				CreatedAt   string                 `json:"created_at"`
+				UpdatedAt   string                 `json:"updated_at"`
+			}{
+				Name:        plugin.Name,
+				Slug:        plugin.Slug,
+				Description: plugin.Description,
+				Command:     plugin.Command,
+				Checksum:    plugin.Checksum,
+				Config:      plugin.Config,
+				HookType:    plugin.HookType,
+				IsActive:    plugin.IsActive,
+				Namespace:   plugin.Namespace,
+				CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			},
 		}
 	}
 
