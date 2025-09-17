@@ -804,6 +804,7 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 
 		if c.config.HubSpoke.SkipTLSVerify {
 			tlsConfig = &tls.Config{InsecureSkipVerify: true}
+			log.Warn().Msg("🔒 SECURITY: TLS certificate verification disabled - not recommended for production")
 		} else {
 			tlsConfig = &tls.Config{}
 		}
@@ -818,9 +819,13 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 		}
 
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
-		log.Info().Bool("skip_verify", c.config.HubSpoke.SkipTLSVerify).Msg("Using TLS credentials for gRPC connection")
+		log.Info().Bool("skip_verify", c.config.HubSpoke.SkipTLSVerify).Msg("✅ Using secure TLS credentials for gRPC connection")
 	} else {
-		log.Warn().Msg("Using insecure credentials for gRPC connection - not recommended for production")
+		// Security: Require explicit opt-in for insecure connections
+		if !c.config.HubSpoke.AllowInsecure {
+			return nil, fmt.Errorf("🔒 SECURITY: Insecure gRPC connections are disabled by default. To enable for development, set EDGE_ALLOW_INSECURE=true")
+		}
+		log.Warn().Msg("⚠️  SECURITY WARNING: Using insecure credentials for gRPC connection - DEVELOPMENT ONLY")
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 

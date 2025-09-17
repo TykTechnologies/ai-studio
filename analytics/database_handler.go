@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,27 @@ type DatabaseHandler struct {
 	recMutex       sync.RWMutex
 	ctx            context.Context
 	cancel         context.CancelFunc
+}
+
+// Security: Pattern to detect sensitive data in error messages that should be redacted
+var sensitiveDataPattern = regexp.MustCompile(`(?i)(token|key|secret|password|credential|authorization|bearer|api_key|auth)[\s\w]*[:=][\s]*['"]*([^\s'"]+)`)
+
+// sanitizeError removes potentially sensitive data from error messages for safe logging
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errStr := err.Error()
+
+	// Redact sensitive data patterns
+	sanitized := sensitiveDataPattern.ReplaceAllString(errStr, "$1=***REDACTED***")
+
+	// Additional sanitization for common sensitive patterns
+	sanitized = strings.ReplaceAll(sanitized, "password=", "password=***REDACTED***")
+	sanitized = strings.ReplaceAll(sanitized, "secret=", "secret=***REDACTED***")
+
+	return sanitized
 }
 
 // NewDatabaseHandler creates a new database analytics handler
@@ -61,7 +83,7 @@ func (h *DatabaseHandler) start() {
 	if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
 		if err != nil {
-			slog.Warn("ANALYTICS_BUFFER_SIZE must be a string", "error", err)
+			slog.Warn("ANALYTICS_BUFFER_SIZE must be a string", "error", sanitizeError(err))
 		} else {
 			defaultBufferSize = bfr
 		}
@@ -87,7 +109,7 @@ func (h *DatabaseHandler) startWorker() {
 				return h.db.Create(record).Error
 			})
 			if err != nil {
-				slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
+				slog.Warn("error creating chat record", "error", sanitizeError(err), "model", record.Name, "timestamp", record.TimeStamp)
 			} else {
 				slog.Info("created chat record",
 					"model", record.Name,
@@ -102,21 +124,21 @@ func (h *DatabaseHandler) startWorker() {
 				return h.db.Create(logEntry).Error
 			})
 			if err != nil {
-				slog.Warn("error creating chat log entry", "error", err)
+				slog.Warn("error creating chat log entry", "error", sanitizeError(err))
 			}
 		case toolCall := <-h.toolCallChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(toolCall).Error
 			})
 			if err != nil {
-				slog.Warn("error creating tool call record", "error", err)
+				slog.Warn("error creating tool call record", "error", sanitizeError(err))
 			}
 		case proxyLog := <-h.proxyLogChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(proxyLog).Error
 			})
 			if err != nil {
-				slog.Warn("error creating proxy log", "error", err)
+				slog.Warn("error creating proxy log", "error", sanitizeError(err))
 			}
 		case <-h.ctx.Done():
 			slog.Info("shutting down database analytics handler")
@@ -280,7 +302,7 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 
 	if err != nil {
 		slog.Warn("error creating chat record batch",
-			"error", err,
+			"error", sanitizeError(err),
 			"count", len(records),
 			"processing_time_ms", processingTime.Milliseconds())
 	} else {
@@ -319,7 +341,7 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 
 	if err != nil {
 		slog.Warn("error creating proxy log batch",
-			"error", err,
+			"error", sanitizeError(err),
 			"count", len(logs),
 			"processing_time_ms", processingTime.Milliseconds())
 	} else {
@@ -347,6 +369,6 @@ func initDB(db *gorm.DB) {
 	)
 
 	if err != nil {
-		slog.Warn("error migrating analytics tables", "error", err)
+		slog.Warn("error migrating analytics tables", "error", sanitizeError(err))
 	}
 }

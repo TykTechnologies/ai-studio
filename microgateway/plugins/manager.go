@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -678,6 +681,85 @@ func (pm *PluginManager) SaveReattachConfig(pluginID uint) error {
 	return nil
 }
 
+// Security validation functions for plugin paths
+var (
+	// Pattern to detect shell metacharacters that could be used for command injection
+	shellMetacharPattern = regexp.MustCompile(`[;&|$(){}[\]<>?*!~\x60\\]`)
+
+	// Default allowed plugin directories (can be configured)
+	defaultAllowedDirs = []string{
+		"/opt/microgateway/plugins",
+		"./plugins",
+		"plugins/",
+	}
+)
+
+// validatePluginPath performs security validation on plugin executable paths
+func validatePluginPath(cmdPath string) error {
+	// Security: Check for shell metacharacters that could indicate command injection
+	if shellMetacharPattern.MatchString(cmdPath) {
+		return fmt.Errorf("🔒 SECURITY: Plugin command contains shell metacharacters: %s", cmdPath)
+	}
+
+	// Security: Resolve to absolute path and check for directory traversal
+	absPath, err := filepath.Abs(cmdPath)
+	if err != nil {
+		return fmt.Errorf("🔒 SECURITY: Cannot resolve plugin path: %w", err)
+	}
+
+	// Security: Check if resolved path is within allowed directories
+	if !isPathInAllowedDirectories(absPath) {
+		return fmt.Errorf("🔒 SECURITY: Plugin path '%s' is not in allowed directories. Use oci:// or grpc:// schemes for external plugins", absPath)
+	}
+
+	// Security: Check that the file exists and is a regular file (not a symlink to dangerous locations)
+	fileInfo, err := os.Lstat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("🔒 SECURITY: Plugin executable not found: %s", absPath)
+		}
+		return fmt.Errorf("🔒 SECURITY: Cannot stat plugin file: %w", err)
+	}
+
+	// Security: Reject symbolic links (could point to dangerous locations)
+	if fileInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("🔒 SECURITY: Plugin cannot be a symbolic link for security reasons: %s", absPath)
+	}
+
+	// Security: Verify file is executable
+	if fileInfo.Mode()&0111 == 0 {
+		return fmt.Errorf("🔒 SECURITY: Plugin file is not executable: %s", absPath)
+	}
+
+	log.Info().
+		Str("plugin_path", absPath).
+		Msg("✅ Plugin path security validation passed")
+
+	return nil
+}
+
+// isPathInAllowedDirectories checks if the given path is within allowed plugin directories
+func isPathInAllowedDirectories(absPath string) bool {
+	for _, allowedDir := range defaultAllowedDirs {
+		allowedAbsDir, err := filepath.Abs(allowedDir)
+		if err != nil {
+			continue
+		}
+
+		// Check if the plugin path is within the allowed directory
+		relPath, err := filepath.Rel(allowedAbsDir, absPath)
+		if err != nil {
+			continue
+		}
+
+		// If relative path doesn't start with "..", it's within the allowed directory
+		if !strings.HasPrefix(relPath, "..") {
+			return true
+		}
+	}
+	return false
+}
+
 // createPluginClient creates a plugin client based on command scheme
 func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
 	if strings.HasPrefix(command, "oci://") {
@@ -702,16 +784,21 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		}), nil
 	} else {
-		// Local executable - use exec.Command
+		// Local executable - use exec.Command with security validation
 		cmdPath := command
 		if strings.HasPrefix(command, "file://") {
 			cmdPath = strings.TrimPrefix(command, "file://")
 		}
 
+		// Security: Validate plugin path to prevent command injection
+		if err := validatePluginPath(cmdPath); err != nil {
+			return nil, fmt.Errorf("plugin security validation failed: %w", err)
+		}
+
 		log.Info().
 			Str("command", command).
 			Str("path", cmdPath).
-			Msg("Creating client for local plugin executable")
+			Msg("✅ Creating client for validated local plugin executable")
 
 		return plugin.NewClient(&plugin.ClientConfig{
 			HandshakeConfig:  pm.handshakeConfig,

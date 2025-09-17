@@ -112,11 +112,12 @@ type HubSpokeConfig struct {
 	// Authentication
 	ClientToken       string        `env:"EDGE_AUTH_TOKEN" envDefault:""`
 	NextAuthToken     string        `env:"GRPC_AUTH_TOKEN_NEXT" envDefault:""`
-	ClientTLSEnabled  bool          `env:"EDGE_TLS_ENABLED" envDefault:"false"`
+	ClientTLSEnabled  bool          `env:"EDGE_TLS_ENABLED" envDefault:"true"`
 	ClientTLSCertPath string        `env:"EDGE_TLS_CERT_PATH"`
 	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
 	ClientTLSCAPath   string        `env:"EDGE_TLS_CA_PATH"`
 	SkipTLSVerify     bool          `env:"EDGE_SKIP_TLS_VERIFY" envDefault:"false"`
+	AllowInsecure     bool          `env:"EDGE_ALLOW_INSECURE" envDefault:"false"` // Security: Explicit opt-in for development
 	
 	// Token Validation Cache Configuration
 	TokenCacheEnabled    bool          `env:"EDGE_TOKEN_CACHE_ENABLED" envDefault:"true"`
