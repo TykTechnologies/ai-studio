@@ -127,7 +127,7 @@ func main() {
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,
-		TestMode:               appConf.DevMode,
+		TestMode:               false, // Always false in production - tests set this directly
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
