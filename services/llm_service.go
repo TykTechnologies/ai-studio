@@ -252,8 +252,8 @@ func (s *Service) GetLLMsByNameStub(name string) (models.LLMs, error) {
 // GetLLMsInNamespace returns LLMs in a specific namespace (including global)
 func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
 	llms := models.LLMs{}
-	
-	query := s.DB.Preload("Filters")
+
+	query := s.DB.Preload("Filters").Preload("Plugins")
 	if namespace == "" {
 		// Global namespace - only global LLMs
 		query = query.Where("namespace = ''")
@@ -261,7 +261,7 @@ func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
 		// Specific namespace - global + matching namespace
 		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
-	
+
 	if err := query.Find(&llms).Error; err != nil {
 		return nil, err
 	}
@@ -277,8 +277,8 @@ func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
 // GetActiveLLMsInNamespace returns active LLMs in a specific namespace (including global)
 func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, error) {
 	llms := models.LLMs{}
-	
-	query := s.DB.Preload("Filters").Where("active = ?", true)
+
+	query := s.DB.Preload("Filters").Preload("Plugins").Where("active = ?", true)
 	if namespace == "" {
 		// Global namespace - only global LLMs
 		query = query.Where("namespace = ''")
@@ -286,7 +286,7 @@ func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, erro
 		// Specific namespace - global + matching namespace
 		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
-	
+
 	if err := query.Find(&llms).Error; err != nil {
 		return nil, err
 	}

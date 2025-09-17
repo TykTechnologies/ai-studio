@@ -92,31 +92,30 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 		maxStreams = 1000 // Sensible default
 	}
 
+	// Security check: REQUIRE MICROGATEWAY_ENCRYPTION_KEY to be configured
+	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		log.Fatal().
+			Msg("🚨 CRITICAL SECURITY ERROR: MICROGATEWAY_ENCRYPTION_KEY environment variable is required but not set! Please set a secure 32-character random key.")
+	}
+	if len(encryptionKey) != 32 {
+		log.Fatal().
+			Int("current_length", len(encryptionKey)).
+			Int("required_length", 32).
+			Msg("🚨 CRITICAL SECURITY ERROR: MICROGATEWAY_ENCRYPTION_KEY must be exactly 32 characters long!")
+	}
+	if encryptionKey == DEFAULT_ENCRYPTION_KEY {
+		log.Fatal().
+			Msg("🚨 CRITICAL SECURITY ERROR: MICROGATEWAY_ENCRYPTION_KEY cannot use the default insecure key! Please generate a secure 32-character random key.")
+	}
+
+	log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
+
 	server := &ControlServer{
 		config:               cfg,
 		db:                   db,
 		edgeConnections:      make(map[string]*EdgeInstanceConnection),
 		maxConcurrentStreams: maxStreams,
-	}
-
-	// Security check: Warn if MICROGATEWAY_ENCRYPTION_KEY is not configured
-	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
-	if encryptionKey == "" {
-		log.Error().
-			Str("default_key_prefix", DEFAULT_ENCRYPTION_KEY[:8]+"...").
-			Msg("🚨 CRITICAL SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY not configured! Using DEFAULT INSECURE KEY. This MUST be changed for production deployments!")
-		log.Error().
-			Msg("🚨 SET MICROGATEWAY_ENCRYPTION_KEY to a secure 32-character random key immediately!")
-	} else if len(encryptionKey) != 32 {
-		log.Warn().
-			Int("current_length", len(encryptionKey)).
-			Int("required_length", 32).
-			Msg("🔒 STARTUP SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has incorrect length! Generate a 32-character encryption key for secure production operation.")
-	} else if encryptionKey == DEFAULT_ENCRYPTION_KEY {
-		log.Error().
-			Msg("🚨 CRITICAL SECURITY WARNING: Using DEFAULT INSECURE encryption key! This MUST be changed for production deployments!")
-	} else {
-		log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
 	}
 
 	// Initialize AI Studio's analytics system for processing edge pulse data
@@ -545,6 +544,9 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 
 // SendAnalyticsPulse handles analytics pulse data from edge instances
 func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.AnalyticsPulse) (*pb.AnalyticsPulseResponse, error) {
+	// Performance monitoring: track total processing time
+	startTime := time.Now()
+
 	log.Info().
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
@@ -557,62 +559,72 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 
 	processedRecords := uint64(0)
 
-	// Process analytics events using AI Studio's native analytics system
-	for _, event := range req.AnalyticsEvents {
-		// Use model name and vendor from pulse event (extracted from actual request)
-		modelName := event.ModelName
-		vendor := event.Vendor
-		if modelName == "" {
-			modelName = "unknown-model"
-		}
-		if vendor == "" {
-			vendor = s.extractVendorFromEvent(event)
+	// Process analytics events using AI Studio's native analytics system with batch processing
+	if len(req.AnalyticsEvents) > 0 {
+		proxyLogs := make([]*models.ProxyLog, len(req.AnalyticsEvents))
+		chatRecords := make([]*models.LLMChatRecord, len(req.AnalyticsEvents))
+
+		for i, event := range req.AnalyticsEvents {
+			// Use model name and vendor from pulse event (extracted from actual request)
+			modelName := event.ModelName
+			vendor := event.Vendor
+			if modelName == "" {
+				modelName = "unknown-model"
+			}
+			if vendor == "" {
+				vendor = s.extractVendorFromEvent(event)
+			}
+
+			// Create ProxyLog for request/response tracking
+			proxyLogs[i] = &models.ProxyLog{
+				AppID:        uint(event.AppId),
+				UserID:       0, // Edge doesn't track individual users
+				Vendor:       vendor,
+				RequestBody:  event.RequestBody,  // Now included from pulse if configured
+				ResponseBody: event.ResponseBody, // Now included from pulse if configured
+				ResponseCode: int(event.StatusCode),
+				TimeStamp:    event.Timestamp.AsTime(),
+			}
+
+			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
+			chatRecords[i] = &models.LLMChatRecord{
+				LLMID:           uint(event.LlmId),
+				AppID:           uint(event.AppId),
+				Name:            modelName, // Use actual model name from request
+				Vendor:          vendor,
+				TotalTokens:     int(event.TotalTokens),
+				PromptTokens:    int(event.RequestTokens),
+				ResponseTokens:  int(event.ResponseTokens),
+				Cost:            event.Cost * 10000, // Convert to cents for AI Studio format
+				Currency:        "USD",
+				TimeStamp:       event.Timestamp.AsTime(),
+				InteractionType: models.ProxyInteraction, // Mark as proxy interaction
+				UserID:          0, // Edge doesn't track individual users
+				ChatID:          "", // Not applicable for proxy
+				Choices:         1, // Default
+				ToolCalls:       0, // Default for proxy
+			}
+
+			log.Debug().
+				Str("edge_id", req.EdgeId).
+				Str("request_id", event.RequestId).
+				Str("model", modelName).
+				Int("total_tokens", int(event.TotalTokens)).
+				Float64("cost", event.Cost).
+				Bool("has_request_body", len(event.RequestBody) > 0).
+				Bool("has_response_body", len(event.ResponseBody) > 0).
+				Msg("Analytics event processed for batch")
 		}
 
-		// Create ProxyLog for request/response tracking
-		proxyLog := &models.ProxyLog{
-			AppID:        uint(event.AppId),
-			UserID:       0, // Edge doesn't track individual users
-			Vendor:       vendor,
-			RequestBody:  event.RequestBody,  // Now included from pulse if configured
-			ResponseBody: event.ResponseBody, // Now included from pulse if configured
-			ResponseCode: int(event.StatusCode),
-			TimeStamp:    event.Timestamp.AsTime(),
-		}
+		// Use batch processing for improved performance
+		analytics.RecordProxyLogsBatch(proxyLogs)
+		analytics.RecordChatRecordsBatch(chatRecords)
+		processedRecords += uint64(len(req.AnalyticsEvents))
 
-		// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
-		chatRecord := &models.LLMChatRecord{
-			LLMID:           uint(event.LlmId),
-			AppID:           uint(event.AppId),
-			Name:            modelName, // Use actual model name from request
-			Vendor:          vendor,
-			TotalTokens:     int(event.TotalTokens),
-			PromptTokens:    int(event.RequestTokens),
-			ResponseTokens:  int(event.ResponseTokens),
-			Cost:            event.Cost * 10000, // Convert to cents for AI Studio format
-			Currency:        "USD",
-			TimeStamp:       event.Timestamp.AsTime(),
-			InteractionType: models.ProxyInteraction, // Mark as proxy interaction
-			UserID:          0, // Edge doesn't track individual users
-			ChatID:          "", // Not applicable for proxy
-			Choices:         1, // Default
-			ToolCalls:       0, // Default for proxy
-		}
-
-		// Use AI Studio's native analytics system for both records
-		analytics.RecordProxyLog(proxyLog)
-		analytics.RecordChatRecord(chatRecord)
-		processedRecords++
-
-		log.Debug().
+		log.Info().
 			Str("edge_id", req.EdgeId).
-			Str("request_id", event.RequestId).
-			Str("model", modelName).
-			Int("total_tokens", int(event.TotalTokens)).
-			Float64("cost", event.Cost).
-			Bool("has_request_body", len(event.RequestBody) > 0).
-			Bool("has_response_body", len(event.ResponseBody) > 0).
-			Msg("Analytics event processed via AI Studio analytics system")
+			Int("analytics_events", len(req.AnalyticsEvents)).
+			Msg("Analytics events processed via batch operations")
 	}
 
 	// Process budget events (for now just log - AI Studio budget integration would need budget service)
@@ -639,11 +651,16 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		processedRecords++
 	}
 
+	// Performance monitoring: calculate total processing time
+	totalProcessingTime := time.Since(startTime)
+
 	log.Info().
 		Str("edge_id", req.EdgeId).
 		Uint64("sequence_number", req.SequenceNumber).
 		Uint64("processed_records", processedRecords).
-		Msg("Analytics pulse processed via AI Studio native analytics system")
+		Int64("total_processing_time_ms", totalProcessingTime.Milliseconds()).
+		Float64("records_per_second", float64(processedRecords)/totalProcessingTime.Seconds()).
+		Msg("Analytics pulse processed via AI Studio native analytics system with batch processing")
 
 	return &pb.AnalyticsPulseResponse{
 		Success:          true,
@@ -1047,26 +1064,14 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 		return "", nil
 	}
 
-	// Get microgateway encryption key from environment
+	// Get microgateway encryption key from environment - this MUST be set at startup
 	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	if encryptionKey == "" {
-		// Use default key instead of plaintext to ensure encryption is always used
-		encryptionKey = DEFAULT_ENCRYPTION_KEY
-		log.Warn().
-			Str("function", "encryptForMicrogateway").
-			Str("default_key_prefix", encryptionKey[:8]+"...").
-			Msg("⚠️  SECURITY WARNING: Using DEFAULT INSECURE encryption key! Set MICROGATEWAY_ENCRYPTION_KEY for production.")
+		return "", fmt.Errorf("MICROGATEWAY_ENCRYPTION_KEY environment variable is required but not set")
 	}
 
 	if len(encryptionKey) != 32 {
-		// Use default key instead of plaintext to ensure encryption is always used
-		encryptionKey = DEFAULT_ENCRYPTION_KEY
-		log.Error().
-			Int("key_length", len(os.Getenv("MICROGATEWAY_ENCRYPTION_KEY"))).
-			Int("required_length", 32).
-			Str("function", "encryptForMicrogateway").
-			Str("fallback_key_prefix", encryptionKey[:8]+"...").
-			Msg("⚠️  SECURITY WARNING: MICROGATEWAY_ENCRYPTION_KEY has wrong length - using DEFAULT INSECURE key! Generate a 32-character key for production.")
+		return "", fmt.Errorf("MICROGATEWAY_ENCRYPTION_KEY must be exactly 32 characters long, got %d", len(encryptionKey))
 	}
 
 	// Create AES cipher

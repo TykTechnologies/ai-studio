@@ -112,6 +112,7 @@ func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int6
 }
 
 func (l *LLMs) GetByNameStub(db *gorm.DB, stub string) error {
+	// Use single query with preloading for better performance
 	return db.Preload("Filters").Preload("Plugins").Where("name LIKE ?", stub+"%").Find(l).Error
 }
 

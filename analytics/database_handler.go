@@ -254,6 +254,84 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	}
 }
 
+// RecordChatRecordsBatch records multiple chat records using GORM batch operations for improved performance
+func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+	if len(records) == 0 {
+		return
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		slog.Warn("Analytics recording not started, dropping batch of chat records", "count", len(records))
+		h.recMutex.RUnlock()
+		return
+	}
+	h.recMutex.RUnlock()
+
+	// Performance monitoring: track batch processing time
+	startTime := time.Now()
+
+	// Use GORM CreateInBatches for efficient bulk insert
+	err := h.createRecordWithRetry(func() error {
+		return h.db.CreateInBatches(records, 100).Error // Process in batches of 100
+	})
+
+	processingTime := time.Since(startTime)
+
+	if err != nil {
+		slog.Warn("error creating chat record batch",
+			"error", err,
+			"count", len(records),
+			"processing_time_ms", processingTime.Milliseconds())
+	} else {
+		slog.Info("created chat record batch",
+			"count", len(records),
+			"processing_time_ms", processingTime.Milliseconds(),
+			"records_per_second", float64(len(records))/processingTime.Seconds(),
+			"first_model", records[0].Name,
+			"timestamp", records[0].TimeStamp)
+	}
+}
+
+// RecordProxyLogsBatch records multiple proxy logs using GORM batch operations for improved performance
+func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+	if len(logs) == 0 {
+		return
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		slog.Warn("Analytics recording not started, dropping batch of proxy logs", "count", len(logs))
+		h.recMutex.RUnlock()
+		return
+	}
+	h.recMutex.RUnlock()
+
+	// Performance monitoring: track batch processing time
+	startTime := time.Now()
+
+	// Use GORM CreateInBatches for efficient bulk insert
+	err := h.createRecordWithRetry(func() error {
+		return h.db.CreateInBatches(logs, 100).Error // Process in batches of 100
+	})
+
+	processingTime := time.Since(startTime)
+
+	if err != nil {
+		slog.Warn("error creating proxy log batch",
+			"error", err,
+			"count", len(logs),
+			"processing_time_ms", processingTime.Milliseconds())
+	} else {
+		slog.Info("created proxy log batch",
+			"count", len(logs),
+			"processing_time_ms", processingTime.Milliseconds(),
+			"records_per_second", float64(len(logs))/processingTime.Seconds(),
+			"first_vendor", logs[0].Vendor,
+			"timestamp", logs[0].TimeStamp)
+	}
+}
+
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *DatabaseHandler) SetAsGlobalHandler() {
 	SetHandler(h)

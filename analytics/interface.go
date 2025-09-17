@@ -22,6 +22,10 @@ type AnalyticsHandler interface {
 
 	// SetAsGlobalHandler sets this handler as the global analytics handler
 	SetAsGlobalHandler()
+
+	// Batch processing methods for improved performance
+	RecordChatRecordsBatch(records []*models.LLMChatRecord)
+	RecordProxyLogsBatch(logs []*models.ProxyLog)
 }
 
 var globalHandler AnalyticsHandler
