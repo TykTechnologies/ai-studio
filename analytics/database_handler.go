@@ -23,10 +23,13 @@ type DatabaseHandler struct {
 	logEntryChan   chan *models.LLMChatLogEntry
 	toolCallChan   chan *models.ToolCallRecord
 	proxyLogChan   chan *models.ProxyLog
-	recStarted     bool
-	recMutex       sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
+	// Batch processing channels for async non-blocking batch operations
+	chatRecordBatchChan chan []*models.LLMChatRecord
+	proxyLogBatchChan   chan []*models.ProxyLog
+	recStarted          bool
+	recMutex            sync.RWMutex
+	ctx                 context.Context
+	cancel              context.CancelFunc
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
@@ -104,6 +107,14 @@ func (h *DatabaseHandler) start() {
 	h.toolCallChan = make(chan *models.ToolCallRecord, defaultBufferSize)
 	h.proxyLogChan = make(chan *models.ProxyLog, defaultBufferSize)
 
+	// Initialize batch processing channels with smaller buffer for batches
+	batchBufferSize := defaultBufferSize / 10 // Batches are larger, so fewer slots needed
+	if batchBufferSize < 10 {
+		batchBufferSize = 10
+	}
+	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
+	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
+
 	// Start background workers
 	go h.startWorker()
 }
@@ -148,6 +159,46 @@ func (h *DatabaseHandler) startWorker() {
 			if err != nil {
 				slog.Warn("error creating proxy log", "error", sanitizeError(err))
 			}
+		case records := <-h.chatRecordBatchChan:
+			startTime := time.Now()
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(records, 100).Error
+			})
+			processingTime := time.Since(startTime)
+
+			if err != nil {
+				slog.Warn("error creating chat record batch",
+					"error", sanitizeError(err),
+					"count", len(records),
+					"processing_time_ms", processingTime.Milliseconds())
+			} else {
+				slog.Info("created chat record batch",
+					"count", len(records),
+					"processing_time_ms", processingTime.Milliseconds(),
+					"records_per_second", float64(len(records))/processingTime.Seconds(),
+					"first_model", records[0].Name,
+					"timestamp", records[0].TimeStamp)
+			}
+		case logs := <-h.proxyLogBatchChan:
+			startTime := time.Now()
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(logs, 100).Error
+			})
+			processingTime := time.Since(startTime)
+
+			if err != nil {
+				slog.Warn("error creating proxy log batch",
+					"error", sanitizeError(err),
+					"count", len(logs),
+					"processing_time_ms", processingTime.Milliseconds())
+			} else {
+				slog.Info("created proxy log batch",
+					"count", len(logs),
+					"processing_time_ms", processingTime.Milliseconds(),
+					"records_per_second", float64(len(logs))/processingTime.Seconds(),
+					"first_vendor", logs[0].Vendor,
+					"timestamp", logs[0].TimeStamp)
+			}
 		case <-h.ctx.Done():
 			slog.Info("shutting down database analytics handler")
 			h.recMutex.Lock()
@@ -157,6 +208,8 @@ func (h *DatabaseHandler) startWorker() {
 			close(h.logEntryChan)
 			close(h.toolCallChan)
 			close(h.proxyLogChan)
+			close(h.chatRecordBatchChan)
+			close(h.proxyLogBatchChan)
 			return
 		}
 	}
@@ -284,7 +337,8 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	}
 }
 
-// RecordChatRecordsBatch records multiple chat records using GORM batch operations for improved performance
+// RecordChatRecordsBatch records multiple chat records asynchronously using background worker
+// This method is non-blocking and returns immediately to avoid impacting request latency
 func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
 	if len(records) == 0 {
 		return
@@ -298,32 +352,17 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 	}
 	h.recMutex.RUnlock()
 
-	// Performance monitoring: track batch processing time
-	startTime := time.Now()
-
-	// Use GORM CreateInBatches for efficient bulk insert
-	err := h.createRecordWithRetry(func() error {
-		return h.db.CreateInBatches(records, 100).Error // Process in batches of 100
-	})
-
-	processingTime := time.Since(startTime)
-
-	if err != nil {
-		slog.Warn("error creating chat record batch",
-			"error", sanitizeError(err),
-			"count", len(records),
-			"processing_time_ms", processingTime.Milliseconds())
-	} else {
-		slog.Info("created chat record batch",
-			"count", len(records),
-			"processing_time_ms", processingTime.Milliseconds(),
-			"records_per_second", float64(len(records))/processingTime.Seconds(),
-			"first_model", records[0].Name,
-			"timestamp", records[0].TimeStamp)
+	// Send batch to async worker - non-blocking to avoid request latency
+	select {
+	case h.chatRecordBatchChan <- records:
+		slog.Debug("sent chat record batch to async worker", "count", len(records))
+	default:
+		slog.Warn("chat record batch buffer full, dropping batch", "count", len(records))
 	}
 }
 
-// RecordProxyLogsBatch records multiple proxy logs using GORM batch operations for improved performance
+// RecordProxyLogsBatch records multiple proxy logs asynchronously using background worker
+// This method is non-blocking and returns immediately to avoid impacting request latency
 func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 	if len(logs) == 0 {
 		return
@@ -337,28 +376,12 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 	}
 	h.recMutex.RUnlock()
 
-	// Performance monitoring: track batch processing time
-	startTime := time.Now()
-
-	// Use GORM CreateInBatches for efficient bulk insert
-	err := h.createRecordWithRetry(func() error {
-		return h.db.CreateInBatches(logs, 100).Error // Process in batches of 100
-	})
-
-	processingTime := time.Since(startTime)
-
-	if err != nil {
-		slog.Warn("error creating proxy log batch",
-			"error", sanitizeError(err),
-			"count", len(logs),
-			"processing_time_ms", processingTime.Milliseconds())
-	} else {
-		slog.Info("created proxy log batch",
-			"count", len(logs),
-			"processing_time_ms", processingTime.Milliseconds(),
-			"records_per_second", float64(len(logs))/processingTime.Seconds(),
-			"first_vendor", logs[0].Vendor,
-			"timestamp", logs[0].TimeStamp)
+	// Send batch to async worker - non-blocking to avoid request latency
+	select {
+	case h.proxyLogBatchChan <- logs:
+		slog.Debug("sent proxy log batch to async worker", "count", len(logs))
+	default:
+		slog.Warn("proxy log batch buffer full, dropping batch", "count", len(logs))
 	}
 }
 

@@ -2,6 +2,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -25,18 +26,173 @@ type MicrogatewaAnalyticsHandler struct {
 	pendingEvents map[string]uint // Map request ID to event ID for matching
 	mu            sync.RWMutex
 	pluginManager *plugins.PluginManager // For global data collection plugins
+	// Batch processing channels for async non-blocking batch operations
+	chatRecordBatchChan chan []*models.LLMChatRecord
+	proxyLogBatchChan   chan []*models.ProxyLog
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	workerStarted       bool
+	workerMutex         sync.Mutex
 }
 
 // NewMicrogatewaAnalyticsHandler creates a new analytics handler for the microgateway
 func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig, pluginManager *plugins.PluginManager) *MicrogatewaAnalyticsHandler {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	batchBufferSize := 100 // Default batch channel buffer size
+	if analyticsConfig != nil && analyticsConfig.BufferSize > 0 {
+		batchBufferSize = analyticsConfig.BufferSize / 10
+		if batchBufferSize < 10 {
+			batchBufferSize = 10
+		}
+	}
+
 	return &MicrogatewaAnalyticsHandler{
 		db:            db,
 		config:        analyticsConfig,
 		pendingEvents: make(map[string]uint),
 		pluginManager: pluginManager,
+		chatRecordBatchChan: make(chan []*models.LLMChatRecord, batchBufferSize),
+		proxyLogBatchChan:   make(chan []*models.ProxyLog, batchBufferSize),
+		ctx:                 ctx,
+		cancel:              cancel,
 	}
 }
 
+// ensureWorkerStarted ensures the async batch worker is running
+func (h *MicrogatewaAnalyticsHandler) ensureWorkerStarted() {
+	h.workerMutex.Lock()
+	defer h.workerMutex.Unlock()
+
+	if !h.workerStarted {
+		h.workerStarted = true
+		go h.startBatchWorker()
+	}
+}
+
+// startBatchWorker runs the batch processing worker
+func (h *MicrogatewaAnalyticsHandler) startBatchWorker() {
+	for {
+		select {
+		case records := <-h.chatRecordBatchChan:
+			h.processChatRecordsBatchSync(records)
+		case logs := <-h.proxyLogBatchChan:
+			h.processProxyLogsBatchSync(logs)
+		case <-h.ctx.Done():
+			log.Info().Msg("Shutting down microgateway analytics batch worker")
+			close(h.chatRecordBatchChan)
+			close(h.proxyLogBatchChan)
+			return
+		}
+	}
+}
+
+// processChatRecordsBatchSync processes chat records batch synchronously in worker
+func (h *MicrogatewaAnalyticsHandler) processChatRecordsBatchSync(records []*models.LLMChatRecord) {
+	startTime := time.Now()
+
+	events := make([]*database.AnalyticsEvent, len(records))
+	for i, record := range records {
+		event := &database.AnalyticsEvent{
+			RequestID:      fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+			AppID:          record.AppID,
+			LLMID:          &record.LLMID,
+			Endpoint:       "/v1/chat/completions", // Default endpoint for chat interactions
+			Method:         "POST",
+			StatusCode:     200, // Assume success for chat records
+			RequestTokens:  record.PromptTokens,
+			ResponseTokens: record.ResponseTokens,
+			TotalTokens:    record.TotalTokens,
+			Cost:           record.Cost,
+			LatencyMs:      record.TotalTimeMS,
+			ErrorMessage:   "",
+			CreatedAt:      record.TimeStamp,
+		}
+		events[i] = event
+	}
+
+	// Use GORM CreateInBatches for efficient bulk insert
+	err := h.db.CreateInBatches(events, 100).Error
+	processingTime := time.Since(startTime)
+
+	if err != nil {
+		log.Error().Err(err).Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
+			Msg("Failed to create chat record batch")
+	} else {
+		log.Info().Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
+			Float64("records_per_second", float64(len(records))/processingTime.Seconds()).
+			Msg("Created chat record batch successfully")
+	}
+}
+
+// processProxyLogsBatchSync processes proxy logs batch synchronously in worker
+func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.ProxyLog) {
+	startTime := time.Now()
+
+	events := make([]*database.AnalyticsEvent, len(logs))
+	for i, proxyLog := range logs {
+		// Parse token usage and cost from response body if available
+		tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
+		model := h.extractModelFromRequest(proxyLog.RequestBody)
+		cost := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
+		llmID := h.findLLMIDByVendorAndModel(proxyLog.Vendor, model)
+
+		var llmIDPtr *uint
+		if llmID > 0 {
+			llmIDPtr = &llmID
+		}
+
+		event := &database.AnalyticsEvent{
+			RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+			AppID:          proxyLog.AppID,
+			LLMID:          llmIDPtr,
+			Endpoint:       h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
+			Method:         "POST",
+			StatusCode:     proxyLog.ResponseCode,
+			RequestTokens:  tokens.PromptTokens,
+			ResponseTokens: tokens.ResponseTokens,
+			TotalTokens:    tokens.TotalTokens,
+			Cost:           cost,
+			LatencyMs:      0, // Not available in proxy log
+			ErrorMessage:   "",
+			CreatedAt:      proxyLog.TimeStamp,
+		}
+
+		// Add request/response bodies if configured
+		if h.config != nil {
+			if h.config.StoreRequestBodies {
+				event.RequestBody = h.truncateBody(proxyLog.RequestBody, h.config.MaxBodySize)
+			}
+
+			if h.config.StoreResponseBodies {
+				event.ResponseBody = h.truncateBody(proxyLog.ResponseBody, h.config.MaxBodySize)
+			}
+		}
+
+		events[i] = event
+	}
+
+	// Use GORM CreateInBatches for efficient bulk insert
+	err := h.db.CreateInBatches(events, 100).Error
+	processingTime := time.Since(startTime)
+
+	if err != nil {
+		log.Error().Err(err).Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
+			Msg("Failed to create proxy log batch")
+	} else {
+		log.Info().Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
+			Float64("records_per_second", float64(len(logs))/processingTime.Seconds()).
+			Str("first_vendor", logs[0].Vendor).
+			Msg("Created proxy log batch successfully")
+	}
+}
+
+// Stop gracefully shuts down the analytics handler
+func (h *MicrogatewaAnalyticsHandler) Stop() {
+	if h.cancel != nil {
+		h.cancel()
+	}
+}
 
 // RecordChatRecord implements the midsommar analytics interface
 // This is for AI Studio chat features - for microgateway, we use RecordProxyLog exclusively
@@ -281,93 +437,40 @@ func (h *MicrogatewaAnalyticsHandler) RecordToolCall(name string, timestamp time
 }
 
 // RecordChatRecordsBatch implements batch recording for microgateway analytics
+// This method is non-blocking and returns immediately to avoid impacting request latency
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
-	// For microgateway analytics, we'll convert these to analytics events in batch
 	if len(records) == 0 {
 		return
 	}
 
-	events := make([]*database.AnalyticsEvent, len(records))
-	for i, record := range records {
-		event := &database.AnalyticsEvent{
-			RequestID:      fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
-			AppID:          record.AppID,
-			LLMID:          &record.LLMID,
-			Endpoint:       "/v1/chat/completions", // Default endpoint for chat interactions
-			Method:         "POST",
-			StatusCode:     200, // Assume success for chat records
-			RequestTokens:  record.PromptTokens,
-			ResponseTokens: record.ResponseTokens,
-			TotalTokens:    record.TotalTokens,
-			Cost:           record.Cost,
-			LatencyMs:      record.TotalTimeMS,
-			ErrorMessage:   "",
-			CreatedAt:      record.TimeStamp,
-		}
-		events[i] = event
-	}
+	// Ensure async worker is started
+	h.ensureWorkerStarted()
 
-	// Use GORM CreateInBatches for efficient bulk insert
-	if err := h.db.CreateInBatches(events, 100).Error; err != nil {
-		log.Error().Err(err).Int("count", len(records)).Msg("Failed to create chat record batch")
-	} else {
-		log.Info().Int("count", len(records)).Msg("Created chat record batch successfully")
+	// Send batch to async worker - non-blocking to avoid request latency
+	select {
+	case h.chatRecordBatchChan <- records:
+		log.Debug().Int("count", len(records)).Msg("Sent chat record batch to async worker")
+	default:
+		log.Warn().Int("count", len(records)).Msg("Chat record batch buffer full, dropping batch")
 	}
 }
 
 // RecordProxyLogsBatch implements batch recording for microgateway analytics
+// This method is non-blocking and returns immediately to avoid impacting request latency
 func (h *MicrogatewaAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
-	// Convert proxy logs to analytics events in batch
 	if len(logs) == 0 {
 		return
 	}
 
-	events := make([]*database.AnalyticsEvent, len(logs))
-	for i, proxyLog := range logs {
-		// Parse token usage and cost from response body if available
-		tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
-		model := h.extractModelFromRequest(proxyLog.RequestBody)
-		cost := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
-		llmID := h.findLLMIDByVendorAndModel(proxyLog.Vendor, model)
+	// Ensure async worker is started
+	h.ensureWorkerStarted()
 
-		var llmIDPtr *uint
-		if llmID > 0 {
-			llmIDPtr = &llmID
-		}
-
-		event := &database.AnalyticsEvent{
-			RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
-			AppID:          proxyLog.AppID,
-			LLMID:          llmIDPtr,
-			Endpoint:       h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
-			Method:         "POST",
-			StatusCode:     proxyLog.ResponseCode,
-			RequestTokens:  tokens.PromptTokens,
-			ResponseTokens: tokens.ResponseTokens,
-			TotalTokens:    tokens.TotalTokens,
-			Cost:           cost,
-			LatencyMs:      0, // Not available in proxy log
-			ErrorMessage:   "",
-			CreatedAt:      proxyLog.TimeStamp,
-		}
-
-		// Add request/response bodies if configured
-		if h.config.StoreRequestBodies {
-			event.RequestBody = h.truncateBody(proxyLog.RequestBody, h.config.MaxBodySize)
-		}
-
-		if h.config.StoreResponseBodies {
-			event.ResponseBody = h.truncateBody(proxyLog.ResponseBody, h.config.MaxBodySize)
-		}
-
-		events[i] = event
-	}
-
-	// Use GORM CreateInBatches for efficient bulk insert
-	if err := h.db.CreateInBatches(events, 100).Error; err != nil {
-		log.Error().Err(err).Int("count", len(logs)).Msg("Failed to create proxy log batch")
-	} else {
-		log.Info().Int("count", len(logs)).Msg("Created proxy log batch successfully")
+	// Send batch to async worker - non-blocking to avoid request latency
+	select {
+	case h.proxyLogBatchChan <- logs:
+		log.Debug().Int("count", len(logs)).Msg("Sent proxy log batch to async worker")
+	default:
+		log.Warn().Int("count", len(logs)).Msg("Proxy log batch buffer full, dropping batch")
 	}
 }
 
