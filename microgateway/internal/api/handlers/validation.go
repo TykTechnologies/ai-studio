@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -207,22 +208,43 @@ func validatePluginCommand(command string) error {
 	return nil
 }
 
-// isInternalIP checks if a hostname/IP is internal/private
+// isInternalIP checks if a hostname/IP is internal/private using proper CIDR validation
 func isInternalIP(host string) bool {
-	internalPatterns := []string{
-		"127.", "localhost", "::1",          // Loopback
-		"192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", // Private networks
-		"172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-		"172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-		"169.254.", // Link-local
-		"fc00:", "fd00:", "fe80:", // IPv6 private/link-local
+	// Handle localhost variations
+	lowerHost := strings.ToLower(host)
+	if lowerHost == "localhost" || lowerHost == "::1" {
+		return true
 	}
 
-	lowerHost := strings.ToLower(host)
-	for _, pattern := range internalPatterns {
-		if strings.HasPrefix(lowerHost, pattern) || strings.Contains(lowerHost, pattern) {
+	// Parse the IP address
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// If not an IP, could be a hostname - check for localhost patterns
+		return strings.Contains(lowerHost, "localhost")
+	}
+
+	// Define private IP CIDR ranges
+	privateCIDRs := []string{
+		"10.0.0.0/8",        // Private Class A
+		"172.16.0.0/12",     // Private Class B
+		"192.168.0.0/16",    // Private Class C
+		"127.0.0.0/8",       // IPv4 loopback
+		"169.254.0.0/16",    // IPv4 link-local
+		"::1/128",           // IPv6 loopback
+		"fc00::/7",          // IPv6 unique local addresses
+		"fe80::/10",         // IPv6 link-local
+	}
+
+	// Check if IP falls within any private CIDR range
+	for _, cidrStr := range privateCIDRs {
+		_, cidr, err := net.ParseCIDR(cidrStr)
+		if err != nil {
+			continue
+		}
+		if cidr.Contains(ip) {
 			return true
 		}
 	}
+
 	return false
 }

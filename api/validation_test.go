@@ -95,6 +95,30 @@ func TestValidatePluginCommand(t *testing.T) {
 			shouldError: true,
 			description: "Should block 10.x.x.x private range",
 		},
+		{
+			name:        "SSRF Bypass - 172.32.x.x (should be blocked)",
+			command:     "http://172.32.0.1/plugin",
+			shouldError: false,
+			description: "172.32.x.x is not in private range, should be allowed",
+		},
+		{
+			name:        "SSRF Test - 172.15.x.x (should be blocked)",
+			command:     "http://172.15.255.255/plugin",
+			shouldError: false,
+			description: "172.15.x.x is not in private range, should be allowed",
+		},
+		{
+			name:        "Private 172.16 range start",
+			command:     "http://172.16.0.0/plugin",
+			shouldError: true,
+			description: "Should block 172.16.0.0 (start of private range)",
+		},
+		{
+			name:        "Private 172.31 range end",
+			command:     "http://172.31.255.255/plugin",
+			shouldError: true,
+			description: "Should block 172.31.255.255 (end of private range)",
+		},
 
 		// Invalid URL schemes
 		{

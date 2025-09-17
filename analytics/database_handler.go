@@ -30,7 +30,7 @@ type DatabaseHandler struct {
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
-var sensitiveDataPattern = regexp.MustCompile(`(?i)(token|key|secret|password|credential|authorization|bearer|api_key|auth)[\s\w]*[:=][\s]*['"]*([^\s'"]+)`)
+var sensitiveDataPattern = regexp.MustCompile(`(?i)(token|key|secret|password|credential|authorization|bearer|api_key|auth)\s*[:=]\s*['"]?([^\s'",]+)['"]?`)
 
 // sanitizeError removes potentially sensitive data from error messages for safe logging
 func sanitizeError(err error) string {
@@ -41,11 +41,19 @@ func sanitizeError(err error) string {
 	errStr := err.Error()
 
 	// Redact sensitive data patterns
-	sanitized := sensitiveDataPattern.ReplaceAllString(errStr, "$1=***REDACTED***")
-
-	// Additional sanitization for common sensitive patterns
-	sanitized = strings.ReplaceAll(sanitized, "password=", "password=***REDACTED***")
-	sanitized = strings.ReplaceAll(sanitized, "secret=", "secret=***REDACTED***")
+	sanitized := sensitiveDataPattern.ReplaceAllStringFunc(errStr, func(match string) string {
+		// Extract the key part (first capture group)
+		parts := sensitiveDataPattern.FindStringSubmatch(match)
+		if len(parts) >= 2 {
+			key := parts[1]
+			// Determine the separator used
+			if strings.Contains(match, ":") {
+				return key + ": ***REDACTED***"
+			}
+			return key + "=***REDACTED***"
+		}
+		return "***REDACTED***"
+	})
 
 	return sanitized
 }

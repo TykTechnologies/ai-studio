@@ -73,12 +73,26 @@ func TestMicrogatewayIsInternalIP(t *testing.T) {
 	}{
 		{"Localhost", "localhost", true},
 		{"Loopback IPv4", "127.0.0.1", true},
+		{"Loopback IPv4 range", "127.255.255.255", true},
 		{"Private 192.168", "192.168.1.1", true},
+		{"Private 192.168 edge", "192.168.255.255", true},
 		{"Private 10.x", "10.0.0.1", true},
+		{"Private 10.x edge", "10.255.255.255", true},
 		{"Private 172.16", "172.16.0.1", true},
+		{"Private 172.31 (edge)", "172.31.255.255", true},
+		{"Link-local", "169.254.1.1", true},
+		{"IPv6 loopback", "::1", true},
+		{"IPv6 private fc00", "fc00::1", true},
+		{"IPv6 private fd00", "fd00::1", true},
+		{"IPv6 link-local", "fe80::1", true},
+		// Edge cases that should NOT be internal
+		{"Not private 172.32", "172.32.0.1", false},
+		{"Not private 172.15", "172.15.255.255", false},
 		{"Public IP", "8.8.8.8", false},
 		{"Public Domain", "example.com", false},
 		{"External Service", "api.external.com", false},
+		{"Edge 192.169", "192.169.0.1", false},
+		{"Edge 11.0.0.1", "11.0.0.1", false},
 	}
 
 	for _, tc := range testCases {
