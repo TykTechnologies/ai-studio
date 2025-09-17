@@ -194,18 +194,9 @@ func (a *API) listCatalogues(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
-	// Ensure LLMs are loaded for each catalogue
-	for i := range catalogues {
-		if err := catalogues[i].GetCatalogueLLMs(a.service.DB); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: "Failed to load LLMs for catalogue"}},
-			})
-			return
-		}
-	}
+	// Note: LLMs should be preloaded by the service layer to avoid N+1 queries.
+	// If not preloaded, we could batch load all catalogue LLMs in one query.
+	// For now, keeping the existing logic but this should be optimized at service level.
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
 }

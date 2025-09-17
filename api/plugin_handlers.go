@@ -142,8 +142,90 @@ func (a *API) listPlugins(c *gin.Context) {
 		},
 	}
 
+	// Serialize plugins inline to avoid N+1 queries from function calls
 	for i, plugin := range plugins {
-		response.Data[i] = serializePlugin(&plugin)
+		pluginResponse := PluginResponse{
+			Type: "plugins",
+			ID:   strconv.FormatUint(uint64(plugin.ID), 10),
+			Attributes: struct {
+				Name        string                 `json:"name"`
+				Slug        string                 `json:"slug"`
+				Description string                 `json:"description"`
+				Command     string                 `json:"command"`
+				Checksum    string                 `json:"checksum,omitempty"`
+				Config      map[string]interface{} `json:"config"`
+				HookType    string                 `json:"hook_type"`
+				IsActive    bool                   `json:"is_active"`
+				Namespace   string                 `json:"namespace"`
+				CreatedAt   string                 `json:"created_at"`
+				UpdatedAt   string                 `json:"updated_at"`
+			}{
+				Name:        plugin.Name,
+				Slug:        plugin.Slug,
+				Description: plugin.Description,
+				Command:     plugin.Command,
+				Checksum:    plugin.Checksum,
+				Config:      plugin.Config,
+				HookType:    plugin.HookType,
+				IsActive:    plugin.IsActive,
+				Namespace:   plugin.Namespace,
+				CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			},
+		}
+
+		// Include LLM relationships if they exist (using preloaded data)
+		if len(plugin.LLMs) > 0 {
+			pluginResponse.Relationships = &struct {
+				LLMs struct {
+					Data []struct {
+						Type string `json:"type"`
+						ID   string `json:"id"`
+						Attributes struct {
+							Name   string `json:"name"`
+							Vendor string `json:"vendor"`
+							Active bool   `json:"active"`
+						} `json:"attributes"`
+					} `json:"data"`
+				} `json:"llms"`
+			}{}
+
+			pluginResponse.Relationships.LLMs.Data = make([]struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+				Attributes struct {
+					Name   string `json:"name"`
+					Vendor string `json:"vendor"`
+					Active bool   `json:"active"`
+				} `json:"attributes"`
+			}, len(plugin.LLMs))
+
+			for j, llm := range plugin.LLMs {
+				pluginResponse.Relationships.LLMs.Data[j] = struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+					Attributes struct {
+						Name   string `json:"name"`
+						Vendor string `json:"vendor"`
+						Active bool   `json:"active"`
+					} `json:"attributes"`
+				}{
+					Type: "llms",
+					ID:   strconv.FormatUint(uint64(llm.ID), 10),
+					Attributes: struct {
+						Name   string `json:"name"`
+						Vendor string `json:"vendor"`
+						Active bool   `json:"active"`
+					}{
+						Name:   llm.Name,
+						Vendor: string(llm.Vendor),
+						Active: llm.Active,
+					},
+				}
+			}
+		}
+
+		response.Data[i] = pluginResponse
 	}
 
 	c.JSON(http.StatusOK, response)

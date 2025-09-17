@@ -572,7 +572,81 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 	result := make([]LLMResponse, len(llms))
 	for i, llm := range llms {
-		result[i] = a.serializeLLM(&llm)
+		// Serialize plugins inline to avoid N+1 queries from function calls
+		plugins := make([]PluginResponse, len(llm.Plugins))
+		for j, plugin := range llm.Plugins {
+			plugins[j] = PluginResponse{
+				Type: "plugins",
+				ID:   strconv.FormatUint(uint64(plugin.ID), 10),
+				Attributes: struct {
+					Name        string                 `json:"name"`
+					Slug        string                 `json:"slug"`
+					Description string                 `json:"description"`
+					Command     string                 `json:"command"`
+					Checksum    string                 `json:"checksum,omitempty"`
+					Config      map[string]interface{} `json:"config"`
+					HookType    string                 `json:"hook_type"`
+					IsActive    bool                   `json:"is_active"`
+					Namespace   string                 `json:"namespace"`
+					CreatedAt   string                 `json:"created_at"`
+					UpdatedAt   string                 `json:"updated_at"`
+				}{
+					Name:        plugin.Name,
+					Slug:        plugin.Slug,
+					Description: plugin.Description,
+					Command:     plugin.Command,
+					Checksum:    plugin.Checksum,
+					Config:      plugin.Config,
+					HookType:    plugin.HookType,
+					IsActive:    plugin.IsActive,
+					Namespace:   plugin.Namespace,
+					CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				},
+			}
+		}
+
+		result[i] = LLMResponse{
+			Type: "llms",
+			ID:   strconv.FormatUint(uint64(llm.ID), 10),
+			Attributes: struct {
+				Name             string           `json:"name"`
+				APIKey           string           `json:"api_key"`
+				HasAPIKey        bool             `json:"has_api_key"`
+				APIEndpoint      string           `json:"api_endpoint"`
+				PrivacyScore     int              `json:"privacy_score"`
+				ShortDescription string           `json:"short_description"`
+				LongDescription  string           `json:"long_description"`
+				LogoURL          string           `json:"logo_url"`
+				Vendor           string           `json:"vendor"`
+				Active           bool             `json:"active"`
+				Filters          []FilterResponse `json:"filters"`
+				DefaultModel     string           `json:"default_model"`
+				AllowedModels    []string         `json:"allowed_models"`
+				MonthlyBudget    *float64         `json:"monthly_budget"`
+				BudgetStartDate  *time.Time       `json:"budget_start_date"`
+				Namespace        string           `json:"namespace"`
+				Plugins          []PluginResponse `json:"plugins"`
+			}{
+				Name:             llm.Name,
+				APIKey:           services.REDACTED_VALUE,
+				HasAPIKey:        llm.APIKey != "",
+				APIEndpoint:      llm.APIEndpoint,
+				PrivacyScore:     llm.PrivacyScore,
+				ShortDescription: llm.ShortDescription,
+				LongDescription:  llm.LongDescription,
+				LogoURL:          llm.LogoURL,
+				Vendor:           string(llm.Vendor),
+				Active:           llm.Active,
+				Filters:          serializeFilters(llm.Filters),
+				DefaultModel:     llm.DefaultModel,
+				AllowedModels:    llm.AllowedModels,
+				MonthlyBudget:    llm.MonthlyBudget,
+				BudgetStartDate:  llm.BudgetStartDate,
+				Namespace:        llm.Namespace,
+				Plugins:          plugins,
+			},
+		}
 	}
 	return result
 }
