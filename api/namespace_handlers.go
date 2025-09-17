@@ -98,7 +98,18 @@ func (a *API) listNamespaces(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) triggerNamespaceReload(c *gin.Context) {
 	namespace := c.Param("namespace")
-	
+
+	// Security: Validate namespace parameter
+	if err := validateNamespace(namespace); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Get current user for audit trail
 	user, exists := c.Get("user")
 	initiatedBy := "unknown"
@@ -161,7 +172,18 @@ func (a *API) triggerNamespaceReload(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) getNamespaceEdges(c *gin.Context) {
 	namespace := c.Param("namespace")
-	
+
+	// Security: Validate namespace parameter
+	if err := validateNamespace(namespace); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	edges, err := a.service.NamespaceService.GetEdgesInNamespace(namespace)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -209,7 +231,18 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) getReloadOperationStatus(c *gin.Context) {
 	operationID := c.Param("operation_id")
-	
+
+	// Security: Validate operation_id parameter
+	if err := validateOperationID(operationID); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Get reload coordinator from namespace service
 	if a.service.NamespaceService == nil {
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{

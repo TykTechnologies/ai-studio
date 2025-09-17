@@ -121,10 +121,12 @@ func InitiateEdgeReload(reloadCoordinator *services.ReloadCoordinator) gin.Handl
 func GetReloadOperationStatus(reloadCoordinator *services.ReloadCoordinator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		operationID := c.Param("operation_id")
-		if operationID == "" {
+
+		// Security: Validate operation_id parameter
+		if err := validateOperationID(operationID); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Missing operation ID",
-				"message": "operation_id parameter is required",
+				"error":   "Invalid operation ID",
+				"message": err.Error(),
 			})
 			return
 		}
@@ -225,10 +227,12 @@ func GetEdgeInstanceStatus(serviceContainer *services.ServiceContainer) gin.Hand
 func GetSingleEdgeStatus(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		edgeID := c.Param("edge_id")
-		if edgeID == "" {
+
+		// Security: Validate edge_id parameter
+		if err := validateEdgeID(edgeID); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Missing edge ID",
-				"message": "edge_id parameter is required",
+				"error":   "Invalid edge ID",
+				"message": err.Error(),
 			})
 			return
 		}

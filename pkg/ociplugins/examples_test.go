@@ -8,8 +8,8 @@ import (
 
 // ExampleParseOCICommand demonstrates how to parse OCI plugin commands
 func ExampleParseOCICommand() {
-	// Basic OCI reference with digest
-	ref, params, err := ParseOCICommand("oci://nexus.example.com/plugins/ner@sha256:0123deadbeef456")
+	// Basic OCI reference with digest and explicit architecture
+	ref, params, err := ParseOCICommand("oci://nexus.example.com/plugins/ner@sha256:0123deadbeef456?arch=linux/amd64")
 	if err != nil {
 		panic(err)
 	}
@@ -32,7 +32,7 @@ func ExampleParseOCICommand() {
 	// Registry: nexus.example.com
 	// Repository: plugins/ner
 	// Digest: sha256:0123deadbeef456
-	// Architecture: darwin/arm64
+	// Architecture: linux/amd64
 	// Architecture: linux/arm64
 	// Public Key: test.pub
 }
@@ -56,8 +56,8 @@ func ExampleOCIPluginClient_FetchPlugin() {
 		panic(err)
 	}
 
-	// Parse OCI reference
-	ref, params, err := ParseOCICommand("oci://nexus.example.com/plugins/ner@sha256:0123deadbeef456")
+	// Parse OCI reference with explicit architecture
+	ref, params, err := ParseOCICommand("oci://nexus.example.com/plugins/ner@sha256:0123deadbeef456?arch=linux/amd64")
 	if err != nil {
 		panic(err)
 	}
@@ -65,15 +65,11 @@ func ExampleOCIPluginClient_FetchPlugin() {
 	// This would fetch from the registry in a real scenario
 	fmt.Printf("Would fetch plugin: %s\n", ref.FullReference())
 	fmt.Printf("Target architecture: %s\n", params.Architecture)
-
-	// Note: Output will vary based on runtime architecture
-	// On macOS: Target architecture: darwin/arm64
-	// On Linux: Target architecture: linux/amd64
 	fmt.Printf("Runtime: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 
 	// Output:
 	// Would fetch plugin: nexus.example.com/plugins/ner@sha256:0123deadbeef456
-	// Target architecture: darwin/arm64
+	// Target architecture: linux/amd64
 	// Runtime: darwin/arm64
 }
 

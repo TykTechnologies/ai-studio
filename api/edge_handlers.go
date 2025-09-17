@@ -121,7 +121,18 @@ func (a *API) listEdges(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) getEdge(c *gin.Context) {
 	edgeID := c.Param("edge_id")
-	
+
+	// Security: Validate edge_id parameter
+	if err := validateEdgeID(edgeID); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	edge, err := a.service.EdgeService.GetEdgeByEdgeID(edgeID)
 	if err != nil {
 		if err.Error() == "failed to get edge: record not found" {
@@ -159,7 +170,18 @@ func (a *API) getEdge(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) triggerEdgeReload(c *gin.Context) {
 	edgeID := c.Param("edge_id")
-	
+
+	// Security: Validate edge_id parameter
+	if err := validateEdgeID(edgeID); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Get current user for audit trail
 	user, exists := c.Get("user")
 	initiatedBy := "unknown"
@@ -273,7 +295,18 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) deleteEdge(c *gin.Context) {
 	edgeID := c.Param("edge_id")
-	
+
+	// Security: Validate edge_id parameter
+	if err := validateEdgeID(edgeID); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	if err := a.service.EdgeService.DeleteEdge(edgeID); err != nil {
 		if err.Error() == "edge not found: record not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse{
