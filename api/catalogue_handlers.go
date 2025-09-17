@@ -194,9 +194,6 @@ func (a *API) listCatalogues(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
-	// Note: LLMs should be preloaded by the service layer to avoid N+1 queries.
-	// If not preloaded, we could batch load all catalogue LLMs in one query.
-	// For now, keeping the existing logic but this should be optimized at service level.
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
 }
@@ -401,7 +398,23 @@ func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {
 func serializeCatalogues(catalogues models.Catalogues) []CatalogueResponse {
 	result := make([]CatalogueResponse, len(catalogues))
 	for i, catalogue := range catalogues {
-		result[i] = serializeCatalogue(&catalogue)
+		// Extract LLM names from preloaded relationship to avoid N+1 queries
+		llmNames := make([]string, len(catalogue.LLMs))
+		for j, llm := range catalogue.LLMs {
+			llmNames[j] = llm.Name
+		}
+
+		result[i] = CatalogueResponse{
+			Type: "catalogues",
+			ID:   strconv.FormatUint(uint64(catalogue.ID), 10),
+			Attributes: struct {
+				Name     string   `json:"name"`
+				LLMNames []string `json:"llm_names"`
+			}{
+				Name:     catalogue.Name,
+				LLMNames: llmNames,
+			},
+		}
 	}
 	return result
 }

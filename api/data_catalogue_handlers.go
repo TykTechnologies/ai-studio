@@ -561,7 +561,45 @@ func serializeDataCatalogue(dataCatalogue *models.DataCatalogue) DataCatalogueRe
 func serializeDataCatalogues(dataCatalogues models.DataCatalogues) []DataCatalogueResponse {
 	result := make([]DataCatalogueResponse, len(dataCatalogues))
 	for i, dataCatalogue := range dataCatalogues {
-		result[i] = serializeDataCatalogue(&dataCatalogue)
+		// Serialize datasources inline to avoid N+1 queries
+		datasourceResponses := make([]DatasourceResponse, len(dataCatalogue.Datasources))
+		for j, datasource := range dataCatalogue.Datasources {
+			datasourceResponses[j] = serializeDatasource(&datasource) // Note: this may still have N+1 if it accesses relationships
+		}
+
+		// Serialize tags inline to avoid N+1 queries
+		tagResponses := make([]TagResponse, len(dataCatalogue.Tags))
+		for j, tag := range dataCatalogue.Tags {
+			tagResponses[j] = TagResponse{
+				Type: "tags",
+				ID:   strconv.FormatUint(uint64(tag.ID), 10),
+				Attributes: struct {
+					Name string `json:"name"`
+				}{
+					Name: tag.Name,
+				},
+			}
+		}
+
+		result[i] = DataCatalogueResponse{
+			Type: "data-catalogues",
+			ID:   strconv.FormatUint(uint64(dataCatalogue.ID), 10),
+			Attributes: struct {
+				Name             string               `json:"name"`
+				ShortDescription string               `json:"short_description"`
+				LongDescription  string               `json:"long_description"`
+				Icon             string               `json:"icon"`
+				Datasources      []DatasourceResponse `json:"datasources"`
+				Tags             []TagResponse        `json:"tags"`
+			}{
+				Name:             dataCatalogue.Name,
+				ShortDescription: dataCatalogue.ShortDescription,
+				LongDescription:  dataCatalogue.LongDescription,
+				Icon:             dataCatalogue.Icon,
+				Datasources:      datasourceResponses,
+				Tags:             tagResponses,
+			},
+		}
 	}
 	return result
 }

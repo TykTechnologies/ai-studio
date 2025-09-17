@@ -323,7 +323,40 @@ func serializeUser(user *models.User) UserResponse {
 func serializeUsers(users models.Users) []UserResponse {
 	result := make([]UserResponse, len(users))
 	for i, user := range users {
-		result[i] = serializeUser(&user)
+		response := UserResponse{
+			Type: "users",
+			ID:   strconv.FormatUint(uint64(user.ID), 10),
+			Attributes: struct {
+				Email                string          `json:"email"`
+				Name                 string          `json:"name"`
+				IsAdmin              bool            `json:"is_admin"`
+				ShowChat             bool            `json:"show_chat"`
+				ShowPortal           bool            `json:"show_portal"`
+				EmailVerified        bool            `json:"email_verified"`
+				APIKey               string          `json:"api_key"`
+				NotificationsEnabled bool            `json:"notifications_enabled"`
+				AccessToSSOConfig    bool            `json:"access_to_sso_config"`
+				Role                 string          `json:"role"`
+				Groups               []GroupResponse `json:"groups,omitempty"`
+			}{
+				Email:                user.Email,
+				Name:                 user.Name,
+				IsAdmin:              user.IsAdmin,
+				ShowChat:             user.ShowChat,
+				ShowPortal:           user.ShowPortal,
+				EmailVerified:        user.EmailVerified,
+				APIKey:               user.APIKey,
+				NotificationsEnabled: user.NotificationsEnabled,
+				AccessToSSOConfig:    user.AccessToSSOConfig,
+				Role:                 user.GetRole(),
+			},
+		}
+
+		if len(user.Groups) > 0 {
+			response.Attributes.Groups = serializeGroups(user.Groups)
+		}
+
+		result[i] = response
 	}
 	return result
 }
