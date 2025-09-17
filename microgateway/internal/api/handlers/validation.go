@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // Security validation patterns and limits for API input parameters
@@ -76,4 +79,150 @@ func validateOperationID(operationID string) error {
 	}
 
 	return nil
+}
+
+// sanitizeStringForLogging sanitizes strings for safe logging by removing potential log injection characters
+func sanitizeStringForLogging(input string) string {
+	// Remove newlines, carriage returns, and other control characters that could break log format
+	sanitized := strings.ReplaceAll(input, "\n", "\\n")
+	sanitized = strings.ReplaceAll(sanitized, "\r", "\\r")
+	sanitized = strings.ReplaceAll(sanitized, "\t", "\\t")
+
+	// Limit length to prevent log bloat
+	if len(sanitized) > 256 {
+		sanitized = sanitized[:256] + "..."
+	}
+
+	return sanitized
+}
+
+// validatePluginCommand performs API-level security validation on plugin commands
+// This replicates key validations from the service layer to catch attacks at source
+func validatePluginCommand(command string) error {
+	if command == "" {
+		return fmt.Errorf("🔒 SECURITY: plugin command cannot be empty")
+	}
+
+	// Length limit to prevent extremely long commands
+	if len(command) > 1024 {
+		return fmt.Errorf("🔒 SECURITY: plugin command exceeds maximum length of 1024 characters")
+	}
+
+	// Check for path traversal attacks
+	if strings.Contains(command, "../") || strings.Contains(command, "..\\") {
+		return fmt.Errorf("🔒 SECURITY: plugin command contains path traversal attempt: %s", sanitizeStringForLogging(command))
+	}
+
+	// Check for command injection patterns
+	dangerousPatterns := []string{
+		";", "|", "&", "&&", "||", "`", "$(",
+		"\n", "\r", "\x00", // Control characters
+	}
+
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(command, pattern) {
+			return fmt.Errorf("🔒 SECURITY: plugin command contains potentially dangerous character sequence: %s", sanitizeStringForLogging(command))
+		}
+	}
+
+	// Validate file:// schemes for proper path format
+	if strings.HasPrefix(command, "file://") {
+		filePath := strings.TrimPrefix(command, "file://")
+
+		// Check for path traversal in file paths
+		if strings.Contains(filePath, "..") {
+			return fmt.Errorf("🔒 SECURITY: file:// command contains path traversal: %s", sanitizeStringForLogging(command))
+		}
+
+		// Canonicalize path to check for directory traversal
+		cleanPath := filepath.Clean(filePath)
+		if !strings.HasPrefix(cleanPath, "/") && !strings.Contains(cleanPath, ":") { // Allow Windows drive letters
+			// Relative path that could escape intended directory
+			if strings.Contains(cleanPath, "..") {
+				return fmt.Errorf("🔒 SECURITY: file:// command resolves to unsafe path: %s", sanitizeStringForLogging(command))
+			}
+		}
+
+		// Restrict to safe directories by default (can be overridden by service layer config)
+		safeDirs := []string{
+			"/usr/bin/", "/bin/", "/usr/local/bin/",
+			"./plugins/", "plugins/", "/opt/plugins/",
+		}
+
+		isSafePath := false
+		absPath := cleanPath
+		if !filepath.IsAbs(cleanPath) {
+			// For relative paths, they should be in allowed directories
+			isSafePath = strings.HasPrefix(cleanPath, "plugins/") || strings.HasPrefix(cleanPath, "./plugins/")
+		} else {
+			// For absolute paths, check against safe directories
+			for _, safeDir := range safeDirs {
+				if strings.HasPrefix(absPath, safeDir) {
+					isSafePath = true
+					break
+				}
+			}
+		}
+
+		if !isSafePath {
+			return fmt.Errorf("🔒 SECURITY: file:// command path not in allowed directories: %s", sanitizeStringForLogging(command))
+		}
+	}
+
+	// Validate URLs (grpc://, http://, https://, oci://)
+	if strings.Contains(command, "://") && !strings.HasPrefix(command, "file://") {
+		// Extract URL from command
+		parts := strings.Fields(command)
+		for _, part := range parts {
+			if strings.Contains(part, "://") {
+				parsedURL, err := url.Parse(part)
+				if err != nil {
+					return fmt.Errorf("🔒 SECURITY: plugin command contains invalid URL: %s", sanitizeStringForLogging(command))
+				}
+
+				// Check for internal/private network addresses
+				if parsedURL.Hostname() != "" {
+					host := parsedURL.Hostname()
+					if isInternalIP(host) {
+						return fmt.Errorf("🔒 SECURITY: plugin command targets internal network address: %s", sanitizeStringForLogging(command))
+					}
+				}
+
+				// Validate allowed schemes
+				allowedSchemes := []string{"grpc", "oci", "http", "https"}
+				schemeAllowed := false
+				for _, scheme := range allowedSchemes {
+					if parsedURL.Scheme == scheme {
+						schemeAllowed = true
+						break
+					}
+				}
+				if !schemeAllowed {
+					return fmt.Errorf("🔒 SECURITY: plugin command uses disallowed URL scheme: %s", sanitizeStringForLogging(command))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// isInternalIP checks if a hostname/IP is internal/private
+func isInternalIP(host string) bool {
+	internalPatterns := []string{
+		"127.", "localhost", "::1",          // Loopback
+		"192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", // Private networks
+		"172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+		"172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
+		"169.254.", // Link-local
+		"fc00:", "fd00:", "fe80:", // IPv6 private/link-local
+	}
+
+	lowerHost := strings.ToLower(host)
+	for _, pattern := range internalPatterns {
+		if strings.HasPrefix(lowerHost, pattern) || strings.Contains(lowerHost, pattern) {
+			return true
+		}
+	}
+	return false
 }
