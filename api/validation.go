@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -180,10 +181,10 @@ func validatePluginCommand(command string) error {
 					return fmt.Errorf("🔒 SECURITY: plugin command contains invalid URL: %s", sanitizeStringForLogging(command))
 				}
 
-				// Check for internal/private network addresses
+				// Check for internal/private network addresses (bypass with ALLOW_INTERNAL_NETWORK_ACCESS=true)
 				if parsedURL.Hostname() != "" {
 					host := parsedURL.Hostname()
-					if isInternalIP(host) {
+					if isInternalIP(host) && os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") != "true" {
 						return fmt.Errorf("🔒 SECURITY: plugin command targets internal network address: %s", sanitizeStringForLogging(command))
 					}
 				}

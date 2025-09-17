@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"testing"
 )
 
@@ -245,6 +246,100 @@ func TestSanitizeStringForLogging(t *testing.T) {
 			if result != tc.expected {
 				t.Errorf("Expected %q, got %q", tc.expected, result)
 			}
+		})
+	}
+}
+
+func TestValidatePluginCommand_InternalNetworkBypass(t *testing.T) {
+	testCases := []struct {
+		name        string
+		command     string
+		envValue    string
+		shouldError bool
+	}{
+		{
+			name:        "internal IP blocked by default",
+			command:     "http://127.0.0.1:8080/plugin",
+			envValue:    "",
+			shouldError: true,
+		},
+		{
+			name:        "internal IP allowed with env var",
+			command:     "http://127.0.0.1:8080/plugin",
+			envValue:    "true",
+			shouldError: false,
+		},
+		{
+			name:        "localhost blocked by default",
+			command:     "https://localhost:3000/api",
+			envValue:    "",
+			shouldError: true,
+		},
+		{
+			name:        "localhost allowed with env var",
+			command:     "https://localhost:3000/api",
+			envValue:    "true",
+			shouldError: false,
+		},
+		{
+			name:        "private network blocked by default",
+			command:     "grpc://192.168.1.100:9090",
+			envValue:    "",
+			shouldError: true,
+		},
+		{
+			name:        "private network allowed with env var",
+			command:     "grpc://192.168.1.100:9090",
+			envValue:    "true",
+			shouldError: false,
+		},
+		{
+			name:        "external URL always allowed",
+			command:     "https://api.example.com/webhook",
+			envValue:    "",
+			shouldError: false,
+		},
+		{
+			name:        "external URL still allowed with env var",
+			command:     "https://api.example.com/webhook",
+			envValue:    "true",
+			shouldError: false,
+		},
+		{
+			name:        "env var false still blocks",
+			command:     "http://127.0.0.1:8080/plugin",
+			envValue:    "false",
+			shouldError: true,
+		},
+		{
+			name:        "env var case sensitive",
+			command:     "http://127.0.0.1:8080/plugin",
+			envValue:    "TRUE",
+			shouldError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set up environment
+			if tc.envValue != "" {
+				os.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", tc.envValue)
+			} else {
+				os.Unsetenv("ALLOW_INTERNAL_NETWORK_ACCESS")
+			}
+
+			// Test validation
+			err := validatePluginCommand(tc.command)
+
+			if tc.shouldError && err == nil {
+				t.Errorf("expected error for command %s, but got none", tc.command)
+			}
+			if !tc.shouldError && err != nil {
+				t.Errorf("expected no error for command %s, but got: %v", tc.command, err)
+			}
+
+			// Clean up
+			os.Unsetenv("ALLOW_INTERNAL_NETWORK_ACCESS")
 		})
 	}
 }
