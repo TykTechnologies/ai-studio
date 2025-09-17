@@ -9,6 +9,10 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
+// REDACTED_VALUE is the value used to redact sensitive fields in API responses
+// This matches the value used by secrets.FilterSensitiveFields() for consistency
+const REDACTED_VALUE = "[redacted]"
+
 func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	llm := models.NewLLM()
 	if err := llm.Get(s.DB, id); err != nil {
@@ -92,7 +96,16 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	}
 
 	llm.Name = name
-	llm.APIKey = apiKey
+	// Smart API key update logic
+	if apiKey == "[redacted]" {
+		// Don't update API key if it's the redacted placeholder
+	} else if apiKey == "" {
+		// Clear API key if empty string is provided
+		llm.APIKey = ""
+	} else {
+		// Update to new API key value
+		llm.APIKey = apiKey
+	}
 	llm.APIEndpoint = apiEndpoint
 	llm.PrivacyScore = privacyScore
 	llm.ShortDescription = shortDescription

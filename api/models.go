@@ -150,6 +150,7 @@ type LLMResponse struct {
 	Attributes struct {
 		Name             string           `json:"name"`
 		APIKey           string           `json:"api_key"`
+		HasAPIKey        bool             `json:"has_api_key"`
 		APIEndpoint      string           `json:"api_endpoint"`
 		PrivacyScore     int              `json:"privacy_score"`
 		ShortDescription string           `json:"short_description"`
@@ -282,10 +283,12 @@ type DatasourceResponse struct {
 		DBConnString     string              `json:"db_conn_string"`
 		DBSourceType     string              `json:"db_source_type"`
 		DBConnAPIKey     string              `json:"db_conn_api_key"`
+		HasDBConnAPIKey  bool                `json:"has_db_conn_api_key"`
 		DBName           string              `json:"db_name"`
 		EmbedVendor      string              `json:"embed_vendor"`
 		EmbedUrl         string              `json:"embed_url"`
 		EmbedAPIKey      string              `json:"embed_api_key"`
+		HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 		EmbedModel       string              `json:"embed_model"`
 		Active           bool                `json:"active"`
 		Files            []FileStoreResponse `json:"files"`

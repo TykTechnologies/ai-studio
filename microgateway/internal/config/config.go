@@ -238,6 +238,13 @@ func (c *Config) Validate() error {
 		fmt.Println("Warning: Using default encryption key. Change this in production!")
 	}
 
+	// Validate gRPC TLS configuration (security warning)
+	if !c.HubSpoke.TLSEnabled && c.IsControl() {
+		fmt.Println("⚠️  SECURITY WARNING: gRPC TLS is DISABLED on control instance!")
+		fmt.Println("⚠️  Edge instances will connect to this control server over unencrypted connections.")
+		fmt.Println("⚠️  To enable TLS, set GRPC_TLS_ENABLED=true and provide certificate paths.")
+	}
+
 	if len(c.Security.EncryptionKey) != 32 {
 		return fmt.Errorf("encryption key must be exactly 32 characters")
 	}

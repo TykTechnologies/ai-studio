@@ -157,43 +157,7 @@ func (a *API) getDataCatalogueDatasources(c *gin.Context) {
 
 	response := make([]DatasourceResponse, len(dataCatalogue.Datasources))
 	for i, ds := range dataCatalogue.Datasources {
-		response[i] = DatasourceResponse{
-			Type: "datasource",
-			ID:   strconv.FormatUint(uint64(ds.ID), 10),
-			Attributes: struct {
-				Name             string              `json:"name"`
-				ShortDescription string              `json:"short_description"`
-				LongDescription  string              `json:"long_description"`
-				Icon             string              `json:"icon"`
-				Url              string              `json:"url"`
-				PrivacyScore     int                 `json:"privacy_score"`
-				UserID           uint                `json:"user_id"`
-				Tags             []TagResponse       `json:"tags"`
-				DBConnString     string              `json:"db_conn_string"`
-				DBSourceType     string              `json:"db_source_type"`
-				DBConnAPIKey     string              `json:"db_conn_api_key"`
-				DBName           string              `json:"db_name"`
-				EmbedVendor      string              `json:"embed_vendor"`
-				EmbedUrl         string              `json:"embed_url"`
-				EmbedAPIKey      string              `json:"embed_api_key"`
-				EmbedModel       string              `json:"embed_model"`
-				Active           bool                `json:"active"`
-				Files            []FileStoreResponse `json:"files"` // Added Files field
-			}{
-				Name:             ds.Name,
-				ShortDescription: ds.ShortDescription,
-				LongDescription:  ds.LongDescription,
-				Icon:             ds.Icon,
-				PrivacyScore:     ds.PrivacyScore,
-				UserID:           ds.UserID,
-				Tags:             serializeTags(ds.Tags),
-				DBSourceType:     ds.DBSourceType,
-				DBName:           ds.DBName,
-				EmbedVendor:      string(ds.EmbedVendor),
-				EmbedModel:       ds.EmbedModel,
-				Active:           ds.Active,
-			},
-		}
+		response[i] = serializeDatasource(&ds)
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -568,43 +532,7 @@ func (a *API) getUserAccessibleDataSources(c *gin.Context) {
 
 	response := make([]DatasourceResponse, len(dataSources))
 	for i, ds := range dataSources {
-		response[i] = DatasourceResponse{
-			Type: "datasource",
-			ID:   strconv.FormatUint(uint64(ds.ID), 10),
-			Attributes: struct {
-				Name             string              `json:"name"`
-				ShortDescription string              `json:"short_description"`
-				LongDescription  string              `json:"long_description"`
-				Icon             string              `json:"icon"`
-				Url              string              `json:"url"`
-				PrivacyScore     int                 `json:"privacy_score"`
-				UserID           uint                `json:"user_id"`
-				Tags             []TagResponse       `json:"tags"`
-				DBConnString     string              `json:"db_conn_string"`
-				DBSourceType     string              `json:"db_source_type"`
-				DBConnAPIKey     string              `json:"db_conn_api_key"`
-				DBName           string              `json:"db_name"`
-				EmbedVendor      string              `json:"embed_vendor"`
-				EmbedUrl         string              `json:"embed_url"`
-				EmbedAPIKey      string              `json:"embed_api_key"`
-				EmbedModel       string              `json:"embed_model"`
-				Active           bool                `json:"active"`
-				Files            []FileStoreResponse `json:"files"` // Added Files field
-			}{
-				Name:             ds.Name,
-				ShortDescription: ds.ShortDescription,
-				LongDescription:  ds.LongDescription,
-				Icon:             ds.Icon,
-				PrivacyScore:     ds.PrivacyScore,
-				UserID:           ds.UserID,
-				Tags:             serializeTags(ds.Tags),
-				DBSourceType:     ds.DBSourceType,
-				DBName:           ds.DBName,
-				EmbedVendor:      string(ds.EmbedVendor),
-				EmbedModel:       ds.EmbedModel,
-				Active:           ds.Active,
-			},
-		}
+		response[i] = serializeDatasource(&ds)
 	}
 
 	c.JSON(http.StatusOK, response)

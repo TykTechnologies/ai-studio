@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -531,6 +532,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 		Attributes: struct {
 			Name             string           `json:"name"`
 			APIKey           string           `json:"api_key"`
+			HasAPIKey        bool             `json:"has_api_key"`
 			APIEndpoint      string           `json:"api_endpoint"`
 			PrivacyScore     int              `json:"privacy_score"`
 			ShortDescription string           `json:"short_description"`
@@ -547,7 +549,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Plugins          []PluginResponse `json:"plugins"`
 		}{
 			Name:             llm.Name,
-			APIKey:           llm.APIKey,
+			APIKey:           services.REDACTED_VALUE,
+			HasAPIKey:        llm.APIKey != "",
 			APIEndpoint:      llm.APIEndpoint,
 			PrivacyScore:     llm.PrivacyScore,
 			ShortDescription: llm.ShortDescription,

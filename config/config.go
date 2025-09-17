@@ -321,9 +321,15 @@ func getConfigFromEnv() *AppConf {
 		conf.GRPCHost = "0.0.0.0" // Default to listen on all interfaces
 	}
 
-	grpcTLSStr := os.Getenv("GRPC_TLS_ENABLED")
-	if grpcTLSStr == "true" || grpcTLSStr == "1" {
+	// gRPC TLS is enabled by default (secure by default)
+	grpcTLSInsecureStr := os.Getenv("GRPC_TLS_INSECURE")
+	if grpcTLSInsecureStr == "true" || grpcTLSInsecureStr == "1" {
+		conf.GRPCTLSEnabled = false
+		log.Println("⚠️  SECURITY WARNING: gRPC TLS is DISABLED. This should only be used for development!")
+		log.Println("⚠️  To enable TLS for production, remove GRPC_TLS_INSECURE=true")
+	} else {
 		conf.GRPCTLSEnabled = true
+		log.Println("✅ gRPC TLS enabled (secure by default)")
 	}
 
 	conf.GRPCTLSCertPath = os.Getenv("GRPC_TLS_CERT_PATH")
