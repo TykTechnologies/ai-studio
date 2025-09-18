@@ -106,8 +106,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 
 						ctx = context.WithValue(ctx, "tool", tool)
 						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
+						
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
 					}
-
+					
+					// Not a tool request - continue with LLM request
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}

@@ -411,7 +411,19 @@ func serializeCredential(credential *models.Credential) CredentialResponse {
 func serializeCredentials(credentials models.Credentials) []CredentialResponse {
 	result := make([]CredentialResponse, len(credentials))
 	for i, credential := range credentials {
-		result[i] = serializeCredential(&credential)
+		result[i] = CredentialResponse{
+			Type: "credentials",
+			ID:   strconv.FormatUint(uint64(credential.ID), 10),
+			Attributes: struct {
+				KeyID  string `json:"key_id"`
+				Secret string `json:"secret"`
+				Active bool   `json:"active"`
+			}{
+				KeyID:  credential.KeyID,
+				Secret: credential.Secret,
+				Active: credential.Active,
+			},
+		}
 	}
 	return result
 }

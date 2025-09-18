@@ -1,0 +1,151 @@
+# deployments/docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: microgateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - gateway-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d microgateway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  microgateway:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        BUILD_HASH: ${BUILD_HASH:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    environment:
+      # Database Configuration
+      DATABASE_TYPE: postgres
+      DATABASE_DSN: postgres://gateway:gateway123@postgres:5432/microgateway?sslmode=disable
+      
+      # Security Configuration
+      JWT_SECRET: development-secret-key-change-in-production
+      ENCRYPTION_KEY: development-encryption-key-32chars!
+      
+      # Server Configuration
+      PORT: 8080
+      HOST: 0.0.0.0
+      
+      # Logging
+      LOG_LEVEL: debug
+      LOG_FORMAT: json
+      
+      # Database
+      DB_AUTO_MIGRATE: "true"
+      DB_LOG_LEVEL: warn
+      
+      # Cache
+      CACHE_ENABLED: "true"
+      CACHE_MAX_SIZE: "1000"
+      CACHE_TTL: "1h"
+      
+      # Analytics
+      ANALYTICS_ENABLED: "true"
+      ANALYTICS_BUFFER_SIZE: "100"
+      ANALYTICS_FLUSH_INTERVAL: "10s"
+      
+      # Gateway
+      GATEWAY_ENABLE_ANALYTICS: "true"
+      GATEWAY_TIMEOUT: "30s"
+      
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - gateway_data:/app/data
+      - gateway_logs:/app/logs
+    networks:
+      - gateway-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for enhanced caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - gateway-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - gateway-net
+    restart: unless-stopped
+
+  # Optional: Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - gateway-net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  gateway_data:
+    driver: local
+  gateway_logs:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  gateway-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

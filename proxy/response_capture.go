@@ -54,3 +54,4 @@ func (rc *responseCapture) Write(b []byte) (int, error) {
 func (rc *responseCapture) CapturedBody() []byte {
 	return rc.buffer.Bytes()
 }
+

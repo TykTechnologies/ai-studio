@@ -1,6 +1,8 @@
-package api_test
+package api
 
 import (
+	"encoding/json"
+	"net/http"
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
@@ -65,4 +67,109 @@ func TestLLMWithSecretReference(t *testing.T) {
 	llm, err = service.GetLLMByID(uint(1))
 	assert.NoError(t, err)
 	assert.Equal(t, "$SECRET/OPENAI_KEY", llm.APIKey)
+}
+
+func TestSerializeLLMRedactsAPIKey(t *testing.T) {
+	// Set required environment variable
+	t.Setenv("TYK_AI_SECRET_KEY", "test-key")
+
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := apitest.SetupTestAuthService(db, service)
+	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+
+	// Initialize secrets package with DB reference
+	secrets.SetDBRef(db)
+
+	// Test 1: LLM with direct API key
+	llmWithDirectKey := &models.LLM{
+		Name:             "Direct Key LLM",
+		APIKey:           "sk-direct-key-123",
+		APIEndpoint:      "https://api.openai.com/v1",
+		PrivacyScore:     75,
+		ShortDescription: "LLM with direct API key",
+		Vendor:           models.OPENAI,
+		Active:           true,
+		DefaultModel:     "gpt-4",
+	}
+
+	// Test 2: LLM with secret reference
+	secret := &secrets.Secret{
+		VarName: "TEST_KEY",
+		Value:   "sk-secret-key-456",
+	}
+	err := secrets.CreateSecret(db, secret)
+	assert.NoError(t, err)
+
+	llmWithSecretRef := &models.LLM{
+		Name:             "Secret Ref LLM",
+		APIKey:           "$SECRET/TEST_KEY",
+		APIEndpoint:      "https://api.anthropic.com/v1",
+		PrivacyScore:     80,
+		ShortDescription: "LLM with secret reference",
+		Vendor:           models.ANTHROPIC,
+		Active:           true,
+		DefaultModel:     "claude-3-sonnet",
+	}
+
+	// Test 3: LLM with empty API key
+	llmWithEmptyKey := &models.LLM{
+		Name:             "Empty Key LLM",
+		APIKey:           "",
+		APIEndpoint:      "https://api.ollama.com",
+		PrivacyScore:     90,
+		ShortDescription: "LLM with no API key",
+		Vendor:           models.OLLAMA,
+		Active:           true,
+		DefaultModel:     "llama2",
+	}
+
+	// Store LLMs in database to test via actual API endpoints
+	err = db.Create(llmWithDirectKey).Error
+	assert.NoError(t, err)
+	err = db.Create(llmWithSecretRef).Error
+	assert.NoError(t, err)
+	err = db.Create(llmWithEmptyKey).Error
+	assert.NoError(t, err)
+
+	// Test serialization through actual API endpoints
+	t.Run("DirectAPIKeyIsRedacted", func(t *testing.T) {
+		w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/1", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response struct {
+			Data LLMResponse `json:"data"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, "[redacted]", response.Data.Attributes.APIKey)
+		assert.True(t, response.Data.Attributes.HasAPIKey)
+	})
+
+	t.Run("SecretReferenceIsRedacted", func(t *testing.T) {
+		w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/2", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response struct {
+			Data LLMResponse `json:"data"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, "[redacted]", response.Data.Attributes.APIKey)
+		assert.True(t, response.Data.Attributes.HasAPIKey)
+	})
+
+	t.Run("EmptyAPIKeyShowsCorrectly", func(t *testing.T) {
+		w := apitest.PerformRequest(a.Router(), "GET", "/api/v1/llms/3", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response struct {
+			Data LLMResponse `json:"data"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, "[redacted]", response.Data.Attributes.APIKey)
+		assert.False(t, response.Data.Attributes.HasAPIKey)
+	})
 }

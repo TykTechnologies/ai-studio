@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -521,10 +522,12 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			DBConnString     string              `json:"db_conn_string"`
 			DBSourceType     string              `json:"db_source_type"`
 			DBConnAPIKey     string              `json:"db_conn_api_key"`
+			HasDBConnAPIKey  bool                `json:"has_db_conn_api_key"`
 			DBName           string              `json:"db_name"`
 			EmbedVendor      string              `json:"embed_vendor"`
 			EmbedUrl         string              `json:"embed_url"`
 			EmbedAPIKey      string              `json:"embed_api_key"`
+			HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 			EmbedModel       string              `json:"embed_model"`
 			Active           bool                `json:"active"`
 			Files            []FileStoreResponse `json:"files"` // Added Files field
@@ -539,11 +542,13 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			Tags:             serializeTags(datasource.Tags),
 			DBConnString:     datasource.DBConnString,
 			DBSourceType:     datasource.DBSourceType,
-			DBConnAPIKey:     datasource.DBConnAPIKey,
+			DBConnAPIKey:     services.REDACTED_VALUE,
+			HasDBConnAPIKey:  datasource.DBConnAPIKey != "",
 			DBName:           datasource.DBName,
 			EmbedVendor:      string(datasource.EmbedVendor),
 			EmbedUrl:         datasource.EmbedUrl,
-			EmbedAPIKey:      datasource.EmbedAPIKey,
+			EmbedAPIKey:      services.REDACTED_VALUE,
+			HasEmbedAPIKey:   datasource.EmbedAPIKey != "",
 			EmbedModel:       datasource.EmbedModel,
 			Active:           datasource.Active,
 			Files:            serializeFileStores(datasource.Files), // Added Files field

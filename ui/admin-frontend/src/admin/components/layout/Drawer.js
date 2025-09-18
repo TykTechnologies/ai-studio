@@ -30,6 +30,7 @@ const Drawer = () => {
       icon: <Icon name="microchip-ai" />,
       subItems: [
         { id: 'llms', text: 'LLM providers', path: '/admin/llms' },
+        { id: 'plugins', text: 'Plugins', path: '/admin/plugins' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices' },
       ],
     },
@@ -80,7 +81,10 @@ const Drawer = () => {
             id: 'ai-portal',
             text: 'AI Portal',
             icon: <Icon name="display" />,
-            subItems: [{ id: 'portal-apps', text: 'Apps', path: '/admin/apps' }],
+            subItems: [
+              { id: 'portal-apps', text: 'Apps', path: '/admin/apps' },
+              { id: 'edge-gateways', text: 'Edge Gateways', path: '/admin/edge-gateways' },
+            ],
           },
         ]
       : []),

@@ -183,6 +183,20 @@ func RecordChatLogEntry(log *models.LLMChatLogEntry) {
 	}
 }
 
+// RecordChatRecordsBatch records multiple chat records in a batch for improved performance
+func RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+	if globalHandler != nil {
+		globalHandler.RecordChatRecordsBatch(records)
+	}
+}
+
+// RecordProxyLogsBatch records multiple proxy logs in a batch for improved performance
+func RecordProxyLogsBatch(logs []*models.ProxyLog) {
+	if globalHandler != nil {
+		globalHandler.RecordProxyLogsBatch(logs)
+	}
+}
+
 // InitDefault initializes the default database analytics handler
 func InitDefault(ctx context.Context, db *gorm.DB) {
 	if globalHandler == nil {

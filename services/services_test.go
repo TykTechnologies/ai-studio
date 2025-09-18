@@ -1405,3 +1405,90 @@ func TestUpdateGroupCatalogues(t *testing.T) {
 		assert.Contains(t, err.Error(), "record not found")
 	})
 }
+
+func TestSmartAPIKeyUpdateLogic(t *testing.T) {
+	// Set required environment variable
+	t.Setenv("TYK_AI_SECRET_KEY", "test-key")
+
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	t.Run("LLM_APIKey_SmartUpdate", func(t *testing.T) {
+		// Create an LLM with an initial API key
+		llm, err := service.CreateLLM("Test LLM", "initial-api-key", "https://api.test.com", 75,
+			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
+			"gpt-4", []string{}, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "initial-api-key", llm.APIKey)
+
+		// Test 1: Update with [redacted] should preserve existing key
+		updatedLLM1, err := service.UpdateLLM(llm.ID, "Test LLM", "[redacted]", "https://api.test.com", 75,
+			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
+			"gpt-4", []string{}, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "initial-api-key", updatedLLM1.APIKey, "API key should be preserved when [redacted] is sent")
+
+		// Test 2: Update with empty string should clear the key
+		updatedLLM2, err := service.UpdateLLM(llm.ID, "Test LLM", "", "https://api.test.com", 75,
+			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
+			"gpt-4", []string{}, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "", updatedLLM2.APIKey, "API key should be cleared when empty string is sent")
+
+		// Test 3: Update with new key should update the key
+		updatedLLM3, err := service.UpdateLLM(llm.ID, "Test LLM", "new-api-key", "https://api.test.com", 75,
+			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
+			"gpt-4", []string{}, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "new-api-key", updatedLLM3.APIKey, "API key should be updated when new value is sent")
+	})
+
+	t.Run("Datasource_APIKeys_SmartUpdate", func(t *testing.T) {
+		// Create a user first
+		user, err := service.CreateUser(UserDTO{
+			Email:                "test@example.com",
+			Name:                 "Test User",
+			Password:             "password123",
+			IsAdmin:              true,
+			ShowChat:             true,
+			ShowPortal:           true,
+			EmailVerified:        true,
+			NotificationsEnabled: true,
+			AccessToSSOConfig:    true,
+			Groups:               []uint{},
+		})
+		assert.NoError(t, err)
+
+		// Create a datasource with initial API keys
+		datasource, err := service.CreateDatasource("Test Datasource", "Short desc", "Long desc", "icon.png",
+			"https://example.com", 75, user.ID, []string{}, "conn_string", "source_type",
+			"initial-db-key", "db1", "embed_vendor", "embed_url", "initial-embed-key", "embed_model", true)
+		assert.NoError(t, err)
+		assert.Equal(t, "initial-db-key", datasource.DBConnAPIKey)
+		assert.Equal(t, "initial-embed-key", datasource.EmbedAPIKey)
+
+		// Test 1: Update with [redacted] should preserve existing keys
+		updatedDS1, err := service.UpdateDatasource(datasource.ID, "Test Datasource", "Short desc", "Long desc", "icon.png",
+			"https://example.com", 75, "conn_string", "source_type", "[redacted]", "db1",
+			"embed_vendor", "embed_url", "[redacted]", "embed_model", true, []string{}, user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, "initial-db-key", updatedDS1.DBConnAPIKey, "DB API key should be preserved when [redacted] is sent")
+		assert.Equal(t, "initial-embed-key", updatedDS1.EmbedAPIKey, "Embed API key should be preserved when [redacted] is sent")
+
+		// Test 2: Update with empty strings should clear the keys
+		updatedDS2, err := service.UpdateDatasource(datasource.ID, "Test Datasource", "Short desc", "Long desc", "icon.png",
+			"https://example.com", 75, "conn_string", "source_type", "", "db1",
+			"embed_vendor", "embed_url", "", "embed_model", true, []string{}, user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, "", updatedDS2.DBConnAPIKey, "DB API key should be cleared when empty string is sent")
+		assert.Equal(t, "", updatedDS2.EmbedAPIKey, "Embed API key should be cleared when empty string is sent")
+
+		// Test 3: Update with new keys should update the keys
+		updatedDS3, err := service.UpdateDatasource(datasource.ID, "Test Datasource", "Short desc", "Long desc", "icon.png",
+			"https://example.com", 75, "conn_string", "source_type", "new-db-key", "db1",
+			"embed_vendor", "embed_url", "new-embed-key", "embed_model", true, []string{}, user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, "new-db-key", updatedDS3.DBConnAPIKey, "DB API key should be updated when new value is sent")
+		assert.Equal(t, "new-embed-key", updatedDS3.EmbedAPIKey, "Embed API key should be updated when new value is sent")
+	})
+}

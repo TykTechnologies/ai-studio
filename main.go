@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
+	"github.com/TykTechnologies/midsommar/v2/grpc"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -35,7 +36,7 @@ import (
 var staticFiles embed.FS
 
 func printWelcome() {
-	fmt.Printf("Starting Tyk AI Portal %v\n", VERSION)
+	fmt.Printf("Starting Tyk AI Portal %v\n", "v2.0-hub-spoke")
 	fmt.Println("Copyright Tyk Technologies, 2024")
 }
 
@@ -126,7 +127,7 @@ func main() {
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,
-		TestMode:               appConf.DevMode,
+		TestMode:               false, // Always false in production - tests set this directly
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
@@ -141,7 +142,7 @@ func main() {
 	budgetService := services.NewBudgetService(db, notificationService)
 
 	// Initialize and start telemetry
-	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, VERSION)
+	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, "v2.0-hub-spoke")
 	telemetryManager.Start()
 	defer telemetryManager.Stop()
 
@@ -153,6 +154,47 @@ func main() {
 
 	// Always enable gateway
 	go p.Start()
+
+	// Initialize gRPC control server and reload coordinator if in control mode
+	var controlServer *grpc.ControlServer
+	var reloadCoordinator *services.ReloadCoordinator
+	if appConf.GatewayMode == "control" {
+		grpcConfig := &grpc.Config{
+			GRPCPort:      appConf.GRPCPort,
+			GRPCHost:      appConf.GRPCHost,
+			TLSEnabled:    appConf.GRPCTLSEnabled,
+			TLSCertPath:   appConf.GRPCTLSCertPath,
+			TLSKeyPath:    appConf.GRPCTLSKeyPath,
+			AuthToken:     appConf.GRPCAuthToken,
+			NextAuthToken: appConf.GRPCNextAuthToken,
+		}
+		
+		controlServer = grpc.NewControlServer(grpcConfig, db)
+		
+		// Create reload coordinator and connect it to control server
+		reloadCoordinator = services.NewReloadCoordinator(controlServer)
+		controlServer.SetReloadCoordinator(reloadCoordinator)
+		
+		// Connect reload coordinator to namespace service
+		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
+		
+		log.Printf("✅ Reload coordinator created and connected to control server and namespace service")
+		
+		go func() {
+			log.Printf("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
+			if err := controlServer.Start(); err != nil {
+				log.Fatalf("Failed to start gRPC control server: %v", err)
+			}
+		}()
+		
+		// Graceful shutdown of gRPC server
+		defer func() {
+			if controlServer != nil {
+				log.Printf("Shutting down gRPC control server...")
+				controlServer.Stop()
+			}
+		}()
+	}
 
 	noDocsArg := false
 	docsPortArg := 8989

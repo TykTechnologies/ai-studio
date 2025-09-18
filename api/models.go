@@ -118,6 +118,26 @@ type LLMInput struct {
 			AllowedModels    []string `json:"allowed_models"`
 			MonthlyBudget    *float64 `json:"monthly_budget"`
 			BudgetStartDate  *string  `json:"budget_start_date"`
+			Namespace        string   `json:"namespace,omitempty"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// PluginInput represents the input for plugin-related operations
+// @Description Plugin input model
+type PluginInput struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Name        string                 `json:"name"`
+			Slug        string                 `json:"slug"`
+			Description string                 `json:"description"`
+			Command     string                 `json:"command"`
+			Checksum    string                 `json:"checksum,omitempty"`
+			Config      map[string]interface{} `json:"config"`
+			HookType    string                 `json:"hook_type"`
+			IsActive    bool                   `json:"is_active"`
+			Namespace   string                 `json:"namespace,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -130,6 +150,7 @@ type LLMResponse struct {
 	Attributes struct {
 		Name             string           `json:"name"`
 		APIKey           string           `json:"api_key"`
+		HasAPIKey        bool             `json:"has_api_key"`
 		APIEndpoint      string           `json:"api_endpoint"`
 		PrivacyScore     int              `json:"privacy_score"`
 		ShortDescription string           `json:"short_description"`
@@ -142,6 +163,8 @@ type LLMResponse struct {
 		AllowedModels    []string         `json:"allowed_models"`
 		MonthlyBudget    *float64         `json:"monthly_budget"`
 		BudgetStartDate  *time.Time       `json:"budget_start_date"`
+		Namespace        string           `json:"namespace"`
+		Plugins          []PluginResponse `json:"plugins"`
 	} `json:"attributes"`
 }
 
@@ -260,10 +283,12 @@ type DatasourceResponse struct {
 		DBConnString     string              `json:"db_conn_string"`
 		DBSourceType     string              `json:"db_source_type"`
 		DBConnAPIKey     string              `json:"db_conn_api_key"`
+		HasDBConnAPIKey  bool                `json:"has_db_conn_api_key"`
 		DBName           string              `json:"db_name"`
 		EmbedVendor      string              `json:"embed_vendor"`
 		EmbedUrl         string              `json:"embed_url"`
 		EmbedAPIKey      string              `json:"embed_api_key"`
+		HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 		EmbedModel       string              `json:"embed_model"`
 		Active           bool                `json:"active"`
 		Files            []FileStoreResponse `json:"files"`
@@ -356,6 +381,7 @@ type AppInput struct {
 			ToolIDs         []uint     `json:"tool_ids"`
 			MonthlyBudget   *float64   `json:"monthly_budget"`
 			BudgetStartDate *time.Time `json:"budget_start_date"`
+			Namespace       string     `json:"namespace,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }

@@ -194,18 +194,6 @@ func (a *API) listCatalogues(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
-	// Ensure LLMs are loaded for each catalogue
-	for i := range catalogues {
-		if err := catalogues[i].GetCatalogueLLMs(a.service.DB); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: "Failed to load LLMs for catalogue"}},
-			})
-			return
-		}
-	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
 }
@@ -390,7 +378,7 @@ func (a *API) listCatalogueLLMs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
 }
 
 func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {
@@ -410,7 +398,23 @@ func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {
 func serializeCatalogues(catalogues models.Catalogues) []CatalogueResponse {
 	result := make([]CatalogueResponse, len(catalogues))
 	for i, catalogue := range catalogues {
-		result[i] = serializeCatalogue(&catalogue)
+		// Extract LLM names from preloaded relationship to avoid N+1 queries
+		llmNames := make([]string, len(catalogue.LLMs))
+		for j, llm := range catalogue.LLMs {
+			llmNames[j] = llm.Name
+		}
+
+		result[i] = CatalogueResponse{
+			Type: "catalogues",
+			ID:   strconv.FormatUint(uint64(catalogue.ID), 10),
+			Attributes: struct {
+				Name     string   `json:"name"`
+				LLMNames []string `json:"llm_names"`
+			}{
+				Name:     catalogue.Name,
+				LLMNames: llmNames,
+			},
+		}
 	}
 	return result
 }
