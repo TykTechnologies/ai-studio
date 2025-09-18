@@ -56,4 +56,5 @@ examples/standalone-grpc-plugin/message-modifier-grpc
 examples/standalone-grpc-plugin/standalone-grpc-plugin
 microgateway/mgw
 microgateway/microgateway
-perf-plan.md
+performance/baselines
+performance/targets.md
