@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +49,7 @@ func setupPerformanceTestDB(t *testing.T) (*gorm.DB, *QueryCountLogger) {
 type QueryCountLogger struct {
 	QueryCount int
 	Queries    []string
+	mu         sync.Mutex
 }
 
 func (l *QueryCountLogger) LogMode(level logger.LogLevel) logger.Interface {
@@ -60,8 +62,10 @@ func (l *QueryCountLogger) Error(ctx context.Context, msg string, data ...interf
 
 func (l *QueryCountLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	sql, _ := fc()
+	l.mu.Lock()
 	l.QueryCount++
 	l.Queries = append(l.Queries, sql)
+	l.mu.Unlock()
 }
 
 func createPerformanceTestData(t *testing.T, db *gorm.DB) {
