@@ -16,12 +16,14 @@ import {
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 
 const FilterForm = () => {
   const [filter, setFilter] = useState({
     name: "",
     description: "",
     script: "",
+    namespace: "", // Added for edge availability
   });
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -45,6 +47,7 @@ const FilterForm = () => {
       setFilter({
         ...filterData,
         script: atob(filterData.script), // Decode base64
+        namespace: filterData.namespace || "",
       });
     } catch (error) {
       console.error("Error fetching filter", error);
@@ -59,6 +62,12 @@ const FilterForm = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFilter({ ...filter, [name]: value });
+  };
+
+  const handleNamespaceChange = (namespaces) => {
+    // Convert array to comma-delimited string, or empty string for global
+    const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
+    setFilter({ ...filter, namespace: namespaceString });
   };
 
   const validateForm = () => {
@@ -175,6 +184,14 @@ const FilterForm = () => {
               />
             </Grid>
           </Grid>
+
+          {/* Edge Availability Section */}
+          <EdgeAvailabilitySection
+            value={filter.namespace}
+            onChange={handleNamespaceChange}
+            defaultExpanded={false}
+          />
+
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
               {id ? "Update filter" : "Add filter"}

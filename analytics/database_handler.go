@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,10 +23,42 @@ type DatabaseHandler struct {
 	logEntryChan   chan *models.LLMChatLogEntry
 	toolCallChan   chan *models.ToolCallRecord
 	proxyLogChan   chan *models.ProxyLog
-	recStarted     bool
-	recMutex       sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
+	// Batch processing channels for async non-blocking batch operations
+	chatRecordBatchChan chan []*models.LLMChatRecord
+	proxyLogBatchChan   chan []*models.ProxyLog
+	recStarted          bool
+	recMutex            sync.RWMutex
+	ctx                 context.Context
+	cancel              context.CancelFunc
+}
+
+// Security: Pattern to detect sensitive data in error messages that should be redacted
+var sensitiveDataPattern = regexp.MustCompile(`(?i)(token|key|secret|password|credential|authorization|bearer|api_key|auth)\s*[:=]\s*['"]?([^\s'",]+)['"]?`)
+
+// sanitizeError removes potentially sensitive data from error messages for safe logging
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errStr := err.Error()
+
+	// Redact sensitive data patterns
+	sanitized := sensitiveDataPattern.ReplaceAllStringFunc(errStr, func(match string) string {
+		// Extract the key part (first capture group)
+		parts := sensitiveDataPattern.FindStringSubmatch(match)
+		if len(parts) >= 2 {
+			key := parts[1]
+			// Determine the separator used
+			if strings.Contains(match, ":") {
+				return key + ": ***REDACTED***"
+			}
+			return key + "=***REDACTED***"
+		}
+		return "***REDACTED***"
+	})
+
+	return sanitized
 }
 
 // NewDatabaseHandler creates a new database analytics handler
@@ -61,7 +94,7 @@ func (h *DatabaseHandler) start() {
 	if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
 		if err != nil {
-			slog.Warn("ANALYTICS_BUFFER_SIZE must be a string", "error", err)
+			slog.Warn("ANALYTICS_BUFFER_SIZE must be a string", "error", sanitizeError(err))
 		} else {
 			defaultBufferSize = bfr
 		}
@@ -73,6 +106,14 @@ func (h *DatabaseHandler) start() {
 	h.logEntryChan = make(chan *models.LLMChatLogEntry, defaultBufferSize)
 	h.toolCallChan = make(chan *models.ToolCallRecord, defaultBufferSize)
 	h.proxyLogChan = make(chan *models.ProxyLog, defaultBufferSize)
+
+	// Initialize batch processing channels with smaller buffer for batches
+	batchBufferSize := defaultBufferSize / 10 // Batches are larger, so fewer slots needed
+	if batchBufferSize < 10 {
+		batchBufferSize = 10
+	}
+	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
+	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 
 	// Start background workers
 	go h.startWorker()
@@ -87,7 +128,7 @@ func (h *DatabaseHandler) startWorker() {
 				return h.db.Create(record).Error
 			})
 			if err != nil {
-				slog.Warn("error creating chat record", "error", err, "model", record.Name, "timestamp", record.TimeStamp)
+				slog.Warn("error creating chat record", "error", sanitizeError(err), "model", record.Name, "timestamp", record.TimeStamp)
 			} else {
 				slog.Info("created chat record",
 					"model", record.Name,
@@ -102,21 +143,61 @@ func (h *DatabaseHandler) startWorker() {
 				return h.db.Create(logEntry).Error
 			})
 			if err != nil {
-				slog.Warn("error creating chat log entry", "error", err)
+				slog.Warn("error creating chat log entry", "error", sanitizeError(err))
 			}
 		case toolCall := <-h.toolCallChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(toolCall).Error
 			})
 			if err != nil {
-				slog.Warn("error creating tool call record", "error", err)
+				slog.Warn("error creating tool call record", "error", sanitizeError(err))
 			}
 		case proxyLog := <-h.proxyLogChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(proxyLog).Error
 			})
 			if err != nil {
-				slog.Warn("error creating proxy log", "error", err)
+				slog.Warn("error creating proxy log", "error", sanitizeError(err))
+			}
+		case records := <-h.chatRecordBatchChan:
+			startTime := time.Now()
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(records, 100).Error
+			})
+			processingTime := time.Since(startTime)
+
+			if err != nil {
+				slog.Warn("error creating chat record batch",
+					"error", sanitizeError(err),
+					"count", len(records),
+					"processing_time_ms", processingTime.Milliseconds())
+			} else {
+				slog.Info("created chat record batch",
+					"count", len(records),
+					"processing_time_ms", processingTime.Milliseconds(),
+					"records_per_second", float64(len(records))/processingTime.Seconds(),
+					"first_model", records[0].Name,
+					"timestamp", records[0].TimeStamp)
+			}
+		case logs := <-h.proxyLogBatchChan:
+			startTime := time.Now()
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(logs, 100).Error
+			})
+			processingTime := time.Since(startTime)
+
+			if err != nil {
+				slog.Warn("error creating proxy log batch",
+					"error", sanitizeError(err),
+					"count", len(logs),
+					"processing_time_ms", processingTime.Milliseconds())
+			} else {
+				slog.Info("created proxy log batch",
+					"count", len(logs),
+					"processing_time_ms", processingTime.Milliseconds(),
+					"records_per_second", float64(len(logs))/processingTime.Seconds(),
+					"first_vendor", logs[0].Vendor,
+					"timestamp", logs[0].TimeStamp)
 			}
 		case <-h.ctx.Done():
 			slog.Info("shutting down database analytics handler")
@@ -127,6 +208,8 @@ func (h *DatabaseHandler) startWorker() {
 			close(h.logEntryChan)
 			close(h.toolCallChan)
 			close(h.proxyLogChan)
+			close(h.chatRecordBatchChan)
+			close(h.proxyLogBatchChan)
 			return
 		}
 	}
@@ -254,6 +337,54 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	}
 }
 
+// RecordChatRecordsBatch records multiple chat records asynchronously using background worker
+// This method is non-blocking and returns immediately to avoid impacting request latency
+func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+	if len(records) == 0 {
+		return
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		slog.Warn("Analytics recording not started, dropping batch of chat records", "count", len(records))
+		h.recMutex.RUnlock()
+		return
+	}
+	h.recMutex.RUnlock()
+
+	// Send batch to async worker - non-blocking to avoid request latency
+	select {
+	case h.chatRecordBatchChan <- records:
+		slog.Debug("sent chat record batch to async worker", "count", len(records))
+	default:
+		slog.Warn("chat record batch buffer full, dropping batch", "count", len(records))
+	}
+}
+
+// RecordProxyLogsBatch records multiple proxy logs asynchronously using background worker
+// This method is non-blocking and returns immediately to avoid impacting request latency
+func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+	if len(logs) == 0 {
+		return
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		slog.Warn("Analytics recording not started, dropping batch of proxy logs", "count", len(logs))
+		h.recMutex.RUnlock()
+		return
+	}
+	h.recMutex.RUnlock()
+
+	// Send batch to async worker - non-blocking to avoid request latency
+	select {
+	case h.proxyLogBatchChan <- logs:
+		slog.Debug("sent proxy log batch to async worker", "count", len(logs))
+	default:
+		slog.Warn("proxy log batch buffer full, dropping batch", "count", len(logs))
+	}
+}
+
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *DatabaseHandler) SetAsGlobalHandler() {
 	SetHandler(h)
@@ -269,6 +400,6 @@ func initDB(db *gorm.DB) {
 	)
 
 	if err != nil {
-		slog.Warn("error migrating analytics tables", "error", err)
+		slog.Warn("error migrating analytics tables", "error", sanitizeError(err))
 	}
 }

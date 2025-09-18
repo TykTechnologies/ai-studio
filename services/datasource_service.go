@@ -50,10 +50,28 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.PrivacyScore = privacyScore
 	datasource.DBConnString = dbConnString
 	datasource.DBSourceType = dbSourceType
-	datasource.DBConnAPIKey = dbConnAPIKey
+	// Smart DB connection API key update logic
+	if dbConnAPIKey == "[redacted]" {
+		// Don't update API key if it's the redacted placeholder
+	} else if dbConnAPIKey == "" {
+		// Clear API key if empty string is provided
+		datasource.DBConnAPIKey = ""
+	} else {
+		// Update to new API key value
+		datasource.DBConnAPIKey = dbConnAPIKey
+	}
 	datasource.EmbedVendor = models.Vendor(embedVendor)
 	datasource.EmbedUrl = embedUrl
-	datasource.EmbedAPIKey = embedAPIKey
+	// Smart embed API key update logic
+	if embedAPIKey == "[redacted]" {
+		// Don't update API key if it's the redacted placeholder
+	} else if embedAPIKey == "" {
+		// Clear API key if empty string is provided
+		datasource.EmbedAPIKey = ""
+	} else {
+		// Update to new API key value
+		datasource.EmbedAPIKey = embedAPIKey
+	}
 	datasource.EmbedModel = embedModel
 	datasource.DBName = dbName
 	datasource.Active = active

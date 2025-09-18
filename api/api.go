@@ -627,6 +627,18 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/filters/:id", a.deleteFilter)
 	v1.GET("/filters", a.listFilters)
 
+	// Plugin routes
+	v1.POST("/plugins", a.createPlugin)
+	v1.GET("/plugins/:id", a.getPlugin)
+	v1.PATCH("/plugins/:id", a.updatePlugin)
+	v1.DELETE("/plugins/:id", a.deletePlugin)
+	v1.GET("/plugins", a.listPlugins)
+	v1.POST("/plugins/:id/test", a.testPlugin)
+
+	// LLM-Plugin association routes (extend existing LLM routes)
+	v1.GET("/llms/:id/plugins", a.getLLMPlugins)
+	v1.PUT("/llms/:id/plugins", a.updateLLMPlugins)
+
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)
@@ -672,6 +684,19 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/secrets/:id", a.updateSecret)
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
+
+	// Edge Management routes (Hub-and-Spoke)
+	v1.GET("/edges", a.listEdges)
+	v1.GET("/edges/:edge_id", a.getEdge)
+	v1.POST("/edges/:edge_id/reload", a.triggerEdgeReload)
+	v1.GET("/edges/reload-operations", a.listReloadOperations)
+	v1.GET("/reload-operations/:operation_id/status", a.getReloadOperationStatus)
+	v1.DELETE("/edges/:edge_id", a.deleteEdge)
+
+	// Namespace Management routes (Hub-and-Spoke)
+	v1.GET("/namespaces", a.listNamespaces)
+	v1.POST("/namespaces/:namespace/reload", a.triggerNamespaceReload)
+	v1.GET("/namespaces/:namespace/edges", a.getNamespaceEdges)
 
 	// SSO routes
 	if a.config.TIBEnabled {

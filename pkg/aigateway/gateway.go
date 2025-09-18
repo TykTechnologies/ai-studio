@@ -25,6 +25,9 @@ type Gateway interface {
 
 	// Reload reloads the gateway configuration (LLMs, datasources, filters)
 	Reload() error
+
+	// AddResponseHook adds a response hook for REST request processing (REST-only, not streaming)
+	AddResponseHook(hook proxy.ResponseHook)
 }
 
 // gateway wraps the existing proxy.Proxy to provide a cleaner API
@@ -127,4 +130,9 @@ func (g *gateway) Handler() http.Handler {
 // Reload reloads the gateway configuration
 func (g *gateway) Reload() error {
 	return g.proxy.Reload()
+}
+
+// AddResponseHook adds a response hook for REST request processing
+func (g *gateway) AddResponseHook(hook proxy.ResponseHook) {
+	g.proxy.AddResponseHook(hook)
 }

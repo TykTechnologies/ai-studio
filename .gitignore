@@ -41,3 +41,20 @@ envs/*
 .vow-cooldown
 
 .claude/settings.local.json
+microgateway/dist
+microgateway/bin
+microgateway/bin/microgateway
+microgateway/plugins/examples/custom_auth/custom_auth
+microgateway/plugins/examples/message_modifier/message_modifier
+microgateway/plugins/examples/rate_limiter/rate_limiter
+microgateway/plugins/examples/request_enricher/request_enricher
+microgateway/plugins/examples/response_modifier/response_modifier
+microgateway/plugins/examples/file_analytics_collector/file_analytics_collector
+microgateway/plugins/examples/file_budget_collector/file_budget_collector
+microgateway/plugins/examples/file_proxy_collector/file_proxy_collector
+examples/standalone-grpc-plugin/message-modifier-grpc
+examples/standalone-grpc-plugin/standalone-grpc-plugin
+microgateway/mgw
+microgateway/microgateway
+performance/baselines
+performance/targets.md

@@ -49,16 +49,33 @@ func (a *API) createApp(c *gin.Context) {
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 
-	app, err := a.service.CreateApp(
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.UserID,
-		datasourceIDs,
-		llmIDs,
-		toolIDs, // Pass toolIDs to service method
-		input.Data.Attributes.MonthlyBudget,
-		input.Data.Attributes.BudgetStartDate,
-	)
+	// Use namespace-aware service method if namespace is provided
+	var app *models.App
+	var err error
+	if input.Data.Attributes.Namespace != "" {
+		app, err = a.service.CreateAppWithNamespace(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs, // Pass toolIDs to service method
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+			input.Data.Attributes.Namespace,
+		)
+	} else {
+		app, err = a.service.CreateApp(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs, // Pass toolIDs to service method
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+		)
+	}
 	if err != nil {
 		if err == services.ERRPrivacyScoreMismatch {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -375,9 +392,35 @@ func getToolIDs(tools []models.Tool) []uint {
 }
 
 func serializeApps(apps []models.App) []AppResponse {
-	responses := make([]AppResponse, 0, len(apps))
-	for _, app := range apps {
-		responses = append(responses, serializeApp(&app))
+	responses := make([]AppResponse, len(apps))
+	for i, app := range apps {
+		responses[i] = AppResponse{
+			Type: "app",
+			ID:   strconv.FormatUint(uint64(app.ID), 10),
+			Attributes: struct {
+				Name            string     `json:"name"`
+				Description     string     `json:"description"`
+				UserID          uint       `json:"user_id"`
+				CredentialID    uint       `json:"credential_id"`
+				DatasourceIDs   []uint     `json:"datasource_ids"`
+				LLMIDs          []uint     `json:"llm_ids"`
+				ToolIDs         []uint     `json:"tool_ids"`
+				MonthlyBudget   *float64   `json:"monthly_budget"`
+				BudgetStartDate *time.Time `json:"budget_start_date"`
+				IsOrphaned      bool       `json:"is_orphaned"`
+			}{
+				Name:            app.Name,
+				Description:     app.Description,
+				UserID:          app.UserID,
+				CredentialID:    app.CredentialID,
+				DatasourceIDs:   getDatasourceIDs(app.Datasources),
+				LLMIDs:          getLLMIDs(app.LLMs),
+				ToolIDs:         getToolIDs(app.Tools),
+				MonthlyBudget:   app.MonthlyBudget,
+				BudgetStartDate: app.BudgetStartDate,
+				IsOrphaned:      app.IsOrphaned,
+			},
+		}
 	}
 	return responses
 }

@@ -150,6 +150,54 @@ func (h *FileAnalyticsHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEnt
 		logEntry.Name, logEntry.Vendor, logEntry.UserID, logEntry.ChatID)
 }
 
+// RecordChatRecordsBatch records multiple LLM chat/proxy usage records in batch
+func (h *FileAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Process each record
+	for _, record := range records {
+		// Add to in-memory storage
+		h.chatRecords = append(h.chatRecords, *record)
+
+		// Convert cost from cents to dollars for budget tracking
+		costInDollars := float64(record.Cost) / 10000.0
+
+		// Log to console for demo purposes
+		log.Printf("[ANALYTICS] Batch Chat Record: LLM=%d, Model=%s, Tokens=%d, Cost=$%.4f, App=%d",
+			record.LLMID, record.Name, record.TotalTokens, costInDollars, record.AppID)
+
+		// Update budget usage if budget service is available
+		if h.budgetService != nil {
+			h.budgetService.AddUsage(record.AppID, record.LLMID, costInDollars)
+			log.Printf("[BUDGET] Updated usage: App=%d, LLM=%d, Cost=$%.4f",
+				record.AppID, record.LLMID, costInDollars)
+		}
+	}
+
+	// Save to file once after processing all records
+	h.saveChatRecords()
+}
+
+// RecordProxyLogsBatch records multiple proxy request/response logs in batch
+func (h *FileAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Process each log entry
+	for _, logEntry := range logs {
+		// Add to in-memory storage
+		h.proxyLogs = append(h.proxyLogs, *logEntry)
+
+		// Log to console for demo purposes
+		log.Printf("[ANALYTICS] Batch Proxy Log: Vendor=%s, ResponseCode=%d, App=%d, User=%d",
+			logEntry.Vendor, logEntry.ResponseCode, logEntry.AppID, logEntry.UserID)
+	}
+
+	// Save to file once after processing all logs
+	h.saveProxyLogs()
+}
+
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *FileAnalyticsHandler) SetAsGlobalHandler() {
 	analytics.SetHandler(h)

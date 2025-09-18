@@ -24,8 +24,11 @@ type LLM struct {
 	// Budget
 	MonthlyBudget   *float64   `json:"monthly_budget" gorm:"column:monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date" gorm:"column:budget_start_date"`
+	// Hub-and-Spoke Configuration
+	Namespace       string     `json:"namespace" gorm:"default:'';index:idx_llm_namespace"`
 
 	Filters       []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
+	Plugins       []*Plugin `json:"plugins" gorm:"many2many:llm_plugins;"`
 	AllowedModels []string  `json:"allowed_models" gorm:"serializer:json"`
 }
 
@@ -46,7 +49,7 @@ func NewLLM() *LLM {
 }
 
 func (l *LLM) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Filters").First(l, id).Error
+	return db.Preload("Filters").Preload("Plugins").First(l, id).Error
 }
 
 func (l *LLM) Create(db *gorm.DB) error {
@@ -84,12 +87,12 @@ func (l *LLM) Delete(db *gorm.DB) error {
 }
 
 func (l *LLM) GetByName(db *gorm.DB, name string) error {
-	return db.Preload("Filters").Where("name = ?", name).First(l).Error
+	return db.Preload("Filters").Preload("Plugins").Where("name = ?", name).First(l).Error
 }
 
 func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
 	var totalCount int64
-	query := db.Model(&LLM{}).Preload("Filters")
+	query := db.Model(&LLM{}).Preload("Filters").Preload("Plugins")
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}
@@ -109,23 +112,24 @@ func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int6
 }
 
 func (l *LLMs) GetByNameStub(db *gorm.DB, stub string) error {
-	return db.Preload("Filters").Where("name LIKE ?", stub+"%").Find(l).Error
+	// Use single query with preloading for better performance
+	return db.Preload("Filters").Preload("Plugins").Where("name LIKE ?", stub+"%").Find(l).Error
 }
 
 func (l *LLMs) GetByMaxPrivacyScore(db *gorm.DB, score int) error {
-	return db.Preload("Filters").Where("privacy_score <= ?", score).Find(l).Error
+	return db.Preload("Filters").Preload("Plugins").Where("privacy_score <= ?", score).Find(l).Error
 }
 
 func (l *LLMs) GetByMinPrivacyScore(db *gorm.DB, score int) error {
-	return db.Preload("Filters").Where("privacy_score >= ?", score).Find(l).Error
+	return db.Preload("Filters").Preload("Plugins").Where("privacy_score >= ?", score).Find(l).Error
 }
 
 func (l *LLMs) GetByPrivacyScoreRange(db *gorm.DB, min, max int) error {
-	return db.Preload("Filters").Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error
+	return db.Preload("Filters").Preload("Plugins").Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error
 }
 
 func (l *LLMs) GetActiveLLMs(db *gorm.DB) error {
-	return db.Preload("Filters").Where("active = ?", true).Find(l).Error
+	return db.Preload("Filters").Preload("Plugins").Where("active = ?", true).Find(l).Error
 }
 
 func (l *LLMs) GetLLMCount(db *gorm.DB) (int64, error) {

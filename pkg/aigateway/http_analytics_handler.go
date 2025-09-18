@@ -112,6 +112,72 @@ func (h *HTTPAnalyticsHandler) postJSON(path string, data interface{}) {
 	}
 }
 
+// RecordChatRecordsBatch implements batch recording for HTTP analytics
+func (h *HTTPAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+	// For HTTP handler, we can send individual records or batch them in a single request
+	// For simplicity, we'll batch them into a single HTTP request
+	if len(records) == 0 {
+		return
+	}
+
+	batch := make([]map[string]interface{}, len(records))
+	for i, record := range records {
+		batch[i] = map[string]interface{}{
+			"type":                      "llm_usage",
+			"llm_id":                    record.LLMID,
+			"model":                     record.Name,
+			"vendor":                    record.Vendor,
+			"prompt_tokens":             record.PromptTokens,
+			"response_tokens":           record.ResponseTokens,
+			"cache_write_prompt_tokens": record.CacheWritePromptTokens,
+			"cache_read_prompt_tokens":  record.CacheReadPromptTokens,
+			"total_tokens":              record.TotalTokens,
+			"cost":                      record.Cost,
+			"currency":                  record.Currency,
+			"timestamp":                 record.TimeStamp,
+			"app_id":                    record.AppID,
+			"user_id":                   record.UserID,
+			"interaction_type":          record.InteractionType,
+			"choices":                   record.Choices,
+			"tool_calls":                record.ToolCalls,
+		}
+	}
+
+	batchData := map[string]interface{}{
+		"type": "llm_usage_batch",
+		"records": batch,
+	}
+	h.postJSON("/analytics/batch", batchData)
+}
+
+// RecordProxyLogsBatch implements batch recording for HTTP analytics
+func (h *HTTPAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+	// For HTTP handler, we can send individual records or batch them in a single request
+	if len(logs) == 0 {
+		return
+	}
+
+	batch := make([]map[string]interface{}, len(logs))
+	for i, log := range logs {
+		batch[i] = map[string]interface{}{
+			"type":          "proxy_log",
+			"app_id":        log.AppID,
+			"user_id":       log.UserID,
+			"vendor":        log.Vendor,
+			"status_code":   log.ResponseCode,
+			"timestamp":     log.TimeStamp,
+			"request_body":  log.RequestBody,  // Already truncated by proxy
+			"response_body": log.ResponseBody, // Already truncated by proxy
+		}
+	}
+
+	batchData := map[string]interface{}{
+		"type": "proxy_log_batch",
+		"records": batch,
+	}
+	h.postJSON("/analytics/batch", batchData)
+}
+
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *HTTPAnalyticsHandler) SetAsGlobalHandler() {
 	analytics.SetHandler(h)

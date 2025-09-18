@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -204,38 +202,14 @@ func TestBudgetCheck(t *testing.T) {
 	err = proxy.loadResources()
 	require.NoError(t, err)
 
-	// Setup test server
-	r := mux.NewRouter()
-	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		newReq := r.Clone(r.Context())
-		newReq.Body = io.NopCloser(bytes.NewBuffer(body))
-		newReq.ContentLength = int64(len(body))
-
-		proxy.handleLLMRequest(w, newReq)
-	}).Methods("POST")
-	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		newReq := r.Clone(r.Context())
-		newReq.Body = io.NopCloser(bytes.NewBuffer(body))
-		newReq.ContentLength = int64(len(body))
-
-		proxy.handleStreamingLLMRequest(w, newReq)
-	}).Methods("POST")
-	srv := httptest.NewServer(proxy.credValidator.Middleware(r))
+	// Setup test server using proxy's proper handler
+	handler := proxy.createHandler()
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
 	// Helper to create a request
 	makeRequest := func(streaming bool) *http.Request {
-		reqBody := []byte(`{"prompt": "Hello"}`)
+		reqBody := []byte(`{"model": "test-model", "prompt": "Hello"}`)
 		endpoint := "/llm/rest/"
 		if streaming {
 			endpoint = "/llm/stream/"
@@ -244,8 +218,6 @@ func TestBudgetCheck(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer valid-token")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(reqBody)))
-		// Insert 'app' into context manually for test
-		req = req.WithContext(context.WithValue(req.Context(), "app", app))
 		return req
 	}
 

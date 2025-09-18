@@ -29,10 +29,20 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 
 func SetupTestService(db *gorm.DB) *services.Service {
 	notificationService := services.NewTestNotificationService(db)
+	budgetService := services.NewBudgetService(db, notificationService)
+	
+	// Initialize hub-and-spoke services
+	edgeService := services.NewEdgeService(db)
+	namespaceService := services.NewNamespaceService(db, edgeService)
+	pluginService := services.NewPluginService(db)
+	
 	return &services.Service{
 		DB:                  db,
 		NotificationService: notificationService,
-		Budget:              services.NewBudgetService(db, notificationService),
+		Budget:              budgetService,
+		EdgeService:         edgeService,
+		NamespaceService:    namespaceService,
+		PluginService:       pluginService,
 	}
 }
 

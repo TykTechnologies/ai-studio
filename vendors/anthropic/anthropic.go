@@ -66,7 +66,7 @@ func (v *Anthropic) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode
 		return llm, app, response, nil
 	}
 
-	return llm, app, nil, fmt.Errorf("unknown response type")
+	return llm, app, nil, fmt.Errorf("unknown response type: %s", r.URL.Path)
 }
 
 func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {

@@ -96,6 +96,7 @@ type Proxy struct {
 	mcpServersMu   sync.RWMutex
 	openAPICache   map[string]*OpenAPICache
 	openAPICacheMu sync.RWMutex
+	responseHookManager ResponseHookManager // REST-only response hooks
 }
 
 type Config struct {
@@ -106,14 +107,15 @@ type Config struct {
 // This is the new interface-based constructor that supports flexible backends.
 func New(gatewayService services.ServiceInterface, budgetService services.BudgetServiceInterface, cfg *Config) *Proxy {
 	p := &Proxy{
-		gatewayService: gatewayService,
-		budgetService:  budgetService,
-		llms:           make(map[string]*models.LLM),
-		datasources:    make(map[string]*models.Datasource),
-		config:         cfg,
-		filters:        make([]*models.Filter, 0),
-		mcpServers:     make(map[string]*MCPServerCache),
-		openAPICache:   make(map[string]*OpenAPICache),
+		gatewayService:      gatewayService,
+		budgetService:       budgetService,
+		llms:                make(map[string]*models.LLM),
+		datasources:         make(map[string]*models.Datasource),
+		config:              cfg,
+		filters:             make([]*models.Filter, 0),
+		mcpServers:          make(map[string]*MCPServerCache),
+		openAPICache:        make(map[string]*OpenAPICache),
+		responseHookManager: NewDefaultResponseHookManager(), // Initialize REST-only response hooks
 	}
 
 	val := NewCredentialValidator(gatewayService, p)
@@ -442,9 +444,125 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
-	capture := newResponseCapture(w)
-	httpProxy.ServeHTTP(capture, r) // Use new variable name
-	go p.analyzeResponse(llm, app, capture.statusCode, capture.buffer.Bytes(), reqBody, r)
+	
+	// Use buffered response capture only if hooks are actually configured
+	if p.responseHookManager != nil && p.hasResponseHooks() {
+		bufferedCapture := newBufferedResponseCapture(w)
+		httpProxy.ServeHTTP(bufferedCapture, r)
+		
+		// Execute REST-only response hooks (hooks modify the buffered response in-place)
+		if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
+			log.Printf("Response hook execution failed: %v", err)
+		}
+		
+		// AI Gateway proxy writes the final (potentially modified) response to client
+		bufferedCapture.WriteToClient()
+		
+		go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+	} else {
+		capture := newResponseCapture(w)
+		httpProxy.ServeHTTP(capture, r)
+		go p.analyzeResponse(llm, app, capture.statusCode, capture.buffer.Bytes(), reqBody, r)
+	}
+}
+
+
+// executeBufferedResponseHooks executes response hooks on the buffered response (REST-only)
+func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, llm *models.LLM, app *models.App, r *http.Request) error {
+	if p.responseHookManager == nil {
+		return nil // No hooks configured
+	}
+	
+	// Create plugin context
+	pluginCtx := &PluginContext{
+		RequestID: r.Header.Get("X-Request-ID"),
+		LLMSlug:   llm.Name,
+		LLMID:     llm.ID,
+		AppID:     app.ID,
+		UserID:    app.UserID,
+		Metadata:  make(map[string]string),
+	}
+	
+	// If no request ID, generate one
+	if pluginCtx.RequestID == "" {
+		pluginCtx.RequestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
+	
+	ctx := context.Background()
+	
+	// Execute OnBeforeWriteHeaders hook
+	headerReq := &HeadersRequest{
+		Headers: make(map[string]string),
+		Context: pluginCtx,
+	}
+	
+	// Convert captured headers to map
+	for key, values := range capture.header {
+		if len(values) > 0 {
+			headerReq.Headers[key] = values[0]
+		}
+	}
+	
+	headerResp, err := p.responseHookManager.ExecuteOnBeforeWriteHeaders(ctx, headerReq)
+	if err != nil {
+		return fmt.Errorf("header hook failed: %w", err)
+	}
+	
+	// Apply header modifications if any
+	if headerResp.Modified {
+		capture.ModifyHeaders(headerResp.Headers)
+	}
+	
+	// Execute OnBeforeWrite hook with current headers
+	currentHeaders := headerResp.Headers
+	if !headerResp.Modified {
+		currentHeaders = headerReq.Headers // Use original if not modified
+	}
+	
+	writeReq := &ResponseWriteRequest{
+		Body:    capture.CapturedBody(),
+		Headers: currentHeaders,
+		Context: pluginCtx,
+	}
+	
+	writeResp, err := p.responseHookManager.ExecuteOnBeforeWrite(ctx, writeReq)
+	if err != nil {
+		return fmt.Errorf("body hook failed: %w", err)
+	}
+	
+	// Apply body modifications if any
+	if writeResp.Modified {
+		capture.ModifyBody(writeResp.Body)
+		// Also apply any header changes from the write hook
+		capture.ModifyHeaders(writeResp.Headers)
+	}
+	
+	return nil
+}
+
+// hasResponseHooks checks if there are any response hooks configured
+func (p *Proxy) hasResponseHooks() bool {
+	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
+		return manager.HasHooks()
+	}
+	return false
+}
+
+// AddResponseHook adds a response hook to the proxy (for embeddable AI Gateway)
+func (p *Proxy) AddResponseHook(hook ResponseHook) {
+	if p.responseHookManager == nil {
+		p.responseHookManager = NewDefaultResponseHookManager()
+	}
+	
+	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
+		manager.AddHook(hook)
+		log.Printf("Added response hook: %s", hook.GetName())
+	}
+}
+
+// GetResponseHookManager returns the response hook manager for external configuration
+func (p *Proxy) GetResponseHookManager() ResponseHookManager {
+	return p.responseHookManager
 }
 
 func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
