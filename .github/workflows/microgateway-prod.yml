@@ -1,17 +1,18 @@
 name: Build and Deploy Microgateway
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI tests"]
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - 'microgateway/**'
-      - '.github/workflows/microgateway-prod.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'microgateway/**'
+      - '.github/workflows/microgateway-prod.yml'
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -26,52 +27,12 @@ env:
   IMAGE_NAME: tykio/microgateway
 
 jobs:
-  test:
-    name: Test Microgateway
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./microgateway
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.24"
-          cache-dependency-path: microgateway/go.sum
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-microgateway-go-${{ hashFiles('microgateway/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-microgateway-go-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run tests
-        run: make test
-
-      - name: Run linter
-        run: make lint
-
-      - name: Build binaries
-        run: make build-both
-
   build-and-push:
     name: Build and Push Container
     runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name != 'pull_request'
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout code
