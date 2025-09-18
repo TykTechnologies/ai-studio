@@ -465,6 +465,7 @@ func TestSimpleEdgeClient_ConnectionManagement(t *testing.T) {
 			EdgeID:          "test-edge-conn",
 			EdgeNamespace:   "test",
 			ControlEndpoint: "localhost:99999",
+			AllowInsecure:   true, // Enable insecure connections for testing
 		},
 	}
 

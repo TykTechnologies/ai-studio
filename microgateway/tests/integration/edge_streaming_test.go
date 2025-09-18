@@ -56,6 +56,7 @@ func TestSimpleEdgeClient_StreamingConnection(t *testing.T) {
 			EdgeID:            "test-edge-1",
 			EdgeNamespace:     "test-namespace",
 			HeartbeatInterval: 100 * time.Millisecond, // Required for heartbeat worker
+			AllowInsecure:     true,                   // Enable insecure connections for testing
 		},
 	}
 
@@ -256,6 +257,7 @@ func TestSimpleEdgeClient_BidirectionalStreaming(t *testing.T) {
 		HubSpoke: config.HubSpokeConfig{
 			Mode:            "edge",
 			ControlEndpoint: "localhost:9998",
+			AllowInsecure:   true, // Enable insecure connections for testing
 			EdgeID:          "test-edge-streaming",
 			EdgeNamespace:   "test-namespace",
 			HeartbeatInterval: 100 * time.Millisecond, // Fast heartbeats for testing
@@ -313,6 +315,7 @@ func TestSimpleEdgeClient_ErrorHandling(t *testing.T) {
 			ControlEndpoint: "localhost:99999", // Non-existent port
 			EdgeID:          "test-edge-error",
 			EdgeNamespace:   "test",
+			AllowInsecure:   true, // Enable insecure connections for testing
 		},
 	}
 

@@ -114,12 +114,16 @@ func TestPluginMiddleware_Integration(t *testing.T) {
 
 	// Create mock plugin manager
 	mockPluginManager := &MockPluginManagerForAPI{}
-	
-	// Mock no plugins for this LLM (plugins would return empty)
+
+	// Mock no plugins for this LLM - GetPluginsForLLM returns empty slice
+	mockPluginManager.On("GetPluginsForLLM", llm.ID, "pre_auth").Return([]interface{}{}, nil)
+	mockPluginManager.On("GetPluginsForLLM", llm.ID, "post_auth").Return([]interface{}{}, nil)
+
+	// Mock plugin execution (should not be called since no plugins, but added for safety)
 	mockPluginManager.On("ExecutePluginChain", llm.ID, "pre_auth", mock.Anything, mock.Anything).
-		Return(mock.Anything, nil)
-	mockPluginManager.On("ExecutePluginChain", llm.ID, "on_response", mock.Anything, mock.Anything).
-		Return(mock.Anything, nil)
+		Return(mock.Anything, nil).Maybe()
+	mockPluginManager.On("ExecutePluginChain", llm.ID, "post_auth", mock.Anything, mock.Anything).
+		Return(mock.Anything, nil).Maybe()
 
 	// Create mock auth provider
 	mockAuthProvider := &MockAuthProvider{}
@@ -163,8 +167,9 @@ func TestPluginMiddleware_Integration(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "AI Gateway response")
 
-	// Verify plugin chain was called
-	mockPluginManager.AssertCalled(t, "ExecutePluginChain", llm.ID, "pre_auth", mock.Anything, mock.Anything)
+	// Verify GetPluginsForLLM was called but ExecutePluginChain was not (since no plugins)
+	mockPluginManager.AssertCalled(t, "GetPluginsForLLM", llm.ID, "pre_auth")
+	mockPluginManager.AssertNotCalled(t, "ExecutePluginChain", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestPluginMiddleware_NonLLMRequest(t *testing.T) {

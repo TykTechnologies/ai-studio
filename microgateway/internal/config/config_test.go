@@ -477,6 +477,9 @@ func TestConfig_Validation_EdgeCases(t *testing.T) {
 				LogLevel:  "info",
 				LogFormat: "json",
 			},
+			HubSpoke: HubSpokeConfig{
+				Mode: "standalone",
+			},
 		}
 
 		err := cfg.Validate()
@@ -500,6 +503,9 @@ func TestConfig_Validation_EdgeCases(t *testing.T) {
 				LogLevel:  "trace",
 				LogFormat: "text",
 			},
+			HubSpoke: HubSpokeConfig{
+				Mode: "standalone",
+			},
 		}
 
 		err := cfg.Validate()
@@ -522,6 +528,9 @@ func TestConfig_Validation_EdgeCases(t *testing.T) {
 			Observability: ObservabilityConfig{
 				LogLevel:  "panic",
 				LogFormat: "json",
+			},
+			HubSpoke: HubSpokeConfig{
+				Mode: "standalone",
 			},
 		}
 

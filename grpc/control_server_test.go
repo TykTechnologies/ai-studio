@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -1351,7 +1352,7 @@ func TestControlServer_ThreadSafety(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			edgeID := "edge-" + string(rune(id%26+'A'))
+			edgeID := fmt.Sprintf("edge-%d", id)
 
 			for j := 0; j < numOperations; j++ {
 				// Add connection

@@ -30,10 +30,9 @@ func setupBenchmarkServer(b *testing.B) (*Server, *framework.BenchmarkDB, *frame
 
 	// Create test configuration
 	cfg := &config.Config{
-		HTTPServer: config.HTTPServerConfig{
-			Port:    0, // Use random port for testing
-			Host:    "localhost",
-			Timeout: 30,
+		Server: config.ServerConfig{
+			Port: 0,    // Use random port for testing
+			Host: "localhost",
 		},
 		Database: config.DatabaseConfig{
 			Type: "sqlite",
@@ -50,7 +49,7 @@ func setupBenchmarkServer(b *testing.B) (*Server, *framework.BenchmarkDB, *frame
 	}
 
 	// Create service container
-	serviceContainer, err := services.NewServiceContainer(cfg, benchDB.DB)
+	serviceContainer, err := services.NewServiceContainer(benchDB.DB, cfg)
 	if err != nil {
 		b.Fatalf("Failed to create service container: %v", err)
 	}
@@ -551,10 +550,9 @@ func BenchmarkConcurrentAPIRequests(b *testing.B) {
 func BenchmarkServerStartupTime(b *testing.B) {
 	// Create test configuration
 	cfg := &config.Config{
-		HTTPServer: config.HTTPServerConfig{
-			Port:    0,
-			Host:    "localhost",
-			Timeout: 30,
+		Server: config.ServerConfig{
+			Port: 0,
+			Host: "localhost",
 		},
 		Database: config.DatabaseConfig{
 			Type: "sqlite",
@@ -576,7 +574,7 @@ func BenchmarkServerStartupTime(b *testing.B) {
 		start := time.Now()
 
 		// Create service container
-		serviceContainer, err := services.NewServiceContainer(cfg, benchDB.DB)
+		serviceContainer, err := services.NewServiceContainer(benchDB.DB, cfg)
 		if err != nil {
 			b.Fatalf("Failed to create service container: %v", err)
 		}

@@ -232,6 +232,11 @@ func (c *SimpleEdgeClient) GetEdgeNamespace() string {
 func (c *SimpleEdgeClient) RequestFullSync() error {
 	log.Info().Msg("Requesting full configuration sync from control")
 
+	// Check if client is connected
+	if c.client == nil {
+		return fmt.Errorf("not connected to control server")
+	}
+
 	ctx := context.Background()
 	req := &pb.ConfigurationRequest{
 		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
