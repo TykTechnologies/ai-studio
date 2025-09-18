@@ -23,7 +23,7 @@ func setupLoadTestProxy(b *testing.B) (*proxy.Proxy, *framework.BenchmarkDB, *fr
 	benchDB.SetupTestData(b)
 
 	// Create services
-	service := benchDB.GetService()
+	service := services.NewService(benchDB.GetDB())
 	budgetService := services.NewBudgetService(benchDB.DB, nil)
 
 	// Initialize analytics
@@ -426,7 +426,6 @@ func BenchmarkStepLoadIncrease(b *testing.B) {
 
 		var stepErrors []int64
 		var stepRequests []int64
-		currentStep := 0
 
 		metrics := tester.Execute(b, func(ctx context.Context, workerID int, metrics *framework.PerformanceMetrics) error {
 			reqBody := framework.BuildLLMRequest("gpt-4", []map[string]string{

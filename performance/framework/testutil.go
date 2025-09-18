@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -245,9 +244,9 @@ func (bdb *BenchmarkDB) ResetQueryStats() {
 	bdb.QueryLogger.Reset()
 }
 
-// GetService returns a service instance for testing
-func (bdb *BenchmarkDB) GetService() *services.Service {
-	return services.NewService(bdb.DB)
+// GetDB returns the database instance for testing
+func (bdb *BenchmarkDB) GetDB() *gorm.DB {
+	return bdb.DB
 }
 
 // MockLLMServer provides a mock LLM provider for testing

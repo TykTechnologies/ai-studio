@@ -21,7 +21,7 @@ func setupBenchmarkGateway(b *testing.B) (Gateway, *framework.BenchmarkDB, *fram
 	benchDB.SetupTestData(b)
 
 	// Create services
-	service := benchDB.GetService()
+	service := services.NewService(benchDB.GetDB())
 	budgetService := services.NewBudgetService(benchDB.DB, nil)
 
 	// Create mock LLM server
@@ -44,7 +44,7 @@ func BenchmarkGatewayInitialization(b *testing.B) {
 	benchDB := framework.NewBenchmarkDB(b).SetTestDataSize(50)
 	benchDB.SetupTestData(b)
 
-	service := benchDB.GetService()
+	service := services.NewService(benchDB.GetDB())
 	budgetService := services.NewBudgetService(benchDB.DB, nil)
 
 	ctx := context.Background()
@@ -385,7 +385,7 @@ func BenchmarkGatewayStartStop(b *testing.B) {
 	benchDB := framework.NewBenchmarkDB(b).SetTestDataSize(10)
 	benchDB.SetupTestData(b)
 
-	service := benchDB.GetService()
+	service := services.NewService(benchDB.GetDB())
 	budgetService := services.NewBudgetService(benchDB.DB, nil)
 
 	ctx := context.Background()
