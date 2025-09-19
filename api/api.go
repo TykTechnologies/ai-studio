@@ -649,6 +649,9 @@ func (a *API) setupRoutes() {
 	v1.POST("/plugins/:id/ui/unload", a.unloadPluginUI)
 	v1.POST("/plugins/:id/manifest/parse", a.parsePluginManifest)
 
+	// Plugin RPC routes
+	v1.POST("/plugins/:id/rpc/:method", a.callPluginRPC)
+
 	// Plugin runtime status routes (for debugging)
 	v1.GET("/plugins/:id/status", a.getPluginStatus)
 	v1.GET("/plugins/loaded", a.getLoadedPlugins)

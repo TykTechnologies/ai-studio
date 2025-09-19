@@ -1495,3 +1495,87 @@ func (a *API) getLoadedPlugins(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": statuses})
 }
+
+// @Summary Call plugin RPC method
+// @Description Execute RPC call on loaded AI Studio plugin
+// @Tags plugins
+// @Accept json
+// @Produce json
+// @Param id path int true "Plugin ID"
+// @Param method path string true "RPC method name"
+// @Param payload body map[string]interface{} false "RPC payload"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/plugins/{id}/rpc/{method} [post]
+// @Security BearerAuth
+func (a *API) callPluginRPC(c *gin.Context) {
+	if a.service.AIStudioPluginManager == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Service Unavailable", Detail: "AI Studio plugin manager not configured"}},
+		})
+		return
+	}
+
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid plugin ID"}},
+		})
+		return
+	}
+
+	method := c.Param("method")
+	if method == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "RPC method is required"}},
+		})
+		return
+	}
+
+	// Get request payload
+	var payload map[string]interface{}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		// Allow empty payload
+		payload = make(map[string]interface{})
+	}
+
+	// Validate plugin exists and is loaded
+	if !a.service.AIStudioPluginManager.IsPluginLoaded(uint(id)) {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Plugin not loaded"}},
+		})
+		return
+	}
+
+	// TODO: Validate RPC permissions from manifest
+	// For MVP, allow all RPC calls to loaded plugins
+
+	// Call plugin RPC method
+	response, err := a.service.AIStudioPluginManager.CallPluginRPC(uint(id), method, payload)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}

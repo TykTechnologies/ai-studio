@@ -93,8 +93,8 @@ class PluginLoaderService {
         }
       }
 
-      // Create a React wrapper for the Web Component
-      const WebComponentWrapper = this.createWebComponentWrapper(component_tag, mount_config);
+      // Create a React wrapper for the Web Component with plugin context
+      const WebComponentWrapper = this.createWebComponentWrapper(component_tag, mount_config, plugin_id);
 
       this.loadedComponents.set(component_tag, WebComponentWrapper);
 
@@ -114,8 +114,9 @@ class PluginLoaderService {
    * Create a React wrapper for a Web Component
    * @param {string} tagName - Custom element tag name
    * @param {Object} mountConfig - Mount configuration from manifest
+   * @param {number} pluginId - Plugin ID for RPC calls
    */
-  createWebComponentWrapper(tagName, mountConfig = {}) {
+  createWebComponentWrapper(tagName, mountConfig = {}, pluginId = null) {
     const React = window.React || require('react'); // Support both import methods
     const { useEffect, useRef } = React;
 
@@ -126,10 +127,28 @@ class PluginLoaderService {
         const element = elementRef.current;
         if (!element) return;
 
+        // Inject context-aware plugin API (hides all implementation details)
+        if (pluginId && window.aiStudioAPI) {
+          element.pluginAPI = {
+            call: async (method, payload = {}) => {
+              try {
+                const result = await window.aiStudioAPI.pluginRPCCall(pluginId, method, payload);
+                return result.data;
+              } catch (error) {
+                console.error(`Plugin RPC call failed: ${method}`, error);
+                throw error;
+              }
+            }
+          };
+          console.log(`Injected plugin API for plugin ${pluginId} into ${element.tagName}`);
+        }
+
         // Set props from mount config
         const configProps = mountConfig.props || {};
         Object.entries(configProps).forEach(([key, value]) => {
-          element.setAttribute(`data-${key}`, typeof value === 'string' ? value : JSON.stringify(value));
+          // Convert camelCase to kebab-case for HTML attributes
+          const attrName = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+          element.setAttribute(`data-${attrName}`, typeof value === 'string' ? value : JSON.stringify(value));
         });
 
         // Set component props

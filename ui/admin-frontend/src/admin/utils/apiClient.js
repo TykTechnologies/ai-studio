@@ -61,6 +61,23 @@ export const appToolAPI = {
   listAvailableTools: (params) => apiClientInstance.get('/tools', { params: { all: true, ...params } }),
 };
 
+// Plugin RPC call function for secure plugin communication
+export const pluginRPCCall = async (pluginId, method, payload = {}) => {
+  // Security: Check admin context from entitlements
+  const entitlements = window.adminEntitlements;
+  if (!entitlements?.is_admin) {
+    throw new Error('Plugin RPC calls require admin permissions');
+  }
+
+  // Call through secure apiClient (handles auth, CSRF, CORS)
+  try {
+    const response = await apiClientInstance.post(`/plugins/${pluginId}/rpc/${method}`, payload);
+    return response.data;
+  } catch (error) {
+    console.error(`Plugin RPC call failed: ${method}`, error);
+    throw error;
+  }
+};
 
 // Function to reinitialize the API client with new configuration
 export const reinitializeApiClient = () => {

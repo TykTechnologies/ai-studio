@@ -12,10 +12,31 @@ class RateLimitingDashboard extends HTMLElement {
   }
 
   connectedCallback() {
-    this.rpcBase = this.getAttribute('data-rpc-base') || '';
+    console.log('Dashboard component initialized:', {
+      hasPluginAPI: !!this.pluginAPI
+    });
+
     this.render();
-    this.loadData();
     this.setupEventListeners();
+
+    // Wait for plugin API to be injected before loading data
+    this.waitForPluginAPI();
+  }
+
+  async waitForPluginAPI() {
+    // Poll for plugin API availability (max 5 seconds)
+    for (let i = 0; i < 50; i++) {
+      if (this.pluginAPI) {
+        console.log('Plugin API found, loading data...');
+        this.loadData();
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Timeout - show error
+    console.error('Plugin API injection timeout');
+    this.showError('Plugin API initialization timeout - please refresh the page');
   }
 
   async loadData() {
@@ -34,31 +55,31 @@ class RateLimitingDashboard extends HTMLElement {
   }
 
   async loadStatistics() {
-    const response = await fetch(`${this.rpcBase}/call/get_statistics`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
+    if (!this.pluginAPI) {
+      throw new Error('Plugin API not available - component not properly initialized');
+    }
 
-    if (!response.ok) throw new Error('Failed to load statistics');
-
-    const result = await response.json();
-    this.data.statistics = JSON.parse(result.data);
-    this.updateStatistics();
+    try {
+      this.data.statistics = await this.pluginAPI.call('get_statistics', {});
+      this.updateStatistics();
+    } catch (error) {
+      console.error('Failed to load statistics:', error);
+      throw error;
+    }
   }
 
   async loadRateLimits() {
-    const response = await fetch(`${this.rpcBase}/call/get_rate_limits`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
+    if (!this.pluginAPI) {
+      throw new Error('Plugin API not available - component not properly initialized');
+    }
 
-    if (!response.ok) throw new Error('Failed to load rate limits');
-
-    const result = await response.json();
-    this.data.rateLimits = JSON.parse(result.data);
-    this.updateRateLimits();
+    try {
+      this.data.rateLimits = await this.pluginAPI.call('get_rate_limits', {});
+      this.updateRateLimits();
+    } catch (error) {
+      console.error('Failed to load rate limits:', error);
+      throw error;
+    }
   }
 
   setLoading(loading) {

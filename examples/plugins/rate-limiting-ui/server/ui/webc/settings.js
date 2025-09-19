@@ -8,24 +8,41 @@ class RateLimitingSettings extends HTMLElement {
   }
 
   connectedCallback() {
-    this.rpcBase = this.getAttribute('data-rpc-base') || '';
+    console.log('Settings component initialized:', {
+      hasPluginAPI: !!this.pluginAPI
+    });
+
     this.render();
-    this.loadSettings();
     this.setupEventListeners();
+
+    // Wait for plugin API to be injected before loading data
+    this.waitForPluginAPI();
+  }
+
+  async waitForPluginAPI() {
+    // Poll for plugin API availability (max 5 seconds)
+    for (let i = 0; i < 50; i++) {
+      if (this.pluginAPI) {
+        console.log('Plugin API found, loading settings...');
+        this.loadSettings();
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Timeout - show error
+    console.error('Plugin API injection timeout');
+    this.showError('Plugin API initialization timeout - please refresh the page');
   }
 
   async loadSettings() {
+    if (!this.pluginAPI) {
+      this.showError('Plugin API not available - component not properly initialized');
+      return;
+    }
+
     try {
-      const response = await fetch(`${this.rpcBase}/call/get_global_settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
-
-      if (!response.ok) throw new Error('Failed to load settings');
-
-      const result = await response.json();
-      this.settings = JSON.parse(result.data);
+      this.settings = await this.pluginAPI.call('get_global_settings', {});
       this.populateForm();
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -50,13 +67,11 @@ class RateLimitingSettings extends HTMLElement {
         alert_threshold: parseFloat(formData.get('alert_threshold'))
       };
 
-      const response = await fetch(`${this.rpcBase}/call/set_global_settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      });
+      if (!this.pluginAPI) {
+        throw new Error('Plugin API not available - component not properly initialized');
+      }
 
-      if (!response.ok) throw new Error('Failed to save settings');
+      await this.pluginAPI.call('set_global_settings', settings);
 
       this.showSuccess('Settings saved successfully');
     } catch (error) {

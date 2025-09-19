@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -138,6 +139,113 @@ func (p *RateLimitingUIPlugin) GetManifest(ctx context.Context, req *pb.GetManif
 	return &pb.GetManifestResponse{
 		Success:      true,
 		ManifestJson: string(manifestFile),
+	}, nil
+}
+
+func (p *RateLimitingUIPlugin) Call(ctx context.Context, req *pb.CallRequest) (*pb.CallResponse, error) {
+	log.Printf("Call method: %s", req.Method)
+
+	switch req.Method {
+	case "get_statistics":
+		return p.getStatistics(ctx, req.Payload)
+	case "get_rate_limits":
+		return p.getRateLimits(ctx, req.Payload)
+	case "get_global_settings":
+		return p.getGlobalSettings(ctx, req.Payload)
+	case "set_global_settings":
+		return p.setGlobalSettings(ctx, req.Payload)
+	case "set_rate_limit":
+		return p.setRateLimit(ctx, req.Payload)
+	default:
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Unknown method: %s", req.Method),
+		}, nil
+	}
+}
+
+// RPC method implementations
+func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	stats := p.kvStore["statistics"]
+
+	data, err := json.Marshal(stats)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal statistics: %v", err),
+		}, nil
+	}
+
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(data),
+	}, nil
+}
+
+func (p *RateLimitingUIPlugin) getRateLimits(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	rateLimits := p.kvStore["rate_limits"]
+
+	data, err := json.Marshal(rateLimits)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal rate limits: %v", err),
+		}, nil
+	}
+
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(data),
+	}, nil
+}
+
+func (p *RateLimitingUIPlugin) getGlobalSettings(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	settings := p.kvStore["global_settings"]
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal global settings: %v", err),
+		}, nil
+	}
+
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(data),
+	}, nil
+}
+
+func (p *RateLimitingUIPlugin) setGlobalSettings(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(payload), &settings); err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to parse settings payload: %v", err),
+		}, nil
+	}
+
+	p.kvStore["global_settings"] = settings
+
+	return &pb.CallResponse{
+		Success: true,
+		Data:    `{"message": "Settings updated successfully"}`,
+	}, nil
+}
+
+func (p *RateLimitingUIPlugin) setRateLimit(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	var rateLimitData map[string]interface{}
+	if err := json.Unmarshal([]byte(payload), &rateLimitData); err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to parse rate limit payload: %v", err),
+		}, nil
+	}
+
+	// For demo purposes, just acknowledge the request
+	return &pb.CallResponse{
+		Success: true,
+		Data:    `{"message": "Rate limit updated successfully"}`,
 	}, nil
 }
 

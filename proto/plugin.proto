@@ -37,6 +37,9 @@ service PluginService {
     rpc GetAsset(GetAssetRequest) returns (GetAssetResponse);
     rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
     rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+
+    // Generic RPC call method (for AI Studio plugins)
+    rpc Call(CallRequest) returns (CallResponse);
 }
 
 // Common messages
@@ -278,5 +281,17 @@ message GetManifestRequest {
 message GetManifestResponse {
     bool success = 1;
     string manifest_json = 2;  // Complete manifest as JSON string
+    string error_message = 3;
+}
+
+// Generic RPC call messages (for AI Studio plugins)
+message CallRequest {
+    string method = 1;   // RPC method name (e.g., "get_statistics")
+    string payload = 2;  // JSON payload as string
+}
+
+message CallResponse {
+    bool success = 1;
+    string data = 2;          // JSON response data as string
     string error_message = 3;
 }

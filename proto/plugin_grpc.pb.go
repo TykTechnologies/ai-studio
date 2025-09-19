@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugin.proto
+// source: proto/plugin.proto
 
 package proto
 
@@ -35,6 +35,7 @@ const (
 	PluginService_GetAsset_FullMethodName             = "/plugin.PluginService/GetAsset"
 	PluginService_ListAssets_FullMethodName           = "/plugin.PluginService/ListAssets"
 	PluginService_GetManifest_FullMethodName          = "/plugin.PluginService/GetManifest"
+	PluginService_Call_FullMethodName                 = "/plugin.PluginService/Call"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -67,6 +68,8 @@ type PluginServiceClient interface {
 	GetAsset(ctx context.Context, in *GetAssetRequest, opts ...grpc.CallOption) (*GetAssetResponse, error)
 	ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error)
 	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
+	// Generic RPC call method (for AI Studio plugins)
+	Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -237,6 +240,16 @@ func (c *pluginServiceClient) GetManifest(ctx context.Context, in *GetManifestRe
 	return out, nil
 }
 
+func (c *pluginServiceClient) Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CallResponse)
+	err := c.cc.Invoke(ctx, PluginService_Call_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -267,6 +280,8 @@ type PluginServiceServer interface {
 	GetAsset(context.Context, *GetAssetRequest) (*GetAssetResponse, error)
 	ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error)
 	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
+	// Generic RPC call method (for AI Studio plugins)
+	Call(context.Context, *CallRequest) (*CallResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -324,6 +339,9 @@ func (UnimplementedPluginServiceServer) ListAssets(context.Context, *ListAssetsR
 }
 func (UnimplementedPluginServiceServer) GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetManifest not implemented")
+}
+func (UnimplementedPluginServiceServer) Call(context.Context, *CallRequest) (*CallResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Call not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -634,6 +652,24 @@ func _PluginService_GetManifest_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_Call_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).Call(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_Call_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).Call(ctx, req.(*CallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -705,7 +741,11 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetManifest",
 			Handler:    _PluginService_GetManifest_Handler,
 		},
+		{
+			MethodName: "Call",
+			Handler:    _PluginService_Call_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugin.proto",
+	Metadata: "proto/plugin.proto",
 }

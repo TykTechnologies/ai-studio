@@ -14,7 +14,7 @@ import SuccessBanner from "./admin/components/common/SuccessBanner";
 
 // Configurations and utilities
 import { loadConfig } from "./config";
-import { reinitializeApiClient } from "./admin/utils/apiClient";
+import { reinitializeApiClient, pluginRPCCall } from "./admin/utils/apiClient";
 import { reinitializePubClient } from "./admin/utils/pubClient";
 import pubClient from "./admin/utils/pubClient";
 
@@ -127,6 +127,25 @@ function App() {
 
     initialize();
   }, []);
+
+  // Expose plugin API for admin users
+  useEffect(() => {
+    if (entitlements?.is_admin) {
+      // Store entitlements globally for security checks
+      window.adminEntitlements = entitlements;
+
+      // Expose secure plugin API
+      window.aiStudioAPI = {
+        pluginRPCCall: pluginRPCCall
+      };
+
+      console.log('Plugin API exposed for admin user');
+    } else {
+      // Clean up global API exposure for non-admin users
+      delete window.adminEntitlements;
+      delete window.aiStudioAPI;
+    }
+  }, [entitlements]);
 
   if (loading || !configLoaded) {
     return (

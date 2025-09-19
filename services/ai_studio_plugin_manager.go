@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"mime"
 	"os/exec"
@@ -331,6 +332,52 @@ func (m *AIStudioPluginManager) ListPluginAssets(pluginID uint, pathPrefix strin
 	}
 
 	return assets, nil
+}
+
+// CallPluginRPC calls a plugin's RPC method via gRPC
+func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payload map[string]interface{}) (interface{}, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	// Convert payload to JSON string
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal RPC payload: %w", err)
+	}
+
+	// Call plugin's Call gRPC method
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
+		Method:  method,
+		Payload: string(payloadBytes),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to call plugin RPC method: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("plugin RPC call failed: %s", resp.ErrorMessage)
+	}
+
+	// Parse response data as JSON
+	var responseData interface{}
+	if err := json.Unmarshal([]byte(resp.Data), &responseData); err != nil {
+		// If not valid JSON, return as string
+		return resp.Data, nil
+	}
+
+	return responseData, nil
 }
 
 // createPluginClient creates a plugin client based on command scheme (adapted from microgateway)
