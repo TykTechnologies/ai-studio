@@ -145,6 +145,31 @@ const PluginList = () => {
     handleMenuClose();
   };
 
+  const handleReloadPlugin = async (id, name) => {
+    if (window.confirm(`Reload plugin "${name}"? This will reload the plugin binary and refresh its manifest.`)) {
+      try {
+        setLoading(true);
+        await pluginService.reloadPlugin(id);
+        setSnackbar({
+          open: true,
+          message: `Plugin "${name}" reloaded successfully`,
+          severity: 'success',
+        });
+        fetchPlugins(); // Refresh the list to show updated status
+      } catch (err) {
+        setError(err.message);
+        setSnackbar({
+          open: true,
+          message: `Failed to reload plugin "${name}"`,
+          severity: 'error',
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+    handleMenuClose();
+  };
+
   const handleCloseSnackbar = (event, reason) => {
     if (reason === 'clickaway') {
       return;
@@ -374,7 +399,17 @@ const PluginList = () => {
           >
             Edit Plugin
           </MenuItem>
-          <MenuItem 
+          {selectedPlugin?.pluginType === 'ai_studio' && (
+            <MenuItem
+              onClick={() => {
+                handleReloadPlugin(selectedPlugin.id, selectedPlugin.name);
+                handleMenuClose();
+              }}
+            >
+              Reload Plugin
+            </MenuItem>
+          )}
+          <MenuItem
             onClick={() => handleDelete(selectedPlugin?.id, selectedPlugin?.name)}
           >
             Delete Plugin

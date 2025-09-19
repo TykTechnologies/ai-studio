@@ -45,6 +45,7 @@ const PluginForm = ({ mode = 'create' }) => {
     namespace: '',
     pluginType: 'gateway',
     ociReference: '',
+    loadImmediately: false,
   });
   
   const [errors, setErrors] = useState({});
@@ -316,11 +317,28 @@ const PluginForm = ({ mode = 'create' }) => {
               </Grid>
             )}
             {formData.pluginType === 'ai_studio' && (
-              <Grid item xs={12}>
-                <Typography variant="body2" color="textSecondary">
-                  AI Studio plugins automatically use the "studio_ui" hook type for UI extensions.
-                </Typography>
-              </Grid>
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="textSecondary">
+                    AI Studio plugins automatically use the "studio_ui" hook type for UI extensions.
+                  </Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.loadImmediately}
+                        onChange={handleSwitchChange('loadImmediately')}
+                        name="loadImmediately"
+                      />
+                    }
+                    label="Load Immediately"
+                  />
+                  <Typography variant="caption" display="block" color="textSecondary" sx={{ mt: 0.5 }}>
+                    Automatically load plugin and fetch manifest after creation (recommended for development)
+                  </Typography>
+                </Grid>
+              </>
             )}
             <Grid item xs={12}>
               <TextField

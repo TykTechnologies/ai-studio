@@ -112,8 +112,9 @@ class PluginService {
         namespace: pluginData.namespace || '',
         plugin_type: pluginData.pluginType || 'gateway',
         oci_reference: pluginData.ociReference || '',
+        load_immediately: pluginData.loadImmediately || false,
       };
-      
+
       const response = await apiClient.post('/plugins', payload);
       
       if (response.data?.data) {
@@ -155,8 +156,9 @@ class PluginService {
         namespace: pluginData.namespace || '',
         plugin_type: pluginData.pluginType || 'gateway',
         oci_reference: pluginData.ociReference || '',
+        load_immediately: pluginData.loadImmediately || false,
       };
-      
+
       const response = await apiClient.patch(`/plugins/${id}`, payload);
       
       if (response.data?.data) {
@@ -434,6 +436,16 @@ class PluginService {
     } catch (error) {
       console.error('Error fetching sidebar menu items:', error);
       throw new Error(error.response?.data?.message || 'Failed to fetch sidebar menu items');
+    }
+  }
+
+  async reloadPlugin(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/reload`);
+      return response.data;
+    } catch (error) {
+      console.error('Error reloading plugin:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to reload plugin');
     }
   }
 }

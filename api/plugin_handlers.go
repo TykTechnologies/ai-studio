@@ -450,7 +450,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -458,6 +458,42 @@ func (a *API) updatePlugin(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Auto-load AI Studio plugins if requested on update
+	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+		log.Printf("Auto-loading AI Studio plugin after update: %s (ID: %d)", plugin.Name, plugin.ID)
+
+		// Unload if currently loaded to ensure fresh reload
+		if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
+			log.Printf("Unloading existing plugin for fresh reload: %s", plugin.Name)
+			if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
+				log.Printf("Warning: Failed to unload existing plugin %s: %v", plugin.Name, unloadErr)
+			}
+		}
+
+		// Load the plugin
+		if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
+			log.Printf("Warning: Failed to auto-load plugin %s: %v", plugin.Name, loadErr)
+		} else {
+			// Auto-fetch and parse manifest
+			log.Printf("Auto-fetching manifest for updated plugin: %s", plugin.Name)
+			if manifestJSON, manifestErr := a.service.AIStudioPluginManager.GetPluginManifest(plugin.ID); manifestErr != nil {
+				log.Printf("Warning: Failed to auto-fetch manifest for plugin %s: %v", plugin.Name, manifestErr)
+			} else {
+				// Parse and register UI components
+				manifest := &models.PluginManifest{}
+				if parseErr := json.Unmarshal([]byte(manifestJSON), manifest); parseErr != nil {
+					log.Printf("Warning: Failed to parse auto-fetched manifest for plugin %s: %v", plugin.Name, parseErr)
+				} else {
+					if registerErr := a.service.PluginManifestService.RegisterPluginUI(plugin, manifest); registerErr != nil {
+						log.Printf("Warning: Failed to auto-register UI for plugin %s: %v", plugin.Name, registerErr)
+					} else {
+						log.Printf("✅ Auto-loaded and registered UI for updated plugin: %s", plugin.Name)
+					}
+				}
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
@@ -734,7 +770,15 @@ func (a *API) reloadPlugin(c *gin.Context) {
 
 	log.Printf("Reloading AI Studio plugin: %s (ID: %d)", plugin.Name, plugin.ID)
 
-	// Load the plugin (will reload if already loaded)
+	// Unload plugin if currently loaded to force fresh reload
+	if a.service.AIStudioPluginManager.IsPluginLoaded(uint(id)) {
+		log.Printf("Unloading existing plugin process for: %s", plugin.Name)
+		if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(uint(id)); unloadErr != nil {
+			log.Printf("Warning: Failed to unload existing plugin %s: %v", plugin.Name, unloadErr)
+		}
+	}
+
+	// Load the plugin fresh (new process)
 	if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(uint(id)); loadErr != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

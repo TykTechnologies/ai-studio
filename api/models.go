@@ -129,15 +129,18 @@ type PluginInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name        string                 `json:"name"`
-			Slug        string                 `json:"slug"`
-			Description string                 `json:"description"`
-			Command     string                 `json:"command"`
-			Checksum    string                 `json:"checksum,omitempty"`
-			Config      map[string]interface{} `json:"config"`
-			HookType    string                 `json:"hook_type"`
-			IsActive    bool                   `json:"is_active"`
-			Namespace   string                 `json:"namespace,omitempty"`
+			Name            string                 `json:"name"`
+			Slug            string                 `json:"slug"`
+			Description     string                 `json:"description"`
+			Command         string                 `json:"command"`
+			Checksum        string                 `json:"checksum,omitempty"`
+			Config          map[string]interface{} `json:"config"`
+			HookType        string                 `json:"hook_type"`
+			IsActive        bool                   `json:"is_active"`
+			Namespace       string                 `json:"namespace,omitempty"`
+			PluginType      string                 `json:"plugin_type,omitempty"`
+			OCIReference    string                 `json:"oci_reference,omitempty"`
+			LoadImmediately bool                   `json:"load_immediately,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
