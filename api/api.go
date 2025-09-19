@@ -635,6 +635,27 @@ func (a *API) setupRoutes() {
 	v1.GET("/plugins", a.listPlugins)
 	v1.POST("/plugins/:id/test", a.testPlugin)
 
+	// OCI Plugin routes
+	v1.POST("/plugins/oci", a.createOCIPlugin)
+	v1.GET("/plugins/oci/cached", a.listCachedOCIPlugins)
+	v1.POST("/plugins/:id/refresh", a.refreshOCIPlugin)
+	v1.GET("/plugins/type/:type", a.getPluginsByType)
+	v1.GET("/plugins/ai-studio/manifests", a.getAIStudioPluginsWithManifests)
+
+	// Plugin UI Management routes
+	v1.GET("/plugins/ui-registry", a.getUIRegistry)
+	v1.GET("/plugins/sidebar-menu", a.getSidebarMenuItems)
+	v1.POST("/plugins/:id/ui/load", a.loadPluginUI)
+	v1.POST("/plugins/:id/ui/unload", a.unloadPluginUI)
+	v1.POST("/plugins/:id/manifest/parse", a.parsePluginManifest)
+
+	// Plugin runtime status routes (for debugging)
+	v1.GET("/plugins/:id/status", a.getPluginStatus)
+	v1.GET("/plugins/loaded", a.getLoadedPlugins)
+
+	// Plugin asset serving (outside of v1 group for simpler URLs)
+	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
+
 	// LLM-Plugin association routes (extend existing LLM routes)
 	v1.GET("/llms/:id/plugins", a.getLLMPlugins)
 	v1.PUT("/llms/:id/plugins", a.updateLLMPlugins)

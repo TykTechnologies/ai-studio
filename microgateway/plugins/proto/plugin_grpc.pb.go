@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugins/proto/plugin.proto
+// source: plugin.proto
 
 package proto
 
@@ -32,6 +32,9 @@ const (
 	PluginService_HandleProxyLog_FullMethodName       = "/plugin.PluginService/HandleProxyLog"
 	PluginService_HandleAnalytics_FullMethodName      = "/plugin.PluginService/HandleAnalytics"
 	PluginService_HandleBudgetUsage_FullMethodName    = "/plugin.PluginService/HandleBudgetUsage"
+	PluginService_GetAsset_FullMethodName             = "/plugin.PluginService/GetAsset"
+	PluginService_ListAssets_FullMethodName           = "/plugin.PluginService/ListAssets"
+	PluginService_GetManifest_FullMethodName          = "/plugin.PluginService/GetManifest"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -60,6 +63,10 @@ type PluginServiceClient interface {
 	HandleProxyLog(ctx context.Context, in *ProxyLogRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 	HandleAnalytics(ctx context.Context, in *AnalyticsRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 	HandleBudgetUsage(ctx context.Context, in *BudgetUsageRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
+	// AI Studio UI Asset serving (for AI Studio plugins only)
+	GetAsset(ctx context.Context, in *GetAssetRequest, opts ...grpc.CallOption) (*GetAssetResponse, error)
+	ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error)
+	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -200,6 +207,36 @@ func (c *pluginServiceClient) HandleBudgetUsage(ctx context.Context, in *BudgetU
 	return out, nil
 }
 
+func (c *pluginServiceClient) GetAsset(ctx context.Context, in *GetAssetRequest, opts ...grpc.CallOption) (*GetAssetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAssetResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetAsset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAssetsResponse)
+	err := c.cc.Invoke(ctx, PluginService_ListAssets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetManifestResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetManifest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -226,6 +263,10 @@ type PluginServiceServer interface {
 	HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error)
 	HandleAnalytics(context.Context, *AnalyticsRequest) (*DataCollectionResponse, error)
 	HandleBudgetUsage(context.Context, *BudgetUsageRequest) (*DataCollectionResponse, error)
+	// AI Studio UI Asset serving (for AI Studio plugins only)
+	GetAsset(context.Context, *GetAssetRequest) (*GetAssetResponse, error)
+	ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error)
+	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -274,6 +315,15 @@ func (UnimplementedPluginServiceServer) HandleAnalytics(context.Context, *Analyt
 }
 func (UnimplementedPluginServiceServer) HandleBudgetUsage(context.Context, *BudgetUsageRequest) (*DataCollectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HandleBudgetUsage not implemented")
+}
+func (UnimplementedPluginServiceServer) GetAsset(context.Context, *GetAssetRequest) (*GetAssetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAsset not implemented")
+}
+func (UnimplementedPluginServiceServer) ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAssets not implemented")
+}
+func (UnimplementedPluginServiceServer) GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetManifest not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -530,6 +580,60 @@ func _PluginService_HandleBudgetUsage_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_GetAsset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAssetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetAsset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetAsset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetAsset(ctx, req.(*GetAssetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_ListAssets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAssetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ListAssets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ListAssets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ListAssets(ctx, req.(*ListAssetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_GetManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetManifest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetManifest(ctx, req.(*GetManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -589,7 +693,19 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "HandleBudgetUsage",
 			Handler:    _PluginService_HandleBudgetUsage_Handler,
 		},
+		{
+			MethodName: "GetAsset",
+			Handler:    _PluginService_GetAsset_Handler,
+		},
+		{
+			MethodName: "ListAssets",
+			Handler:    _PluginService_ListAssets_Handler,
+		},
+		{
+			MethodName: "GetManifest",
+			Handler:    _PluginService_GetManifest_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugins/proto/plugin.proto",
+	Metadata: "plugin.proto",
 }

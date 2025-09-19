@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 // Base gRPC server implementation

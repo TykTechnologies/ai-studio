@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -21,9 +22,14 @@ type Plugin struct {
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt         `json:"deleted_at,omitempty" gorm:"index"`
-	
+
 	// Hub-and-Spoke Configuration
 	Namespace   string                 `json:"namespace" gorm:"default:'';index:idx_plugin_namespace"`
+
+	// Plugin Type and OCI Support
+	PluginType  string                 `json:"plugin_type" gorm:"not null;default:'gateway';size:50;index:idx_plugins_type"` // "gateway" or "ai_studio"
+	OCIReference string                `json:"oci_reference" gorm:"size:500"`                                                // OCI artifact reference (for OCI plugins)
+	Manifest    map[string]interface{} `json:"manifest" gorm:"serializer:json"`                                              // Plugin manifest for UI extensions
 
 	// Relationships
 	LLMs []LLM `json:"llms,omitempty" gorm:"many2many:llm_plugins;"`
@@ -38,18 +44,30 @@ type Plugins []Plugin
 
 // Plugin hook type constants
 const (
+	// Gateway plugin hook types
 	HookTypePreAuth        = "pre_auth"
 	HookTypeAuth           = "auth"
 	HookTypePostAuth       = "post_auth"
 	HookTypeOnResponse     = "on_response"
 	HookTypeDataCollection = "data_collection"
+
+	// AI Studio plugin hook types
+	HookTypeStudioUI       = "studio_ui"     // AI Studio UI extension plugins
+)
+
+// Plugin type constants
+const (
+	PluginTypeGateway   = "gateway"   // Microgateway plugins
+	PluginTypeAIStudio  = "ai_studio" // AI Studio UI extension plugins
 )
 
 // NewPlugin creates a new Plugin instance
 func NewPlugin() *Plugin {
 	return &Plugin{
-		IsActive: true,
-		Config:   make(map[string]interface{}),
+		IsActive:   true,
+		Config:     make(map[string]interface{}),
+		PluginType: PluginTypeGateway, // Default to gateway plugin
+		Manifest:   make(map[string]interface{}),
 	}
 }
 
@@ -86,14 +104,45 @@ func (p *Plugin) IsValidHookType() bool {
 		HookTypePostAuth,
 		HookTypeOnResponse,
 		HookTypeDataCollection,
+		HookTypeStudioUI,
 	}
-	
+
 	for _, validType := range validTypes {
 		if p.HookType == validType {
 			return true
 		}
 	}
 	return false
+}
+
+// IsValidPluginType validates if the plugin type is supported
+func (p *Plugin) IsValidPluginType() bool {
+	return p.PluginType == PluginTypeGateway || p.PluginType == PluginTypeAIStudio
+}
+
+// IsAIStudioPlugin returns true if this is an AI Studio plugin
+func (p *Plugin) IsAIStudioPlugin() bool {
+	return p.PluginType == PluginTypeAIStudio
+}
+
+// IsGatewayPlugin returns true if this is a Gateway plugin
+func (p *Plugin) IsGatewayPlugin() bool {
+	return p.PluginType == PluginTypeGateway
+}
+
+// IsOCIPlugin returns true if this plugin uses OCI (determined by command prefix)
+func (p *Plugin) IsOCIPlugin() bool {
+	return strings.HasPrefix(p.Command, "oci://")
+}
+
+// IsLocalPlugin returns true if this plugin is a local binary
+func (p *Plugin) IsLocalPlugin() bool {
+	return !strings.HasPrefix(p.Command, "oci://") && !strings.HasPrefix(p.Command, "grpc://")
+}
+
+// IsGRPCPlugin returns true if this plugin connects to external gRPC
+func (p *Plugin) IsGRPCPlugin() bool {
+	return strings.HasPrefix(p.Command, "grpc://")
 }
 
 // GetPluginsForLLM returns plugins associated with an LLM, ordered by execution order

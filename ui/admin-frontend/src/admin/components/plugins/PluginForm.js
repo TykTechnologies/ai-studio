@@ -43,6 +43,8 @@ const PluginForm = ({ mode = 'create' }) => {
     hookType: '',
     isActive: true,
     namespace: '',
+    pluginType: 'gateway',
+    ociReference: '',
   });
   
   const [errors, setErrors] = useState({});
@@ -76,6 +78,8 @@ const PluginForm = ({ mode = 'create' }) => {
           hookType: plugin.hookType,
           isActive: plugin.isActive,
           namespace: plugin.namespace === 'global' ? '' : plugin.namespace,
+          pluginType: plugin.pluginType || 'gateway',
+          ociReference: plugin.ociReference || '',
         });
         setConfigJson(JSON.stringify(plugin.config || {}, null, 2));
       }
@@ -148,10 +152,20 @@ const PluginForm = ({ mode = 'create' }) => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Plugin name is required';
     if (!formData.slug.trim()) newErrors.slug = 'Plugin slug is required';
-    if (!formData.command.trim()) newErrors.command = 'Plugin command is required';
-    if (!formData.hookType) newErrors.hookType = 'Hook type is required';
+
+    // Validate command (auto-detect OCI vs local from prefix)
+    if (!formData.command.trim()) {
+      newErrors.command = 'Plugin command is required';
+    } else if (formData.command.startsWith('oci://') && formData.ociReference && !formData.ociReference.trim()) {
+      newErrors.command = 'OCI reference cannot be empty for OCI plugins';
+    }
+
+    // Hook type is required for gateway plugins, auto-set for AI Studio plugins
+    if (formData.pluginType === 'gateway' && !formData.hookType) {
+      newErrors.hookType = 'Hook type is required for gateway plugins';
+    }
     if (configError) newErrors.config = configError;
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -164,10 +178,16 @@ const PluginForm = ({ mode = 'create' }) => {
     }
     
     try {
+      // Prepare form data with auto-set hook type for AI Studio plugins
+      const submissionData = { ...formData };
+      if (submissionData.pluginType === 'ai_studio') {
+        submissionData.hookType = 'studio_ui'; // Auto-set for AI Studio plugins
+      }
+
       if (isEdit) {
-        await pluginService.updatePlugin(id, formData);
+        await pluginService.updatePlugin(id, submissionData);
       } else {
-        await pluginService.createPlugin(formData);
+        await pluginService.createPlugin(submissionData);
       }
       
       setSnackbar({
@@ -258,27 +278,50 @@ const PluginForm = ({ mode = 'create' }) => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth required error={!!errors.hookType}>
-                <InputLabel>Hook Type</InputLabel>
+              <FormControl fullWidth required>
+                <InputLabel>Plugin Type</InputLabel>
                 <Select
-                  name="hookType"
-                  value={formData.hookType}
-                  label="Hook Type"
+                  name="pluginType"
+                  value={formData.pluginType}
+                  label="Plugin Type"
                   onChange={handleChange}
                 >
-                  {availableHookTypes.map((hookType) => (
-                    <MenuItem key={hookType.value} value={hookType.value}>
-                      {hookType.label}
-                    </MenuItem>
-                  ))}
+                  <MenuItem value="gateway">Gateway Plugin</MenuItem>
+                  <MenuItem value="ai_studio">AI Studio Plugin</MenuItem>
                 </Select>
-                {errors.hookType && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
-                    {errors.hookType}
-                  </Typography>
-                )}
               </FormControl>
             </Grid>
+            {formData.pluginType === 'gateway' && (
+              <Grid item xs={12}>
+                <FormControl fullWidth required error={!!errors.hookType}>
+                  <InputLabel>Hook Type</InputLabel>
+                  <Select
+                    name="hookType"
+                    value={formData.hookType}
+                    label="Hook Type"
+                    onChange={handleChange}
+                  >
+                    {availableHookTypes.map((hookType) => (
+                      <MenuItem key={hookType.value} value={hookType.value}>
+                        {hookType.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.hookType && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                      {errors.hookType}
+                    </Typography>
+                  )}
+                </FormControl>
+              </Grid>
+            )}
+            {formData.pluginType === 'ai_studio' && (
+              <Grid item xs={12}>
+                <Typography variant="body2" color="textSecondary">
+                  AI Studio plugins automatically use the "studio_ui" hook type for UI extensions.
+                </Typography>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -287,7 +330,11 @@ const PluginForm = ({ mode = 'create' }) => {
                 value={formData.command}
                 onChange={handleChange}
                 error={!!errors.command}
-                helperText={errors.command || 'Full path to the plugin executable'}
+                helperText={
+                  errors.command ||
+                  'Plugin command - use oci:// for OCI artifacts, grpc:// for external services, or local path for binaries'
+                }
+                placeholder="e.g., oci://registry.com/my-plugin:latest or /path/to/plugin-binary"
                 required
               />
             </Grid>

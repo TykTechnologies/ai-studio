@@ -3,7 +3,7 @@ package sdk
 
 import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 // Convert from protobuf types to interfaces types

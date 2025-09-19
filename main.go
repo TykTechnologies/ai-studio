@@ -91,6 +91,16 @@ func main() {
 	// Create a new service instance
 	service := services.NewService(db)
 
+	// Load AI Studio plugins at startup
+	if service.AIStudioPluginManager != nil {
+		log.Println("🔌 Loading AI Studio plugins...")
+		if err := service.AIStudioPluginManager.LoadAllAIStudioPlugins(); err != nil {
+			log.Printf("⚠️  Failed to load some AI Studio plugins: %v", err)
+		} else {
+			log.Println("✅ AI Studio plugins loaded successfully")
+		}
+	}
+
 	// Initialize mail service and notification service
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
 	mailService := notifications.NewMailService(

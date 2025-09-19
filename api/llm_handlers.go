@@ -499,24 +499,30 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Type: "plugins",
 			ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 			Attributes: struct {
-				Name        string                 `json:"name"`
-				Slug        string                 `json:"slug"`
-				Description string                 `json:"description"`
-				Command     string                 `json:"command"`
-				Checksum    string                 `json:"checksum,omitempty"`
-				Config      map[string]interface{} `json:"config"`
-				HookType    string                 `json:"hook_type"`
-				IsActive    bool                   `json:"is_active"`
-				Namespace   string                 `json:"namespace"`
-				CreatedAt   string                 `json:"created_at"`
-				UpdatedAt   string                 `json:"updated_at"`
+				Name         string                 `json:"name"`
+				Slug         string                 `json:"slug"`
+				Description  string                 `json:"description"`
+				Command      string                 `json:"command"`
+				Checksum     string                 `json:"checksum,omitempty"`
+				Config       map[string]interface{} `json:"config"`
+				HookType     string                 `json:"hook_type"`
+				IsActive     bool                   `json:"is_active"`
+				Namespace    string                 `json:"namespace"`
+				PluginType   string                 `json:"plugin_type"`   // "gateway" or "ai_studio"
+				OCIReference string                 `json:"oci_reference"` // OCI artifact reference (for OCI plugins)
+				Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
+				CreatedAt    string                 `json:"created_at"`
+				UpdatedAt    string                 `json:"updated_at"`
 			}{
-				Name:        plugin.Name,
-				Slug:        plugin.Slug,
-				Description: plugin.Description,
-				Command:     plugin.Command,
-				Checksum:    plugin.Checksum,
-				Config:      plugin.Config,
+				Name:         plugin.Name,
+				Slug:         plugin.Slug,
+				Description:  plugin.Description,
+				Command:      plugin.Command,
+				Checksum:     plugin.Checksum,
+				Config:       plugin.Config,
+				PluginType:   plugin.PluginType,
+				OCIReference: plugin.OCIReference,
+				Manifest:     plugin.Manifest,
 				HookType:    plugin.HookType,
 				IsActive:    plugin.IsActive,
 				Namespace:   plugin.Namespace,
@@ -579,29 +585,35 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Type: "plugins",
 				ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 				Attributes: struct {
-					Name        string                 `json:"name"`
-					Slug        string                 `json:"slug"`
-					Description string                 `json:"description"`
-					Command     string                 `json:"command"`
-					Checksum    string                 `json:"checksum,omitempty"`
-					Config      map[string]interface{} `json:"config"`
-					HookType    string                 `json:"hook_type"`
-					IsActive    bool                   `json:"is_active"`
-					Namespace   string                 `json:"namespace"`
-					CreatedAt   string                 `json:"created_at"`
-					UpdatedAt   string                 `json:"updated_at"`
+					Name         string                 `json:"name"`
+					Slug         string                 `json:"slug"`
+					Description  string                 `json:"description"`
+					Command      string                 `json:"command"`
+					Checksum     string                 `json:"checksum,omitempty"`
+					Config       map[string]interface{} `json:"config"`
+					HookType     string                 `json:"hook_type"`
+					IsActive     bool                   `json:"is_active"`
+					Namespace    string                 `json:"namespace"`
+					PluginType   string                 `json:"plugin_type"`   // "gateway" or "ai_studio"
+					OCIReference string                 `json:"oci_reference"` // OCI artifact reference (for OCI plugins)
+					Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
+					CreatedAt    string                 `json:"created_at"`
+					UpdatedAt    string                 `json:"updated_at"`
 				}{
-					Name:        plugin.Name,
-					Slug:        plugin.Slug,
-					Description: plugin.Description,
-					Command:     plugin.Command,
-					Checksum:    plugin.Checksum,
-					Config:      plugin.Config,
-					HookType:    plugin.HookType,
-					IsActive:    plugin.IsActive,
-					Namespace:   plugin.Namespace,
-					CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-					UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					Name:         plugin.Name,
+					Slug:         plugin.Slug,
+					Description:  plugin.Description,
+					Command:      plugin.Command,
+					Checksum:     plugin.Checksum,
+					Config:       plugin.Config,
+					HookType:     plugin.HookType,
+					IsActive:     plugin.IsActive,
+					Namespace:    plugin.Namespace,
+					PluginType:   plugin.PluginType,
+					OCIReference: plugin.OCIReference,
+					Manifest:     plugin.Manifest,
+					CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 				},
 			}
 		}

@@ -1,10 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import BaseDrawer from './base-drawer';
 import useAdminData from '../../hooks/useAdminData';
 import Icon from '../../../components/common/Icon';
+import pluginLoaderService from '../../services/pluginLoaderService';
 
 const Drawer = () => {
   const { features, uiOptions, config, loading, error } = useAdminData();
+  const [pluginMenuItems, setPluginMenuItems] = useState([]);
+
+  useEffect(() => {
+    loadPluginMenuItems();
+  }, []);
+
+  const loadPluginMenuItems = async () => {
+    try {
+      const menuItems = await pluginLoaderService.getSidebarMenuItems();
+      setPluginMenuItems(menuItems);
+    } catch (error) {
+      console.error('Failed to load plugin menu items:', error);
+    }
+  };
 
   if (loading || error) {
     return null;
@@ -119,6 +134,19 @@ const Drawer = () => {
           },
         ]
       : []),
+    // Add plugin-contributed menu items
+    ...pluginMenuItems.map(item => ({
+      id: item.id,
+      text: item.label,
+      icon: <Icon name="puzzle-piece" />, // Default icon for plugins
+      path: item.path,
+      title: item.title,
+      subItems: item.sub_items?.map(subItem => ({
+        id: subItem.id,
+        text: subItem.text,
+        path: subItem.path
+      })) || []
+    }))
   ];
 
   return (

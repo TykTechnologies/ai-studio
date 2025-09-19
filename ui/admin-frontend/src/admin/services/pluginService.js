@@ -42,6 +42,9 @@ class PluginService {
             hookType: plugin.attributes.hook_type,
             isActive: plugin.attributes.is_active,
             namespace: plugin.attributes.namespace || 'global',
+            pluginType: plugin.attributes.plugin_type || 'gateway',
+            ociReference: plugin.attributes.oci_reference || '',
+            manifest: plugin.attributes.manifest || {},
             createdAt: plugin.attributes.created_at,
             updatedAt: plugin.attributes.updated_at,
           })),
@@ -73,6 +76,9 @@ class PluginService {
           hookType: plugin.attributes.hook_type,
           isActive: plugin.attributes.is_active,
           namespace: plugin.attributes.namespace || 'global',
+          pluginType: plugin.attributes.plugin_type || 'gateway',
+          ociReference: plugin.attributes.oci_reference || '',
+          manifest: plugin.attributes.manifest || {},
           createdAt: plugin.attributes.created_at,
           updatedAt: plugin.attributes.updated_at,
           // Include associated LLMs if present with full data
@@ -104,6 +110,8 @@ class PluginService {
         hook_type: pluginData.hookType,
         is_active: pluginData.isActive !== undefined ? pluginData.isActive : true,
         namespace: pluginData.namespace || '',
+        plugin_type: pluginData.pluginType || 'gateway',
+        oci_reference: pluginData.ociReference || '',
       };
       
       const response = await apiClient.post('/plugins', payload);
@@ -145,6 +153,8 @@ class PluginService {
         hook_type: pluginData.hookType,
         is_active: pluginData.isActive !== undefined ? pluginData.isActive : true,
         namespace: pluginData.namespace || '',
+        plugin_type: pluginData.pluginType || 'gateway',
+        oci_reference: pluginData.ociReference || '',
       };
       
       const response = await apiClient.patch(`/plugins/${id}`, payload);
@@ -257,8 +267,11 @@ class PluginService {
       errors.slug = 'Plugin slug is required';
     }
 
+    // Validate command (auto-detect OCI vs local from prefix)
     if (!pluginData.command?.trim()) {
       errors.command = 'Plugin command is required';
+    } else if (pluginData.command.startsWith('oci://') && (!pluginData.command.includes('/'))) {
+      errors.command = 'Invalid OCI reference format';
     }
 
     if (!pluginData.hookType) {
@@ -271,6 +284,157 @@ class PluginService {
       isValid: Object.keys(errors).length === 0,
       errors,
     };
+  }
+
+  // OCI Plugin Operations
+
+  async createOCIPlugin(ociPluginData) {
+    try {
+      const payload = {
+        name: ociPluginData.name,
+        slug: ociPluginData.slug,
+        description: ociPluginData.description || '',
+        oci_reference: ociPluginData.ociReference,
+        config: ociPluginData.config || {},
+        hook_type: ociPluginData.hookType,
+        is_active: ociPluginData.isActive !== undefined ? ociPluginData.isActive : true,
+        namespace: ociPluginData.namespace || '',
+      };
+
+      const response = await apiClient.post('/plugins/oci', payload);
+
+      if (response.data?.data) {
+        const plugin = response.data.data;
+        return {
+          id: plugin.id,
+          name: plugin.attributes.name,
+          slug: plugin.attributes.slug,
+          description: plugin.attributes.description,
+          command: plugin.attributes.command,
+          pluginType: plugin.attributes.plugin_type,
+          ociReference: plugin.attributes.oci_reference,
+          manifest: plugin.attributes.manifest || {},
+          hookType: plugin.attributes.hook_type,
+          isActive: plugin.attributes.is_active,
+          namespace: plugin.attributes.namespace || 'global',
+          createdAt: plugin.attributes.created_at,
+          updatedAt: plugin.attributes.updated_at,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error creating OCI plugin:', error);
+      throw new Error(error.response?.data?.message || 'Failed to create OCI plugin');
+    }
+  }
+
+  async refreshOCIPlugin(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/refresh`);
+
+      if (response.data?.data) {
+        const plugin = response.data.data;
+        return {
+          id: plugin.id,
+          name: plugin.attributes.name,
+          slug: plugin.attributes.slug,
+          description: plugin.attributes.description,
+          command: plugin.attributes.command,
+          pluginType: plugin.attributes.plugin_type,
+          ociReference: plugin.attributes.oci_reference,
+          manifest: plugin.attributes.manifest || {},
+          hookType: plugin.attributes.hook_type,
+          isActive: plugin.attributes.is_active,
+          namespace: plugin.attributes.namespace || 'global',
+          createdAt: plugin.attributes.created_at,
+          updatedAt: plugin.attributes.updated_at,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error refreshing OCI plugin:', error);
+      throw new Error(error.response?.data?.message || 'Failed to refresh OCI plugin');
+    }
+  }
+
+  async parsePluginManifest(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/manifest/parse`);
+      return response.data;
+    } catch (error) {
+      console.error('Error parsing plugin manifest:', error);
+      throw new Error(error.response?.data?.message || 'Failed to parse plugin manifest');
+    }
+  }
+
+  async loadPluginUI(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/ui/load`);
+      return response.data;
+    } catch (error) {
+      console.error('Error loading plugin UI:', error);
+      throw new Error(error.response?.data?.message || 'Failed to load plugin UI');
+    }
+  }
+
+  async unloadPluginUI(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/ui/unload`);
+      return response.data;
+    } catch (error) {
+      console.error('Error unloading plugin UI:', error);
+      throw new Error(error.response?.data?.message || 'Failed to unload plugin UI');
+    }
+  }
+
+  async getPluginsByType(pluginType) {
+    try {
+      const response = await apiClient.get(`/plugins/type/${pluginType}`);
+
+      if (response.data?.data) {
+        return response.data.data.map(plugin => ({
+          id: plugin.id,
+          name: plugin.attributes.name,
+          slug: plugin.attributes.slug,
+          description: plugin.attributes.description,
+          command: plugin.attributes.command,
+          pluginType: plugin.attributes.plugin_type,
+          ociReference: plugin.attributes.oci_reference,
+          hookType: plugin.attributes.hook_type,
+          isActive: plugin.attributes.is_active,
+          namespace: plugin.attributes.namespace || 'global',
+          createdAt: plugin.attributes.created_at,
+          updatedAt: plugin.attributes.updated_at,
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      console.error('Error fetching plugins by type:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch plugins by type');
+    }
+  }
+
+  async getUIRegistry() {
+    try {
+      const response = await apiClient.get('/plugins/ui-registry');
+      return response.data?.data || [];
+    } catch (error) {
+      console.error('Error fetching UI registry:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch UI registry');
+    }
+  }
+
+  async getSidebarMenuItems() {
+    try {
+      const response = await apiClient.get('/plugins/sidebar-menu');
+      return response.data?.data || [];
+    } catch (error) {
+      console.error('Error fetching sidebar menu items:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch sidebar menu items');
+    }
   }
 }
 

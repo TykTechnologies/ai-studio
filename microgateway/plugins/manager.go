@@ -17,7 +17,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/hashicorp/go-plugin"

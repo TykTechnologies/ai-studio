@@ -1,18 +1,21 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 // PluginService implements plugin management for AI Studio
 type PluginService struct {
-	db *gorm.DB
+	db        *gorm.DB
+	ociClient *ociplugins.OCIPluginClient
 }
 
 // NewPluginService creates a new plugin service
@@ -22,28 +25,50 @@ func NewPluginService(db *gorm.DB) *PluginService {
 	}
 }
 
+// NewPluginServiceWithOCI creates a new plugin service with OCI support
+func NewPluginServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) (*PluginService, error) {
+	var ociClient *ociplugins.OCIPluginClient
+	var err error
+
+	if ociConfig != nil {
+		ociClient, err = ociplugins.NewOCIPluginClient(ociConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OCI plugin client: %w", err)
+		}
+	}
+
+	return &PluginService{
+		db:        db,
+		ociClient: ociClient,
+	}, nil
+}
+
 // Plugin request/response structures (adapted from microgateway)
 type CreatePluginRequest struct {
-	Name        string                 `json:"name" binding:"required"`
-	Slug        string                 `json:"slug" binding:"required"`
-	Description string                 `json:"description"`
-	Command     string                 `json:"command" binding:"required"`
-	Checksum    string                 `json:"checksum"` // Optional
-	Config      map[string]interface{} `json:"config"`
-	HookType    string                 `json:"hook_type" binding:"required"`
-	IsActive    bool                   `json:"is_active"`
-	Namespace   string                 `json:"namespace,omitempty"`
+	Name         string                 `json:"name" binding:"required"`
+	Slug         string                 `json:"slug" binding:"required"`
+	Description  string                 `json:"description"`
+	Command      string                 `json:"command" binding:"required"`
+	Checksum     string                 `json:"checksum"` // Optional
+	Config       map[string]interface{} `json:"config"`
+	HookType     string                 `json:"hook_type" binding:"required"`
+	IsActive     bool                   `json:"is_active"`
+	Namespace    string                 `json:"namespace,omitempty"`
+	PluginType   string                 `json:"plugin_type,omitempty"`   // "gateway" or "ai_studio"
+	OCIReference string                 `json:"oci_reference,omitempty"` // OCI artifact reference
 }
 
 type UpdatePluginRequest struct {
-	Name        *string                `json:"name"`
-	Description *string                `json:"description"`
-	Command     *string                `json:"command"`
-	Checksum    *string                `json:"checksum"`
-	Config      map[string]interface{} `json:"config"`
-	HookType    *string                `json:"hook_type"`
-	IsActive    *bool                  `json:"is_active"`
-	Namespace   *string                `json:"namespace"`
+	Name         *string                `json:"name"`
+	Description  *string                `json:"description"`
+	Command      *string                `json:"command"`
+	Checksum     *string                `json:"checksum"`
+	Config       map[string]interface{} `json:"config"`
+	HookType     *string                `json:"hook_type"`
+	IsActive     *bool                  `json:"is_active"`
+	Namespace    *string                `json:"namespace"`
+	PluginType   *string                `json:"plugin_type"`
+	OCIReference *string                `json:"oci_reference"`
 }
 
 // PluginServiceInterface defines the interface for plugin operations (adapted from microgateway)
@@ -96,16 +121,36 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 		return nil, fmt.Errorf("plugin slug '%s' already exists", req.Slug)
 	}
 
+	// Set default plugin type if not specified
+	pluginType := req.PluginType
+	if pluginType == "" {
+		pluginType = models.PluginTypeGateway
+	}
+
+	// Set default hook type for AI Studio plugins
+	hookType := req.HookType
+	if pluginType == models.PluginTypeAIStudio && hookType == "" {
+		hookType = models.HookTypeStudioUI
+	}
+
 	plugin := &models.Plugin{
-		Name:        req.Name,
-		Slug:        req.Slug,
-		Description: req.Description,
-		Command:     req.Command,
-		Checksum:    req.Checksum,
-		Config:      req.Config,
-		HookType:    req.HookType,
-		IsActive:    req.IsActive,
-		Namespace:   req.Namespace,
+		Name:         req.Name,
+		Slug:         req.Slug,
+		Description:  req.Description,
+		Command:      req.Command,
+		Checksum:     req.Checksum,
+		Config:       req.Config,
+		HookType:     hookType,
+		IsActive:     req.IsActive,
+		Namespace:    req.Namespace,
+		PluginType:   pluginType,
+		OCIReference: req.OCIReference,
+		Manifest:     make(map[string]interface{}),
+	}
+
+	// Validate plugin type
+	if !plugin.IsValidPluginType() {
+		return nil, fmt.Errorf("invalid plugin type: %s", pluginType)
 	}
 
 	if err := plugin.Create(s.db); err != nil {
@@ -184,6 +229,17 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	}
 	if req.Namespace != nil {
 		plugin.Namespace = *req.Namespace
+	}
+	if req.PluginType != nil {
+		plugin.PluginType = *req.PluginType
+		// Validate plugin type
+		if !plugin.IsValidPluginType() {
+			return nil, fmt.Errorf("invalid plugin type: %s", *req.PluginType)
+		}
+	}
+	// IsOCI is now determined by command prefix, no need to set explicitly
+	if req.OCIReference != nil {
+		plugin.OCIReference = *req.OCIReference
 	}
 
 	if err := plugin.Update(s.db); err != nil {
@@ -345,6 +401,7 @@ func isValidHookType(hookType string) bool {
 		models.HookTypePostAuth,
 		models.HookTypeOnResponse,
 		models.HookTypeDataCollection,
+		models.HookTypeStudioUI,
 	}
 	for _, validType := range validTypes {
 		if hookType == validType {
@@ -427,4 +484,141 @@ func (s *PluginService) containsInternalIP(command string) bool {
 		}
 	}
 	return false
+}
+
+// OCI Plugin Management Methods
+
+// CreateOCIPluginFromReference creates a plugin from an OCI reference
+func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest) (*models.Plugin, error) {
+	if s.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not configured")
+	}
+
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(req.OCIReference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OCI reference: %w", err)
+	}
+
+	// Fetch plugin from registry to verify it exists
+	ctx := context.Background()
+	_, err = s.ociClient.FetchPlugin(ctx, ref, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
+	}
+
+	// For MVP, we'll use a default manifest structure
+	// In full implementation, this would extract manifest.json from the OCI artifact
+	manifest := map[string]interface{}{
+		"id":      fmt.Sprintf("plugin-%s", req.Slug),
+		"version": "1.0.0",
+		"name":    req.Name,
+		"description": req.Description,
+		// Manifest will be populated later when parsed from the OCI artifact
+	}
+
+	// Create plugin record
+	plugin := &models.Plugin{
+		Name:         req.Name,
+		Slug:         req.Slug,
+		Description:  req.Description,
+		Command:      req.OCIReference, // Store OCI reference as command
+		PluginType:   models.PluginTypeAIStudio,
+		OCIReference: req.OCIReference,
+		HookType:     models.HookTypeStudioUI, // AI Studio plugins use studio_ui hook type
+		IsActive:     req.IsActive,
+		Namespace:    req.Namespace,
+		Config:       req.Config,
+		Manifest:     manifest,
+	}
+
+	if err := plugin.Create(s.db); err != nil {
+		return nil, fmt.Errorf("failed to create OCI plugin record: %w", err)
+	}
+
+	return plugin, nil
+}
+
+// ListCachedOCIPlugins returns all cached OCI plugins
+func (s *PluginService) ListCachedOCIPlugins() ([]*ociplugins.LocalPlugin, error) {
+	if s.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not configured")
+	}
+	return s.ociClient.ListCached()
+}
+
+// RefreshOCIPlugin refreshes an OCI plugin from the registry
+func (s *PluginService) RefreshOCIPlugin(pluginID uint) (*models.Plugin, error) {
+	if s.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not configured")
+	}
+
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !plugin.IsOCIPlugin() {
+		return nil, fmt.Errorf("plugin is not an OCI plugin")
+	}
+
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(plugin.OCIReference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OCI reference: %w", err)
+	}
+
+	// Fetch latest version to verify it exists and update cache
+	ctx := context.Background()
+	_, err = s.ociClient.FetchPlugin(ctx, ref, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh OCI plugin: %w", err)
+	}
+
+	// For MVP, maintain existing manifest
+	// In full implementation, this would re-extract manifest.json from the updated OCI artifact
+	// The manifest will be properly populated when ParsePluginManifest is called
+
+	if err := plugin.Update(s.db); err != nil {
+		return nil, fmt.Errorf("failed to update plugin: %w", err)
+	}
+
+	return plugin, nil
+}
+
+// GetPluginsByType returns plugins filtered by type
+func (s *PluginService) GetPluginsByType(pluginType string) ([]models.Plugin, error) {
+	var plugins []models.Plugin
+
+	if err := s.db.Where("plugin_type = ? AND is_active = ?", pluginType, true).
+		Order("created_at DESC").Find(&plugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get plugins by type: %w", err)
+	}
+
+	return plugins, nil
+}
+
+// GetAIStudioPluginsWithManifests returns AI Studio plugins that have UI manifests
+func (s *PluginService) GetAIStudioPluginsWithManifests() ([]models.Plugin, error) {
+	var plugins []models.Plugin
+
+	if err := s.db.Where("plugin_type = ? AND is_active = ? AND manifest IS NOT NULL AND manifest != '{}'",
+		models.PluginTypeAIStudio, true).
+		Order("created_at DESC").Find(&plugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get AI Studio plugins with manifests: %w", err)
+	}
+
+	return plugins, nil
+}
+
+// CreateOCIPluginRequest represents a request to create a plugin from an OCI artifact
+type CreateOCIPluginRequest struct {
+	Name         string                 `json:"name" binding:"required"`
+	Slug         string                 `json:"slug" binding:"required"`
+	Description  string                 `json:"description"`
+	OCIReference string                 `json:"oci_reference" binding:"required"`
+	Config       map[string]interface{} `json:"config"`
+	HookType     string                 `json:"hook_type" binding:"required"`
+	IsActive     bool                   `json:"is_active"`
+	Namespace    string                 `json:"namespace,omitempty"`
 }

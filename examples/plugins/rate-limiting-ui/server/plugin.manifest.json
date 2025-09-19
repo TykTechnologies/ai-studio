@@ -1,0 +1,63 @@
+{
+  "id": "com.tyk.rate-limiting-ui",
+  "version": "1.0.0",
+  "name": "Rate Limiting UI",
+  "description": "Enhanced UI for rate limiting configuration and monitoring",
+  "permissions": {
+    "kv": ["read", "write", "list"],
+    "rpc": ["call"],
+    "routes": ["GET:/plugin/com.tyk.rate-limiting-ui/rpc/*"],
+    "ui": ["sidebar.register", "route.register"]
+  },
+  "kvNamespace": "plugin:com.tyk.rate-limiting-ui",
+  "rpc": {
+    "basePath": "/plugin/com.tyk.rate-limiting-ui/rpc",
+    "proto": "server/plugin.proto",
+    "entrypoint": "Call"
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Rate Limiting",
+        "icon": "/assets/rate-limit.svg",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/rate-limiting/dashboard",
+            "title": "Rate Limiting Dashboard",
+            "mount": {
+              "kind": "webc",
+              "tag": "rate-limiting-dashboard",
+              "entry": "/ui/webc/dashboard.js",
+              "props": {
+                "rpcBase": "/plugin/com.tyk.rate-limiting-ui/rpc"
+              }
+            }
+          },
+          {
+            "type": "route",
+            "path": "/admin/rate-limiting/settings",
+            "title": "Global Settings",
+            "mount": {
+              "kind": "webc",
+              "tag": "rate-limiting-settings",
+              "entry": "/ui/webc/settings.js",
+              "props": {
+                "rpcBase": "/plugin/com.tyk.rate-limiting-ui/rpc"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "compat": {
+    "app": ">=2.6 <3.0",
+    "api": ["ui-v1", "kv-v1", "rpc-v1"]
+  },
+  "security": {
+    "csp": "script-src 'self'; object-src 'none'; frame-ancestors 'none'"
+  },
+  "assets": ["/assets/rate-limit.svg", "/ui/webc/dashboard.js", "/ui/webc/settings.js"]
+}
