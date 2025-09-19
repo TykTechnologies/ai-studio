@@ -439,6 +439,18 @@ func (a *API) updatePlugin(c *gin.Context) {
 		}
 	}
 
+	// Get original plugin state to detect activation changes
+	originalPlugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Plugin not found"}},
+		})
+		return
+	}
+
 	plugin, err := a.service.PluginService.UpdatePlugin(uint(id), &req)
 	if err != nil {
 		if err.Error() == "plugin not found: "+strconv.FormatUint(id, 10) {
@@ -458,6 +470,45 @@ func (a *API) updatePlugin(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Handle plugin activation state changes for AI Studio plugins
+	if plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+		wasActive := originalPlugin.IsActive
+		isNowActive := plugin.IsActive
+
+		// Plugin was deactivated - unload it
+		if wasActive && !isNowActive {
+			log.Printf("Plugin deactivated, unloading: %s (ID: %d)", plugin.Name, plugin.ID)
+
+			if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
+				if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
+					log.Printf("Warning: Failed to unload deactivated plugin %s: %v", plugin.Name, unloadErr)
+				} else {
+					log.Printf("✅ Successfully unloaded deactivated plugin: %s", plugin.Name)
+
+					// Clean up UI registry entries for deactivated plugin
+					if a.service.PluginManifestService != nil {
+						if unloadUIErr := a.service.PluginManifestService.UnloadPluginUI(plugin.ID); unloadUIErr != nil {
+							log.Printf("Warning: Failed to clean up UI for deactivated plugin %s: %v", plugin.Name, unloadUIErr)
+						} else {
+							log.Printf("✅ Cleaned up UI registry for deactivated plugin: %s", plugin.Name)
+						}
+					}
+				}
+			}
+		}
+
+		// Plugin was activated - load it if load_immediately is set
+		if !wasActive && isNowActive && req.LoadImmediately != nil && *req.LoadImmediately {
+			log.Printf("Plugin activated with load_immediately, loading: %s (ID: %d)", plugin.Name, plugin.ID)
+
+			if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
+				log.Printf("Warning: Failed to auto-load activated plugin %s: %v", plugin.Name, loadErr)
+			} else {
+				log.Printf("✅ Successfully loaded activated plugin: %s", plugin.Name)
+			}
+		}
 	}
 
 	// Auto-load AI Studio plugins if requested on update
@@ -1745,7 +1796,29 @@ func (a *API) callPluginRPC(c *gin.Context) {
 		payload = make(map[string]interface{})
 	}
 
-	// Validate plugin exists and is loaded
+	// Validate plugin exists and is active
+	plugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Plugin not found"}},
+		})
+		return
+	}
+
+	if !plugin.IsActive {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Plugin is not active - RPC calls are disabled"}},
+		})
+		return
+	}
+
+	// Validate plugin is loaded
 	if !a.service.AIStudioPluginManager.IsPluginLoaded(uint(id)) {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
