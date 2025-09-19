@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
@@ -366,6 +367,51 @@ func (p *AIStudioGRPCPlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Serve
 	return nil
 }
 
+// ConfigProviderGRPCPlugin provides config-only service for the rate limiting plugin
+type ConfigProviderGRPCPlugin struct {
+	plugin.Plugin
+	Impl *RateLimitingUIPlugin
+}
+
+func (p *ConfigProviderGRPCPlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	configpb.RegisterConfigProviderServiceServer(s, &ConfigProviderServer{Impl: p.Impl})
+	return nil
+}
+
+func (p *ConfigProviderGRPCPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return configpb.NewConfigProviderServiceClient(c), nil
+}
+
+// ConfigProviderServer implements the ConfigProviderService for rate limiting plugin
+type ConfigProviderServer struct {
+	configpb.UnimplementedConfigProviderServiceServer
+	Impl *RateLimitingUIPlugin
+}
+
+func (s *ConfigProviderServer) GetConfigSchema(ctx context.Context, req *configpb.ConfigSchemaRequest) (*configpb.ConfigSchemaResponse, error) {
+	// Return the same schema as the main plugin's GetConfigSchema method
+	resp, err := s.Impl.GetConfigSchema(ctx, &pb.GetConfigSchemaRequest{})
+	if err != nil {
+		return &configpb.ConfigSchemaResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &configpb.ConfigSchemaResponse{
+		Success:      resp.Success,
+		SchemaJson:   resp.SchemaJson,
+		ErrorMessage: resp.ErrorMessage,
+	}, nil
+}
+
+func (s *ConfigProviderServer) Ping(ctx context.Context, req *configpb.ConfigPingRequest) (*configpb.ConfigPingResponse, error) {
+	return &configpb.ConfigPingResponse{
+		Timestamp: req.Timestamp,
+		Healthy:   true,
+	}, nil
+}
+
 func (p *AIStudioGRPCPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return pb.NewPluginServiceClient(c), nil
 }
@@ -375,6 +421,8 @@ func (p *AIStudioGRPCPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPC
 func main() {
 	log.Printf("🚀 Starting Rate Limiting UI Plugin with embedded assets")
 
+	pluginImpl := &RateLimitingUIPlugin{}
+
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: plugin.HandshakeConfig{
 			ProtocolVersion:  1,
@@ -383,7 +431,10 @@ func main() {
 		},
 		Plugins: map[string]plugin.Plugin{
 			"plugin": &AIStudioGRPCPlugin{
-				Impl: &RateLimitingUIPlugin{},
+				Impl: pluginImpl,
+			},
+			"config": &ConfigProviderGRPCPlugin{
+				Impl: pluginImpl,
 			},
 		},
 		GRPCServer: plugin.DefaultGRPCServer,

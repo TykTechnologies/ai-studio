@@ -313,6 +313,30 @@ func (s *PluginService) GetLLMPluginConfig(llmID, pluginID uint) (map[string]int
 	return llmPlugin.ConfigOverride, nil
 }
 
+// UpdateLLMPluginConfig updates the configuration override for a specific plugin-LLM association
+func (s *PluginService) UpdateLLMPluginConfig(llmID, pluginID uint, configOverride map[string]interface{}) error {
+	var llmPlugin models.LLMPlugin
+	if err := llmPlugin.Get(s.db, llmID, pluginID); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("plugin-LLM association not found")
+		}
+		return fmt.Errorf("failed to get plugin-LLM association: %w", err)
+	}
+
+	// Update the configuration override
+	if err := llmPlugin.UpdateConfig(s.db, configOverride); err != nil {
+		return fmt.Errorf("failed to update plugin-LLM config: %w", err)
+	}
+
+	log.Info().
+		Uint("llm_id", llmID).
+		Uint("plugin_id", pluginID).
+		Int("config_keys", len(configOverride)).
+		Msg("Updated LLM plugin configuration override")
+
+	return nil
+}
+
 // TestPlugin tests a plugin with provided test data (simplified from microgateway)
 func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interface{}, error) {
 	plugin, err := s.GetPlugin(pluginID)

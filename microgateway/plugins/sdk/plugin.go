@@ -14,10 +14,11 @@ var HandshakeConfig = plugin.HandshakeConfig{
 }
 
 // ServePlugin serves a plugin implementation via gRPC
+// Now serves BOTH the main plugin service AND the config provider service
 func ServePlugin(impl interface{}) {
 	var pluginMap = map[string]plugin.Plugin{}
-	
-	// Determine plugin type and add to plugin map
+
+	// Determine plugin type and add main service to plugin map
 	switch p := impl.(type) {
 	case interfaces.PreAuthPlugin:
 		pluginMap["plugin"] = &PreAuthPluginGRPC{Impl: p}
@@ -32,7 +33,12 @@ func ServePlugin(impl interface{}) {
 	default:
 		panic("unsupported plugin type")
 	}
-	
+
+	// Add config provider service (universal - works with any plugin type)
+	if basePlugin, ok := impl.(interfaces.BasePlugin); ok {
+		pluginMap["config"] = &ConfigProviderPluginGRPC{Impl: basePlugin}
+	}
+
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins:         pluginMap,

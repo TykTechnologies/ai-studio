@@ -24,6 +24,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/grpc"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/startup"
@@ -88,8 +89,16 @@ func main() {
 		log.Fatalf("Failed to initialize models: %v", err)
 	}
 
-	// Create a new service instance
-	service := services.NewService(db)
+	// Create a new service instance with OCI support if configured
+	var ociConfig *ociplugins.OCIConfig
+	if appConf.OCIPlugins.IsEnabled() {
+		ociConfig = appConf.OCIPlugins.ToOCILibConfig()
+		log.Printf("🔧 OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
+	} else {
+		log.Println("ℹ️  OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
+	}
+
+	service := services.NewServiceWithOCI(db, ociConfig)
 
 	// Load AI Studio plugins at startup
 	if service.AIStudioPluginManager != nil {

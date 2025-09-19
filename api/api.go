@@ -668,6 +668,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/llms/:id/plugins", a.getLLMPlugins)
 	v1.PUT("/llms/:id/plugins", a.updateLLMPlugins)
 
+	// LLM-Plugin configuration routes
+	v1.GET("/llms/:id/plugins/:pluginId/config", a.getLLMPluginConfig)
+	v1.PUT("/llms/:id/plugins/:pluginId/config", a.updateLLMPluginConfig)
+
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)

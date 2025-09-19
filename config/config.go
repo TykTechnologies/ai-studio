@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -39,7 +40,10 @@ type AppConf struct {
 	ProxyOAuthMetadataURL string
 	TelemetryEnabled      bool
 	QueueConfig           QueueConfig
-	
+
+	// OCI Plugin Configuration
+	OCIPlugins            OCIConfig
+
 	// Hub-and-Spoke Configuration
 	GatewayMode        string
 	GRPCPort           int
@@ -337,6 +341,9 @@ func getConfigFromEnv() *AppConf {
 	conf.GRPCAuthToken = os.Getenv("GRPC_AUTH_TOKEN")
 	conf.GRPCNextAuthToken = os.Getenv("GRPC_AUTH_TOKEN_NEXT")
 
+	// OCI Plugin configuration
+	conf.OCIPlugins = getOCIConfig()
+
 	return conf
 }
 
@@ -547,6 +554,99 @@ func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
 		config.NotifyTimeout = notifyTimeout
 	}
 
+	return config
+}
+
+// getOCIConfig parses OCI plugin-related environment variables
+func getOCIConfig() OCIConfig {
+	config := OCIConfig{}
+
+	// Cache directory - if not set, OCI support is disabled
+	config.CacheDir = os.Getenv("AI_STUDIO_OCI_CACHE_DIR")
+
+	// Only parse other settings if OCI is enabled
+	if config.CacheDir == "" {
+		return config
+	}
+
+	// Max cache size
+	if cacheSizeStr := os.Getenv("AI_STUDIO_OCI_MAX_CACHE_SIZE"); cacheSizeStr != "" {
+		if cacheSize, err := strconv.ParseInt(cacheSizeStr, 10, 64); err == nil && cacheSize > 0 {
+			config.MaxCacheSize = cacheSize
+		} else {
+			log.Printf("Warning: Invalid AI_STUDIO_OCI_MAX_CACHE_SIZE value: %s. Using default: %d", cacheSizeStr, config.MaxCacheSize)
+		}
+	}
+
+	// Allowed registries
+	if allowedRegistries := os.Getenv("AI_STUDIO_OCI_ALLOWED_REGISTRIES"); allowedRegistries != "" {
+		config.AllowedRegistries = strings.Split(allowedRegistries, ",")
+		for i, registry := range config.AllowedRegistries {
+			config.AllowedRegistries[i] = strings.TrimSpace(registry)
+		}
+	}
+
+	// Require signature verification
+	if requireSigStr := os.Getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
+		if requireSig, err := strconv.ParseBool(requireSigStr); err == nil {
+			config.RequireSignature = requireSig
+		} else {
+			log.Printf("Warning: Invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value: %s. Using default: %t", requireSigStr, config.RequireSignature)
+		}
+	}
+
+	// Network timeout
+	if timeoutStr := os.Getenv("AI_STUDIO_OCI_TIMEOUT"); timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+			config.Timeout = timeout
+		} else {
+			log.Printf("Warning: Invalid AI_STUDIO_OCI_TIMEOUT value: %s. Using default: %s", timeoutStr, config.Timeout)
+		}
+	}
+
+	// Retry attempts
+	if retriesStr := os.Getenv("AI_STUDIO_OCI_RETRY_ATTEMPTS"); retriesStr != "" {
+		if retries, err := strconv.Atoi(retriesStr); err == nil && retries >= 0 {
+			config.RetryAttempts = retries
+		} else {
+			log.Printf("Warning: Invalid AI_STUDIO_OCI_RETRY_ATTEMPTS value: %s. Using default: %d", retriesStr, config.RetryAttempts)
+		}
+	}
+
+	// Garbage collection interval
+	if gcIntervalStr := os.Getenv("AI_STUDIO_OCI_GC_INTERVAL"); gcIntervalStr != "" {
+		if gcInterval, err := time.ParseDuration(gcIntervalStr); err == nil {
+			config.GCInterval = gcInterval
+		} else {
+			log.Printf("Warning: Invalid AI_STUDIO_OCI_GC_INTERVAL value: %s. Using default: %s", gcIntervalStr, config.GCInterval)
+		}
+	}
+
+	// Keep versions
+	if keepVersionsStr := os.Getenv("AI_STUDIO_OCI_KEEP_VERSIONS"); keepVersionsStr != "" {
+		if keepVersions, err := strconv.Atoi(keepVersionsStr); err == nil && keepVersions > 0 {
+			config.KeepVersions = keepVersions
+		} else {
+			log.Printf("Warning: Invalid AI_STUDIO_OCI_KEEP_VERSIONS value: %s. Using default: %d", keepVersionsStr, config.KeepVersions)
+		}
+	}
+
+	// Insecure registries
+	if insecureRegistries := os.Getenv("AI_STUDIO_OCI_INSECURE_REGISTRIES"); insecureRegistries != "" {
+		config.InsecureRegistries = strings.Split(insecureRegistries, ",")
+		for i, registry := range config.InsecureRegistries {
+			config.InsecureRegistries[i] = strings.TrimSpace(registry)
+		}
+	}
+
+	// Apply defaults and validate
+	config.SetDefaults()
+	if err := config.Validate(); err != nil {
+		log.Printf("Warning: Invalid OCI configuration: %v. OCI support will be disabled.", err)
+		return OCIConfig{} // Return empty config to disable OCI
+	}
+
+	log.Printf("✅ AI Studio OCI configuration loaded successfully - cache dir: %s", config.CacheDir)
 	return config
 }
 

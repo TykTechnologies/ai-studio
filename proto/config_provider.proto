@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package config_provider;
+
+option go_package = "github.com/TykTechnologies/midsommar/v2/proto/configpb";
+
+// ConfigProviderService defines a minimal gRPC interface for configuration schema extraction
+// This service runs independently of the main plugin service and uses a universal handshake
+// that works with any plugin type (microgateway or AI Studio)
+service ConfigProviderService {
+    // Get the JSON Schema for this plugin's configuration
+    rpc GetConfigSchema(ConfigSchemaRequest) returns (ConfigSchemaResponse);
+
+    // Health check for the config service
+    rpc Ping(ConfigPingRequest) returns (ConfigPingResponse);
+}
+
+// Configuration schema messages
+message ConfigSchemaRequest {
+    // Empty - each plugin returns its own configuration schema
+}
+
+message ConfigSchemaResponse {
+    bool success = 1;
+    string schema_json = 2;    // JSON Schema as string (jsonschema.org format)
+    string error_message = 3;
+}
+
+// Health check messages
+message ConfigPingRequest {
+    int64 timestamp = 1;
+}
+
+message ConfigPingResponse {
+    int64 timestamp = 1;
+    bool healthy = 2;
+}

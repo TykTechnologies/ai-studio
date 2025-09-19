@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
@@ -83,4 +84,19 @@ func (p *DataCollectionPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc
 
 func (p *DataCollectionPluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return pb.NewPluginServiceClient(c), nil
+}
+
+// ConfigProviderPluginGRPC implements the plugin.Plugin interface for config-only service
+type ConfigProviderPluginGRPC struct {
+	plugin.Plugin
+	Impl interfaces.BasePlugin
+}
+
+func (p *ConfigProviderPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	configpb.RegisterConfigProviderServiceServer(s, &ConfigProviderGRPC{Impl: p.Impl})
+	return nil
+}
+
+func (p *ConfigProviderPluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return configpb.NewConfigProviderServiceClient(c), nil
 }

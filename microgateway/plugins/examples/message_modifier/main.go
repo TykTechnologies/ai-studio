@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 )
@@ -41,6 +42,41 @@ func (p *MessageModifierPlugin) GetVersion() string {
 // Shutdown implements BasePlugin
 func (p *MessageModifierPlugin) Shutdown() error {
 	return nil
+}
+
+// GetConfigSchema implements ConfigSchemaProvider
+func (p *MessageModifierPlugin) GetConfigSchema() ([]byte, error) {
+	schema := map[string]interface{}{
+		"$schema": "http://json-schema.org/draft-07/schema#",
+		"type":    "object",
+		"title":   "Message Modifier Plugin Configuration",
+		"description": "Configuration for the message modifier plugin that adds instructions to user messages",
+		"properties": map[string]interface{}{
+			"instruction": map[string]interface{}{
+				"type":        "string",
+				"title":       "Instruction Text",
+				"description": "Text to append to the last user message in the conversation",
+				"default":     "Say Moo! at the end of your response",
+				"examples":    []string{
+					"Say Moo! at the end of your response",
+					"Please respond in a friendly and helpful tone",
+					"Add a summary at the end of your response",
+					"Include relevant examples in your answer",
+				},
+				"minLength": 1,
+				"maxLength": 500,
+			},
+		},
+		"required": []string{"instruction"},
+		"additionalProperties": false,
+	}
+
+	schemaBytes, err := json.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate config schema: %w", err)
+	}
+
+	return schemaBytes, nil
 }
 
 // ProcessRequest implements PreAuthPlugin

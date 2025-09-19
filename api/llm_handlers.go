@@ -1,8 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -661,4 +663,161 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 		}
 	}
 	return result
+}
+
+// @Summary Get LLM plugin configuration
+// @Description Get the configuration override for a specific plugin-LLM association
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param id path int true "LLM ID"
+// @Param pluginId path int true "Plugin ID"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/llms/{id}/plugins/{pluginId}/config [get]
+// @Security BearerAuth
+func (a *API) getLLMPluginConfig(c *gin.Context) {
+	llmID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
+		})
+		return
+	}
+
+	pluginID, err := strconv.ParseUint(c.Param("pluginId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid Plugin ID"}},
+		})
+		return
+	}
+
+	config, err := a.service.PluginService.GetLLMPluginConfig(uint(llmID), uint(pluginID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "Plugin-LLM association not found"}},
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	response := gin.H{
+		"data": gin.H{
+			"type": "llm-plugin-config",
+			"id":   fmt.Sprintf("%d-%d", llmID, pluginID),
+			"attributes": gin.H{
+				"llm_id":          llmID,
+				"plugin_id":       pluginID,
+				"config_override": config,
+			},
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Update LLM plugin configuration
+// @Description Update the configuration override for a specific plugin-LLM association
+// @Tags llms
+// @Accept json
+// @Produce json
+// @Param id path int true "LLM ID"
+// @Param pluginId path int true "Plugin ID"
+// @Param config body object true "Configuration override object"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/llms/{id}/plugins/{pluginId}/config [put]
+// @Security BearerAuth
+func (a *API) updateLLMPluginConfig(c *gin.Context) {
+	llmID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct{
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
+		})
+		return
+	}
+
+	pluginID, err := strconv.ParseUint(c.Param("pluginId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct{
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid Plugin ID"}},
+		})
+		return
+	}
+
+	var req struct {
+		ConfigOverride map[string]interface{} `json:"config_override"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct{
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	if err := a.service.PluginService.UpdateLLMPluginConfig(uint(llmID), uint(pluginID), req.ConfigOverride); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct{
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "Plugin-LLM association not found"}},
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct{
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	response := gin.H{
+		"data": gin.H{
+			"type": "llm-plugin-config",
+			"id":   fmt.Sprintf("%d-%d", llmID, pluginID),
+			"attributes": gin.H{
+				"llm_id":          llmID,
+				"plugin_id":       pluginID,
+				"config_override": req.ConfigOverride,
+			},
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
 }
