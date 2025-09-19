@@ -60,6 +60,11 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		aiStudioPluginManager = NewAIStudioPluginManager(db, nil)
 	}
 
+	// Wire up manifest service to plugin manager for auto-manifest functionality
+	if aiStudioPluginManager != nil && pluginManifestService != nil {
+		aiStudioPluginManager.SetManifestService(pluginManifestService)
+	}
+
 	return &Service{
 		DB:                    db,
 		NotificationService:   notificationService,

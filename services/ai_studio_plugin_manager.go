@@ -23,9 +23,10 @@ import (
 // AIStudioPluginManager manages AI Studio plugin lifecycle and execution
 // Reuses proven patterns from microgateway's plugin manager
 type AIStudioPluginManager struct {
-	db          *gorm.DB
-	ociClient   *ociplugins.OCIPluginClient
-	mu          sync.RWMutex
+	db              *gorm.DB
+	ociClient       *ociplugins.OCIPluginClient
+	manifestService *PluginManifestService
+	mu              sync.RWMutex
 
 	// Plugin runtime state
 	loadedPlugins   map[uint]*LoadedAIStudioPlugin // plugin_id -> loaded plugin
@@ -54,10 +55,11 @@ type LoadedAIStudioPlugin struct {
 // NewAIStudioPluginManager creates a new AI Studio plugin manager
 func NewAIStudioPluginManager(db *gorm.DB, ociClient *ociplugins.OCIPluginClient) *AIStudioPluginManager {
 	return &AIStudioPluginManager{
-		db:            db,
-		ociClient:     ociClient,
-		loadedPlugins: make(map[uint]*LoadedAIStudioPlugin),
-		pluginClients: make(map[uint]*plugin.Client),
+		db:              db,
+		ociClient:       ociClient,
+		manifestService: nil, // Will be set later to avoid circular dependency
+		loadedPlugins:   make(map[uint]*LoadedAIStudioPlugin),
+		pluginClients:   make(map[uint]*plugin.Client),
 		handshakeConfig: plugin.HandshakeConfig{
 			ProtocolVersion:  1,
 			MagicCookieKey:   "AI_STUDIO_PLUGIN",
@@ -67,6 +69,13 @@ func NewAIStudioPluginManager(db *gorm.DB, ociClient *ociplugins.OCIPluginClient
 			"plugin": &AIStudioPluginGRPC{},
 		},
 	}
+}
+
+// SetManifestService sets the manifest service (to avoid circular dependency)
+func (m *AIStudioPluginManager) SetManifestService(manifestService *PluginManifestService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.manifestService = manifestService
 }
 
 // AIStudioPluginGRPC implements the plugin.Plugin interface for gRPC
@@ -183,6 +192,75 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		Str("command", plugin.Command).
 		Bool("is_oci", plugin.IsOCIPlugin()).
 		Msg("AI Studio plugin loaded successfully")
+
+	// Auto-fetch and register manifest (new streamlined workflow)
+	go func() {
+		log.Info().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Msg("Auto-fetching manifest for loaded AI Studio plugin")
+
+		// Give plugin a moment to fully initialize
+		time.Sleep(1 * time.Second)
+
+		manifestJSON, manifestErr := m.GetPluginManifest(pluginID)
+		if manifestErr != nil {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Err(manifestErr).
+				Msg("Failed to auto-fetch manifest - manual parse may be needed")
+			return
+		}
+
+		// Parse manifest
+		manifest := &models.PluginManifest{}
+		if parseErr := json.Unmarshal([]byte(manifestJSON), manifest); parseErr != nil {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Err(parseErr).
+				Msg("Failed to parse auto-fetched manifest")
+			return
+		}
+
+		// Register UI components via manifest service
+		// Note: We need to get plugin again since we're in a goroutine
+		var pluginForUI models.Plugin
+		if err := m.db.First(&pluginForUI, pluginID).Error; err != nil {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Err(err).
+				Msg("Failed to get plugin for UI registration")
+			return
+		}
+
+		// Register UI automatically if manifest service is available
+		if m.manifestService != nil {
+			if registerErr := m.manifestService.RegisterPluginUI(&pluginForUI, manifest); registerErr != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Str("plugin_name", plugin.Name).
+					Err(registerErr).
+					Msg("Failed to auto-register UI components")
+				return
+			}
+
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Str("manifest_id", manifest.ID).
+				Str("manifest_version", manifest.Version).
+				Msg("✅ Auto-fetched manifest and registered UI components")
+		} else {
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Str("manifest_id", manifest.ID).
+				Str("manifest_version", manifest.Version).
+				Msg("Auto-fetched manifest successfully - manifest service not available for UI registration")
+		}
+	}()
 
 	return loadedPlugin, nil
 }

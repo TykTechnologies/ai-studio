@@ -45,30 +45,32 @@ func NewPluginServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) (*Plu
 
 // Plugin request/response structures (adapted from microgateway)
 type CreatePluginRequest struct {
-	Name         string                 `json:"name" binding:"required"`
-	Slug         string                 `json:"slug" binding:"required"`
-	Description  string                 `json:"description"`
-	Command      string                 `json:"command" binding:"required"`
-	Checksum     string                 `json:"checksum"` // Optional
-	Config       map[string]interface{} `json:"config"`
-	HookType     string                 `json:"hook_type" binding:"required"`
-	IsActive     bool                   `json:"is_active"`
-	Namespace    string                 `json:"namespace,omitempty"`
-	PluginType   string                 `json:"plugin_type,omitempty"`   // "gateway" or "ai_studio"
-	OCIReference string                 `json:"oci_reference,omitempty"` // OCI artifact reference
+	Name            string                 `json:"name" binding:"required"`
+	Slug            string                 `json:"slug" binding:"required"`
+	Description     string                 `json:"description"`
+	Command         string                 `json:"command" binding:"required"`
+	Checksum        string                 `json:"checksum"` // Optional
+	Config          map[string]interface{} `json:"config"`
+	HookType        string                 `json:"hook_type" binding:"required"`
+	IsActive        bool                   `json:"is_active"`
+	Namespace       string                 `json:"namespace,omitempty"`
+	PluginType      string                 `json:"plugin_type,omitempty"`   // "gateway" or "ai_studio"
+	OCIReference    string                 `json:"oci_reference,omitempty"` // OCI artifact reference
+	LoadImmediately bool                   `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
 }
 
 type UpdatePluginRequest struct {
-	Name         *string                `json:"name"`
-	Description  *string                `json:"description"`
-	Command      *string                `json:"command"`
-	Checksum     *string                `json:"checksum"`
-	Config       map[string]interface{} `json:"config"`
-	HookType     *string                `json:"hook_type"`
-	IsActive     *bool                  `json:"is_active"`
-	Namespace    *string                `json:"namespace"`
-	PluginType   *string                `json:"plugin_type"`
-	OCIReference *string                `json:"oci_reference"`
+	Name            *string                `json:"name"`
+	Description     *string                `json:"description"`
+	Command         *string                `json:"command"`
+	Checksum        *string                `json:"checksum"`
+	Config          map[string]interface{} `json:"config"`
+	HookType        *string                `json:"hook_type"`
+	IsActive        *bool                  `json:"is_active"`
+	Namespace       *string                `json:"namespace"`
+	PluginType      *string                `json:"plugin_type"`
+	OCIReference    *string                `json:"oci_reference"`
+	LoadImmediately *bool                  `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
 }
 
 // PluginServiceInterface defines the interface for plugin operations (adapted from microgateway)

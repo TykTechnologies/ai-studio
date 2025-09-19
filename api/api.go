@@ -651,6 +651,7 @@ func (a *API) setupRoutes() {
 
 	// Plugin RPC routes
 	v1.POST("/plugins/:id/rpc/:method", a.callPluginRPC)
+	v1.POST("/plugins/:id/reload", a.reloadPlugin)
 
 	// Plugin runtime status routes (for debugging)
 	v1.GET("/plugins/:id/status", a.getPluginStatus)

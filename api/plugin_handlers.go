@@ -290,9 +290,9 @@ func (a *API) createPlugin(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Check for validation errors that should return 400 instead of 500
-		if strings.Contains(errMsg, "cannot be empty") || 
+		if strings.Contains(errMsg, "cannot be empty") ||
 		   strings.Contains(errMsg, "invalid hook type") {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Errors: []struct {
@@ -302,7 +302,7 @@ func (a *API) createPlugin(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -310,6 +310,34 @@ func (a *API) createPlugin(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Auto-load AI Studio plugins if requested
+	if req.LoadImmediately && plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+		log.Printf("Auto-loading AI Studio plugin: %s (ID: %d)", plugin.Name, plugin.ID)
+
+		// Load the plugin
+		if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
+			log.Printf("Warning: Failed to auto-load plugin %s: %v", plugin.Name, loadErr)
+		} else {
+			// Auto-fetch and parse manifest
+			log.Printf("Auto-fetching manifest for plugin: %s", plugin.Name)
+			if manifestJSON, manifestErr := a.service.AIStudioPluginManager.GetPluginManifest(plugin.ID); manifestErr != nil {
+				log.Printf("Warning: Failed to auto-fetch manifest for plugin %s: %v", plugin.Name, manifestErr)
+			} else {
+				// Parse and register UI components
+				manifest := &models.PluginManifest{}
+				if parseErr := json.Unmarshal([]byte(manifestJSON), manifest); parseErr != nil {
+					log.Printf("Warning: Failed to parse auto-fetched manifest for plugin %s: %v", plugin.Name, parseErr)
+				} else {
+					if registerErr := a.service.PluginManifestService.RegisterPluginUI(plugin, manifest); registerErr != nil {
+						log.Printf("Warning: Failed to auto-register UI for plugin %s: %v", plugin.Name, registerErr)
+					} else {
+						log.Printf("✅ Auto-loaded and registered UI for plugin: %s", plugin.Name)
+					}
+				}
+			}
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": serializePlugin(plugin)})
@@ -636,6 +664,128 @@ func (a *API) updateLLMPlugins(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "LLM plugins updated successfully"})
+}
+
+// @Summary Reload AI Studio plugin
+// @Description Reload an AI Studio plugin and auto-fetch its manifest
+// @Tags plugins
+// @Accept json
+// @Produce json
+// @Param id path int true "Plugin ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/plugins/{id}/reload [post]
+// @Security BearerAuth
+func (a *API) reloadPlugin(c *gin.Context) {
+	if a.service.AIStudioPluginManager == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Service Unavailable", Detail: "AI Studio plugin manager not configured"}},
+		})
+		return
+	}
+
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid plugin ID"}},
+		})
+		return
+	}
+
+	// Get plugin to verify it's an AI Studio plugin
+	plugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "Plugin not found"}},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	if !plugin.IsAIStudioPlugin() {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Only AI Studio plugins can be reloaded"}},
+		})
+		return
+	}
+
+	log.Printf("Reloading AI Studio plugin: %s (ID: %d)", plugin.Name, plugin.ID)
+
+	// Load the plugin (will reload if already loaded)
+	if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(uint(id)); loadErr != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: fmt.Sprintf("Failed to load plugin: %v", loadErr)}},
+		})
+		return
+	}
+
+	// Auto-fetch and parse manifest
+	log.Printf("Auto-fetching manifest for reloaded plugin: %s", plugin.Name)
+	manifestJSON, manifestErr := a.service.AIStudioPluginManager.GetPluginManifest(uint(id))
+	if manifestErr != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: fmt.Sprintf("Failed to fetch manifest: %v", manifestErr)}},
+		})
+		return
+	}
+
+	// Parse and register UI components
+	manifest := &models.PluginManifest{}
+	if parseErr := json.Unmarshal([]byte(manifestJSON), manifest); parseErr != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: fmt.Sprintf("Failed to parse manifest: %v", parseErr)}},
+		})
+		return
+	}
+
+	if registerErr := a.service.PluginManifestService.RegisterPluginUI(plugin, manifest); registerErr != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: fmt.Sprintf("Failed to register UI: %v", registerErr)}},
+		})
+		return
+	}
+
+	log.Printf("✅ Successfully reloaded and registered UI for plugin: %s", plugin.Name)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Plugin reloaded and manifest registered successfully",
+		"plugin":  serializePlugin(plugin),
+	})
 }
 
 // serializePlugin converts a Plugin model to API response format
