@@ -87,12 +87,41 @@ const PluginConfigurationSection = ({
     setConfigJson(JSON.stringify(formData || {}, null, 2));
   };
 
-  const handleRefreshSchema = () => {
-    fetchConfigSchema();
+  const handleRefreshSchema = async () => {
+    if (!pluginId) return;
+
+    // Clear current schema state
+    setConfigSchema(null);
+    setSchemaError(null);
+    setSchemaLoading(true);
+
+    try {
+      // Call the refresh API which invalidates cache and fetches fresh
+      const schema = await pluginService.refreshPluginConfigSchema(pluginId);
+      setConfigSchema(schema);
+
+      // Auto-switch to form view if schema is available
+      if (schema && viewMode === 'auto') {
+        setViewMode('form');
+      }
+    } catch (error) {
+      console.warn('Failed to refresh plugin schema:', error);
+      setSchemaError(error.message);
+      setConfigSchema(null);
+    } finally {
+      setSchemaLoading(false);
+    }
   };
 
+  // Check if we have a real schema (not just the default fallback)
+  const isRealSchema = configSchema &&
+    !configSchema.description?.includes('default - manager not available') &&
+    !configSchema.description?.includes('fallback -') &&
+    configSchema.properties &&
+    Object.keys(configSchema.properties).length > 0;
+
   // Determine what to show based on schema availability and view mode
-  const showSchemaForm = configSchema && !schemaError && (viewMode === 'form' || viewMode === 'auto');
+  const showSchemaForm = isRealSchema && !schemaError && (viewMode === 'form' || viewMode === 'auto');
   const showJsonEditor = !showSchemaForm || viewMode === 'json';
 
   return (
@@ -116,7 +145,7 @@ const PluginConfigurationSection = ({
             </Box>
           )}
 
-          {configSchema && !schemaLoading && (
+          {isRealSchema && !schemaLoading && (
             <Box display="flex" alignItems="center" gap={1}>
               <Chip
                 size="small"
@@ -132,7 +161,7 @@ const PluginConfigurationSection = ({
                 onChange={handleViewModeChange}
                 size="small"
               >
-                <ToggleButton value="form" disabled={!configSchema}>
+                <ToggleButton value="form" disabled={!isRealSchema}>
                   <Tooltip title="Form View">
                     <FormIcon fontSize="small" />
                   </Tooltip>

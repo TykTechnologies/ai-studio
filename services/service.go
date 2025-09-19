@@ -3,6 +3,7 @@ package services
 import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -68,6 +69,12 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	// Wire up plugin manager to plugin service for config schema functionality
 	if pluginService != nil && aiStudioPluginManager != nil {
 		pluginService.SetPluginManager(aiStudioPluginManager)
+		log.Info().Msg("✅ Wired AI Studio plugin manager to plugin service for config schema functionality")
+	} else {
+		log.Warn().
+			Bool("plugin_service_nil", pluginService == nil).
+			Bool("ai_studio_plugin_manager_nil", aiStudioPluginManager == nil).
+			Msg("⚠️  Failed to wire plugin manager to plugin service")
 	}
 
 	return &Service{

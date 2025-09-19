@@ -657,8 +657,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/plugins/:id/status", a.getPluginStatus)
 	v1.GET("/plugins/loaded", a.getLoadedPlugins)
 
-	// Plugin configuration schema route
+	// Plugin configuration schema routes
 	v1.GET("/plugins/:id/config-schema", a.getPluginConfigSchema)
+	v1.POST("/plugins/:id/config-schema/refresh", a.refreshPluginConfigSchema)
 
 	// Plugin asset serving (outside of v1 group for simpler URLs)
 	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)

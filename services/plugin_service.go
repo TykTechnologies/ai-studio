@@ -690,18 +690,35 @@ func (s *PluginService) RefreshPluginConfigSchema(ctx context.Context, pluginID 
 		return "", fmt.Errorf("failed to get plugin: %w", err)
 	}
 
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("command", plugin.Command).
+		Msg("Refreshing plugin config schema - invalidating cache first")
+
+	// First, invalidate any existing cache entry
+	if err := s.InvalidateSchemaCache(plugin.Command); err != nil {
+		log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to invalidate schema cache")
+		// Continue anyway - we'll still fetch fresh
+	}
+
 	// Fetch fresh schema from plugin
 	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, plugin.Command)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch schema from plugin: %w", err)
+		return "", fmt.Errorf("failed to fetch fresh schema from plugin: %w", err)
 	}
 
-	// Force update cache
+	// Cache the fresh schema
 	cachedSchema := &models.PluginConfigSchema{}
 	if err := cachedSchema.Upsert(s.db, plugin.Command, schemaJSON); err != nil {
-		log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to update schema cache")
+		log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to cache refreshed schema")
 		// Don't fail the request just because caching failed
 	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("command", plugin.Command).
+		Int("schema_bytes", len(schemaJSON)).
+		Msg("Successfully refreshed plugin config schema")
 
 	return schemaJSON, nil
 }
@@ -729,55 +746,27 @@ func (s *PluginService) InvalidateSchemaCache(command string) error {
 func (s *PluginService) fetchSchemaFromPlugin(ctx context.Context, command string) (string, error) {
 	// Check if we have the AI Studio plugin manager available
 	if s.pluginManager == nil {
-		log.Debug().Str("command", command).Msg("Plugin manager not available, returning default schema")
+		log.Warn().Str("command", command).Msg("Plugin manager not available - SetPluginManager may not have been called")
 
-		// Return a basic JSON schema that accepts any configuration
-		defaultSchema := `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "title": "Plugin Configuration",
-  "description": "Configuration schema for this plugin (default - manager not available)",
-  "properties": {},
-  "additionalProperties": true
-}`
-		return defaultSchema, nil
+		// Return an error instead of default schema to help diagnose issues
+		return "", fmt.Errorf("plugin manager not available - cannot fetch schema from plugin")
 	}
 
 	// Use plugin manager to load plugin for config-only access
-	log.Debug().Str("command", command).Msg("Loading plugin for schema extraction")
+	log.Info().Str("command", command).Msg("Loading plugin for schema extraction")
 
 	configProvider, err := s.pluginManager.LoadPluginForConfigOnly(ctx, command)
 	if err != nil {
-		log.Warn().Err(err).Str("command", command).Msg("Failed to load plugin for schema, returning default")
-
-		// Fallback to default schema if plugin loading fails
-		defaultSchema := `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "title": "Plugin Configuration",
-  "description": "Configuration schema for this plugin (fallback - plugin loading failed)",
-  "properties": {},
-  "additionalProperties": true
-}`
-		return defaultSchema, nil
+		log.Error().Err(err).Str("command", command).Msg("Failed to load plugin for schema extraction")
+		return "", fmt.Errorf("failed to load plugin for schema extraction: %w", err)
 	}
 	defer s.pluginManager.UnloadConfigProvider(configProvider)
 
 	// Get schema from plugin
 	schemaBytes, err := configProvider.GetConfigSchema(ctx)
 	if err != nil {
-		log.Warn().Err(err).Str("command", command).Msg("Failed to get schema from plugin, returning default")
-
-		// Fallback to default schema if schema extraction fails
-		defaultSchema := `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "title": "Plugin Configuration",
-  "description": "Configuration schema for this plugin (fallback - schema extraction failed)",
-  "properties": {},
-  "additionalProperties": true
-}`
-		return defaultSchema, nil
+		log.Error().Err(err).Str("command", command).Msg("Failed to get schema from plugin")
+		return "", fmt.Errorf("failed to get config schema from plugin: %w", err)
 	}
 
 	log.Debug().

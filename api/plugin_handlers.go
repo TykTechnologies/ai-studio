@@ -1923,3 +1923,80 @@ func (a *API) getPluginConfigSchema(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// refreshPluginConfigSchema forces a refresh of the configuration schema for a plugin
+func (a *API) refreshPluginConfigSchema(c *gin.Context) {
+	// Parse plugin ID from URL
+	pluginIDStr := c.Param("id")
+	if pluginIDStr == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Plugin ID is required"}},
+		})
+		return
+	}
+
+	id, err := strconv.Atoi(pluginIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid plugin ID format"}},
+		})
+		return
+	}
+
+	// Refresh plugin config schema (bypasses cache)
+	ctx := c.Request.Context()
+	schemaJSON, err := a.service.PluginService.RefreshPluginConfigSchema(ctx, uint(id))
+	if err != nil {
+		log.Printf("Failed to refresh plugin config schema: %v", err)
+
+		// Check if it's a not found error
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "Plugin not found"}},
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+		}
+		return
+	}
+
+	// Parse schema to validate it's valid JSON
+	var schemaObj interface{}
+	if err := json.Unmarshal([]byte(schemaJSON), &schemaObj); err != nil {
+		log.Printf("Plugin returned invalid JSON schema on refresh: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Plugin returned invalid JSON schema"}},
+		})
+		return
+	}
+
+	// Return refreshed schema with metadata
+	response := gin.H{
+		"data": gin.H{
+			"type": "plugin-config-schema",
+			"id":   pluginIDStr,
+			"attributes": gin.H{
+				"schema": schemaObj,
+			},
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
+}

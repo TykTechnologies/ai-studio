@@ -455,8 +455,30 @@ class PluginService {
       return response.data?.data?.attributes?.schema || null;
     } catch (error) {
       console.error('Error fetching plugin config schema:', error);
+
+      // Log the specific error for debugging
+      if (error.response?.data?.errors?.[0]?.detail) {
+        console.error('Backend error:', error.response.data.errors[0].detail);
+      }
+
       // Return null instead of throwing to allow graceful fallback to JSON editor
       return null;
+    }
+  }
+
+  async refreshPluginConfigSchema(pluginId) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/config-schema/refresh`);
+      return response.data?.data?.attributes?.schema || null;
+    } catch (error) {
+      console.error('Error refreshing plugin config schema:', error);
+
+      // Log the specific error for debugging
+      if (error.response?.data?.errors?.[0]?.detail) {
+        console.error('Backend refresh error:', error.response.data.errors[0].detail);
+      }
+
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to refresh plugin schema');
     }
   }
 }
