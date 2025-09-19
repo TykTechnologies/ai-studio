@@ -32,13 +32,30 @@ const PluginConfigurationSection = ({
   const [viewMode, setViewMode] = useState('auto'); // 'auto', 'form', 'json'
   const [configJson, setConfigJson] = useState('{}');
 
+  // Retry logic state
+  const [retryCount, setRetryCount] = useState(0);
+  const [retryTimeoutId, setRetryTimeoutId] = useState(null);
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [1000, 2000, 5000]; // 1s, 2s, 5s delays
+
   // Initialize JSON representation of config
   useEffect(() => {
     setConfigJson(JSON.stringify(config || {}, null, 2));
   }, [config]);
 
-  const fetchConfigSchema = useCallback(async () => {
+  const fetchConfigSchema = useCallback(async (isRetry = false) => {
     if (!pluginId) return;
+
+    // Clear any existing retry timeout
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId);
+      setRetryTimeoutId(null);
+    }
+
+    // If this is not a retry, reset retry count
+    if (!isRetry) {
+      setRetryCount(0);
+    }
 
     setSchemaLoading(true);
     setSchemaError(null);
@@ -46,19 +63,44 @@ const PluginConfigurationSection = ({
     try {
       const schema = await pluginService.getPluginConfigSchema(pluginId);
       setConfigSchema(schema);
+      setRetryCount(0); // Reset retry count on success
 
       // Auto-switch to form view if schema is available
       if (schema && viewMode === 'auto') {
         setViewMode('form');
       }
     } catch (error) {
-      console.warn('Failed to fetch plugin schema:', error);
-      setSchemaError(error.message);
-      setConfigSchema(null);
+      console.warn(`Failed to fetch plugin schema (attempt ${retryCount + 1}):`, error);
+
+      // Check if we should retry
+      if (retryCount < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+        const newRetryCount = retryCount + 1;
+
+        console.log(`Retrying schema fetch in ${delay}ms (attempt ${newRetryCount}/${MAX_RETRIES})`);
+
+        setRetryCount(newRetryCount);
+        setSchemaError(`Failed to load schema. Retrying in ${delay / 1000}s... (${newRetryCount}/${MAX_RETRIES})`);
+
+        const timeoutId = setTimeout(() => {
+          fetchConfigSchema(true); // isRetry = true
+        }, delay);
+
+        setRetryTimeoutId(timeoutId);
+      } else {
+        // Max retries exceeded
+        console.error('Max retries exceeded for plugin schema fetch');
+        setSchemaError(`Failed to load plugin schema after ${MAX_RETRIES} attempts. Please try refreshing manually.`);
+        setConfigSchema(null);
+        setRetryCount(0);
+      }
     } finally {
-      setSchemaLoading(false);
+      if (retryCount >= MAX_RETRIES || !isRetry) {
+        setSchemaLoading(false);
+      }
+      // Keep loading state true during retries
     }
-  }, [pluginId]);
+  }, [pluginId, viewMode, retryCount, retryTimeoutId]);
 
   // Fetch config schema when component mounts (if in edit mode)
   useEffect(() => {
@@ -66,6 +108,15 @@ const PluginConfigurationSection = ({
       fetchConfigSchema();
     }
   }, [isEdit, pluginId, configSchema, schemaLoading, fetchConfigSchema]);
+
+  // Cleanup retry timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutId) {
+        clearTimeout(retryTimeoutId);
+      }
+    };
+  }, [retryTimeoutId]);
 
   const handleViewModeChange = (event, newMode) => {
     if (newMode !== null) {
@@ -90,6 +141,13 @@ const PluginConfigurationSection = ({
   const handleRefreshSchema = async () => {
     if (!pluginId) return;
 
+    // Clear any existing retry timeout and reset retry state
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId);
+      setRetryTimeoutId(null);
+    }
+    setRetryCount(0);
+
     // Clear current schema state
     setConfigSchema(null);
     setSchemaError(null);
@@ -106,7 +164,7 @@ const PluginConfigurationSection = ({
       }
     } catch (error) {
       console.warn('Failed to refresh plugin schema:', error);
-      setSchemaError(error.message);
+      setSchemaError(`Refresh failed: ${error.message}`);
       setConfigSchema(null);
     } finally {
       setSchemaLoading(false);
@@ -182,15 +240,17 @@ const PluginConfigurationSection = ({
             </Box>
           )}
 
-          {schemaError && !schemaLoading && (
-            <Alert severity="warning" sx={{ width: '100%' }}>
+          {schemaError && (
+            <Alert severity={retryCount > 0 ? "info" : "warning"} sx={{ width: '100%' }}>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Typography variant="body2">
-                  Could not load configuration schema. Using JSON editor.
+                  {retryCount > 0 ? schemaError : 'Could not load configuration schema. Using JSON editor.'}
                 </Typography>
-                <IconButton size="small" onClick={handleRefreshSchema}>
-                  <RefreshIcon fontSize="small" />
-                </IconButton>
+                {!schemaLoading && (
+                  <IconButton size="small" onClick={handleRefreshSchema}>
+                    <RefreshIcon fontSize="small" />
+                  </IconButton>
+                )}
               </Box>
             </Alert>
           )}
