@@ -60,7 +60,8 @@ func (lp *LLMPlugin) UpdateOrder(db *gorm.DB, newOrder int) error {
 // UpdateConfig updates the configuration override for this association
 func (lp *LLMPlugin) UpdateConfig(db *gorm.DB, config map[string]interface{}) error {
 	lp.ConfigOverride = config
-	return db.Model(lp).Where("llm_id = ? AND plugin_id = ?", lp.LLMID, lp.PluginID).Update("config_override", config).Error
+	// Use Save to trigger GORM serializers instead of Update
+	return db.Model(lp).Where("llm_id = ? AND plugin_id = ?", lp.LLMID, lp.PluginID).Save(lp).Error
 }
 
 // Activate activates this LLM-Plugin association
