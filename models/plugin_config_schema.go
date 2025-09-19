@@ -73,8 +73,15 @@ func (pcs *PluginConfigSchema) Upsert(db *gorm.DB, command string, schemaJSON st
 	existing.SchemaJSON = schemaJSON
 	existing.LastFetched = now
 	existing.UpdatedAt = now
+
+	// Save the existing record (which has the proper ID)
+	if err := db.Save(existing).Error; err != nil {
+		return err
+	}
+
+	// Copy the updated record back to pcs
 	*pcs = *existing
-	return db.Save(pcs).Error
+	return nil
 }
 
 // IsStale checks if the cached schema is older than the specified duration

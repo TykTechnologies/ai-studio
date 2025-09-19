@@ -60,3 +60,4 @@ performance/baselines
 performance/targets.md
 examples/plugins/rate-limiting-ui/server/rate-limiting-ui
 TODO-Fix-Per-LLM-Config-Loading.md
+cache/plugins

@@ -717,13 +717,7 @@ func (s *PluginService) RefreshPluginConfigSchema(ctx context.Context, pluginID 
 	log.Info().
 		Uint("plugin_id", pluginID).
 		Str("command", plugin.Command).
-		Msg("Refreshing plugin config schema - invalidating cache first")
-
-	// First, invalidate any existing cache entry
-	if err := s.InvalidateSchemaCache(plugin.Command); err != nil {
-		log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to invalidate schema cache")
-		// Continue anyway - we'll still fetch fresh
-	}
+		Msg("Refreshing plugin config schema - fetching fresh from plugin")
 
 	// Fetch fresh schema from plugin
 	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, plugin.Command)
@@ -731,11 +725,28 @@ func (s *PluginService) RefreshPluginConfigSchema(ctx context.Context, pluginID 
 		return "", fmt.Errorf("failed to fetch fresh schema from plugin: %w", err)
 	}
 
-	// Cache the fresh schema
-	cachedSchema := &models.PluginConfigSchema{}
-	if err := cachedSchema.Upsert(s.db, plugin.Command, schemaJSON); err != nil {
-		log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to cache refreshed schema")
-		// Don't fail the request just because caching failed
+	// Use GORM's proper upsert with Where + Updates
+	now := time.Now()
+	result := s.db.Model(&models.PluginConfigSchema{}).
+		Where("command = ?", plugin.Command).
+		Updates(map[string]interface{}{
+			"schema_json":  schemaJSON,
+			"last_fetched": now,
+			"updated_at":   now,
+		})
+
+	if result.Error != nil {
+		log.Warn().Err(result.Error).Str("command", plugin.Command).Msg("Failed to update schema cache")
+	} else if result.RowsAffected == 0 {
+		// No existing record to update, create new one
+		cachedSchema := &models.PluginConfigSchema{
+			Command:     plugin.Command,
+			SchemaJSON:  schemaJSON,
+			LastFetched: now,
+		}
+		if err := s.db.Create(cachedSchema).Error; err != nil {
+			log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to create new schema cache entry")
+		}
 	}
 
 	log.Info().
