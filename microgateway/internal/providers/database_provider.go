@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/pkg/config"
+	"github.com/rs/zerolog/log"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -303,26 +306,90 @@ func (p *DatabaseProvider) GetPlugin(id uint) (*database.Plugin, error) {
 	return &plugin, err
 }
 
-// GetPluginsForLLM retrieves plugins associated with an LLM, respecting namespace
+// GetPluginsForLLM retrieves plugins associated with an LLM with merged configurations, respecting namespace
 func (p *DatabaseProvider) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) {
 	// First check if we can access the LLM
 	_, err := p.GetLLM(llmID)
 	if err != nil {
 		return nil, err
 	}
-	
+
+	// Get LLM-plugin associations first
+	var llmPlugins []database.LLMPlugin
+	err = p.db.Where("llm_id = ? AND is_active = ?", llmID, true).
+		Order("order_index ASC").
+		Find(&llmPlugins).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LLM plugin associations: %w", err)
+	}
+
+	if len(llmPlugins) == 0 {
+		return []database.Plugin{}, nil
+	}
+
+	// Get plugin IDs
+	pluginIDs := make([]uint, len(llmPlugins))
+	for i, lp := range llmPlugins {
+		pluginIDs[i] = lp.PluginID
+	}
+
+	// Get plugins with active filter and namespace filtering
 	var plugins []database.Plugin
-	
-	query := p.db.Joins("JOIN llm_plugins lp ON lp.plugin_id = plugins.id").
-		Where("lp.llm_id = ? AND lp.is_active = ? AND plugins.is_active = ?", llmID, true, true)
-	
+	query := p.db.Where("id IN ? AND is_active = ?", pluginIDs, true)
+
 	// Apply namespace filtering to plugins
 	if p.namespace != "" {
-		query = query.Where("(plugins.namespace = '' OR plugins.namespace = ?)", p.namespace)
+		query = query.Where("(namespace = '' OR namespace = ?)", p.namespace)
 	}
-	
-	err = query.Order("lp.order_index ASC").Find(&plugins).Error
-	return plugins, err
+
+	err = query.Find(&plugins).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugins: %w", err)
+	}
+
+	// Create plugin map for fast lookup
+	pluginMap := make(map[uint]database.Plugin)
+	for _, plugin := range plugins {
+		pluginMap[plugin.ID] = plugin
+	}
+
+	// Build result with merged configurations, maintaining order
+	result := make([]database.Plugin, 0, len(llmPlugins))
+
+	for _, llmPlugin := range llmPlugins {
+		plugin, exists := pluginMap[llmPlugin.PluginID]
+		if !exists {
+			// Plugin might be inactive or filtered out by namespace, skip it
+			continue
+		}
+
+		// Merge base plugin config with per-LLM override
+		baseConfigJSON := []byte(plugin.Config)
+		overrideConfigJSON := []byte(llmPlugin.ConfigOverride)
+
+		mergedConfigJSON, err := config.MergePluginConfigsJSON(baseConfigJSON, overrideConfigJSON)
+		if err != nil {
+			log.Error().Err(err).
+				Uint("plugin_id", plugin.ID).
+				Uint("llm_id", llmID).
+				Msg("Failed to merge plugin config, using base config")
+			mergedConfigJSON = baseConfigJSON
+		}
+
+		// Update plugin with merged config
+		plugin.Config = datatypes.JSON(mergedConfigJSON)
+
+		log.Debug().
+			Uint("plugin_id", plugin.ID).
+			Uint("llm_id", llmID).
+			Bool("has_override", len(overrideConfigJSON) > 0).
+			Msg("Merged plugin configuration for LLM in database provider")
+
+		result = append(result, plugin)
+	}
+
+	return result, nil
 }
 
 // ListPlugins retrieves plugins with namespace and type filtering
