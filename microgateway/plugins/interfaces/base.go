@@ -16,18 +16,26 @@ const (
 type BasePlugin interface {
 	// Initialize initializes the plugin with configuration
 	Initialize(config map[string]interface{}) error
-	
+
 	// GetHookType returns the hook type this plugin implements
 	GetHookType() HookType
-	
+
 	// GetName returns the plugin name
 	GetName() string
-	
+
 	// GetVersion returns the plugin version
 	GetVersion() string
-	
+
 	// Shutdown performs cleanup when plugin is unloaded
 	Shutdown() error
+}
+
+// ConfigSchemaProvider is an optional interface that plugins can implement
+// to provide their configuration JSON Schema
+type ConfigSchemaProvider interface {
+	// GetConfigSchema returns the JSON Schema for this plugin's configuration
+	// The schema should follow the JSON Schema specification (jsonschema.org)
+	GetConfigSchema() ([]byte, error)
 }
 
 // PluginContext provides contextual information for plugin execution

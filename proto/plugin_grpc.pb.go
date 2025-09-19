@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: proto/plugin.proto
+// source: plugin.proto
 
 package proto
 
@@ -36,6 +36,7 @@ const (
 	PluginService_ListAssets_FullMethodName           = "/plugin.PluginService/ListAssets"
 	PluginService_GetManifest_FullMethodName          = "/plugin.PluginService/GetManifest"
 	PluginService_Call_FullMethodName                 = "/plugin.PluginService/Call"
+	PluginService_GetConfigSchema_FullMethodName      = "/plugin.PluginService/GetConfigSchema"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -70,6 +71,8 @@ type PluginServiceClient interface {
 	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 	// Generic RPC call method (for AI Studio plugins)
 	Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error)
+	// Configuration schema method (for both systems)
+	GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -250,6 +253,16 @@ func (c *pluginServiceClient) Call(ctx context.Context, in *CallRequest, opts ..
 	return out, nil
 }
 
+func (c *pluginServiceClient) GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetConfigSchemaResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetConfigSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -282,6 +295,8 @@ type PluginServiceServer interface {
 	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	// Generic RPC call method (for AI Studio plugins)
 	Call(context.Context, *CallRequest) (*CallResponse, error)
+	// Configuration schema method (for both systems)
+	GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -342,6 +357,9 @@ func (UnimplementedPluginServiceServer) GetManifest(context.Context, *GetManifes
 }
 func (UnimplementedPluginServiceServer) Call(context.Context, *CallRequest) (*CallResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Call not implemented")
+}
+func (UnimplementedPluginServiceServer) GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetConfigSchema not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -670,6 +688,24 @@ func _PluginService_Call_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_GetConfigSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetConfigSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetConfigSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetConfigSchema(ctx, req.(*GetConfigSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -745,7 +781,11 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Call",
 			Handler:    _PluginService_Call_Handler,
 		},
+		{
+			MethodName: "GetConfigSchema",
+			Handler:    _PluginService_GetConfigSchema_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/plugin.proto",
+	Metadata: "plugin.proto",
 }

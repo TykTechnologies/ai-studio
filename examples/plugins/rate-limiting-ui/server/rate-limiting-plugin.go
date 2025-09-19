@@ -79,6 +79,91 @@ func (p *RateLimitingUIPlugin) Shutdown(ctx context.Context, req *pb.ShutdownReq
 	return &pb.ShutdownResponse{Success: true}, nil
 }
 
+// === Configuration Schema Method ===
+
+func (p *RateLimitingUIPlugin) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
+	log.Printf("GetConfigSchema called")
+
+	// Define the JSON Schema for this plugin's configuration
+	schema := map[string]interface{}{
+		"$schema": "http://json-schema.org/draft-07/schema#",
+		"type":    "object",
+		"title":   "Rate Limiting Plugin Configuration",
+		"description": "Configuration schema for the Rate Limiting UI Plugin",
+		"properties": map[string]interface{}{
+			"redis_url": map[string]interface{}{
+				"type":        "string",
+				"title":       "Redis URL",
+				"description": "Connection URL for Redis storage backend",
+				"default":     "redis://localhost:6379",
+				"format":      "uri",
+				"examples":    []string{"redis://localhost:6379", "redis://user:pass@host:6379/db"},
+			},
+			"default_limit": map[string]interface{}{
+				"type":        "integer",
+				"title":       "Default Rate Limit",
+				"description": "Default number of requests allowed per time window",
+				"default":     1000,
+				"minimum":     1,
+				"maximum":     1000000,
+			},
+			"default_window": map[string]interface{}{
+				"type":        "string",
+				"title":       "Default Time Window",
+				"description": "Default time window for rate limiting (e.g., '1m', '1h', '1d')",
+				"default":     "1h",
+				"pattern":     "^\\d+[smhd]$",
+				"examples":    []string{"30s", "1m", "5m", "1h", "24h"},
+			},
+			"enable_burst": map[string]interface{}{
+				"type":        "boolean",
+				"title":       "Enable Burst Mode",
+				"description": "Allow temporary bursts above the rate limit",
+				"default":     true,
+			},
+			"burst_multiplier": map[string]interface{}{
+				"type":        "number",
+				"title":       "Burst Multiplier",
+				"description": "Multiplier for burst limits (e.g., 2.0 allows 2x the normal rate)",
+				"default":     2.0,
+				"minimum":     1.0,
+				"maximum":     10.0,
+			},
+			"monitoring_enabled": map[string]interface{}{
+				"type":        "boolean",
+				"title":       "Enable Monitoring",
+				"description": "Enable monitoring and metrics collection",
+				"default":     true,
+			},
+			"alert_threshold": map[string]interface{}{
+				"type":        "number",
+				"title":       "Alert Threshold",
+				"description": "Threshold for triggering rate limit alerts (0.0-1.0)",
+				"default":     0.8,
+				"minimum":     0.0,
+				"maximum":     1.0,
+			},
+		},
+		"required": []string{"redis_url", "default_limit"},
+		"additionalProperties": false,
+	}
+
+	// Convert schema to JSON
+	schemaBytes, err := json.Marshal(schema)
+	if err != nil {
+		log.Printf("Failed to marshal schema: %v", err)
+		return &pb.GetConfigSchemaResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to generate schema: %v", err),
+		}, nil
+	}
+
+	return &pb.GetConfigSchemaResponse{
+		Success:    true,
+		SchemaJson: string(schemaBytes),
+	}, nil
+}
+
 // === AI Studio Asset Serving Methods ===
 
 func (p *RateLimitingUIPlugin) GetAsset(ctx context.Context, req *pb.GetAssetRequest) (*pb.GetAssetResponse, error) {

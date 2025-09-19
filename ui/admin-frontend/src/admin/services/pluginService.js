@@ -448,6 +448,17 @@ class PluginService {
       throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to reload plugin');
     }
   }
+
+  async getPluginConfigSchema(pluginId) {
+    try {
+      const response = await apiClient.get(`/plugins/${pluginId}/config-schema`);
+      return response.data?.data?.attributes?.schema || null;
+    } catch (error) {
+      console.error('Error fetching plugin config schema:', error);
+      // Return null instead of throwing to allow graceful fallback to JSON editor
+      return null;
+    }
+  }
 }
 
 export default new PluginService();

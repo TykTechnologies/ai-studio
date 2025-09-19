@@ -675,6 +675,164 @@ func (m *AIStudioPluginManager) unloadPluginUnsafe(pluginID uint) error {
 	return nil
 }
 
+// ConfigOnlyPlugin represents a plugin loaded only for configuration schema extraction
+type ConfigOnlyPlugin struct {
+	Command     string
+	Client      *plugin.Client
+	GRPCClient  pb.PluginServiceClient
+	LoadTime    time.Time
+}
+
+// LoadPluginForConfigOnly loads a plugin with minimal resources for schema extraction
+// Implements ConfigProviderLoader interface
+func (m *AIStudioPluginManager) LoadPluginForConfigOnly(ctx context.Context, command string) (ConfigProvider, error) {
+	log.Debug().Str("command", command).Msg("Loading plugin for config-only access")
+
+	// Create plugin client based on command type
+	client, err := m.createPluginClient(command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin client: %w", err)
+	}
+
+	// Connect to plugin
+	rpcClient, err := client.Client()
+	if err != nil {
+		client.Kill()
+		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
+	}
+
+	// Get gRPC client
+	raw, err := rpcClient.Dispense("plugin")
+	if err != nil {
+		client.Kill()
+		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
+	}
+
+	grpcClient, ok := raw.(pb.PluginServiceClient)
+	if !ok {
+		client.Kill()
+		return nil, fmt.Errorf("plugin does not implement PluginServiceClient")
+	}
+
+	// Initialize plugin with minimal config for schema extraction
+	initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	initResp, err := grpcClient.Initialize(initCtx, &pb.InitRequest{
+		Config: make(map[string]string), // Empty config for schema-only loading
+	})
+	if err != nil {
+		client.Kill()
+		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
+	}
+
+	if !initResp.Success {
+		client.Kill()
+		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
+	}
+
+	// Create config-only plugin instance
+	configPlugin := &ConfigOnlyPlugin{
+		Command:    command,
+		Client:     client,
+		GRPCClient: grpcClient,
+		LoadTime:   time.Now(),
+	}
+
+	log.Debug().
+		Str("command", command).
+		Msg("Plugin loaded successfully for config-only access")
+
+	return configPlugin, nil
+}
+
+// UnloadConfigProvider releases resources used by a ConfigProvider
+func (m *AIStudioPluginManager) UnloadConfigProvider(provider ConfigProvider) error {
+	configPlugin, ok := provider.(*ConfigOnlyPlugin)
+	if !ok {
+		return fmt.Errorf("invalid config provider type")
+	}
+
+	// Shutdown plugin gracefully
+	if configPlugin.GRPCClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := configPlugin.GRPCClient.Shutdown(ctx, &pb.ShutdownRequest{
+			TimeoutSeconds: 3,
+		})
+		if err != nil {
+			log.Warn().
+				Str("command", configPlugin.Command).
+				Err(err).
+				Msg("Failed to shutdown config-only plugin gracefully")
+		}
+	}
+
+	// Kill plugin process
+	if configPlugin.Client != nil {
+		configPlugin.Client.Kill()
+	}
+
+	log.Debug().
+		Str("command", configPlugin.Command).
+		Msg("Config-only plugin unloaded successfully")
+
+	return nil
+}
+
+// GetConfigSchema implements ConfigProvider interface for ConfigOnlyPlugin
+func (cp *ConfigOnlyPlugin) GetConfigSchema(ctx context.Context) ([]byte, error) {
+	// Call plugin's GetConfigSchema gRPC method
+	schemaCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	resp, err := cp.GRPCClient.GetConfigSchema(schemaCtx, &pb.GetConfigSchemaRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config schema from plugin: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("plugin config schema request failed: %s", resp.ErrorMessage)
+	}
+
+	return []byte(resp.SchemaJson), nil
+}
+
+// GetPluginConfigSchema retrieves config schema from a plugin by ID
+func (m *AIStudioPluginManager) GetPluginConfigSchema(pluginID uint) (string, error) {
+	// Get plugin from database
+	var plugin models.Plugin
+	if err := m.db.First(&plugin, pluginID).Error; err != nil {
+		return "", fmt.Errorf("plugin not found: %w", err)
+	}
+
+	// Only load AI Studio plugins
+	if !plugin.IsAIStudioPlugin() {
+		return "", fmt.Errorf("plugin %d is not an AI Studio plugin", pluginID)
+	}
+
+	if !plugin.IsActive {
+		return "", fmt.Errorf("plugin %d is not active", pluginID)
+	}
+
+	// Load plugin for config-only access
+	ctx := context.Background()
+	configProvider, err := m.LoadPluginForConfigOnly(ctx, plugin.Command)
+	if err != nil {
+		return "", fmt.Errorf("failed to load plugin for config access: %w", err)
+	}
+	defer m.UnloadConfigProvider(configProvider)
+
+	// Get schema
+	schemaBytes, err := configProvider.GetConfigSchema(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get config schema: %w", err)
+	}
+
+	return string(schemaBytes), nil
+}
+
 // AssetInfo represents information about a plugin asset
 type AssetInfo struct {
 	Path     string `json:"path"`

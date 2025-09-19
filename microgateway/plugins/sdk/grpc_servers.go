@@ -47,6 +47,39 @@ func (s *BaseGRPCServer) Shutdown(ctx context.Context, req *pb.ShutdownRequest) 
 	return &pb.ShutdownResponse{Success: true}, nil
 }
 
+func (s *BaseGRPCServer) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
+	// Check if the plugin implements ConfigSchemaProvider
+	if schemaProvider, ok := s.BaseImpl.(interfaces.ConfigSchemaProvider); ok {
+		schemaBytes, err := schemaProvider.GetConfigSchema()
+		if err != nil {
+			return &pb.GetConfigSchemaResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+
+		return &pb.GetConfigSchemaResponse{
+			Success:    true,
+			SchemaJson: string(schemaBytes),
+		}, nil
+	}
+
+	// Default implementation returns a basic schema that accepts any configuration
+	defaultSchema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Plugin Configuration",
+  "description": "Configuration schema for this plugin (default - plugin does not provide custom schema)",
+  "properties": {},
+  "additionalProperties": true
+}`
+
+	return &pb.GetConfigSchemaResponse{
+		Success:    true,
+		SchemaJson: defaultSchema,
+	}, nil
+}
+
 // Pre-auth plugin gRPC server
 type PreAuthGRPCServer struct {
 	BaseGRPCServer

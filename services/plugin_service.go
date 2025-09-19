@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
@@ -14,8 +15,9 @@ import (
 
 // PluginService implements plugin management for AI Studio
 type PluginService struct {
-	db        *gorm.DB
-	ociClient *ociplugins.OCIPluginClient
+	db               *gorm.DB
+	ociClient        *ociplugins.OCIPluginClient
+	pluginManager    *AIStudioPluginManager // For loading plugins to get config schemas
 }
 
 // NewPluginService creates a new plugin service
@@ -23,6 +25,11 @@ func NewPluginService(db *gorm.DB) *PluginService {
 	return &PluginService{
 		db: db,
 	}
+}
+
+// SetPluginManager sets the AI Studio plugin manager (to avoid circular dependency)
+func (s *PluginService) SetPluginManager(pluginManager *AIStudioPluginManager) {
+	s.pluginManager = pluginManager
 }
 
 // NewPluginServiceWithOCI creates a new plugin service with OCI support
@@ -623,4 +630,160 @@ type CreateOCIPluginRequest struct {
 	HookType     string                 `json:"hook_type" binding:"required"`
 	IsActive     bool                   `json:"is_active"`
 	Namespace    string                 `json:"namespace,omitempty"`
+}
+
+// Plugin Config Schema Methods
+
+// GetPluginConfigSchema retrieves the configuration schema for a plugin, using cache when possible
+func (s *PluginService) GetPluginConfigSchema(ctx context.Context, pluginID uint) (string, error) {
+	// Get plugin to access its command
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	return s.GetPluginConfigSchemaByCommand(ctx, plugin.Command)
+}
+
+// GetPluginConfigSchemaByCommand retrieves schema by command, using cache when possible
+func (s *PluginService) GetPluginConfigSchemaByCommand(ctx context.Context, command string) (string, error) {
+	// Check cache first
+	cachedSchema := &models.PluginConfigSchema{}
+	err := cachedSchema.GetByCommand(s.db, command)
+
+	if err == nil {
+		// Cache hit - check if it's still fresh (24 hour TTL)
+		if !cachedSchema.IsStale(24 * 60 * 60 * time.Second) {
+			log.Debug().
+				Str("command", command).
+				Time("last_fetched", cachedSchema.LastFetched).
+				Msg("Using cached plugin config schema")
+			return cachedSchema.SchemaJSON, nil
+		}
+	} else if err != gorm.ErrRecordNotFound {
+		return "", fmt.Errorf("failed to check schema cache: %w", err)
+	}
+
+	// Cache miss or stale - fetch from plugin
+	log.Debug().
+		Str("command", command).
+		Msg("Cache miss or stale - fetching schema from plugin")
+
+	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, command)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch schema from plugin: %w", err)
+	}
+
+	// Update cache
+	if err := cachedSchema.Upsert(s.db, command, schemaJSON); err != nil {
+		log.Warn().Err(err).Str("command", command).Msg("Failed to update schema cache")
+		// Don't fail the request just because caching failed
+	}
+
+	return schemaJSON, nil
+}
+
+// RefreshPluginConfigSchema forces a refresh of the schema from the plugin
+func (s *PluginService) RefreshPluginConfigSchema(ctx context.Context, pluginID uint) (string, error) {
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	// Fetch fresh schema from plugin
+	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, plugin.Command)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch schema from plugin: %w", err)
+	}
+
+	// Force update cache
+	cachedSchema := &models.PluginConfigSchema{}
+	if err := cachedSchema.Upsert(s.db, plugin.Command, schemaJSON); err != nil {
+		log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to update schema cache")
+		// Don't fail the request just because caching failed
+	}
+
+	return schemaJSON, nil
+}
+
+// InvalidateSchemaCache removes a schema from the cache
+func (s *PluginService) InvalidateSchemaCache(command string) error {
+	cachedSchema := &models.PluginConfigSchema{}
+	err := cachedSchema.GetByCommand(s.db, command)
+	if err == gorm.ErrRecordNotFound {
+		return nil // Already not cached
+	}
+	if err != nil {
+		return fmt.Errorf("failed to find cached schema: %w", err)
+	}
+
+	if err := cachedSchema.Delete(s.db); err != nil {
+		return fmt.Errorf("failed to delete cached schema: %w", err)
+	}
+
+	log.Debug().Str("command", command).Msg("Invalidated plugin config schema cache")
+	return nil
+}
+
+// fetchSchemaFromPlugin loads a plugin and calls GetConfigSchema
+func (s *PluginService) fetchSchemaFromPlugin(ctx context.Context, command string) (string, error) {
+	// Check if we have the AI Studio plugin manager available
+	if s.pluginManager == nil {
+		log.Debug().Str("command", command).Msg("Plugin manager not available, returning default schema")
+
+		// Return a basic JSON schema that accepts any configuration
+		defaultSchema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Plugin Configuration",
+  "description": "Configuration schema for this plugin (default - manager not available)",
+  "properties": {},
+  "additionalProperties": true
+}`
+		return defaultSchema, nil
+	}
+
+	// Use plugin manager to load plugin for config-only access
+	log.Debug().Str("command", command).Msg("Loading plugin for schema extraction")
+
+	configProvider, err := s.pluginManager.LoadPluginForConfigOnly(ctx, command)
+	if err != nil {
+		log.Warn().Err(err).Str("command", command).Msg("Failed to load plugin for schema, returning default")
+
+		// Fallback to default schema if plugin loading fails
+		defaultSchema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Plugin Configuration",
+  "description": "Configuration schema for this plugin (fallback - plugin loading failed)",
+  "properties": {},
+  "additionalProperties": true
+}`
+		return defaultSchema, nil
+	}
+	defer s.pluginManager.UnloadConfigProvider(configProvider)
+
+	// Get schema from plugin
+	schemaBytes, err := configProvider.GetConfigSchema(ctx)
+	if err != nil {
+		log.Warn().Err(err).Str("command", command).Msg("Failed to get schema from plugin, returning default")
+
+		// Fallback to default schema if schema extraction fails
+		defaultSchema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Plugin Configuration",
+  "description": "Configuration schema for this plugin (fallback - schema extraction failed)",
+  "properties": {},
+  "additionalProperties": true
+}`
+		return defaultSchema, nil
+	}
+
+	log.Debug().
+		Str("command", command).
+		Int("schema_bytes", len(schemaBytes)).
+		Msg("Successfully fetched schema from plugin")
+
+	return string(schemaBytes), nil
 }

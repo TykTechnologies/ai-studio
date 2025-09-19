@@ -27,6 +27,7 @@ import {
 } from '../../styles/sharedStyles';
 import pluginService from '../../services/pluginService';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
+import PluginConfigurationSection from './PluginConfigurationSection';
 
 const PluginForm = ({ mode = 'create' }) => {
   const { id } = useParams();
@@ -58,6 +59,9 @@ const PluginForm = ({ mode = 'create' }) => {
   // Configuration as JSON string for editing
   const [configJson, setConfigJson] = useState('{}');
   const [configError, setConfigError] = useState(null);
+
+  // Accordion expansion state
+  const [accordionExpanded, setAccordionExpanded] = useState(false);
 
   useEffect(() => {
     if (isEdit) {
@@ -127,17 +131,29 @@ const PluginForm = ({ mode = 'create' }) => {
     }));
   };
 
-  const handleConfigChange = (event) => {
-    const value = event.target.value;
-    setConfigJson(value);
+  const handleConfigChange = (configData) => {
     setConfigError(null);
-    
-    try {
-      const parsed = JSON.parse(value);
-      setFormData(prev => ({ ...prev, config: parsed }));
-    } catch (err) {
-      setConfigError('Invalid JSON format');
+
+    if (typeof configData === 'string') {
+      // Handle raw JSON string (from JSON editor)
+      const value = configData;
+      setConfigJson(value);
+
+      try {
+        const parsed = JSON.parse(value);
+        setFormData(prev => ({ ...prev, config: parsed }));
+      } catch (err) {
+        setConfigError('Invalid JSON format');
+      }
+    } else {
+      // Handle parsed config object (from schema form)
+      setFormData(prev => ({ ...prev, config: configData }));
+      setConfigJson(JSON.stringify(configData || {}, null, 2));
     }
+  };
+
+  const handleAccordionChange = (event, isExpanded) => {
+    setAccordionExpanded(isExpanded);
   };
 
   const handleNamespaceChange = (namespaces) => {
@@ -389,26 +405,20 @@ const PluginForm = ({ mode = 'create' }) => {
           />
 
           {/* Configuration Section */}
-          <StyledAccordion>
+          <StyledAccordion
+            expanded={accordionExpanded}
+            onChange={handleAccordionChange}
+          >
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography>Plugin Configuration</Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="body2" color="textSecondary" paragraph>
-                Optional JSON configuration that will be passed to the plugin. This can include
-                any plugin-specific settings or parameters.
-              </Typography>
-              
-              <TextField
-                fullWidth
-                label="Configuration JSON"
-                value={configJson}
-                onChange={handleConfigChange}
-                multiline
-                rows={8}
-                error={!!configError}
-                helperText={configError || 'Valid JSON configuration object'}
-                sx={{ fontFamily: 'monospace' }}
+              <PluginConfigurationSection
+                pluginId={isEdit ? id : null}
+                config={formData.config}
+                onConfigChange={handleConfigChange}
+                configError={configError}
+                isEdit={isEdit}
               />
             </AccordionDetails>
           </StyledAccordion>
