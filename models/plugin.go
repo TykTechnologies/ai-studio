@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -30,6 +31,10 @@ type Plugin struct {
 	PluginType  string                 `json:"plugin_type" gorm:"not null;default:'gateway';size:50;index:idx_plugins_type"` // "gateway" or "ai_studio"
 	OCIReference string                `json:"oci_reference" gorm:"size:500"`                                                // OCI artifact reference (for OCI plugins)
 	Manifest    map[string]interface{} `json:"manifest" gorm:"serializer:json"`                                              // Plugin manifest for UI extensions
+
+	// Service Access Control (for AI Studio plugins)
+	ServiceAccessAuthorized bool     `json:"service_access_authorized" gorm:"default:false;index:idx_plugins_service_access"` // Admin authorization for service access
+	ServiceScopes          []string `json:"service_scopes" gorm:"serializer:json"`                                            // Authorized service scopes from manifest
 
 	// Relationships
 	LLMs []LLM `json:"llms,omitempty" gorm:"many2many:llm_plugins;"`
@@ -290,3 +295,70 @@ func (p *Plugin) CountPluginsByHookType(db *gorm.DB, hookType string) (int64, er
 	err := db.Model(&Plugin{}).Where("hook_type = ? AND is_active = ?", hookType, true).Count(&count).Error
 	return count, err
 }
+
+// Service Access Control Methods
+
+// HasServiceAccess returns true if the plugin is authorized for service access
+func (p *Plugin) HasServiceAccess() bool {
+	return p.ServiceAccessAuthorized
+}
+
+// HasServiceScope returns true if the plugin has the specified service scope
+func (p *Plugin) HasServiceScope(scope string) bool {
+	for _, s := range p.ServiceScopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+// AuthorizeServiceAccess grants service access to the plugin with specified scopes
+func (p *Plugin) AuthorizeServiceAccess(db *gorm.DB, scopes []string) error {
+	p.ServiceAccessAuthorized = true
+	p.ServiceScopes = scopes
+	return db.Save(p).Error
+}
+
+// RevokeServiceAccess revokes service access from the plugin
+func (p *Plugin) RevokeServiceAccess(db *gorm.DB) error {
+	p.ServiceAccessAuthorized = false
+	p.ServiceScopes = []string{}
+	return db.Save(p).Error
+}
+
+// UpdateServiceScopes updates the authorized service scopes for the plugin
+func (p *Plugin) UpdateServiceScopes(db *gorm.DB, scopes []string) error {
+	if !p.ServiceAccessAuthorized {
+		return fmt.Errorf("service access not authorized for plugin")
+	}
+	p.ServiceScopes = scopes
+	return db.Save(p).Error
+}
+
+// Service scope constants for AI Studio plugins
+const (
+	// Plugin management scopes
+	ServiceScopePluginsRead   = "plugins.read"
+	ServiceScopePluginsWrite  = "plugins.write"
+	ServiceScopePluginsConfig = "plugins.config"
+
+	// LLM management scopes
+	ServiceScopeLLMsRead     = "llms.read"
+	ServiceScopeLLMsWrite    = "llms.write"
+	ServiceScopeLLMsConfig   = "llms.config"
+
+	// Analytics scopes
+	ServiceScopeAnalyticsRead = "analytics.read"
+
+	// App management scopes
+	ServiceScopeAppsRead  = "apps.read"
+	ServiceScopeAppsWrite = "apps.write"
+
+	// Tool management scopes
+	ServiceScopeToolsRead  = "tools.read"
+	ServiceScopeToolsWrite = "tools.write"
+
+	// System scopes
+	ServiceScopeSystemRead = "system.read"
+)

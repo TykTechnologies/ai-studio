@@ -17,10 +17,11 @@ type PluginManifest struct {
 
 	// Permissions and security
 	Permissions struct {
-		KV     []string `json:"kv"`     // KV access permissions: read, write, list
-		RPC    []string `json:"rpc"`    // RPC permissions: call
-		Routes []string `json:"routes"` // Route patterns this plugin can register
-		UI     []string `json:"ui"`     // UI permissions: sidebar.register, route.register
+		KV       []string `json:"kv"`       // KV access permissions: read, write, list
+		RPC      []string `json:"rpc"`      // RPC permissions: call
+		Routes   []string `json:"routes"`   // Route patterns this plugin can register
+		UI       []string `json:"ui"`       // UI permissions: sidebar.register, route.register
+		Services []string `json:"services"` // AI Studio service access scopes: analytics.read, plugins.config, etc.
 	} `json:"permissions"`
 
 	// Key-value namespace for plugin data
@@ -204,8 +205,24 @@ func (pm *PluginManifest) HasPermission(permType, permission string) bool {
 				return true
 			}
 		}
+	case "services":
+		for _, perm := range pm.Permissions.Services {
+			if perm == permission {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+// GetServiceScopes returns all service scopes declared in the manifest
+func (pm *PluginManifest) GetServiceScopes() []string {
+	return pm.Permissions.Services
+}
+
+// HasServiceScope checks if the manifest declares a specific service scope
+func (pm *PluginManifest) HasServiceScope(scope string) bool {
+	return pm.HasPermission("services", scope)
 }
 
 // TableName returns table name for RegisteredPlugin

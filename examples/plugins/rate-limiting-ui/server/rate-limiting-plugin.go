@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strconv"
 
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
+	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Embed UI assets and manifest into the binary
@@ -25,7 +28,9 @@ var manifestFile []byte
 // RateLimitingUIPlugin implements the AI Studio plugin interface with embedded UI assets
 type RateLimitingUIPlugin struct {
 	pb.UnimplementedPluginServiceServer
-	kvStore map[string]interface{}
+	kvStore         map[string]interface{}
+	managementClient mgmtpb.AIStudioManagementServiceClient
+	pluginID        uint32
 }
 
 // === Lifecycle Methods ===
@@ -33,7 +38,57 @@ type RateLimitingUIPlugin struct {
 func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
 	log.Printf("Initializing Rate Limiting UI Plugin with config: %v", req.Config)
 
-	// Initialize KV store with default data
+	// Extract plugin ID from config (set by AI Studio plugin manager)
+	if pluginIDStr, ok := req.Config["plugin_id"]; ok {
+		if pluginID, err := strconv.ParseUint(pluginIDStr, 10, 32); err == nil {
+			p.pluginID = uint32(pluginID)
+			log.Printf("Plugin ID set to: %d", p.pluginID)
+		} else {
+			log.Printf("Warning: Invalid plugin ID format: %s", pluginIDStr)
+		}
+	} else {
+		log.Printf("Warning: Plugin ID not found in config, using mock data")
+	}
+
+	// Initialize gRPC client for AI Studio Management Service
+	// For MVP, connect to localhost - in production this would be configurable
+	managementEndpoint := "localhost:50052" // AI Studio Management Service port
+	if endpoint, ok := req.Config["management_endpoint"]; ok {
+		managementEndpoint = endpoint
+	}
+
+	conn, err := grpc.Dial(managementEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("Failed to connect to AI Studio Management Service: %v", err)
+		// Fall back to mock data for development
+		p.initializeMockData()
+	} else {
+		p.managementClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
+		log.Printf("Connected to AI Studio Management Service at %s", managementEndpoint)
+
+		// Initialize with minimal config - real data will be fetched on demand
+		p.kvStore = map[string]interface{}{
+			"global_settings": map[string]interface{}{
+				"storage_type":       "redis",
+				"redis_url":          "redis://localhost:6379",
+				"default_limit":      1000,
+				"default_window":     "1h",
+				"enable_burst":       true,
+				"burst_multiplier":   2.0,
+				"monitoring_enabled": true,
+				"alert_threshold":    0.8,
+			},
+		}
+	}
+
+	return &pb.InitResponse{
+		Success: true,
+	}, nil
+}
+
+// initializeMockData sets up mock data when gRPC client is unavailable
+func (p *RateLimitingUIPlugin) initializeMockData() {
+	log.Printf("Initializing with mock data (gRPC client unavailable)")
 	p.kvStore = map[string]interface{}{
 		"global_settings": map[string]interface{}{
 			"storage_type":       "redis",
@@ -62,10 +117,6 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 			},
 		},
 	}
-
-	return &pb.InitResponse{
-		Success: true,
-	}, nil
 }
 
 func (p *RateLimitingUIPlugin) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
@@ -252,6 +303,12 @@ func (p *RateLimitingUIPlugin) Call(ctx context.Context, req *pb.CallRequest) (*
 
 // RPC method implementations
 func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	// If gRPC client is available, fetch real analytics data
+	if p.managementClient != nil && p.pluginID != 0 {
+		return p.getStatisticsFromService(ctx)
+	}
+
+	// Fall back to mock data
 	stats := p.kvStore["statistics"]
 
 	data, err := json.Marshal(stats)
@@ -262,6 +319,68 @@ func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string
 		}, nil
 	}
 
+	log.Printf("Returning mock statistics data")
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(data),
+	}, nil
+}
+
+// getStatisticsFromService fetches real analytics data via gRPC
+func (p *RateLimitingUIPlugin) getStatisticsFromService(ctx context.Context) (*pb.CallResponse, error) {
+	log.Printf("Fetching real analytics data via gRPC for plugin %d", p.pluginID)
+
+	// Create plugin context for authentication
+	pluginCtx := &mgmtpb.PluginContext{
+		PluginId:    p.pluginID,
+		MethodScope: "analytics.read",
+	}
+
+	// Get analytics summary from AI Studio
+	analyticsResp, err := p.managementClient.GetAnalyticsSummary(ctx, &mgmtpb.GetAnalyticsSummaryRequest{
+		Context:   pluginCtx,
+		TimeRange: "24h",
+	})
+	if err != nil {
+		log.Printf("Failed to fetch analytics data: %v", err)
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to fetch analytics: %v", err),
+		}, nil
+	}
+
+	// Convert analytics data to the format expected by the UI
+	topEndpoints := make([]map[string]interface{}, len(analyticsResp.TopEndpoints))
+	for i, endpoint := range analyticsResp.TopEndpoints {
+		successRate := float64(endpoint.RequestCount-endpoint.BlockedCount) / float64(endpoint.RequestCount)
+		topEndpoints[i] = map[string]interface{}{
+			"path":     endpoint.Path,
+			"requests": endpoint.RequestCount,
+			"blocked":  endpoint.BlockedCount,
+			"success_rate": successRate,
+		}
+	}
+
+	// Build statistics response in expected format
+	stats := map[string]interface{}{
+		"total_requests":   analyticsResp.TotalRequests,
+		"blocked_requests": analyticsResp.FailedRequests, // Using failed as proxy for blocked
+		"success_rate":     float64(analyticsResp.SuccessfulRequests) / float64(analyticsResp.TotalRequests),
+		"top_endpoints":    topEndpoints,
+		"total_cost":       analyticsResp.TotalCost,
+		"currency":         analyticsResp.Currency,
+		"total_tokens":     analyticsResp.TotalTokens,
+	}
+
+	data, err := json.Marshal(stats)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal real analytics data: %v", err),
+		}, nil
+	}
+
+	log.Printf("✅ Returning real analytics data via gRPC")
 	return &pb.CallResponse{
 		Success: true,
 		Data:    string(data),

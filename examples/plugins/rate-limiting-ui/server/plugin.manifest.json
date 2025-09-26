@@ -7,7 +7,8 @@
     "kv": ["read", "write", "list"],
     "rpc": ["call"],
     "routes": ["GET:/plugin/com.tyk.rate-limiting-ui/rpc/*"],
-    "ui": ["sidebar.register", "route.register"]
+    "ui": ["sidebar.register", "route.register"],
+    "services": ["analytics.read", "plugins.read", "llms.read"]
   },
   "kvNamespace": "plugin:com.tyk.rate-limiting-ui",
   "rpc": {

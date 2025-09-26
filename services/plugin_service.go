@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -810,4 +811,120 @@ func (s *PluginService) fetchSchemaFromPlugin(ctx context.Context, command strin
 		Msg("Successfully fetched schema from plugin")
 
 	return string(schemaBytes), nil
+}
+
+// Universal Manifest Loading Methods
+
+// LoadPluginManifestViaGRPC loads manifest from any plugin type using the GetManifest gRPC method
+func (s *PluginService) LoadPluginManifestViaGRPC(pluginID uint) (*models.PluginManifest, error) {
+	// Verify plugin exists and is AI Studio type
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	if !plugin.IsAIStudioPlugin() {
+		return nil, fmt.Errorf("manifest loading only supported for AI Studio plugins")
+	}
+
+	// Check if AI Studio plugin manager is available
+	if s.pluginManager == nil {
+		return nil, fmt.Errorf("AI Studio plugin manager not configured")
+	}
+
+	// Get manifest via gRPC (works for all deployment types: file, remote, OCI)
+	manifestJSON, err := s.pluginManager.GetPluginManifest(pluginID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manifest via gRPC: %w", err)
+	}
+
+	// Parse manifest
+	var manifest models.PluginManifest
+	if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest JSON: %w", err)
+	}
+
+	// Validate manifest structure
+	if err := manifest.ValidateManifest(); err != nil {
+		return nil, fmt.Errorf("invalid manifest: %w", err)
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", plugin.Name).
+		Int("service_scopes", len(manifest.GetServiceScopes())).
+		Msg("Successfully loaded plugin manifest via gRPC")
+
+	return &manifest, nil
+}
+
+// ExtractAndStoreServiceScopes extracts service scopes from manifest and stores them in the database
+func (s *PluginService) ExtractAndStoreServiceScopes(pluginID uint) error {
+	// Load manifest via gRPC
+	manifest, err := s.LoadPluginManifestViaGRPC(pluginID)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin manifest: %w", err)
+	}
+
+	// Extract service scopes from manifest
+	serviceScopes := manifest.GetServiceScopes()
+
+	// Get plugin from database
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	// Update plugin with extracted scopes (but don't authorize yet - admin must approve)
+	plugin.ServiceScopes = serviceScopes
+	plugin.ServiceAccessAuthorized = false // Require admin authorization
+
+	if err := plugin.Update(s.db); err != nil {
+		return fmt.Errorf("failed to update plugin with service scopes: %w", err)
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", plugin.Name).
+		Strs("service_scopes", serviceScopes).
+		Msg("Extracted and stored service scopes from manifest")
+
+	return nil
+}
+
+// AuthorizePluginServiceAccess authorizes service access for a plugin (admin operation)
+func (s *PluginService) AuthorizePluginServiceAccess(pluginID uint, adminApproval bool) error {
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	if len(plugin.ServiceScopes) == 0 {
+		return fmt.Errorf("plugin has no service scopes declared - load manifest first")
+	}
+
+	if adminApproval {
+		// Authorize access with the scopes declared in manifest
+		if err := plugin.AuthorizeServiceAccess(s.db, plugin.ServiceScopes); err != nil {
+			return fmt.Errorf("failed to authorize service access: %w", err)
+		}
+
+		log.Info().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Strs("authorized_scopes", plugin.ServiceScopes).
+			Msg("Admin authorized plugin service access")
+	} else {
+		// Revoke access
+		if err := plugin.RevokeServiceAccess(s.db); err != nil {
+			return fmt.Errorf("failed to revoke service access: %w", err)
+		}
+
+		log.Info().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Msg("Admin revoked plugin service access")
+	}
+
+	return nil
 }
