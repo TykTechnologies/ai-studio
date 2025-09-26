@@ -87,6 +87,16 @@ func (s *AIStudioManagementServer) GetCostAnalysis(ctx context.Context, req *pb.
 	return s.analyticsServer.GetCostAnalysis(ctx, req)
 }
 
+// Detailed Analytics Operations - delegate to analytics server
+
+func (s *AIStudioManagementServer) GetChatRecordsPerDay(ctx context.Context, req *pb.GetChatRecordsPerDayRequest) (*pb.GetChatRecordsPerDayResponse, error) {
+	return s.analyticsServer.GetChatRecordsPerDay(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetModelUsage(ctx context.Context, req *pb.GetModelUsageRequest) (*pb.GetModelUsageResponse, error) {
+	return s.analyticsServer.GetModelUsage(ctx, req)
+}
+
 // App Management Operations - implement directly
 
 func (s *AIStudioManagementServer) ListApps(ctx context.Context, req *pb.ListAppsRequest) (*pb.ListAppsResponse, error) {

@@ -105,6 +105,13 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/GetUsageStatistics": models.ServiceScopeAnalyticsRead,
 		"/ai_studio_management.AIStudioManagementService/GetCostAnalysis":    models.ServiceScopeAnalyticsRead,
 
+		// Detailed analytics methods
+		"/ai_studio_management.AIStudioManagementService/GetChatRecordsPerDay":   models.ServiceScopeAnalyticsDetailed,
+		"/ai_studio_management.AIStudioManagementService/GetModelUsage":         models.ServiceScopeAnalyticsDetailed,
+		"/ai_studio_management.AIStudioManagementService/GetVendorUsage":        models.ServiceScopeAnalyticsDetailed,
+		"/ai_studio_management.AIStudioManagementService/GetTokenUsagePerApp":   models.ServiceScopeAnalyticsReports,
+		"/ai_studio_management.AIStudioManagementService/GetToolUsageStatistics": models.ServiceScopeAnalyticsReports,
+
 		// App management methods
 		"/ai_studio_management.AIStudioManagementService/ListApps": models.ServiceScopeAppsRead,
 		"/ai_studio_management.AIStudioManagementService/GetApp":   models.ServiceScopeAppsRead,
