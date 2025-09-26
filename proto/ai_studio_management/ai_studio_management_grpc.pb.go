@@ -25,6 +25,9 @@ const (
 	AIStudioManagementService_ListLLMs_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListLLMs"
 	AIStudioManagementService_GetLLM_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetLLM"
 	AIStudioManagementService_GetLLMPlugins_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetLLMPlugins"
+	AIStudioManagementService_CreateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateLLM"
+	AIStudioManagementService_UpdateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateLLM"
+	AIStudioManagementService_DeleteLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteLLM"
 	AIStudioManagementService_GetAnalyticsSummary_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
 	AIStudioManagementService_GetUsageStatistics_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
 	AIStudioManagementService_GetCostAnalysis_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
@@ -35,10 +38,16 @@ const (
 	AIStudioManagementService_GetToolUsageStatistics_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetToolUsageStatistics"
 	AIStudioManagementService_ListApps_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListApps"
 	AIStudioManagementService_GetApp_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetApp"
+	AIStudioManagementService_CreateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateApp"
+	AIStudioManagementService_UpdateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateApp"
+	AIStudioManagementService_DeleteApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteApp"
 	AIStudioManagementService_ListTools_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/ListTools"
 	AIStudioManagementService_GetTool_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/GetTool"
 	AIStudioManagementService_GetToolOperations_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetToolOperations"
 	AIStudioManagementService_CallToolOperation_FullMethodName           = "/ai_studio_management.AIStudioManagementService/CallToolOperation"
+	AIStudioManagementService_CreateTool_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/CreateTool"
+	AIStudioManagementService_UpdateTool_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/UpdateTool"
+	AIStudioManagementService_DeleteTool_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/DeleteTool"
 	AIStudioManagementService_ListDatasources_FullMethodName             = "/ai_studio_management.AIStudioManagementService/ListDatasources"
 	AIStudioManagementService_GetDatasource_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetDatasource"
 	AIStudioManagementService_CreateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateDatasource"
@@ -74,6 +83,9 @@ type AIStudioManagementServiceClient interface {
 	ListLLMs(ctx context.Context, in *ListLLMsRequest, opts ...grpc.CallOption) (*ListLLMsResponse, error)
 	GetLLM(ctx context.Context, in *GetLLMRequest, opts ...grpc.CallOption) (*GetLLMResponse, error)
 	GetLLMPlugins(ctx context.Context, in *GetLLMPluginsRequest, opts ...grpc.CallOption) (*GetLLMPluginsResponse, error)
+	CreateLLM(ctx context.Context, in *CreateLLMRequest, opts ...grpc.CallOption) (*CreateLLMResponse, error)
+	UpdateLLM(ctx context.Context, in *UpdateLLMRequest, opts ...grpc.CallOption) (*UpdateLLMResponse, error)
+	DeleteLLM(ctx context.Context, in *DeleteLLMRequest, opts ...grpc.CallOption) (*DeleteLLMResponse, error)
 	// Analytics Operations (with caching)
 	GetAnalyticsSummary(ctx context.Context, in *GetAnalyticsSummaryRequest, opts ...grpc.CallOption) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(ctx context.Context, in *GetUsageStatisticsRequest, opts ...grpc.CallOption) (*GetUsageStatisticsResponse, error)
@@ -87,11 +99,17 @@ type AIStudioManagementServiceClient interface {
 	// App Management Operations
 	ListApps(ctx context.Context, in *ListAppsRequest, opts ...grpc.CallOption) (*ListAppsResponse, error)
 	GetApp(ctx context.Context, in *GetAppRequest, opts ...grpc.CallOption) (*GetAppResponse, error)
+	CreateApp(ctx context.Context, in *CreateAppRequest, opts ...grpc.CallOption) (*CreateAppResponse, error)
+	UpdateApp(ctx context.Context, in *UpdateAppRequest, opts ...grpc.CallOption) (*UpdateAppResponse, error)
+	DeleteApp(ctx context.Context, in *DeleteAppRequest, opts ...grpc.CallOption) (*DeleteAppResponse, error)
 	// Tool Management Operations (High Priority)
 	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
 	GetTool(ctx context.Context, in *GetToolRequest, opts ...grpc.CallOption) (*GetToolResponse, error)
 	GetToolOperations(ctx context.Context, in *GetToolOperationsRequest, opts ...grpc.CallOption) (*GetToolOperationsResponse, error)
 	CallToolOperation(ctx context.Context, in *CallToolOperationRequest, opts ...grpc.CallOption) (*CallToolOperationResponse, error)
+	CreateTool(ctx context.Context, in *CreateToolRequest, opts ...grpc.CallOption) (*CreateToolResponse, error)
+	UpdateTool(ctx context.Context, in *UpdateToolRequest, opts ...grpc.CallOption) (*UpdateToolResponse, error)
+	DeleteTool(ctx context.Context, in *DeleteToolRequest, opts ...grpc.CallOption) (*DeleteToolResponse, error)
 	// Datasource Management Operations (Phase 1.1)
 	ListDatasources(ctx context.Context, in *ListDatasourcesRequest, opts ...grpc.CallOption) (*ListDatasourcesResponse, error)
 	GetDatasource(ctx context.Context, in *GetDatasourceRequest, opts ...grpc.CallOption) (*GetDatasourceResponse, error)
@@ -177,6 +195,36 @@ func (c *aIStudioManagementServiceClient) GetLLMPlugins(ctx context.Context, in 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetLLMPluginsResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_GetLLMPlugins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateLLM(ctx context.Context, in *CreateLLMRequest, opts ...grpc.CallOption) (*CreateLLMResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateLLMResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateLLM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateLLM(ctx context.Context, in *UpdateLLMRequest, opts ...grpc.CallOption) (*UpdateLLMResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateLLMResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateLLM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteLLM(ctx context.Context, in *DeleteLLMRequest, opts ...grpc.CallOption) (*DeleteLLMResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteLLMResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteLLM_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -283,6 +331,36 @@ func (c *aIStudioManagementServiceClient) GetApp(ctx context.Context, in *GetApp
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) CreateApp(ctx context.Context, in *CreateAppRequest, opts ...grpc.CallOption) (*CreateAppResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateAppResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateApp(ctx context.Context, in *UpdateAppRequest, opts ...grpc.CallOption) (*UpdateAppResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateAppResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteApp(ctx context.Context, in *DeleteAppRequest, opts ...grpc.CallOption) (*DeleteAppResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAppResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *aIStudioManagementServiceClient) ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListToolsResponse)
@@ -317,6 +395,36 @@ func (c *aIStudioManagementServiceClient) CallToolOperation(ctx context.Context,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CallToolOperationResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_CallToolOperation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateTool(ctx context.Context, in *CreateToolRequest, opts ...grpc.CallOption) (*CreateToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateToolResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateTool(ctx context.Context, in *UpdateToolRequest, opts ...grpc.CallOption) (*UpdateToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateToolResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteTool(ctx context.Context, in *DeleteToolRequest, opts ...grpc.CallOption) (*DeleteToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteToolResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteTool_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -518,6 +626,9 @@ type AIStudioManagementServiceServer interface {
 	ListLLMs(context.Context, *ListLLMsRequest) (*ListLLMsResponse, error)
 	GetLLM(context.Context, *GetLLMRequest) (*GetLLMResponse, error)
 	GetLLMPlugins(context.Context, *GetLLMPluginsRequest) (*GetLLMPluginsResponse, error)
+	CreateLLM(context.Context, *CreateLLMRequest) (*CreateLLMResponse, error)
+	UpdateLLM(context.Context, *UpdateLLMRequest) (*UpdateLLMResponse, error)
+	DeleteLLM(context.Context, *DeleteLLMRequest) (*DeleteLLMResponse, error)
 	// Analytics Operations (with caching)
 	GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(context.Context, *GetUsageStatisticsRequest) (*GetUsageStatisticsResponse, error)
@@ -531,11 +642,17 @@ type AIStudioManagementServiceServer interface {
 	// App Management Operations
 	ListApps(context.Context, *ListAppsRequest) (*ListAppsResponse, error)
 	GetApp(context.Context, *GetAppRequest) (*GetAppResponse, error)
+	CreateApp(context.Context, *CreateAppRequest) (*CreateAppResponse, error)
+	UpdateApp(context.Context, *UpdateAppRequest) (*UpdateAppResponse, error)
+	DeleteApp(context.Context, *DeleteAppRequest) (*DeleteAppResponse, error)
 	// Tool Management Operations (High Priority)
 	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
 	GetTool(context.Context, *GetToolRequest) (*GetToolResponse, error)
 	GetToolOperations(context.Context, *GetToolOperationsRequest) (*GetToolOperationsResponse, error)
 	CallToolOperation(context.Context, *CallToolOperationRequest) (*CallToolOperationResponse, error)
+	CreateTool(context.Context, *CreateToolRequest) (*CreateToolResponse, error)
+	UpdateTool(context.Context, *UpdateToolRequest) (*UpdateToolResponse, error)
+	DeleteTool(context.Context, *DeleteToolRequest) (*DeleteToolResponse, error)
 	// Datasource Management Operations (Phase 1.1)
 	ListDatasources(context.Context, *ListDatasourcesRequest) (*ListDatasourcesResponse, error)
 	GetDatasource(context.Context, *GetDatasourceRequest) (*GetDatasourceResponse, error)
@@ -585,6 +702,15 @@ func (UnimplementedAIStudioManagementServiceServer) GetLLM(context.Context, *Get
 func (UnimplementedAIStudioManagementServiceServer) GetLLMPlugins(context.Context, *GetLLMPluginsRequest) (*GetLLMPluginsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLLMPlugins not implemented")
 }
+func (UnimplementedAIStudioManagementServiceServer) CreateLLM(context.Context, *CreateLLMRequest) (*CreateLLMResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateLLM not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateLLM(context.Context, *UpdateLLMRequest) (*UpdateLLMResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateLLM not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteLLM(context.Context, *DeleteLLMRequest) (*DeleteLLMResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteLLM not implemented")
+}
 func (UnimplementedAIStudioManagementServiceServer) GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAnalyticsSummary not implemented")
 }
@@ -615,6 +741,15 @@ func (UnimplementedAIStudioManagementServiceServer) ListApps(context.Context, *L
 func (UnimplementedAIStudioManagementServiceServer) GetApp(context.Context, *GetAppRequest) (*GetAppResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetApp not implemented")
 }
+func (UnimplementedAIStudioManagementServiceServer) CreateApp(context.Context, *CreateAppRequest) (*CreateAppResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateApp not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateApp(context.Context, *UpdateAppRequest) (*UpdateAppResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateApp not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteApp(context.Context, *DeleteAppRequest) (*DeleteAppResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteApp not implemented")
+}
 func (UnimplementedAIStudioManagementServiceServer) ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTools not implemented")
 }
@@ -626,6 +761,15 @@ func (UnimplementedAIStudioManagementServiceServer) GetToolOperations(context.Co
 }
 func (UnimplementedAIStudioManagementServiceServer) CallToolOperation(context.Context, *CallToolOperationRequest) (*CallToolOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CallToolOperation not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateTool(context.Context, *CreateToolRequest) (*CreateToolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateTool not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateTool(context.Context, *UpdateToolRequest) (*UpdateToolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTool not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteTool(context.Context, *DeleteToolRequest) (*DeleteToolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTool not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ListDatasources(context.Context, *ListDatasourcesRequest) (*ListDatasourcesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDatasources not implemented")
@@ -811,6 +955,60 @@ func _AIStudioManagementService_GetLLMPlugins_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_CreateLLM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateLLMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateLLM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateLLM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateLLM(ctx, req.(*CreateLLMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateLLM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLLMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateLLM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateLLM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateLLM(ctx, req.(*UpdateLLMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteLLM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteLLMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteLLM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteLLM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteLLM(ctx, req.(*DeleteLLMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AIStudioManagementService_GetAnalyticsSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAnalyticsSummaryRequest)
 	if err := dec(in); err != nil {
@@ -991,6 +1189,60 @@ func _AIStudioManagementService_GetApp_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_CreateApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateApp(ctx, req.(*CreateAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateApp(ctx, req.(*UpdateAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteApp(ctx, req.(*DeleteAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AIStudioManagementService_ListTools_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListToolsRequest)
 	if err := dec(in); err != nil {
@@ -1059,6 +1311,60 @@ func _AIStudioManagementService_CallToolOperation_Handler(srv interface{}, ctx c
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).CallToolOperation(ctx, req.(*CallToolOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CreateTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateTool(ctx, req.(*CreateToolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateTool(ctx, req.(*UpdateToolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteTool(ctx, req.(*DeleteToolRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1419,6 +1725,18 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AIStudioManagementService_GetLLMPlugins_Handler,
 		},
 		{
+			MethodName: "CreateLLM",
+			Handler:    _AIStudioManagementService_CreateLLM_Handler,
+		},
+		{
+			MethodName: "UpdateLLM",
+			Handler:    _AIStudioManagementService_UpdateLLM_Handler,
+		},
+		{
+			MethodName: "DeleteLLM",
+			Handler:    _AIStudioManagementService_DeleteLLM_Handler,
+		},
+		{
 			MethodName: "GetAnalyticsSummary",
 			Handler:    _AIStudioManagementService_GetAnalyticsSummary_Handler,
 		},
@@ -1459,6 +1777,18 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AIStudioManagementService_GetApp_Handler,
 		},
 		{
+			MethodName: "CreateApp",
+			Handler:    _AIStudioManagementService_CreateApp_Handler,
+		},
+		{
+			MethodName: "UpdateApp",
+			Handler:    _AIStudioManagementService_UpdateApp_Handler,
+		},
+		{
+			MethodName: "DeleteApp",
+			Handler:    _AIStudioManagementService_DeleteApp_Handler,
+		},
+		{
 			MethodName: "ListTools",
 			Handler:    _AIStudioManagementService_ListTools_Handler,
 		},
@@ -1473,6 +1803,18 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CallToolOperation",
 			Handler:    _AIStudioManagementService_CallToolOperation_Handler,
+		},
+		{
+			MethodName: "CreateTool",
+			Handler:    _AIStudioManagementService_CreateTool_Handler,
+		},
+		{
+			MethodName: "UpdateTool",
+			Handler:    _AIStudioManagementService_UpdateTool_Handler,
+		},
+		{
+			MethodName: "DeleteTool",
+			Handler:    _AIStudioManagementService_DeleteTool_Handler,
 		},
 		{
 			MethodName: "ListDatasources",

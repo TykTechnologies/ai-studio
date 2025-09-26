@@ -18,6 +18,9 @@ service AIStudioManagementService {
     rpc ListLLMs(ListLLMsRequest) returns (ListLLMsResponse);
     rpc GetLLM(GetLLMRequest) returns (GetLLMResponse);
     rpc GetLLMPlugins(GetLLMPluginsRequest) returns (GetLLMPluginsResponse);
+    rpc CreateLLM(CreateLLMRequest) returns (CreateLLMResponse);
+    rpc UpdateLLM(UpdateLLMRequest) returns (UpdateLLMResponse);
+    rpc DeleteLLM(DeleteLLMRequest) returns (DeleteLLMResponse);
 
     // Analytics Operations (with caching)
     rpc GetAnalyticsSummary(GetAnalyticsSummaryRequest) returns (GetAnalyticsSummaryResponse);
@@ -34,12 +37,18 @@ service AIStudioManagementService {
     // App Management Operations
     rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
     rpc GetApp(GetAppRequest) returns (GetAppResponse);
+    rpc CreateApp(CreateAppRequest) returns (CreateAppResponse);
+    rpc UpdateApp(UpdateAppRequest) returns (UpdateAppResponse);
+    rpc DeleteApp(DeleteAppRequest) returns (DeleteAppResponse);
 
     // Tool Management Operations (High Priority)
     rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
     rpc GetTool(GetToolRequest) returns (GetToolResponse);
     rpc GetToolOperations(GetToolOperationsRequest) returns (GetToolOperationsResponse);
     rpc CallToolOperation(CallToolOperationRequest) returns (CallToolOperationResponse);
+    rpc CreateTool(CreateToolRequest) returns (CreateToolResponse);
+    rpc UpdateTool(UpdateToolRequest) returns (UpdateToolResponse);
+    rpc DeleteTool(DeleteToolRequest) returns (DeleteToolResponse);
 
     // Datasource Management Operations (Phase 1.1)
     rpc ListDatasources(ListDatasourcesRequest) returns (ListDatasourcesResponse);
@@ -185,6 +194,59 @@ message LLMInfo {
     google.protobuf.Timestamp updated_at = 14;
 }
 
+// LLM CRUD Messages
+
+message CreateLLMRequest {
+    PluginContext context = 1;
+    string name = 2;
+    string api_key = 3;
+    string api_endpoint = 4;
+    int32 privacy_score = 5;
+    string short_description = 6;
+    string long_description = 7;
+    string logo_url = 8;
+    string vendor = 9;
+    bool active = 10;
+    string default_model = 11;
+    repeated string allowed_models = 12;
+    optional double monthly_budget = 13;
+    string namespace = 14;
+}
+
+message CreateLLMResponse {
+    LLMInfo llm = 1;
+}
+
+message UpdateLLMRequest {
+    PluginContext context = 1;
+    uint32 llm_id = 2;
+    string name = 3;
+    string api_key = 4;
+    string api_endpoint = 5;
+    int32 privacy_score = 6;
+    string short_description = 7;
+    string long_description = 8;
+    string logo_url = 9;
+    bool active = 10;
+    string default_model = 11;
+    repeated string allowed_models = 12;
+    optional double monthly_budget = 13;
+}
+
+message UpdateLLMResponse {
+    LLMInfo llm = 1;
+}
+
+message DeleteLLMRequest {
+    PluginContext context = 1;
+    uint32 llm_id = 2;
+}
+
+message DeleteLLMResponse {
+    bool success = 1;
+    string message = 2;
+}
+
 // Analytics Messages
 
 message GetAnalyticsSummaryRequest {
@@ -297,6 +359,49 @@ message AppInfo {
     google.protobuf.Timestamp updated_at = 9;
 }
 
+// App CRUD Messages
+
+message CreateAppRequest {
+    PluginContext context = 1;
+    string name = 2;
+    string description = 3;
+    uint32 user_id = 4;
+    repeated uint32 datasource_ids = 5;
+    repeated uint32 llm_ids = 6;
+    repeated uint32 tool_ids = 7;
+    optional double monthly_budget = 8;
+    string namespace = 9;
+}
+
+message CreateAppResponse {
+    AppInfo app = 1;
+}
+
+message UpdateAppRequest {
+    PluginContext context = 1;
+    uint32 app_id = 2;
+    string name = 3;
+    string description = 4;
+    bool is_active = 5;
+    repeated uint32 llm_ids = 6;
+    repeated uint32 tool_ids = 7;
+    optional double monthly_budget = 8;
+}
+
+message UpdateAppResponse {
+    AppInfo app = 1;
+}
+
+message DeleteAppRequest {
+    PluginContext context = 1;
+    uint32 app_id = 2;
+}
+
+message DeleteAppResponse {
+    bool success = 1;
+    string message = 2;
+}
+
 // Tool Management Messages
 
 message ListToolsRequest {
@@ -389,6 +494,49 @@ message ToolRequestBody {
     bool required = 2;
     string content_type = 3;   // "application/json", etc.
     string schema_json = 4;    // JSON schema as string
+}
+
+// Tool CRUD Messages
+
+message CreateToolRequest {
+    PluginContext context = 1;
+    string name = 2;
+    string description = 3;
+    string tool_type = 4;
+    string oas_spec = 5;       // Base64 encoded OpenAPI spec
+    int32 privacy_score = 6;
+    string auth_schema_name = 7;
+    string auth_key = 8;
+}
+
+message CreateToolResponse {
+    ToolInfo tool = 1;
+}
+
+message UpdateToolRequest {
+    PluginContext context = 1;
+    uint32 tool_id = 2;
+    string name = 3;
+    string description = 4;
+    string tool_type = 5;
+    string oas_spec = 6;
+    int32 privacy_score = 7;
+    string auth_schema_name = 8;
+    string auth_key = 9;
+}
+
+message UpdateToolResponse {
+    ToolInfo tool = 1;
+}
+
+message DeleteToolRequest {
+    PluginContext context = 1;
+    uint32 tool_id = 2;
+}
+
+message DeleteToolResponse {
+    bool success = 1;
+    string message = 2;
 }
 
 // Datasource Management Messages (Phase 1.1)
