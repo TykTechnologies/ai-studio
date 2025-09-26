@@ -12,9 +12,8 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
+	"github.com/TykTechnologies/midsommar/v2/services/grpc"
 	"github.com/hashicorp/go-plugin"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Embed UI assets and manifest into the binary
@@ -29,7 +28,7 @@ var manifestFile []byte
 type RateLimitingUIPlugin struct {
 	pb.UnimplementedPluginServiceServer
 	kvStore         map[string]interface{}
-	managementClient mgmtpb.AIStudioManagementServiceClient
+	serviceProvider grpc.AIStudioServiceProvider // Injected by AI Studio
 	pluginID        uint32
 }
 
@@ -47,38 +46,31 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 			log.Printf("Warning: Invalid plugin ID format: %s", pluginIDStr)
 		}
 	} else {
-		log.Printf("Warning: Plugin ID not found in config, using mock data")
+		log.Printf("Warning: Plugin ID not found in config")
 	}
 
-	// Initialize gRPC client for AI Studio Management Service
-	// For MVP, connect to localhost - in production this would be configurable
-	managementEndpoint := "localhost:50052" // AI Studio Management Service port
-	if endpoint, ok := req.Config["management_endpoint"]; ok {
-		managementEndpoint = endpoint
-	}
-
-	conn, err := grpc.Dial(managementEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Printf("Failed to connect to AI Studio Management Service: %v", err)
-		// Fall back to mock data for development
-		p.initializeMockData()
+	// Check if service provider will be available
+	if hasServiceProvider, ok := req.Config["has_service_provider"]; ok && hasServiceProvider == "true" {
+		log.Printf("✅ AI Studio service provider will be injected")
+		// Service provider will be injected by AI Studio plugin manager
+		// No need to create network connections
 	} else {
-		p.managementClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
-		log.Printf("Connected to AI Studio Management Service at %s", managementEndpoint)
+		log.Printf("⚠️ No service provider available - using mock data")
+		p.initializeMockData()
+	}
 
-		// Initialize with minimal config - real data will be fetched on demand
-		p.kvStore = map[string]interface{}{
-			"global_settings": map[string]interface{}{
-				"storage_type":       "redis",
-				"redis_url":          "redis://localhost:6379",
-				"default_limit":      1000,
-				"default_window":     "1h",
-				"enable_burst":       true,
-				"burst_multiplier":   2.0,
-				"monitoring_enabled": true,
-				"alert_threshold":    0.8,
-			},
-		}
+	// Initialize with minimal global settings
+	p.kvStore = map[string]interface{}{
+		"global_settings": map[string]interface{}{
+			"storage_type":       "redis",
+			"redis_url":          "redis://localhost:6379",
+			"default_limit":      1000,
+			"default_window":     "1h",
+			"enable_burst":       true,
+			"burst_multiplier":   2.0,
+			"monitoring_enabled": true,
+			"alert_threshold":    0.8,
+		},
 	}
 
 	return &pb.InitResponse{
@@ -86,7 +78,13 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 	}, nil
 }
 
-// initializeMockData sets up mock data when gRPC client is unavailable
+// InjectServiceProvider implements ServiceProviderInjectable interface
+func (p *RateLimitingUIPlugin) InjectServiceProvider(provider grpc.AIStudioServiceProvider) {
+	p.serviceProvider = provider
+	log.Printf("✅ Service provider injected into Rate Limiting Plugin")
+}
+
+// initializeMockData sets up mock data when service provider is unavailable
 func (p *RateLimitingUIPlugin) initializeMockData() {
 	log.Printf("Initializing with mock data (gRPC client unavailable)")
 	p.kvStore = map[string]interface{}{
@@ -311,8 +309,8 @@ func (p *RateLimitingUIPlugin) Call(ctx context.Context, req *pb.CallRequest) (*
 
 // RPC method implementations
 func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	// If gRPC client is available, fetch real analytics data
-	if p.managementClient != nil && p.pluginID != 0 {
+	// If service provider is available, fetch real analytics data
+	if p.serviceProvider != nil && p.pluginID != 0 {
 		return p.getStatisticsFromService(ctx)
 	}
 
@@ -334,9 +332,9 @@ func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string
 	}, nil
 }
 
-// getStatisticsFromService fetches real analytics data via gRPC
+// getStatisticsFromService fetches real analytics data via injected service provider
 func (p *RateLimitingUIPlugin) getStatisticsFromService(ctx context.Context) (*pb.CallResponse, error) {
-	log.Printf("Fetching real analytics data via gRPC for plugin %d", p.pluginID)
+	log.Printf("Fetching real analytics data via injected service provider for plugin %d", p.pluginID)
 
 	// Create plugin context for authentication
 	pluginCtx := &mgmtpb.PluginContext{
@@ -344,8 +342,8 @@ func (p *RateLimitingUIPlugin) getStatisticsFromService(ctx context.Context) (*p
 		MethodScope: "analytics.read",
 	}
 
-	// Get analytics summary from AI Studio
-	analyticsResp, err := p.managementClient.GetAnalyticsSummary(ctx, &mgmtpb.GetAnalyticsSummaryRequest{
+	// Get analytics summary from AI Studio via injected service provider (in-process call)
+	analyticsResp, err := p.serviceProvider.GetAnalyticsSummary(ctx, &mgmtpb.GetAnalyticsSummaryRequest{
 		Context:   pluginCtx,
 		TimeRange: "24h",
 	})
@@ -388,7 +386,7 @@ func (p *RateLimitingUIPlugin) getStatisticsFromService(ctx context.Context) (*p
 		}, nil
 	}
 
-	log.Printf("✅ Returning real analytics data via gRPC")
+	log.Printf("✅ Returning real analytics data via injected service provider")
 	return &pb.CallResponse{
 		Success: true,
 		Data:    string(data),
@@ -463,8 +461,8 @@ func (p *RateLimitingUIPlugin) setRateLimit(ctx context.Context, payload string)
 }
 
 func (p *RateLimitingUIPlugin) getAvailableTools(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	// Demonstrate tool access via gRPC service
-	if p.managementClient != nil && p.pluginID != 0 {
+	// Demonstrate tool access via injected service provider
+	if p.serviceProvider != nil && p.pluginID != 0 {
 		return p.getAvailableToolsFromService(ctx)
 	}
 
@@ -514,8 +512,8 @@ func (p *RateLimitingUIPlugin) getAvailableToolsFromService(ctx context.Context)
 		MethodScope: "tools.read",
 	}
 
-	// Get tools list from AI Studio
-	toolsResp, err := p.managementClient.ListTools(ctx, &mgmtpb.ListToolsRequest{
+	// Get tools list from AI Studio via injected service provider
+	toolsResp, err := p.serviceProvider.ListTools(ctx, &mgmtpb.ListToolsRequest{
 		Context: pluginCtx,
 		Page:    1,
 		Limit:   50, // Get up to 50 tools
@@ -566,13 +564,13 @@ func (p *RateLimitingUIPlugin) getAvailableToolsFromService(ctx context.Context)
 
 // Datasources management demonstration
 func (p *RateLimitingUIPlugin) getDatasources(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	if p.managementClient != nil && p.pluginID != 0 {
+	if p.serviceProvider != nil && p.pluginID != 0 {
 		pluginCtx := &mgmtpb.PluginContext{
 			PluginId:    p.pluginID,
 			MethodScope: "datasources.read",
 		}
 
-		resp, err := p.managementClient.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
+		resp, err := p.serviceProvider.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
 			Context: pluginCtx,
 			Page:    1,
 			Limit:   20,
@@ -620,13 +618,13 @@ func (p *RateLimitingUIPlugin) getDatasources(ctx context.Context, payload strin
 
 // Data catalogues management demonstration
 func (p *RateLimitingUIPlugin) getDataCatalogues(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	if p.managementClient != nil && p.pluginID != 0 {
+	if p.serviceProvider != nil && p.pluginID != 0 {
 		pluginCtx := &mgmtpb.PluginContext{
 			PluginId:    p.pluginID,
 			MethodScope: "data-catalogues.read",
 		}
 
-		resp, err := p.managementClient.ListDataCatalogues(ctx, &mgmtpb.ListDataCataloguesRequest{
+		resp, err := p.serviceProvider.ListDataCatalogues(ctx, &mgmtpb.ListDataCataloguesRequest{
 			Context: pluginCtx,
 			Page:    1,
 			Limit:   20,
@@ -669,13 +667,13 @@ func (p *RateLimitingUIPlugin) getDataCatalogues(ctx context.Context, payload st
 
 // Tags management demonstration
 func (p *RateLimitingUIPlugin) getTags(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	if p.managementClient != nil && p.pluginID != 0 {
+	if p.serviceProvider != nil && p.pluginID != 0 {
 		pluginCtx := &mgmtpb.PluginContext{
 			PluginId:    p.pluginID,
 			MethodScope: "tags.read",
 		}
 
-		resp, err := p.managementClient.ListTags(ctx, &mgmtpb.ListTagsRequest{
+		resp, err := p.serviceProvider.ListTags(ctx, &mgmtpb.ListTagsRequest{
 			Context: pluginCtx,
 			Page:    1,
 			Limit:   50,

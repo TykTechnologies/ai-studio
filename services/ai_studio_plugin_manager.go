@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/grpc"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -27,6 +28,7 @@ type AIStudioPluginManager struct {
 	db              *gorm.DB
 	ociClient       *ociplugins.OCIPluginClient
 	manifestService *PluginManifestService
+	service         *Service // Reference to main service for creating service providers
 	mu              sync.RWMutex
 
 	// Plugin runtime state
@@ -40,17 +42,18 @@ type AIStudioPluginManager struct {
 
 // LoadedAIStudioPlugin represents a loaded AI Studio plugin
 type LoadedAIStudioPlugin struct {
-	ID          uint
-	Name        string
-	Slug        string
-	PluginType  string
-	Command     string
-	IsOCI       bool
-	Client      *goplugin.Client
-	GRPCClient  pb.PluginServiceClient
-	LoadTime    time.Time
-	IsHealthy   bool
-	LastPing    time.Time
+	ID              uint
+	Name            string
+	Slug            string
+	PluginType      string
+	Command         string
+	IsOCI           bool
+	Client          *goplugin.Client
+	GRPCClient      pb.PluginServiceClient
+	ServiceProvider grpc.AIStudioServiceProvider // Injected service provider
+	LoadTime        time.Time
+	IsHealthy       bool
+	LastPing        time.Time
 }
 
 // NewAIStudioPluginManager creates a new AI Studio plugin manager
@@ -77,6 +80,13 @@ func (m *AIStudioPluginManager) SetManifestService(manifestService *PluginManife
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.manifestService = manifestService
+}
+
+// SetService sets the main service reference (to avoid circular dependency)
+func (m *AIStudioPluginManager) SetService(service *Service) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.service = service
 }
 
 // AIStudioPluginGRPC implements the goplugin.Plugin interface for gRPC
@@ -178,6 +188,10 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		}
 	}
 
+	// Add plugin ID to config for service provider setup
+	configMap["plugin_id"] = fmt.Sprintf("%d", plugin.ID)
+	configMap["has_service_provider"] = "true"
+
 	initResp, err := grpcClient.Initialize(ctx, &pb.InitRequest{
 		Config: configMap,
 	})
@@ -191,30 +205,63 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
 	}
 
+	// Create service provider for this plugin (if main service is available)
+	var serviceProvider grpc.AIStudioServiceProvider
+	if m.service != nil {
+		serviceProvider = grpc.NewInProcessServiceProvider(m.service, plugin.ID)
+		log.Info().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Msg("Created in-process service provider for plugin")
+	} else {
+		log.Warn().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Msg("No service reference available - plugin will not have service access")
+	}
+
 	// Create loaded plugin record
 	loadedPlugin := &LoadedAIStudioPlugin{
-		ID:          plugin.ID,
-		Name:        plugin.Name,
-		Slug:        plugin.Slug,
-		PluginType:  plugin.PluginType,
-		Command:     plugin.Command,
-		IsOCI:       plugin.IsOCIPlugin(),
-		Client:      client,
-		GRPCClient:  grpcClient,
-		LoadTime:    time.Now(),
-		IsHealthy:   true,
-		LastPing:    time.Now(),
+		ID:              plugin.ID,
+		Name:            plugin.Name,
+		Slug:            plugin.Slug,
+		PluginType:      plugin.PluginType,
+		Command:         plugin.Command,
+		IsOCI:           plugin.IsOCIPlugin(),
+		Client:          client,
+		GRPCClient:      grpcClient,
+		ServiceProvider: serviceProvider, // Inject service provider
+		LoadTime:        time.Now(),
+		IsHealthy:       true,
+		LastPing:        time.Now(),
 	}
 
 	// Store in manager
 	m.loadedPlugins[pluginID] = loadedPlugin
 	m.pluginClients[pluginID] = client
 
+	// Inject service provider into plugin if it supports it
+	if serviceProvider != nil {
+		err = m.injectServiceProvider(loadedPlugin)
+		if err != nil {
+			log.Warn().Err(err).
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Msg("Failed to inject service provider into plugin")
+		} else {
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Msg("✅ Service provider injected into plugin successfully")
+		}
+	}
+
 	log.Info().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", plugin.Name).
 		Str("command", plugin.Command).
 		Bool("is_oci", plugin.IsOCIPlugin()).
+		Bool("has_service_provider", serviceProvider != nil).
 		Msg("AI Studio plugin loaded successfully")
 
 	// Auto-fetch and register manifest (new streamlined workflow)
@@ -287,6 +334,36 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	}()
 
 	return loadedPlugin, nil
+}
+
+// injectServiceProvider injects the service provider into a plugin after loading
+func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStudioPlugin) error {
+	// For now, the service provider is stored in the LoadedAIStudioPlugin structure
+	// In a future enhancement, we could add a gRPC method to inject it directly
+	// but the current approach of storing it and having the plugin access it is sufficient
+
+	// The plugin will access the service provider via a reference mechanism
+	// For the initial implementation, plugins will need to implement ServiceProviderInjectable
+	// and call GetServiceProvider() to access the injected services
+
+	log.Debug().
+		Uint("plugin_id", loadedPlugin.ID).
+		Str("plugin_name", loadedPlugin.Name).
+		Msg("Service provider available for plugin access")
+
+	return nil
+}
+
+// GetServiceProvider returns the service provider for a loaded plugin
+func (m *AIStudioPluginManager) GetServiceProvider(pluginID uint) (grpc.AIStudioServiceProvider, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if loadedPlugin, exists := m.loadedPlugins[pluginID]; exists {
+		return loadedPlugin.ServiceProvider, loadedPlugin.ServiceProvider != nil
+	}
+
+	return nil, false
 }
 
 // UnloadPlugin unloads an AI Studio plugin

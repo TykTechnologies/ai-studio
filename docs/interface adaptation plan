@@ -1,0 +1,220 @@
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Ready to code?                                                                                                                                                  │
+│                                                                                                                                                                 │
+│ Here is Claude's plan:                                                                                                                                          │
+│ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Architecture Adaptation Plan: Option 1 - Service Interface Injection                                                                                        │ │
+│ │                                                                                                                                                             │ │
+│ │ Current Work Preservation (100% Reusable)                                                                                                                   │ │
+│ │                                                                                                                                                             │ │
+│ │ ✅ What We Keep Exactly As-Is:                                                                                                                               │ │
+│ │                                                                                                                                                             │ │
+│ │ - All protobuf definitions: 47 gRPC methods, complete message structures                                                                                    │ │
+│ │ - All server implementations: DatasourcesServer, LLMManagementServer, etc.                                                                                  │ │
+│ │ - All authentication/authorization logic: Plugin ID context, scope enforcement                                                                              │ │
+│ │ - All service layer integrations: Real analytics data, service method calls                                                                                 │ │
+│ │ - All model conversions: protobuf ↔ database model mappings                                                                                                 │ │
+│ │ - All testing framework: Auth, scope, and integration tests                                                                                                 │ │
+│ │                                                                                                                                                             │ │
+│ │ 🔄 What Changes: Connection Mechanism Only                                                                                                                  │ │
+│ │                                                                                                                                                             │ │
+│ │ Current (Network-Based):                                                                                                                                    │ │
+│ │ // Plugin creates network connection                                                                                                                        │ │
+│ │ conn, err := grpc.Dial("localhost:50052", ...)                                                                                                              │ │
+│ │ client := mgmtpb.NewAIStudioManagementServiceClient(conn)                                                                                                   │ │
+│ │                                                                                                                                                             │ │
+│ │ New (In-Process Injection):                                                                                                                                 │ │
+│ │ // AI Studio injects service provider during plugin initialization                                                                                          │ │
+│ │ serviceProvider := injectedDuringInitialization                                                                                                             │ │
+│ │                                                                                                                                                             │ │
+│ │ Implementation Adaptation Plan                                                                                                                              │ │
+│ │                                                                                                                                                             │ │
+│ │ Phase 1: Create Service Interface Wrapper (1 hour)                                                                                                          │ │
+│ │                                                                                                                                                             │ │
+│ │ 1. Create AIStudioServiceProvider Interface                                                                                                                 │ │
+│ │                                                                                                                                                             │ │
+│ │ // services/grpc/service_provider.go                                                                                                                        │ │
+│ │ type AIStudioServiceProvider interface {                                                                                                                    │ │
+│ │     // Analytics                                                                                                                                            │ │
+│ │     GetAnalyticsSummary(ctx context.Context, req *pb.GetAnalyticsSummaryRequest) (*pb.GetAnalyticsSummaryResponse, error)                                   │ │
+│ │     GetUsageStatistics(ctx context.Context, req *pb.GetUsageStatisticsRequest) (*pb.GetUsageStatisticsResponse, error)                                      │ │
+│ │                                                                                                                                                             │ │
+│ │     // LLMs                                                                                                                                                 │ │
+│ │     ListLLMs(ctx context.Context, req *pb.ListLLMsRequest) (*pb.ListLLMsResponse, error)                                                                    │ │
+│ │     GetLLM(ctx context.Context, req *pb.GetLLMRequest) (*pb.GetLLMResponse, error)                                                                          │ │
+│ │                                                                                                                                                             │ │
+│ │     // Tools                                                                                                                                                │ │
+│ │     ListTools(ctx context.Context, req *pb.ListToolsRequest) (*pb.ListToolsResponse, error)                                                                 │ │
+│ │     CallToolOperation(ctx context.Context, req *pb.CallToolOperationRequest) (*pb.CallToolOperationResponse, error)                                         │ │
+│ │                                                                                                                                                             │ │
+│ │     // Datasources                                                                                                                                          │ │
+│ │     ListDatasources(ctx context.Context, req *pb.ListDatasourcesRequest) (*pb.ListDatasourcesResponse, error)                                               │ │
+│ │     CreateDatasource(ctx context.Context, req *pb.CreateDatasourceRequest) (*pb.CreateDatasourceResponse, error)                                            │ │
+│ │                                                                                                                                                             │ │
+│ │     // Data Catalogues                                                                                                                                      │ │
+│ │     ListDataCatalogues(ctx context.Context, req *pb.ListDataCataloguesRequest) (*pb.ListDataCataloguesResponse, error)                                      │ │
+│ │                                                                                                                                                             │ │
+│ │     // Tags                                                                                                                                                 │ │
+│ │     ListTags(ctx context.Context, req *pb.ListTagsRequest) (*pb.ListTagsResponse, error)                                                                    │ │
+│ │                                                                                                                                                             │ │
+│ │     // ... all 47 methods as interface                                                                                                                      │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ 2. Create In-Process Implementation                                                                                                                         │ │
+│ │                                                                                                                                                             │ │
+│ │ // services/grpc/in_process_provider.go                                                                                                                     │ │
+│ │ type InProcessServiceProvider struct {                                                                                                                      │ │
+│ │     server   *AIStudioManagementServer                                                                                                                      │ │
+│ │     pluginID uint                                                                                                                                           │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ func NewInProcessServiceProvider(service *services.Service, pluginID uint) AIStudioServiceProvider {                                                        │ │
+│ │     return &InProcessServiceProvider{                                                                                                                       │ │
+│ │         server:   NewAIStudioManagementServer(service),                                                                                                     │ │
+│ │         pluginID: pluginID,                                                                                                                                 │ │
+│ │     }                                                                                                                                                       │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ func (p *InProcessServiceProvider) GetAnalyticsSummary(ctx context.Context, req *pb.GetAnalyticsSummaryRequest) (*pb.GetAnalyticsSummaryResponse, error) {  │ │
+│ │     // Add plugin authentication context                                                                                                                    │ │
+│ │     ctx = SetPluginIDInContext(ctx, p.pluginID)                                                                                                             │ │
+│ │                                                                                                                                                             │ │
+│ │     // Call server directly (reusing ALL existing implementation)                                                                                           │ │
+│ │     return p.server.GetAnalyticsSummary(ctx, req)                                                                                                           │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ // ... implement all 47 methods following same pattern                                                                                                      │ │
+│ │                                                                                                                                                             │ │
+│ │ Phase 2: Modify Plugin Manager Injection (30 minutes)                                                                                                       │ │
+│ │                                                                                                                                                             │ │
+│ │ Update AI Studio Plugin Manager                                                                                                                             │ │
+│ │                                                                                                                                                             │ │
+│ │ // services/ai_studio_plugin_manager.go                                                                                                                     │ │
+│ │ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin, error) {                                                                  │ │
+│ │     // ... existing plugin loading logic ...                                                                                                                │ │
+│ │                                                                                                                                                             │ │
+│ │     // Create in-process service provider                                                                                                                   │ │
+│ │     serviceProvider := NewInProcessServiceProvider(m.service, pluginID)                                                                                     │ │
+│ │                                                                                                                                                             │ │
+│ │     // Inject service provider during initialization                                                                                                        │ │
+│ │     initResponse, err := pluginGRPC.Initialize(ctx, &pb.InitRequest{                                                                                        │ │
+│ │         Config: existingConfig,                                                                                                                             │ │
+│ │         // NEW: Inject service provider                                                                                                                     │ │
+│ │         ServiceProvider: serviceProvider,                                                                                                                   │ │
+│ │     })                                                                                                                                                      │ │
+│ │                                                                                                                                                             │ │
+│ │     // Store reference for plugin lifecycle management                                                                                                      │ │
+│ │     loadedPlugin.ServiceProvider = serviceProvider                                                                                                          │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ Phase 3: Update Plugin Interface (30 minutes)                                                                                                               │ │
+│ │                                                                                                                                                             │ │
+│ │ Extend InitRequest Message                                                                                                                                  │ │
+│ │                                                                                                                                                             │ │
+│ │ // proto/plugin.proto                                                                                                                                       │ │
+│ │ message InitRequest {                                                                                                                                       │ │
+│ │     map<string, string> config = 1;                                                                                                                         │ │
+│ │     // NEW: Service provider injection (AI Studio → Plugin direction)                                                                                       │ │
+│ │     bool has_service_provider = 2;  // Indicates if services are available                                                                                  │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ Plugin Implementation Pattern                                                                                                                               │ │
+│ │                                                                                                                                                             │ │
+│ │ // Plugin implements service access                                                                                                                         │ │
+│ │ type RateLimitingUIPlugin struct {                                                                                                                          │ │
+│ │     pb.UnimplementedPluginServiceServer                                                                                                                     │ │
+│ │     kvStore         map[string]interface{}                                                                                                                  │ │
+│ │     serviceProvider AIStudioServiceProvider // Injected by AI Studio                                                                                        │ │
+│ │     pluginID        uint32                                                                                                                                  │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {                                             │ │
+│ │     // Get plugin ID from config                                                                                                                            │ │
+│ │     if pluginIDStr, ok := req.Config["plugin_id"]; ok {                                                                                                     │ │
+│ │         pluginID, _ := strconv.ParseUint(pluginIDStr, 10, 32)                                                                                               │ │
+│ │         p.pluginID = uint32(pluginID)                                                                                                                       │ │
+│ │     }                                                                                                                                                       │ │
+│ │                                                                                                                                                             │ │
+│ │     // Service provider injected by AI Studio during plugin loading                                                                                         │ │
+│ │     // (Set via AI Studio plugin manager, not via gRPC connection)                                                                                          │ │
+│ │                                                                                                                                                             │ │
+│ │     return &pb.InitResponse{Success: true}, nil                                                                                                             │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ // Service access methods (NO network calls)                                                                                                                │ │
+│ │ func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string) (*pb.CallResponse, error) {                                               │ │
+│ │     if p.serviceProvider != nil {                                                                                                                           │ │
+│ │         // Direct method call to injected service (in-process)                                                                                              │ │
+│ │         resp, err := p.serviceProvider.GetAnalyticsSummary(ctx, &pb.GetAnalyticsSummaryRequest{                                                             │ │
+│ │             Context: &pb.PluginContext{                                                                                                                     │ │
+│ │                 PluginId: p.pluginID,                                                                                                                       │ │
+│ │                 MethodScope: "analytics.read",                                                                                                              │ │
+│ │             },                                                                                                                                              │ │
+│ │             TimeRange: "24h",                                                                                                                               │ │
+│ │         })                                                                                                                                                  │ │
+│ │         // Process response...                                                                                                                              │ │
+│ │     }                                                                                                                                                       │ │
+│ │     // Fallback to mock data if no services                                                                                                                 │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ Phase 4: Service Provider Injection Mechanism (1 hour)                                                                                                      │ │
+│ │                                                                                                                                                             │ │
+│ │ AI Studio Side: Service Injection                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ // services/ai_studio_plugin_manager.go                                                                                                                     │ │
+│ │ func (m *AIStudioPluginManager) injectServiceProvider(plugin *LoadedAIStudioPlugin, pluginID uint) {                                                        │ │
+│ │     // Create service provider with plugin context                                                                                                          │ │
+│ │     serviceProvider := NewInProcessServiceProvider(m.service, pluginID)                                                                                     │ │
+│ │                                                                                                                                                             │ │
+│ │     // Use reflection or plugin interface to inject                                                                                                         │ │
+│ │     if injectable, ok := plugin.GRPCClient.(ServiceProviderInjectable); ok {                                                                                │ │
+│ │         injectable.InjectServiceProvider(serviceProvider)                                                                                                   │ │
+│ │     }                                                                                                                                                       │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ // Plugin side: Service provider reception                                                                                                                  │ │
+│ │ type ServiceProviderInjectable interface {                                                                                                                  │ │
+│ │     InjectServiceProvider(provider AIStudioServiceProvider)                                                                                                 │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ func (p *RateLimitingUIPlugin) InjectServiceProvider(provider AIStudioServiceProvider) {                                                                    │ │
+│ │     p.serviceProvider = provider                                                                                                                            │ │
+│ │ }                                                                                                                                                           │ │
+│ │                                                                                                                                                             │ │
+│ │ Benefits of Option 1 Approach                                                                                                                               │ │
+│ │                                                                                                                                                             │ │
+│ │ ✅ Architecture Benefits:                                                                                                                                    │ │
+│ │                                                                                                                                                             │ │
+│ │ - Single connection: Reuses go-plugin bidirectional gRPC                                                                                                    │ │
+│ │ - No additional ports: No separate gRPC server needed                                                                                                       │ │
+│ │ - Type safety: Go interfaces instead of network protocols                                                                                                   │ │
+│ │ - Performance: In-process calls vs network calls                                                                                                            │ │
+│ │ - Simplicity: Plugin just calls Go methods                                                                                                                  │ │
+│ │                                                                                                                                                             │ │
+│ │ ✅ Security Benefits:                                                                                                                                        │ │
+│ │                                                                                                                                                             │ │
+│ │ - Same authentication: Plugin ID context preserved                                                                                                          │ │
+│ │ - Same authorization: Scope enforcement works identically                                                                                                   │ │
+│ │ - Same audit trail: All existing logging/monitoring preserved                                                                                               │ │
+│ │ - Controlled injection: AI Studio manages service access lifecycle                                                                                          │ │
+│ │                                                                                                                                                             │ │
+│ │ ✅ Development Benefits:                                                                                                                                     │ │
+│ │                                                                                                                                                             │ │
+│ │ - 100% code reuse: All server implementations become service providers                                                                                      │ │
+│ │ - Same testing: All existing tests work with minimal adaptation                                                                                             │ │
+│ │ - Easy debugging: In-process calls easier to debug than network calls                                                                                       │ │
+│ │ - Clean abstraction: Plugin doesn't need to know about gRPC internals                                                                                       │ │
+│ │                                                                                                                                                             │ │
+│ │ Implementation Effort                                                                                                                                       │ │
+│ │                                                                                                                                                             │ │
+│ │ Total Adaptation Time: 3-4 hours                                                                                                                            │ │
+│ │ - Phase 1: Service interface wrapper (1 hour)                                                                                                               │ │
+│ │ - Phase 2: Plugin manager injection (30 minutes)                                                                                                            │ │
+│ │ - Phase 3: Plugin interface updates (30 minutes)                                                                                                            │ │
+│ │ - Phase 4: Injection mechanism (1 hour)                                                                                                                     │ │
+│ │ - Testing: Verify everything works (1 hour)                                                                                                                 │ │
+│ │                                                                                                                                                             │ │
+│ │ Result: Clean architecture using bidirectional connection while preserving 100% of our gRPC service implementation work.                                    │ │
+│ │                                                                                                                                                             │ │
+│ │ This approach gives us the best of both worlds - clean plugin architecture using established connections while keeping all our comprehensive service        │ │
+│ │ implementations!
