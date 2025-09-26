@@ -19,9 +19,13 @@ type AIStudioManagementServer struct {
 	pb.UnimplementedAIStudioManagementServiceServer
 
 	// Specialized servers for different domains
-	pluginServer   *PluginManagementServer
-	llmServer      *LLMManagementServer
-	analyticsServer *AnalyticsServer
+	pluginServer       *PluginManagementServer
+	llmServer          *LLMManagementServer
+	analyticsServer    *AnalyticsServer
+	toolsServer        *ToolsServer
+	datasourcesServer  *DatasourcesServer
+	dataCataloguesServer *DataCataloguesServer
+	tagsServer         *TagsServer
 
 	// Main service for direct access
 	service *services.Service
@@ -30,10 +34,14 @@ type AIStudioManagementServer struct {
 // NewAIStudioManagementServer creates the unified AI Studio management server
 func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementServer {
 	return &AIStudioManagementServer{
-		pluginServer:   NewPluginManagementServer(service.PluginService),
-		llmServer:      NewLLMManagementServer(service),
-		analyticsServer: NewAnalyticsServer(service),
-		service:        service,
+		pluginServer:       NewPluginManagementServer(service.PluginService),
+		llmServer:          NewLLMManagementServer(service),
+		analyticsServer:    NewAnalyticsServer(service),
+		toolsServer:        NewToolsServer(service),
+		datasourcesServer:  NewDatasourcesServer(service),
+		dataCataloguesServer: NewDataCataloguesServer(service),
+		tagsServer:         NewTagsServer(service),
+		service:            service,
 	}
 }
 
@@ -143,6 +151,74 @@ func (s *AIStudioManagementServer) GetApp(ctx context.Context, req *pb.GetAppReq
 	return &pb.GetAppResponse{
 		App: convertAppToPB(app),
 	}, nil
+}
+
+// Tool Management Operations - delegate to tools server
+
+func (s *AIStudioManagementServer) ListTools(ctx context.Context, req *pb.ListToolsRequest) (*pb.ListToolsResponse, error) {
+	return s.toolsServer.ListTools(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetTool(ctx context.Context, req *pb.GetToolRequest) (*pb.GetToolResponse, error) {
+	return s.toolsServer.GetTool(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetToolOperations(ctx context.Context, req *pb.GetToolOperationsRequest) (*pb.GetToolOperationsResponse, error) {
+	return s.toolsServer.GetToolOperations(ctx, req)
+}
+
+func (s *AIStudioManagementServer) CallToolOperation(ctx context.Context, req *pb.CallToolOperationRequest) (*pb.CallToolOperationResponse, error) {
+	return s.toolsServer.CallToolOperation(ctx, req)
+}
+
+// Datasource Management Operations - delegate to datasources server
+
+func (s *AIStudioManagementServer) ListDatasources(ctx context.Context, req *pb.ListDatasourcesRequest) (*pb.ListDatasourcesResponse, error) {
+	return s.datasourcesServer.ListDatasources(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetDatasource(ctx context.Context, req *pb.GetDatasourceRequest) (*pb.GetDatasourceResponse, error) {
+	return s.datasourcesServer.GetDatasource(ctx, req)
+}
+
+func (s *AIStudioManagementServer) CreateDatasource(ctx context.Context, req *pb.CreateDatasourceRequest) (*pb.CreateDatasourceResponse, error) {
+	return s.datasourcesServer.CreateDatasource(ctx, req)
+}
+
+func (s *AIStudioManagementServer) SearchDatasources(ctx context.Context, req *pb.SearchDatasourcesRequest) (*pb.SearchDatasourcesResponse, error) {
+	return s.datasourcesServer.SearchDatasources(ctx, req)
+}
+
+// Data Catalogues Management Operations - delegate to data catalogues server
+
+func (s *AIStudioManagementServer) ListDataCatalogues(ctx context.Context, req *pb.ListDataCataloguesRequest) (*pb.ListDataCataloguesResponse, error) {
+	return s.dataCataloguesServer.ListDataCatalogues(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetDataCatalogue(ctx context.Context, req *pb.GetDataCatalogueRequest) (*pb.GetDataCatalogueResponse, error) {
+	return s.dataCataloguesServer.GetDataCatalogue(ctx, req)
+}
+
+func (s *AIStudioManagementServer) CreateDataCatalogue(ctx context.Context, req *pb.CreateDataCatalogueRequest) (*pb.CreateDataCatalogueResponse, error) {
+	return s.dataCataloguesServer.CreateDataCatalogue(ctx, req)
+}
+
+// Tags Management Operations - delegate to tags server
+
+func (s *AIStudioManagementServer) ListTags(ctx context.Context, req *pb.ListTagsRequest) (*pb.ListTagsResponse, error) {
+	return s.tagsServer.ListTags(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetTag(ctx context.Context, req *pb.GetTagRequest) (*pb.GetTagResponse, error) {
+	return s.tagsServer.GetTag(ctx, req)
+}
+
+func (s *AIStudioManagementServer) CreateTag(ctx context.Context, req *pb.CreateTagRequest) (*pb.CreateTagResponse, error) {
+	return s.tagsServer.CreateTag(ctx, req)
+}
+
+func (s *AIStudioManagementServer) SearchTags(ctx context.Context, req *pb.SearchTagsRequest) (*pb.SearchTagsResponse, error) {
+	return s.tagsServer.SearchTags(ctx, req)
 }
 
 // convertAppToPB converts a models.App to protobuf AppInfo

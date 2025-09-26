@@ -293,6 +293,14 @@ func (p *RateLimitingUIPlugin) Call(ctx context.Context, req *pb.CallRequest) (*
 		return p.setGlobalSettings(ctx, req.Payload)
 	case "set_rate_limit":
 		return p.setRateLimit(ctx, req.Payload)
+	case "get_available_tools":
+		return p.getAvailableTools(ctx, req.Payload)
+	case "get_datasources":
+		return p.getDatasources(ctx, req.Payload)
+	case "get_data_catalogues":
+		return p.getDataCatalogues(ctx, req.Payload)
+	case "get_tags":
+		return p.getTags(ctx, req.Payload)
 	default:
 		return &pb.CallResponse{
 			Success:      false,
@@ -452,6 +460,261 @@ func (p *RateLimitingUIPlugin) setRateLimit(ctx context.Context, payload string)
 		Success: true,
 		Data:    `{"message": "Rate limit updated successfully"}`,
 	}, nil
+}
+
+func (p *RateLimitingUIPlugin) getAvailableTools(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	// Demonstrate tool access via gRPC service
+	if p.managementClient != nil && p.pluginID != 0 {
+		return p.getAvailableToolsFromService(ctx)
+	}
+
+	// Fall back to mock data
+	mockTools := map[string]interface{}{
+		"tools": []map[string]interface{}{
+			{
+				"id":   1,
+				"name": "HTTP API Tool",
+				"slug": "http-api-tool",
+				"type": "rest",
+				"operations": []string{"get_users", "create_user"},
+			},
+			{
+				"id":   2,
+				"name": "Database Query Tool",
+				"slug": "db-query-tool",
+				"type": "sql",
+				"operations": []string{"select_query", "insert_query"},
+			},
+		},
+		"total_count": 2,
+	}
+
+	data, err := json.Marshal(mockTools)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal mock tools: %v", err),
+		}, nil
+	}
+
+	log.Printf("Returning mock tools data")
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(data),
+	}, nil
+}
+
+// getAvailableToolsFromService fetches real tool data via gRPC
+func (p *RateLimitingUIPlugin) getAvailableToolsFromService(ctx context.Context) (*pb.CallResponse, error) {
+	log.Printf("Fetching real tools data via gRPC for plugin %d", p.pluginID)
+
+	// Create plugin context for authentication
+	pluginCtx := &mgmtpb.PluginContext{
+		PluginId:    p.pluginID,
+		MethodScope: "tools.read",
+	}
+
+	// Get tools list from AI Studio
+	toolsResp, err := p.managementClient.ListTools(ctx, &mgmtpb.ListToolsRequest{
+		Context: pluginCtx,
+		Page:    1,
+		Limit:   50, // Get up to 50 tools
+	})
+	if err != nil {
+		log.Printf("Failed to fetch tools data: %v", err)
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to fetch tools: %v", err),
+		}, nil
+	}
+
+	// Convert tools data to the format expected by the UI
+	tools := make([]map[string]interface{}, len(toolsResp.Tools))
+	for i, tool := range toolsResp.Tools {
+		tools[i] = map[string]interface{}{
+			"id":          tool.Id,
+			"name":        tool.Name,
+			"slug":        tool.Slug,
+			"description": tool.Description,
+			"type":        tool.ToolType,
+			"operations":  tool.Operations,
+			"is_active":   tool.IsActive,
+			"privacy_score": tool.PrivacyScore,
+		}
+	}
+
+	// Build tools response in expected format
+	toolsData := map[string]interface{}{
+		"tools":       tools,
+		"total_count": toolsResp.TotalCount,
+	}
+
+	data, err := json.Marshal(toolsData)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal real tools data: %v", err),
+		}, nil
+	}
+
+	log.Printf("✅ Returning real tools data via gRPC")
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(data),
+	}, nil
+}
+
+// Datasources management demonstration
+func (p *RateLimitingUIPlugin) getDatasources(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	if p.managementClient != nil && p.pluginID != 0 {
+		pluginCtx := &mgmtpb.PluginContext{
+			PluginId:    p.pluginID,
+			MethodScope: "datasources.read",
+		}
+
+		resp, err := p.managementClient.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
+			Context: pluginCtx,
+			Page:    1,
+			Limit:   20,
+		})
+		if err != nil {
+			return &pb.CallResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("Failed to fetch datasources: %v", err),
+			}, nil
+		}
+
+		// Convert to expected format
+		datasourcesData := map[string]interface{}{
+			"datasources":  resp.Datasources,
+			"total_count":  resp.TotalCount,
+		}
+
+		data, err := json.Marshal(datasourcesData)
+		if err != nil {
+			return &pb.CallResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("Failed to marshal datasources: %v", err),
+			}, nil
+		}
+
+		log.Printf("✅ Returning real datasources data via gRPC")
+		return &pb.CallResponse{
+			Success: true,
+			Data:    string(data),
+		}, nil
+	}
+
+	// Fallback mock data
+	mockData := map[string]interface{}{
+		"datasources": []map[string]interface{}{
+			{"id": 1, "name": "Customer Database", "type": "sql", "active": true},
+			{"id": 2, "name": "Product Catalog", "type": "api", "active": true},
+		},
+		"total_count": 2,
+	}
+
+	data, _ := json.Marshal(mockData)
+	return &pb.CallResponse{Success: true, Data: string(data)}, nil
+}
+
+// Data catalogues management demonstration
+func (p *RateLimitingUIPlugin) getDataCatalogues(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	if p.managementClient != nil && p.pluginID != 0 {
+		pluginCtx := &mgmtpb.PluginContext{
+			PluginId:    p.pluginID,
+			MethodScope: "data-catalogues.read",
+		}
+
+		resp, err := p.managementClient.ListDataCatalogues(ctx, &mgmtpb.ListDataCataloguesRequest{
+			Context: pluginCtx,
+			Page:    1,
+			Limit:   20,
+		})
+		if err != nil {
+			return &pb.CallResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("Failed to fetch data catalogues: %v", err),
+			}, nil
+		}
+
+		cataloguesData := map[string]interface{}{
+			"data_catalogues": resp.DataCatalogues,
+			"total_count":     resp.TotalCount,
+		}
+
+		data, err := json.Marshal(cataloguesData)
+		if err != nil {
+			return &pb.CallResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("Failed to marshal data catalogues: %v", err),
+			}, nil
+		}
+
+		log.Printf("✅ Returning real data catalogues via gRPC")
+		return &pb.CallResponse{Success: true, Data: string(data)}, nil
+	}
+
+	// Fallback mock data
+	mockData := map[string]interface{}{
+		"data_catalogues": []map[string]interface{}{
+			{"id": 1, "name": "Customer Data", "description": "Customer information datasets"},
+			{"id": 2, "name": "Product Data", "description": "Product catalog and inventory"},
+		},
+		"total_count": 2,
+	}
+	data, _ := json.Marshal(mockData)
+	return &pb.CallResponse{Success: true, Data: string(data)}, nil
+}
+
+// Tags management demonstration
+func (p *RateLimitingUIPlugin) getTags(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	if p.managementClient != nil && p.pluginID != 0 {
+		pluginCtx := &mgmtpb.PluginContext{
+			PluginId:    p.pluginID,
+			MethodScope: "tags.read",
+		}
+
+		resp, err := p.managementClient.ListTags(ctx, &mgmtpb.ListTagsRequest{
+			Context: pluginCtx,
+			Page:    1,
+			Limit:   50,
+		})
+		if err != nil {
+			return &pb.CallResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("Failed to fetch tags: %v", err),
+			}, nil
+		}
+
+		tagsData := map[string]interface{}{
+			"tags":        resp.Tags,
+			"total_count": resp.TotalCount,
+		}
+
+		data, err := json.Marshal(tagsData)
+		if err != nil {
+			return &pb.CallResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("Failed to marshal tags: %v", err),
+			}, nil
+		}
+
+		log.Printf("✅ Returning real tags data via gRPC")
+		return &pb.CallResponse{Success: true, Data: string(data)}, nil
+	}
+
+	// Fallback mock data
+	mockData := map[string]interface{}{
+		"tags": []map[string]interface{}{
+			{"id": 1, "name": "AI/ML"},
+			{"id": 2, "name": "Analytics"},
+			{"id": 3, "name": "Database"},
+		},
+		"total_count": 3,
+	}
+	data, _ := json.Marshal(mockData)
+	return &pb.CallResponse{Success: true, Data: string(data)}, nil
 }
 
 // === Utility Functions ===

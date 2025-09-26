@@ -24,9 +24,46 @@ service AIStudioManagementService {
     rpc GetUsageStatistics(GetUsageStatisticsRequest) returns (GetUsageStatisticsResponse);
     rpc GetCostAnalysis(GetCostAnalysisRequest) returns (GetCostAnalysisResponse);
 
+    // Detailed Analytics Operations (Phase 2.1)
+    rpc GetChatRecordsPerDay(GetChatRecordsPerDayRequest) returns (GetChatRecordsPerDayResponse);
+    rpc GetModelUsage(GetModelUsageRequest) returns (GetModelUsageResponse);
+    rpc GetVendorUsage(GetVendorUsageRequest) returns (GetVendorUsageResponse);
+    rpc GetTokenUsagePerApp(GetTokenUsagePerAppRequest) returns (GetTokenUsagePerAppResponse);
+    rpc GetToolUsageStatistics(GetToolUsageStatisticsRequest) returns (GetToolUsageStatisticsResponse);
+
     // App Management Operations
     rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
     rpc GetApp(GetAppRequest) returns (GetAppResponse);
+
+    // Tool Management Operations (High Priority)
+    rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+    rpc GetTool(GetToolRequest) returns (GetToolResponse);
+    rpc GetToolOperations(GetToolOperationsRequest) returns (GetToolOperationsResponse);
+    rpc CallToolOperation(CallToolOperationRequest) returns (CallToolOperationResponse);
+
+    // Datasource Management Operations (Phase 1.1)
+    rpc ListDatasources(ListDatasourcesRequest) returns (ListDatasourcesResponse);
+    rpc GetDatasource(GetDatasourceRequest) returns (GetDatasourceResponse);
+    rpc CreateDatasource(CreateDatasourceRequest) returns (CreateDatasourceResponse);
+    rpc UpdateDatasource(UpdateDatasourceRequest) returns (UpdateDatasourceResponse);
+    rpc DeleteDatasource(DeleteDatasourceRequest) returns (DeleteDatasourceResponse);
+    rpc SearchDatasources(SearchDatasourcesRequest) returns (SearchDatasourcesResponse);
+    rpc ProcessDatasourceEmbeddings(ProcessEmbeddingsRequest) returns (ProcessEmbeddingsResponse);
+
+    // Data Catalogues Management Operations (Phase 1.2)
+    rpc ListDataCatalogues(ListDataCataloguesRequest) returns (ListDataCataloguesResponse);
+    rpc GetDataCatalogue(GetDataCatalogueRequest) returns (GetDataCatalogueResponse);
+    rpc CreateDataCatalogue(CreateDataCatalogueRequest) returns (CreateDataCatalogueResponse);
+    rpc UpdateDataCatalogue(UpdateDataCatalogueRequest) returns (UpdateDataCatalogueResponse);
+    rpc DeleteDataCatalogue(DeleteDataCatalogueRequest) returns (DeleteDataCatalogueResponse);
+
+    // Tags Management Operations (Phase 1.3)
+    rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
+    rpc GetTag(GetTagRequest) returns (GetTagResponse);
+    rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+    rpc UpdateTag(UpdateTagRequest) returns (UpdateTagResponse);
+    rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
+    rpc SearchTags(SearchTagsRequest) returns (SearchTagsResponse);
 }
 
 // Common request context for all operations
@@ -258,4 +295,462 @@ message AppInfo {
     repeated uint32 llm_ids = 7;
     google.protobuf.Timestamp created_at = 8;
     google.protobuf.Timestamp updated_at = 9;
+}
+
+// Tool Management Messages
+
+message ListToolsRequest {
+    PluginContext context = 1;
+
+    // Filtering options
+    string tool_type = 2;
+    optional bool is_active = 3;
+    string namespace = 4;
+
+    // Pagination
+    int32 page = 5;
+    int32 limit = 6;
+}
+
+message ListToolsResponse {
+    repeated ToolInfo tools = 1;
+    int64 total_count = 2;
+}
+
+message GetToolRequest {
+    PluginContext context = 1;
+    uint32 tool_id = 2;
+}
+
+message GetToolResponse {
+    ToolInfo tool = 1;
+}
+
+message GetToolOperationsRequest {
+    PluginContext context = 1;
+    uint32 tool_id = 2;
+}
+
+message GetToolOperationsResponse {
+    repeated ToolOperation operations = 1;
+}
+
+message CallToolOperationRequest {
+    PluginContext context = 1;
+    uint32 tool_id = 2;
+    string operation_id = 3;
+    string params_json = 4;    // JSON string of parameters
+    string payload_json = 5;   // JSON string of request body
+    string headers_json = 6;   // JSON string of headers
+}
+
+message CallToolOperationResponse {
+    bool success = 1;
+    string result_json = 2;    // JSON string of operation result
+    string error_message = 3;
+}
+
+message ToolInfo {
+    uint32 id = 1;
+    string name = 2;
+    string slug = 3;
+    string description = 4;
+    string tool_type = 5;      // "rest", "graphql", "grpc", etc.
+    string oas_spec = 6;       // OpenAPI specification (truncated for security)
+    repeated string operations = 7; // Whitelisted operation IDs
+    bool is_active = 8;
+    string namespace = 9;
+    int32 privacy_score = 10;
+    google.protobuf.Timestamp created_at = 11;
+    google.protobuf.Timestamp updated_at = 12;
+}
+
+message ToolOperation {
+    string operation_id = 1;
+    string method = 2;         // HTTP method
+    string path = 3;           // API path
+    string summary = 4;        // Operation description
+    string description = 5;    // Detailed description
+    repeated ToolParameter parameters = 6;
+    optional ToolRequestBody request_body = 7;
+}
+
+message ToolParameter {
+    string name = 1;
+    string in = 2;             // "query", "path", "header"
+    string description = 3;
+    bool required = 4;
+    string type = 5;           // Parameter type
+    string example = 6;        // Example value
+}
+
+message ToolRequestBody {
+    string description = 1;
+    bool required = 2;
+    string content_type = 3;   // "application/json", etc.
+    string schema_json = 4;    // JSON schema as string
+}
+
+// Datasource Management Messages (Phase 1.1)
+
+message ListDatasourcesRequest {
+    PluginContext context = 1;
+    optional bool is_active = 2;
+    string user_id = 3; // Filter by user
+    int32 page = 4;
+    int32 limit = 5;
+}
+
+message ListDatasourcesResponse {
+    repeated DatasourceInfo datasources = 1;
+    int64 total_count = 2;
+}
+
+message GetDatasourceRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+}
+
+message GetDatasourceResponse {
+    DatasourceInfo datasource = 1;
+}
+
+message CreateDatasourceRequest {
+    PluginContext context = 1;
+    string name = 2;
+    string short_description = 3;
+    string long_description = 4;
+    string icon = 5;
+    string url = 6;
+    int32 privacy_score = 7;
+    uint32 user_id = 8;
+    repeated string tag_names = 9;
+    string db_conn_string = 10;
+    string db_source_type = 11;
+    string db_conn_api_key = 12;
+    string db_name = 13;
+    string embed_vendor = 14;
+    string embed_url = 15;
+    string embed_api_key = 16;
+    string embed_model = 17;
+    bool active = 18;
+}
+
+message CreateDatasourceResponse {
+    DatasourceInfo datasource = 1;
+}
+
+message UpdateDatasourceRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    // Same fields as CreateDatasourceRequest
+    string name = 3;
+    string short_description = 4;
+    string long_description = 5;
+    string icon = 6;
+    string url = 7;
+    int32 privacy_score = 8;
+    string db_conn_string = 9;
+    string db_source_type = 10;
+    string db_conn_api_key = 11;
+    string db_name = 12;
+    string embed_vendor = 13;
+    string embed_url = 14;
+    string embed_api_key = 15;
+    string embed_model = 16;
+    bool active = 17;
+    repeated string tag_names = 18;
+    uint32 user_id = 19;
+}
+
+message UpdateDatasourceResponse {
+    DatasourceInfo datasource = 1;
+}
+
+message DeleteDatasourceRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+}
+
+message DeleteDatasourceResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message SearchDatasourcesRequest {
+    PluginContext context = 1;
+    string query = 2;
+}
+
+message SearchDatasourcesResponse {
+    repeated DatasourceInfo datasources = 1;
+}
+
+message ProcessEmbeddingsRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+}
+
+message ProcessEmbeddingsResponse {
+    bool success = 1;
+    string message = 2;
+    string job_id = 3; // For tracking async processing
+}
+
+message DatasourceInfo {
+    uint32 id = 1;
+    string name = 2;
+    string short_description = 3;
+    string long_description = 4;
+    string icon = 5;
+    string url = 6;
+    int32 privacy_score = 7;
+    uint32 user_id = 8;
+    repeated TagInfo tags = 9;
+    string db_source_type = 10;
+    string db_name = 11;
+    string embed_vendor = 12;
+    string embed_model = 13;
+    bool active = 14;
+    bool has_db_conn_api_key = 15;   // Don't expose actual key
+    bool has_embed_api_key = 16;     // Don't expose actual key
+    google.protobuf.Timestamp created_at = 17;
+    google.protobuf.Timestamp updated_at = 18;
+}
+
+// Data Catalogues Management Messages (Phase 1.2)
+
+message ListDataCataloguesRequest {
+    PluginContext context = 1;
+    int32 page = 2;
+    int32 limit = 3;
+}
+
+message ListDataCataloguesResponse {
+    repeated DataCatalogueInfo data_catalogues = 1;
+    int64 total_count = 2;
+}
+
+message GetDataCatalogueRequest {
+    PluginContext context = 1;
+    uint32 data_catalogue_id = 2;
+}
+
+message GetDataCatalogueResponse {
+    DataCatalogueInfo data_catalogue = 1;
+}
+
+message CreateDataCatalogueRequest {
+    PluginContext context = 1;
+    string name = 2;
+    string short_description = 3;
+    string long_description = 4;
+    string icon = 5;
+}
+
+message CreateDataCatalogueResponse {
+    DataCatalogueInfo data_catalogue = 1;
+}
+
+message UpdateDataCatalogueRequest {
+    PluginContext context = 1;
+    uint32 data_catalogue_id = 2;
+    string name = 3;
+    string short_description = 4;
+    string long_description = 5;
+    string icon = 6;
+}
+
+message UpdateDataCatalogueResponse {
+    DataCatalogueInfo data_catalogue = 1;
+}
+
+message DeleteDataCatalogueRequest {
+    PluginContext context = 1;
+    uint32 data_catalogue_id = 2;
+}
+
+message DeleteDataCatalogueResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message DataCatalogueInfo {
+    uint32 id = 1;
+    string name = 2;
+    string short_description = 3;
+    string long_description = 4;
+    string icon = 5;
+    repeated DatasourceInfo datasources = 6;
+    repeated TagInfo tags = 7;
+    google.protobuf.Timestamp created_at = 8;
+    google.protobuf.Timestamp updated_at = 9;
+}
+
+// Tags Management Messages (Phase 1.3)
+
+message ListTagsRequest {
+    PluginContext context = 1;
+    int32 page = 2;
+    int32 limit = 3;
+}
+
+message ListTagsResponse {
+    repeated TagInfo tags = 1;
+    int64 total_count = 2;
+}
+
+message GetTagRequest {
+    PluginContext context = 1;
+    uint32 tag_id = 2;
+}
+
+message GetTagResponse {
+    TagInfo tag = 1;
+}
+
+message CreateTagRequest {
+    PluginContext context = 1;
+    string name = 2;
+    // Note: description removed - Tag model doesn't have description field
+}
+
+message CreateTagResponse {
+    TagInfo tag = 1;
+}
+
+message UpdateTagRequest {
+    PluginContext context = 1;
+    uint32 tag_id = 2;
+    string name = 3;
+    // Note: description removed - Tag model doesn't have description field
+}
+
+message UpdateTagResponse {
+    TagInfo tag = 1;
+}
+
+message DeleteTagRequest {
+    PluginContext context = 1;
+    uint32 tag_id = 2;
+}
+
+message DeleteTagResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message SearchTagsRequest {
+    PluginContext context = 1;
+    string query = 2;
+}
+
+message SearchTagsResponse {
+    repeated TagInfo tags = 1;
+}
+
+message TagInfo {
+    uint32 id = 1;
+    string name = 2;
+    // Note: description field removed - Tag model doesn't have description
+    google.protobuf.Timestamp created_at = 3;
+    google.protobuf.Timestamp updated_at = 4;
+}
+
+// Detailed Analytics Messages (Phase 2.1)
+
+message GetChatRecordsPerDayRequest {
+    PluginContext context = 1;
+    string start_date = 2; // YYYY-MM-DD format
+    string end_date = 3;   // YYYY-MM-DD format
+    optional uint32 app_id = 4;
+}
+
+message GetChatRecordsPerDayResponse {
+    repeated DayRecord records = 1;
+}
+
+message GetModelUsageRequest {
+    PluginContext context = 1;
+    string start_date = 2;
+    string end_date = 3;
+    optional uint32 llm_id = 4;
+}
+
+message GetModelUsageResponse {
+    repeated ModelUsageRecord usage = 1;
+}
+
+message GetVendorUsageRequest {
+    PluginContext context = 1;
+    string start_date = 2;
+    string end_date = 3;
+    string vendor = 4;
+    optional uint32 llm_id = 5;
+}
+
+message GetVendorUsageResponse {
+    repeated VendorUsageRecord usage = 1;
+}
+
+message GetTokenUsagePerAppRequest {
+    PluginContext context = 1;
+    string start_date = 2;
+    string end_date = 3;
+}
+
+message GetTokenUsagePerAppResponse {
+    repeated AppTokenUsage usage = 1;
+}
+
+message GetToolUsageStatisticsRequest {
+    PluginContext context = 1;
+    string start_date = 2;
+    string end_date = 3;
+}
+
+message GetToolUsageStatisticsResponse {
+    repeated ToolUsageRecord usage = 1;
+}
+
+// Analytics data structures
+
+message DayRecord {
+    string date = 1;        // YYYY-MM-DD format
+    int64 count = 2;
+    double total_cost = 3;
+    int64 total_tokens = 4;
+}
+
+message ModelUsageRecord {
+    string model_name = 1;
+    string vendor = 2;
+    int64 request_count = 3;
+    int64 total_tokens = 4;
+    double total_cost = 5;
+    double average_cost = 6;
+}
+
+message VendorUsageRecord {
+    string date = 1;
+    int64 request_count = 2;
+    int64 total_tokens = 3;
+    double total_cost = 4;
+}
+
+message AppTokenUsage {
+    uint32 app_id = 1;
+    string app_name = 2;
+    int64 total_tokens = 3;
+    double total_cost = 4;
+    int64 request_count = 5;
+}
+
+message ToolUsageRecord {
+    uint32 tool_id = 1;
+    string tool_name = 2;
+    string operation_id = 3;
+    int64 call_count = 4;
+    double success_rate = 5;
+    double average_latency_ms = 6;
 }

@@ -19,17 +19,44 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AIStudioManagementService_ListPlugins_FullMethodName         = "/ai_studio_management.AIStudioManagementService/ListPlugins"
-	AIStudioManagementService_GetPlugin_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetPlugin"
-	AIStudioManagementService_UpdatePluginConfig_FullMethodName  = "/ai_studio_management.AIStudioManagementService/UpdatePluginConfig"
-	AIStudioManagementService_ListLLMs_FullMethodName            = "/ai_studio_management.AIStudioManagementService/ListLLMs"
-	AIStudioManagementService_GetLLM_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetLLM"
-	AIStudioManagementService_GetLLMPlugins_FullMethodName       = "/ai_studio_management.AIStudioManagementService/GetLLMPlugins"
-	AIStudioManagementService_GetAnalyticsSummary_FullMethodName = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
-	AIStudioManagementService_GetUsageStatistics_FullMethodName  = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
-	AIStudioManagementService_GetCostAnalysis_FullMethodName     = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
-	AIStudioManagementService_ListApps_FullMethodName            = "/ai_studio_management.AIStudioManagementService/ListApps"
-	AIStudioManagementService_GetApp_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetApp"
+	AIStudioManagementService_ListPlugins_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ListPlugins"
+	AIStudioManagementService_GetPlugin_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetPlugin"
+	AIStudioManagementService_UpdatePluginConfig_FullMethodName          = "/ai_studio_management.AIStudioManagementService/UpdatePluginConfig"
+	AIStudioManagementService_ListLLMs_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListLLMs"
+	AIStudioManagementService_GetLLM_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetLLM"
+	AIStudioManagementService_GetLLMPlugins_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetLLMPlugins"
+	AIStudioManagementService_GetAnalyticsSummary_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
+	AIStudioManagementService_GetUsageStatistics_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
+	AIStudioManagementService_GetCostAnalysis_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
+	AIStudioManagementService_GetChatRecordsPerDay_FullMethodName        = "/ai_studio_management.AIStudioManagementService/GetChatRecordsPerDay"
+	AIStudioManagementService_GetModelUsage_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetModelUsage"
+	AIStudioManagementService_GetVendorUsage_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetVendorUsage"
+	AIStudioManagementService_GetTokenUsagePerApp_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetTokenUsagePerApp"
+	AIStudioManagementService_GetToolUsageStatistics_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetToolUsageStatistics"
+	AIStudioManagementService_ListApps_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListApps"
+	AIStudioManagementService_GetApp_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetApp"
+	AIStudioManagementService_ListTools_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/ListTools"
+	AIStudioManagementService_GetTool_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/GetTool"
+	AIStudioManagementService_GetToolOperations_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetToolOperations"
+	AIStudioManagementService_CallToolOperation_FullMethodName           = "/ai_studio_management.AIStudioManagementService/CallToolOperation"
+	AIStudioManagementService_ListDatasources_FullMethodName             = "/ai_studio_management.AIStudioManagementService/ListDatasources"
+	AIStudioManagementService_GetDatasource_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetDatasource"
+	AIStudioManagementService_CreateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateDatasource"
+	AIStudioManagementService_UpdateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateDatasource"
+	AIStudioManagementService_DeleteDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteDatasource"
+	AIStudioManagementService_SearchDatasources_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SearchDatasources"
+	AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName = "/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings"
+	AIStudioManagementService_ListDataCatalogues_FullMethodName          = "/ai_studio_management.AIStudioManagementService/ListDataCatalogues"
+	AIStudioManagementService_GetDataCatalogue_FullMethodName            = "/ai_studio_management.AIStudioManagementService/GetDataCatalogue"
+	AIStudioManagementService_CreateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/CreateDataCatalogue"
+	AIStudioManagementService_UpdateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/UpdateDataCatalogue"
+	AIStudioManagementService_DeleteDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/DeleteDataCatalogue"
+	AIStudioManagementService_ListTags_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListTags"
+	AIStudioManagementService_GetTag_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetTag"
+	AIStudioManagementService_CreateTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateTag"
+	AIStudioManagementService_UpdateTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateTag"
+	AIStudioManagementService_DeleteTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteTag"
+	AIStudioManagementService_SearchTags_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/SearchTags"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -51,9 +78,41 @@ type AIStudioManagementServiceClient interface {
 	GetAnalyticsSummary(ctx context.Context, in *GetAnalyticsSummaryRequest, opts ...grpc.CallOption) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(ctx context.Context, in *GetUsageStatisticsRequest, opts ...grpc.CallOption) (*GetUsageStatisticsResponse, error)
 	GetCostAnalysis(ctx context.Context, in *GetCostAnalysisRequest, opts ...grpc.CallOption) (*GetCostAnalysisResponse, error)
+	// Detailed Analytics Operations (Phase 2.1)
+	GetChatRecordsPerDay(ctx context.Context, in *GetChatRecordsPerDayRequest, opts ...grpc.CallOption) (*GetChatRecordsPerDayResponse, error)
+	GetModelUsage(ctx context.Context, in *GetModelUsageRequest, opts ...grpc.CallOption) (*GetModelUsageResponse, error)
+	GetVendorUsage(ctx context.Context, in *GetVendorUsageRequest, opts ...grpc.CallOption) (*GetVendorUsageResponse, error)
+	GetTokenUsagePerApp(ctx context.Context, in *GetTokenUsagePerAppRequest, opts ...grpc.CallOption) (*GetTokenUsagePerAppResponse, error)
+	GetToolUsageStatistics(ctx context.Context, in *GetToolUsageStatisticsRequest, opts ...grpc.CallOption) (*GetToolUsageStatisticsResponse, error)
 	// App Management Operations
 	ListApps(ctx context.Context, in *ListAppsRequest, opts ...grpc.CallOption) (*ListAppsResponse, error)
 	GetApp(ctx context.Context, in *GetAppRequest, opts ...grpc.CallOption) (*GetAppResponse, error)
+	// Tool Management Operations (High Priority)
+	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
+	GetTool(ctx context.Context, in *GetToolRequest, opts ...grpc.CallOption) (*GetToolResponse, error)
+	GetToolOperations(ctx context.Context, in *GetToolOperationsRequest, opts ...grpc.CallOption) (*GetToolOperationsResponse, error)
+	CallToolOperation(ctx context.Context, in *CallToolOperationRequest, opts ...grpc.CallOption) (*CallToolOperationResponse, error)
+	// Datasource Management Operations (Phase 1.1)
+	ListDatasources(ctx context.Context, in *ListDatasourcesRequest, opts ...grpc.CallOption) (*ListDatasourcesResponse, error)
+	GetDatasource(ctx context.Context, in *GetDatasourceRequest, opts ...grpc.CallOption) (*GetDatasourceResponse, error)
+	CreateDatasource(ctx context.Context, in *CreateDatasourceRequest, opts ...grpc.CallOption) (*CreateDatasourceResponse, error)
+	UpdateDatasource(ctx context.Context, in *UpdateDatasourceRequest, opts ...grpc.CallOption) (*UpdateDatasourceResponse, error)
+	DeleteDatasource(ctx context.Context, in *DeleteDatasourceRequest, opts ...grpc.CallOption) (*DeleteDatasourceResponse, error)
+	SearchDatasources(ctx context.Context, in *SearchDatasourcesRequest, opts ...grpc.CallOption) (*SearchDatasourcesResponse, error)
+	ProcessDatasourceEmbeddings(ctx context.Context, in *ProcessEmbeddingsRequest, opts ...grpc.CallOption) (*ProcessEmbeddingsResponse, error)
+	// Data Catalogues Management Operations (Phase 1.2)
+	ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error)
+	GetDataCatalogue(ctx context.Context, in *GetDataCatalogueRequest, opts ...grpc.CallOption) (*GetDataCatalogueResponse, error)
+	CreateDataCatalogue(ctx context.Context, in *CreateDataCatalogueRequest, opts ...grpc.CallOption) (*CreateDataCatalogueResponse, error)
+	UpdateDataCatalogue(ctx context.Context, in *UpdateDataCatalogueRequest, opts ...grpc.CallOption) (*UpdateDataCatalogueResponse, error)
+	DeleteDataCatalogue(ctx context.Context, in *DeleteDataCatalogueRequest, opts ...grpc.CallOption) (*DeleteDataCatalogueResponse, error)
+	// Tags Management Operations (Phase 1.3)
+	ListTags(ctx context.Context, in *ListTagsRequest, opts ...grpc.CallOption) (*ListTagsResponse, error)
+	GetTag(ctx context.Context, in *GetTagRequest, opts ...grpc.CallOption) (*GetTagResponse, error)
+	CreateTag(ctx context.Context, in *CreateTagRequest, opts ...grpc.CallOption) (*CreateTagResponse, error)
+	UpdateTag(ctx context.Context, in *UpdateTagRequest, opts ...grpc.CallOption) (*UpdateTagResponse, error)
+	DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*DeleteTagResponse, error)
+	SearchTags(ctx context.Context, in *SearchTagsRequest, opts ...grpc.CallOption) (*SearchTagsResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -154,6 +213,56 @@ func (c *aIStudioManagementServiceClient) GetCostAnalysis(ctx context.Context, i
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) GetChatRecordsPerDay(ctx context.Context, in *GetChatRecordsPerDayRequest, opts ...grpc.CallOption) (*GetChatRecordsPerDayResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatRecordsPerDayResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetChatRecordsPerDay_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetModelUsage(ctx context.Context, in *GetModelUsageRequest, opts ...grpc.CallOption) (*GetModelUsageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetModelUsageResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetModelUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetVendorUsage(ctx context.Context, in *GetVendorUsageRequest, opts ...grpc.CallOption) (*GetVendorUsageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVendorUsageResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetVendorUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetTokenUsagePerApp(ctx context.Context, in *GetTokenUsagePerAppRequest, opts ...grpc.CallOption) (*GetTokenUsagePerAppResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTokenUsagePerAppResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetTokenUsagePerApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetToolUsageStatistics(ctx context.Context, in *GetToolUsageStatisticsRequest, opts ...grpc.CallOption) (*GetToolUsageStatisticsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetToolUsageStatisticsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetToolUsageStatistics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *aIStudioManagementServiceClient) ListApps(ctx context.Context, in *ListAppsRequest, opts ...grpc.CallOption) (*ListAppsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListAppsResponse)
@@ -168,6 +277,226 @@ func (c *aIStudioManagementServiceClient) GetApp(ctx context.Context, in *GetApp
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAppResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_GetApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListToolsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListTools_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetTool(ctx context.Context, in *GetToolRequest, opts ...grpc.CallOption) (*GetToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetToolResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetToolOperations(ctx context.Context, in *GetToolOperationsRequest, opts ...grpc.CallOption) (*GetToolOperationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetToolOperationsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetToolOperations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CallToolOperation(ctx context.Context, in *CallToolOperationRequest, opts ...grpc.CallOption) (*CallToolOperationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CallToolOperationResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CallToolOperation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListDatasources(ctx context.Context, in *ListDatasourcesRequest, opts ...grpc.CallOption) (*ListDatasourcesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDatasourcesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListDatasources_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetDatasource(ctx context.Context, in *GetDatasourceRequest, opts ...grpc.CallOption) (*GetDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateDatasource(ctx context.Context, in *CreateDatasourceRequest, opts ...grpc.CallOption) (*CreateDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateDatasource(ctx context.Context, in *UpdateDatasourceRequest, opts ...grpc.CallOption) (*UpdateDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteDatasource(ctx context.Context, in *DeleteDatasourceRequest, opts ...grpc.CallOption) (*DeleteDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) SearchDatasources(ctx context.Context, in *SearchDatasourcesRequest, opts ...grpc.CallOption) (*SearchDatasourcesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchDatasourcesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_SearchDatasources_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ProcessDatasourceEmbeddings(ctx context.Context, in *ProcessEmbeddingsRequest, opts ...grpc.CallOption) (*ProcessEmbeddingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProcessEmbeddingsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDataCataloguesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListDataCatalogues_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetDataCatalogue(ctx context.Context, in *GetDataCatalogueRequest, opts ...grpc.CallOption) (*GetDataCatalogueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDataCatalogueResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetDataCatalogue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateDataCatalogue(ctx context.Context, in *CreateDataCatalogueRequest, opts ...grpc.CallOption) (*CreateDataCatalogueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateDataCatalogueResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateDataCatalogue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateDataCatalogue(ctx context.Context, in *UpdateDataCatalogueRequest, opts ...grpc.CallOption) (*UpdateDataCatalogueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateDataCatalogueResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateDataCatalogue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteDataCatalogue(ctx context.Context, in *DeleteDataCatalogueRequest, opts ...grpc.CallOption) (*DeleteDataCatalogueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteDataCatalogueResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteDataCatalogue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListTags(ctx context.Context, in *ListTagsRequest, opts ...grpc.CallOption) (*ListTagsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTagsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListTags_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetTag(ctx context.Context, in *GetTagRequest, opts ...grpc.CallOption) (*GetTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTagResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateTag(ctx context.Context, in *CreateTagRequest, opts ...grpc.CallOption) (*CreateTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateTagResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateTag(ctx context.Context, in *UpdateTagRequest, opts ...grpc.CallOption) (*UpdateTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateTagResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*DeleteTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteTagResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) SearchTags(ctx context.Context, in *SearchTagsRequest, opts ...grpc.CallOption) (*SearchTagsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchTagsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_SearchTags_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -193,9 +522,41 @@ type AIStudioManagementServiceServer interface {
 	GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(context.Context, *GetUsageStatisticsRequest) (*GetUsageStatisticsResponse, error)
 	GetCostAnalysis(context.Context, *GetCostAnalysisRequest) (*GetCostAnalysisResponse, error)
+	// Detailed Analytics Operations (Phase 2.1)
+	GetChatRecordsPerDay(context.Context, *GetChatRecordsPerDayRequest) (*GetChatRecordsPerDayResponse, error)
+	GetModelUsage(context.Context, *GetModelUsageRequest) (*GetModelUsageResponse, error)
+	GetVendorUsage(context.Context, *GetVendorUsageRequest) (*GetVendorUsageResponse, error)
+	GetTokenUsagePerApp(context.Context, *GetTokenUsagePerAppRequest) (*GetTokenUsagePerAppResponse, error)
+	GetToolUsageStatistics(context.Context, *GetToolUsageStatisticsRequest) (*GetToolUsageStatisticsResponse, error)
 	// App Management Operations
 	ListApps(context.Context, *ListAppsRequest) (*ListAppsResponse, error)
 	GetApp(context.Context, *GetAppRequest) (*GetAppResponse, error)
+	// Tool Management Operations (High Priority)
+	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
+	GetTool(context.Context, *GetToolRequest) (*GetToolResponse, error)
+	GetToolOperations(context.Context, *GetToolOperationsRequest) (*GetToolOperationsResponse, error)
+	CallToolOperation(context.Context, *CallToolOperationRequest) (*CallToolOperationResponse, error)
+	// Datasource Management Operations (Phase 1.1)
+	ListDatasources(context.Context, *ListDatasourcesRequest) (*ListDatasourcesResponse, error)
+	GetDatasource(context.Context, *GetDatasourceRequest) (*GetDatasourceResponse, error)
+	CreateDatasource(context.Context, *CreateDatasourceRequest) (*CreateDatasourceResponse, error)
+	UpdateDatasource(context.Context, *UpdateDatasourceRequest) (*UpdateDatasourceResponse, error)
+	DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error)
+	SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error)
+	ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error)
+	// Data Catalogues Management Operations (Phase 1.2)
+	ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error)
+	GetDataCatalogue(context.Context, *GetDataCatalogueRequest) (*GetDataCatalogueResponse, error)
+	CreateDataCatalogue(context.Context, *CreateDataCatalogueRequest) (*CreateDataCatalogueResponse, error)
+	UpdateDataCatalogue(context.Context, *UpdateDataCatalogueRequest) (*UpdateDataCatalogueResponse, error)
+	DeleteDataCatalogue(context.Context, *DeleteDataCatalogueRequest) (*DeleteDataCatalogueResponse, error)
+	// Tags Management Operations (Phase 1.3)
+	ListTags(context.Context, *ListTagsRequest) (*ListTagsResponse, error)
+	GetTag(context.Context, *GetTagRequest) (*GetTagResponse, error)
+	CreateTag(context.Context, *CreateTagRequest) (*CreateTagResponse, error)
+	UpdateTag(context.Context, *UpdateTagRequest) (*UpdateTagResponse, error)
+	DeleteTag(context.Context, *DeleteTagRequest) (*DeleteTagResponse, error)
+	SearchTags(context.Context, *SearchTagsRequest) (*SearchTagsResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -233,11 +594,92 @@ func (UnimplementedAIStudioManagementServiceServer) GetUsageStatistics(context.C
 func (UnimplementedAIStudioManagementServiceServer) GetCostAnalysis(context.Context, *GetCostAnalysisRequest) (*GetCostAnalysisResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCostAnalysis not implemented")
 }
+func (UnimplementedAIStudioManagementServiceServer) GetChatRecordsPerDay(context.Context, *GetChatRecordsPerDayRequest) (*GetChatRecordsPerDayResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatRecordsPerDay not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetModelUsage(context.Context, *GetModelUsageRequest) (*GetModelUsageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetModelUsage not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetVendorUsage(context.Context, *GetVendorUsageRequest) (*GetVendorUsageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVendorUsage not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetTokenUsagePerApp(context.Context, *GetTokenUsagePerAppRequest) (*GetTokenUsagePerAppResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTokenUsagePerApp not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetToolUsageStatistics(context.Context, *GetToolUsageStatisticsRequest) (*GetToolUsageStatisticsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetToolUsageStatistics not implemented")
+}
 func (UnimplementedAIStudioManagementServiceServer) ListApps(context.Context, *ListAppsRequest) (*ListAppsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListApps not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) GetApp(context.Context, *GetAppRequest) (*GetAppResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetApp not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTools not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetTool(context.Context, *GetToolRequest) (*GetToolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTool not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetToolOperations(context.Context, *GetToolOperationsRequest) (*GetToolOperationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetToolOperations not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CallToolOperation(context.Context, *CallToolOperationRequest) (*CallToolOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CallToolOperation not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListDatasources(context.Context, *ListDatasourcesRequest) (*ListDatasourcesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDatasources not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetDatasource(context.Context, *GetDatasourceRequest) (*GetDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDatasource not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateDatasource(context.Context, *CreateDatasourceRequest) (*CreateDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateDatasource not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateDatasource(context.Context, *UpdateDatasourceRequest) (*UpdateDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDatasource not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteDatasource not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchDatasources not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProcessDatasourceEmbeddings not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDataCatalogues not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetDataCatalogue(context.Context, *GetDataCatalogueRequest) (*GetDataCatalogueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDataCatalogue not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateDataCatalogue(context.Context, *CreateDataCatalogueRequest) (*CreateDataCatalogueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateDataCatalogue not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateDataCatalogue(context.Context, *UpdateDataCatalogueRequest) (*UpdateDataCatalogueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDataCatalogue not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteDataCatalogue(context.Context, *DeleteDataCatalogueRequest) (*DeleteDataCatalogueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteDataCatalogue not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListTags(context.Context, *ListTagsRequest) (*ListTagsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTags not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetTag(context.Context, *GetTagRequest) (*GetTagResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTag not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateTag(context.Context, *CreateTagRequest) (*CreateTagResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateTag not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateTag(context.Context, *UpdateTagRequest) (*UpdateTagResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTag not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteTag(context.Context, *DeleteTagRequest) (*DeleteTagResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTag not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) SearchTags(context.Context, *SearchTagsRequest) (*SearchTagsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchTags not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -423,6 +865,96 @@ func _AIStudioManagementService_GetCostAnalysis_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_GetChatRecordsPerDay_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatRecordsPerDayRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetChatRecordsPerDay(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetChatRecordsPerDay_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetChatRecordsPerDay(ctx, req.(*GetChatRecordsPerDayRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetModelUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModelUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetModelUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetModelUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetModelUsage(ctx, req.(*GetModelUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetVendorUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVendorUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetVendorUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetVendorUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetVendorUsage(ctx, req.(*GetVendorUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetTokenUsagePerApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTokenUsagePerAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetTokenUsagePerApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetTokenUsagePerApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetTokenUsagePerApp(ctx, req.(*GetTokenUsagePerAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetToolUsageStatistics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetToolUsageStatisticsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetToolUsageStatistics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetToolUsageStatistics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetToolUsageStatistics(ctx, req.(*GetToolUsageStatisticsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AIStudioManagementService_ListApps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListAppsRequest)
 	if err := dec(in); err != nil {
@@ -455,6 +987,402 @@ func _AIStudioManagementService_GetApp_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).GetApp(ctx, req.(*GetAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListTools_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListToolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListTools(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListTools_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListTools(ctx, req.(*ListToolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetTool(ctx, req.(*GetToolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetToolOperations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetToolOperationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetToolOperations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetToolOperations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetToolOperations(ctx, req.(*GetToolOperationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CallToolOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CallToolOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CallToolOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CallToolOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CallToolOperation(ctx, req.(*CallToolOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListDatasources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDatasourcesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListDatasources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListDatasources_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListDatasources(ctx, req.(*ListDatasourcesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetDatasource(ctx, req.(*GetDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CreateDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateDatasource(ctx, req.(*CreateDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateDatasource(ctx, req.(*UpdateDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteDatasource(ctx, req.(*DeleteDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_SearchDatasources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchDatasourcesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).SearchDatasources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_SearchDatasources_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).SearchDatasources(ctx, req.(*SearchDatasourcesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ProcessDatasourceEmbeddings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProcessEmbeddingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ProcessDatasourceEmbeddings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ProcessDatasourceEmbeddings(ctx, req.(*ProcessEmbeddingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListDataCatalogues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDataCataloguesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListDataCatalogues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListDataCatalogues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListDataCatalogues(ctx, req.(*ListDataCataloguesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetDataCatalogue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDataCatalogueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetDataCatalogue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetDataCatalogue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetDataCatalogue(ctx, req.(*GetDataCatalogueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CreateDataCatalogue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateDataCatalogueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateDataCatalogue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateDataCatalogue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateDataCatalogue(ctx, req.(*CreateDataCatalogueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateDataCatalogue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDataCatalogueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateDataCatalogue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateDataCatalogue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateDataCatalogue(ctx, req.(*UpdateDataCatalogueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteDataCatalogue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDataCatalogueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteDataCatalogue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteDataCatalogue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteDataCatalogue(ctx, req.(*DeleteDataCatalogueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListTags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTagsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListTags(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListTags_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListTags(ctx, req.(*ListTagsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetTag(ctx, req.(*GetTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CreateTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateTag(ctx, req.(*CreateTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateTag(ctx, req.(*UpdateTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteTag(ctx, req.(*DeleteTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_SearchTags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchTagsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).SearchTags(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_SearchTags_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).SearchTags(ctx, req.(*SearchTagsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -503,12 +1431,120 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AIStudioManagementService_GetCostAnalysis_Handler,
 		},
 		{
+			MethodName: "GetChatRecordsPerDay",
+			Handler:    _AIStudioManagementService_GetChatRecordsPerDay_Handler,
+		},
+		{
+			MethodName: "GetModelUsage",
+			Handler:    _AIStudioManagementService_GetModelUsage_Handler,
+		},
+		{
+			MethodName: "GetVendorUsage",
+			Handler:    _AIStudioManagementService_GetVendorUsage_Handler,
+		},
+		{
+			MethodName: "GetTokenUsagePerApp",
+			Handler:    _AIStudioManagementService_GetTokenUsagePerApp_Handler,
+		},
+		{
+			MethodName: "GetToolUsageStatistics",
+			Handler:    _AIStudioManagementService_GetToolUsageStatistics_Handler,
+		},
+		{
 			MethodName: "ListApps",
 			Handler:    _AIStudioManagementService_ListApps_Handler,
 		},
 		{
 			MethodName: "GetApp",
 			Handler:    _AIStudioManagementService_GetApp_Handler,
+		},
+		{
+			MethodName: "ListTools",
+			Handler:    _AIStudioManagementService_ListTools_Handler,
+		},
+		{
+			MethodName: "GetTool",
+			Handler:    _AIStudioManagementService_GetTool_Handler,
+		},
+		{
+			MethodName: "GetToolOperations",
+			Handler:    _AIStudioManagementService_GetToolOperations_Handler,
+		},
+		{
+			MethodName: "CallToolOperation",
+			Handler:    _AIStudioManagementService_CallToolOperation_Handler,
+		},
+		{
+			MethodName: "ListDatasources",
+			Handler:    _AIStudioManagementService_ListDatasources_Handler,
+		},
+		{
+			MethodName: "GetDatasource",
+			Handler:    _AIStudioManagementService_GetDatasource_Handler,
+		},
+		{
+			MethodName: "CreateDatasource",
+			Handler:    _AIStudioManagementService_CreateDatasource_Handler,
+		},
+		{
+			MethodName: "UpdateDatasource",
+			Handler:    _AIStudioManagementService_UpdateDatasource_Handler,
+		},
+		{
+			MethodName: "DeleteDatasource",
+			Handler:    _AIStudioManagementService_DeleteDatasource_Handler,
+		},
+		{
+			MethodName: "SearchDatasources",
+			Handler:    _AIStudioManagementService_SearchDatasources_Handler,
+		},
+		{
+			MethodName: "ProcessDatasourceEmbeddings",
+			Handler:    _AIStudioManagementService_ProcessDatasourceEmbeddings_Handler,
+		},
+		{
+			MethodName: "ListDataCatalogues",
+			Handler:    _AIStudioManagementService_ListDataCatalogues_Handler,
+		},
+		{
+			MethodName: "GetDataCatalogue",
+			Handler:    _AIStudioManagementService_GetDataCatalogue_Handler,
+		},
+		{
+			MethodName: "CreateDataCatalogue",
+			Handler:    _AIStudioManagementService_CreateDataCatalogue_Handler,
+		},
+		{
+			MethodName: "UpdateDataCatalogue",
+			Handler:    _AIStudioManagementService_UpdateDataCatalogue_Handler,
+		},
+		{
+			MethodName: "DeleteDataCatalogue",
+			Handler:    _AIStudioManagementService_DeleteDataCatalogue_Handler,
+		},
+		{
+			MethodName: "ListTags",
+			Handler:    _AIStudioManagementService_ListTags_Handler,
+		},
+		{
+			MethodName: "GetTag",
+			Handler:    _AIStudioManagementService_GetTag_Handler,
+		},
+		{
+			MethodName: "CreateTag",
+			Handler:    _AIStudioManagementService_CreateTag_Handler,
+		},
+		{
+			MethodName: "UpdateTag",
+			Handler:    _AIStudioManagementService_UpdateTag_Handler,
+		},
+		{
+			MethodName: "DeleteTag",
+			Handler:    _AIStudioManagementService_DeleteTag_Handler,
+		},
+		{
+			MethodName: "SearchTags",
+			Handler:    _AIStudioManagementService_SearchTags_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

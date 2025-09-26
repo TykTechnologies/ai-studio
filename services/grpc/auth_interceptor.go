@@ -108,6 +108,36 @@ func extractScopeFromMethod(fullMethod string) string {
 		// App management methods
 		"/ai_studio_management.AIStudioManagementService/ListApps": models.ServiceScopeAppsRead,
 		"/ai_studio_management.AIStudioManagementService/GetApp":   models.ServiceScopeAppsRead,
+
+		// Tool management methods
+		"/ai_studio_management.AIStudioManagementService/ListTools":         models.ServiceScopeToolsRead,
+		"/ai_studio_management.AIStudioManagementService/GetTool":           models.ServiceScopeToolsRead,
+		"/ai_studio_management.AIStudioManagementService/GetToolOperations": models.ServiceScopeToolsOperations,
+		"/ai_studio_management.AIStudioManagementService/CallToolOperation": models.ServiceScopeToolsCall,
+
+		// Datasource management methods
+		"/ai_studio_management.AIStudioManagementService/ListDatasources":        models.ServiceScopeDatasourcesRead,
+		"/ai_studio_management.AIStudioManagementService/GetDatasource":         models.ServiceScopeDatasourcesRead,
+		"/ai_studio_management.AIStudioManagementService/CreateDatasource":      models.ServiceScopeDatasourcesWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateDatasource":      models.ServiceScopeDatasourcesWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteDatasource":      models.ServiceScopeDatasourcesWrite,
+		"/ai_studio_management.AIStudioManagementService/SearchDatasources":     models.ServiceScopeDatasourcesRead,
+		"/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings": models.ServiceScopeDatasourcesEmbeddings,
+
+		// Data catalogues management methods
+		"/ai_studio_management.AIStudioManagementService/ListDataCatalogues":   models.ServiceScopeDataCataloguesRead,
+		"/ai_studio_management.AIStudioManagementService/GetDataCatalogue":     models.ServiceScopeDataCataloguesRead,
+		"/ai_studio_management.AIStudioManagementService/CreateDataCatalogue":  models.ServiceScopeDataCataloguesWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateDataCatalogue":  models.ServiceScopeDataCataloguesWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteDataCatalogue":  models.ServiceScopeDataCataloguesWrite,
+
+		// Tags management methods
+		"/ai_studio_management.AIStudioManagementService/ListTags":   models.ServiceScopeTagsRead,
+		"/ai_studio_management.AIStudioManagementService/GetTag":     models.ServiceScopeTagsRead,
+		"/ai_studio_management.AIStudioManagementService/CreateTag":  models.ServiceScopeTagsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateTag":  models.ServiceScopeTagsWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteTag":  models.ServiceScopeTagsWrite,
+		"/ai_studio_management.AIStudioManagementService/SearchTags": models.ServiceScopeTagsRead,
 	}
 
 	return scopeMap[fullMethod]

@@ -356,8 +356,38 @@ const (
 	ServiceScopeAppsWrite = "apps.write"
 
 	// Tool management scopes
-	ServiceScopeToolsRead  = "tools.read"
-	ServiceScopeToolsWrite = "tools.write"
+	ServiceScopeToolsRead       = "tools.read"
+	ServiceScopeToolsWrite      = "tools.write"
+	ServiceScopeToolsOperations = "tools.operations" // Call tool operations
+	ServiceScopeToolsCall       = "tools.call"       // Execute tool operations
+
+	// Datasource management scopes
+	ServiceScopeDatasourcesRead       = "datasources.read"
+	ServiceScopeDatasourcesWrite      = "datasources.write"
+	ServiceScopeDatasourcesEmbeddings = "datasources.embeddings"
+
+	// Data catalogue management scopes
+	ServiceScopeDataCataloguesRead  = "data-catalogues.read"
+	ServiceScopeDataCataloguesWrite = "data-catalogues.write"
+
+	// Tags management scopes
+	ServiceScopeTagsRead  = "tags.read"
+	ServiceScopeTagsWrite = "tags.write"
+
+	// Filter management scopes
+	ServiceScopeFiltersRead  = "filters.read"
+	ServiceScopeFiltersWrite = "filters.write"
+
+	// Model pricing scopes
+	ServiceScopePricingRead  = "pricing.read"
+	ServiceScopePricingWrite = "pricing.write"
+
+	// Vendor information scopes
+	ServiceScopeVendorsRead = "vendors.read"
+
+	// Advanced analytics scopes
+	ServiceScopeAnalyticsDetailed = "analytics.detailed"
+	ServiceScopeAnalyticsReports  = "analytics.reports"
 
 	// System scopes
 	ServiceScopeSystemRead = "system.read"

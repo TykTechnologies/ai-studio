@@ -8,7 +8,16 @@
     "rpc": ["call"],
     "routes": ["GET:/plugin/com.tyk.rate-limiting-ui/rpc/*"],
     "ui": ["sidebar.register", "route.register"],
-    "services": ["analytics.read", "plugins.read", "llms.read"]
+    "services": [
+      "analytics.read",
+      "plugins.read",
+      "llms.read",
+      "tools.read",
+      "tools.operations",
+      "datasources.read",
+      "data-catalogues.read",
+      "tags.read"
+    ]
   },
   "kvNamespace": "plugin:com.tyk.rate-limiting-ui",
   "rpc": {
