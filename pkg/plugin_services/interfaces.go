@@ -1,4 +1,4 @@
-package grpc
+package plugin_services
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 )
 
 // AIStudioServiceProvider defines the interface for AI Studio plugins to access management services
-// This interface wraps the gRPC server implementations for in-process usage
+// This interface is dependency-free and can be implemented by any package
 type AIStudioServiceProvider interface {
 	// Plugin Management Operations
 	ListPlugins(ctx context.Context, req *pb.ListPluginsRequest) (*pb.ListPluginsResponse, error)
@@ -76,4 +76,18 @@ type AIStudioServiceProvider interface {
 // ServiceProviderInjectable interface for plugins that can receive service providers
 type ServiceProviderInjectable interface {
 	InjectServiceProvider(provider AIStudioServiceProvider)
+}
+
+// Context manipulation utilities (dependency-free)
+type pluginContextKey struct{}
+
+func AddPluginIDToContext(ctx context.Context, pluginID uint) context.Context {
+	return context.WithValue(ctx, pluginContextKey{}, pluginID)
+}
+
+func GetPluginIDFromContext(ctx context.Context) (uint, bool) {
+	if pluginID, ok := ctx.Value(pluginContextKey{}).(uint); ok {
+		return pluginID, true
+	}
+	return 0, false
 }

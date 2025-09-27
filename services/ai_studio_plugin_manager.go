@@ -13,7 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
-	"github.com/TykTechnologies/midsommar/v2/services/grpc"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -50,7 +50,7 @@ type LoadedAIStudioPlugin struct {
 	IsOCI           bool
 	Client          *goplugin.Client
 	GRPCClient      pb.PluginServiceClient
-	ServiceProvider grpc.AIStudioServiceProvider // Injected service provider
+	ServiceProvider plugin_services.AIStudioServiceProvider // Injected service provider
 	LoadTime        time.Time
 	IsHealthy       bool
 	LastPing        time.Time
@@ -206,13 +206,14 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	}
 
 	// Create service provider for this plugin (if main service is available)
-	var serviceProvider grpc.AIStudioServiceProvider
+	var serviceProvider plugin_services.AIStudioServiceProvider
 	if m.service != nil {
-		serviceProvider = grpc.NewInProcessServiceProvider(m.service, plugin.ID)
+		// For now, service provider will be nil until we complete the adapter implementation
+		// This allows the plugin to load and fall back to mock data
 		log.Info().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
-			Msg("Created in-process service provider for plugin")
+			Msg("Service reference available - service provider implementation pending")
 	} else {
 		log.Warn().
 			Uint("plugin_id", plugin.ID).
@@ -355,7 +356,7 @@ func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStud
 }
 
 // GetServiceProvider returns the service provider for a loaded plugin
-func (m *AIStudioPluginManager) GetServiceProvider(pluginID uint) (grpc.AIStudioServiceProvider, bool) {
+func (m *AIStudioPluginManager) GetServiceProvider(pluginID uint) (plugin_services.AIStudioServiceProvider, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

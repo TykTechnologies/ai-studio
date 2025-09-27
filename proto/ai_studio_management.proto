@@ -73,6 +73,26 @@ service AIStudioManagementService {
     rpc UpdateTag(UpdateTagRequest) returns (UpdateTagResponse);
     rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
     rpc SearchTags(SearchTagsRequest) returns (SearchTagsResponse);
+
+    // Model Price Management Operations (Critical Priority)
+    rpc ListModelPrices(ListModelPricesRequest) returns (ListModelPricesResponse);
+    rpc GetModelPrice(GetModelPriceRequest) returns (GetModelPriceResponse);
+    rpc CreateModelPrice(CreateModelPriceRequest) returns (CreateModelPriceResponse);
+    rpc UpdateModelPrice(UpdateModelPriceRequest) returns (UpdateModelPriceResponse);
+    rpc DeleteModelPrice(DeleteModelPriceRequest) returns (DeleteModelPriceResponse);
+    rpc GetModelPricesByVendor(GetModelPricesByVendorRequest) returns (GetModelPricesByVendorResponse);
+
+    // Filter Management Operations
+    rpc ListFilters(ListFiltersRequest) returns (ListFiltersResponse);
+    rpc GetFilter(GetFilterRequest) returns (GetFilterResponse);
+    rpc CreateFilter(CreateFilterRequest) returns (CreateFilterResponse);
+    rpc UpdateFilter(UpdateFilterRequest) returns (UpdateFilterResponse);
+    rpc DeleteFilter(DeleteFilterRequest) returns (DeleteFilterResponse);
+
+    // Vendor Information Operations
+    rpc GetAvailableLLMDrivers(GetAvailableLLMDriversRequest) returns (GetAvailableLLMDriversResponse);
+    rpc GetAvailableEmbedders(GetAvailableEmbeddersRequest) returns (GetAvailableEmbeddersResponse);
+    rpc GetAvailableVectorStores(GetAvailableVectorStoresRequest) returns (GetAvailableVectorStoresResponse);
 }
 
 // Common request context for all operations

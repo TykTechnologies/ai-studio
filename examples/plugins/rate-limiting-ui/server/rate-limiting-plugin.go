@@ -12,8 +12,9 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
-	"github.com/TykTechnologies/midsommar/v2/services/grpc"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	"github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc"
 )
 
 // Embed UI assets and manifest into the binary
@@ -28,7 +29,7 @@ var manifestFile []byte
 type RateLimitingUIPlugin struct {
 	pb.UnimplementedPluginServiceServer
 	kvStore         map[string]interface{}
-	serviceProvider grpc.AIStudioServiceProvider // Injected by AI Studio
+	serviceProvider plugin_services.AIStudioServiceProvider // Injected by AI Studio
 	pluginID        uint32
 }
 
@@ -79,7 +80,7 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 }
 
 // InjectServiceProvider implements ServiceProviderInjectable interface
-func (p *RateLimitingUIPlugin) InjectServiceProvider(provider grpc.AIStudioServiceProvider) {
+func (p *RateLimitingUIPlugin) InjectServiceProvider(provider plugin_services.AIStudioServiceProvider) {
 	p.serviceProvider = provider
 	log.Printf("✅ Service provider injected into Rate Limiting Plugin")
 }
