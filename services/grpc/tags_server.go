@@ -143,6 +143,70 @@ func (s *TagsServer) SearchTags(ctx context.Context, req *pb.SearchTagsRequest) 
 	}, nil
 }
 
+// UpdateTag updates an existing tag
+func (s *TagsServer) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.UpdateTagResponse, error) {
+	tagID := req.GetTagId()
+	if tagID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "tag_id is required")
+	}
+
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+
+	// Call existing service method
+	tag, err := s.service.UpdateTag(uint(tagID), req.GetName())
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "tag not found: %d", tagID)
+		}
+		log.Error().Err(err).
+			Uint32("tag_id", tagID).
+			Str("name", req.GetName()).
+			Msg("Failed to update tag via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update tag: %v", err)
+	}
+
+	log.Info().
+		Uint32("tag_id", tagID).
+		Str("tag_name", tag.Name).
+		Msg("Updated tag via gRPC")
+
+	return &pb.UpdateTagResponse{
+		Tag: convertTagToPB(tag),
+	}, nil
+}
+
+// DeleteTag deletes a tag
+func (s *TagsServer) DeleteTag(ctx context.Context, req *pb.DeleteTagRequest) (*pb.DeleteTagResponse, error) {
+	tagID := req.GetTagId()
+	if tagID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "tag_id is required")
+	}
+
+	// Call existing service method
+	err := s.service.DeleteTag(uint(tagID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "tag not found: %d", tagID)
+		}
+		log.Error().Err(err).
+			Uint32("tag_id", tagID).
+			Msg("Failed to delete tag via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to delete tag: %v", err)
+	}
+
+	log.Info().
+		Uint32("tag_id", tagID).
+		Msg("Deleted tag via gRPC")
+
+	return &pb.DeleteTagResponse{
+		Success: true,
+		Message: "Tag deleted successfully",
+	}, nil
+}
+
 // convertTagToPB converts a models.Tag to protobuf TagInfo
 func convertTagToPB(tag *models.Tag) *pb.TagInfo {
 	return &pb.TagInfo{

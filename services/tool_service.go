@@ -586,3 +586,68 @@ func (s *Service) CallToolOperation(toolID uint, operationID string, params map[
 
 	return result, nil
 }
+
+// ToolOperationDetail represents detailed information about a tool operation
+type ToolOperationDetail struct {
+	OperationID string
+	Method      string
+	Path        string
+	Summary     string
+	Description string
+}
+
+// GetToolOperationDetails retrieves detailed information about tool operations from OpenAPI spec
+func (s *Service) GetToolOperationDetails(toolID uint) ([]ToolOperationDetail, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	if tool.OASSpec == "" {
+		return nil, fmt.Errorf("tool has no OpenAPI specification")
+	}
+
+	// Get basic operations list first
+	operations, err := s.ListToolOperationsFromSpec(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode the spec for detailed parsing
+	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+	}
+
+	// Create universal client for parsing
+	client, err := universalclient.NewClient(decodedSpec, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create universal client: %w", err)
+	}
+
+	// Extract detailed information for each operation
+	details := make([]ToolOperationDetail, 0, len(operations))
+	for _, operationID := range operations {
+		detail := ToolOperationDetail{
+			OperationID: operationID,
+			Method:      "POST", // Default for tool calls through proxy
+			Path:        "",
+			Summary:     "",
+			Description: "",
+		}
+
+		// Try to get tool definition for this operation
+		tools, err := client.AsTool(operationID)
+		if err == nil && len(tools) > 0 {
+			tool := tools[0]
+			if tool.Function != nil {
+				detail.Summary = tool.Function.Name
+				detail.Description = tool.Function.Description
+			}
+		}
+
+		details = append(details, detail)
+	}
+
+	return details, nil
+}

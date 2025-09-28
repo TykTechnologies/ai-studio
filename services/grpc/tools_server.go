@@ -39,15 +39,43 @@ func (s *ToolsServer) ListTools(ctx context.Context, req *pb.ListToolsRequest) (
 		limit = 20
 	}
 
-	// Call existing service method - using GetAllTools with pagination
-	tools, totalCount, _, err := s.service.GetAllTools(limit, page, false)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to list tools via gRPC")
-		return nil, status.Errorf(codes.Internal, "failed to list tools: %v", err)
+	// Apply filtering based on request parameters
+	var tools []models.Tool
+	var totalCount int64
+	var err error
+
+	// Check if filtering is requested
+	if req.GetToolType() != "" {
+		// Use tool type filtering
+		tools, err = s.service.GetToolsByType(req.GetToolType())
+		if err != nil {
+			log.Error().Err(err).Str("tool_type", req.GetToolType()).Msg("Failed to get tools by type via gRPC")
+			return nil, status.Errorf(codes.Internal, "failed to get tools by type: %v", err)
+		}
+		totalCount = int64(len(tools))
+
+		// Apply manual pagination since service method doesn't support it
+		start := (page - 1) * limit
+		end := start + limit
+		if start < len(tools) {
+			if end > len(tools) {
+				end = len(tools)
+			}
+			tools = tools[start:end]
+		} else {
+			tools = []models.Tool{}
+		}
+	} else {
+		// Use standard pagination without filtering
+		tools, totalCount, _, err = s.service.GetAllTools(limit, page, false)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list tools via gRPC")
+			return nil, status.Errorf(codes.Internal, "failed to list tools: %v", err)
+		}
 	}
 
-	// TODO: Apply tool_type, is_active, and namespace filtering in future versions
-	// For MVP, return all tools
+	// Note: is_active and namespace filtering not implemented as Tool model doesn't have these fields
+	// Tools are considered active if they exist and namespace is always global
 
 	// Convert service response to gRPC protobuf
 	pbTools := make([]*pb.ToolInfo, len(tools))
@@ -58,7 +86,8 @@ func (s *ToolsServer) ListTools(ctx context.Context, req *pb.ListToolsRequest) (
 	log.Debug().
 		Int("tool_count", len(tools)).
 		Int64("total_count", totalCount).
-		Msg("Listed tools via gRPC")
+		Str("tool_type_filter", req.GetToolType()).
+		Msg("Listed tools with filtering via gRPC")
 
 	return &pb.ListToolsResponse{
 		Tools:      pbTools,
@@ -109,30 +138,30 @@ func (s *ToolsServer) GetToolOperations(ctx context.Context, req *pb.GetToolOper
 		return nil, status.Errorf(codes.Internal, "failed to get tool: %v", err)
 	}
 
-	// Get tool operations from service
-	operations, err := s.service.GetToolOperations(uint(toolID))
+	// Get detailed tool operation information from service
+	operationDetails, err := s.service.GetToolOperationDetails(uint(toolID))
 	if err != nil {
-		log.Error().Err(err).Uint32("tool_id", toolID).Msg("Failed to get tool operations via gRPC")
-		return nil, status.Errorf(codes.Internal, "failed to get tool operations: %v", err)
+		log.Error().Err(err).Uint32("tool_id", toolID).Msg("Failed to get tool operation details via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to get tool operation details: %v", err)
 	}
 
-	// Convert to protobuf (simplified for MVP)
-	pbOperations := make([]*pb.ToolOperation, len(operations))
-	for i, op := range operations {
+	// Convert to protobuf with full operation details
+	pbOperations := make([]*pb.ToolOperation, len(operationDetails))
+	for i, detail := range operationDetails {
 		pbOperations[i] = &pb.ToolOperation{
-			OperationId: op,
-			Method:      "GET", // Simplified - would need actual operation details
-			Path:        "",    // Would need to parse from OpenAPI spec
-			Summary:     "",    // Would need to extract from spec
-			Description: "",    // Would need to extract from spec
+			OperationId: detail.OperationID,
+			Method:      detail.Method,
+			Path:        detail.Path,
+			Summary:     detail.Summary,
+			Description: detail.Description,
 		}
 	}
 
 	log.Debug().
 		Uint32("tool_id", toolID).
 		Str("tool_name", tool.Name).
-		Int("operation_count", len(operations)).
-		Msg("Retrieved tool operations via gRPC")
+		Int("operation_count", len(operationDetails)).
+		Msg("Retrieved detailed tool operations via gRPC")
 
 	return &pb.GetToolOperationsResponse{
 		Operations: pbOperations,
@@ -206,6 +235,127 @@ func (s *ToolsServer) CallToolOperation(ctx context.Context, req *pb.CallToolOpe
 	}, nil
 }
 
+// CreateTool creates a new tool
+func (s *ToolsServer) CreateTool(ctx context.Context, req *pb.CreateToolRequest) (*pb.CreateToolResponse, error) {
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+	if req.GetDescription() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "description is required")
+	}
+	if req.GetToolType() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "tool_type is required")
+	}
+
+	// Call existing service method
+	tool, err := s.service.CreateTool(
+		req.GetName(),
+		req.GetDescription(),
+		req.GetToolType(),
+		req.GetOasSpec(),
+		int(req.GetPrivacyScore()),
+		req.GetAuthSchemaName(),
+		req.GetAuthKey(),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Str("name", req.GetName()).
+			Str("tool_type", req.GetToolType()).
+			Msg("Failed to create tool via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to create tool: %v", err)
+	}
+
+	log.Info().
+		Uint("tool_id", tool.ID).
+		Str("tool_name", tool.Name).
+		Str("tool_type", tool.ToolType).
+		Msg("Created tool via gRPC")
+
+	return &pb.CreateToolResponse{
+		Tool: convertToolToPB(tool),
+	}, nil
+}
+
+// UpdateTool updates an existing tool
+func (s *ToolsServer) UpdateTool(ctx context.Context, req *pb.UpdateToolRequest) (*pb.UpdateToolResponse, error) {
+	toolID := req.GetToolId()
+	if toolID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "tool_id is required")
+	}
+
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+	if req.GetDescription() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "description is required")
+	}
+	if req.GetToolType() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "tool_type is required")
+	}
+
+	// Call existing service method
+	tool, err := s.service.UpdateTool(
+		uint(toolID),
+		req.GetName(),
+		req.GetDescription(),
+		req.GetToolType(),
+		req.GetOasSpec(),
+		int(req.GetPrivacyScore()),
+		req.GetAuthSchemaName(),
+		req.GetAuthKey(),
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
+		}
+		log.Error().Err(err).
+			Uint32("tool_id", toolID).
+			Str("name", req.GetName()).
+			Msg("Failed to update tool via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update tool: %v", err)
+	}
+
+	log.Info().
+		Uint32("tool_id", toolID).
+		Str("tool_name", tool.Name).
+		Msg("Updated tool via gRPC")
+
+	return &pb.UpdateToolResponse{
+		Tool: convertToolToPB(tool),
+	}, nil
+}
+
+// DeleteTool deletes a tool
+func (s *ToolsServer) DeleteTool(ctx context.Context, req *pb.DeleteToolRequest) (*pb.DeleteToolResponse, error) {
+	toolID := req.GetToolId()
+	if toolID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "tool_id is required")
+	}
+
+	// Call existing service method
+	err := s.service.DeleteTool(uint(toolID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
+		}
+		log.Error().Err(err).
+			Uint32("tool_id", toolID).
+			Msg("Failed to delete tool via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to delete tool: %v", err)
+	}
+
+	log.Info().
+		Uint32("tool_id", toolID).
+		Msg("Deleted tool via gRPC")
+
+	return &pb.DeleteToolResponse{
+		Success: true,
+		Message: "Tool deleted successfully",
+	}, nil
+}
+
 // convertToolToPB converts a models.Tool to protobuf ToolInfo
 func convertToolToPB(tool *models.Tool) *pb.ToolInfo {
 	// For security, don't expose the full OAS spec - just basic info
@@ -227,8 +377,8 @@ func convertToolToPB(tool *models.Tool) *pb.ToolInfo {
 		ToolType:     tool.ToolType,
 		OasSpec:      truncatedSpec,
 		Operations:   tool.GetOperations(), // Get whitelisted operations
-		IsActive:     true,                 // Tool model doesn't have IsActive - assume true
-		Namespace:    "",                   // Tool model doesn't have Namespace - assume global
+		IsActive:     true,                 // Tool model doesn't have IsActive field - default to true
+		Namespace:    "",                   // Tool model doesn't have Namespace field - default to global
 		PrivacyScore: int32(tool.PrivacyScore),
 		CreatedAt:    timestamppb.New(tool.CreatedAt),
 		UpdatedAt:    timestamppb.New(tool.UpdatedAt),

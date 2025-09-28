@@ -38,15 +38,52 @@ func (s *LLMManagementServer) ListLLMs(ctx context.Context, req *pb.ListLLMsRequ
 		limit = 20
 	}
 
-	// Call existing service method - simplified for MVP
-	llmsWithMeta, totalCount, _, err := s.service.GetAllLLMs(limit, page, false)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to list LLMs via gRPC")
-		return nil, status.Errorf(codes.Internal, "failed to list LLMs: %v", err)
+	// Apply filtering based on request parameters
+	var llmsWithMeta []models.LLM
+	var totalCount int64
+	var err error
+
+	// Check if namespace filtering is requested
+	if req.GetNamespace() != "" {
+		// Use namespace-aware filtering
+		llmsWithMeta, err = s.service.GetActiveLLMsInNamespace(req.GetNamespace())
+		if err != nil {
+			log.Error().Err(err).Str("namespace", req.GetNamespace()).Msg("Failed to get LLMs by namespace via gRPC")
+			return nil, status.Errorf(codes.Internal, "failed to get LLMs by namespace: %v", err)
+		}
+		totalCount = int64(len(llmsWithMeta))
+
+		// Apply manual pagination since service method doesn't support it
+		start := (page - 1) * limit
+		end := start + limit
+		if start < len(llmsWithMeta) {
+			if end > len(llmsWithMeta) {
+				end = len(llmsWithMeta)
+			}
+			llmsWithMeta = llmsWithMeta[start:end]
+		} else {
+			llmsWithMeta = []models.LLM{}
+		}
+	} else {
+		// Use standard pagination without namespace filtering
+		llmsWithMeta, totalCount, _, err = s.service.GetAllLLMs(limit, page, false)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list LLMs via gRPC")
+			return nil, status.Errorf(codes.Internal, "failed to list LLMs: %v", err)
+		}
 	}
 
-	// TODO: Apply vendor and namespace filtering in future versions
-	// For MVP, return all LLMs
+	// Apply vendor filtering if requested (post-processing since no direct service method)
+	if req.GetVendor() != "" {
+		filteredLLMs := make([]models.LLM, 0)
+		for _, llm := range llmsWithMeta {
+			if string(llm.Vendor) == req.GetVendor() {
+				filteredLLMs = append(filteredLLMs, llm)
+			}
+		}
+		llmsWithMeta = filteredLLMs
+		totalCount = int64(len(filteredLLMs))
+	}
 
 	// Convert service response to gRPC protobuf
 	pbLLMs := make([]*pb.LLMInfo, len(llmsWithMeta))
@@ -57,7 +94,9 @@ func (s *LLMManagementServer) ListLLMs(ctx context.Context, req *pb.ListLLMsRequ
 	log.Debug().
 		Int("llm_count", len(llmsWithMeta)).
 		Int64("total_count", totalCount).
-		Msg("Listed LLMs via gRPC")
+		Str("vendor_filter", req.GetVendor()).
+		Str("namespace_filter", req.GetNamespace()).
+		Msg("Listed LLMs with filtering via gRPC")
 
 	return &pb.ListLLMsResponse{
 		Llms:       pbLLMs,

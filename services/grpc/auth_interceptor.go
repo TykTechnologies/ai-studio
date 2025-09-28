@@ -127,6 +127,9 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/GetTool":           models.ServiceScopeToolsRead,
 		"/ai_studio_management.AIStudioManagementService/GetToolOperations": models.ServiceScopeToolsOperations,
 		"/ai_studio_management.AIStudioManagementService/CallToolOperation": models.ServiceScopeToolsCall,
+		"/ai_studio_management.AIStudioManagementService/CreateTool":        models.ServiceScopeToolsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateTool":        models.ServiceScopeToolsWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteTool":        models.ServiceScopeToolsWrite,
 
 		// Datasource management methods
 		"/ai_studio_management.AIStudioManagementService/ListDatasources":        models.ServiceScopeDatasourcesRead,

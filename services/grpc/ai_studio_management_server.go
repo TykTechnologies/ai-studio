@@ -19,13 +19,16 @@ type AIStudioManagementServer struct {
 	pb.UnimplementedAIStudioManagementServiceServer
 
 	// Specialized servers for different domains
-	pluginServer       *PluginManagementServer
-	llmServer          *LLMManagementServer
-	analyticsServer    *AnalyticsServer
-	toolsServer        *ToolsServer
-	datasourcesServer  *DatasourcesServer
+	pluginServer         *PluginManagementServer
+	llmServer           *LLMManagementServer
+	analyticsServer     *AnalyticsServer
+	toolsServer         *ToolsServer
+	datasourcesServer   *DatasourcesServer
 	dataCataloguesServer *DataCataloguesServer
-	tagsServer         *TagsServer
+	tagsServer          *TagsServer
+	filtersServer       *FiltersServer
+	vendorsServer       *VendorsServer
+	modelPricingServer  *ModelPricingServer
 
 	// Main service for direct access
 	service *services.Service
@@ -34,13 +37,16 @@ type AIStudioManagementServer struct {
 // NewAIStudioManagementServer creates the unified AI Studio management server
 func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementServer {
 	return &AIStudioManagementServer{
-		pluginServer:       NewPluginManagementServer(service.PluginService),
-		llmServer:          NewLLMManagementServer(service),
-		analyticsServer:    NewAnalyticsServer(service),
-		toolsServer:        NewToolsServer(service),
-		datasourcesServer:  NewDatasourcesServer(service),
+		pluginServer:         NewPluginManagementServer(service.PluginService),
+		llmServer:           NewLLMManagementServer(service),
+		analyticsServer:     NewAnalyticsServer(service),
+		toolsServer:         NewToolsServer(service),
+		datasourcesServer:   NewDatasourcesServer(service),
 		dataCataloguesServer: NewDataCataloguesServer(service),
-		tagsServer:         NewTagsServer(service),
+		tagsServer:          NewTagsServer(service),
+		filtersServer:       NewFiltersServer(service),
+		vendorsServer:       NewVendorsServer(service),
+		modelPricingServer:  NewModelPricingServer(service),
 		service:            service,
 	}
 }
@@ -352,6 +358,126 @@ func (s *AIStudioManagementServer) CreateTag(ctx context.Context, req *pb.Create
 
 func (s *AIStudioManagementServer) SearchTags(ctx context.Context, req *pb.SearchTagsRequest) (*pb.SearchTagsResponse, error) {
 	return s.tagsServer.SearchTags(ctx, req)
+}
+
+// Missing Tool CRUD Operations - delegate to tools server
+
+func (s *AIStudioManagementServer) CreateTool(ctx context.Context, req *pb.CreateToolRequest) (*pb.CreateToolResponse, error) {
+	return s.toolsServer.CreateTool(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateTool(ctx context.Context, req *pb.UpdateToolRequest) (*pb.UpdateToolResponse, error) {
+	return s.toolsServer.UpdateTool(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteTool(ctx context.Context, req *pb.DeleteToolRequest) (*pb.DeleteToolResponse, error) {
+	return s.toolsServer.DeleteTool(ctx, req)
+}
+
+// Missing Data Management CRUD Operations - delegate to respective servers
+
+func (s *AIStudioManagementServer) UpdateDatasource(ctx context.Context, req *pb.UpdateDatasourceRequest) (*pb.UpdateDatasourceResponse, error) {
+	return s.datasourcesServer.UpdateDatasource(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteDatasource(ctx context.Context, req *pb.DeleteDatasourceRequest) (*pb.DeleteDatasourceResponse, error) {
+	return s.datasourcesServer.DeleteDatasource(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ProcessDatasourceEmbeddings(ctx context.Context, req *pb.ProcessEmbeddingsRequest) (*pb.ProcessEmbeddingsResponse, error) {
+	return s.datasourcesServer.ProcessDatasourceEmbeddings(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateDataCatalogue(ctx context.Context, req *pb.UpdateDataCatalogueRequest) (*pb.UpdateDataCatalogueResponse, error) {
+	return s.dataCataloguesServer.UpdateDataCatalogue(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteDataCatalogue(ctx context.Context, req *pb.DeleteDataCatalogueRequest) (*pb.DeleteDataCatalogueResponse, error) {
+	return s.dataCataloguesServer.DeleteDataCatalogue(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.UpdateTagResponse, error) {
+	return s.tagsServer.UpdateTag(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteTag(ctx context.Context, req *pb.DeleteTagRequest) (*pb.DeleteTagResponse, error) {
+	return s.tagsServer.DeleteTag(ctx, req)
+}
+
+// Filter Management Operations - delegate to filters server
+
+func (s *AIStudioManagementServer) ListFilters(ctx context.Context, req *pb.ListFiltersRequest) (*pb.ListFiltersResponse, error) {
+	return s.filtersServer.ListFilters(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetFilter(ctx context.Context, req *pb.GetFilterRequest) (*pb.GetFilterResponse, error) {
+	return s.filtersServer.GetFilter(ctx, req)
+}
+
+func (s *AIStudioManagementServer) CreateFilter(ctx context.Context, req *pb.CreateFilterRequest) (*pb.CreateFilterResponse, error) {
+	return s.filtersServer.CreateFilter(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateFilter(ctx context.Context, req *pb.UpdateFilterRequest) (*pb.UpdateFilterResponse, error) {
+	return s.filtersServer.UpdateFilter(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteFilter(ctx context.Context, req *pb.DeleteFilterRequest) (*pb.DeleteFilterResponse, error) {
+	return s.filtersServer.DeleteFilter(ctx, req)
+}
+
+// Vendor Information Operations - delegate to vendors server
+
+func (s *AIStudioManagementServer) GetAvailableLLMDrivers(ctx context.Context, req *pb.GetAvailableLLMDriversRequest) (*pb.GetAvailableLLMDriversResponse, error) {
+	return s.vendorsServer.GetAvailableLLMDrivers(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetAvailableEmbedders(ctx context.Context, req *pb.GetAvailableEmbeddersRequest) (*pb.GetAvailableEmbeddersResponse, error) {
+	return s.vendorsServer.GetAvailableEmbedders(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetAvailableVectorStores(ctx context.Context, req *pb.GetAvailableVectorStoresRequest) (*pb.GetAvailableVectorStoresResponse, error) {
+	return s.vendorsServer.GetAvailableVectorStores(ctx, req)
+}
+
+// Model Pricing Operations - delegate to model pricing server
+
+func (s *AIStudioManagementServer) ListModelPrices(ctx context.Context, req *pb.ListModelPricesRequest) (*pb.ListModelPricesResponse, error) {
+	return s.modelPricingServer.ListModelPrices(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetModelPrice(ctx context.Context, req *pb.GetModelPriceRequest) (*pb.GetModelPriceResponse, error) {
+	return s.modelPricingServer.GetModelPrice(ctx, req)
+}
+
+func (s *AIStudioManagementServer) CreateModelPrice(ctx context.Context, req *pb.CreateModelPriceRequest) (*pb.CreateModelPriceResponse, error) {
+	return s.modelPricingServer.CreateModelPrice(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateModelPrice(ctx context.Context, req *pb.UpdateModelPriceRequest) (*pb.UpdateModelPriceResponse, error) {
+	return s.modelPricingServer.UpdateModelPrice(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteModelPrice(ctx context.Context, req *pb.DeleteModelPriceRequest) (*pb.DeleteModelPriceResponse, error) {
+	return s.modelPricingServer.DeleteModelPrice(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetModelPricesByVendor(ctx context.Context, req *pb.GetModelPricesByVendorRequest) (*pb.GetModelPricesByVendorResponse, error) {
+	return s.modelPricingServer.GetModelPricesByVendor(ctx, req)
+}
+
+// Advanced Analytics Operations - delegate to analytics server
+
+func (s *AIStudioManagementServer) GetVendorUsage(ctx context.Context, req *pb.GetVendorUsageRequest) (*pb.GetVendorUsageResponse, error) {
+	return s.analyticsServer.GetVendorUsage(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetTokenUsagePerApp(ctx context.Context, req *pb.GetTokenUsagePerAppRequest) (*pb.GetTokenUsagePerAppResponse, error) {
+	return s.analyticsServer.GetTokenUsagePerApp(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetToolUsageStatistics(ctx context.Context, req *pb.GetToolUsageStatisticsRequest) (*pb.GetToolUsageStatisticsResponse, error) {
+	return s.analyticsServer.GetToolUsageStatistics(ctx, req)
 }
 
 // convertAppToPB converts a models.App to protobuf AppInfo

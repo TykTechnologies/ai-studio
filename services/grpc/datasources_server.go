@@ -3,7 +3,9 @@ package grpc
 import (
 	"context"
 	"strings"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -161,6 +163,148 @@ func (s *DatasourcesServer) SearchDatasources(ctx context.Context, req *pb.Searc
 
 	return &pb.SearchDatasourcesResponse{
 		Datasources: pbDatasources,
+	}, nil
+}
+
+// UpdateDatasource updates an existing datasource
+func (s *DatasourcesServer) UpdateDatasource(ctx context.Context, req *pb.UpdateDatasourceRequest) (*pb.UpdateDatasourceResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+
+	// Call existing service method
+	datasource, err := s.service.UpdateDatasource(
+		uint(datasourceID),
+		req.GetName(),
+		req.GetShortDescription(),
+		req.GetLongDescription(),
+		req.GetIcon(),
+		req.GetUrl(),
+		int(req.GetPrivacyScore()),
+		req.GetDbConnString(),
+		req.GetDbSourceType(),
+		req.GetDbConnApiKey(),
+		req.GetDbName(),
+		req.GetEmbedVendor(),
+		req.GetEmbedUrl(),
+		req.GetEmbedApiKey(),
+		req.GetEmbedModel(),
+		req.GetActive(),
+		req.GetTagNames(),
+		uint(req.GetUserId()),
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Str("name", req.GetName()).
+			Msg("Failed to update datasource via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update datasource: %v", err)
+	}
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Str("datasource_name", datasource.Name).
+		Msg("Updated datasource via gRPC")
+
+	return &pb.UpdateDatasourceResponse{
+		Datasource: convertDatasourceToPB(datasource),
+	}, nil
+}
+
+// DeleteDatasource deletes a datasource
+func (s *DatasourcesServer) DeleteDatasource(ctx context.Context, req *pb.DeleteDatasourceRequest) (*pb.DeleteDatasourceResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	// Call existing service method
+	err := s.service.DeleteDatasource(uint(datasourceID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Msg("Failed to delete datasource via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to delete datasource: %v", err)
+	}
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Msg("Deleted datasource via gRPC")
+
+	return &pb.DeleteDatasourceResponse{
+		Success: true,
+		Message: "Datasource deleted successfully",
+	}, nil
+}
+
+// ProcessDatasourceEmbeddings processes embeddings for a datasource
+func (s *DatasourcesServer) ProcessDatasourceEmbeddings(ctx context.Context, req *pb.ProcessEmbeddingsRequest) (*pb.ProcessEmbeddingsResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	// Get datasource with files to verify it exists and has content
+	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Initialize sources map for DataSession
+	sources := make(map[uint]*models.Datasource)
+	sources[datasource.ID] = datasource
+
+	// Create new DataSession
+	ds := data_session.NewDataSession(sources)
+
+	// Process embeddings in a goroutine (same pattern as REST API)
+	go func() {
+		err := ds.ProcessRAGForDatasource(uint(datasourceID), s.service.DB)
+		if err != nil {
+			log.Error().Err(err).
+				Uint32("datasource_id", datasourceID).
+				Msg("Error processing embeddings for datasource via gRPC")
+			return
+		}
+		log.Info().
+			Uint32("datasource_id", datasourceID).
+			Msg("Successfully processed embeddings for datasource via gRPC")
+
+		// Update LastProcessedOn for all files in the datasource
+		for _, file := range datasource.Files {
+			file.LastProcessedOn = time.Now()
+			err = file.Update(s.service.DB)
+			if err != nil {
+				log.Error().Err(err).
+					Uint("file_id", file.ID).
+					Msg("Error updating LastProcessedOn for file")
+			}
+		}
+	}()
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Str("datasource_name", datasource.Name).
+		Msg("Started real embedding processing for datasource via gRPC")
+
+	return &pb.ProcessEmbeddingsResponse{
+		Success: true,
+		Message: "Embedding processing started successfully",
 	}, nil
 }
 

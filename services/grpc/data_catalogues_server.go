@@ -118,6 +118,76 @@ func (s *DataCataloguesServer) CreateDataCatalogue(ctx context.Context, req *pb.
 	}, nil
 }
 
+// UpdateDataCatalogue updates an existing data catalogue
+func (s *DataCataloguesServer) UpdateDataCatalogue(ctx context.Context, req *pb.UpdateDataCatalogueRequest) (*pb.UpdateDataCatalogueResponse, error) {
+	dataCatalogueID := req.GetDataCatalogueId()
+	if dataCatalogueID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "data_catalogue_id is required")
+	}
+
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+
+	// Call existing service method
+	dataCatalogue, err := s.service.UpdateDataCatalogue(
+		uint(dataCatalogueID),
+		req.GetName(),
+		req.GetShortDescription(),
+		req.GetLongDescription(),
+		req.GetIcon(),
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "data catalogue not found: %d", dataCatalogueID)
+		}
+		log.Error().Err(err).
+			Uint32("data_catalogue_id", dataCatalogueID).
+			Str("name", req.GetName()).
+			Msg("Failed to update data catalogue via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update data catalogue: %v", err)
+	}
+
+	log.Info().
+		Uint32("data_catalogue_id", dataCatalogueID).
+		Str("data_catalogue_name", dataCatalogue.Name).
+		Msg("Updated data catalogue via gRPC")
+
+	return &pb.UpdateDataCatalogueResponse{
+		DataCatalogue: convertDataCatalogueToPB(dataCatalogue),
+	}, nil
+}
+
+// DeleteDataCatalogue deletes a data catalogue
+func (s *DataCataloguesServer) DeleteDataCatalogue(ctx context.Context, req *pb.DeleteDataCatalogueRequest) (*pb.DeleteDataCatalogueResponse, error) {
+	dataCatalogueID := req.GetDataCatalogueId()
+	if dataCatalogueID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "data_catalogue_id is required")
+	}
+
+	// Call existing service method
+	err := s.service.DeleteDataCatalogue(uint(dataCatalogueID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "data catalogue not found: %d", dataCatalogueID)
+		}
+		log.Error().Err(err).
+			Uint32("data_catalogue_id", dataCatalogueID).
+			Msg("Failed to delete data catalogue via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to delete data catalogue: %v", err)
+	}
+
+	log.Info().
+		Uint32("data_catalogue_id", dataCatalogueID).
+		Msg("Deleted data catalogue via gRPC")
+
+	return &pb.DeleteDataCatalogueResponse{
+		Success: true,
+		Message: "Data catalogue deleted successfully",
+	}, nil
+}
+
 // convertDataCatalogueToPB converts a models.DataCatalogue to protobuf DataCatalogueInfo
 func convertDataCatalogueToPB(dataCatalogue *models.DataCatalogue) *pb.DataCatalogueInfo {
 	// Convert datasources - use the function from datasources_server.go
