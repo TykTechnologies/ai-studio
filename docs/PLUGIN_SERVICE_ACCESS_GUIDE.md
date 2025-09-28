@@ -33,14 +33,27 @@ Declare required service scopes in your plugin manifest:
 | `plugins.write` | Modify plugins | CreatePlugin, UpdatePlugin |
 | `plugins.config` | Update plugin configurations | UpdatePluginConfig |
 | `llms.read` | Read LLM information | ListLLMs, GetLLM, GetLLMPlugins |
-| `llms.write` | Modify LLMs | CreateLLM, UpdateLLM |
-| `llms.config` | Update LLM configurations | UpdateLLMConfig |
-| `analytics.read` | Access analytics data | GetAnalyticsSummary, GetUsageStatistics |
+| `llms.write` | Modify LLMs | CreateLLM, UpdateLLM, DeleteLLM |
 | `apps.read` | Read app information | ListApps, GetApp |
-| `apps.write` | Modify apps | CreateApp, UpdateApp |
+| `apps.write` | Modify apps | CreateApp, UpdateApp, DeleteApp |
 | `tools.read` | Read tool information | ListTools, GetTool |
+| `tools.write` | Modify tools | CreateTool, UpdateTool, DeleteTool |
 | `tools.operations` | Get tool operations | GetToolOperations |
 | `tools.call` | Execute tool operations | CallToolOperation |
+| `datasources.read` | Read datasource information | ListDatasources, GetDatasource, SearchDatasources |
+| `datasources.write` | Modify datasources | CreateDatasource, UpdateDatasource, DeleteDatasource |
+| `datasources.embeddings` | Process embeddings | ProcessDatasourceEmbeddings |
+| `data-catalogues.read` | Read data catalogues | ListDataCatalogues, GetDataCatalogue |
+| `data-catalogues.write` | Modify data catalogues | CreateDataCatalogue, UpdateDataCatalogue, DeleteDataCatalogue |
+| `tags.read` | Read tag information | ListTags, GetTag, SearchTags |
+| `tags.write` | Modify tags | CreateTag, UpdateTag, DeleteTag |
+| `pricing.read` | Read model pricing | ListModelPrices, GetModelPrice, GetModelPricesByVendor |
+| `pricing.write` | Modify model pricing | CreateModelPrice, UpdateModelPrice, DeleteModelPrice |
+| `filters.read` | Read filter information | ListFilters, GetFilter |
+| `filters.write` | Modify filters | CreateFilter, UpdateFilter, DeleteFilter |
+| `vendors.read` | Read vendor information | GetAvailableLLMDrivers, GetAvailableEmbedders, GetAvailableVectorStores |
+
+**Note**: Analytics operations (`analytics.read`, `analytics.detailed`, `analytics.reports`) are **intentionally unimplemented** - analytics remain in REST API layer.
 
 ## 2. Plugin Implementation
 
@@ -133,6 +146,31 @@ func (p *MyPlugin) listAvailableTools(ctx context.Context) error {
 
     return nil
 }
+
+func (p *MyPlugin) listDatasourcesForUser(ctx context.Context, userID uint32) error {
+    pluginCtx := &mgmtpb.PluginContext{
+        PluginId:    p.pluginID,
+        MethodScope: "datasources.read",
+    }
+
+    isActive := true
+    resp, err := p.managementClient.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
+        Context:  pluginCtx,
+        IsActive: &isActive,
+        UserId:   strconv.FormatUint(uint64(userID), 10),
+        Page:     1,
+        Limit:    20,
+    })
+    if err != nil {
+        return fmt.Errorf("failed to list datasources: %v", err)
+    }
+
+    for _, ds := range resp.Datasources {
+        log.Printf("Datasource: %s (Privacy Score: %d)", ds.Name, ds.PrivacyScore)
+    }
+
+    return nil
+}
 ```
 
 ### Embed Manifest with go:embed
@@ -151,26 +189,16 @@ func (p *MyPlugin) GetManifest(ctx context.Context, req *pb.GetManifestRequest) 
 
 ## 3. Admin Authorization Workflow
 
-### Current Database Methods (No UI Yet)
-
-```go
-// Extract scopes from manifest and store in database
-err := pluginService.ExtractAndStoreServiceScopes(pluginID)
-
-// Admin reviews requested scopes and authorizes
-err := pluginService.AuthorizePluginServiceAccess(pluginID, true) // true = authorize
-
-// Plugin can now access authorized services
-```
-
 ### Plugin Service Access Lifecycle
 
 1. **Plugin Loaded**: AI Studio loads plugin, calls `GetManifest`
-2. **Scope Extraction**: `ExtractAndStoreServiceScopes()` parses manifest and stores scopes
-3. **Admin Review**: Admin sees requested scopes in plugin details (UI needed)
-4. **Authorization**: Admin clicks "Authorize Service Access" (UI needed)
+2. **Scope Extraction**: System extracts declared scopes from manifest
+3. **Admin Review**: Admin reviews requested scopes in plugin management UI
+4. **Authorization**: Admin authorizes service access for the plugin
 5. **Runtime Access**: Plugin can call gRPC services with authorized scopes
 6. **Enforcement**: gRPC interceptor validates every method call
+
+*Note: UI integration for service authorization workflow is in development*
 
 ## 4. Error Handling
 
@@ -204,7 +232,34 @@ if err != nil {
 }
 ```
 
-## 5. Best Practices
+## 5. Enhanced Filtering & Quality (Recently Improved)
+
+### Available Filtering Parameters
+
+**Apps (ListApps)**:
+- `namespace` - Filter by specific namespace (empty = all namespaces)
+- `is_active` - Filter by active status
+
+**Datasources (ListDatasources)**:
+- `is_active` - Filter by active status
+- `user_id` - Filter by owning user (string format)
+
+**Filters (ListFilters)**:
+- Namespace filtering supported (note: is_active not supported by main Filter model)
+
+**All list operations**:
+- `page` - Page number (1-based)
+- `limit` - Items per page (max 100)
+
+### Error Handling Improvements
+
+The gRPC services now use proper error type detection:
+- `codes.NotFound` for missing resources (not string matching)
+- `codes.InvalidArgument` for invalid parameters
+- `codes.PermissionDenied` for authorization failures
+- `codes.Unimplemented` for intentionally excluded analytics operations
+
+## 6. Best Practices
 
 ### Security
 - **Declare minimum required scopes** - Only request scopes actually needed
@@ -258,10 +313,11 @@ cat plugin.manifest.json | jq '.permissions.services'
 
 ## Framework Status
 
-- ✅ **Core Services**: Plugin, LLM, Analytics, Apps, Tools implemented
+- ✅ **Complete Service Coverage**: Plugin, LLM, Apps, Tools, Datasources, Tags, Model Pricing, Filters, Data Catalogues, Vendor Info implemented
+- ✅ **Quality Implementation**: All TODOs resolved, proper filtering, type-safe error handling
 - ✅ **Authentication**: Plugin ID-based authentication working
 - ✅ **Authorization**: Scope-based authorization with admin approval
-- ✅ **Testing**: Comprehensive test coverage
+- ✅ **Testing**: Comprehensive integration test coverage
 - ✅ **Documentation**: Complete guide and examples
+- ❌ **Analytics Services**: Intentionally excluded - remain in REST API layer
 - ❌ **UI Integration**: Admin authorization workflow needs frontend
-- ❌ **Extended Services**: Datasources, advanced analytics, catalogues pending

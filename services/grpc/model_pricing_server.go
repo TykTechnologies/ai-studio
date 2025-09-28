@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // ModelPricingServer implements the AIStudioManagementService for model pricing operations
@@ -87,7 +88,7 @@ func (s *ModelPricingServer) GetModelPrice(ctx context.Context, req *pb.GetModel
 	// Call existing service method
 	modelPrice, err := s.service.GetModelPriceByID(uint(modelPriceID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "model price not found: %d", modelPriceID)
 		}
 		log.Error().Err(err).Uint32("model_price_id", modelPriceID).Msg("Failed to get model price via gRPC")
@@ -163,7 +164,7 @@ func (s *ModelPricingServer) UpdateModelPrice(ctx context.Context, req *pb.Updat
 		req.GetCurrency(),
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "model price not found: %d", modelPriceID)
 		}
 		log.Error().Err(err).Uint32("model_price_id", modelPriceID).Msg("Failed to update model price via gRPC")
@@ -191,7 +192,7 @@ func (s *ModelPricingServer) DeleteModelPrice(ctx context.Context, req *pb.Delet
 	// Call existing service method
 	err := s.service.DeleteModelPrice(uint(modelPriceID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "model price not found: %d", modelPriceID)
 		}
 		log.Error().Err(err).Uint32("model_price_id", modelPriceID).Msg("Failed to delete model price via gRPC")

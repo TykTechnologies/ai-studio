@@ -126,6 +126,16 @@ func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (mod
 	return datasources, totalCount, totalPages, nil
 }
 
+// GetAllDatasourcesWithFilters returns all datasources with filtering by active status and user ID
+func (s *Service) GetAllDatasourcesWithFilters(pageSize int, pageNumber int, all bool, isActive *bool, userID *uint) (models.Datasources, int64, int, error) {
+	var datasources models.Datasources
+	totalCount, totalPages, err := datasources.GetAllWithFilters(s.DB, pageSize, pageNumber, all, isActive, userID)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return datasources, totalCount, totalPages, nil
+}
+
 func (s *Service) GetActiveDatasources() ([]models.Datasource, error) {
 	var datasources models.Datasources
 	if err := datasources.GetActiveDataSources(s.DB); err != nil {

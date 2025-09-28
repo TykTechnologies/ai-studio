@@ -60,6 +60,39 @@ func (f *Filter) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) ([]
 	return filters, totalCount, totalPages, err
 }
 
+// GetAllWithFilters retrieves all filters with namespace filtering
+func (f *Filter) GetAllWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bool, namespace string) ([]Filter, int64, int, error) {
+	var filters []Filter
+	var totalCount int64
+	query := db.Model(&Filter{})
+
+	// Apply namespace filtering
+	if namespace == "__ALL_NAMESPACES__" || namespace == "" {
+		// No namespace filtering - return filters from all namespaces
+		// No additional WHERE clause needed
+	} else {
+		// Specific namespace: only filters in specified namespace
+		query = query.Where("namespace = ?", namespace)
+	}
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Find(&filters).Error
+	return filters, totalCount, totalPages, err
+}
+
 // GetByName gets a filter by its name
 func (f *Filter) GetByName(db *gorm.DB, name string) error {
 	return db.Where("name = ?", name).First(f).Error

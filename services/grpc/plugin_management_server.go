@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // PluginManagementServer implements the AIStudioManagementService for plugin management operations
@@ -102,7 +103,7 @@ func (s *PluginManagementServer) GetPlugin(ctx context.Context, req *pb.GetPlugi
 	// Call existing service method
 	plugin, err := s.pluginService.GetPlugin(uint(pluginID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "plugin not found: %d", pluginID)
 		}
 		log.Error().Err(err).Uint32("plugin_id", pluginID).Msg("Failed to get plugin via gRPC")
@@ -144,7 +145,7 @@ func (s *PluginManagementServer) UpdatePluginConfig(ctx context.Context, req *pb
 
 	_, err := s.pluginService.UpdatePlugin(uint(pluginID), updateReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "plugin not found: %d", pluginID)
 		}
 		log.Error().Err(err).Uint32("plugin_id", pluginID).Msg("Failed to update plugin config via gRPC")

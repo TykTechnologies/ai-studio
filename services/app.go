@@ -607,6 +607,13 @@ func (s *Service) SearchApps(searchTerm string, pageSize, pageNumber int, all bo
 	return apps, totalCount, totalPages, err
 }
 
+// ListAppsWithFilters returns a paginated list of apps with namespace and active status filtering
+func (s *Service) ListAppsWithFilters(pageSize, pageNumber int, all bool, sort, namespace string, isActive *bool) (models.Apps, int64, int, error) {
+	var apps models.Apps
+	totalCount, totalPages, err := apps.ListWithFilters(s.DB, pageSize, pageNumber, all, sort, namespace, isActive)
+	return apps, totalCount, totalPages, err
+}
+
 // CountApps returns the total number of apps
 func (s *Service) CountApps() (int64, error) {
 	app := models.NewApp()

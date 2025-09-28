@@ -57,6 +57,13 @@ func (s *Service) GetAllFilters(pageSize int, pageNumber int, all bool) ([]model
 	return filter.GetAll(s.DB, pageSize, pageNumber, all)
 }
 
+// GetAllFiltersWithFilters returns all filters with namespace filtering
+// Note: is_active filtering not supported by main Filter model (only microgateway Filter has this field)
+func (s *Service) GetAllFiltersWithFilters(pageSize int, pageNumber int, all bool, namespace string) ([]models.Filter, int64, int, error) {
+	filter := models.NewFilter()
+	return filter.GetAllWithFilters(s.DB, pageSize, pageNumber, all, namespace)
+}
+
 func (s *Service) GetFilterByName(name string) (*models.Filter, error) {
 	filter := models.NewFilter()
 	if err := filter.GetByName(s.DB, name); err != nil {

@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // DataCataloguesServer implements the AIStudioManagementService for data catalogues management operations
@@ -72,7 +73,7 @@ func (s *DataCataloguesServer) GetDataCatalogue(ctx context.Context, req *pb.Get
 	// Call existing service method
 	dataCatalogue, err := s.service.GetDataCatalogueByID(uint(dataCatalogueID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "data catalogue not found: %d", dataCatalogueID)
 		}
 		log.Error().Err(err).Uint32("data_catalogue_id", dataCatalogueID).Msg("Failed to get data catalogue via gRPC")
@@ -139,7 +140,7 @@ func (s *DataCataloguesServer) UpdateDataCatalogue(ctx context.Context, req *pb.
 		req.GetIcon(),
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "data catalogue not found: %d", dataCatalogueID)
 		}
 		log.Error().Err(err).
@@ -169,7 +170,7 @@ func (s *DataCataloguesServer) DeleteDataCatalogue(ctx context.Context, req *pb.
 	// Call existing service method
 	err := s.service.DeleteDataCatalogue(uint(dataCatalogueID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "data catalogue not found: %d", dataCatalogueID)
 		}
 		log.Error().Err(err).

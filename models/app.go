@@ -223,6 +223,61 @@ func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all
 	return totalCount, totalPages, err
 }
 
+// ListWithFilters returns a paginated list of apps with namespace and active status filtering
+func (a *Apps) ListWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bool, sort, namespace string, isActive *bool) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&App{})
+
+	// Apply namespace filtering
+	if namespace == "__ALL_NAMESPACES__" || namespace == "" {
+		// No namespace filtering - return apps from all namespaces
+		// No additional WHERE clause needed
+	} else {
+		// Specific namespace: only apps in specified namespace
+		query = query.Where("namespace = ?", namespace)
+	}
+
+	// Apply is_active filtering
+	if isActive != nil {
+		query = query.Where("is_active = ?", *isActive)
+	}
+
+	// Handle sorting
+	if sort != "" {
+		if sort[0] == '-' {
+			query = query.Order(sort[1:] + " DESC")
+		} else {
+			query = query.Order(sort + " ASC")
+		}
+	} else {
+		query = query.Order("id ASC") // Default sort by ID ascending
+	}
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := 0
+	if totalCount > 0 {
+		if all {
+			totalPages = 1
+		} else {
+			totalPages = int(totalCount) / pageSize
+			if int(totalCount)%pageSize != 0 {
+				totalPages++
+			}
+		}
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Find(a).Error
+	return totalCount, totalPages, err
+}
+
 // ListByUserID returns all apps for a specific user with pagination
 func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64

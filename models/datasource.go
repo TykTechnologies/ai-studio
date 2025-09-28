@@ -80,6 +80,39 @@ func (d *Datasources) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool
 	return totalCount, totalPages, err
 }
 
+// GetAllWithFilters returns all datasources with filtering by active status and user ID
+func (d *Datasources) GetAllWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bool, isActive *bool, userID *uint) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Datasource{})
+
+	// Apply is_active filtering
+	if isActive != nil {
+		query = query.Where("active = ?", *isActive)
+	}
+
+	// Apply user_id filtering
+	if userID != nil {
+		query = query.Where("user_id = ?", *userID)
+	}
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Tags").Find(d).Error
+	return totalCount, totalPages, err
+}
+
 // Search datasources by name, short description and long description
 func (d *Datasources) Search(db *gorm.DB, query string) error {
 	return db.Preload("Tags").Where("name LIKE ? OR short_description LIKE ? OR long_description LIKE ?", "%"+query+"%", "%"+query+"%", "%"+query+"%").Find(d).Error

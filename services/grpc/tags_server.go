@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // TagsServer implements the AIStudioManagementService for tags management operations
@@ -72,7 +73,7 @@ func (s *TagsServer) GetTag(ctx context.Context, req *pb.GetTagRequest) (*pb.Get
 	// Call existing service method
 	tag, err := s.service.GetTagByID(uint(tagID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tag not found: %d", tagID)
 		}
 		log.Error().Err(err).Uint32("tag_id", tagID).Msg("Failed to get tag via gRPC")
@@ -158,7 +159,7 @@ func (s *TagsServer) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*
 	// Call existing service method
 	tag, err := s.service.UpdateTag(uint(tagID), req.GetName())
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tag not found: %d", tagID)
 		}
 		log.Error().Err(err).
@@ -188,7 +189,7 @@ func (s *TagsServer) DeleteTag(ctx context.Context, req *pb.DeleteTagRequest) (*
 	// Call existing service method
 	err := s.service.DeleteTag(uint(tagID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tag not found: %d", tagID)
 		}
 		log.Error().Err(err).

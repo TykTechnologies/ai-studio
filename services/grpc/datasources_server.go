@@ -2,7 +2,8 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
+	"strconv"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/data_session"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // DatasourcesServer implements the AIStudioManagementService for datasources management operations
@@ -40,15 +42,31 @@ func (s *DatasourcesServer) ListDatasources(ctx context.Context, req *pb.ListDat
 		limit = 20
 	}
 
-	// Call existing service method
-	datasources, totalCount, _, err := s.service.GetAllDatasources(limit, page, false)
+	// Handle is_active parameter
+	var isActive *bool
+	if req.IsActive != nil {
+		value := req.GetIsActive()
+		isActive = &value
+	}
+
+	// Handle user_id parameter
+	var userID *uint
+	if req.GetUserId() != "" {
+		// Parse user_id string to uint
+		if id, err := strconv.ParseUint(req.GetUserId(), 10, 32); err == nil {
+			value := uint(id)
+			userID = &value
+		} else {
+			log.Warn().Str("user_id", req.GetUserId()).Msg("Invalid user_id format in ListDatasources request")
+		}
+	}
+
+	// Call enhanced service method with filtering
+	datasources, totalCount, _, err := s.service.GetAllDatasourcesWithFilters(limit, page, false, isActive, userID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list datasources via gRPC")
 		return nil, status.Errorf(codes.Internal, "failed to list datasources: %v", err)
 	}
-
-	// TODO: Apply is_active and user_id filtering in future versions
-	// For MVP, return all datasources
 
 	// Convert service response to gRPC protobuf
 	pbDatasources := make([]*pb.DatasourceInfo, len(datasources))
@@ -59,7 +77,9 @@ func (s *DatasourcesServer) ListDatasources(ctx context.Context, req *pb.ListDat
 	log.Debug().
 		Int("datasource_count", len(datasources)).
 		Int64("total_count", totalCount).
-		Msg("Listed datasources via gRPC")
+		Interface("is_active", isActive).
+		Interface("user_id", userID).
+		Msg("Listed datasources with filtering via gRPC")
 
 	return &pb.ListDatasourcesResponse{
 		Datasources: pbDatasources,
@@ -77,7 +97,7 @@ func (s *DatasourcesServer) GetDatasource(ctx context.Context, req *pb.GetDataso
 	// Call existing service method
 	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
 		}
 		log.Error().Err(err).Uint32("datasource_id", datasourceID).Msg("Failed to get datasource via gRPC")
@@ -200,7 +220,7 @@ func (s *DatasourcesServer) UpdateDatasource(ctx context.Context, req *pb.Update
 		uint(req.GetUserId()),
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
 		}
 		log.Error().Err(err).
@@ -230,7 +250,7 @@ func (s *DatasourcesServer) DeleteDatasource(ctx context.Context, req *pb.Delete
 	// Call existing service method
 	err := s.service.DeleteDatasource(uint(datasourceID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
 		}
 		log.Error().Err(err).
@@ -259,7 +279,7 @@ func (s *DatasourcesServer) ProcessDatasourceEmbeddings(ctx context.Context, req
 	// Get datasource with files to verify it exists and has content
 	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)

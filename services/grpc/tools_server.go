@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // ToolsServer implements the AIStudioManagementService for tools management operations
@@ -105,7 +107,7 @@ func (s *ToolsServer) GetTool(ctx context.Context, req *pb.GetToolRequest) (*pb.
 	// Call existing service method
 	tool, err := s.service.GetToolByID(uint(toolID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
 		}
 		log.Error().Err(err).Uint32("tool_id", toolID).Msg("Failed to get tool via gRPC")
@@ -132,7 +134,7 @@ func (s *ToolsServer) GetToolOperations(ctx context.Context, req *pb.GetToolOper
 	// Get tool first to verify it exists
 	tool, err := s.service.GetToolByID(uint(toolID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get tool: %v", err)
@@ -307,7 +309,7 @@ func (s *ToolsServer) UpdateTool(ctx context.Context, req *pb.UpdateToolRequest)
 		req.GetAuthKey(),
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
 		}
 		log.Error().Err(err).
@@ -337,7 +339,7 @@ func (s *ToolsServer) DeleteTool(ctx context.Context, req *pb.DeleteToolRequest)
 	// Call existing service method
 	err := s.service.DeleteTool(uint(toolID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
 		}
 		log.Error().Err(err).

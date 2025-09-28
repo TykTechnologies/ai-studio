@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // AIStudioManagementServer is the unified server that implements all AI Studio management operations
@@ -128,15 +129,22 @@ func (s *AIStudioManagementServer) ListApps(ctx context.Context, req *pb.ListApp
 		limit = 20
 	}
 
-	// Call existing service method - simplified for MVP
-	apps, totalCount, _, err := s.service.ListAppsWithPagination(limit, page, false, "created_at DESC")
+	namespace := req.GetNamespace()
+	// Empty namespace means "all namespaces" - no need to change it
+
+	// Handle is_active parameter
+	var isActive *bool
+	if req.IsActive != nil {
+		value := req.GetIsActive()
+		isActive = &value
+	}
+
+	// Call enhanced service method with filtering
+	apps, totalCount, _, err := s.service.ListAppsWithFilters(limit, page, false, "-created_at", namespace, isActive)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list apps via gRPC")
 		return nil, status.Errorf(codes.Internal, "failed to list apps: %v", err)
 	}
-
-	// TODO: Apply namespace and isActive filtering in future versions
-	// For MVP, return all apps
 
 	// Convert service response to gRPC protobuf
 	pbApps := make([]*pb.AppInfo, len(apps))
@@ -147,7 +155,9 @@ func (s *AIStudioManagementServer) ListApps(ctx context.Context, req *pb.ListApp
 	log.Debug().
 		Int("app_count", len(apps)).
 		Int64("total_count", totalCount).
-		Msg("Listed apps via gRPC")
+		Str("namespace", namespace).
+		Interface("is_active", isActive).
+		Msg("Listed apps with filtering via gRPC")
 
 	return &pb.ListAppsResponse{
 		Apps:       pbApps,
@@ -164,7 +174,7 @@ func (s *AIStudioManagementServer) GetApp(ctx context.Context, req *pb.GetAppReq
 	// Call existing service method
 	app, err := s.service.GetAppByID(uint(appID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
 		}
 		log.Error().Err(err).Uint32("app_id", appID).Msg("Failed to get app via gRPC")
@@ -248,7 +258,7 @@ func (s *AIStudioManagementServer) UpdateApp(ctx context.Context, req *pb.Update
 		nil, // budgetStartDate
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
 		}
 		log.Error().Err(err).Uint32("app_id", appID).Msg("Failed to update app via gRPC")
@@ -275,7 +285,7 @@ func (s *AIStudioManagementServer) DeleteApp(ctx context.Context, req *pb.Delete
 	// Call existing service method
 	err := s.service.DeleteApp(uint(appID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
 		}
 		log.Error().Err(err).Uint32("app_id", appID).Msg("Failed to delete app via gRPC")

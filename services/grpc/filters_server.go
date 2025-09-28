@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // FiltersServer implements the AIStudioManagementService for filters management operations
@@ -38,26 +39,33 @@ func (s *FiltersServer) ListFilters(ctx context.Context, req *pb.ListFiltersRequ
 		limit = 20
 	}
 
-	// Call existing service method
-	filters, totalCount, _, err := s.service.GetAllFilters(limit, page, false)
+	// Handle namespace parameter - empty means all namespaces
+	namespace := "" // Show all namespaces by default
+
+	// Note: is_active filtering not supported - main Filter model doesn't have is_active field
+	// Only the microgateway database.Filter model has this field
+	if req.GetIsActive() != false {
+		log.Debug().Bool("is_active", req.GetIsActive()).Msg("is_active filtering requested but not supported by main Filter model")
+	}
+
+	// Call enhanced service method with namespace filtering
+	filters, totalCount, _, err := s.service.GetAllFiltersWithFilters(limit, page, false, namespace)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list filters via gRPC")
 		return nil, status.Errorf(codes.Internal, "failed to list filters: %v", err)
 	}
 
-	// TODO: Apply filter_type, is_active, and namespace filtering in future versions
-	// For MVP, return all filters
-
 	// Convert service response to gRPC protobuf
 	pbFilters := make([]*pb.FilterInfo, len(filters))
 	for i, filter := range filters {
-		pbFilters[i] = convertFilterToPB(&filter)
+		pbFilters[i] = s.convertFilterToPBWithLLMs(&filter)
 	}
 
 	log.Debug().
 		Int("filter_count", len(filters)).
 		Int64("total_count", totalCount).
-		Msg("Listed filters via gRPC")
+		Str("namespace", namespace).
+		Msg("Listed filters with namespace filtering via gRPC")
 
 	return &pb.ListFiltersResponse{
 		Filters:    pbFilters,
@@ -75,7 +83,7 @@ func (s *FiltersServer) GetFilter(ctx context.Context, req *pb.GetFilterRequest)
 	// Call existing service method
 	filter, err := s.service.GetFilterByID(uint(filterID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "filter not found: %d", filterID)
 		}
 		log.Error().Err(err).Uint32("filter_id", filterID).Msg("Failed to get filter via gRPC")
@@ -88,7 +96,7 @@ func (s *FiltersServer) GetFilter(ctx context.Context, req *pb.GetFilterRequest)
 		Msg("Retrieved filter via gRPC")
 
 	return &pb.GetFilterResponse{
-		Filter: convertFilterToPB(filter),
+		Filter: s.convertFilterToPBWithLLMs(filter),
 	}, nil
 }
 
@@ -118,7 +126,7 @@ func (s *FiltersServer) CreateFilter(ctx context.Context, req *pb.CreateFilterRe
 		Msg("Created filter via gRPC")
 
 	return &pb.CreateFilterResponse{
-		Filter: convertFilterToPB(filter),
+		Filter: s.convertFilterToPBWithLLMs(filter),
 	}, nil
 }
 
@@ -142,7 +150,7 @@ func (s *FiltersServer) UpdateFilter(ctx context.Context, req *pb.UpdateFilterRe
 		[]byte(req.GetScript()),
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "filter not found: %d", filterID)
 		}
 		log.Error().Err(err).
@@ -158,7 +166,7 @@ func (s *FiltersServer) UpdateFilter(ctx context.Context, req *pb.UpdateFilterRe
 		Msg("Updated filter via gRPC")
 
 	return &pb.UpdateFilterResponse{
-		Filter: convertFilterToPB(filter),
+		Filter: s.convertFilterToPBWithLLMs(filter),
 	}, nil
 }
 
@@ -172,7 +180,7 @@ func (s *FiltersServer) DeleteFilter(ctx context.Context, req *pb.DeleteFilterRe
 	// Call existing service method
 	err := s.service.DeleteFilter(uint(filterID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "filter not found: %d", filterID)
 		}
 		log.Error().Err(err).
@@ -204,10 +212,47 @@ func convertFilterToPB(filter *models.Filter) *pb.FilterInfo {
 		Name:        filter.Name,
 		Description: filter.Description,
 		Script:      script,
-		IsActive:    true,               // Filter model doesn't have IsActive field - default to true
-		OrderIndex:  0,                  // Filter model doesn't have OrderIndex field - default to 0
-		Namespace:   filter.Namespace,   // Filter model has Namespace field
-		LlmIds:      []uint32{},         // TODO: Query actual LLM relationships if needed
+		IsActive:    true, // Main Filter model doesn't have IsActive field - assume true since filter exists
+		OrderIndex:  0,    // Main Filter model doesn't have OrderIndex field - set to 0 as default
+		Namespace:   filter.Namespace,
+		LlmIds:      []uint32{}, // Main Filter model doesn't have direct LLM relationship - would need separate query
+		CreatedAt:   timestamppb.New(filter.CreatedAt),
+		UpdatedAt:   timestamppb.New(filter.UpdatedAt),
+	}
+}
+
+// convertFilterToPBWithLLMs converts a models.Filter to protobuf FilterInfo with LLM relationships queried
+func (s *FiltersServer) convertFilterToPBWithLLMs(filter *models.Filter) *pb.FilterInfo {
+	// For security, truncate script if it's too long
+	script := string(filter.Script)
+	if len(script) > 1000 {
+		script = script[:1000] + "... [truncated for security]"
+	}
+
+	// Query LLMs that use this filter
+	var llms []models.LLM
+	llmIds := []uint32{}
+
+	// Query LLMs that reference this filter through many-to-many relationship
+	if err := s.service.DB.Joins("JOIN llm_filters lf ON lf.llm_id = llms.id").
+		Where("lf.filter_id = ?", filter.ID).
+		Find(&llms).Error; err == nil {
+
+		llmIds = make([]uint32, len(llms))
+		for i, llm := range llms {
+			llmIds[i] = uint32(llm.ID)
+		}
+	}
+
+	return &pb.FilterInfo{
+		Id:          uint32(filter.ID),
+		Name:        filter.Name,
+		Description: filter.Description,
+		Script:      script,
+		IsActive:    true, // Main Filter model doesn't have IsActive field - assume true since filter exists
+		OrderIndex:  0,    // Main Filter model doesn't have OrderIndex field - set to 0 as default
+		Namespace:   filter.Namespace,
+		LlmIds:      llmIds, // Now properly queried from database
 		CreatedAt:   timestamppb.New(filter.CreatedAt),
 		UpdatedAt:   timestamppb.New(filter.UpdatedAt),
 	}

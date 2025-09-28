@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 // LLMManagementServer implements the AIStudioManagementService for LLM management operations
@@ -114,7 +115,7 @@ func (s *LLMManagementServer) GetLLM(ctx context.Context, req *pb.GetLLMRequest)
 	// Call existing service method
 	llm, err := s.service.GetLLMByID(uint(llmID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 		}
 		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to get LLM via gRPC")
@@ -246,7 +247,7 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		nil, // BudgetStartDate
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 		}
 		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to update LLM via gRPC")
@@ -273,7 +274,7 @@ func (s *LLMManagementServer) DeleteLLM(ctx context.Context, req *pb.DeleteLLMRe
 	// Call existing service method
 	err := s.service.DeleteLLM(uint(llmID))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 		}
 		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to delete LLM via gRPC")
