@@ -78,14 +78,23 @@ func (l *PluginMetadataLoader) LoadPluginMetadata(ctx context.Context, command s
 					Err(parseErr).
 					Str("command", command).
 					Msg("Failed to parse manifest JSON - continuing without manifest")
+				manifest = nil
 			} else {
 				// Validate manifest structure
 				if validateErr := manifest.ValidateManifest(); validateErr != nil {
 					log.Warn().
 						Err(validateErr).
 						Str("command", command).
+						Str("manifest_id", manifest.ID).
+						Strs("blocked_scopes", manifest.GetServiceScopes()).
 						Msg("Manifest validation failed - continuing without manifest")
 					manifest = nil
+				} else {
+					log.Info().
+						Str("command", command).
+						Str("manifest_id", manifest.ID).
+						Strs("service_scopes", manifest.GetServiceScopes()).
+						Msg("Manifest loaded and validated successfully")
 				}
 			}
 		}

@@ -98,14 +98,14 @@ const PluginCreationWizard = () => {
         setMetadata({
           configSchema: response.data.attributes.config_schema,
           manifest: response.data.attributes.manifest,
-          scopes: response.data.attributes.scopes,
+          scopes: response.data.attributes.scopes || [],
           status: response.data.attributes.status,
         });
 
         setWorkflowState(response.data.attributes.status);
 
         // If there are scopes, go to approval step
-        if (response.data.attributes.scopes.length > 0) {
+        if (response.data.attributes.scopes && response.data.attributes.scopes.length > 0) {
           handleNext(); // Go to scope approval step
         } else {
           // No scopes, skip to configuration
