@@ -14,6 +14,8 @@ import {
   Switch,
   AccordionSummary,
   AccordionDetails,
+  Button,
+  CircularProgress,
 } from '@mui/material';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -28,6 +30,7 @@ import {
 import pluginService from '../../services/pluginService';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
 import PluginConfigurationSection from './PluginConfigurationSection';
+import ScopeReviewSection from './ScopeReviewSection';
 
 const PluginForm = ({ mode = 'create' }) => {
   const { id } = useParams();
@@ -63,6 +66,14 @@ const PluginForm = ({ mode = 'create' }) => {
   // Accordion expansion state
   const [accordionExpanded, setAccordionExpanded] = useState(false);
 
+  // Command change detection state
+  const [originalCommand, setOriginalCommand] = useState('');
+  const [requiresReapproval, setRequiresReapproval] = useState(false);
+  const [showCommandChangeWarning, setShowCommandChangeWarning] = useState(false);
+  const [showScopeApproval, setShowScopeApproval] = useState(false);
+  const [extractedScopes, setExtractedScopes] = useState([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
+
   useEffect(() => {
     if (isEdit) {
       fetchPlugin();
@@ -87,6 +98,9 @@ const PluginForm = ({ mode = 'create' }) => {
           ociReference: plugin.ociReference || '',
         });
         setConfigJson(JSON.stringify(plugin.config || {}, null, 2));
+
+        // Store original command for change detection
+        setOriginalCommand(plugin.command);
       }
     } catch (error) {
       console.error('Error fetching plugin:', error);
@@ -101,12 +115,12 @@ const PluginForm = ({ mode = 'create' }) => {
   const handleInputChange = (field) => (event) => {
     const { name, value } = event.target;
     const fieldName = name || field;
-    
+
     setFormData(prev => ({
       ...prev,
       [fieldName]: value
     }));
-    
+
     // Auto-generate slug from name if creating new plugin
     if (fieldName === 'name' && !isEdit && !formData.slug) {
       const slug = value
@@ -116,6 +130,15 @@ const PluginForm = ({ mode = 'create' }) => {
         .replace(/-+/g, '-')
         .trim();
       setFormData(prev => ({ ...prev, slug }));
+    }
+
+    // Command change detection for edit mode
+    if (fieldName === 'command' && isEdit && value !== originalCommand && formData.pluginType === 'ai_studio') {
+      setRequiresReapproval(true);
+      setShowCommandChangeWarning(true);
+      setShowScopeApproval(false);
+      // Reset any previous scope approval state
+      setExtractedScopes([]);
     }
   };
 
@@ -163,6 +186,66 @@ const PluginForm = ({ mode = 'create' }) => {
       ...prev,
       namespace: namespaceString
     }));
+  };
+
+  // Command change handlers
+  const handleLoadNewScopes = async () => {
+    setScopeLoading(true);
+    try {
+      // Call validate-and-load API to get new scopes
+      const response = await pluginService.validateAndLoadPlugin(id, {
+        command: formData.command,
+      });
+
+      setExtractedScopes(response.data.attributes.scopes || []);
+      setShowScopeApproval(true);
+      setShowCommandChangeWarning(false);
+    } catch (error) {
+      console.error('Error loading new scopes:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to load plugin metadata',
+        severity: 'error',
+      });
+    } finally {
+      setScopeLoading(false);
+    }
+  };
+
+  const handleScopeApproval = async (approved) => {
+    if (approved) {
+      setScopeLoading(true);
+      try {
+        await pluginService.approvePluginScopes(id, true);
+        setRequiresReapproval(false);
+        setShowScopeApproval(false);
+        setSnackbar({
+          open: true,
+          message: 'Plugin scopes approved successfully',
+          severity: 'success',
+        });
+      } catch (error) {
+        console.error('Error approving scopes:', error);
+        setSnackbar({
+          open: true,
+          message: error.message || 'Failed to approve scopes',
+          severity: 'error',
+        });
+      } finally {
+        setScopeLoading(false);
+      }
+    } else {
+      // User declined - revert command or navigate away
+      setFormData(prev => ({ ...prev, command: originalCommand }));
+      setRequiresReapproval(false);
+      setShowScopeApproval(false);
+      setShowCommandChangeWarning(false);
+      setSnackbar({
+        open: true,
+        message: 'Command reverted to original value',
+        severity: 'info',
+      });
+    }
   };
 
   const validateForm = () => {
@@ -403,6 +486,45 @@ const PluginForm = ({ mode = 'create' }) => {
             onChange={handleNamespaceChange}
             defaultExpanded={false}
           />
+
+          {/* Command Change Warning */}
+          {showCommandChangeWarning && (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    Command Changed - Scope Re-approval Required
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    AI Studio plugins require security approval when the command changes.
+                    Click "Load New Scopes" to review the new permissions.
+                  </Typography>
+                </Box>
+                <Button
+                  onClick={handleLoadNewScopes}
+                  variant="outlined"
+                  size="small"
+                  disabled={scopeLoading}
+                  startIcon={scopeLoading ? <CircularProgress size={16} /> : null}
+                >
+                  {scopeLoading ? 'Loading...' : 'Load New Scopes'}
+                </Button>
+              </Box>
+            </Alert>
+          )}
+
+          {/* Scope Approval Section */}
+          {showScopeApproval && (
+            <Box sx={{ mb: 3, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+              <ScopeReviewSection
+                scopes={extractedScopes}
+                onApprove={() => handleScopeApproval(true)}
+                onDeny={() => handleScopeApproval(false)}
+                loading={scopeLoading}
+                disabled={scopeLoading}
+              />
+            </Box>
+          )}
 
           {/* Configuration Section */}
           <StyledAccordion

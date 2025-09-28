@@ -786,6 +786,23 @@ func (s *ConfigProviderServer) GetConfigSchema(ctx context.Context, req *configp
 	}, nil
 }
 
+func (s *ConfigProviderServer) GetManifest(ctx context.Context, req *configpb.GetManifestRequest) (*configpb.GetManifestResponse, error) {
+	// Return the same manifest as the main plugin's GetManifest method
+	resp, err := s.Impl.GetManifest(ctx, &pb.GetManifestRequest{})
+	if err != nil {
+		return &configpb.GetManifestResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &configpb.GetManifestResponse{
+		Success:      resp.Success,
+		ManifestJson: resp.ManifestJson,
+		ErrorMessage: resp.ErrorMessage,
+	}, nil
+}
+
 func (s *ConfigProviderServer) Ping(ctx context.Context, req *configpb.ConfigPingRequest) (*configpb.ConfigPingResponse, error) {
 	return &configpb.ConfigPingResponse{
 		Timestamp: req.Timestamp,

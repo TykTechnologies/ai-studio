@@ -481,6 +481,40 @@ class PluginService {
       throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to refresh plugin schema');
     }
   }
+
+  // Plugin workflow methods for step-by-step creation and approval
+
+  async validateAndLoadPlugin(pluginId, commandData = {}) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/validate-and-load`, commandData);
+      return response.data;
+    } catch (error) {
+      console.error('Error validating and loading plugin:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to validate and load plugin');
+    }
+  }
+
+  async approvePluginScopes(pluginId, approved) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/approve-scopes`, {
+        approved,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error approving plugin scopes:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to approve plugin scopes');
+    }
+  }
+
+  async getPluginWorkflowStatus(pluginId) {
+    try {
+      const response = await apiClient.get(`/plugins/${pluginId}/workflow-status`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting plugin workflow status:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to get plugin workflow status');
+    }
+  }
 }
 
 export default new PluginService();

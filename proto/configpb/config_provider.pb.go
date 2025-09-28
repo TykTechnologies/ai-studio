@@ -215,6 +215,103 @@ func (x *ConfigPingResponse) GetHealthy() bool {
 	return false
 }
 
+// Manifest messages (reusing same structure as main plugin service)
+type GetManifestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetManifestRequest) Reset() {
+	*x = GetManifestRequest{}
+	mi := &file_proto_config_provider_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetManifestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetManifestRequest) ProtoMessage() {}
+
+func (x *GetManifestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_provider_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetManifestRequest.ProtoReflect.Descriptor instead.
+func (*GetManifestRequest) Descriptor() ([]byte, []int) {
+	return file_proto_config_provider_proto_rawDescGZIP(), []int{4}
+}
+
+type GetManifestResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ManifestJson  string                 `protobuf:"bytes,2,opt,name=manifest_json,json=manifestJson,proto3" json:"manifest_json,omitempty"` // Complete manifest as JSON string
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetManifestResponse) Reset() {
+	*x = GetManifestResponse{}
+	mi := &file_proto_config_provider_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetManifestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetManifestResponse) ProtoMessage() {}
+
+func (x *GetManifestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_provider_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetManifestResponse.ProtoReflect.Descriptor instead.
+func (*GetManifestResponse) Descriptor() ([]byte, []int) {
+	return file_proto_config_provider_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetManifestResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *GetManifestResponse) GetManifestJson() string {
+	if x != nil {
+		return x.ManifestJson
+	}
+	return ""
+}
+
+func (x *GetManifestResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_proto_config_provider_proto protoreflect.FileDescriptor
 
 const file_proto_config_provider_proto_rawDesc = "" +
@@ -230,9 +327,15 @@ const file_proto_config_provider_proto_rawDesc = "" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"L\n" +
 	"\x12ConfigPingResponse\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12\x18\n" +
-	"\ahealthy\x18\x02 \x01(\bR\ahealthy2\xc8\x01\n" +
+	"\ahealthy\x18\x02 \x01(\bR\ahealthy\"\x14\n" +
+	"\x12GetManifestRequest\"y\n" +
+	"\x13GetManifestResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
+	"\rmanifest_json\x18\x02 \x01(\tR\fmanifestJson\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xa2\x02\n" +
 	"\x15ConfigProviderService\x12^\n" +
-	"\x0fGetConfigSchema\x12$.config_provider.ConfigSchemaRequest\x1a%.config_provider.ConfigSchemaResponse\x12O\n" +
+	"\x0fGetConfigSchema\x12$.config_provider.ConfigSchemaRequest\x1a%.config_provider.ConfigSchemaResponse\x12X\n" +
+	"\vGetManifest\x12#.config_provider.GetManifestRequest\x1a$.config_provider.GetManifestResponse\x12O\n" +
 	"\x04Ping\x12\".config_provider.ConfigPingRequest\x1a#.config_provider.ConfigPingResponseB8Z6github.com/TykTechnologies/midsommar/v2/proto/configpbb\x06proto3"
 
 var (
@@ -247,20 +350,24 @@ func file_proto_config_provider_proto_rawDescGZIP() []byte {
 	return file_proto_config_provider_proto_rawDescData
 }
 
-var file_proto_config_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_config_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_config_provider_proto_goTypes = []any{
 	(*ConfigSchemaRequest)(nil),  // 0: config_provider.ConfigSchemaRequest
 	(*ConfigSchemaResponse)(nil), // 1: config_provider.ConfigSchemaResponse
 	(*ConfigPingRequest)(nil),    // 2: config_provider.ConfigPingRequest
 	(*ConfigPingResponse)(nil),   // 3: config_provider.ConfigPingResponse
+	(*GetManifestRequest)(nil),   // 4: config_provider.GetManifestRequest
+	(*GetManifestResponse)(nil),  // 5: config_provider.GetManifestResponse
 }
 var file_proto_config_provider_proto_depIdxs = []int32{
 	0, // 0: config_provider.ConfigProviderService.GetConfigSchema:input_type -> config_provider.ConfigSchemaRequest
-	2, // 1: config_provider.ConfigProviderService.Ping:input_type -> config_provider.ConfigPingRequest
-	1, // 2: config_provider.ConfigProviderService.GetConfigSchema:output_type -> config_provider.ConfigSchemaResponse
-	3, // 3: config_provider.ConfigProviderService.Ping:output_type -> config_provider.ConfigPingResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 1: config_provider.ConfigProviderService.GetManifest:input_type -> config_provider.GetManifestRequest
+	2, // 2: config_provider.ConfigProviderService.Ping:input_type -> config_provider.ConfigPingRequest
+	1, // 3: config_provider.ConfigProviderService.GetConfigSchema:output_type -> config_provider.ConfigSchemaResponse
+	5, // 4: config_provider.ConfigProviderService.GetManifest:output_type -> config_provider.GetManifestResponse
+	3, // 5: config_provider.ConfigProviderService.Ping:output_type -> config_provider.ConfigPingResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -277,7 +384,7 @@ func file_proto_config_provider_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_provider_proto_rawDesc), len(file_proto_config_provider_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

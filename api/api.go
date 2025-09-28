@@ -661,6 +661,11 @@ func (a *API) setupRoutes() {
 	v1.GET("/plugins/:id/config-schema", a.getPluginConfigSchema)
 	v1.POST("/plugins/:id/config-schema/refresh", a.refreshPluginConfigSchema)
 
+	// Plugin workflow routes (for step-by-step creation and approval)
+	v1.POST("/plugins/:id/validate-and-load", a.validateAndLoadPlugin)
+	v1.POST("/plugins/:id/approve-scopes", a.approvePluginScopes)
+	v1.GET("/plugins/:id/workflow-status", a.getPluginWorkflowStatus)
+
 	// Plugin asset serving (outside of v1 group for simpler URLs)
 	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
 

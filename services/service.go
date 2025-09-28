@@ -17,6 +17,7 @@ type Service struct {
 	PluginService          *PluginService
 	PluginManifestService  *PluginManifestService
 	AIStudioPluginManager  *AIStudioPluginManager
+	PluginMetadataLoader   *PluginMetadataLoader
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -77,6 +78,15 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 			Msg("⚠️  Failed to wire plugin manager to plugin service")
 	}
 
+	// Initialize plugin metadata loader with enhanced config provider support
+	var pluginMetadataLoader *PluginMetadataLoader
+	if aiStudioPluginManager != nil {
+		pluginMetadataLoader = NewPluginMetadataLoader(db, aiStudioPluginManager)
+		log.Info().Msg("✅ Initialized plugin metadata loader with enhanced config provider support")
+	} else {
+		log.Warn().Msg("⚠️  AI Studio plugin manager not available - plugin metadata loader will not be available")
+	}
+
 	return &Service{
 		DB:                    db,
 		NotificationService:   notificationService,
@@ -86,6 +96,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		PluginService:         pluginService,
 		PluginManifestService: pluginManifestService,
 		AIStudioPluginManager: aiStudioPluginManager,
+		PluginMetadataLoader:  pluginMetadataLoader,
 	}
 }
 

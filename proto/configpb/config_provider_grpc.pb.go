@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ConfigProviderService_GetConfigSchema_FullMethodName = "/config_provider.ConfigProviderService/GetConfigSchema"
+	ConfigProviderService_GetManifest_FullMethodName     = "/config_provider.ConfigProviderService/GetManifest"
 	ConfigProviderService_Ping_FullMethodName            = "/config_provider.ConfigProviderService/Ping"
 )
 
@@ -33,6 +34,8 @@ const (
 type ConfigProviderServiceClient interface {
 	// Get the JSON Schema for this plugin's configuration
 	GetConfigSchema(ctx context.Context, in *ConfigSchemaRequest, opts ...grpc.CallOption) (*ConfigSchemaResponse, error)
+	// Get the plugin manifest (for AI Studio plugins with UI extensions)
+	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 	// Health check for the config service
 	Ping(ctx context.Context, in *ConfigPingRequest, opts ...grpc.CallOption) (*ConfigPingResponse, error)
 }
@@ -49,6 +52,16 @@ func (c *configProviderServiceClient) GetConfigSchema(ctx context.Context, in *C
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ConfigSchemaResponse)
 	err := c.cc.Invoke(ctx, ConfigProviderService_GetConfigSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *configProviderServiceClient) GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetManifestResponse)
+	err := c.cc.Invoke(ctx, ConfigProviderService_GetManifest_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +88,8 @@ func (c *configProviderServiceClient) Ping(ctx context.Context, in *ConfigPingRe
 type ConfigProviderServiceServer interface {
 	// Get the JSON Schema for this plugin's configuration
 	GetConfigSchema(context.Context, *ConfigSchemaRequest) (*ConfigSchemaResponse, error)
+	// Get the plugin manifest (for AI Studio plugins with UI extensions)
+	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	// Health check for the config service
 	Ping(context.Context, *ConfigPingRequest) (*ConfigPingResponse, error)
 	mustEmbedUnimplementedConfigProviderServiceServer()
@@ -89,6 +104,9 @@ type UnimplementedConfigProviderServiceServer struct{}
 
 func (UnimplementedConfigProviderServiceServer) GetConfigSchema(context.Context, *ConfigSchemaRequest) (*ConfigSchemaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfigSchema not implemented")
+}
+func (UnimplementedConfigProviderServiceServer) GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetManifest not implemented")
 }
 func (UnimplementedConfigProviderServiceServer) Ping(context.Context, *ConfigPingRequest) (*ConfigPingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
@@ -132,6 +150,24 @@ func _ConfigProviderService_GetConfigSchema_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigProviderService_GetManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigProviderServiceServer).GetManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigProviderService_GetManifest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigProviderServiceServer).GetManifest(ctx, req.(*GetManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ConfigProviderService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ConfigPingRequest)
 	if err := dec(in); err != nil {
@@ -160,6 +196,10 @@ var ConfigProviderService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetConfigSchema",
 			Handler:    _ConfigProviderService_GetConfigSchema_Handler,
+		},
+		{
+			MethodName: "GetManifest",
+			Handler:    _ConfigProviderService_GetManifest_Handler,
 		},
 		{
 			MethodName: "Ping",

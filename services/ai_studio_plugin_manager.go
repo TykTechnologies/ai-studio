@@ -1114,6 +1114,24 @@ func (cp *LegacyConfigOnlyPlugin) GetConfigSchema(ctx context.Context) ([]byte, 
 	return []byte(resp.SchemaJson), nil
 }
 
+// GetManifest implements EnhancedConfigProvider interface for LegacyConfigOnlyPlugin
+func (cp *LegacyConfigOnlyPlugin) GetManifest(ctx context.Context) ([]byte, error) {
+	// Call plugin's GetManifest via the main PluginService
+	manifestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	resp, err := cp.GRPCClient.GetManifest(manifestCtx, &pb.GetManifestRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manifest from main PluginService: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("plugin manifest request failed: %s", resp.ErrorMessage)
+	}
+
+	return []byte(resp.ManifestJson), nil
+}
+
 // UnloadConfigProvider releases resources used by a ConfigProvider
 func (m *AIStudioPluginManager) UnloadConfigProvider(provider ConfigProvider) error {
 	switch cp := provider.(type) {
@@ -1166,6 +1184,24 @@ func (cp *ConfigOnlyPlugin) GetConfigSchema(ctx context.Context) ([]byte, error)
 	}
 
 	return []byte(resp.SchemaJson), nil
+}
+
+// GetManifest implements EnhancedConfigProvider interface for ConfigOnlyPlugin
+func (cp *ConfigOnlyPlugin) GetManifest(ctx context.Context) ([]byte, error) {
+	// Call plugin's GetManifest via the ConfigProviderService
+	manifestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	resp, err := cp.ConfigGRPCClient.GetManifest(manifestCtx, &configpb.GetManifestRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manifest from ConfigProviderService: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("config provider manifest request failed: %s", resp.ErrorMessage)
+	}
+
+	return []byte(resp.ManifestJson), nil
 }
 
 // GetPluginConfigSchema retrieves config schema from a plugin by ID

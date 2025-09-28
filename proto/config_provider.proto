@@ -11,6 +11,9 @@ service ConfigProviderService {
     // Get the JSON Schema for this plugin's configuration
     rpc GetConfigSchema(ConfigSchemaRequest) returns (ConfigSchemaResponse);
 
+    // Get the plugin manifest (for AI Studio plugins with UI extensions)
+    rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+
     // Health check for the config service
     rpc Ping(ConfigPingRequest) returns (ConfigPingResponse);
 }
@@ -34,4 +37,15 @@ message ConfigPingRequest {
 message ConfigPingResponse {
     int64 timestamp = 1;
     bool healthy = 2;
+}
+
+// Manifest messages (reusing same structure as main plugin service)
+message GetManifestRequest {
+    // No parameters needed - each plugin has one manifest
+}
+
+message GetManifestResponse {
+    bool success = 1;
+    string manifest_json = 2;  // Complete manifest as JSON string
+    string error_message = 3;
 }
