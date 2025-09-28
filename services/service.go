@@ -87,7 +87,8 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		log.Warn().Msg("⚠️  AI Studio plugin manager not available - plugin metadata loader will not be available")
 	}
 
-	return &Service{
+	// Create service instance
+	service := &Service{
 		DB:                    db,
 		NotificationService:   notificationService,
 		Budget:                budgetService,
@@ -98,6 +99,18 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		AIStudioPluginManager: aiStudioPluginManager,
 		PluginMetadataLoader:  pluginMetadataLoader,
 	}
+
+	// Wire service reference to AI Studio plugin manager for proper service provider injection
+	if aiStudioPluginManager != nil {
+		aiStudioPluginManager.SetService(service)
+
+		// Set global service reference for GRPCServer access
+		SetGlobalServiceReference(service)
+
+		log.Info().Msg("✅ Wired service reference to AI Studio plugin manager for service provider injection")
+	}
+
+	return service
 }
 
 func (s *Service) GetDB() *gorm.DB {

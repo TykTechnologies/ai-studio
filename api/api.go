@@ -666,6 +666,9 @@ func (a *API) setupRoutes() {
 	v1.POST("/plugins/:id/approve-scopes", a.approvePluginScopes)
 	v1.GET("/plugins/:id/workflow-status", a.getPluginWorkflowStatus)
 
+	// Plugin cleanup routes
+	v1.POST("/plugins/cleanup-orphaned-registry", a.cleanupOrphanedUIRegistry)
+
 	// Plugin asset serving (outside of v1 group for simpler URLs)
 	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
 

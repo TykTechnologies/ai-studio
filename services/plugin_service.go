@@ -271,8 +271,55 @@ func (s *PluginService) DeletePlugin(id uint) error {
 		return fmt.Errorf("failed to remove plugin associations: %w", err)
 	}
 
+	// Clean up UI registry entries for this plugin
+	if err := s.db.Where("plugin_id = ?", id).Delete(&models.UIRegistry{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up UI registry entries")
+		// Don't fail the deletion, just log warning
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up UI registry entries for deleted plugin")
+	}
+
+	// Clean up registered plugin entries
+	if err := s.db.Where("plugin_id = ?", id).Delete(&models.RegisteredPlugin{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up registered plugin entries")
+		// Don't fail the deletion, just log warning
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up registered plugin entries for deleted plugin")
+	}
+
 	if err := plugin.Delete(s.db); err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupOrphanedUIRegistryEntries removes UI registry entries for plugins that no longer exist
+func (s *PluginService) CleanupOrphanedUIRegistryEntries() error {
+	// Get all existing plugin IDs (non-deleted)
+	var existingPluginIDs []uint
+	if err := s.db.Model(&models.Plugin{}).Pluck("id", &existingPluginIDs).Error; err != nil {
+		return fmt.Errorf("failed to get existing plugin IDs: %w", err)
+	}
+
+	// Delete UI registry entries where plugin_id is not in the existing plugins list
+	result := s.db.Where("plugin_id NOT IN ?", existingPluginIDs).Delete(&models.UIRegistry{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to cleanup orphaned UI registry entries: %w", result.Error)
+	}
+
+	if result.RowsAffected > 0 {
+		log.Info().Int64("cleaned_entries", result.RowsAffected).Msg("Cleaned up orphaned UI registry entries")
+	}
+
+	// Also cleanup orphaned registered plugin entries
+	result = s.db.Where("plugin_id NOT IN ?", existingPluginIDs).Delete(&models.RegisteredPlugin{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to cleanup orphaned registered plugin entries: %w", result.Error)
+	}
+
+	if result.RowsAffected > 0 {
+		log.Info().Int64("cleaned_entries", result.RowsAffected).Msg("Cleaned up orphaned registered plugin entries")
 	}
 
 	return nil

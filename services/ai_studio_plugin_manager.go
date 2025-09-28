@@ -16,11 +16,23 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
+	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"gorm.io/gorm"
 )
+
+// Global service reference for GRPCServer access
+// This is set when the service is created to avoid circular dependencies
+var globalServiceReference *Service
+
+// SetGlobalServiceReference sets the global service reference for GRPCServer access
+func SetGlobalServiceReference(service *Service) {
+	globalServiceReference = service
+	log.Info().Msg("✅ Global service reference set for plugin GRPCServer access")
+}
+
 
 // AIStudioPluginManager manages AI Studio plugin lifecycle and execution
 // Reuses proven patterns from microgateway's plugin manager
@@ -95,12 +107,129 @@ type AIStudioPluginGRPC struct {
 }
 
 func (p *AIStudioPluginGRPC) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
-	// This is implemented by the plugin binary, not the host
+	// This method is not used on the host side - it's for plugin implementation
 	return nil
 }
 
 func (p *AIStudioPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return pb.NewPluginServiceClient(c), nil
+	// Return client wrapper that stores broker for host-side service setup
+	return &AIStudioPluginClient{
+		broker:     broker,
+		pluginStub: pb.NewPluginServiceClient(c),
+		service:    globalServiceReference,
+	}, nil
+}
+
+// AIStudioPluginClient wraps the plugin client with broker access for host service setup
+type AIStudioPluginClient struct {
+	broker     *goplugin.GRPCBroker
+	pluginStub pb.PluginServiceClient
+	service    *Service // Reference to AI Studio service for brokered servers
+}
+
+// SetupServiceBroker creates a long-lived brokered server for AI Studio services
+// Returns the broker ID that the plugin can use to dial back to host services
+func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
+	if c.broker == nil || c.service == nil {
+		return 0, fmt.Errorf("broker or service not available")
+	}
+
+	// Allocate broker ID and start brokered server
+	brokerID := c.broker.NextId()
+
+	log.Info().
+		Uint32("broker_id", brokerID).
+		Msg("Setting up long-lived brokered server for AI Studio service API access")
+
+	// Start brokered server with AI Studio management services
+	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+		s := grpc.NewServer(opts...)
+
+		// Register AI Studio management services on brokered server
+		aiStudioServer := NewAIStudioServiceServer(c.service)
+		mgmtpb.RegisterAIStudioManagementServiceServer(s, aiStudioServer)
+
+		log.Info().
+			Uint32("broker_id", brokerID).
+			Msg("✅ AI Studio management services registered on brokered server")
+
+		return s
+	})
+
+	return brokerID, nil
+}
+
+// Delegate all PluginServiceClient methods to the plugin stub (with correct signatures)
+func (c *AIStudioPluginClient) Initialize(ctx context.Context, req *pb.InitRequest, opts ...grpc.CallOption) (*pb.InitResponse, error) {
+	return c.pluginStub.Initialize(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) Ping(ctx context.Context, req *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error) {
+	return c.pluginStub.Ping(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) Shutdown(ctx context.Context, req *pb.ShutdownRequest, opts ...grpc.CallOption) (*pb.ShutdownResponse, error) {
+	return c.pluginStub.Shutdown(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) Call(ctx context.Context, req *pb.CallRequest, opts ...grpc.CallOption) (*pb.CallResponse, error) {
+	return c.pluginStub.Call(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) GetAsset(ctx context.Context, req *pb.GetAssetRequest, opts ...grpc.CallOption) (*pb.GetAssetResponse, error) {
+	return c.pluginStub.GetAsset(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) GetManifest(ctx context.Context, req *pb.GetManifestRequest, opts ...grpc.CallOption) (*pb.GetManifestResponse, error) {
+	return c.pluginStub.GetManifest(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest, opts ...grpc.CallOption) (*pb.GetConfigSchemaResponse, error) {
+	return c.pluginStub.GetConfigSchema(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) ProcessPreAuth(ctx context.Context, req *pb.PluginRequest, opts ...grpc.CallOption) (*pb.PluginResponse, error) {
+	return c.pluginStub.ProcessPreAuth(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) Authenticate(ctx context.Context, req *pb.AuthRequest, opts ...grpc.CallOption) (*pb.AuthResponse, error) {
+	return c.pluginStub.Authenticate(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) GetAppByCredential(ctx context.Context, req *pb.GetAppRequest, opts ...grpc.CallOption) (*pb.GetAppResponse, error) {
+	return c.pluginStub.GetAppByCredential(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) GetUserByCredential(ctx context.Context, req *pb.GetUserRequest, opts ...grpc.CallOption) (*pb.GetUserResponse, error) {
+	return c.pluginStub.GetUserByCredential(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) ProcessPostAuth(ctx context.Context, req *pb.EnrichedRequest, opts ...grpc.CallOption) (*pb.PluginResponse, error) {
+	return c.pluginStub.ProcessPostAuth(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) OnBeforeWriteHeaders(ctx context.Context, req *pb.HeadersRequest, opts ...grpc.CallOption) (*pb.HeadersResponse, error) {
+	return c.pluginStub.OnBeforeWriteHeaders(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) OnBeforeWrite(ctx context.Context, req *pb.ResponseWriteRequest, opts ...grpc.CallOption) (*pb.ResponseWriteResponse, error) {
+	return c.pluginStub.OnBeforeWrite(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) HandleProxyLog(ctx context.Context, req *pb.ProxyLogRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
+	return c.pluginStub.HandleProxyLog(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) HandleAnalytics(ctx context.Context, req *pb.AnalyticsRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
+	return c.pluginStub.HandleAnalytics(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) HandleBudgetUsage(ctx context.Context, req *pb.BudgetUsageRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
+	return c.pluginStub.HandleBudgetUsage(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) ListAssets(ctx context.Context, req *pb.ListAssetsRequest, opts ...grpc.CallOption) (*pb.ListAssetsResponse, error) {
+	return c.pluginStub.ListAssets(ctx, req, opts...)
 }
 
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
@@ -164,6 +293,10 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
+	// Note: Broker server setup will happen when needed, not during plugin loading
+	// The host will set up brokered servers for specific service calls
+	// and pass broker IDs to the plugin via request parameters
+
 	// Get gRPC client
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
@@ -171,11 +304,40 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
-	grpcClient, ok := raw.(pb.PluginServiceClient)
+	// Get plugin client wrapper from dispense
+	clientWrapper, ok := raw.(*AIStudioPluginClient)
 	if !ok {
-		client.Kill()
-		return nil, fmt.Errorf("plugin does not implement PluginServiceClient")
+		log.Fatal().
+			Interface("received_type", raw).
+			Str("expected_type", "*AIStudioPluginClient").
+			Msg("FATAL: Plugin dispense type mismatch! This is the source of the plugin loading failure.")
 	}
+
+	// Set service reference in client wrapper for brokered server setup
+	clientWrapper.service = m.service
+
+	// Set up long-lived brokered server for AI Studio service API access
+	var serviceBrokerID uint32
+	if clientWrapper.broker != nil && clientWrapper.service != nil {
+		brokerID, err := clientWrapper.SetupServiceBroker()
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to set up service broker")
+		} else {
+			serviceBrokerID = brokerID
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Uint32("broker_id", serviceBrokerID).
+				Msg("✅ Service broker set up for plugin service API access")
+		}
+	}
+
+	log.Info().
+		Uint("plugin_id", plugin.ID).
+		Str("plugin_name", plugin.Name).
+		Bool("has_broker", clientWrapper.broker != nil).
+		Bool("has_service", clientWrapper.service != nil).
+		Uint32("service_broker_id", serviceBrokerID).
+		Msg("✅ Plugin client wrapper connected with broker access")
 
 	// Initialize plugin with config
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -188,11 +350,14 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		}
 	}
 
-	// Add plugin ID to config for service provider setup
+	// Add plugin ID and service broker ID to config
 	configMap["plugin_id"] = fmt.Sprintf("%d", plugin.ID)
-	configMap["has_service_provider"] = "true"
+	if serviceBrokerID != 0 {
+		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
+		configMap["has_service_api"] = "true"
+	}
 
-	initResp, err := grpcClient.Initialize(ctx, &pb.InitRequest{
+	initResp, err := clientWrapper.Initialize(ctx, &pb.InitRequest{
 		Config: configMap,
 	})
 	if err != nil {
@@ -230,8 +395,8 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		Command:         plugin.Command,
 		IsOCI:           plugin.IsOCIPlugin(),
 		Client:          client,
-		GRPCClient:      grpcClient,
-		ServiceProvider: serviceProvider, // Inject service provider
+		GRPCClient:      clientWrapper, // Use client wrapper with broker access
+		ServiceProvider: serviceProvider,
 		LoadTime:        time.Now(),
 		IsHealthy:       true,
 		LastPing:        time.Now(),
@@ -339,18 +504,19 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 
 // injectServiceProvider injects the service provider into a plugin after loading
 func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStudioPlugin) error {
-	// For now, the service provider is stored in the LoadedAIStudioPlugin structure
-	// In a future enhancement, we could add a gRPC method to inject it directly
-	// but the current approach of storing it and having the plugin access it is sufficient
+	if loadedPlugin.ServiceProvider == nil {
+		log.Warn().
+			Uint("plugin_id", loadedPlugin.ID).
+			Str("plugin_name", loadedPlugin.Name).
+			Msg("No service provider to inject - plugin will use fallback data")
+		return nil
+	}
 
-	// The plugin will access the service provider via a reference mechanism
-	// For the initial implementation, plugins will need to implement ServiceProviderInjectable
-	// and call GetServiceProvider() to access the injected services
 
-	log.Debug().
+	log.Info().
 		Uint("plugin_id", loadedPlugin.ID).
 		Str("plugin_name", loadedPlugin.Name).
-		Msg("Service provider available for plugin access")
+		Msg("✅ Service provider injected and available for plugin access")
 
 	return nil
 }

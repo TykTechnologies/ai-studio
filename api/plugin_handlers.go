@@ -1570,19 +1570,15 @@ func (a *API) servePluginAsset(c *gin.Context) {
 		return
 	}
 
-	// Ensure plugin is loaded
+	// Check if plugin is loaded (don't auto-load on asset requests)
 	if !a.service.AIStudioPluginManager.IsPluginLoaded(uint(id)) {
-		// Try to load the plugin
-		_, loadErr := a.service.AIStudioPluginManager.LoadPlugin(uint(id))
-		if loadErr != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Not Found", Detail: fmt.Sprintf("Plugin %d not loaded: %v", id, loadErr)}},
-			})
-			return
-		}
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: fmt.Sprintf("Plugin %d not loaded - please load the plugin first", id)}},
+		})
+		return
 	}
 
 	// Get asset content from plugin via gRPC

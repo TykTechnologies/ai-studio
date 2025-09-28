@@ -52,7 +52,7 @@ const PluginRouteHandler = () => {
 
         console.log(`DEBUG PLUGIN ROUTE: Found matching route:`, matchingRoute);
 
-        const LoadedComponent = await pluginLoaderService.loadPlugin(matchingRoute.pluginId);
+        const LoadedComponent = await pluginLoaderService.loadPlugin(matchingRoute.pluginId, matchingRoute.componentTag);
         setComponent(() => LoadedComponent);
         setLoading(false);
       } catch (err) {

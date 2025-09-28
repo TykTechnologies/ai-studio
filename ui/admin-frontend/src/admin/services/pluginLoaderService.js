@@ -22,9 +22,10 @@ class PluginLoaderService {
       // Build plugin registry
       registry.forEach(entry => {
         if (entry.is_active) {
-          // Use the registry entry ID as the key for lookup consistency
-          this.pluginRegistry.set(entry.ID, entry);
-          console.log(`Registry entry ${entry.ID}: plugin_id=${entry.plugin_id}, route=${entry.route_pattern}, tag=${entry.component_tag}`);
+          // Use composite key to allow multiple components per plugin
+          const compositeKey = `${entry.plugin_id}_${entry.component_tag}`;
+          this.pluginRegistry.set(compositeKey, entry);
+          console.log(`Registry entry ${entry.ID}: plugin_id=${entry.plugin_id}, route=${entry.route_pattern}, tag=${entry.component_tag}, key=${compositeKey}`);
         }
       });
 
@@ -128,11 +129,12 @@ class PluginLoaderService {
         if (!element) return;
 
         // Inject context-aware plugin API (hides all implementation details)
-        if (pluginId && window.aiStudioAPI) {
+        if (pluginId) {
           element.pluginAPI = {
             call: async (method, payload = {}) => {
               try {
-                const result = await window.aiStudioAPI.pluginRPCCall(pluginId, method, payload);
+                const { pluginRPCCall } = await import('../utils/apiClient');
+                const result = await pluginRPCCall(pluginId, method, payload);
                 return result.data;
               } catch (error) {
                 console.error(`Plugin RPC call failed: ${method}`, error);
@@ -325,11 +327,29 @@ class PluginLoaderService {
 
   /**
    * Load a plugin component based on its mount configuration
-   * @param {string} pluginId - Plugin ID or registry entry ID
+   * @param {string} pluginId - Plugin ID
+   * @param {string} componentTag - Component tag (optional, for specific component lookup)
    */
-  async loadPlugin(pluginId) {
-    console.log(`DEBUG LOAD PLUGIN: Loading plugin ID ${pluginId}`);
-    const pluginEntry = this.pluginRegistry.get(parseInt(pluginId));
+  async loadPlugin(pluginId, componentTag = null) {
+    console.log(`DEBUG LOAD PLUGIN: Loading plugin ID ${pluginId}, component: ${componentTag}`);
+
+    let pluginEntry = null;
+
+    if (componentTag) {
+      // Direct lookup using composite key
+      const compositeKey = `${pluginId}_${componentTag}`;
+      pluginEntry = this.pluginRegistry.get(compositeKey);
+      console.log(`DEBUG LOAD PLUGIN: Direct lookup with key ${compositeKey}: ${pluginEntry ? 'found' : 'not found'}`);
+    } else {
+      // Find any component for this plugin ID (backward compatibility)
+      for (const [compositeKey, entry] of this.pluginRegistry) {
+        if (entry.plugin_id === parseInt(pluginId)) {
+          pluginEntry = entry;
+          console.log(`DEBUG LOAD PLUGIN: Found plugin via composite key ${compositeKey}`);
+          break;
+        }
+      }
+    }
 
     if (!pluginEntry) {
       console.error(`DEBUG LOAD PLUGIN: Plugin ${pluginId} not found in registry. Available entries:`, Array.from(this.pluginRegistry.keys()));
@@ -386,8 +406,9 @@ class PluginLoaderService {
       if (entry.route_pattern && entry.is_active) {
         const route = {
           path: entry.route_pattern,
-          pluginId: id, // Use the registry entry ID for lookup
+          pluginId: entry.plugin_id, // Use the actual plugin ID, not registry entry ID
           component: entry.component_tag,
+          componentTag: entry.component_tag, // Add componentTag for specific lookup
           title: entry.mount_config?.title || 'Plugin',
           exact: true
         };

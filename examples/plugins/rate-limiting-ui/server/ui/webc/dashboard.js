@@ -60,8 +60,11 @@ class RateLimitingDashboard extends HTMLElement {
     }
 
     try {
+      console.log('Dashboard: Calling get_statistics...');
       this.data.statistics = await this.pluginAPI.call('get_statistics', {});
+      console.log('Dashboard: get_statistics response:', this.data.statistics);
       this.updateStatistics();
+      console.log('Dashboard: Statistics updated successfully');
     } catch (error) {
       console.error('Failed to load statistics:', error);
       throw error;
@@ -74,8 +77,11 @@ class RateLimitingDashboard extends HTMLElement {
     }
 
     try {
+      console.log('Dashboard: Calling get_rate_limits...');
       this.data.rateLimits = await this.pluginAPI.call('get_rate_limits', {});
+      console.log('Dashboard: get_rate_limits response:', this.data.rateLimits);
       this.updateRateLimits();
+      console.log('Dashboard: Rate limits updated successfully');
     } catch (error) {
       console.error('Failed to load rate limits:', error);
       throw error;
@@ -96,22 +102,41 @@ class RateLimitingDashboard extends HTMLElement {
   updateStatistics() {
     const stats = this.data.statistics;
 
-    this.shadowRoot.querySelector('#total-requests').textContent =
-      stats.total_requests?.toLocaleString() || '0';
-    this.shadowRoot.querySelector('#blocked-requests').textContent =
-      stats.blocked_requests?.toLocaleString() || '0';
-    this.shadowRoot.querySelector('#success-rate').textContent =
-      `${((stats.success_rate || 0) * 100).toFixed(1)}%`;
+    // Display service API demo data
+    this.shadowRoot.querySelector('#total-plugins').textContent =
+      stats.total_plugins?.toLocaleString() || '0';
+    this.shadowRoot.querySelector('#total-llms').textContent =
+      stats.total_llms?.toLocaleString() || '0';
+    this.shadowRoot.querySelector('#service-status').textContent =
+      stats.service_status || 'unknown';
 
-    // Update top endpoints table
-    const tableBody = this.shadowRoot.querySelector('#top-endpoints tbody');
-    if (tableBody && stats.top_endpoints) {
-      tableBody.innerHTML = stats.top_endpoints.map(endpoint => `
+    // Show service message
+    const messageDiv = this.shadowRoot.querySelector('#service-message');
+    if (messageDiv) {
+      messageDiv.textContent = stats.message || '';
+    }
+
+    // Update plugins table with real data
+    const pluginsTableBody = this.shadowRoot.querySelector('#plugins-table tbody');
+    if (pluginsTableBody && stats.plugin_list) {
+      pluginsTableBody.innerHTML = stats.plugin_list.map(plugin => `
         <tr>
-          <td>${endpoint.path}</td>
-          <td>${endpoint.requests.toLocaleString()}</td>
-          <td>${endpoint.blocked.toLocaleString()}</td>
-          <td>${(((endpoint.requests - endpoint.blocked) / endpoint.requests) * 100).toFixed(1)}%</td>
+          <td>${plugin.name}</td>
+          <td>${plugin.plugin_type}</td>
+          <td><span class="status ${plugin.is_active ? 'active' : 'inactive'}">${plugin.is_active ? 'Active' : 'Inactive'}</span></td>
+          <td>${plugin.hook_type}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Update LLMs table with real data
+    const llmsTableBody = this.shadowRoot.querySelector('#llms-table tbody');
+    if (llmsTableBody && stats.llm_list) {
+      llmsTableBody.innerHTML = stats.llm_list.map(llm => `
+        <tr>
+          <td>${llm.name}</td>
+          <td>${llm.vendor}</td>
+          <td><span class="status ${llm.active ? 'active' : 'inactive'}">${llm.active ? 'Active' : 'Inactive'}</span></td>
         </tr>
       `).join('');
     }
@@ -255,6 +280,16 @@ class RateLimitingDashboard extends HTMLElement {
           font-weight: bold;
         }
 
+        .status.active {
+          color: #4caf50;
+          font-weight: bold;
+        }
+
+        .status.inactive {
+          color: #f44336;
+          font-weight: bold;
+        }
+
         .btn-edit {
           background: #1976d2;
           color: white;
@@ -296,40 +331,41 @@ class RateLimitingDashboard extends HTMLElement {
         }
       </style>
 
-      <div id="loading-spinner">Loading rate limiting dashboard...</div>
+      <div id="loading-spinner">Loading Service API Demo Dashboard...</div>
       <div id="error-message"></div>
 
       <div id="content" style="display: none;">
         <div class="header">
-          <h2>Rate Limiting Dashboard</h2>
+          <h2>Service API Integration Demo</h2>
           <button id="refresh-btn" class="btn-refresh">Refresh</button>
         </div>
 
+        <div id="service-message" style="background: #e3f2fd; padding: 12px; border-radius: 4px; margin-bottom: 16px; color: #1565c0;"></div>
+
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value" id="total-requests">0</div>
-            <div class="stat-label">Total Requests</div>
+            <div class="stat-value" id="total-plugins">0</div>
+            <div class="stat-label">Total Plugins</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="blocked-requests">0</div>
-            <div class="stat-label">Blocked Requests</div>
+            <div class="stat-value" id="total-llms">0</div>
+            <div class="stat-label">Total LLMs</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="success-rate">0%</div>
-            <div class="stat-label">Success Rate</div>
+            <div class="stat-value" id="service-status">unknown</div>
+            <div class="stat-label">Service Status</div>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-header">Rate Limit Configurations</div>
-          <table id="rate-limits">
+          <div class="section-header">Live Plugins (via Service API)</div>
+          <table id="plugins-table">
             <thead>
               <tr>
-                <th>Endpoint</th>
-                <th>Method</th>
-                <th>Limit</th>
+                <th>Name</th>
+                <th>Type</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th>Hook Type</th>
               </tr>
             </thead>
             <tbody>
@@ -338,14 +374,13 @@ class RateLimitingDashboard extends HTMLElement {
         </div>
 
         <div class="section">
-          <div class="section-header">Top Endpoints by Traffic</div>
-          <table id="top-endpoints">
+          <div class="section-header">Live LLMs (via Service API)</div>
+          <table id="llms-table">
             <thead>
               <tr>
-                <th>Endpoint</th>
-                <th>Requests</th>
-                <th>Blocked</th>
-                <th>Success Rate</th>
+                <th>Name</th>
+                <th>Vendor</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>

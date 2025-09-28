@@ -208,6 +208,32 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
+// @Summary Cleanup orphaned UI registry entries
+// @Description Remove UI registry entries for plugins that no longer exist
+// @Tags plugins,maintenance
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/plugins/cleanup-orphaned-registry [post]
+// @Security BearerAuth
+func (a *API) cleanupOrphanedUIRegistry(c *gin.Context) {
+	err := a.service.PluginService.CleanupOrphanedUIRegistryEntries()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Orphaned UI registry entries cleaned up successfully",
+	})
+}
+
 // @Summary Approve or deny plugin service scopes
 // @Description Admin endpoint to approve or deny service access scopes for AI Studio plugins
 // @Tags plugins,workflow

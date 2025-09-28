@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -16,6 +17,13 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
+
+// Global service reference for bidirectional gRPC
+// This will be set by the AI Studio plugin manager
+var globalServiceReference interface{}
+
+// Service server constructor (to avoid import cycles)
+var NewAIStudioServiceServer func(service interface{}) interface{}
 
 // Embed UI assets and manifest into the binary
 //
@@ -26,23 +34,26 @@ var embeddedAssets embed.FS
 var manifestFile []byte
 
 // RateLimitingUIPlugin implements the AI Studio plugin interface with embedded UI assets
+// Now using clean SDK pattern for service API access
 type RateLimitingUIPlugin struct {
 	pb.UnimplementedPluginServiceServer
-	kvStore         map[string]interface{}
-	serviceProvider plugin_services.AIStudioServiceProvider // Injected by AI Studio
-	pluginID        uint32
+	kvStore  map[string]interface{}
+	pluginID uint32
 }
 
 // === Lifecycle Methods ===
 
 func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
-	log.Printf("Initializing Rate Limiting UI Plugin with config: %v", req.Config)
+	log.Printf("Initializing Rate Limiting UI Plugin with clean SDK pattern")
 
 	// Extract plugin ID from config (set by AI Studio plugin manager)
 	if pluginIDStr, ok := req.Config["plugin_id"]; ok {
 		if pluginID, err := strconv.ParseUint(pluginIDStr, 10, 32); err == nil {
 			p.pluginID = uint32(pluginID)
 			log.Printf("Plugin ID set to: %d", p.pluginID)
+
+			// Update SDK with plugin ID
+			ai_studio_sdk.SetPluginID(uint32(pluginID))
 		} else {
 			log.Printf("Warning: Invalid plugin ID format: %s", pluginIDStr)
 		}
@@ -50,15 +61,12 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 		log.Printf("Warning: Plugin ID not found in config")
 	}
 
-	// Check if service provider will be available
-	if hasServiceProvider, ok := req.Config["has_service_provider"]; ok && hasServiceProvider == "true" {
-		log.Printf("✅ AI Studio service provider will be injected")
-		// Service provider will be injected by AI Studio plugin manager
-		// No need to create network connections
-	} else {
-		log.Printf("⚠️ No service provider available - using mock data")
-		p.initializeMockData()
-	}
+	// Service broker ID will be provided when host makes service calls available
+	// This follows the go-plugin bidirectional pattern where broker ID is passed per request
+
+	// Check if SDK is ready for service API calls
+	sdkReady := ai_studio_sdk.IsInitialized()
+	log.Printf("✅ AI Studio SDK initialized: %t - service APIs available via broker-based ai_studio_sdk functions", sdkReady)
 
 	// Initialize with minimal global settings
 	p.kvStore = map[string]interface{}{
@@ -79,10 +87,10 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 	}, nil
 }
 
-// InjectServiceProvider implements ServiceProviderInjectable interface
+// InjectServiceProvider implements ServiceProviderInjectable interface (deprecated)
+// This is no longer needed with the clean SDK pattern but kept for compatibility
 func (p *RateLimitingUIPlugin) InjectServiceProvider(provider plugin_services.AIStudioServiceProvider) {
-	p.serviceProvider = provider
-	log.Printf("✅ Service provider injected into Rate Limiting Plugin")
+	log.Printf("✅ Service provider injection called but not needed with clean SDK pattern")
 }
 
 // initializeMockData sets up mock data when service provider is unavailable
@@ -310,8 +318,8 @@ func (p *RateLimitingUIPlugin) Call(ctx context.Context, req *pb.CallRequest) (*
 
 // RPC method implementations
 func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	// If service provider is available, fetch real analytics data
-	if p.serviceProvider != nil && p.pluginID != 0 {
+	// Try to get real analytics data via clean SDK
+	if ai_studio_sdk.IsInitialized() {
 		return p.getStatisticsFromService(ctx)
 	}
 
@@ -326,33 +334,112 @@ func (p *RateLimitingUIPlugin) getStatistics(ctx context.Context, payload string
 		}, nil
 	}
 
-	log.Printf("Returning mock statistics data")
+	log.Printf("Returning mock statistics data (SDK not available)")
 	return &pb.CallResponse{
 		Success: true,
 		Data:    string(data),
 	}, nil
 }
 
-// getStatisticsFromService fetches real analytics data via injected service provider
-func (p *RateLimitingUIPlugin) getStatisticsFromService(ctx context.Context) (*pb.CallResponse, error) {
-	log.Printf("Fetching real analytics data via injected service provider for plugin %d", p.pluginID)
+// getServiceAPIDemo demonstrates service API integration using the clean SDK pattern
+func (p *RateLimitingUIPlugin) getServiceAPIDemo(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	log.Printf("Service API Demo: Using clean SDK function calls for plugin %d", p.pluginID)
 
-	// Create plugin context for authentication
-	pluginCtx := &mgmtpb.PluginContext{
-		PluginId:    p.pluginID,
-		MethodScope: "analytics.read",
+	// Check if SDK is initialized
+	if !ai_studio_sdk.IsInitialized() {
+		log.Printf("Service API Demo: SDK not initialized, returning fallback data")
+
+		demoData := map[string]interface{}{
+			"total_plugins":  0,
+			"total_llms":     0,
+			"service_status": "sdk_not_initialized",
+			"message":        "AI Studio SDK not initialized",
+			"plugin_list":    []interface{}{},
+			"llm_list":       []interface{}{},
+		}
+
+		data, _ := json.Marshal(demoData)
+		return &pb.CallResponse{Success: true, Data: string(data)}, nil
 	}
 
-	// Get analytics summary from AI Studio via injected service provider (in-process call)
-	analyticsResp, err := p.serviceProvider.GetAnalyticsSummary(ctx, &mgmtpb.GetAnalyticsSummaryRequest{
-		Context:   pluginCtx,
-		TimeRange: "24h",
-	})
+	log.Printf("Service API Demo: SDK initialized, making clean service calls")
+
+	// Use clean SDK function calls - no need for manual gRPC client management
+	pluginsResp, err := ai_studio_sdk.ListPlugins(ctx, 1, 10)
 	if err != nil {
-		log.Printf("Failed to fetch analytics data: %v", err)
+		log.Printf("Service API Demo: Failed to get plugins via SDK: %v", err)
 		return &pb.CallResponse{
 			Success:      false,
-			ErrorMessage: fmt.Sprintf("Failed to fetch analytics: %v", err),
+			ErrorMessage: fmt.Sprintf("Failed to get plugins via clean SDK: %v", err),
+		}, nil
+	}
+
+	// Get real LLM list using clean SDK function
+	llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 5)
+	if err != nil {
+		log.Printf("Service API Demo: Failed to get LLMs via SDK: %v", err)
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to get LLMs via clean SDK: %v", err),
+		}, nil
+	}
+
+	// Convert plugin data for frontend
+	pluginList := make([]map[string]interface{}, len(pluginsResp.Plugins))
+	for i, plugin := range pluginsResp.Plugins {
+		pluginList[i] = map[string]interface{}{
+			"id":          plugin.Id,
+			"name":        plugin.Name,
+			"plugin_type": plugin.PluginType,
+			"is_active":   plugin.IsActive,
+			"hook_type":   plugin.HookType,
+		}
+	}
+
+	// Convert LLM data for frontend
+	llmList := make([]map[string]interface{}, len(llmsResp.Llms))
+	for i, llm := range llmsResp.Llms {
+		llmList[i] = map[string]interface{}{
+			"id":     llm.Id,
+			"name":   llm.Name,
+			"vendor": llm.Vendor,
+			"active": llm.Active,
+		}
+	}
+
+	// Format demo data for dashboard
+	demoData := map[string]interface{}{
+		"total_plugins":  len(pluginsResp.Plugins),
+		"total_llms":     len(llmsResp.Llms),
+		"service_status": "connected_via_clean_sdk",
+		"message":        "Successfully connected to AI Studio service APIs via clean SDK functions",
+		"plugin_list":    pluginList,
+		"llm_list":       llmList,
+	}
+
+	data, err := json.Marshal(demoData)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal service API demo data: %v", err),
+		}, nil
+	}
+
+	log.Printf("✅ Service API Demo: Successfully returned real data via clean SDK - %d plugins, %d LLMs", len(pluginsResp.Plugins), len(llmsResp.Llms))
+	return &pb.CallResponse{Success: true, Data: string(data)}, nil
+}
+
+// getStatisticsFromService fetches real analytics data via clean SDK
+func (p *RateLimitingUIPlugin) getStatisticsFromService(ctx context.Context) (*pb.CallResponse, error) {
+	log.Printf("Fetching real analytics data via clean SDK for plugin %d", p.pluginID)
+
+	// Get analytics summary from AI Studio via clean SDK function call
+	analyticsResp, err := ai_studio_sdk.GetAnalyticsSummary(ctx, "24h")
+	if err != nil {
+		log.Printf("Failed to fetch analytics data via SDK: %v", err)
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to fetch analytics via clean SDK: %v", err),
 		}, nil
 	}
 
@@ -462,8 +549,8 @@ func (p *RateLimitingUIPlugin) setRateLimit(ctx context.Context, payload string)
 }
 
 func (p *RateLimitingUIPlugin) getAvailableTools(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	// Demonstrate tool access via injected service provider
-	if p.serviceProvider != nil && p.pluginID != 0 {
+	// Demonstrate tool access via clean SDK
+	if ai_studio_sdk.IsInitialized() {
 		return p.getAvailableToolsFromService(ctx)
 	}
 
@@ -503,22 +590,12 @@ func (p *RateLimitingUIPlugin) getAvailableTools(ctx context.Context, payload st
 	}, nil
 }
 
-// getAvailableToolsFromService fetches real tool data via gRPC
+// getAvailableToolsFromService fetches real tool data via clean SDK
 func (p *RateLimitingUIPlugin) getAvailableToolsFromService(ctx context.Context) (*pb.CallResponse, error) {
-	log.Printf("Fetching real tools data via gRPC for plugin %d", p.pluginID)
+	log.Printf("Fetching real tools data via clean SDK for plugin %d", p.pluginID)
 
-	// Create plugin context for authentication
-	pluginCtx := &mgmtpb.PluginContext{
-		PluginId:    p.pluginID,
-		MethodScope: "tools.read",
-	}
-
-	// Get tools list from AI Studio via injected service provider
-	toolsResp, err := p.serviceProvider.ListTools(ctx, &mgmtpb.ListToolsRequest{
-		Context: pluginCtx,
-		Page:    1,
-		Limit:   50, // Get up to 50 tools
-	})
+	// Get tools list from AI Studio via clean SDK function call
+	toolsResp, err := ai_studio_sdk.ListTools(ctx, 1, 50)
 	if err != nil {
 		log.Printf("Failed to fetch tools data: %v", err)
 		return &pb.CallResponse{
@@ -565,17 +642,13 @@ func (p *RateLimitingUIPlugin) getAvailableToolsFromService(ctx context.Context)
 
 // Datasources management demonstration
 func (p *RateLimitingUIPlugin) getDatasources(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	if p.serviceProvider != nil && p.pluginID != 0 {
-		pluginCtx := &mgmtpb.PluginContext{
-			PluginId:    p.pluginID,
-			MethodScope: "datasources.read",
+	if ai_studio_sdk.IsInitialized() {
+		// Datasources not available in basic SDK - use fallback
+		resp := struct{ Datasources []interface{}; TotalCount int64 }{
+			Datasources: []interface{}{},
+			TotalCount:  0,
 		}
-
-		resp, err := p.serviceProvider.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
-			Context: pluginCtx,
-			Page:    1,
-			Limit:   20,
-		})
+		err := fmt.Errorf("datasources endpoint not available")
 		if err != nil {
 			return &pb.CallResponse{
 				Success:      false,
@@ -585,8 +658,8 @@ func (p *RateLimitingUIPlugin) getDatasources(ctx context.Context, payload strin
 
 		// Convert to expected format
 		datasourcesData := map[string]interface{}{
-			"datasources":  resp.Datasources,
-			"total_count":  resp.TotalCount,
+			"datasources": resp.Datasources,
+			"total_count": resp.TotalCount,
 		}
 
 		data, err := json.Marshal(datasourcesData)
@@ -619,17 +692,13 @@ func (p *RateLimitingUIPlugin) getDatasources(ctx context.Context, payload strin
 
 // Data catalogues management demonstration
 func (p *RateLimitingUIPlugin) getDataCatalogues(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	if p.serviceProvider != nil && p.pluginID != 0 {
-		pluginCtx := &mgmtpb.PluginContext{
-			PluginId:    p.pluginID,
-			MethodScope: "data-catalogues.read",
+	if ai_studio_sdk.IsInitialized() {
+		// Data catalogues not available in basic SDK - use fallback
+		resp := struct{ DataCatalogues []interface{}; TotalCount int64 }{
+			DataCatalogues: []interface{}{},
+			TotalCount:     0,
 		}
-
-		resp, err := p.serviceProvider.ListDataCatalogues(ctx, &mgmtpb.ListDataCataloguesRequest{
-			Context: pluginCtx,
-			Page:    1,
-			Limit:   20,
-		})
+		err := fmt.Errorf("data catalogues endpoint not available")
 		if err != nil {
 			return &pb.CallResponse{
 				Success:      false,
@@ -668,17 +737,13 @@ func (p *RateLimitingUIPlugin) getDataCatalogues(ctx context.Context, payload st
 
 // Tags management demonstration
 func (p *RateLimitingUIPlugin) getTags(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	if p.serviceProvider != nil && p.pluginID != 0 {
-		pluginCtx := &mgmtpb.PluginContext{
-			PluginId:    p.pluginID,
-			MethodScope: "tags.read",
+	if ai_studio_sdk.IsInitialized() {
+		// Tags not available in basic SDK - use fallback
+		resp := struct{ Tags []interface{}; TotalCount int64 }{
+			Tags:       []interface{}{},
+			TotalCount: 0,
 		}
-
-		resp, err := p.serviceProvider.ListTags(ctx, &mgmtpb.ListTagsRequest{
-			Context: pluginCtx,
-			Page:    1,
-			Limit:   50,
-		})
+		err := fmt.Errorf("tags endpoint not available")
 		if err != nil {
 			return &pb.CallResponse{
 				Success:      false,
@@ -814,27 +879,161 @@ func (p *AIStudioGRPCPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPC
 	return pb.NewPluginServiceClient(c), nil
 }
 
+// === SDK Interface Implementation ===
+
+// OnInitialize is called by the SDK when the plugin is initialized
+func (p *RateLimitingUIPlugin) OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32) error {
+	log.Printf("Rate Limiting UI Plugin SDK initializing with broker-based service access")
+
+	// Store plugin ID for reference (service API now accessed via ai_studio_sdk functions)
+	p.pluginID = pluginID
+
+	// Update the SDK with the plugin ID now that we have it from config
+	ai_studio_sdk.SetPluginID(pluginID)
+
+	// Initialize mock data
+	p.kvStore = map[string]interface{}{
+		"global_settings": map[string]interface{}{
+			"storage_type":       "redis",
+			"redis_url":          "redis://localhost:6379",
+			"default_limit":      1000,
+			"default_window":     "1h",
+			"enable_burst":       true,
+			"burst_multiplier":   2.0,
+			"monitoring_enabled": true,
+			"alert_threshold":    0.8,
+		},
+	}
+
+	// Check if SDK is ready for service API calls
+	sdkReady := ai_studio_sdk.IsInitialized()
+
+	log.Printf("✅ Rate Limiting UI Plugin initialized - SDK ready: %t - service APIs available via ai_studio_sdk functions", sdkReady)
+	return nil
+}
+
+// OnShutdown is called by the SDK when the plugin is shutting down
+func (p *RateLimitingUIPlugin) OnShutdown() error {
+	log.Printf("Rate Limiting UI Plugin shutting down")
+	return nil
+}
+
+
+// === SDK Interface Implementation ===
+
+// RateLimitingUIPluginSDK implements the SDK interface and delegates to the main plugin
+type RateLimitingUIPluginSDK struct {
+	plugin *RateLimitingUIPlugin
+}
+
+// OnInitialize is called by the SDK when the plugin is initialized
+func (p *RateLimitingUIPluginSDK) OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32) error {
+	log.Printf("Rate Limiting UI Plugin SDK wrapper initializing")
+
+	// Initialize the underlying plugin with mock context
+	ctx := context.Background()
+	req := &pb.InitRequest{
+		Config: map[string]string{
+			"plugin_id": fmt.Sprintf("%d", pluginID),
+		},
+	}
+
+	// Initialize the underlying plugin
+	p.plugin = &RateLimitingUIPlugin{}
+	_, err := p.plugin.Initialize(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to initialize underlying plugin: %v", err)
+	}
+
+	log.Printf("✅ Rate Limiting UI Plugin SDK wrapper initialized")
+	return nil
+}
+
+// OnShutdown is called by the SDK when the plugin is shutting down
+func (p *RateLimitingUIPluginSDK) OnShutdown() error {
+	log.Printf("Rate Limiting UI Plugin SDK wrapper shutting down")
+	return nil
+}
+
+// GetAsset serves static assets for the plugin UI (SDK interface signature)
+func (p *RateLimitingUIPluginSDK) GetAsset(assetPath string) ([]byte, string, error) {
+	ctx := context.Background()
+	req := &pb.GetAssetRequest{AssetPath: assetPath}
+
+	resp, err := p.plugin.GetAsset(ctx, req)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if !resp.Success {
+		return nil, "", fmt.Errorf("asset request failed: %s", resp.ErrorMessage)
+	}
+
+	return resp.Content, resp.MimeType, nil
+}
+
+// GetManifest returns the plugin manifest (SDK interface signature)
+func (p *RateLimitingUIPluginSDK) GetManifest() ([]byte, error) {
+	ctx := context.Background()
+	req := &pb.GetManifestRequest{}
+
+	resp, err := p.plugin.GetManifest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("manifest request failed: %s", resp.ErrorMessage)
+	}
+
+	return []byte(resp.ManifestJson), nil
+}
+
+// HandleCall processes RPC method calls (SDK interface signature)
+func (p *RateLimitingUIPluginSDK) HandleCall(method string, payload []byte) ([]byte, error) {
+	ctx := context.Background()
+	req := &pb.CallRequest{
+		Method:  method,
+		Payload: string(payload),
+	}
+
+	resp, err := p.plugin.Call(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("call failed: %s", resp.ErrorMessage)
+	}
+
+	return []byte(resp.Data), nil
+}
+
+// GetConfigSchema returns the JSON Schema for plugin configuration (SDK interface signature)
+func (p *RateLimitingUIPluginSDK) GetConfigSchema() ([]byte, error) {
+	ctx := context.Background()
+	req := &pb.GetConfigSchemaRequest{}
+
+	resp, err := p.plugin.GetConfigSchema(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("config schema request failed: %s", resp.ErrorMessage)
+	}
+
+	return []byte(resp.SchemaJson), nil
+}
+
 // === Main ===
 
 func main() {
-	log.Printf("🚀 Starting Rate Limiting UI Plugin with embedded assets")
+	log.Printf("🚀 Starting Rate Limiting UI Plugin with Clean AI Studio SDK")
 
-	pluginImpl := &RateLimitingUIPlugin{}
+	// Create SDK wrapper that implements the clean interface
+	pluginImpl := &RateLimitingUIPluginSDK{}
 
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: plugin.HandshakeConfig{
-			ProtocolVersion:  1,
-			MagicCookieKey:   "AI_STUDIO_PLUGIN",
-			MagicCookieValue: "v1",
-		},
-		Plugins: map[string]plugin.Plugin{
-			"plugin": &AIStudioGRPCPlugin{
-				Impl: pluginImpl,
-			},
-			"config": &ConfigProviderGRPCPlugin{
-				Impl: pluginImpl,
-			},
-		},
-		GRPCServer: plugin.DefaultGRPCServer,
-	})
+	// Serve using SDK (automatically handles service API setup)
+	ai_studio_sdk.ServePlugin(pluginImpl)
 }
