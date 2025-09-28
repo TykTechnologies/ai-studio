@@ -66,6 +66,20 @@ const (
 	AIStudioManagementService_UpdateTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateTag"
 	AIStudioManagementService_DeleteTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteTag"
 	AIStudioManagementService_SearchTags_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/SearchTags"
+	AIStudioManagementService_ListModelPrices_FullMethodName             = "/ai_studio_management.AIStudioManagementService/ListModelPrices"
+	AIStudioManagementService_GetModelPrice_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetModelPrice"
+	AIStudioManagementService_CreateModelPrice_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateModelPrice"
+	AIStudioManagementService_UpdateModelPrice_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateModelPrice"
+	AIStudioManagementService_DeleteModelPrice_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteModelPrice"
+	AIStudioManagementService_GetModelPricesByVendor_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetModelPricesByVendor"
+	AIStudioManagementService_ListFilters_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ListFilters"
+	AIStudioManagementService_GetFilter_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetFilter"
+	AIStudioManagementService_CreateFilter_FullMethodName                = "/ai_studio_management.AIStudioManagementService/CreateFilter"
+	AIStudioManagementService_UpdateFilter_FullMethodName                = "/ai_studio_management.AIStudioManagementService/UpdateFilter"
+	AIStudioManagementService_DeleteFilter_FullMethodName                = "/ai_studio_management.AIStudioManagementService/DeleteFilter"
+	AIStudioManagementService_GetAvailableLLMDrivers_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetAvailableLLMDrivers"
+	AIStudioManagementService_GetAvailableEmbedders_FullMethodName       = "/ai_studio_management.AIStudioManagementService/GetAvailableEmbedders"
+	AIStudioManagementService_GetAvailableVectorStores_FullMethodName    = "/ai_studio_management.AIStudioManagementService/GetAvailableVectorStores"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -131,6 +145,23 @@ type AIStudioManagementServiceClient interface {
 	UpdateTag(ctx context.Context, in *UpdateTagRequest, opts ...grpc.CallOption) (*UpdateTagResponse, error)
 	DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*DeleteTagResponse, error)
 	SearchTags(ctx context.Context, in *SearchTagsRequest, opts ...grpc.CallOption) (*SearchTagsResponse, error)
+	// Model Price Management Operations (Critical Priority)
+	ListModelPrices(ctx context.Context, in *ListModelPricesRequest, opts ...grpc.CallOption) (*ListModelPricesResponse, error)
+	GetModelPrice(ctx context.Context, in *GetModelPriceRequest, opts ...grpc.CallOption) (*GetModelPriceResponse, error)
+	CreateModelPrice(ctx context.Context, in *CreateModelPriceRequest, opts ...grpc.CallOption) (*CreateModelPriceResponse, error)
+	UpdateModelPrice(ctx context.Context, in *UpdateModelPriceRequest, opts ...grpc.CallOption) (*UpdateModelPriceResponse, error)
+	DeleteModelPrice(ctx context.Context, in *DeleteModelPriceRequest, opts ...grpc.CallOption) (*DeleteModelPriceResponse, error)
+	GetModelPricesByVendor(ctx context.Context, in *GetModelPricesByVendorRequest, opts ...grpc.CallOption) (*GetModelPricesByVendorResponse, error)
+	// Filter Management Operations
+	ListFilters(ctx context.Context, in *ListFiltersRequest, opts ...grpc.CallOption) (*ListFiltersResponse, error)
+	GetFilter(ctx context.Context, in *GetFilterRequest, opts ...grpc.CallOption) (*GetFilterResponse, error)
+	CreateFilter(ctx context.Context, in *CreateFilterRequest, opts ...grpc.CallOption) (*CreateFilterResponse, error)
+	UpdateFilter(ctx context.Context, in *UpdateFilterRequest, opts ...grpc.CallOption) (*UpdateFilterResponse, error)
+	DeleteFilter(ctx context.Context, in *DeleteFilterRequest, opts ...grpc.CallOption) (*DeleteFilterResponse, error)
+	// Vendor Information Operations
+	GetAvailableLLMDrivers(ctx context.Context, in *GetAvailableLLMDriversRequest, opts ...grpc.CallOption) (*GetAvailableLLMDriversResponse, error)
+	GetAvailableEmbedders(ctx context.Context, in *GetAvailableEmbeddersRequest, opts ...grpc.CallOption) (*GetAvailableEmbeddersResponse, error)
+	GetAvailableVectorStores(ctx context.Context, in *GetAvailableVectorStoresRequest, opts ...grpc.CallOption) (*GetAvailableVectorStoresResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -611,6 +642,146 @@ func (c *aIStudioManagementServiceClient) SearchTags(ctx context.Context, in *Se
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) ListModelPrices(ctx context.Context, in *ListModelPricesRequest, opts ...grpc.CallOption) (*ListModelPricesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListModelPricesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListModelPrices_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetModelPrice(ctx context.Context, in *GetModelPriceRequest, opts ...grpc.CallOption) (*GetModelPriceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetModelPriceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetModelPrice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateModelPrice(ctx context.Context, in *CreateModelPriceRequest, opts ...grpc.CallOption) (*CreateModelPriceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateModelPriceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateModelPrice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateModelPrice(ctx context.Context, in *UpdateModelPriceRequest, opts ...grpc.CallOption) (*UpdateModelPriceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateModelPriceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateModelPrice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteModelPrice(ctx context.Context, in *DeleteModelPriceRequest, opts ...grpc.CallOption) (*DeleteModelPriceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteModelPriceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteModelPrice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetModelPricesByVendor(ctx context.Context, in *GetModelPricesByVendorRequest, opts ...grpc.CallOption) (*GetModelPricesByVendorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetModelPricesByVendorResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetModelPricesByVendor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListFilters(ctx context.Context, in *ListFiltersRequest, opts ...grpc.CallOption) (*ListFiltersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFiltersResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListFilters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetFilter(ctx context.Context, in *GetFilterRequest, opts ...grpc.CallOption) (*GetFilterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFilterResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetFilter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CreateFilter(ctx context.Context, in *CreateFilterRequest, opts ...grpc.CallOption) (*CreateFilterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateFilterResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateFilter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateFilter(ctx context.Context, in *UpdateFilterRequest, opts ...grpc.CallOption) (*UpdateFilterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateFilterResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateFilter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteFilter(ctx context.Context, in *DeleteFilterRequest, opts ...grpc.CallOption) (*DeleteFilterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteFilterResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteFilter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetAvailableLLMDrivers(ctx context.Context, in *GetAvailableLLMDriversRequest, opts ...grpc.CallOption) (*GetAvailableLLMDriversResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAvailableLLMDriversResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetAvailableLLMDrivers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetAvailableEmbedders(ctx context.Context, in *GetAvailableEmbeddersRequest, opts ...grpc.CallOption) (*GetAvailableEmbeddersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAvailableEmbeddersResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetAvailableEmbedders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetAvailableVectorStores(ctx context.Context, in *GetAvailableVectorStoresRequest, opts ...grpc.CallOption) (*GetAvailableVectorStoresResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAvailableVectorStoresResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetAvailableVectorStores_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -674,6 +845,23 @@ type AIStudioManagementServiceServer interface {
 	UpdateTag(context.Context, *UpdateTagRequest) (*UpdateTagResponse, error)
 	DeleteTag(context.Context, *DeleteTagRequest) (*DeleteTagResponse, error)
 	SearchTags(context.Context, *SearchTagsRequest) (*SearchTagsResponse, error)
+	// Model Price Management Operations (Critical Priority)
+	ListModelPrices(context.Context, *ListModelPricesRequest) (*ListModelPricesResponse, error)
+	GetModelPrice(context.Context, *GetModelPriceRequest) (*GetModelPriceResponse, error)
+	CreateModelPrice(context.Context, *CreateModelPriceRequest) (*CreateModelPriceResponse, error)
+	UpdateModelPrice(context.Context, *UpdateModelPriceRequest) (*UpdateModelPriceResponse, error)
+	DeleteModelPrice(context.Context, *DeleteModelPriceRequest) (*DeleteModelPriceResponse, error)
+	GetModelPricesByVendor(context.Context, *GetModelPricesByVendorRequest) (*GetModelPricesByVendorResponse, error)
+	// Filter Management Operations
+	ListFilters(context.Context, *ListFiltersRequest) (*ListFiltersResponse, error)
+	GetFilter(context.Context, *GetFilterRequest) (*GetFilterResponse, error)
+	CreateFilter(context.Context, *CreateFilterRequest) (*CreateFilterResponse, error)
+	UpdateFilter(context.Context, *UpdateFilterRequest) (*UpdateFilterResponse, error)
+	DeleteFilter(context.Context, *DeleteFilterRequest) (*DeleteFilterResponse, error)
+	// Vendor Information Operations
+	GetAvailableLLMDrivers(context.Context, *GetAvailableLLMDriversRequest) (*GetAvailableLLMDriversResponse, error)
+	GetAvailableEmbedders(context.Context, *GetAvailableEmbeddersRequest) (*GetAvailableEmbeddersResponse, error)
+	GetAvailableVectorStores(context.Context, *GetAvailableVectorStoresRequest) (*GetAvailableVectorStoresResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -824,6 +1012,48 @@ func (UnimplementedAIStudioManagementServiceServer) DeleteTag(context.Context, *
 }
 func (UnimplementedAIStudioManagementServiceServer) SearchTags(context.Context, *SearchTagsRequest) (*SearchTagsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchTags not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListModelPrices(context.Context, *ListModelPricesRequest) (*ListModelPricesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListModelPrices not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetModelPrice(context.Context, *GetModelPriceRequest) (*GetModelPriceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetModelPrice not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateModelPrice(context.Context, *CreateModelPriceRequest) (*CreateModelPriceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateModelPrice not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateModelPrice(context.Context, *UpdateModelPriceRequest) (*UpdateModelPriceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateModelPrice not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteModelPrice(context.Context, *DeleteModelPriceRequest) (*DeleteModelPriceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteModelPrice not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetModelPricesByVendor(context.Context, *GetModelPricesByVendorRequest) (*GetModelPricesByVendorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetModelPricesByVendor not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListFilters(context.Context, *ListFiltersRequest) (*ListFiltersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListFilters not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetFilter(context.Context, *GetFilterRequest) (*GetFilterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFilter not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateFilter(context.Context, *CreateFilterRequest) (*CreateFilterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateFilter not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateFilter(context.Context, *UpdateFilterRequest) (*UpdateFilterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateFilter not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteFilter(context.Context, *DeleteFilterRequest) (*DeleteFilterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteFilter not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetAvailableLLMDrivers(context.Context, *GetAvailableLLMDriversRequest) (*GetAvailableLLMDriversResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableLLMDrivers not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetAvailableEmbedders(context.Context, *GetAvailableEmbeddersRequest) (*GetAvailableEmbeddersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableEmbedders not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetAvailableVectorStores(context.Context, *GetAvailableVectorStoresRequest) (*GetAvailableVectorStoresResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableVectorStores not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -1693,6 +1923,258 @@ func _AIStudioManagementService_SearchTags_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_ListModelPrices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListModelPricesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListModelPrices(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListModelPrices_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListModelPrices(ctx, req.(*ListModelPricesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetModelPrice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModelPriceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetModelPrice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetModelPrice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetModelPrice(ctx, req.(*GetModelPriceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CreateModelPrice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateModelPriceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateModelPrice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateModelPrice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateModelPrice(ctx, req.(*CreateModelPriceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateModelPrice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateModelPriceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateModelPrice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateModelPrice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateModelPrice(ctx, req.(*UpdateModelPriceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteModelPrice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteModelPriceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteModelPrice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteModelPrice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteModelPrice(ctx, req.(*DeleteModelPriceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetModelPricesByVendor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModelPricesByVendorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetModelPricesByVendor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetModelPricesByVendor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetModelPricesByVendor(ctx, req.(*GetModelPricesByVendorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListFilters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFiltersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListFilters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListFilters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListFilters(ctx, req.(*ListFiltersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetFilter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFilterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetFilter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetFilter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetFilter(ctx, req.(*GetFilterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CreateFilter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateFilterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateFilter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateFilter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateFilter(ctx, req.(*CreateFilterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateFilter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateFilterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateFilter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateFilter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateFilter(ctx, req.(*UpdateFilterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteFilter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFilterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteFilter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteFilter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteFilter(ctx, req.(*DeleteFilterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetAvailableLLMDrivers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAvailableLLMDriversRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetAvailableLLMDrivers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetAvailableLLMDrivers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetAvailableLLMDrivers(ctx, req.(*GetAvailableLLMDriversRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetAvailableEmbedders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAvailableEmbeddersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetAvailableEmbedders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetAvailableEmbedders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetAvailableEmbedders(ctx, req.(*GetAvailableEmbeddersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetAvailableVectorStores_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAvailableVectorStoresRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetAvailableVectorStores(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetAvailableVectorStores_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetAvailableVectorStores(ctx, req.(*GetAvailableVectorStoresRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1887,6 +2369,62 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchTags",
 			Handler:    _AIStudioManagementService_SearchTags_Handler,
+		},
+		{
+			MethodName: "ListModelPrices",
+			Handler:    _AIStudioManagementService_ListModelPrices_Handler,
+		},
+		{
+			MethodName: "GetModelPrice",
+			Handler:    _AIStudioManagementService_GetModelPrice_Handler,
+		},
+		{
+			MethodName: "CreateModelPrice",
+			Handler:    _AIStudioManagementService_CreateModelPrice_Handler,
+		},
+		{
+			MethodName: "UpdateModelPrice",
+			Handler:    _AIStudioManagementService_UpdateModelPrice_Handler,
+		},
+		{
+			MethodName: "DeleteModelPrice",
+			Handler:    _AIStudioManagementService_DeleteModelPrice_Handler,
+		},
+		{
+			MethodName: "GetModelPricesByVendor",
+			Handler:    _AIStudioManagementService_GetModelPricesByVendor_Handler,
+		},
+		{
+			MethodName: "ListFilters",
+			Handler:    _AIStudioManagementService_ListFilters_Handler,
+		},
+		{
+			MethodName: "GetFilter",
+			Handler:    _AIStudioManagementService_GetFilter_Handler,
+		},
+		{
+			MethodName: "CreateFilter",
+			Handler:    _AIStudioManagementService_CreateFilter_Handler,
+		},
+		{
+			MethodName: "UpdateFilter",
+			Handler:    _AIStudioManagementService_UpdateFilter_Handler,
+		},
+		{
+			MethodName: "DeleteFilter",
+			Handler:    _AIStudioManagementService_DeleteFilter_Handler,
+		},
+		{
+			MethodName: "GetAvailableLLMDrivers",
+			Handler:    _AIStudioManagementService_GetAvailableLLMDrivers_Handler,
+		},
+		{
+			MethodName: "GetAvailableEmbedders",
+			Handler:    _AIStudioManagementService_GetAvailableEmbedders_Handler,
+		},
+		{
+			MethodName: "GetAvailableVectorStores",
+			Handler:    _AIStudioManagementService_GetAvailableVectorStores_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

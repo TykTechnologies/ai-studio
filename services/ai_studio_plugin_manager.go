@@ -208,12 +208,12 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// Create service provider for this plugin (if main service is available)
 	var serviceProvider plugin_services.AIStudioServiceProvider
 	if m.service != nil {
-		// For now, service provider will be nil until we complete the adapter implementation
-		// This allows the plugin to load and fall back to mock data
+		// Create working service provider adapter
+		serviceProvider = plugin_services.NewWorkingServiceProviderAdapter(m.service, plugin.ID)
 		log.Info().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
-			Msg("Service reference available - service provider implementation pending")
+			Msg("✅ Created working service provider for plugin - real analytics available")
 	} else {
 		log.Warn().
 			Uint("plugin_id", plugin.ID).

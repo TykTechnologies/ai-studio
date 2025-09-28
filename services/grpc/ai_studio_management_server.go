@@ -73,6 +73,18 @@ func (s *AIStudioManagementServer) GetLLMPlugins(ctx context.Context, req *pb.Ge
 	return s.llmServer.GetLLMPlugins(ctx, req)
 }
 
+func (s *AIStudioManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRequest) (*pb.CreateLLMResponse, error) {
+	return s.llmServer.CreateLLM(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRequest) (*pb.UpdateLLMResponse, error) {
+	return s.llmServer.UpdateLLM(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteLLM(ctx context.Context, req *pb.DeleteLLMRequest) (*pb.DeleteLLMResponse, error) {
+	return s.llmServer.DeleteLLM(ctx, req)
+}
+
 // Analytics Operations - delegate to analytics server
 
 func (s *AIStudioManagementServer) GetAnalyticsSummary(ctx context.Context, req *pb.GetAnalyticsSummaryRequest) (*pb.GetAnalyticsSummaryResponse, error) {
@@ -160,6 +172,117 @@ func (s *AIStudioManagementServer) GetApp(ctx context.Context, req *pb.GetAppReq
 
 	return &pb.GetAppResponse{
 		App: convertAppToPB(app),
+	}, nil
+}
+
+// CreateApp creates a new app
+func (s *AIStudioManagementServer) CreateApp(ctx context.Context, req *pb.CreateAppRequest) (*pb.CreateAppResponse, error) {
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+
+	// Call existing service method
+	app, err := s.service.CreateApp(
+		req.GetName(),
+		req.GetDescription(),
+		uint(req.GetUserId()),
+		[]uint{}, // DatasourceIDs - convert from req.GetDatasourceIds()
+		[]uint{}, // LLMIDs - convert from req.GetLlmIds()
+		[]uint{}, // ToolIDs - convert from req.GetToolIds()
+		req.MonthlyBudget,
+		nil, // BudgetStartDate
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Str("name", req.GetName()).
+			Uint32("user_id", req.GetUserId()).
+			Msg("Failed to create app via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to create app: %v", err)
+	}
+
+	log.Info().
+		Uint("app_id", app.ID).
+		Str("app_name", app.Name).
+		Uint32("user_id", req.GetUserId()).
+		Msg("Created app via gRPC")
+
+	return &pb.CreateAppResponse{
+		App: convertAppToPB(app),
+	}, nil
+}
+
+// UpdateApp updates an existing app
+func (s *AIStudioManagementServer) UpdateApp(ctx context.Context, req *pb.UpdateAppRequest) (*pb.UpdateAppResponse, error) {
+	appID := req.GetAppId()
+	if appID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "app_id is required")
+	}
+
+	// Convert uint32 arrays to uint arrays
+	llmIDs := make([]uint, len(req.GetLlmIds()))
+	for i, id := range req.GetLlmIds() {
+		llmIDs[i] = uint(id)
+	}
+	toolIDs := make([]uint, len(req.GetToolIds()))
+	for i, id := range req.GetToolIds() {
+		toolIDs[i] = uint(id)
+	}
+
+	// Call existing service method with full parameters
+	app, err := s.service.UpdateApp(
+		uint(appID),
+		req.GetName(),
+		req.GetDescription(),
+		0, // userID - not updated via this method
+		[]uint{}, // datasourceIDs - not in update request
+		llmIDs,
+		toolIDs,
+		req.MonthlyBudget,
+		nil, // budgetStartDate
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
+		}
+		log.Error().Err(err).Uint32("app_id", appID).Msg("Failed to update app via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update app: %v", err)
+	}
+
+	log.Info().
+		Uint32("app_id", appID).
+		Str("app_name", app.Name).
+		Msg("Updated app via gRPC")
+
+	return &pb.UpdateAppResponse{
+		App: convertAppToPB(app),
+	}, nil
+}
+
+// DeleteApp deletes an app
+func (s *AIStudioManagementServer) DeleteApp(ctx context.Context, req *pb.DeleteAppRequest) (*pb.DeleteAppResponse, error) {
+	appID := req.GetAppId()
+	if appID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "app_id is required")
+	}
+
+	// Call existing service method
+	err := s.service.DeleteApp(uint(appID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
+		}
+		log.Error().Err(err).Uint32("app_id", appID).Msg("Failed to delete app via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to delete app: %v", err)
+	}
+
+	log.Info().
+		Uint32("app_id", appID).
+		Msg("Deleted app via gRPC")
+
+	return &pb.DeleteAppResponse{
+		Success: true,
+		Message: "App deleted successfully",
 	}, nil
 }
 

@@ -122,6 +122,135 @@ func (s *LLMManagementServer) GetLLMPlugins(ctx context.Context, req *pb.GetLLMP
 	}, nil
 }
 
+// CreateLLM creates a new LLM
+func (s *LLMManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRequest) (*pb.CreateLLMResponse, error) {
+	// Validate required fields
+	if req.GetName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+	if req.GetVendor() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "vendor is required")
+	}
+	if req.GetDefaultModel() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "default_model is required")
+	}
+
+	// Convert vendor string to models.Vendor
+	vendor := models.Vendor(req.GetVendor())
+
+	// Call existing service method
+	llm, err := s.service.CreateLLMWithNamespace(
+		req.GetName(),
+		req.GetApiKey(),
+		req.GetApiEndpoint(),
+		int(req.GetPrivacyScore()),
+		req.GetShortDescription(),
+		req.GetLongDescription(),
+		req.GetLogoUrl(),
+		vendor,
+		req.GetActive(),
+		[]*models.Filter{}, // Empty filters initially
+		req.GetDefaultModel(),
+		req.GetAllowedModels(),
+		req.MonthlyBudget,
+		nil, // BudgetStartDate
+		req.GetNamespace(),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Str("name", req.GetName()).
+			Str("vendor", req.GetVendor()).
+			Msg("Failed to create LLM via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to create LLM: %v", err)
+	}
+
+	log.Info().
+		Uint("llm_id", llm.ID).
+		Str("llm_name", llm.Name).
+		Str("vendor", string(llm.Vendor)).
+		Msg("Created LLM via gRPC")
+
+	return &pb.CreateLLMResponse{
+		Llm: convertLLMToPB(llm),
+	}, nil
+}
+
+// UpdateLLM updates an existing LLM
+func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRequest) (*pb.UpdateLLMResponse, error) {
+	llmID := req.GetLlmId()
+	if llmID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "llm_id is required")
+	}
+
+	// Get existing LLM to preserve vendor (UpdateLLMRequest doesn't include vendor)
+	existingLLM, err := s.service.GetLLMByID(uint(llmID))
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
+	}
+
+	// Call existing service method with preserved vendor
+	llm, err := s.service.UpdateLLM(
+		uint(llmID),
+		req.GetName(),
+		req.GetApiKey(),
+		req.GetApiEndpoint(),
+		int(req.GetPrivacyScore()),
+		req.GetShortDescription(),
+		req.GetLongDescription(),
+		req.GetLogoUrl(),
+		existingLLM.Vendor, // Preserve existing vendor
+		req.GetActive(),
+		[]*models.Filter{}, // Filters managed separately
+		req.GetDefaultModel(),
+		req.GetAllowedModels(),
+		req.MonthlyBudget,
+		nil, // BudgetStartDate
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
+		}
+		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to update LLM via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update LLM: %v", err)
+	}
+
+	log.Info().
+		Uint32("llm_id", llmID).
+		Str("llm_name", llm.Name).
+		Msg("Updated LLM via gRPC")
+
+	return &pb.UpdateLLMResponse{
+		Llm: convertLLMToPB(llm),
+	}, nil
+}
+
+// DeleteLLM deletes an LLM
+func (s *LLMManagementServer) DeleteLLM(ctx context.Context, req *pb.DeleteLLMRequest) (*pb.DeleteLLMResponse, error) {
+	llmID := req.GetLlmId()
+	if llmID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "llm_id is required")
+	}
+
+	// Call existing service method
+	err := s.service.DeleteLLM(uint(llmID))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
+		}
+		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to delete LLM via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to delete LLM: %v", err)
+	}
+
+	log.Info().
+		Uint32("llm_id", llmID).
+		Msg("Deleted LLM via gRPC")
+
+	return &pb.DeleteLLMResponse{
+		Success: true,
+		Message: "LLM deleted successfully",
+	}, nil
+}
+
 // convertLLMToPB converts a models.LLM to protobuf LLMInfo
 func convertLLMToPB(llm *models.LLM) *pb.LLMInfo {
 	// Don't expose the actual API key, just indicate if it exists

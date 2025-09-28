@@ -99,6 +99,9 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/ListLLMs":      models.ServiceScopeLLMsRead,
 		"/ai_studio_management.AIStudioManagementService/GetLLM":        models.ServiceScopeLLMsRead,
 		"/ai_studio_management.AIStudioManagementService/GetLLMPlugins": models.ServiceScopeLLMsRead,
+		"/ai_studio_management.AIStudioManagementService/CreateLLM":     models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateLLM":     models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteLLM":     models.ServiceScopeLLMsWrite,
 
 		// Analytics methods
 		"/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary": models.ServiceScopeAnalyticsRead,
@@ -115,6 +118,9 @@ func extractScopeFromMethod(fullMethod string) string {
 		// App management methods
 		"/ai_studio_management.AIStudioManagementService/ListApps": models.ServiceScopeAppsRead,
 		"/ai_studio_management.AIStudioManagementService/GetApp":   models.ServiceScopeAppsRead,
+		"/ai_studio_management.AIStudioManagementService/CreateApp": models.ServiceScopeAppsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateApp": models.ServiceScopeAppsWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteApp": models.ServiceScopeAppsWrite,
 
 		// Tool management methods
 		"/ai_studio_management.AIStudioManagementService/ListTools":         models.ServiceScopeToolsRead,
@@ -145,6 +151,26 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/UpdateTag":  models.ServiceScopeTagsWrite,
 		"/ai_studio_management.AIStudioManagementService/DeleteTag":  models.ServiceScopeTagsWrite,
 		"/ai_studio_management.AIStudioManagementService/SearchTags": models.ServiceScopeTagsRead,
+
+		// Model pricing methods
+		"/ai_studio_management.AIStudioManagementService/ListModelPrices":        models.ServiceScopePricingRead,
+		"/ai_studio_management.AIStudioManagementService/GetModelPrice":         models.ServiceScopePricingRead,
+		"/ai_studio_management.AIStudioManagementService/CreateModelPrice":      models.ServiceScopePricingWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateModelPrice":      models.ServiceScopePricingWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteModelPrice":      models.ServiceScopePricingWrite,
+		"/ai_studio_management.AIStudioManagementService/GetModelPricesByVendor": models.ServiceScopePricingRead,
+
+		// Filter management methods
+		"/ai_studio_management.AIStudioManagementService/ListFilters":   models.ServiceScopeFiltersRead,
+		"/ai_studio_management.AIStudioManagementService/GetFilter":     models.ServiceScopeFiltersRead,
+		"/ai_studio_management.AIStudioManagementService/CreateFilter":  models.ServiceScopeFiltersWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateFilter":  models.ServiceScopeFiltersWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteFilter":  models.ServiceScopeFiltersWrite,
+
+		// Vendor information methods
+		"/ai_studio_management.AIStudioManagementService/GetAvailableLLMDrivers":    models.ServiceScopeVendorsRead,
+		"/ai_studio_management.AIStudioManagementService/GetAvailableEmbedders":    models.ServiceScopeVendorsRead,
+		"/ai_studio_management.AIStudioManagementService/GetAvailableVectorStores": models.ServiceScopeVendorsRead,
 	}
 
 	return scopeMap[fullMethod]

@@ -922,3 +922,192 @@ message ToolUsageRecord {
     double success_rate = 5;
     double average_latency_ms = 6;
 }
+
+// Model Price Management Messages
+
+message ListModelPricesRequest {
+    PluginContext context = 1;
+    string vendor = 2; // Optional vendor filter
+    int32 page = 3;
+    int32 limit = 4;
+}
+
+message ListModelPricesResponse {
+    repeated ModelPriceInfo model_prices = 1;
+    int64 total_count = 2;
+}
+
+message GetModelPriceRequest {
+    PluginContext context = 1;
+    uint32 model_price_id = 2;
+}
+
+message GetModelPriceResponse {
+    ModelPriceInfo model_price = 1;
+}
+
+message CreateModelPriceRequest {
+    PluginContext context = 1;
+    string model_name = 2;
+    string vendor = 3;
+    double cpt = 4;          // Cost per token (completion/output)
+    double cpit = 5;         // Cost per input token (prompt)
+    double cache_write_pt = 6; // Cost per cache write token
+    double cache_read_pt = 7;  // Cost per cache read token
+    string currency = 8;
+}
+
+message CreateModelPriceResponse {
+    ModelPriceInfo model_price = 1;
+}
+
+message UpdateModelPriceRequest {
+    PluginContext context = 1;
+    uint32 model_price_id = 2;
+    string model_name = 3;
+    string vendor = 4;
+    double cpt = 5;
+    double cpit = 6;
+    double cache_write_pt = 7;
+    double cache_read_pt = 8;
+    string currency = 9;
+}
+
+message UpdateModelPriceResponse {
+    ModelPriceInfo model_price = 1;
+}
+
+message DeleteModelPriceRequest {
+    PluginContext context = 1;
+    uint32 model_price_id = 2;
+}
+
+message DeleteModelPriceResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message GetModelPricesByVendorRequest {
+    PluginContext context = 1;
+    string vendor = 2;
+}
+
+message GetModelPricesByVendorResponse {
+    repeated ModelPriceInfo model_prices = 1;
+}
+
+message ModelPriceInfo {
+    uint32 id = 1;
+    string model_name = 2;
+    string vendor = 3;
+    double cpt = 4;          // Cost per token (completion/output)
+    double cpit = 5;         // Cost per input token (prompt)
+    double cache_write_pt = 6; // Cost per cache write token
+    double cache_read_pt = 7;  // Cost per cache read token
+    string currency = 8;
+    google.protobuf.Timestamp created_at = 9;
+    google.protobuf.Timestamp updated_at = 10;
+}
+
+// Filter Management Messages
+
+message ListFiltersRequest {
+    PluginContext context = 1;
+    bool is_active = 2;
+    int32 page = 3;
+    int32 limit = 4;
+}
+
+message ListFiltersResponse {
+    repeated FilterInfo filters = 1;
+    int64 total_count = 2;
+}
+
+message GetFilterRequest {
+    PluginContext context = 1;
+    uint32 filter_id = 2;
+}
+
+message GetFilterResponse {
+    FilterInfo filter = 1;
+}
+
+message CreateFilterRequest {
+    PluginContext context = 1;
+    string name = 2;
+    string description = 3;
+    string script = 4; // Filter script content
+}
+
+message CreateFilterResponse {
+    FilterInfo filter = 1;
+}
+
+message UpdateFilterRequest {
+    PluginContext context = 1;
+    uint32 filter_id = 2;
+    string name = 3;
+    string description = 4;
+    string script = 5;
+}
+
+message UpdateFilterResponse {
+    FilterInfo filter = 1;
+}
+
+message DeleteFilterRequest {
+    PluginContext context = 1;
+    uint32 filter_id = 2;
+}
+
+message DeleteFilterResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message FilterInfo {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string script = 4; // Filter script (truncated for security)
+    bool is_active = 5;
+    int32 order_index = 6;
+    string namespace = 7;
+    repeated uint32 llm_ids = 8;
+    google.protobuf.Timestamp created_at = 9;
+    google.protobuf.Timestamp updated_at = 10;
+}
+
+// Vendor Information Messages
+
+message GetAvailableLLMDriversRequest {
+    PluginContext context = 1;
+}
+
+message GetAvailableLLMDriversResponse {
+    repeated VendorDriverInfo drivers = 1;
+}
+
+message GetAvailableEmbeddersRequest {
+    PluginContext context = 1;
+}
+
+message GetAvailableEmbeddersResponse {
+    repeated VendorDriverInfo embedders = 1;
+}
+
+message GetAvailableVectorStoresRequest {
+    PluginContext context = 1;
+}
+
+message GetAvailableVectorStoresResponse {
+    repeated VendorDriverInfo vector_stores = 1;
+}
+
+message VendorDriverInfo {
+    string name = 1;
+    string vendor = 2;
+    string version = 3;
+    string description = 4;
+    repeated string supported_features = 5;
+}

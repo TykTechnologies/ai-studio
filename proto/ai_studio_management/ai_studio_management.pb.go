@@ -7649,6 +7649,1842 @@ func (x *ToolUsageRecord) GetAverageLatencyMs() float64 {
 	return 0
 }
 
+type ListModelPricesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Vendor        string                 `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"` // Optional vendor filter
+	Page          int32                  `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListModelPricesRequest) Reset() {
+	*x = ListModelPricesRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[114]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListModelPricesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListModelPricesRequest) ProtoMessage() {}
+
+func (x *ListModelPricesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[114]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListModelPricesRequest.ProtoReflect.Descriptor instead.
+func (*ListModelPricesRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{114}
+}
+
+func (x *ListModelPricesRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListModelPricesRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *ListModelPricesRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListModelPricesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListModelPricesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelPrices   []*ModelPriceInfo      `protobuf:"bytes,1,rep,name=model_prices,json=modelPrices,proto3" json:"model_prices,omitempty"`
+	TotalCount    int64                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListModelPricesResponse) Reset() {
+	*x = ListModelPricesResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[115]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListModelPricesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListModelPricesResponse) ProtoMessage() {}
+
+func (x *ListModelPricesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[115]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListModelPricesResponse.ProtoReflect.Descriptor instead.
+func (*ListModelPricesResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{115}
+}
+
+func (x *ListModelPricesResponse) GetModelPrices() []*ModelPriceInfo {
+	if x != nil {
+		return x.ModelPrices
+	}
+	return nil
+}
+
+func (x *ListModelPricesResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type GetModelPriceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ModelPriceId  uint32                 `protobuf:"varint,2,opt,name=model_price_id,json=modelPriceId,proto3" json:"model_price_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModelPriceRequest) Reset() {
+	*x = GetModelPriceRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[116]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModelPriceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModelPriceRequest) ProtoMessage() {}
+
+func (x *GetModelPriceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[116]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModelPriceRequest.ProtoReflect.Descriptor instead.
+func (*GetModelPriceRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{116}
+}
+
+func (x *GetModelPriceRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetModelPriceRequest) GetModelPriceId() uint32 {
+	if x != nil {
+		return x.ModelPriceId
+	}
+	return 0
+}
+
+type GetModelPriceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelPrice    *ModelPriceInfo        `protobuf:"bytes,1,opt,name=model_price,json=modelPrice,proto3" json:"model_price,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModelPriceResponse) Reset() {
+	*x = GetModelPriceResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[117]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModelPriceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModelPriceResponse) ProtoMessage() {}
+
+func (x *GetModelPriceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[117]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModelPriceResponse.ProtoReflect.Descriptor instead.
+func (*GetModelPriceResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{117}
+}
+
+func (x *GetModelPriceResponse) GetModelPrice() *ModelPriceInfo {
+	if x != nil {
+		return x.ModelPrice
+	}
+	return nil
+}
+
+type CreateModelPriceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	Vendor        string                 `protobuf:"bytes,3,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Cpt           float64                `protobuf:"fixed64,4,opt,name=cpt,proto3" json:"cpt,omitempty"`                                         // Cost per token (completion/output)
+	Cpit          float64                `protobuf:"fixed64,5,opt,name=cpit,proto3" json:"cpit,omitempty"`                                       // Cost per input token (prompt)
+	CacheWritePt  float64                `protobuf:"fixed64,6,opt,name=cache_write_pt,json=cacheWritePt,proto3" json:"cache_write_pt,omitempty"` // Cost per cache write token
+	CacheReadPt   float64                `protobuf:"fixed64,7,opt,name=cache_read_pt,json=cacheReadPt,proto3" json:"cache_read_pt,omitempty"`    // Cost per cache read token
+	Currency      string                 `protobuf:"bytes,8,opt,name=currency,proto3" json:"currency,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateModelPriceRequest) Reset() {
+	*x = CreateModelPriceRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[118]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateModelPriceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateModelPriceRequest) ProtoMessage() {}
+
+func (x *CreateModelPriceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[118]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateModelPriceRequest.ProtoReflect.Descriptor instead.
+func (*CreateModelPriceRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{118}
+}
+
+func (x *CreateModelPriceRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *CreateModelPriceRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *CreateModelPriceRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *CreateModelPriceRequest) GetCpt() float64 {
+	if x != nil {
+		return x.Cpt
+	}
+	return 0
+}
+
+func (x *CreateModelPriceRequest) GetCpit() float64 {
+	if x != nil {
+		return x.Cpit
+	}
+	return 0
+}
+
+func (x *CreateModelPriceRequest) GetCacheWritePt() float64 {
+	if x != nil {
+		return x.CacheWritePt
+	}
+	return 0
+}
+
+func (x *CreateModelPriceRequest) GetCacheReadPt() float64 {
+	if x != nil {
+		return x.CacheReadPt
+	}
+	return 0
+}
+
+func (x *CreateModelPriceRequest) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+type CreateModelPriceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelPrice    *ModelPriceInfo        `protobuf:"bytes,1,opt,name=model_price,json=modelPrice,proto3" json:"model_price,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateModelPriceResponse) Reset() {
+	*x = CreateModelPriceResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[119]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateModelPriceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateModelPriceResponse) ProtoMessage() {}
+
+func (x *CreateModelPriceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[119]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateModelPriceResponse.ProtoReflect.Descriptor instead.
+func (*CreateModelPriceResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{119}
+}
+
+func (x *CreateModelPriceResponse) GetModelPrice() *ModelPriceInfo {
+	if x != nil {
+		return x.ModelPrice
+	}
+	return nil
+}
+
+type UpdateModelPriceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ModelPriceId  uint32                 `protobuf:"varint,2,opt,name=model_price_id,json=modelPriceId,proto3" json:"model_price_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,3,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	Vendor        string                 `protobuf:"bytes,4,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Cpt           float64                `protobuf:"fixed64,5,opt,name=cpt,proto3" json:"cpt,omitempty"`
+	Cpit          float64                `protobuf:"fixed64,6,opt,name=cpit,proto3" json:"cpit,omitempty"`
+	CacheWritePt  float64                `protobuf:"fixed64,7,opt,name=cache_write_pt,json=cacheWritePt,proto3" json:"cache_write_pt,omitempty"`
+	CacheReadPt   float64                `protobuf:"fixed64,8,opt,name=cache_read_pt,json=cacheReadPt,proto3" json:"cache_read_pt,omitempty"`
+	Currency      string                 `protobuf:"bytes,9,opt,name=currency,proto3" json:"currency,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateModelPriceRequest) Reset() {
+	*x = UpdateModelPriceRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[120]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateModelPriceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateModelPriceRequest) ProtoMessage() {}
+
+func (x *UpdateModelPriceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[120]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateModelPriceRequest.ProtoReflect.Descriptor instead.
+func (*UpdateModelPriceRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{120}
+}
+
+func (x *UpdateModelPriceRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *UpdateModelPriceRequest) GetModelPriceId() uint32 {
+	if x != nil {
+		return x.ModelPriceId
+	}
+	return 0
+}
+
+func (x *UpdateModelPriceRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *UpdateModelPriceRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *UpdateModelPriceRequest) GetCpt() float64 {
+	if x != nil {
+		return x.Cpt
+	}
+	return 0
+}
+
+func (x *UpdateModelPriceRequest) GetCpit() float64 {
+	if x != nil {
+		return x.Cpit
+	}
+	return 0
+}
+
+func (x *UpdateModelPriceRequest) GetCacheWritePt() float64 {
+	if x != nil {
+		return x.CacheWritePt
+	}
+	return 0
+}
+
+func (x *UpdateModelPriceRequest) GetCacheReadPt() float64 {
+	if x != nil {
+		return x.CacheReadPt
+	}
+	return 0
+}
+
+func (x *UpdateModelPriceRequest) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+type UpdateModelPriceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelPrice    *ModelPriceInfo        `protobuf:"bytes,1,opt,name=model_price,json=modelPrice,proto3" json:"model_price,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateModelPriceResponse) Reset() {
+	*x = UpdateModelPriceResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[121]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateModelPriceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateModelPriceResponse) ProtoMessage() {}
+
+func (x *UpdateModelPriceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[121]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateModelPriceResponse.ProtoReflect.Descriptor instead.
+func (*UpdateModelPriceResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{121}
+}
+
+func (x *UpdateModelPriceResponse) GetModelPrice() *ModelPriceInfo {
+	if x != nil {
+		return x.ModelPrice
+	}
+	return nil
+}
+
+type DeleteModelPriceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ModelPriceId  uint32                 `protobuf:"varint,2,opt,name=model_price_id,json=modelPriceId,proto3" json:"model_price_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteModelPriceRequest) Reset() {
+	*x = DeleteModelPriceRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[122]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteModelPriceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteModelPriceRequest) ProtoMessage() {}
+
+func (x *DeleteModelPriceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[122]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteModelPriceRequest.ProtoReflect.Descriptor instead.
+func (*DeleteModelPriceRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{122}
+}
+
+func (x *DeleteModelPriceRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *DeleteModelPriceRequest) GetModelPriceId() uint32 {
+	if x != nil {
+		return x.ModelPriceId
+	}
+	return 0
+}
+
+type DeleteModelPriceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteModelPriceResponse) Reset() {
+	*x = DeleteModelPriceResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[123]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteModelPriceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteModelPriceResponse) ProtoMessage() {}
+
+func (x *DeleteModelPriceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[123]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteModelPriceResponse.ProtoReflect.Descriptor instead.
+func (*DeleteModelPriceResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{123}
+}
+
+func (x *DeleteModelPriceResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteModelPriceResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type GetModelPricesByVendorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Vendor        string                 `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModelPricesByVendorRequest) Reset() {
+	*x = GetModelPricesByVendorRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[124]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModelPricesByVendorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModelPricesByVendorRequest) ProtoMessage() {}
+
+func (x *GetModelPricesByVendorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[124]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModelPricesByVendorRequest.ProtoReflect.Descriptor instead.
+func (*GetModelPricesByVendorRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{124}
+}
+
+func (x *GetModelPricesByVendorRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetModelPricesByVendorRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+type GetModelPricesByVendorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelPrices   []*ModelPriceInfo      `protobuf:"bytes,1,rep,name=model_prices,json=modelPrices,proto3" json:"model_prices,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModelPricesByVendorResponse) Reset() {
+	*x = GetModelPricesByVendorResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[125]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModelPricesByVendorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModelPricesByVendorResponse) ProtoMessage() {}
+
+func (x *GetModelPricesByVendorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[125]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModelPricesByVendorResponse.ProtoReflect.Descriptor instead.
+func (*GetModelPricesByVendorResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{125}
+}
+
+func (x *GetModelPricesByVendorResponse) GetModelPrices() []*ModelPriceInfo {
+	if x != nil {
+		return x.ModelPrices
+	}
+	return nil
+}
+
+type ModelPriceInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	Vendor        string                 `protobuf:"bytes,3,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Cpt           float64                `protobuf:"fixed64,4,opt,name=cpt,proto3" json:"cpt,omitempty"`                                         // Cost per token (completion/output)
+	Cpit          float64                `protobuf:"fixed64,5,opt,name=cpit,proto3" json:"cpit,omitempty"`                                       // Cost per input token (prompt)
+	CacheWritePt  float64                `protobuf:"fixed64,6,opt,name=cache_write_pt,json=cacheWritePt,proto3" json:"cache_write_pt,omitempty"` // Cost per cache write token
+	CacheReadPt   float64                `protobuf:"fixed64,7,opt,name=cache_read_pt,json=cacheReadPt,proto3" json:"cache_read_pt,omitempty"`    // Cost per cache read token
+	Currency      string                 `protobuf:"bytes,8,opt,name=currency,proto3" json:"currency,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelPriceInfo) Reset() {
+	*x = ModelPriceInfo{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[126]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelPriceInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelPriceInfo) ProtoMessage() {}
+
+func (x *ModelPriceInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[126]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelPriceInfo.ProtoReflect.Descriptor instead.
+func (*ModelPriceInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{126}
+}
+
+func (x *ModelPriceInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ModelPriceInfo) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *ModelPriceInfo) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *ModelPriceInfo) GetCpt() float64 {
+	if x != nil {
+		return x.Cpt
+	}
+	return 0
+}
+
+func (x *ModelPriceInfo) GetCpit() float64 {
+	if x != nil {
+		return x.Cpit
+	}
+	return 0
+}
+
+func (x *ModelPriceInfo) GetCacheWritePt() float64 {
+	if x != nil {
+		return x.CacheWritePt
+	}
+	return 0
+}
+
+func (x *ModelPriceInfo) GetCacheReadPt() float64 {
+	if x != nil {
+		return x.CacheReadPt
+	}
+	return 0
+}
+
+func (x *ModelPriceInfo) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *ModelPriceInfo) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *ModelPriceInfo) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type ListFiltersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	IsActive      bool                   `protobuf:"varint,2,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Page          int32                  `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFiltersRequest) Reset() {
+	*x = ListFiltersRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[127]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFiltersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFiltersRequest) ProtoMessage() {}
+
+func (x *ListFiltersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[127]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFiltersRequest.ProtoReflect.Descriptor instead.
+func (*ListFiltersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{127}
+}
+
+func (x *ListFiltersRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListFiltersRequest) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *ListFiltersRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListFiltersRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListFiltersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filters       []*FilterInfo          `protobuf:"bytes,1,rep,name=filters,proto3" json:"filters,omitempty"`
+	TotalCount    int64                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFiltersResponse) Reset() {
+	*x = ListFiltersResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[128]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFiltersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFiltersResponse) ProtoMessage() {}
+
+func (x *ListFiltersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[128]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFiltersResponse.ProtoReflect.Descriptor instead.
+func (*ListFiltersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{128}
+}
+
+func (x *ListFiltersResponse) GetFilters() []*FilterInfo {
+	if x != nil {
+		return x.Filters
+	}
+	return nil
+}
+
+func (x *ListFiltersResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type GetFilterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	FilterId      uint32                 `protobuf:"varint,2,opt,name=filter_id,json=filterId,proto3" json:"filter_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFilterRequest) Reset() {
+	*x = GetFilterRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[129]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFilterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFilterRequest) ProtoMessage() {}
+
+func (x *GetFilterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[129]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFilterRequest.ProtoReflect.Descriptor instead.
+func (*GetFilterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{129}
+}
+
+func (x *GetFilterRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetFilterRequest) GetFilterId() uint32 {
+	if x != nil {
+		return x.FilterId
+	}
+	return 0
+}
+
+type GetFilterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filter        *FilterInfo            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFilterResponse) Reset() {
+	*x = GetFilterResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[130]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFilterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFilterResponse) ProtoMessage() {}
+
+func (x *GetFilterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[130]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFilterResponse.ProtoReflect.Descriptor instead.
+func (*GetFilterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{130}
+}
+
+func (x *GetFilterResponse) GetFilter() *FilterInfo {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+type CreateFilterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"` // Filter script content
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateFilterRequest) Reset() {
+	*x = CreateFilterRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[131]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateFilterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateFilterRequest) ProtoMessage() {}
+
+func (x *CreateFilterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[131]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateFilterRequest.ProtoReflect.Descriptor instead.
+func (*CreateFilterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{131}
+}
+
+func (x *CreateFilterRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *CreateFilterRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateFilterRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *CreateFilterRequest) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
+type CreateFilterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filter        *FilterInfo            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateFilterResponse) Reset() {
+	*x = CreateFilterResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[132]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateFilterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateFilterResponse) ProtoMessage() {}
+
+func (x *CreateFilterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[132]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateFilterResponse.ProtoReflect.Descriptor instead.
+func (*CreateFilterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{132}
+}
+
+func (x *CreateFilterResponse) GetFilter() *FilterInfo {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+type UpdateFilterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	FilterId      uint32                 `protobuf:"varint,2,opt,name=filter_id,json=filterId,proto3" json:"filter_id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Script        string                 `protobuf:"bytes,5,opt,name=script,proto3" json:"script,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateFilterRequest) Reset() {
+	*x = UpdateFilterRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[133]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateFilterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateFilterRequest) ProtoMessage() {}
+
+func (x *UpdateFilterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[133]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateFilterRequest.ProtoReflect.Descriptor instead.
+func (*UpdateFilterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{133}
+}
+
+func (x *UpdateFilterRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *UpdateFilterRequest) GetFilterId() uint32 {
+	if x != nil {
+		return x.FilterId
+	}
+	return 0
+}
+
+func (x *UpdateFilterRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpdateFilterRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *UpdateFilterRequest) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
+type UpdateFilterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filter        *FilterInfo            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateFilterResponse) Reset() {
+	*x = UpdateFilterResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[134]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateFilterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateFilterResponse) ProtoMessage() {}
+
+func (x *UpdateFilterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[134]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateFilterResponse.ProtoReflect.Descriptor instead.
+func (*UpdateFilterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{134}
+}
+
+func (x *UpdateFilterResponse) GetFilter() *FilterInfo {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+type DeleteFilterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	FilterId      uint32                 `protobuf:"varint,2,opt,name=filter_id,json=filterId,proto3" json:"filter_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFilterRequest) Reset() {
+	*x = DeleteFilterRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[135]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFilterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFilterRequest) ProtoMessage() {}
+
+func (x *DeleteFilterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[135]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFilterRequest.ProtoReflect.Descriptor instead.
+func (*DeleteFilterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{135}
+}
+
+func (x *DeleteFilterRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *DeleteFilterRequest) GetFilterId() uint32 {
+	if x != nil {
+		return x.FilterId
+	}
+	return 0
+}
+
+type DeleteFilterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFilterResponse) Reset() {
+	*x = DeleteFilterResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[136]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFilterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFilterResponse) ProtoMessage() {}
+
+func (x *DeleteFilterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[136]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFilterResponse.ProtoReflect.Descriptor instead.
+func (*DeleteFilterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{136}
+}
+
+func (x *DeleteFilterResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteFilterResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type FilterInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"` // Filter script (truncated for security)
+	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	OrderIndex    int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	Namespace     string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	LlmIds        []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FilterInfo) Reset() {
+	*x = FilterInfo{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[137]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FilterInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FilterInfo) ProtoMessage() {}
+
+func (x *FilterInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[137]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FilterInfo.ProtoReflect.Descriptor instead.
+func (*FilterInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{137}
+}
+
+func (x *FilterInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *FilterInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FilterInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *FilterInfo) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
+func (x *FilterInfo) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *FilterInfo) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *FilterInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *FilterInfo) GetLlmIds() []uint32 {
+	if x != nil {
+		return x.LlmIds
+	}
+	return nil
+}
+
+func (x *FilterInfo) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *FilterInfo) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type GetAvailableLLMDriversRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailableLLMDriversRequest) Reset() {
+	*x = GetAvailableLLMDriversRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[138]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailableLLMDriversRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailableLLMDriversRequest) ProtoMessage() {}
+
+func (x *GetAvailableLLMDriversRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[138]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailableLLMDriversRequest.ProtoReflect.Descriptor instead.
+func (*GetAvailableLLMDriversRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{138}
+}
+
+func (x *GetAvailableLLMDriversRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type GetAvailableLLMDriversResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Drivers       []*VendorDriverInfo    `protobuf:"bytes,1,rep,name=drivers,proto3" json:"drivers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailableLLMDriversResponse) Reset() {
+	*x = GetAvailableLLMDriversResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[139]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailableLLMDriversResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailableLLMDriversResponse) ProtoMessage() {}
+
+func (x *GetAvailableLLMDriversResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[139]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailableLLMDriversResponse.ProtoReflect.Descriptor instead.
+func (*GetAvailableLLMDriversResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{139}
+}
+
+func (x *GetAvailableLLMDriversResponse) GetDrivers() []*VendorDriverInfo {
+	if x != nil {
+		return x.Drivers
+	}
+	return nil
+}
+
+type GetAvailableEmbeddersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailableEmbeddersRequest) Reset() {
+	*x = GetAvailableEmbeddersRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[140]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailableEmbeddersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailableEmbeddersRequest) ProtoMessage() {}
+
+func (x *GetAvailableEmbeddersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[140]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailableEmbeddersRequest.ProtoReflect.Descriptor instead.
+func (*GetAvailableEmbeddersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{140}
+}
+
+func (x *GetAvailableEmbeddersRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type GetAvailableEmbeddersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Embedders     []*VendorDriverInfo    `protobuf:"bytes,1,rep,name=embedders,proto3" json:"embedders,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailableEmbeddersResponse) Reset() {
+	*x = GetAvailableEmbeddersResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[141]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailableEmbeddersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailableEmbeddersResponse) ProtoMessage() {}
+
+func (x *GetAvailableEmbeddersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[141]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailableEmbeddersResponse.ProtoReflect.Descriptor instead.
+func (*GetAvailableEmbeddersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{141}
+}
+
+func (x *GetAvailableEmbeddersResponse) GetEmbedders() []*VendorDriverInfo {
+	if x != nil {
+		return x.Embedders
+	}
+	return nil
+}
+
+type GetAvailableVectorStoresRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailableVectorStoresRequest) Reset() {
+	*x = GetAvailableVectorStoresRequest{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[142]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailableVectorStoresRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailableVectorStoresRequest) ProtoMessage() {}
+
+func (x *GetAvailableVectorStoresRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[142]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailableVectorStoresRequest.ProtoReflect.Descriptor instead.
+func (*GetAvailableVectorStoresRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{142}
+}
+
+func (x *GetAvailableVectorStoresRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type GetAvailableVectorStoresResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VectorStores  []*VendorDriverInfo    `protobuf:"bytes,1,rep,name=vector_stores,json=vectorStores,proto3" json:"vector_stores,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailableVectorStoresResponse) Reset() {
+	*x = GetAvailableVectorStoresResponse{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[143]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailableVectorStoresResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailableVectorStoresResponse) ProtoMessage() {}
+
+func (x *GetAvailableVectorStoresResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[143]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailableVectorStoresResponse.ProtoReflect.Descriptor instead.
+func (*GetAvailableVectorStoresResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{143}
+}
+
+func (x *GetAvailableVectorStoresResponse) GetVectorStores() []*VendorDriverInfo {
+	if x != nil {
+		return x.VectorStores
+	}
+	return nil
+}
+
+type VendorDriverInfo struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Name              string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Vendor            string                 `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Version           string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	Description       string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	SupportedFeatures []string               `protobuf:"bytes,5,rep,name=supported_features,json=supportedFeatures,proto3" json:"supported_features,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *VendorDriverInfo) Reset() {
+	*x = VendorDriverInfo{}
+	mi := &file_proto_ai_studio_management_proto_msgTypes[144]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VendorDriverInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VendorDriverInfo) ProtoMessage() {}
+
+func (x *VendorDriverInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_proto_msgTypes[144]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VendorDriverInfo.ProtoReflect.Descriptor instead.
+func (*VendorDriverInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_proto_rawDescGZIP(), []int{144}
+}
+
+func (x *VendorDriverInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *VendorDriverInfo) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *VendorDriverInfo) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *VendorDriverInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *VendorDriverInfo) GetSupportedFeatures() []string {
+	if x != nil {
+		return x.SupportedFeatures
+	}
+	return nil
+}
+
 var File_proto_ai_studio_management_proto protoreflect.FileDescriptor
 
 const file_proto_ai_studio_management_proto_rawDesc = "" +
@@ -8305,7 +10141,144 @@ const file_proto_ai_studio_management_proto_rawDesc = "" +
 	"\n" +
 	"call_count\x18\x04 \x01(\x03R\tcallCount\x12!\n" +
 	"\fsuccess_rate\x18\x05 \x01(\x01R\vsuccessRate\x12,\n" +
-	"\x12average_latency_ms\x18\x06 \x01(\x01R\x10averageLatencyMs2\x8a'\n" +
+	"\x12average_latency_ms\x18\x06 \x01(\x01R\x10averageLatencyMs\"\x99\x01\n" +
+	"\x16ListModelPricesRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x16\n" +
+	"\x06vendor\x18\x02 \x01(\tR\x06vendor\x12\x12\n" +
+	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"\x83\x01\n" +
+	"\x17ListModelPricesResponse\x12G\n" +
+	"\fmodel_prices\x18\x01 \x03(\v2$.ai_studio_management.ModelPriceInfoR\vmodelPrices\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"{\n" +
+	"\x14GetModelPriceRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12$\n" +
+	"\x0emodel_price_id\x18\x02 \x01(\rR\fmodelPriceId\"^\n" +
+	"\x15GetModelPriceResponse\x12E\n" +
+	"\vmodel_price\x18\x01 \x01(\v2$.ai_studio_management.ModelPriceInfoR\n" +
+	"modelPrice\"\x9b\x02\n" +
+	"\x17CreateModelPriceRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12\x16\n" +
+	"\x06vendor\x18\x03 \x01(\tR\x06vendor\x12\x10\n" +
+	"\x03cpt\x18\x04 \x01(\x01R\x03cpt\x12\x12\n" +
+	"\x04cpit\x18\x05 \x01(\x01R\x04cpit\x12$\n" +
+	"\x0ecache_write_pt\x18\x06 \x01(\x01R\fcacheWritePt\x12\"\n" +
+	"\rcache_read_pt\x18\a \x01(\x01R\vcacheReadPt\x12\x1a\n" +
+	"\bcurrency\x18\b \x01(\tR\bcurrency\"a\n" +
+	"\x18CreateModelPriceResponse\x12E\n" +
+	"\vmodel_price\x18\x01 \x01(\v2$.ai_studio_management.ModelPriceInfoR\n" +
+	"modelPrice\"\xc1\x02\n" +
+	"\x17UpdateModelPriceRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12$\n" +
+	"\x0emodel_price_id\x18\x02 \x01(\rR\fmodelPriceId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x03 \x01(\tR\tmodelName\x12\x16\n" +
+	"\x06vendor\x18\x04 \x01(\tR\x06vendor\x12\x10\n" +
+	"\x03cpt\x18\x05 \x01(\x01R\x03cpt\x12\x12\n" +
+	"\x04cpit\x18\x06 \x01(\x01R\x04cpit\x12$\n" +
+	"\x0ecache_write_pt\x18\a \x01(\x01R\fcacheWritePt\x12\"\n" +
+	"\rcache_read_pt\x18\b \x01(\x01R\vcacheReadPt\x12\x1a\n" +
+	"\bcurrency\x18\t \x01(\tR\bcurrency\"a\n" +
+	"\x18UpdateModelPriceResponse\x12E\n" +
+	"\vmodel_price\x18\x01 \x01(\v2$.ai_studio_management.ModelPriceInfoR\n" +
+	"modelPrice\"~\n" +
+	"\x17DeleteModelPriceRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12$\n" +
+	"\x0emodel_price_id\x18\x02 \x01(\rR\fmodelPriceId\"N\n" +
+	"\x18DeleteModelPriceResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"v\n" +
+	"\x1dGetModelPricesByVendorRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x16\n" +
+	"\x06vendor\x18\x02 \x01(\tR\x06vendor\"i\n" +
+	"\x1eGetModelPricesByVendorResponse\x12G\n" +
+	"\fmodel_prices\x18\x01 \x03(\v2$.ai_studio_management.ModelPriceInfoR\vmodelPrices\"\xd9\x02\n" +
+	"\x0eModelPriceInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12\x16\n" +
+	"\x06vendor\x18\x03 \x01(\tR\x06vendor\x12\x10\n" +
+	"\x03cpt\x18\x04 \x01(\x01R\x03cpt\x12\x12\n" +
+	"\x04cpit\x18\x05 \x01(\x01R\x04cpit\x12$\n" +
+	"\x0ecache_write_pt\x18\x06 \x01(\x01R\fcacheWritePt\x12\"\n" +
+	"\rcache_read_pt\x18\a \x01(\x01R\vcacheReadPt\x12\x1a\n" +
+	"\bcurrency\x18\b \x01(\tR\bcurrency\x129\n" +
+	"\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9a\x01\n" +
+	"\x12ListFiltersRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\tis_active\x18\x02 \x01(\bR\bisActive\x12\x12\n" +
+	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"r\n" +
+	"\x13ListFiltersResponse\x12:\n" +
+	"\afilters\x18\x01 \x03(\v2 .ai_studio_management.FilterInfoR\afilters\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"n\n" +
+	"\x10GetFilterRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\tfilter_id\x18\x02 \x01(\rR\bfilterId\"M\n" +
+	"\x11GetFilterResponse\x128\n" +
+	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"\xa2\x01\n" +
+	"\x13CreateFilterRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06script\x18\x04 \x01(\tR\x06script\"P\n" +
+	"\x14CreateFilterResponse\x128\n" +
+	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"\xbf\x01\n" +
+	"\x13UpdateFilterRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\tfilter_id\x18\x02 \x01(\rR\bfilterId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06script\x18\x05 \x01(\tR\x06script\"P\n" +
+	"\x14UpdateFilterResponse\x128\n" +
+	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"q\n" +
+	"\x13DeleteFilterRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\tfilter_id\x18\x02 \x01(\rR\bfilterId\"J\n" +
+	"\x14DeleteFilterResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xd5\x02\n" +
+	"\n" +
+	"FilterInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06script\x18\x04 \x01(\tR\x06script\x12\x1b\n" +
+	"\tis_active\x18\x05 \x01(\bR\bisActive\x12\x1f\n" +
+	"\vorder_index\x18\x06 \x01(\x05R\n" +
+	"orderIndex\x12\x1c\n" +
+	"\tnamespace\x18\a \x01(\tR\tnamespace\x12\x17\n" +
+	"\allm_ids\x18\b \x03(\rR\x06llmIds\x129\n" +
+	"\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"^\n" +
+	"\x1dGetAvailableLLMDriversRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\"b\n" +
+	"\x1eGetAvailableLLMDriversResponse\x12@\n" +
+	"\adrivers\x18\x01 \x03(\v2&.ai_studio_management.VendorDriverInfoR\adrivers\"]\n" +
+	"\x1cGetAvailableEmbeddersRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\"e\n" +
+	"\x1dGetAvailableEmbeddersResponse\x12D\n" +
+	"\tembedders\x18\x01 \x03(\v2&.ai_studio_management.VendorDriverInfoR\tembedders\"`\n" +
+	"\x1fGetAvailableVectorStoresRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\"o\n" +
+	" GetAvailableVectorStoresResponse\x12K\n" +
+	"\rvector_stores\x18\x01 \x03(\v2&.ai_studio_management.VendorDriverInfoR\fvectorStores\"\xa9\x01\n" +
+	"\x10VendorDriverInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06vendor\x18\x02 \x01(\tR\x06vendor\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12-\n" +
+	"\x12supported_features\x18\x05 \x03(\tR\x11supportedFeatures2\xcf3\n" +
 	"\x19AIStudioManagementService\x12b\n" +
 	"\vListPlugins\x12(.ai_studio_management.ListPluginsRequest\x1a).ai_studio_management.ListPluginsResponse\x12\\\n" +
 	"\tGetPlugin\x12&.ai_studio_management.GetPluginRequest\x1a'.ai_studio_management.GetPluginResponse\x12w\n" +
@@ -8357,7 +10330,21 @@ const file_proto_ai_studio_management_proto_rawDesc = "" +
 	"\tUpdateTag\x12&.ai_studio_management.UpdateTagRequest\x1a'.ai_studio_management.UpdateTagResponse\x12\\\n" +
 	"\tDeleteTag\x12&.ai_studio_management.DeleteTagRequest\x1a'.ai_studio_management.DeleteTagResponse\x12_\n" +
 	"\n" +
-	"SearchTags\x12'.ai_studio_management.SearchTagsRequest\x1a(.ai_studio_management.SearchTagsResponseBDZBgithub.com/TykTechnologies/midsommar/v2/proto/ai_studio_managementb\x06proto3"
+	"SearchTags\x12'.ai_studio_management.SearchTagsRequest\x1a(.ai_studio_management.SearchTagsResponse\x12n\n" +
+	"\x0fListModelPrices\x12,.ai_studio_management.ListModelPricesRequest\x1a-.ai_studio_management.ListModelPricesResponse\x12h\n" +
+	"\rGetModelPrice\x12*.ai_studio_management.GetModelPriceRequest\x1a+.ai_studio_management.GetModelPriceResponse\x12q\n" +
+	"\x10CreateModelPrice\x12-.ai_studio_management.CreateModelPriceRequest\x1a..ai_studio_management.CreateModelPriceResponse\x12q\n" +
+	"\x10UpdateModelPrice\x12-.ai_studio_management.UpdateModelPriceRequest\x1a..ai_studio_management.UpdateModelPriceResponse\x12q\n" +
+	"\x10DeleteModelPrice\x12-.ai_studio_management.DeleteModelPriceRequest\x1a..ai_studio_management.DeleteModelPriceResponse\x12\x83\x01\n" +
+	"\x16GetModelPricesByVendor\x123.ai_studio_management.GetModelPricesByVendorRequest\x1a4.ai_studio_management.GetModelPricesByVendorResponse\x12b\n" +
+	"\vListFilters\x12(.ai_studio_management.ListFiltersRequest\x1a).ai_studio_management.ListFiltersResponse\x12\\\n" +
+	"\tGetFilter\x12&.ai_studio_management.GetFilterRequest\x1a'.ai_studio_management.GetFilterResponse\x12e\n" +
+	"\fCreateFilter\x12).ai_studio_management.CreateFilterRequest\x1a*.ai_studio_management.CreateFilterResponse\x12e\n" +
+	"\fUpdateFilter\x12).ai_studio_management.UpdateFilterRequest\x1a*.ai_studio_management.UpdateFilterResponse\x12e\n" +
+	"\fDeleteFilter\x12).ai_studio_management.DeleteFilterRequest\x1a*.ai_studio_management.DeleteFilterResponse\x12\x83\x01\n" +
+	"\x16GetAvailableLLMDrivers\x123.ai_studio_management.GetAvailableLLMDriversRequest\x1a4.ai_studio_management.GetAvailableLLMDriversResponse\x12\x80\x01\n" +
+	"\x15GetAvailableEmbedders\x122.ai_studio_management.GetAvailableEmbeddersRequest\x1a3.ai_studio_management.GetAvailableEmbeddersResponse\x12\x89\x01\n" +
+	"\x18GetAvailableVectorStores\x125.ai_studio_management.GetAvailableVectorStoresRequest\x1a6.ai_studio_management.GetAvailableVectorStoresResponseBDZBgithub.com/TykTechnologies/midsommar/v2/proto/ai_studio_managementb\x06proto3"
 
 var (
 	file_proto_ai_studio_management_proto_rawDescOnce sync.Once
@@ -8371,123 +10358,154 @@ func file_proto_ai_studio_management_proto_rawDescGZIP() []byte {
 	return file_proto_ai_studio_management_proto_rawDescData
 }
 
-var file_proto_ai_studio_management_proto_msgTypes = make([]protoimpl.MessageInfo, 114)
+var file_proto_ai_studio_management_proto_msgTypes = make([]protoimpl.MessageInfo, 145)
 var file_proto_ai_studio_management_proto_goTypes = []any{
-	(*PluginContext)(nil),                  // 0: ai_studio_management.PluginContext
-	(*ListPluginsRequest)(nil),             // 1: ai_studio_management.ListPluginsRequest
-	(*ListPluginsResponse)(nil),            // 2: ai_studio_management.ListPluginsResponse
-	(*GetPluginRequest)(nil),               // 3: ai_studio_management.GetPluginRequest
-	(*GetPluginResponse)(nil),              // 4: ai_studio_management.GetPluginResponse
-	(*UpdatePluginConfigRequest)(nil),      // 5: ai_studio_management.UpdatePluginConfigRequest
-	(*UpdatePluginConfigResponse)(nil),     // 6: ai_studio_management.UpdatePluginConfigResponse
-	(*PluginInfo)(nil),                     // 7: ai_studio_management.PluginInfo
-	(*ListLLMsRequest)(nil),                // 8: ai_studio_management.ListLLMsRequest
-	(*ListLLMsResponse)(nil),               // 9: ai_studio_management.ListLLMsResponse
-	(*GetLLMRequest)(nil),                  // 10: ai_studio_management.GetLLMRequest
-	(*GetLLMResponse)(nil),                 // 11: ai_studio_management.GetLLMResponse
-	(*GetLLMPluginsRequest)(nil),           // 12: ai_studio_management.GetLLMPluginsRequest
-	(*GetLLMPluginsResponse)(nil),          // 13: ai_studio_management.GetLLMPluginsResponse
-	(*LLMInfo)(nil),                        // 14: ai_studio_management.LLMInfo
-	(*CreateLLMRequest)(nil),               // 15: ai_studio_management.CreateLLMRequest
-	(*CreateLLMResponse)(nil),              // 16: ai_studio_management.CreateLLMResponse
-	(*UpdateLLMRequest)(nil),               // 17: ai_studio_management.UpdateLLMRequest
-	(*UpdateLLMResponse)(nil),              // 18: ai_studio_management.UpdateLLMResponse
-	(*DeleteLLMRequest)(nil),               // 19: ai_studio_management.DeleteLLMRequest
-	(*DeleteLLMResponse)(nil),              // 20: ai_studio_management.DeleteLLMResponse
-	(*GetAnalyticsSummaryRequest)(nil),     // 21: ai_studio_management.GetAnalyticsSummaryRequest
-	(*GetAnalyticsSummaryResponse)(nil),    // 22: ai_studio_management.GetAnalyticsSummaryResponse
-	(*GetUsageStatisticsRequest)(nil),      // 23: ai_studio_management.GetUsageStatisticsRequest
-	(*GetUsageStatisticsResponse)(nil),     // 24: ai_studio_management.GetUsageStatisticsResponse
-	(*GetCostAnalysisRequest)(nil),         // 25: ai_studio_management.GetCostAnalysisRequest
-	(*GetCostAnalysisResponse)(nil),        // 26: ai_studio_management.GetCostAnalysisResponse
-	(*TopEndpoint)(nil),                    // 27: ai_studio_management.TopEndpoint
-	(*ModelUsage)(nil),                     // 28: ai_studio_management.ModelUsage
-	(*UsageStatistic)(nil),                 // 29: ai_studio_management.UsageStatistic
-	(*CostBreakdown)(nil),                  // 30: ai_studio_management.CostBreakdown
-	(*ListAppsRequest)(nil),                // 31: ai_studio_management.ListAppsRequest
-	(*ListAppsResponse)(nil),               // 32: ai_studio_management.ListAppsResponse
-	(*GetAppRequest)(nil),                  // 33: ai_studio_management.GetAppRequest
-	(*GetAppResponse)(nil),                 // 34: ai_studio_management.GetAppResponse
-	(*AppInfo)(nil),                        // 35: ai_studio_management.AppInfo
-	(*CreateAppRequest)(nil),               // 36: ai_studio_management.CreateAppRequest
-	(*CreateAppResponse)(nil),              // 37: ai_studio_management.CreateAppResponse
-	(*UpdateAppRequest)(nil),               // 38: ai_studio_management.UpdateAppRequest
-	(*UpdateAppResponse)(nil),              // 39: ai_studio_management.UpdateAppResponse
-	(*DeleteAppRequest)(nil),               // 40: ai_studio_management.DeleteAppRequest
-	(*DeleteAppResponse)(nil),              // 41: ai_studio_management.DeleteAppResponse
-	(*ListToolsRequest)(nil),               // 42: ai_studio_management.ListToolsRequest
-	(*ListToolsResponse)(nil),              // 43: ai_studio_management.ListToolsResponse
-	(*GetToolRequest)(nil),                 // 44: ai_studio_management.GetToolRequest
-	(*GetToolResponse)(nil),                // 45: ai_studio_management.GetToolResponse
-	(*GetToolOperationsRequest)(nil),       // 46: ai_studio_management.GetToolOperationsRequest
-	(*GetToolOperationsResponse)(nil),      // 47: ai_studio_management.GetToolOperationsResponse
-	(*CallToolOperationRequest)(nil),       // 48: ai_studio_management.CallToolOperationRequest
-	(*CallToolOperationResponse)(nil),      // 49: ai_studio_management.CallToolOperationResponse
-	(*ToolInfo)(nil),                       // 50: ai_studio_management.ToolInfo
-	(*ToolOperation)(nil),                  // 51: ai_studio_management.ToolOperation
-	(*ToolParameter)(nil),                  // 52: ai_studio_management.ToolParameter
-	(*ToolRequestBody)(nil),                // 53: ai_studio_management.ToolRequestBody
-	(*CreateToolRequest)(nil),              // 54: ai_studio_management.CreateToolRequest
-	(*CreateToolResponse)(nil),             // 55: ai_studio_management.CreateToolResponse
-	(*UpdateToolRequest)(nil),              // 56: ai_studio_management.UpdateToolRequest
-	(*UpdateToolResponse)(nil),             // 57: ai_studio_management.UpdateToolResponse
-	(*DeleteToolRequest)(nil),              // 58: ai_studio_management.DeleteToolRequest
-	(*DeleteToolResponse)(nil),             // 59: ai_studio_management.DeleteToolResponse
-	(*ListDatasourcesRequest)(nil),         // 60: ai_studio_management.ListDatasourcesRequest
-	(*ListDatasourcesResponse)(nil),        // 61: ai_studio_management.ListDatasourcesResponse
-	(*GetDatasourceRequest)(nil),           // 62: ai_studio_management.GetDatasourceRequest
-	(*GetDatasourceResponse)(nil),          // 63: ai_studio_management.GetDatasourceResponse
-	(*CreateDatasourceRequest)(nil),        // 64: ai_studio_management.CreateDatasourceRequest
-	(*CreateDatasourceResponse)(nil),       // 65: ai_studio_management.CreateDatasourceResponse
-	(*UpdateDatasourceRequest)(nil),        // 66: ai_studio_management.UpdateDatasourceRequest
-	(*UpdateDatasourceResponse)(nil),       // 67: ai_studio_management.UpdateDatasourceResponse
-	(*DeleteDatasourceRequest)(nil),        // 68: ai_studio_management.DeleteDatasourceRequest
-	(*DeleteDatasourceResponse)(nil),       // 69: ai_studio_management.DeleteDatasourceResponse
-	(*SearchDatasourcesRequest)(nil),       // 70: ai_studio_management.SearchDatasourcesRequest
-	(*SearchDatasourcesResponse)(nil),      // 71: ai_studio_management.SearchDatasourcesResponse
-	(*ProcessEmbeddingsRequest)(nil),       // 72: ai_studio_management.ProcessEmbeddingsRequest
-	(*ProcessEmbeddingsResponse)(nil),      // 73: ai_studio_management.ProcessEmbeddingsResponse
-	(*DatasourceInfo)(nil),                 // 74: ai_studio_management.DatasourceInfo
-	(*ListDataCataloguesRequest)(nil),      // 75: ai_studio_management.ListDataCataloguesRequest
-	(*ListDataCataloguesResponse)(nil),     // 76: ai_studio_management.ListDataCataloguesResponse
-	(*GetDataCatalogueRequest)(nil),        // 77: ai_studio_management.GetDataCatalogueRequest
-	(*GetDataCatalogueResponse)(nil),       // 78: ai_studio_management.GetDataCatalogueResponse
-	(*CreateDataCatalogueRequest)(nil),     // 79: ai_studio_management.CreateDataCatalogueRequest
-	(*CreateDataCatalogueResponse)(nil),    // 80: ai_studio_management.CreateDataCatalogueResponse
-	(*UpdateDataCatalogueRequest)(nil),     // 81: ai_studio_management.UpdateDataCatalogueRequest
-	(*UpdateDataCatalogueResponse)(nil),    // 82: ai_studio_management.UpdateDataCatalogueResponse
-	(*DeleteDataCatalogueRequest)(nil),     // 83: ai_studio_management.DeleteDataCatalogueRequest
-	(*DeleteDataCatalogueResponse)(nil),    // 84: ai_studio_management.DeleteDataCatalogueResponse
-	(*DataCatalogueInfo)(nil),              // 85: ai_studio_management.DataCatalogueInfo
-	(*ListTagsRequest)(nil),                // 86: ai_studio_management.ListTagsRequest
-	(*ListTagsResponse)(nil),               // 87: ai_studio_management.ListTagsResponse
-	(*GetTagRequest)(nil),                  // 88: ai_studio_management.GetTagRequest
-	(*GetTagResponse)(nil),                 // 89: ai_studio_management.GetTagResponse
-	(*CreateTagRequest)(nil),               // 90: ai_studio_management.CreateTagRequest
-	(*CreateTagResponse)(nil),              // 91: ai_studio_management.CreateTagResponse
-	(*UpdateTagRequest)(nil),               // 92: ai_studio_management.UpdateTagRequest
-	(*UpdateTagResponse)(nil),              // 93: ai_studio_management.UpdateTagResponse
-	(*DeleteTagRequest)(nil),               // 94: ai_studio_management.DeleteTagRequest
-	(*DeleteTagResponse)(nil),              // 95: ai_studio_management.DeleteTagResponse
-	(*SearchTagsRequest)(nil),              // 96: ai_studio_management.SearchTagsRequest
-	(*SearchTagsResponse)(nil),             // 97: ai_studio_management.SearchTagsResponse
-	(*TagInfo)(nil),                        // 98: ai_studio_management.TagInfo
-	(*GetChatRecordsPerDayRequest)(nil),    // 99: ai_studio_management.GetChatRecordsPerDayRequest
-	(*GetChatRecordsPerDayResponse)(nil),   // 100: ai_studio_management.GetChatRecordsPerDayResponse
-	(*GetModelUsageRequest)(nil),           // 101: ai_studio_management.GetModelUsageRequest
-	(*GetModelUsageResponse)(nil),          // 102: ai_studio_management.GetModelUsageResponse
-	(*GetVendorUsageRequest)(nil),          // 103: ai_studio_management.GetVendorUsageRequest
-	(*GetVendorUsageResponse)(nil),         // 104: ai_studio_management.GetVendorUsageResponse
-	(*GetTokenUsagePerAppRequest)(nil),     // 105: ai_studio_management.GetTokenUsagePerAppRequest
-	(*GetTokenUsagePerAppResponse)(nil),    // 106: ai_studio_management.GetTokenUsagePerAppResponse
-	(*GetToolUsageStatisticsRequest)(nil),  // 107: ai_studio_management.GetToolUsageStatisticsRequest
-	(*GetToolUsageStatisticsResponse)(nil), // 108: ai_studio_management.GetToolUsageStatisticsResponse
-	(*DayRecord)(nil),                      // 109: ai_studio_management.DayRecord
-	(*ModelUsageRecord)(nil),               // 110: ai_studio_management.ModelUsageRecord
-	(*VendorUsageRecord)(nil),              // 111: ai_studio_management.VendorUsageRecord
-	(*AppTokenUsage)(nil),                  // 112: ai_studio_management.AppTokenUsage
-	(*ToolUsageRecord)(nil),                // 113: ai_studio_management.ToolUsageRecord
-	(*timestamppb.Timestamp)(nil),          // 114: google.protobuf.Timestamp
+	(*PluginContext)(nil),                    // 0: ai_studio_management.PluginContext
+	(*ListPluginsRequest)(nil),               // 1: ai_studio_management.ListPluginsRequest
+	(*ListPluginsResponse)(nil),              // 2: ai_studio_management.ListPluginsResponse
+	(*GetPluginRequest)(nil),                 // 3: ai_studio_management.GetPluginRequest
+	(*GetPluginResponse)(nil),                // 4: ai_studio_management.GetPluginResponse
+	(*UpdatePluginConfigRequest)(nil),        // 5: ai_studio_management.UpdatePluginConfigRequest
+	(*UpdatePluginConfigResponse)(nil),       // 6: ai_studio_management.UpdatePluginConfigResponse
+	(*PluginInfo)(nil),                       // 7: ai_studio_management.PluginInfo
+	(*ListLLMsRequest)(nil),                  // 8: ai_studio_management.ListLLMsRequest
+	(*ListLLMsResponse)(nil),                 // 9: ai_studio_management.ListLLMsResponse
+	(*GetLLMRequest)(nil),                    // 10: ai_studio_management.GetLLMRequest
+	(*GetLLMResponse)(nil),                   // 11: ai_studio_management.GetLLMResponse
+	(*GetLLMPluginsRequest)(nil),             // 12: ai_studio_management.GetLLMPluginsRequest
+	(*GetLLMPluginsResponse)(nil),            // 13: ai_studio_management.GetLLMPluginsResponse
+	(*LLMInfo)(nil),                          // 14: ai_studio_management.LLMInfo
+	(*CreateLLMRequest)(nil),                 // 15: ai_studio_management.CreateLLMRequest
+	(*CreateLLMResponse)(nil),                // 16: ai_studio_management.CreateLLMResponse
+	(*UpdateLLMRequest)(nil),                 // 17: ai_studio_management.UpdateLLMRequest
+	(*UpdateLLMResponse)(nil),                // 18: ai_studio_management.UpdateLLMResponse
+	(*DeleteLLMRequest)(nil),                 // 19: ai_studio_management.DeleteLLMRequest
+	(*DeleteLLMResponse)(nil),                // 20: ai_studio_management.DeleteLLMResponse
+	(*GetAnalyticsSummaryRequest)(nil),       // 21: ai_studio_management.GetAnalyticsSummaryRequest
+	(*GetAnalyticsSummaryResponse)(nil),      // 22: ai_studio_management.GetAnalyticsSummaryResponse
+	(*GetUsageStatisticsRequest)(nil),        // 23: ai_studio_management.GetUsageStatisticsRequest
+	(*GetUsageStatisticsResponse)(nil),       // 24: ai_studio_management.GetUsageStatisticsResponse
+	(*GetCostAnalysisRequest)(nil),           // 25: ai_studio_management.GetCostAnalysisRequest
+	(*GetCostAnalysisResponse)(nil),          // 26: ai_studio_management.GetCostAnalysisResponse
+	(*TopEndpoint)(nil),                      // 27: ai_studio_management.TopEndpoint
+	(*ModelUsage)(nil),                       // 28: ai_studio_management.ModelUsage
+	(*UsageStatistic)(nil),                   // 29: ai_studio_management.UsageStatistic
+	(*CostBreakdown)(nil),                    // 30: ai_studio_management.CostBreakdown
+	(*ListAppsRequest)(nil),                  // 31: ai_studio_management.ListAppsRequest
+	(*ListAppsResponse)(nil),                 // 32: ai_studio_management.ListAppsResponse
+	(*GetAppRequest)(nil),                    // 33: ai_studio_management.GetAppRequest
+	(*GetAppResponse)(nil),                   // 34: ai_studio_management.GetAppResponse
+	(*AppInfo)(nil),                          // 35: ai_studio_management.AppInfo
+	(*CreateAppRequest)(nil),                 // 36: ai_studio_management.CreateAppRequest
+	(*CreateAppResponse)(nil),                // 37: ai_studio_management.CreateAppResponse
+	(*UpdateAppRequest)(nil),                 // 38: ai_studio_management.UpdateAppRequest
+	(*UpdateAppResponse)(nil),                // 39: ai_studio_management.UpdateAppResponse
+	(*DeleteAppRequest)(nil),                 // 40: ai_studio_management.DeleteAppRequest
+	(*DeleteAppResponse)(nil),                // 41: ai_studio_management.DeleteAppResponse
+	(*ListToolsRequest)(nil),                 // 42: ai_studio_management.ListToolsRequest
+	(*ListToolsResponse)(nil),                // 43: ai_studio_management.ListToolsResponse
+	(*GetToolRequest)(nil),                   // 44: ai_studio_management.GetToolRequest
+	(*GetToolResponse)(nil),                  // 45: ai_studio_management.GetToolResponse
+	(*GetToolOperationsRequest)(nil),         // 46: ai_studio_management.GetToolOperationsRequest
+	(*GetToolOperationsResponse)(nil),        // 47: ai_studio_management.GetToolOperationsResponse
+	(*CallToolOperationRequest)(nil),         // 48: ai_studio_management.CallToolOperationRequest
+	(*CallToolOperationResponse)(nil),        // 49: ai_studio_management.CallToolOperationResponse
+	(*ToolInfo)(nil),                         // 50: ai_studio_management.ToolInfo
+	(*ToolOperation)(nil),                    // 51: ai_studio_management.ToolOperation
+	(*ToolParameter)(nil),                    // 52: ai_studio_management.ToolParameter
+	(*ToolRequestBody)(nil),                  // 53: ai_studio_management.ToolRequestBody
+	(*CreateToolRequest)(nil),                // 54: ai_studio_management.CreateToolRequest
+	(*CreateToolResponse)(nil),               // 55: ai_studio_management.CreateToolResponse
+	(*UpdateToolRequest)(nil),                // 56: ai_studio_management.UpdateToolRequest
+	(*UpdateToolResponse)(nil),               // 57: ai_studio_management.UpdateToolResponse
+	(*DeleteToolRequest)(nil),                // 58: ai_studio_management.DeleteToolRequest
+	(*DeleteToolResponse)(nil),               // 59: ai_studio_management.DeleteToolResponse
+	(*ListDatasourcesRequest)(nil),           // 60: ai_studio_management.ListDatasourcesRequest
+	(*ListDatasourcesResponse)(nil),          // 61: ai_studio_management.ListDatasourcesResponse
+	(*GetDatasourceRequest)(nil),             // 62: ai_studio_management.GetDatasourceRequest
+	(*GetDatasourceResponse)(nil),            // 63: ai_studio_management.GetDatasourceResponse
+	(*CreateDatasourceRequest)(nil),          // 64: ai_studio_management.CreateDatasourceRequest
+	(*CreateDatasourceResponse)(nil),         // 65: ai_studio_management.CreateDatasourceResponse
+	(*UpdateDatasourceRequest)(nil),          // 66: ai_studio_management.UpdateDatasourceRequest
+	(*UpdateDatasourceResponse)(nil),         // 67: ai_studio_management.UpdateDatasourceResponse
+	(*DeleteDatasourceRequest)(nil),          // 68: ai_studio_management.DeleteDatasourceRequest
+	(*DeleteDatasourceResponse)(nil),         // 69: ai_studio_management.DeleteDatasourceResponse
+	(*SearchDatasourcesRequest)(nil),         // 70: ai_studio_management.SearchDatasourcesRequest
+	(*SearchDatasourcesResponse)(nil),        // 71: ai_studio_management.SearchDatasourcesResponse
+	(*ProcessEmbeddingsRequest)(nil),         // 72: ai_studio_management.ProcessEmbeddingsRequest
+	(*ProcessEmbeddingsResponse)(nil),        // 73: ai_studio_management.ProcessEmbeddingsResponse
+	(*DatasourceInfo)(nil),                   // 74: ai_studio_management.DatasourceInfo
+	(*ListDataCataloguesRequest)(nil),        // 75: ai_studio_management.ListDataCataloguesRequest
+	(*ListDataCataloguesResponse)(nil),       // 76: ai_studio_management.ListDataCataloguesResponse
+	(*GetDataCatalogueRequest)(nil),          // 77: ai_studio_management.GetDataCatalogueRequest
+	(*GetDataCatalogueResponse)(nil),         // 78: ai_studio_management.GetDataCatalogueResponse
+	(*CreateDataCatalogueRequest)(nil),       // 79: ai_studio_management.CreateDataCatalogueRequest
+	(*CreateDataCatalogueResponse)(nil),      // 80: ai_studio_management.CreateDataCatalogueResponse
+	(*UpdateDataCatalogueRequest)(nil),       // 81: ai_studio_management.UpdateDataCatalogueRequest
+	(*UpdateDataCatalogueResponse)(nil),      // 82: ai_studio_management.UpdateDataCatalogueResponse
+	(*DeleteDataCatalogueRequest)(nil),       // 83: ai_studio_management.DeleteDataCatalogueRequest
+	(*DeleteDataCatalogueResponse)(nil),      // 84: ai_studio_management.DeleteDataCatalogueResponse
+	(*DataCatalogueInfo)(nil),                // 85: ai_studio_management.DataCatalogueInfo
+	(*ListTagsRequest)(nil),                  // 86: ai_studio_management.ListTagsRequest
+	(*ListTagsResponse)(nil),                 // 87: ai_studio_management.ListTagsResponse
+	(*GetTagRequest)(nil),                    // 88: ai_studio_management.GetTagRequest
+	(*GetTagResponse)(nil),                   // 89: ai_studio_management.GetTagResponse
+	(*CreateTagRequest)(nil),                 // 90: ai_studio_management.CreateTagRequest
+	(*CreateTagResponse)(nil),                // 91: ai_studio_management.CreateTagResponse
+	(*UpdateTagRequest)(nil),                 // 92: ai_studio_management.UpdateTagRequest
+	(*UpdateTagResponse)(nil),                // 93: ai_studio_management.UpdateTagResponse
+	(*DeleteTagRequest)(nil),                 // 94: ai_studio_management.DeleteTagRequest
+	(*DeleteTagResponse)(nil),                // 95: ai_studio_management.DeleteTagResponse
+	(*SearchTagsRequest)(nil),                // 96: ai_studio_management.SearchTagsRequest
+	(*SearchTagsResponse)(nil),               // 97: ai_studio_management.SearchTagsResponse
+	(*TagInfo)(nil),                          // 98: ai_studio_management.TagInfo
+	(*GetChatRecordsPerDayRequest)(nil),      // 99: ai_studio_management.GetChatRecordsPerDayRequest
+	(*GetChatRecordsPerDayResponse)(nil),     // 100: ai_studio_management.GetChatRecordsPerDayResponse
+	(*GetModelUsageRequest)(nil),             // 101: ai_studio_management.GetModelUsageRequest
+	(*GetModelUsageResponse)(nil),            // 102: ai_studio_management.GetModelUsageResponse
+	(*GetVendorUsageRequest)(nil),            // 103: ai_studio_management.GetVendorUsageRequest
+	(*GetVendorUsageResponse)(nil),           // 104: ai_studio_management.GetVendorUsageResponse
+	(*GetTokenUsagePerAppRequest)(nil),       // 105: ai_studio_management.GetTokenUsagePerAppRequest
+	(*GetTokenUsagePerAppResponse)(nil),      // 106: ai_studio_management.GetTokenUsagePerAppResponse
+	(*GetToolUsageStatisticsRequest)(nil),    // 107: ai_studio_management.GetToolUsageStatisticsRequest
+	(*GetToolUsageStatisticsResponse)(nil),   // 108: ai_studio_management.GetToolUsageStatisticsResponse
+	(*DayRecord)(nil),                        // 109: ai_studio_management.DayRecord
+	(*ModelUsageRecord)(nil),                 // 110: ai_studio_management.ModelUsageRecord
+	(*VendorUsageRecord)(nil),                // 111: ai_studio_management.VendorUsageRecord
+	(*AppTokenUsage)(nil),                    // 112: ai_studio_management.AppTokenUsage
+	(*ToolUsageRecord)(nil),                  // 113: ai_studio_management.ToolUsageRecord
+	(*ListModelPricesRequest)(nil),           // 114: ai_studio_management.ListModelPricesRequest
+	(*ListModelPricesResponse)(nil),          // 115: ai_studio_management.ListModelPricesResponse
+	(*GetModelPriceRequest)(nil),             // 116: ai_studio_management.GetModelPriceRequest
+	(*GetModelPriceResponse)(nil),            // 117: ai_studio_management.GetModelPriceResponse
+	(*CreateModelPriceRequest)(nil),          // 118: ai_studio_management.CreateModelPriceRequest
+	(*CreateModelPriceResponse)(nil),         // 119: ai_studio_management.CreateModelPriceResponse
+	(*UpdateModelPriceRequest)(nil),          // 120: ai_studio_management.UpdateModelPriceRequest
+	(*UpdateModelPriceResponse)(nil),         // 121: ai_studio_management.UpdateModelPriceResponse
+	(*DeleteModelPriceRequest)(nil),          // 122: ai_studio_management.DeleteModelPriceRequest
+	(*DeleteModelPriceResponse)(nil),         // 123: ai_studio_management.DeleteModelPriceResponse
+	(*GetModelPricesByVendorRequest)(nil),    // 124: ai_studio_management.GetModelPricesByVendorRequest
+	(*GetModelPricesByVendorResponse)(nil),   // 125: ai_studio_management.GetModelPricesByVendorResponse
+	(*ModelPriceInfo)(nil),                   // 126: ai_studio_management.ModelPriceInfo
+	(*ListFiltersRequest)(nil),               // 127: ai_studio_management.ListFiltersRequest
+	(*ListFiltersResponse)(nil),              // 128: ai_studio_management.ListFiltersResponse
+	(*GetFilterRequest)(nil),                 // 129: ai_studio_management.GetFilterRequest
+	(*GetFilterResponse)(nil),                // 130: ai_studio_management.GetFilterResponse
+	(*CreateFilterRequest)(nil),              // 131: ai_studio_management.CreateFilterRequest
+	(*CreateFilterResponse)(nil),             // 132: ai_studio_management.CreateFilterResponse
+	(*UpdateFilterRequest)(nil),              // 133: ai_studio_management.UpdateFilterRequest
+	(*UpdateFilterResponse)(nil),             // 134: ai_studio_management.UpdateFilterResponse
+	(*DeleteFilterRequest)(nil),              // 135: ai_studio_management.DeleteFilterRequest
+	(*DeleteFilterResponse)(nil),             // 136: ai_studio_management.DeleteFilterResponse
+	(*FilterInfo)(nil),                       // 137: ai_studio_management.FilterInfo
+	(*GetAvailableLLMDriversRequest)(nil),    // 138: ai_studio_management.GetAvailableLLMDriversRequest
+	(*GetAvailableLLMDriversResponse)(nil),   // 139: ai_studio_management.GetAvailableLLMDriversResponse
+	(*GetAvailableEmbeddersRequest)(nil),     // 140: ai_studio_management.GetAvailableEmbeddersRequest
+	(*GetAvailableEmbeddersResponse)(nil),    // 141: ai_studio_management.GetAvailableEmbeddersResponse
+	(*GetAvailableVectorStoresRequest)(nil),  // 142: ai_studio_management.GetAvailableVectorStoresRequest
+	(*GetAvailableVectorStoresResponse)(nil), // 143: ai_studio_management.GetAvailableVectorStoresResponse
+	(*VendorDriverInfo)(nil),                 // 144: ai_studio_management.VendorDriverInfo
+	(*timestamppb.Timestamp)(nil),            // 145: google.protobuf.Timestamp
 }
 var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	0,   // 0: ai_studio_management.ListPluginsRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8495,16 +10513,16 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	0,   // 2: ai_studio_management.GetPluginRequest.context:type_name -> ai_studio_management.PluginContext
 	7,   // 3: ai_studio_management.GetPluginResponse.plugin:type_name -> ai_studio_management.PluginInfo
 	0,   // 4: ai_studio_management.UpdatePluginConfigRequest.context:type_name -> ai_studio_management.PluginContext
-	114, // 5: ai_studio_management.PluginInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 6: ai_studio_management.PluginInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 5: ai_studio_management.PluginInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 6: ai_studio_management.PluginInfo.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 7: ai_studio_management.ListLLMsRequest.context:type_name -> ai_studio_management.PluginContext
 	14,  // 8: ai_studio_management.ListLLMsResponse.llms:type_name -> ai_studio_management.LLMInfo
 	0,   // 9: ai_studio_management.GetLLMRequest.context:type_name -> ai_studio_management.PluginContext
 	14,  // 10: ai_studio_management.GetLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
 	0,   // 11: ai_studio_management.GetLLMPluginsRequest.context:type_name -> ai_studio_management.PluginContext
 	7,   // 12: ai_studio_management.GetLLMPluginsResponse.plugins:type_name -> ai_studio_management.PluginInfo
-	114, // 13: ai_studio_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 14: ai_studio_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 13: ai_studio_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 14: ai_studio_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 15: ai_studio_management.CreateLLMRequest.context:type_name -> ai_studio_management.PluginContext
 	14,  // 16: ai_studio_management.CreateLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
 	0,   // 17: ai_studio_management.UpdateLLMRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8517,13 +10535,13 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	29,  // 24: ai_studio_management.GetUsageStatisticsResponse.statistics:type_name -> ai_studio_management.UsageStatistic
 	0,   // 25: ai_studio_management.GetCostAnalysisRequest.context:type_name -> ai_studio_management.PluginContext
 	30,  // 26: ai_studio_management.GetCostAnalysisResponse.breakdown:type_name -> ai_studio_management.CostBreakdown
-	114, // 27: ai_studio_management.UsageStatistic.timestamp:type_name -> google.protobuf.Timestamp
+	145, // 27: ai_studio_management.UsageStatistic.timestamp:type_name -> google.protobuf.Timestamp
 	0,   // 28: ai_studio_management.ListAppsRequest.context:type_name -> ai_studio_management.PluginContext
 	35,  // 29: ai_studio_management.ListAppsResponse.apps:type_name -> ai_studio_management.AppInfo
 	0,   // 30: ai_studio_management.GetAppRequest.context:type_name -> ai_studio_management.PluginContext
 	35,  // 31: ai_studio_management.GetAppResponse.app:type_name -> ai_studio_management.AppInfo
-	114, // 32: ai_studio_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 33: ai_studio_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 32: ai_studio_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 33: ai_studio_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 34: ai_studio_management.CreateAppRequest.context:type_name -> ai_studio_management.PluginContext
 	35,  // 35: ai_studio_management.CreateAppResponse.app:type_name -> ai_studio_management.AppInfo
 	0,   // 36: ai_studio_management.UpdateAppRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8536,8 +10554,8 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	0,   // 43: ai_studio_management.GetToolOperationsRequest.context:type_name -> ai_studio_management.PluginContext
 	51,  // 44: ai_studio_management.GetToolOperationsResponse.operations:type_name -> ai_studio_management.ToolOperation
 	0,   // 45: ai_studio_management.CallToolOperationRequest.context:type_name -> ai_studio_management.PluginContext
-	114, // 46: ai_studio_management.ToolInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 47: ai_studio_management.ToolInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 46: ai_studio_management.ToolInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 47: ai_studio_management.ToolInfo.updated_at:type_name -> google.protobuf.Timestamp
 	52,  // 48: ai_studio_management.ToolOperation.parameters:type_name -> ai_studio_management.ToolParameter
 	53,  // 49: ai_studio_management.ToolOperation.request_body:type_name -> ai_studio_management.ToolRequestBody
 	0,   // 50: ai_studio_management.CreateToolRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8558,8 +10576,8 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	74,  // 65: ai_studio_management.SearchDatasourcesResponse.datasources:type_name -> ai_studio_management.DatasourceInfo
 	0,   // 66: ai_studio_management.ProcessEmbeddingsRequest.context:type_name -> ai_studio_management.PluginContext
 	98,  // 67: ai_studio_management.DatasourceInfo.tags:type_name -> ai_studio_management.TagInfo
-	114, // 68: ai_studio_management.DatasourceInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 69: ai_studio_management.DatasourceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 68: ai_studio_management.DatasourceInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 69: ai_studio_management.DatasourceInfo.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 70: ai_studio_management.ListDataCataloguesRequest.context:type_name -> ai_studio_management.PluginContext
 	85,  // 71: ai_studio_management.ListDataCataloguesResponse.data_catalogues:type_name -> ai_studio_management.DataCatalogueInfo
 	0,   // 72: ai_studio_management.GetDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8571,8 +10589,8 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	0,   // 78: ai_studio_management.DeleteDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
 	74,  // 79: ai_studio_management.DataCatalogueInfo.datasources:type_name -> ai_studio_management.DatasourceInfo
 	98,  // 80: ai_studio_management.DataCatalogueInfo.tags:type_name -> ai_studio_management.TagInfo
-	114, // 81: ai_studio_management.DataCatalogueInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 82: ai_studio_management.DataCatalogueInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 81: ai_studio_management.DataCatalogueInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 82: ai_studio_management.DataCatalogueInfo.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 83: ai_studio_management.ListTagsRequest.context:type_name -> ai_studio_management.PluginContext
 	98,  // 84: ai_studio_management.ListTagsResponse.tags:type_name -> ai_studio_management.TagInfo
 	0,   // 85: ai_studio_management.GetTagRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8584,8 +10602,8 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	0,   // 91: ai_studio_management.DeleteTagRequest.context:type_name -> ai_studio_management.PluginContext
 	0,   // 92: ai_studio_management.SearchTagsRequest.context:type_name -> ai_studio_management.PluginContext
 	98,  // 93: ai_studio_management.SearchTagsResponse.tags:type_name -> ai_studio_management.TagInfo
-	114, // 94: ai_studio_management.TagInfo.created_at:type_name -> google.protobuf.Timestamp
-	114, // 95: ai_studio_management.TagInfo.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 94: ai_studio_management.TagInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 95: ai_studio_management.TagInfo.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 96: ai_studio_management.GetChatRecordsPerDayRequest.context:type_name -> ai_studio_management.PluginContext
 	109, // 97: ai_studio_management.GetChatRecordsPerDayResponse.records:type_name -> ai_studio_management.DayRecord
 	0,   // 98: ai_studio_management.GetModelUsageRequest.context:type_name -> ai_studio_management.PluginContext
@@ -8596,105 +10614,163 @@ var file_proto_ai_studio_management_proto_depIdxs = []int32{
 	112, // 103: ai_studio_management.GetTokenUsagePerAppResponse.usage:type_name -> ai_studio_management.AppTokenUsage
 	0,   // 104: ai_studio_management.GetToolUsageStatisticsRequest.context:type_name -> ai_studio_management.PluginContext
 	113, // 105: ai_studio_management.GetToolUsageStatisticsResponse.usage:type_name -> ai_studio_management.ToolUsageRecord
-	1,   // 106: ai_studio_management.AIStudioManagementService.ListPlugins:input_type -> ai_studio_management.ListPluginsRequest
-	3,   // 107: ai_studio_management.AIStudioManagementService.GetPlugin:input_type -> ai_studio_management.GetPluginRequest
-	5,   // 108: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:input_type -> ai_studio_management.UpdatePluginConfigRequest
-	8,   // 109: ai_studio_management.AIStudioManagementService.ListLLMs:input_type -> ai_studio_management.ListLLMsRequest
-	10,  // 110: ai_studio_management.AIStudioManagementService.GetLLM:input_type -> ai_studio_management.GetLLMRequest
-	12,  // 111: ai_studio_management.AIStudioManagementService.GetLLMPlugins:input_type -> ai_studio_management.GetLLMPluginsRequest
-	15,  // 112: ai_studio_management.AIStudioManagementService.CreateLLM:input_type -> ai_studio_management.CreateLLMRequest
-	17,  // 113: ai_studio_management.AIStudioManagementService.UpdateLLM:input_type -> ai_studio_management.UpdateLLMRequest
-	19,  // 114: ai_studio_management.AIStudioManagementService.DeleteLLM:input_type -> ai_studio_management.DeleteLLMRequest
-	21,  // 115: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:input_type -> ai_studio_management.GetAnalyticsSummaryRequest
-	23,  // 116: ai_studio_management.AIStudioManagementService.GetUsageStatistics:input_type -> ai_studio_management.GetUsageStatisticsRequest
-	25,  // 117: ai_studio_management.AIStudioManagementService.GetCostAnalysis:input_type -> ai_studio_management.GetCostAnalysisRequest
-	99,  // 118: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:input_type -> ai_studio_management.GetChatRecordsPerDayRequest
-	101, // 119: ai_studio_management.AIStudioManagementService.GetModelUsage:input_type -> ai_studio_management.GetModelUsageRequest
-	103, // 120: ai_studio_management.AIStudioManagementService.GetVendorUsage:input_type -> ai_studio_management.GetVendorUsageRequest
-	105, // 121: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:input_type -> ai_studio_management.GetTokenUsagePerAppRequest
-	107, // 122: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:input_type -> ai_studio_management.GetToolUsageStatisticsRequest
-	31,  // 123: ai_studio_management.AIStudioManagementService.ListApps:input_type -> ai_studio_management.ListAppsRequest
-	33,  // 124: ai_studio_management.AIStudioManagementService.GetApp:input_type -> ai_studio_management.GetAppRequest
-	36,  // 125: ai_studio_management.AIStudioManagementService.CreateApp:input_type -> ai_studio_management.CreateAppRequest
-	38,  // 126: ai_studio_management.AIStudioManagementService.UpdateApp:input_type -> ai_studio_management.UpdateAppRequest
-	40,  // 127: ai_studio_management.AIStudioManagementService.DeleteApp:input_type -> ai_studio_management.DeleteAppRequest
-	42,  // 128: ai_studio_management.AIStudioManagementService.ListTools:input_type -> ai_studio_management.ListToolsRequest
-	44,  // 129: ai_studio_management.AIStudioManagementService.GetTool:input_type -> ai_studio_management.GetToolRequest
-	46,  // 130: ai_studio_management.AIStudioManagementService.GetToolOperations:input_type -> ai_studio_management.GetToolOperationsRequest
-	48,  // 131: ai_studio_management.AIStudioManagementService.CallToolOperation:input_type -> ai_studio_management.CallToolOperationRequest
-	54,  // 132: ai_studio_management.AIStudioManagementService.CreateTool:input_type -> ai_studio_management.CreateToolRequest
-	56,  // 133: ai_studio_management.AIStudioManagementService.UpdateTool:input_type -> ai_studio_management.UpdateToolRequest
-	58,  // 134: ai_studio_management.AIStudioManagementService.DeleteTool:input_type -> ai_studio_management.DeleteToolRequest
-	60,  // 135: ai_studio_management.AIStudioManagementService.ListDatasources:input_type -> ai_studio_management.ListDatasourcesRequest
-	62,  // 136: ai_studio_management.AIStudioManagementService.GetDatasource:input_type -> ai_studio_management.GetDatasourceRequest
-	64,  // 137: ai_studio_management.AIStudioManagementService.CreateDatasource:input_type -> ai_studio_management.CreateDatasourceRequest
-	66,  // 138: ai_studio_management.AIStudioManagementService.UpdateDatasource:input_type -> ai_studio_management.UpdateDatasourceRequest
-	68,  // 139: ai_studio_management.AIStudioManagementService.DeleteDatasource:input_type -> ai_studio_management.DeleteDatasourceRequest
-	70,  // 140: ai_studio_management.AIStudioManagementService.SearchDatasources:input_type -> ai_studio_management.SearchDatasourcesRequest
-	72,  // 141: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:input_type -> ai_studio_management.ProcessEmbeddingsRequest
-	75,  // 142: ai_studio_management.AIStudioManagementService.ListDataCatalogues:input_type -> ai_studio_management.ListDataCataloguesRequest
-	77,  // 143: ai_studio_management.AIStudioManagementService.GetDataCatalogue:input_type -> ai_studio_management.GetDataCatalogueRequest
-	79,  // 144: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:input_type -> ai_studio_management.CreateDataCatalogueRequest
-	81,  // 145: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:input_type -> ai_studio_management.UpdateDataCatalogueRequest
-	83,  // 146: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:input_type -> ai_studio_management.DeleteDataCatalogueRequest
-	86,  // 147: ai_studio_management.AIStudioManagementService.ListTags:input_type -> ai_studio_management.ListTagsRequest
-	88,  // 148: ai_studio_management.AIStudioManagementService.GetTag:input_type -> ai_studio_management.GetTagRequest
-	90,  // 149: ai_studio_management.AIStudioManagementService.CreateTag:input_type -> ai_studio_management.CreateTagRequest
-	92,  // 150: ai_studio_management.AIStudioManagementService.UpdateTag:input_type -> ai_studio_management.UpdateTagRequest
-	94,  // 151: ai_studio_management.AIStudioManagementService.DeleteTag:input_type -> ai_studio_management.DeleteTagRequest
-	96,  // 152: ai_studio_management.AIStudioManagementService.SearchTags:input_type -> ai_studio_management.SearchTagsRequest
-	2,   // 153: ai_studio_management.AIStudioManagementService.ListPlugins:output_type -> ai_studio_management.ListPluginsResponse
-	4,   // 154: ai_studio_management.AIStudioManagementService.GetPlugin:output_type -> ai_studio_management.GetPluginResponse
-	6,   // 155: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:output_type -> ai_studio_management.UpdatePluginConfigResponse
-	9,   // 156: ai_studio_management.AIStudioManagementService.ListLLMs:output_type -> ai_studio_management.ListLLMsResponse
-	11,  // 157: ai_studio_management.AIStudioManagementService.GetLLM:output_type -> ai_studio_management.GetLLMResponse
-	13,  // 158: ai_studio_management.AIStudioManagementService.GetLLMPlugins:output_type -> ai_studio_management.GetLLMPluginsResponse
-	16,  // 159: ai_studio_management.AIStudioManagementService.CreateLLM:output_type -> ai_studio_management.CreateLLMResponse
-	18,  // 160: ai_studio_management.AIStudioManagementService.UpdateLLM:output_type -> ai_studio_management.UpdateLLMResponse
-	20,  // 161: ai_studio_management.AIStudioManagementService.DeleteLLM:output_type -> ai_studio_management.DeleteLLMResponse
-	22,  // 162: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:output_type -> ai_studio_management.GetAnalyticsSummaryResponse
-	24,  // 163: ai_studio_management.AIStudioManagementService.GetUsageStatistics:output_type -> ai_studio_management.GetUsageStatisticsResponse
-	26,  // 164: ai_studio_management.AIStudioManagementService.GetCostAnalysis:output_type -> ai_studio_management.GetCostAnalysisResponse
-	100, // 165: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:output_type -> ai_studio_management.GetChatRecordsPerDayResponse
-	102, // 166: ai_studio_management.AIStudioManagementService.GetModelUsage:output_type -> ai_studio_management.GetModelUsageResponse
-	104, // 167: ai_studio_management.AIStudioManagementService.GetVendorUsage:output_type -> ai_studio_management.GetVendorUsageResponse
-	106, // 168: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:output_type -> ai_studio_management.GetTokenUsagePerAppResponse
-	108, // 169: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:output_type -> ai_studio_management.GetToolUsageStatisticsResponse
-	32,  // 170: ai_studio_management.AIStudioManagementService.ListApps:output_type -> ai_studio_management.ListAppsResponse
-	34,  // 171: ai_studio_management.AIStudioManagementService.GetApp:output_type -> ai_studio_management.GetAppResponse
-	37,  // 172: ai_studio_management.AIStudioManagementService.CreateApp:output_type -> ai_studio_management.CreateAppResponse
-	39,  // 173: ai_studio_management.AIStudioManagementService.UpdateApp:output_type -> ai_studio_management.UpdateAppResponse
-	41,  // 174: ai_studio_management.AIStudioManagementService.DeleteApp:output_type -> ai_studio_management.DeleteAppResponse
-	43,  // 175: ai_studio_management.AIStudioManagementService.ListTools:output_type -> ai_studio_management.ListToolsResponse
-	45,  // 176: ai_studio_management.AIStudioManagementService.GetTool:output_type -> ai_studio_management.GetToolResponse
-	47,  // 177: ai_studio_management.AIStudioManagementService.GetToolOperations:output_type -> ai_studio_management.GetToolOperationsResponse
-	49,  // 178: ai_studio_management.AIStudioManagementService.CallToolOperation:output_type -> ai_studio_management.CallToolOperationResponse
-	55,  // 179: ai_studio_management.AIStudioManagementService.CreateTool:output_type -> ai_studio_management.CreateToolResponse
-	57,  // 180: ai_studio_management.AIStudioManagementService.UpdateTool:output_type -> ai_studio_management.UpdateToolResponse
-	59,  // 181: ai_studio_management.AIStudioManagementService.DeleteTool:output_type -> ai_studio_management.DeleteToolResponse
-	61,  // 182: ai_studio_management.AIStudioManagementService.ListDatasources:output_type -> ai_studio_management.ListDatasourcesResponse
-	63,  // 183: ai_studio_management.AIStudioManagementService.GetDatasource:output_type -> ai_studio_management.GetDatasourceResponse
-	65,  // 184: ai_studio_management.AIStudioManagementService.CreateDatasource:output_type -> ai_studio_management.CreateDatasourceResponse
-	67,  // 185: ai_studio_management.AIStudioManagementService.UpdateDatasource:output_type -> ai_studio_management.UpdateDatasourceResponse
-	69,  // 186: ai_studio_management.AIStudioManagementService.DeleteDatasource:output_type -> ai_studio_management.DeleteDatasourceResponse
-	71,  // 187: ai_studio_management.AIStudioManagementService.SearchDatasources:output_type -> ai_studio_management.SearchDatasourcesResponse
-	73,  // 188: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:output_type -> ai_studio_management.ProcessEmbeddingsResponse
-	76,  // 189: ai_studio_management.AIStudioManagementService.ListDataCatalogues:output_type -> ai_studio_management.ListDataCataloguesResponse
-	78,  // 190: ai_studio_management.AIStudioManagementService.GetDataCatalogue:output_type -> ai_studio_management.GetDataCatalogueResponse
-	80,  // 191: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:output_type -> ai_studio_management.CreateDataCatalogueResponse
-	82,  // 192: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:output_type -> ai_studio_management.UpdateDataCatalogueResponse
-	84,  // 193: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:output_type -> ai_studio_management.DeleteDataCatalogueResponse
-	87,  // 194: ai_studio_management.AIStudioManagementService.ListTags:output_type -> ai_studio_management.ListTagsResponse
-	89,  // 195: ai_studio_management.AIStudioManagementService.GetTag:output_type -> ai_studio_management.GetTagResponse
-	91,  // 196: ai_studio_management.AIStudioManagementService.CreateTag:output_type -> ai_studio_management.CreateTagResponse
-	93,  // 197: ai_studio_management.AIStudioManagementService.UpdateTag:output_type -> ai_studio_management.UpdateTagResponse
-	95,  // 198: ai_studio_management.AIStudioManagementService.DeleteTag:output_type -> ai_studio_management.DeleteTagResponse
-	97,  // 199: ai_studio_management.AIStudioManagementService.SearchTags:output_type -> ai_studio_management.SearchTagsResponse
-	153, // [153:200] is the sub-list for method output_type
-	106, // [106:153] is the sub-list for method input_type
-	106, // [106:106] is the sub-list for extension type_name
-	106, // [106:106] is the sub-list for extension extendee
-	0,   // [0:106] is the sub-list for field type_name
+	0,   // 106: ai_studio_management.ListModelPricesRequest.context:type_name -> ai_studio_management.PluginContext
+	126, // 107: ai_studio_management.ListModelPricesResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
+	0,   // 108: ai_studio_management.GetModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	126, // 109: ai_studio_management.GetModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
+	0,   // 110: ai_studio_management.CreateModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	126, // 111: ai_studio_management.CreateModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
+	0,   // 112: ai_studio_management.UpdateModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	126, // 113: ai_studio_management.UpdateModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
+	0,   // 114: ai_studio_management.DeleteModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	0,   // 115: ai_studio_management.GetModelPricesByVendorRequest.context:type_name -> ai_studio_management.PluginContext
+	126, // 116: ai_studio_management.GetModelPricesByVendorResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
+	145, // 117: ai_studio_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 118: ai_studio_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	0,   // 119: ai_studio_management.ListFiltersRequest.context:type_name -> ai_studio_management.PluginContext
+	137, // 120: ai_studio_management.ListFiltersResponse.filters:type_name -> ai_studio_management.FilterInfo
+	0,   // 121: ai_studio_management.GetFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	137, // 122: ai_studio_management.GetFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
+	0,   // 123: ai_studio_management.CreateFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	137, // 124: ai_studio_management.CreateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
+	0,   // 125: ai_studio_management.UpdateFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	137, // 126: ai_studio_management.UpdateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
+	0,   // 127: ai_studio_management.DeleteFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	145, // 128: ai_studio_management.FilterInfo.created_at:type_name -> google.protobuf.Timestamp
+	145, // 129: ai_studio_management.FilterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	0,   // 130: ai_studio_management.GetAvailableLLMDriversRequest.context:type_name -> ai_studio_management.PluginContext
+	144, // 131: ai_studio_management.GetAvailableLLMDriversResponse.drivers:type_name -> ai_studio_management.VendorDriverInfo
+	0,   // 132: ai_studio_management.GetAvailableEmbeddersRequest.context:type_name -> ai_studio_management.PluginContext
+	144, // 133: ai_studio_management.GetAvailableEmbeddersResponse.embedders:type_name -> ai_studio_management.VendorDriverInfo
+	0,   // 134: ai_studio_management.GetAvailableVectorStoresRequest.context:type_name -> ai_studio_management.PluginContext
+	144, // 135: ai_studio_management.GetAvailableVectorStoresResponse.vector_stores:type_name -> ai_studio_management.VendorDriverInfo
+	1,   // 136: ai_studio_management.AIStudioManagementService.ListPlugins:input_type -> ai_studio_management.ListPluginsRequest
+	3,   // 137: ai_studio_management.AIStudioManagementService.GetPlugin:input_type -> ai_studio_management.GetPluginRequest
+	5,   // 138: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:input_type -> ai_studio_management.UpdatePluginConfigRequest
+	8,   // 139: ai_studio_management.AIStudioManagementService.ListLLMs:input_type -> ai_studio_management.ListLLMsRequest
+	10,  // 140: ai_studio_management.AIStudioManagementService.GetLLM:input_type -> ai_studio_management.GetLLMRequest
+	12,  // 141: ai_studio_management.AIStudioManagementService.GetLLMPlugins:input_type -> ai_studio_management.GetLLMPluginsRequest
+	15,  // 142: ai_studio_management.AIStudioManagementService.CreateLLM:input_type -> ai_studio_management.CreateLLMRequest
+	17,  // 143: ai_studio_management.AIStudioManagementService.UpdateLLM:input_type -> ai_studio_management.UpdateLLMRequest
+	19,  // 144: ai_studio_management.AIStudioManagementService.DeleteLLM:input_type -> ai_studio_management.DeleteLLMRequest
+	21,  // 145: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:input_type -> ai_studio_management.GetAnalyticsSummaryRequest
+	23,  // 146: ai_studio_management.AIStudioManagementService.GetUsageStatistics:input_type -> ai_studio_management.GetUsageStatisticsRequest
+	25,  // 147: ai_studio_management.AIStudioManagementService.GetCostAnalysis:input_type -> ai_studio_management.GetCostAnalysisRequest
+	99,  // 148: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:input_type -> ai_studio_management.GetChatRecordsPerDayRequest
+	101, // 149: ai_studio_management.AIStudioManagementService.GetModelUsage:input_type -> ai_studio_management.GetModelUsageRequest
+	103, // 150: ai_studio_management.AIStudioManagementService.GetVendorUsage:input_type -> ai_studio_management.GetVendorUsageRequest
+	105, // 151: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:input_type -> ai_studio_management.GetTokenUsagePerAppRequest
+	107, // 152: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:input_type -> ai_studio_management.GetToolUsageStatisticsRequest
+	31,  // 153: ai_studio_management.AIStudioManagementService.ListApps:input_type -> ai_studio_management.ListAppsRequest
+	33,  // 154: ai_studio_management.AIStudioManagementService.GetApp:input_type -> ai_studio_management.GetAppRequest
+	36,  // 155: ai_studio_management.AIStudioManagementService.CreateApp:input_type -> ai_studio_management.CreateAppRequest
+	38,  // 156: ai_studio_management.AIStudioManagementService.UpdateApp:input_type -> ai_studio_management.UpdateAppRequest
+	40,  // 157: ai_studio_management.AIStudioManagementService.DeleteApp:input_type -> ai_studio_management.DeleteAppRequest
+	42,  // 158: ai_studio_management.AIStudioManagementService.ListTools:input_type -> ai_studio_management.ListToolsRequest
+	44,  // 159: ai_studio_management.AIStudioManagementService.GetTool:input_type -> ai_studio_management.GetToolRequest
+	46,  // 160: ai_studio_management.AIStudioManagementService.GetToolOperations:input_type -> ai_studio_management.GetToolOperationsRequest
+	48,  // 161: ai_studio_management.AIStudioManagementService.CallToolOperation:input_type -> ai_studio_management.CallToolOperationRequest
+	54,  // 162: ai_studio_management.AIStudioManagementService.CreateTool:input_type -> ai_studio_management.CreateToolRequest
+	56,  // 163: ai_studio_management.AIStudioManagementService.UpdateTool:input_type -> ai_studio_management.UpdateToolRequest
+	58,  // 164: ai_studio_management.AIStudioManagementService.DeleteTool:input_type -> ai_studio_management.DeleteToolRequest
+	60,  // 165: ai_studio_management.AIStudioManagementService.ListDatasources:input_type -> ai_studio_management.ListDatasourcesRequest
+	62,  // 166: ai_studio_management.AIStudioManagementService.GetDatasource:input_type -> ai_studio_management.GetDatasourceRequest
+	64,  // 167: ai_studio_management.AIStudioManagementService.CreateDatasource:input_type -> ai_studio_management.CreateDatasourceRequest
+	66,  // 168: ai_studio_management.AIStudioManagementService.UpdateDatasource:input_type -> ai_studio_management.UpdateDatasourceRequest
+	68,  // 169: ai_studio_management.AIStudioManagementService.DeleteDatasource:input_type -> ai_studio_management.DeleteDatasourceRequest
+	70,  // 170: ai_studio_management.AIStudioManagementService.SearchDatasources:input_type -> ai_studio_management.SearchDatasourcesRequest
+	72,  // 171: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:input_type -> ai_studio_management.ProcessEmbeddingsRequest
+	75,  // 172: ai_studio_management.AIStudioManagementService.ListDataCatalogues:input_type -> ai_studio_management.ListDataCataloguesRequest
+	77,  // 173: ai_studio_management.AIStudioManagementService.GetDataCatalogue:input_type -> ai_studio_management.GetDataCatalogueRequest
+	79,  // 174: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:input_type -> ai_studio_management.CreateDataCatalogueRequest
+	81,  // 175: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:input_type -> ai_studio_management.UpdateDataCatalogueRequest
+	83,  // 176: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:input_type -> ai_studio_management.DeleteDataCatalogueRequest
+	86,  // 177: ai_studio_management.AIStudioManagementService.ListTags:input_type -> ai_studio_management.ListTagsRequest
+	88,  // 178: ai_studio_management.AIStudioManagementService.GetTag:input_type -> ai_studio_management.GetTagRequest
+	90,  // 179: ai_studio_management.AIStudioManagementService.CreateTag:input_type -> ai_studio_management.CreateTagRequest
+	92,  // 180: ai_studio_management.AIStudioManagementService.UpdateTag:input_type -> ai_studio_management.UpdateTagRequest
+	94,  // 181: ai_studio_management.AIStudioManagementService.DeleteTag:input_type -> ai_studio_management.DeleteTagRequest
+	96,  // 182: ai_studio_management.AIStudioManagementService.SearchTags:input_type -> ai_studio_management.SearchTagsRequest
+	114, // 183: ai_studio_management.AIStudioManagementService.ListModelPrices:input_type -> ai_studio_management.ListModelPricesRequest
+	116, // 184: ai_studio_management.AIStudioManagementService.GetModelPrice:input_type -> ai_studio_management.GetModelPriceRequest
+	118, // 185: ai_studio_management.AIStudioManagementService.CreateModelPrice:input_type -> ai_studio_management.CreateModelPriceRequest
+	120, // 186: ai_studio_management.AIStudioManagementService.UpdateModelPrice:input_type -> ai_studio_management.UpdateModelPriceRequest
+	122, // 187: ai_studio_management.AIStudioManagementService.DeleteModelPrice:input_type -> ai_studio_management.DeleteModelPriceRequest
+	124, // 188: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:input_type -> ai_studio_management.GetModelPricesByVendorRequest
+	127, // 189: ai_studio_management.AIStudioManagementService.ListFilters:input_type -> ai_studio_management.ListFiltersRequest
+	129, // 190: ai_studio_management.AIStudioManagementService.GetFilter:input_type -> ai_studio_management.GetFilterRequest
+	131, // 191: ai_studio_management.AIStudioManagementService.CreateFilter:input_type -> ai_studio_management.CreateFilterRequest
+	133, // 192: ai_studio_management.AIStudioManagementService.UpdateFilter:input_type -> ai_studio_management.UpdateFilterRequest
+	135, // 193: ai_studio_management.AIStudioManagementService.DeleteFilter:input_type -> ai_studio_management.DeleteFilterRequest
+	138, // 194: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:input_type -> ai_studio_management.GetAvailableLLMDriversRequest
+	140, // 195: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:input_type -> ai_studio_management.GetAvailableEmbeddersRequest
+	142, // 196: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:input_type -> ai_studio_management.GetAvailableVectorStoresRequest
+	2,   // 197: ai_studio_management.AIStudioManagementService.ListPlugins:output_type -> ai_studio_management.ListPluginsResponse
+	4,   // 198: ai_studio_management.AIStudioManagementService.GetPlugin:output_type -> ai_studio_management.GetPluginResponse
+	6,   // 199: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:output_type -> ai_studio_management.UpdatePluginConfigResponse
+	9,   // 200: ai_studio_management.AIStudioManagementService.ListLLMs:output_type -> ai_studio_management.ListLLMsResponse
+	11,  // 201: ai_studio_management.AIStudioManagementService.GetLLM:output_type -> ai_studio_management.GetLLMResponse
+	13,  // 202: ai_studio_management.AIStudioManagementService.GetLLMPlugins:output_type -> ai_studio_management.GetLLMPluginsResponse
+	16,  // 203: ai_studio_management.AIStudioManagementService.CreateLLM:output_type -> ai_studio_management.CreateLLMResponse
+	18,  // 204: ai_studio_management.AIStudioManagementService.UpdateLLM:output_type -> ai_studio_management.UpdateLLMResponse
+	20,  // 205: ai_studio_management.AIStudioManagementService.DeleteLLM:output_type -> ai_studio_management.DeleteLLMResponse
+	22,  // 206: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:output_type -> ai_studio_management.GetAnalyticsSummaryResponse
+	24,  // 207: ai_studio_management.AIStudioManagementService.GetUsageStatistics:output_type -> ai_studio_management.GetUsageStatisticsResponse
+	26,  // 208: ai_studio_management.AIStudioManagementService.GetCostAnalysis:output_type -> ai_studio_management.GetCostAnalysisResponse
+	100, // 209: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:output_type -> ai_studio_management.GetChatRecordsPerDayResponse
+	102, // 210: ai_studio_management.AIStudioManagementService.GetModelUsage:output_type -> ai_studio_management.GetModelUsageResponse
+	104, // 211: ai_studio_management.AIStudioManagementService.GetVendorUsage:output_type -> ai_studio_management.GetVendorUsageResponse
+	106, // 212: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:output_type -> ai_studio_management.GetTokenUsagePerAppResponse
+	108, // 213: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:output_type -> ai_studio_management.GetToolUsageStatisticsResponse
+	32,  // 214: ai_studio_management.AIStudioManagementService.ListApps:output_type -> ai_studio_management.ListAppsResponse
+	34,  // 215: ai_studio_management.AIStudioManagementService.GetApp:output_type -> ai_studio_management.GetAppResponse
+	37,  // 216: ai_studio_management.AIStudioManagementService.CreateApp:output_type -> ai_studio_management.CreateAppResponse
+	39,  // 217: ai_studio_management.AIStudioManagementService.UpdateApp:output_type -> ai_studio_management.UpdateAppResponse
+	41,  // 218: ai_studio_management.AIStudioManagementService.DeleteApp:output_type -> ai_studio_management.DeleteAppResponse
+	43,  // 219: ai_studio_management.AIStudioManagementService.ListTools:output_type -> ai_studio_management.ListToolsResponse
+	45,  // 220: ai_studio_management.AIStudioManagementService.GetTool:output_type -> ai_studio_management.GetToolResponse
+	47,  // 221: ai_studio_management.AIStudioManagementService.GetToolOperations:output_type -> ai_studio_management.GetToolOperationsResponse
+	49,  // 222: ai_studio_management.AIStudioManagementService.CallToolOperation:output_type -> ai_studio_management.CallToolOperationResponse
+	55,  // 223: ai_studio_management.AIStudioManagementService.CreateTool:output_type -> ai_studio_management.CreateToolResponse
+	57,  // 224: ai_studio_management.AIStudioManagementService.UpdateTool:output_type -> ai_studio_management.UpdateToolResponse
+	59,  // 225: ai_studio_management.AIStudioManagementService.DeleteTool:output_type -> ai_studio_management.DeleteToolResponse
+	61,  // 226: ai_studio_management.AIStudioManagementService.ListDatasources:output_type -> ai_studio_management.ListDatasourcesResponse
+	63,  // 227: ai_studio_management.AIStudioManagementService.GetDatasource:output_type -> ai_studio_management.GetDatasourceResponse
+	65,  // 228: ai_studio_management.AIStudioManagementService.CreateDatasource:output_type -> ai_studio_management.CreateDatasourceResponse
+	67,  // 229: ai_studio_management.AIStudioManagementService.UpdateDatasource:output_type -> ai_studio_management.UpdateDatasourceResponse
+	69,  // 230: ai_studio_management.AIStudioManagementService.DeleteDatasource:output_type -> ai_studio_management.DeleteDatasourceResponse
+	71,  // 231: ai_studio_management.AIStudioManagementService.SearchDatasources:output_type -> ai_studio_management.SearchDatasourcesResponse
+	73,  // 232: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:output_type -> ai_studio_management.ProcessEmbeddingsResponse
+	76,  // 233: ai_studio_management.AIStudioManagementService.ListDataCatalogues:output_type -> ai_studio_management.ListDataCataloguesResponse
+	78,  // 234: ai_studio_management.AIStudioManagementService.GetDataCatalogue:output_type -> ai_studio_management.GetDataCatalogueResponse
+	80,  // 235: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:output_type -> ai_studio_management.CreateDataCatalogueResponse
+	82,  // 236: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:output_type -> ai_studio_management.UpdateDataCatalogueResponse
+	84,  // 237: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:output_type -> ai_studio_management.DeleteDataCatalogueResponse
+	87,  // 238: ai_studio_management.AIStudioManagementService.ListTags:output_type -> ai_studio_management.ListTagsResponse
+	89,  // 239: ai_studio_management.AIStudioManagementService.GetTag:output_type -> ai_studio_management.GetTagResponse
+	91,  // 240: ai_studio_management.AIStudioManagementService.CreateTag:output_type -> ai_studio_management.CreateTagResponse
+	93,  // 241: ai_studio_management.AIStudioManagementService.UpdateTag:output_type -> ai_studio_management.UpdateTagResponse
+	95,  // 242: ai_studio_management.AIStudioManagementService.DeleteTag:output_type -> ai_studio_management.DeleteTagResponse
+	97,  // 243: ai_studio_management.AIStudioManagementService.SearchTags:output_type -> ai_studio_management.SearchTagsResponse
+	115, // 244: ai_studio_management.AIStudioManagementService.ListModelPrices:output_type -> ai_studio_management.ListModelPricesResponse
+	117, // 245: ai_studio_management.AIStudioManagementService.GetModelPrice:output_type -> ai_studio_management.GetModelPriceResponse
+	119, // 246: ai_studio_management.AIStudioManagementService.CreateModelPrice:output_type -> ai_studio_management.CreateModelPriceResponse
+	121, // 247: ai_studio_management.AIStudioManagementService.UpdateModelPrice:output_type -> ai_studio_management.UpdateModelPriceResponse
+	123, // 248: ai_studio_management.AIStudioManagementService.DeleteModelPrice:output_type -> ai_studio_management.DeleteModelPriceResponse
+	125, // 249: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:output_type -> ai_studio_management.GetModelPricesByVendorResponse
+	128, // 250: ai_studio_management.AIStudioManagementService.ListFilters:output_type -> ai_studio_management.ListFiltersResponse
+	130, // 251: ai_studio_management.AIStudioManagementService.GetFilter:output_type -> ai_studio_management.GetFilterResponse
+	132, // 252: ai_studio_management.AIStudioManagementService.CreateFilter:output_type -> ai_studio_management.CreateFilterResponse
+	134, // 253: ai_studio_management.AIStudioManagementService.UpdateFilter:output_type -> ai_studio_management.UpdateFilterResponse
+	136, // 254: ai_studio_management.AIStudioManagementService.DeleteFilter:output_type -> ai_studio_management.DeleteFilterResponse
+	139, // 255: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:output_type -> ai_studio_management.GetAvailableLLMDriversResponse
+	141, // 256: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:output_type -> ai_studio_management.GetAvailableEmbeddersResponse
+	143, // 257: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:output_type -> ai_studio_management.GetAvailableVectorStoresResponse
+	197, // [197:258] is the sub-list for method output_type
+	136, // [136:197] is the sub-list for method input_type
+	136, // [136:136] is the sub-list for extension type_name
+	136, // [136:136] is the sub-list for extension extendee
+	0,   // [0:136] is the sub-list for field type_name
 }
 
 func init() { file_proto_ai_studio_management_proto_init() }
@@ -8725,7 +10801,7 @@ func file_proto_ai_studio_management_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_ai_studio_management_proto_rawDesc), len(file_proto_ai_studio_management_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   114,
+			NumMessages:   145,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
