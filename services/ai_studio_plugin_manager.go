@@ -313,30 +313,14 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 			Msg("FATAL: Plugin dispense type mismatch! This is the source of the plugin loading failure.")
 	}
 
-	// Set service reference in client wrapper for brokered server setup
+	// Set service reference in client wrapper for per-request broker setup
 	clientWrapper.service = m.service
-
-	// Set up long-lived brokered server for AI Studio service API access
-	var serviceBrokerID uint32
-	if clientWrapper.broker != nil && clientWrapper.service != nil {
-		brokerID, err := clientWrapper.SetupServiceBroker()
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to set up service broker")
-		} else {
-			serviceBrokerID = brokerID
-			log.Info().
-				Uint("plugin_id", plugin.ID).
-				Uint32("broker_id", serviceBrokerID).
-				Msg("✅ Service broker set up for plugin service API access")
-		}
-	}
 
 	log.Info().
 		Uint("plugin_id", plugin.ID).
 		Str("plugin_name", plugin.Name).
 		Bool("has_broker", clientWrapper.broker != nil).
 		Bool("has_service", clientWrapper.service != nil).
-		Uint32("service_broker_id", serviceBrokerID).
 		Msg("✅ Plugin client wrapper connected with broker access")
 
 	// Initialize plugin with config
@@ -350,12 +334,9 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		}
 	}
 
-	// Add plugin ID and service broker ID to config
+	// Add plugin ID to config (broker ID will be passed per-request)
 	configMap["plugin_id"] = fmt.Sprintf("%d", plugin.ID)
-	if serviceBrokerID != 0 {
-		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
-		configMap["has_service_api"] = "true"
-	}
+	configMap["has_service_api"] = "true"
 
 	initResp, err := clientWrapper.Initialize(ctx, &pb.InitRequest{
 		Config: configMap,
@@ -698,6 +679,53 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal RPC payload: %w", err)
+	}
+
+	// Set up per-request broker for service API access (if plugin needs it)
+	var serviceBrokerID uint32
+	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+		if clientWrapper.broker != nil && clientWrapper.service != nil {
+			// Set up per-request brokered server for this call
+			brokerID := clientWrapper.broker.NextId()
+
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("method", method).
+				Uint32("broker_id", brokerID).
+				Msg("Setting up per-request broker for service API access")
+
+			// Start brokered server for this request
+			go clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+				s := grpc.NewServer(opts...)
+
+				// Register AI Studio management services
+				aiStudioServer := NewAIStudioServiceServer(clientWrapper.service)
+				mgmtpb.RegisterAIStudioManagementServiceServer(s, aiStudioServer)
+
+				log.Debug().
+					Uint32("broker_id", brokerID).
+					Msg("AI Studio services registered on per-request brokered server")
+
+				return s
+			})
+
+			serviceBrokerID = brokerID
+		}
+	}
+
+	// Add broker ID to payload if available
+	if serviceBrokerID != 0 {
+		// Add broker ID to the payload so plugin can access it
+		if payload == nil {
+			payload = make(map[string]interface{})
+		}
+		payload["_service_broker_id"] = serviceBrokerID
+
+		// Re-marshal payload with broker ID
+		payloadBytes, err = json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal RPC payload with broker ID: %w", err)
+		}
 	}
 
 	// Call plugin's Call gRPC method

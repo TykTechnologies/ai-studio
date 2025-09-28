@@ -61,8 +61,8 @@ func (p *RateLimitingUIPlugin) Initialize(ctx context.Context, req *pb.InitReque
 		log.Printf("Warning: Plugin ID not found in config")
 	}
 
-	// Service broker ID will be provided when host makes service calls available
-	// This follows the go-plugin bidirectional pattern where broker ID is passed per request
+	// Service broker ID will be provided per-request via RPC payload
+	// This follows the correct go-plugin bidirectional pattern
 
 	// Check if SDK is ready for service API calls
 	sdkReady := ai_studio_sdk.IsInitialized()
@@ -991,6 +991,12 @@ func (p *RateLimitingUIPluginSDK) GetManifest() ([]byte, error) {
 
 // HandleCall processes RPC method calls (SDK interface signature)
 func (p *RateLimitingUIPluginSDK) HandleCall(method string, payload []byte) ([]byte, error) {
+	// Extract broker ID from payload for service API access (per-request pattern)
+	if brokerID := ai_studio_sdk.ExtractBrokerIDFromPayload(payload); brokerID != 0 {
+		log.Printf("Extracted service broker ID %d from request payload for method %s", brokerID, method)
+		ai_studio_sdk.SetServiceBrokerID(brokerID)
+	}
+
 	ctx := context.Background()
 	req := &pb.CallRequest{
 		Method:  method,

@@ -2,6 +2,7 @@ package ai_studio_sdk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -42,13 +43,28 @@ func Initialize(server *grpc.Server, broker *goplugin.GRPCBroker, pluginIDVal ui
 }
 
 // SetServiceBrokerID stores the broker ID for dialing back to host services
-// This is called when the plugin receives the broker ID from config
+// This is called when the plugin receives the broker ID from request payload
 func SetServiceBrokerID(brokerID uint32) {
 	initMutex.Lock()
 	defer initMutex.Unlock()
 
 	serviceBrokerID = brokerID
 	log.Info().Uint32("broker_id", brokerID).Msg("✅ Service broker ID set for host service access")
+}
+
+// ExtractBrokerIDFromPayload extracts the broker ID from RPC request payload
+// This should be called by plugins that need service API access
+func ExtractBrokerIDFromPayload(payload []byte) uint32 {
+	var payloadMap map[string]interface{}
+	if err := json.Unmarshal(payload, &payloadMap); err != nil {
+		return 0
+	}
+
+	if brokerID, ok := payloadMap["_service_broker_id"].(float64); ok {
+		return uint32(brokerID)
+	}
+
+	return 0
 }
 
 // SetPluginID updates the plugin ID after it's received from config
