@@ -69,7 +69,7 @@ func TestManifestScopeExtraction(t *testing.T) {
 	})
 
 	t.Run("manifest validation with service scopes", func(t *testing.T) {
-		// Test valid manifest
+		// Test valid manifest with non-analytics scope
 		validManifest := &models.PluginManifest{
 			ID:      "valid.plugin",
 			Version: "1.0.0",
@@ -81,12 +81,32 @@ func TestManifestScopeExtraction(t *testing.T) {
 				UI       []string `json:"ui"`
 				Services []string `json:"services"`
 			}{
-				Services: []string{"analytics.read"},
+				Services: []string{"plugins.read"},
 			},
 		}
 
 		err := validManifest.ValidateManifest()
 		assert.NoError(t, err)
+
+		// Test analytics scope blocking
+		analyticsManifest := &models.PluginManifest{
+			ID:      "analytics.plugin",
+			Version: "1.0.0",
+			Name:    "Analytics Plugin",
+			Permissions: struct {
+				KV       []string `json:"kv"`
+				RPC      []string `json:"rpc"`
+				Routes   []string `json:"routes"`
+				UI       []string `json:"ui"`
+				Services []string `json:"services"`
+			}{
+				Services: []string{"analytics.read"},
+			},
+		}
+
+		err = analyticsManifest.ValidateManifest()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "analytics functionality is not available to plugins")
 
 		// Test invalid manifest (missing required fields)
 		invalidManifest := &models.PluginManifest{

@@ -41,6 +41,15 @@ func PluginAuthInterceptor(db *gorm.DB) grpc.UnaryServerInterceptor {
 			return nil, status.Errorf(codes.Internal, "no scope mapping for method")
 		}
 
+		// Block analytics functionality - not available to plugins
+		if isAnalyticsScope(requiredScope) {
+			log.Warn().
+				Str("method", info.FullMethod).
+				Str("scope", requiredScope).
+				Msg("Analytics functionality blocked for plugins")
+			return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins - analytics logic remains in REST API layer")
+		}
+
 		// Validate plugin service access authorization
 		var plugin models.Plugin
 		if err := db.First(&plugin, pluginID).Error; err != nil {
@@ -177,6 +186,22 @@ func extractScopeFromMethod(fullMethod string) string {
 	}
 
 	return scopeMap[fullMethod]
+}
+
+// isAnalyticsScope checks if a scope is analytics-related and should be blocked
+func isAnalyticsScope(scope string) bool {
+	analyticsScopes := []string{
+		models.ServiceScopeAnalyticsRead,
+		models.ServiceScopeAnalyticsDetailed,
+		models.ServiceScopeAnalyticsReports,
+	}
+
+	for _, analyticsScope := range analyticsScopes {
+		if scope == analyticsScope {
+			return true
+		}
+	}
+	return false
 }
 
 // GetPluginIDFromContext extracts the plugin ID from the context

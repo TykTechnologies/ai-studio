@@ -21,7 +21,6 @@ type AIStudioManagementServer struct {
 	// Specialized servers for different domains
 	pluginServer         *PluginManagementServer
 	llmServer           *LLMManagementServer
-	analyticsServer     *AnalyticsServer
 	toolsServer         *ToolsServer
 	datasourcesServer   *DatasourcesServer
 	dataCataloguesServer *DataCataloguesServer
@@ -29,6 +28,8 @@ type AIStudioManagementServer struct {
 	filtersServer       *FiltersServer
 	vendorsServer       *VendorsServer
 	modelPricingServer  *ModelPricingServer
+
+	// Note: Analytics server removed - analytics functionality not available to plugins
 
 	// Main service for direct access
 	service *services.Service
@@ -39,7 +40,6 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 	return &AIStudioManagementServer{
 		pluginServer:         NewPluginManagementServer(service.PluginService),
 		llmServer:           NewLLMManagementServer(service),
-		analyticsServer:     NewAnalyticsServer(service),
 		toolsServer:         NewToolsServer(service),
 		datasourcesServer:   NewDatasourcesServer(service),
 		dataCataloguesServer: NewDataCataloguesServer(service),
@@ -48,6 +48,7 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 		vendorsServer:       NewVendorsServer(service),
 		modelPricingServer:  NewModelPricingServer(service),
 		service:            service,
+		// Note: Analytics server removed - analytics functionality not available to plugins
 	}
 }
 
@@ -91,28 +92,27 @@ func (s *AIStudioManagementServer) DeleteLLM(ctx context.Context, req *pb.Delete
 	return s.llmServer.DeleteLLM(ctx, req)
 }
 
-// Analytics Operations - delegate to analytics server
+// Analytics Operations are not available to plugins
+// Analytics logic remains in the REST API layer for architectural consistency
 
 func (s *AIStudioManagementServer) GetAnalyticsSummary(ctx context.Context, req *pb.GetAnalyticsSummaryRequest) (*pb.GetAnalyticsSummaryResponse, error) {
-	return s.analyticsServer.GetAnalyticsSummary(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 func (s *AIStudioManagementServer) GetUsageStatistics(ctx context.Context, req *pb.GetUsageStatisticsRequest) (*pb.GetUsageStatisticsResponse, error) {
-	return s.analyticsServer.GetUsageStatistics(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 func (s *AIStudioManagementServer) GetCostAnalysis(ctx context.Context, req *pb.GetCostAnalysisRequest) (*pb.GetCostAnalysisResponse, error) {
-	return s.analyticsServer.GetCostAnalysis(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
-// Detailed Analytics Operations - delegate to analytics server
-
 func (s *AIStudioManagementServer) GetChatRecordsPerDay(ctx context.Context, req *pb.GetChatRecordsPerDayRequest) (*pb.GetChatRecordsPerDayResponse, error) {
-	return s.analyticsServer.GetChatRecordsPerDay(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 func (s *AIStudioManagementServer) GetModelUsage(ctx context.Context, req *pb.GetModelUsageRequest) (*pb.GetModelUsageResponse, error) {
-	return s.analyticsServer.GetModelUsage(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 // App Management Operations - implement directly
@@ -466,18 +466,18 @@ func (s *AIStudioManagementServer) GetModelPricesByVendor(ctx context.Context, r
 	return s.modelPricingServer.GetModelPricesByVendor(ctx, req)
 }
 
-// Advanced Analytics Operations - delegate to analytics server
+// Analytics Operations - not available to plugins
 
 func (s *AIStudioManagementServer) GetVendorUsage(ctx context.Context, req *pb.GetVendorUsageRequest) (*pb.GetVendorUsageResponse, error) {
-	return s.analyticsServer.GetVendorUsage(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 func (s *AIStudioManagementServer) GetTokenUsagePerApp(ctx context.Context, req *pb.GetTokenUsagePerAppRequest) (*pb.GetTokenUsagePerAppResponse, error) {
-	return s.analyticsServer.GetTokenUsagePerApp(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 func (s *AIStudioManagementServer) GetToolUsageStatistics(ctx context.Context, req *pb.GetToolUsageStatisticsRequest) (*pb.GetToolUsageStatisticsResponse, error) {
-	return s.analyticsServer.GetToolUsageStatistics(ctx, req)
+	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
 }
 
 // convertAppToPB converts a models.App to protobuf AppInfo

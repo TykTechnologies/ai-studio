@@ -132,6 +132,13 @@ func (pm *PluginManifest) ValidateManifest() error {
 		return fmt.Errorf("manifest name is required")
 	}
 
+	// Block analytics service scopes - not available to plugins
+	for _, scope := range pm.Permissions.Services {
+		if isAnalyticsServiceScope(scope) {
+			return fmt.Errorf("analytics functionality is not available to plugins - scope '%s' not allowed", scope)
+		}
+	}
+
 	// Validate UI slots if present
 	if pm.UI != nil {
 		for i, slot := range pm.UI.Slots {
@@ -210,6 +217,22 @@ func (pm *PluginManifest) HasPermission(permType, permission string) bool {
 			if perm == permission {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// isAnalyticsServiceScope checks if a service scope is analytics-related
+func isAnalyticsServiceScope(scope string) bool {
+	analyticsScopes := []string{
+		"analytics.read",
+		"analytics.detailed",
+		"analytics.reports",
+	}
+
+	for _, analyticsScope := range analyticsScopes {
+		if scope == analyticsScope {
+			return true
 		}
 	}
 	return false
