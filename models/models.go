@@ -34,12 +34,13 @@ func InitModels(db *gorm.DB) error {
 		&AccessToken{},
 		&PendingOAuthRequest{},
 		// Hub-and-Spoke Models
-		&EdgeInstance{},      // Edge instance tracking
-		&Plugin{},            // Plugin configurations
-		&LLMPlugin{},         // LLM-Plugin associations
+		&EdgeInstance{},       // Edge instance tracking
+		&Plugin{},             // Plugin configurations
+		&LLMPlugin{},          // LLM-Plugin associations
 		&PluginConfigSchema{}, // Plugin config schema cache
-		&RegisteredPlugin{},  // Registered plugins with parsed manifests
-		&UIRegistry{},        // UI component registry
+		&RegisteredPlugin{},   // Registered plugins with parsed manifests
+		&UIRegistry{},         // UI component registry
+		&PluginData{},         // Plugin key-value storage
 	); err != nil {
 		return err
 	}

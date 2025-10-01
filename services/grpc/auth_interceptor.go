@@ -183,6 +183,11 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/GetAvailableLLMDrivers":    models.ServiceScopeVendorsRead,
 		"/ai_studio_management.AIStudioManagementService/GetAvailableEmbedders":    models.ServiceScopeVendorsRead,
 		"/ai_studio_management.AIStudioManagementService/GetAvailableVectorStores": models.ServiceScopeVendorsRead,
+
+		// Plugin KV storage methods
+		"/ai_studio_management.AIStudioManagementService/WritePluginKV":  models.ServiceScopeKVReadWrite,
+		"/ai_studio_management.AIStudioManagementService/ReadPluginKV":   models.ServiceScopeKVReadWrite,
+		"/ai_studio_management.AIStudioManagementService/DeletePluginKV": models.ServiceScopeKVReadWrite,
 	}
 
 	return scopeMap[fullMethod]

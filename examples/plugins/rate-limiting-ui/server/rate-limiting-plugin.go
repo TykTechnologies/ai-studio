@@ -8,6 +8,7 @@ import (
 	"log"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -308,6 +309,10 @@ func (p *RateLimitingUIPlugin) Call(ctx context.Context, req *pb.CallRequest) (*
 		return p.getDataCatalogues(ctx, req.Payload)
 	case "get_tags":
 		return p.getTags(ctx, req.Payload)
+	case "test_kv_storage":
+		return p.testKVStorage(ctx, req.Payload)
+	case "get_kv_demo_data":
+		return p.getKVDemoData(ctx, req.Payload)
 	default:
 		return &pb.CallResponse{
 			Success:      false,
@@ -782,6 +787,154 @@ func (p *RateLimitingUIPlugin) getTags(ctx context.Context, payload string) (*pb
 	}
 	data, _ := json.Marshal(mockData)
 	return &pb.CallResponse{Success: true, Data: string(data)}, nil
+}
+
+// === KV Storage Demo Methods ===
+
+// testKVStorage demonstrates the new plugin KV storage functionality
+func (p *RateLimitingUIPlugin) testKVStorage(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	log.Printf("Testing KV storage functionality for plugin %d", p.pluginID)
+
+	if !ai_studio_sdk.IsInitialized() {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: "SDK not initialized - KV storage requires service API access",
+		}, nil
+	}
+
+	// Test data to store
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	testData := map[string]interface{}{
+		"test_key":    "demo_config",
+		"timestamp":   timestamp,
+		"plugin_name": "Rate Limiting UI",
+		"message":     "This data was stored using plugin KV storage!",
+		"settings": map[string]interface{}{
+			"rate_limit":        100,
+			"window":            "1m",
+			"enable_analytics":  true,
+			"last_updated":      timestamp,
+		},
+	}
+
+	// Convert to JSON
+	dataBytes, err := json.Marshal(testData)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal test data: %v", err),
+		}, nil
+	}
+
+	// Write to KV storage
+	created, err := ai_studio_sdk.WritePluginKV(ctx, "demo_settings", dataBytes)
+	if err != nil {
+		log.Printf("Failed to write KV data: %v", err)
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to write KV data: %v", err),
+		}, nil
+	}
+
+	// Read back from KV storage to verify
+	readData, err := ai_studio_sdk.ReadPluginKV(ctx, "demo_settings")
+	if err != nil {
+		log.Printf("Failed to read KV data: %v", err)
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to read KV data: %v", err),
+		}, nil
+	}
+
+	// Parse the read data
+	var storedData map[string]interface{}
+	if err := json.Unmarshal(readData, &storedData); err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to parse stored data: %v", err),
+		}, nil
+	}
+
+	// Build response
+	result := map[string]interface{}{
+		"success":     true,
+		"created":     created,
+		"stored_data": storedData,
+		"message":     fmt.Sprintf("✅ KV Storage test successful! Data was %s", map[bool]string{true: "created", false: "updated"}[created]),
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal result: %v", err),
+		}, nil
+	}
+
+	log.Printf("✅ KV Storage test successful - data %s", map[bool]string{true: "created", false: "updated"}[created])
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(resultBytes),
+	}, nil
+}
+
+// getKVDemoData retrieves stored KV data for display in the UI
+func (p *RateLimitingUIPlugin) getKVDemoData(ctx context.Context, payload string) (*pb.CallResponse, error) {
+	log.Printf("Retrieving KV demo data for plugin %d", p.pluginID)
+
+	if !ai_studio_sdk.IsInitialized() {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: "SDK not initialized - KV storage requires service API access",
+		}, nil
+	}
+
+	// Try to read stored data
+	readData, err := ai_studio_sdk.ReadPluginKV(ctx, "demo_settings")
+	if err != nil {
+		// Key doesn't exist yet
+		log.Printf("No stored data found (key doesn't exist): %v", err)
+		result := map[string]interface{}{
+			"has_data": false,
+			"message":  "No data stored yet. Click 'Test KV Storage' to create some!",
+		}
+		resultBytes, _ := json.Marshal(result)
+		return &pb.CallResponse{
+			Success: true,
+			Data:    string(resultBytes),
+		}, nil
+	}
+
+	// Parse the stored data
+	var storedData map[string]interface{}
+	if err := json.Unmarshal(readData, &storedData); err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to parse stored data: %v", err),
+		}, nil
+	}
+
+	// Build response
+	result := map[string]interface{}{
+		"has_data":    true,
+		"stored_data": storedData,
+		"message":     "✅ Data loaded from KV storage",
+		"data_size":   len(readData),
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return &pb.CallResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to marshal result: %v", err),
+		}, nil
+	}
+
+	log.Printf("✅ Retrieved KV demo data (%d bytes)", len(readData))
+	return &pb.CallResponse{
+		Success: true,
+		Data:    string(resultBytes),
+	}, nil
 }
 
 // === Utility Functions ===

@@ -93,6 +93,11 @@ service AIStudioManagementService {
     rpc GetAvailableLLMDrivers(GetAvailableLLMDriversRequest) returns (GetAvailableLLMDriversResponse);
     rpc GetAvailableEmbedders(GetAvailableEmbeddersRequest) returns (GetAvailableEmbeddersResponse);
     rpc GetAvailableVectorStores(GetAvailableVectorStoresRequest) returns (GetAvailableVectorStoresResponse);
+
+    // Plugin Key-Value Storage Operations
+    rpc WritePluginKV(WritePluginKVRequest) returns (WritePluginKVResponse);
+    rpc ReadPluginKV(ReadPluginKVRequest) returns (ReadPluginKVResponse);
+    rpc DeletePluginKV(DeletePluginKVRequest) returns (DeletePluginKVResponse);
 }
 
 // Common request context for all operations
@@ -1110,4 +1115,37 @@ message VendorDriverInfo {
     string version = 3;
     string description = 4;
     repeated string supported_features = 5;
+}
+
+// Plugin Key-Value Storage Messages
+
+message WritePluginKVRequest {
+    PluginContext context = 1;
+    string key = 2;    // Data key (max 255 chars)
+    bytes value = 3;   // Binary data value
+}
+
+message WritePluginKVResponse {
+    bool created = 1;  // true if new entry created, false if existing entry updated
+    string message = 2;
+}
+
+message ReadPluginKVRequest {
+    PluginContext context = 1;
+    string key = 2;    // Data key to retrieve
+}
+
+message ReadPluginKVResponse {
+    bytes value = 1;   // Binary data value
+    string message = 2;
+}
+
+message DeletePluginKVRequest {
+    PluginContext context = 1;
+    string key = 2;    // Data key to delete
+}
+
+message DeletePluginKVResponse {
+    bool deleted = 1;  // true if key existed and was deleted, false if key didn't exist
+    string message = 2;
 }

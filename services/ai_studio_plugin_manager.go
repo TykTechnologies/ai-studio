@@ -27,6 +27,10 @@ import (
 // This is set when the service is created to avoid circular dependencies
 var globalServiceReference *Service
 
+// NewAIStudioManagementServerFunc is a factory function for creating AIStudioManagementServer
+// This is set by the grpc package to avoid circular imports
+var NewAIStudioManagementServerFunc func(*Service) interface{}
+
 // SetGlobalServiceReference sets the global service reference for GRPCServer access
 func SetGlobalServiceReference(service *Service) {
 	globalServiceReference = service
@@ -146,12 +150,18 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 		s := grpc.NewServer(opts...)
 
 		// Register AI Studio management services on brokered server
-		aiStudioServer := NewAIStudioServiceServer(c.service)
-		mgmtpb.RegisterAIStudioManagementServiceServer(s, aiStudioServer)
-
-		log.Info().
-			Uint32("broker_id", brokerID).
-			Msg("✅ AI Studio management services registered on brokered server")
+		// Use factory function to avoid circular import (set by grpc package)
+		if NewAIStudioManagementServerFunc != nil {
+			aiStudioServer := NewAIStudioManagementServerFunc(c.service)
+			if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
+				mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
+				log.Info().
+					Uint32("broker_id", brokerID).
+					Msg("✅ AI Studio management services registered on long-lived brokered server")
+			}
+		} else {
+			log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
+		}
 
 		return s
 	})
@@ -695,19 +705,45 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 				Msg("Setting up per-request broker for service API access")
 
 			// Start brokered server for this request
-			go clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-				s := grpc.NewServer(opts...)
+			// Use a channel to ensure server is ready before proceeding
+			serverReady := make(chan struct{})
+			go func() {
+				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+					// Inject plugin ID into context for all requests on this brokered server
+					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
+					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
 
-				// Register AI Studio management services
-				aiStudioServer := NewAIStudioServiceServer(clientWrapper.service)
-				mgmtpb.RegisterAIStudioManagementServiceServer(s, aiStudioServer)
+					s := grpc.NewServer(opts...)
 
-				log.Debug().
-					Uint32("broker_id", brokerID).
-					Msg("AI Studio services registered on per-request brokered server")
+					// Register AI Studio management services with full implementation
+					// Use factory function to avoid circular import (set by grpc package)
+					if NewAIStudioManagementServerFunc != nil {
+						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
+						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
+							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
+							log.Debug().
+								Uint32("broker_id", brokerID).
+								Uint("plugin_id", pluginID).
+								Msg("AI Studio services registered on per-request brokered server with plugin ID context")
+						}
+					} else {
+						log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
+					}
 
-				return s
-			})
+					// Signal that server is ready
+					close(serverReady)
+
+					return s
+				})
+			}()
+
+			// Wait for server to be ready before proceeding (with timeout)
+			select {
+			case <-serverReady:
+				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for plugin calls")
+			case <-time.After(100 * time.Millisecond):
+				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
+			}
 
 			serviceBrokerID = brokerID
 		}

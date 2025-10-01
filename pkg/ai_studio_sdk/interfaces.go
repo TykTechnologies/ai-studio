@@ -59,6 +59,9 @@ type ServiceAPIScope struct {
 	// App management scopes
 	AppsRead  string
 	AppsWrite string
+
+	// Plugin KV storage scopes
+	KVReadWrite string
 }
 
 // AvailableScopes provides constants for common service API scopes
@@ -73,6 +76,7 @@ var AvailableScopes = ServiceAPIScope{
 	ToolsOperations: "tools.operations",
 	AppsRead:        "apps.read",
 	AppsWrite:       "apps.write",
+	KVReadWrite:     "kv.readwrite",
 }
 
 // PluginContext provides context information for service API calls

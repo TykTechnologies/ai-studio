@@ -14,8 +14,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// init registers the AIStudioManagementServer factory with the services package
+// This avoids circular import (services -> services/grpc)
+func init() {
+	services.NewAIStudioManagementServerFunc = func(svc *services.Service) interface{} {
+		return NewAIStudioManagementServer(svc)
+	}
+}
+
 // AIStudioManagementServer is the unified server that implements all AI Studio management operations
 // It delegates to specialized servers for different domains
+// This server is used for plugin-to-host communication via go-plugin's broker pattern
 type AIStudioManagementServer struct {
 	pb.UnimplementedAIStudioManagementServiceServer
 
@@ -29,6 +38,7 @@ type AIStudioManagementServer struct {
 	filtersServer       *FiltersServer
 	vendorsServer       *VendorsServer
 	modelPricingServer  *ModelPricingServer
+	pluginKVServer      *PluginKVServer
 
 	// Note: Analytics server removed - analytics functionality not available to plugins
 
@@ -36,8 +46,64 @@ type AIStudioManagementServer struct {
 	service *services.Service
 }
 
+// validatePluginScope validates that the calling plugin has the required scope
+// Returns the plugin model for downstream use, or an error if validation fails
+func (s *AIStudioManagementServer) validatePluginScope(ctx context.Context, requiredScope string) (*models.Plugin, error) {
+	// Extract plugin ID from context (injected by plugin ID interceptor)
+	pluginID := GetPluginIDFromContext(ctx)
+	if pluginID == 0 {
+		log.Error().Msg("Plugin ID not found in context during scope validation")
+		return nil, status.Errorf(codes.Unauthenticated, "plugin authentication required")
+	}
+
+	// Load plugin from database
+	var plugin models.Plugin
+	if err := s.service.GetDB().First(&plugin, pluginID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.Error().Uint("plugin_id", pluginID).Msg("Plugin not found during scope validation")
+			return nil, status.Errorf(codes.Unauthenticated, "plugin not found")
+		}
+		log.Error().Err(err).Uint("plugin_id", pluginID).Msg("Database error during scope validation")
+		return nil, status.Errorf(codes.Internal, "authentication error")
+	}
+
+	// Check if plugin has service access authorized
+	if !plugin.HasServiceAccess() {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Msg("Plugin service access not authorized")
+		return nil, status.Errorf(codes.PermissionDenied, "service access not authorized for plugin %s", plugin.Name)
+	}
+
+	// Check scope authorization
+	if !plugin.HasServiceScope(requiredScope) {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Str("required_scope", requiredScope).
+			Strs("plugin_scopes", plugin.ServiceScopes).
+			Msg("Plugin missing required scope")
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient scope: %s (plugin: %s)", requiredScope, plugin.Name)
+	}
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", plugin.Name).
+		Str("scope", requiredScope).
+		Msg("Plugin scope validated successfully")
+
+	// Store plugin in context for downstream use (so GetPluginFromContext works)
+	ctx = SetPluginInContext(ctx, &plugin)
+
+	return &plugin, nil
+}
+
 // NewAIStudioManagementServer creates the unified AI Studio management server
 func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementServer {
+	// Create plugin KV service
+	pluginKVService := services.NewPluginKVService(service.GetDB())
+
 	return &AIStudioManagementServer{
 		pluginServer:         NewPluginManagementServer(service.PluginService),
 		llmServer:           NewLLMManagementServer(service),
@@ -48,6 +114,7 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 		filtersServer:       NewFiltersServer(service),
 		vendorsServer:       NewVendorsServer(service),
 		modelPricingServer:  NewModelPricingServer(service),
+		pluginKVServer:      NewPluginKVServer(pluginKVService),
 		service:            service,
 		// Note: Analytics server removed - analytics functionality not available to plugins
 	}
@@ -488,6 +555,47 @@ func (s *AIStudioManagementServer) GetTokenUsagePerApp(ctx context.Context, req 
 
 func (s *AIStudioManagementServer) GetToolUsageStatistics(ctx context.Context, req *pb.GetToolUsageStatisticsRequest) (*pb.GetToolUsageStatisticsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins")
+}
+
+// Plugin KV Storage Operations - delegate to plugin KV server
+
+func (s *AIStudioManagementServer) WritePluginKV(ctx context.Context, req *pb.WritePluginKVRequest) (*pb.WritePluginKVResponse, error) {
+	// Validate plugin has kv.readwrite scope and inject plugin into context
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeKVReadWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update context with validated plugin for downstream use
+	ctx = SetPluginInContext(ctx, plugin)
+
+	return s.pluginKVServer.WritePluginKV(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ReadPluginKV(ctx context.Context, req *pb.ReadPluginKVRequest) (*pb.ReadPluginKVResponse, error) {
+	// Validate plugin has kv.readwrite scope and inject plugin into context
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeKVReadWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update context with validated plugin for downstream use
+	ctx = SetPluginInContext(ctx, plugin)
+
+	return s.pluginKVServer.ReadPluginKV(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeletePluginKV(ctx context.Context, req *pb.DeletePluginKVRequest) (*pb.DeletePluginKVResponse, error) {
+	// Validate plugin has kv.readwrite scope and inject plugin into context
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeKVReadWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update context with validated plugin for downstream use
+	ctx = SetPluginInContext(ctx, plugin)
+
+	return s.pluginKVServer.DeletePluginKV(ctx, req)
 }
 
 // convertAppToPB converts a models.App to protobuf AppInfo

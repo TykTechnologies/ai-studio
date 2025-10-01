@@ -44,7 +44,8 @@ class RateLimitingDashboard extends HTMLElement {
     try {
       await Promise.all([
         this.loadStatistics(),
-        this.loadRateLimits()
+        this.loadRateLimits(),
+        this.loadKVData()
       ]);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -85,6 +86,58 @@ class RateLimitingDashboard extends HTMLElement {
     } catch (error) {
       console.error('Failed to load rate limits:', error);
       throw error;
+    }
+  }
+
+  async loadKVData() {
+    if (!this.pluginAPI) {
+      throw new Error('Plugin API not available - component not properly initialized');
+    }
+
+    try {
+      console.log('Dashboard: Calling get_kv_demo_data...');
+      this.data.kvData = await this.pluginAPI.call('get_kv_demo_data', {});
+      console.log('Dashboard: get_kv_demo_data response:', this.data.kvData);
+      this.updateKVDisplay();
+      console.log('Dashboard: KV data updated successfully');
+    } catch (error) {
+      console.error('Failed to load KV data:', error);
+      // Don't throw - KV data is optional
+      this.data.kvData = { has_data: false, message: 'Failed to load KV data' };
+      this.updateKVDisplay();
+    }
+  }
+
+  async testKVStorage() {
+    if (!this.pluginAPI) {
+      console.error('Plugin API not available');
+      return;
+    }
+
+    const button = this.shadowRoot.querySelector('#test-kv-button');
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Testing...';
+    }
+
+    try {
+      console.log('Dashboard: Testing KV storage...');
+      const result = await this.pluginAPI.call('test_kv_storage', {});
+      console.log('Dashboard: test_kv_storage response:', result);
+
+      // Reload KV data to show the updated values
+      await this.loadKVData();
+
+      // Show success message
+      this.showKVMessage(result.message, 'success');
+    } catch (error) {
+      console.error('Failed to test KV storage:', error);
+      this.showKVMessage('Failed to test KV storage: ' + error.message, 'error');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Test KV Storage';
+      }
     }
   }
 
@@ -172,6 +225,11 @@ class RateLimitingDashboard extends HTMLElement {
       this.loadData();
     });
 
+    // KV Storage test button
+    this.shadowRoot.querySelector('#test-kv-button')?.addEventListener('click', () => {
+      this.testKVStorage();
+    });
+
     // Edit rate limit buttons (event delegation)
     this.shadowRoot.addEventListener('click', (e) => {
       if (e.target.classList.contains('btn-edit')) {
@@ -196,6 +254,48 @@ class RateLimitingDashboard extends HTMLElement {
       errorDiv.textContent = message;
       errorDiv.style.display = 'block';
     }
+  }
+
+  updateKVDisplay() {
+    const kvDisplay = this.shadowRoot.querySelector('#kv-display');
+    const kvStatus = this.shadowRoot.querySelector('#kv-status');
+
+    if (!kvDisplay || !kvStatus) return;
+
+    const kvData = this.data.kvData;
+
+    if (!kvData || !kvData.has_data) {
+      kvStatus.innerHTML = `<div style="color: #999;">${kvData?.message || 'No data stored yet. Click "Test KV Storage" to create some!'}</div>`;
+      return;
+    }
+
+    // Display the stored data in a formatted way
+    kvStatus.innerHTML = `
+      <div style="color: #4caf50; margin-bottom: 8px;">✅ ${kvData.message || 'Data loaded from KV storage'}</div>
+      <div style="color: #666; margin-bottom: 8px;">Data size: ${kvData.data_size || 0} bytes</div>
+      <pre style="background: white; padding: 12px; border-radius: 4px; overflow-x: auto; color: #333;">${JSON.stringify(kvData.stored_data, null, 2)}</pre>
+    `;
+  }
+
+  showKVMessage(message, type) {
+    const messageDiv = this.shadowRoot.querySelector('#kv-message');
+    if (!messageDiv) return;
+
+    messageDiv.style.display = 'block';
+    messageDiv.textContent = message;
+
+    if (type === 'success') {
+      messageDiv.style.background = '#e8f5e9';
+      messageDiv.style.color = '#2e7d32';
+    } else {
+      messageDiv.style.background = '#ffebee';
+      messageDiv.style.color = '#c62828';
+    }
+
+    // Hide after 5 seconds
+    setTimeout(() => {
+      messageDiv.style.display = 'none';
+    }, 5000);
   }
 
   render() {
@@ -386,6 +486,23 @@ class RateLimitingDashboard extends HTMLElement {
             <tbody>
             </tbody>
           </table>
+        </div>
+
+        <!-- KV Storage Demo Section -->
+        <div class="section">
+          <div class="section-header">
+            Plugin KV Storage Demo
+            <button id="test-kv-button" class="btn-edit" style="margin-left: auto;">Test KV Storage</button>
+          </div>
+          <div id="kv-message" style="padding: 12px; margin: 12px; border-radius: 4px; display: none;"></div>
+          <div style="padding: 16px;">
+            <p style="color: #666; margin-bottom: 16px;">
+              This demonstrates the new plugin KV storage functionality. Click "Test KV Storage" to write and read data.
+            </p>
+            <div id="kv-display" style="background: #f5f5f5; padding: 16px; border-radius: 4px; font-family: monospace; font-size: 13px; overflow-x: auto;">
+              <div id="kv-status" style="color: #999;">No data loaded yet...</div>
+            </div>
+          </div>
         </div>
       </div>
     `;

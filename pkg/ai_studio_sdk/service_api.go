@@ -255,3 +255,63 @@ func Reset() {
 	pluginID = 0
 	initialized = false
 }
+
+// === Plugin KV Storage Functions ===
+
+// WritePluginKV writes a key-value entry for the calling plugin
+// Returns true if a new entry was created, false if an existing entry was updated
+func WritePluginKV(ctx context.Context, key string, value []byte) (bool, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return false, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.WritePluginKV(ctx, &mgmtpb.WritePluginKVRequest{
+		Context: createPluginContext(AvailableScopes.KVReadWrite),
+		Key:     key,
+		Value:   value,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to write KV data: %w", err)
+	}
+
+	return resp.Created, nil
+}
+
+// ReadPluginKV reads a key-value entry for the calling plugin
+// Returns an error if the key doesn't exist
+func ReadPluginKV(ctx context.Context, key string) ([]byte, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.ReadPluginKV(ctx, &mgmtpb.ReadPluginKVRequest{
+		Context: createPluginContext(AvailableScopes.KVReadWrite),
+		Key:     key,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read KV data: %w", err)
+	}
+
+	return resp.Value, nil
+}
+
+// DeletePluginKV deletes a key-value entry for the calling plugin
+// Returns true if the key existed and was deleted, false if the key didn't exist
+func DeletePluginKV(ctx context.Context, key string) (bool, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return false, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeletePluginKV(ctx, &mgmtpb.DeletePluginKVRequest{
+		Context: createPluginContext(AvailableScopes.KVReadWrite),
+		Key:     key,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to delete KV data: %w", err)
+	}
+
+	return resp.Deleted, nil
+}

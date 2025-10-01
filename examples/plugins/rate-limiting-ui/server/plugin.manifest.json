@@ -12,7 +12,8 @@
       "plugins.read",
       "llms.read",
       "tools.read",
-      "tools.operations"
+      "tools.operations",
+      "kv.readwrite"
     ]
   },
   "kvNamespace": "plugin:com.tyk.rate-limiting-ui",

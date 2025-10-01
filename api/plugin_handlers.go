@@ -596,6 +596,57 @@ func (a *API) deletePlugin(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// @Summary Clear plugin data
+// @Description Delete all key-value data stored by a plugin
+// @Tags plugins
+// @Accept json
+// @Produce json
+// @Param id path int true "Plugin ID"
+// @Success 204 "No Content - plugin data cleared successfully"
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/plugins/{id}/data [delete]
+// @Security BearerAuth
+func (a *API) clearPluginData(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid plugin ID"}},
+		})
+		return
+	}
+
+	// Create plugin KV service
+	pluginKVService := services.NewPluginKVService(a.service.GetDB())
+
+	// Clear all plugin data
+	if err := pluginKVService.ClearAllPluginData(uint(id)); err != nil {
+		if strings.Contains(err.Error(), "plugin not found") {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "Plugin not found"}},
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // @Summary Test plugin
 // @Description Test a plugin configuration
 // @Tags plugins

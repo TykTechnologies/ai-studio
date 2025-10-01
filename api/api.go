@@ -632,6 +632,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/plugins/:id", a.getPlugin)
 	v1.PATCH("/plugins/:id", a.updatePlugin)
 	v1.DELETE("/plugins/:id", a.deletePlugin)
+	v1.DELETE("/plugins/:id/data", a.clearPluginData)
 	v1.GET("/plugins", a.listPlugins)
 	v1.POST("/plugins/:id/test", a.testPlugin)
 

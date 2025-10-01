@@ -391,4 +391,7 @@ const (
 
 	// System scopes
 	ServiceScopeSystemRead = "system.read"
+
+	// Key-Value storage scopes
+	ServiceScopeKVReadWrite = "kv.readwrite" // Plugin key-value storage access
 )
