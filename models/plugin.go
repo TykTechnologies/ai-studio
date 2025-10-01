@@ -168,14 +168,14 @@ func (plugins *Plugins) GetPluginsByHookType(db *gorm.DB, hookType string) error
 // GetPluginsInNamespace returns plugins in a specific namespace (including global)
 func (plugins *Plugins) GetPluginsInNamespace(db *gorm.DB, namespace string) error {
 	query := db.Where("is_active = ?", true)
-	if namespace == "" {
-		// Global namespace - only global plugins
-		query = query.Where("namespace = ''")
+	if namespace == "" || namespace == "__ALL_NAMESPACES__" {
+		// No namespace filtering - return all plugins (matches App/Filter behavior)
+		// No additional WHERE clause needed
 	} else {
 		// Specific namespace - global + matching namespace
 		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
-	
+
 	return query.Order("created_at DESC").Find(plugins).Error
 }
 
@@ -191,15 +191,12 @@ func (plugins *Plugins) ListWithPagination(db *gorm.DB, pageSize, pageNumber int
 	query = query.Where("is_active = ?", isActive)
 
 	// Apply namespace filtering
-	if namespace == "__ALL_NAMESPACES__" {
-		// Special case: no namespace filtering, return plugins from all namespaces
+	if namespace == "__ALL_NAMESPACES__" || namespace == "" {
+		// No namespace filtering - return plugins from all namespaces (matches App/Filter behavior)
 		// No additional WHERE clause needed
-	} else if namespace != "" {
+	} else {
 		// Specific namespace: include global plugins (empty namespace) + plugins in specified namespace
 		query = query.Where("namespace = '' OR namespace = ?", namespace)
-	} else {
-		// Empty namespace query: only return global plugins
-		query = query.Where("namespace = ''")
 	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
@@ -239,15 +236,12 @@ func (plugins *Plugins) ListAllWithPagination(db *gorm.DB, pageSize, pageNumber 
 	// Note: No is_active filter - this returns both active and inactive
 
 	// Apply namespace filtering
-	if namespace == "__ALL_NAMESPACES__" {
-		// Special case: no namespace filtering, return plugins from all namespaces
+	if namespace == "__ALL_NAMESPACES__" || namespace == "" {
+		// No namespace filtering - return plugins from all namespaces (matches App/Filter behavior)
 		// No additional WHERE clause needed
-	} else if namespace != "" {
+	} else {
 		// Specific namespace: include global plugins (empty namespace) + plugins in specified namespace
 		query = query.Where("namespace = '' OR namespace = ?", namespace)
-	} else {
-		// Empty namespace query: only return global plugins
-		query = query.Where("namespace = ''")
 	}
 
 	if err := query.Count(&totalCount).Error; err != nil {

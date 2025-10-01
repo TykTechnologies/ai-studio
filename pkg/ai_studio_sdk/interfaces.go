@@ -62,21 +62,51 @@ type ServiceAPIScope struct {
 
 	// Plugin KV storage scopes
 	KVReadWrite string
+
+	// Datasource management scopes
+	DatasourcesRead  string
+	DatasourcesWrite string
+
+	// Tag management scopes
+	TagsRead  string
+	TagsWrite string
+
+	// Filter management scopes
+	FiltersRead  string
+	FiltersWrite string
+
+	// Pricing scopes
+	PricingRead  string
+	PricingWrite string
+
+	// Data catalogue scopes
+	DataCataloguesRead  string
+	DataCataloguesWrite string
 }
 
 // AvailableScopes provides constants for common service API scopes
 var AvailableScopes = ServiceAPIScope{
-	PluginsRead:     "plugins.read",
-	PluginsWrite:    "plugins.write",
-	PluginsConfig:   "plugins.config",
-	LLMsRead:        "llms.read",
-	LLMsWrite:       "llms.write",
-	ToolsRead:       "tools.read",
-	ToolsWrite:      "tools.write",
-	ToolsOperations: "tools.operations",
-	AppsRead:        "apps.read",
-	AppsWrite:       "apps.write",
-	KVReadWrite:     "kv.readwrite",
+	PluginsRead:         "plugins.read",
+	PluginsWrite:        "plugins.write",
+	PluginsConfig:       "plugins.config",
+	LLMsRead:            "llms.read",
+	LLMsWrite:           "llms.write",
+	ToolsRead:           "tools.read",
+	ToolsWrite:          "tools.write",
+	ToolsOperations:     "tools.operations",
+	AppsRead:            "apps.read",
+	AppsWrite:           "apps.write",
+	KVReadWrite:         "kv.readwrite",
+	DatasourcesRead:     "datasources.read",
+	DatasourcesWrite:    "datasources.write",
+	TagsRead:            "tags.read",
+	TagsWrite:           "tags.write",
+	FiltersRead:         "filters.read",
+	FiltersWrite:        "filters.write",
+	PricingRead:         "pricing.read",
+	PricingWrite:        "pricing.write",
+	DataCataloguesRead:  "data-catalogues.read",
+	DataCataloguesWrite: "data-catalogues.write",
 }
 
 // PluginContext provides context information for service API calls

@@ -315,3 +315,601 @@ func DeletePluginKV(ctx context.Context, key string) (bool, error) {
 
 	return resp.Deleted, nil
 }
+
+// === LLM CRUD Operations ===
+
+// CreateLLM creates a new LLM configuration
+func CreateLLM(ctx context.Context, name, apiKey, apiEndpoint, vendor, defaultModel string, privacyScore int32, allowedModels []string, monthlyBudget *float64) (*mgmtpb.CreateLLMResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateLLM(ctx, &mgmtpb.CreateLLMRequest{
+		Context:         createPluginContext(AvailableScopes.LLMsWrite),
+		Name:            name,
+		ApiKey:          apiKey,
+		ApiEndpoint:     apiEndpoint,
+		Vendor:          vendor,
+		PrivacyScore:    privacyScore,
+		DefaultModel:    defaultModel,
+		AllowedModels:   allowedModels,
+		MonthlyBudget:   monthlyBudget,
+		Active:          true,
+	})
+}
+
+// UpdateLLM updates an existing LLM configuration
+func UpdateLLM(ctx context.Context, llmID uint32, name, apiKey, apiEndpoint, defaultModel string, privacyScore int32, allowedModels []string, active bool, monthlyBudget *float64) (*mgmtpb.UpdateLLMResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateLLM(ctx, &mgmtpb.UpdateLLMRequest{
+		Context:       createPluginContext(AvailableScopes.LLMsWrite),
+		LlmId:         llmID,
+		Name:          name,
+		ApiKey:        apiKey,
+		ApiEndpoint:   apiEndpoint,
+		PrivacyScore:  privacyScore,
+		DefaultModel:  defaultModel,
+		AllowedModels: allowedModels,
+		Active:        active,
+		MonthlyBudget: monthlyBudget,
+	})
+}
+
+// DeleteLLM deletes an LLM configuration
+func DeleteLLM(ctx context.Context, llmID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteLLM(ctx, &mgmtpb.DeleteLLMRequest{
+		Context: createPluginContext(AvailableScopes.LLMsWrite),
+		LlmId:   llmID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete LLM: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete LLM failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// === App CRUD Operations ===
+
+// GetApp retrieves a specific app
+func GetApp(ctx context.Context, appID uint32) (*mgmtpb.GetAppResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetApp(ctx, &mgmtpb.GetAppRequest{
+		Context: createPluginContext(AvailableScopes.AppsRead),
+		AppId:   appID,
+	})
+}
+
+// CreateApp creates a new application
+func CreateApp(ctx context.Context, name, description string, userID uint32, llmIDs, toolIDs []uint32, monthlyBudget *float64) (*mgmtpb.CreateAppResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateApp(ctx, &mgmtpb.CreateAppRequest{
+		Context:       createPluginContext(AvailableScopes.AppsWrite),
+		Name:          name,
+		Description:   description,
+		UserId:        userID,
+		LlmIds:        llmIDs,
+		ToolIds:       toolIDs,
+		MonthlyBudget: monthlyBudget,
+	})
+}
+
+// UpdateApp updates an existing application
+func UpdateApp(ctx context.Context, appID uint32, name, description string, isActive bool, llmIDs, toolIDs []uint32, monthlyBudget *float64) (*mgmtpb.UpdateAppResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateApp(ctx, &mgmtpb.UpdateAppRequest{
+		Context:       createPluginContext(AvailableScopes.AppsWrite),
+		AppId:         appID,
+		Name:          name,
+		Description:   description,
+		IsActive:      isActive,
+		LlmIds:        llmIDs,
+		ToolIds:       toolIDs,
+		MonthlyBudget: monthlyBudget,
+	})
+}
+
+// DeleteApp deletes an application
+func DeleteApp(ctx context.Context, appID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteApp(ctx, &mgmtpb.DeleteAppRequest{
+		Context: createPluginContext(AvailableScopes.AppsWrite),
+		AppId:   appID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete app: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete app failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// === Tool CRUD Operations ===
+
+// GetTool retrieves a specific tool
+func GetTool(ctx context.Context, toolID uint32) (*mgmtpb.GetToolResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetTool(ctx, &mgmtpb.GetToolRequest{
+		Context: createPluginContext(AvailableScopes.ToolsRead),
+		ToolId:  toolID,
+	})
+}
+
+// CreateTool creates a new tool
+func CreateTool(ctx context.Context, name, description, toolType, oasSpec, authSchemaName, authKey string, privacyScore int32) (*mgmtpb.CreateToolResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateTool(ctx, &mgmtpb.CreateToolRequest{
+		Context:        createPluginContext(AvailableScopes.ToolsWrite),
+		Name:           name,
+		Description:    description,
+		ToolType:       toolType,
+		OasSpec:        oasSpec,
+		PrivacyScore:   privacyScore,
+		AuthSchemaName: authSchemaName,
+		AuthKey:        authKey,
+	})
+}
+
+// UpdateTool updates an existing tool
+func UpdateTool(ctx context.Context, toolID uint32, name, description, toolType, oasSpec, authSchemaName, authKey string, privacyScore int32) (*mgmtpb.UpdateToolResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateTool(ctx, &mgmtpb.UpdateToolRequest{
+		Context:        createPluginContext(AvailableScopes.ToolsWrite),
+		ToolId:         toolID,
+		Name:           name,
+		Description:    description,
+		ToolType:       toolType,
+		OasSpec:        oasSpec,
+		PrivacyScore:   privacyScore,
+		AuthSchemaName: authSchemaName,
+		AuthKey:        authKey,
+	})
+}
+
+// DeleteTool deletes a tool
+func DeleteTool(ctx context.Context, toolID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteTool(ctx, &mgmtpb.DeleteToolRequest{
+		Context: createPluginContext(AvailableScopes.ToolsWrite),
+		ToolId:  toolID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete tool: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete tool failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// === Tag CRUD Operations ===
+
+// GetTag retrieves a specific tag
+func GetTag(ctx context.Context, tagID uint32) (*mgmtpb.GetTagResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetTag(ctx, &mgmtpb.GetTagRequest{
+		Context: createPluginContext(AvailableScopes.TagsRead),
+		TagId:   tagID,
+	})
+}
+
+// CreateTag creates a new tag
+func CreateTag(ctx context.Context, name string) (*mgmtpb.CreateTagResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateTag(ctx, &mgmtpb.CreateTagRequest{
+		Context: createPluginContext(AvailableScopes.TagsWrite),
+		Name:    name,
+	})
+}
+
+// UpdateTag updates an existing tag
+func UpdateTag(ctx context.Context, tagID uint32, name string) (*mgmtpb.UpdateTagResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateTag(ctx, &mgmtpb.UpdateTagRequest{
+		Context: createPluginContext(AvailableScopes.TagsWrite),
+		TagId:   tagID,
+		Name:    name,
+	})
+}
+
+// DeleteTag deletes a tag
+func DeleteTag(ctx context.Context, tagID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteTag(ctx, &mgmtpb.DeleteTagRequest{
+		Context: createPluginContext(AvailableScopes.TagsWrite),
+		TagId:   tagID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete tag: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete tag failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// SearchTags searches for tags by query
+func SearchTags(ctx context.Context, query string) (*mgmtpb.SearchTagsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.SearchTags(ctx, &mgmtpb.SearchTagsRequest{
+		Context: createPluginContext(AvailableScopes.TagsRead),
+		Query:   query,
+	})
+}
+
+// === Filter CRUD Operations ===
+
+// GetFilter retrieves a specific filter
+func GetFilter(ctx context.Context, filterID uint32) (*mgmtpb.GetFilterResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetFilter(ctx, &mgmtpb.GetFilterRequest{
+		Context:  createPluginContext(AvailableScopes.FiltersRead),
+		FilterId: filterID,
+	})
+}
+
+// CreateFilter creates a new filter
+func CreateFilter(ctx context.Context, name, description, script string) (*mgmtpb.CreateFilterResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateFilter(ctx, &mgmtpb.CreateFilterRequest{
+		Context:     createPluginContext(AvailableScopes.FiltersWrite),
+		Name:        name,
+		Description: description,
+		Script:      script,
+	})
+}
+
+// UpdateFilter updates an existing filter
+func UpdateFilter(ctx context.Context, filterID uint32, name, description, script string) (*mgmtpb.UpdateFilterResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateFilter(ctx, &mgmtpb.UpdateFilterRequest{
+		Context:     createPluginContext(AvailableScopes.FiltersWrite),
+		FilterId:    filterID,
+		Name:        name,
+		Description: description,
+		Script:      script,
+	})
+}
+
+// DeleteFilter deletes a filter
+func DeleteFilter(ctx context.Context, filterID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteFilter(ctx, &mgmtpb.DeleteFilterRequest{
+		Context:  createPluginContext(AvailableScopes.FiltersWrite),
+		FilterId: filterID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete filter: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete filter failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// === Model Price CRUD Operations ===
+
+// GetModelPrice retrieves a specific model price
+func GetModelPrice(ctx context.Context, modelPriceID uint32) (*mgmtpb.GetModelPriceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetModelPrice(ctx, &mgmtpb.GetModelPriceRequest{
+		Context:      createPluginContext(AvailableScopes.PricingRead),
+		ModelPriceId: modelPriceID,
+	})
+}
+
+// CreateModelPrice creates a new model price entry
+func CreateModelPrice(ctx context.Context, modelName, vendor, currency string, cpt, cpit, cacheWritePt, cacheReadPt float64) (*mgmtpb.CreateModelPriceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateModelPrice(ctx, &mgmtpb.CreateModelPriceRequest{
+		Context:      createPluginContext(AvailableScopes.PricingWrite),
+		ModelName:    modelName,
+		Vendor:       vendor,
+		Cpt:          cpt,
+		Cpit:         cpit,
+		CacheWritePt: cacheWritePt,
+		CacheReadPt:  cacheReadPt,
+		Currency:     currency,
+	})
+}
+
+// UpdateModelPrice updates an existing model price
+func UpdateModelPrice(ctx context.Context, modelPriceID uint32, modelName, vendor, currency string, cpt, cpit, cacheWritePt, cacheReadPt float64) (*mgmtpb.UpdateModelPriceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateModelPrice(ctx, &mgmtpb.UpdateModelPriceRequest{
+		Context:      createPluginContext(AvailableScopes.PricingWrite),
+		ModelPriceId: modelPriceID,
+		ModelName:    modelName,
+		Vendor:       vendor,
+		Cpt:          cpt,
+		Cpit:         cpit,
+		CacheWritePt: cacheWritePt,
+		CacheReadPt:  cacheReadPt,
+		Currency:     currency,
+	})
+}
+
+// DeleteModelPrice deletes a model price
+func DeleteModelPrice(ctx context.Context, modelPriceID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteModelPrice(ctx, &mgmtpb.DeleteModelPriceRequest{
+		Context:      createPluginContext(AvailableScopes.PricingWrite),
+		ModelPriceId: modelPriceID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete model price: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete model price failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// === Datasource CRUD Operations ===
+
+// GetDatasource retrieves a specific datasource
+func GetDatasource(ctx context.Context, datasourceID uint32) (*mgmtpb.GetDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetDatasource(ctx, &mgmtpb.GetDatasourceRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesRead),
+		DatasourceId: datasourceID,
+	})
+}
+
+// CreateDatasource creates a new datasource
+func CreateDatasource(ctx context.Context, name, shortDesc, longDesc, url, dbSourceType string, privacyScore int32, userID uint32, active bool) (*mgmtpb.CreateDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateDatasource(ctx, &mgmtpb.CreateDatasourceRequest{
+		Context:          createPluginContext(AvailableScopes.DatasourcesWrite),
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Url:              url,
+		DbSourceType:     dbSourceType,
+		PrivacyScore:     privacyScore,
+		UserId:           userID,
+		Active:           active,
+	})
+}
+
+// UpdateDatasource updates an existing datasource
+func UpdateDatasource(ctx context.Context, datasourceID uint32, name, shortDesc, longDesc, url, dbSourceType string, privacyScore int32, userID uint32, active bool) (*mgmtpb.UpdateDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateDatasource(ctx, &mgmtpb.UpdateDatasourceRequest{
+		Context:          createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId:     datasourceID,
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Url:              url,
+		DbSourceType:     dbSourceType,
+		PrivacyScore:     privacyScore,
+		UserId:           userID,
+		Active:           active,
+	})
+}
+
+// DeleteDatasource deletes a datasource
+func DeleteDatasource(ctx context.Context, datasourceID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteDatasource(ctx, &mgmtpb.DeleteDatasourceRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId: datasourceID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete datasource: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete datasource failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// SearchDatasources searches datasources
+func SearchDatasources(ctx context.Context, query string) (*mgmtpb.SearchDatasourcesResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.SearchDatasources(ctx, &mgmtpb.SearchDatasourcesRequest{
+		Context: createPluginContext(AvailableScopes.DatasourcesRead),
+		Query:   query,
+	})
+}
+
+// === Data Catalogue CRUD Operations ===
+
+// GetDataCatalogue retrieves a specific data catalogue
+func GetDataCatalogue(ctx context.Context, catalogueID uint32) (*mgmtpb.GetDataCatalogueResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetDataCatalogue(ctx, &mgmtpb.GetDataCatalogueRequest{
+		Context:         createPluginContext(AvailableScopes.DataCataloguesRead),
+		DataCatalogueId: catalogueID,
+	})
+}
+
+// CreateDataCatalogue creates a new data catalogue
+func CreateDataCatalogue(ctx context.Context, name, shortDesc, longDesc, icon string) (*mgmtpb.CreateDataCatalogueResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateDataCatalogue(ctx, &mgmtpb.CreateDataCatalogueRequest{
+		Context:          createPluginContext(AvailableScopes.DataCataloguesWrite),
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Icon:             icon,
+	})
+}
+
+// UpdateDataCatalogue updates an existing data catalogue
+func UpdateDataCatalogue(ctx context.Context, catalogueID uint32, name, shortDesc, longDesc, icon string) (*mgmtpb.UpdateDataCatalogueResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateDataCatalogue(ctx, &mgmtpb.UpdateDataCatalogueRequest{
+		Context:          createPluginContext(AvailableScopes.DataCataloguesWrite),
+		DataCatalogueId:  catalogueID,
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Icon:             icon,
+	})
+}
+
+// DeleteDataCatalogue deletes a data catalogue
+func DeleteDataCatalogue(ctx context.Context, catalogueID uint32) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteDataCatalogue(ctx, &mgmtpb.DeleteDataCatalogueRequest{
+		Context:         createPluginContext(AvailableScopes.DataCataloguesWrite),
+		DataCatalogueId: catalogueID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete data catalogue: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete data catalogue failed: %s", resp.Message)
+	}
+
+	return nil
+}
