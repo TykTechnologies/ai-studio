@@ -93,9 +93,7 @@ func (s *AIStudioManagementServer) validatePluginScope(ctx context.Context, requ
 		Str("scope", requiredScope).
 		Msg("Plugin scope validated successfully")
 
-	// Store plugin in context for downstream use (so GetPluginFromContext works)
-	ctx = SetPluginInContext(ctx, &plugin)
-
+	// Return the validated plugin - caller will inject it into context
 	return &plugin, nil
 }
 

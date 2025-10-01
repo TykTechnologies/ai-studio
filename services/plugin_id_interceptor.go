@@ -10,9 +10,10 @@ import (
 // This is used for the brokered gRPC server where we already know the plugin ID from the caller
 func CreatePluginIDInterceptor(pluginID uint) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Inject plugin ID into context using the same key type as auth_interceptor.go
-		type pluginContextKey struct{}
-		ctx = context.WithValue(ctx, pluginContextKey{}, pluginID)
+		// Inject plugin ID into context using string key
+		// IMPORTANT: This constant must match pluginContextKeyString in services/grpc/auth_interceptor.go
+		const pluginContextKey = "midsommar:plugin:id"
+		ctx = context.WithValue(ctx, pluginContextKey, pluginID)
 
 		// Call the handler with the enriched context
 		return handler(ctx, req)

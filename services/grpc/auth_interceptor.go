@@ -13,7 +13,12 @@ import (
 )
 
 // Plugin context key for storing authenticated plugin ID
-type pluginContextKey struct{}
+// Using a string key to avoid type identity issues across packages
+const pluginContextKeyString = "midsommar:plugin:id"
+
+// Plugin info context key for storing full plugin model
+// Using a string key to avoid type identity issues
+const pluginInfoKeyString = "midsommar:plugin:info"
 
 // PluginAuthInterceptor creates a gRPC interceptor for plugin authentication and authorization
 func PluginAuthInterceptor(db *gorm.DB) grpc.UnaryServerInterceptor {
@@ -212,7 +217,7 @@ func isAnalyticsScope(scope string) bool {
 // GetPluginIDFromContext extracts the plugin ID from the context
 // This should be set by the AI Studio plugin manager during plugin calls
 func GetPluginIDFromContext(ctx context.Context) uint {
-	if pluginID, ok := ctx.Value(pluginContextKey{}).(uint); ok {
+	if pluginID, ok := ctx.Value(pluginContextKeyString).(uint); ok {
 		return pluginID
 	}
 	return 0
@@ -221,19 +226,20 @@ func GetPluginIDFromContext(ctx context.Context) uint {
 // SetPluginIDInContext stores the plugin ID in the context
 // Used by the AI Studio plugin manager when making calls
 func SetPluginIDInContext(ctx context.Context, pluginID uint) context.Context {
-	return context.WithValue(ctx, pluginContextKey{}, pluginID)
+	return context.WithValue(ctx, pluginContextKeyString, pluginID)
 }
+
+// PluginContextKeyString is exported for use in other packages to avoid circular imports
+const PluginContextKeyString = pluginContextKeyString
 
 // SetPluginInContext stores the full plugin info in the context for downstream use
 func SetPluginInContext(ctx context.Context, plugin *models.Plugin) context.Context {
-	type pluginInfoKey struct{}
-	return context.WithValue(ctx, pluginInfoKey{}, plugin)
+	return context.WithValue(ctx, pluginInfoKeyString, plugin)
 }
 
 // GetPluginFromContext retrieves the full plugin info from the context
 func GetPluginFromContext(ctx context.Context) (*models.Plugin, bool) {
-	type pluginInfoKey struct{}
-	if plugin, ok := ctx.Value(pluginInfoKey{}).(*models.Plugin); ok {
+	if plugin, ok := ctx.Value(pluginInfoKeyString).(*models.Plugin); ok {
 		return plugin, true
 	}
 	return nil, false
