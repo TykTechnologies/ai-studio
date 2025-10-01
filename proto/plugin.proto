@@ -43,6 +43,9 @@ service PluginService {
 
     // Configuration schema method (for both systems)
     rpc GetConfigSchema(GetConfigSchemaRequest) returns (GetConfigSchemaResponse);
+
+    // Agent Plugin Methods
+    rpc HandleAgentMessage(AgentMessageRequest) returns (stream AgentMessageChunk);
 }
 
 // Common messages
@@ -308,4 +311,66 @@ message GetConfigSchemaResponse {
     bool success = 1;
     string schema_json = 2;    // JSON Schema as string (jsonschema.org format)
     string error_message = 3;
+}
+
+// Agent Plugin Messages
+
+message AgentMessageRequest {
+    string session_id = 1;
+    string user_message = 2;
+    repeated AgentToolInfo available_tools = 3;
+    repeated AgentDatasourceInfo available_datasources = 4;
+    repeated AgentLLMInfo available_llms = 5;
+    string config_json = 6;                      // Plugin configuration from AgentConfig
+    repeated AgentConversationMessage history = 7;
+    PluginContext context = 8;
+}
+
+message AgentMessageChunk {
+    enum ChunkType {
+        CONTENT = 0;         // Regular content chunk
+        TOOL_CALL = 1;       // Tool call being made
+        TOOL_RESULT = 2;     // Tool execution result
+        THINKING = 3;        // Agent reasoning/planning
+        ERROR = 4;           // Error occurred
+        DONE = 5;            // Processing complete
+    }
+
+    ChunkType type = 1;
+    string content = 2;          // Text content
+    string metadata_json = 3;    // Additional metadata as JSON
+    bool is_final = 4;           // True if this is the final chunk
+}
+
+message AgentToolInfo {
+    uint32 id = 1;
+    string name = 2;
+    string slug = 3;
+    string description = 4;
+    repeated string operations = 5;  // Available operation IDs
+    int32 privacy_score = 6;
+}
+
+message AgentDatasourceInfo {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string db_source_type = 4;
+    int32 privacy_score = 5;
+}
+
+message AgentLLMInfo {
+    uint32 id = 1;
+    string name = 2;
+    string vendor = 3;
+    string default_model = 4;
+    repeated string allowed_models = 5;
+    int32 privacy_score = 6;
+}
+
+message AgentConversationMessage {
+    string role = 1;             // "user", "assistant", "system"
+    string content = 2;
+    int64 timestamp = 3;         // Unix timestamp
+    string metadata_json = 4;    // Additional metadata as JSON
 }

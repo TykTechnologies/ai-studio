@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: ai_studio_management.proto
+// source: proto/ai_studio_management/ai_studio_management.proto
 
 package ai_studio_management
 
@@ -83,6 +83,9 @@ const (
 	AIStudioManagementService_WritePluginKV_FullMethodName               = "/ai_studio_management.AIStudioManagementService/WritePluginKV"
 	AIStudioManagementService_ReadPluginKV_FullMethodName                = "/ai_studio_management.AIStudioManagementService/ReadPluginKV"
 	AIStudioManagementService_DeletePluginKV_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeletePluginKV"
+	AIStudioManagementService_ExecuteTool_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ExecuteTool"
+	AIStudioManagementService_QueryDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/QueryDatasource"
+	AIStudioManagementService_CallLLM_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/CallLLM"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -169,6 +172,10 @@ type AIStudioManagementServiceClient interface {
 	WritePluginKV(ctx context.Context, in *WritePluginKVRequest, opts ...grpc.CallOption) (*WritePluginKVResponse, error)
 	ReadPluginKV(ctx context.Context, in *ReadPluginKVRequest, opts ...grpc.CallOption) (*ReadPluginKVResponse, error)
 	DeletePluginKV(ctx context.Context, in *DeletePluginKVRequest, opts ...grpc.CallOption) (*DeletePluginKVResponse, error)
+	// Agent Plugin Operations - Wrap REST APIs with credential injection
+	ExecuteTool(ctx context.Context, in *ExecuteToolRequest, opts ...grpc.CallOption) (*ExecuteToolResponse, error)
+	QueryDatasource(ctx context.Context, in *QueryDatasourceRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error)
+	CallLLM(ctx context.Context, in *CallLLMRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CallLLMResponse], error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -819,6 +826,45 @@ func (c *aIStudioManagementServiceClient) DeletePluginKV(ctx context.Context, in
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) ExecuteTool(ctx context.Context, in *ExecuteToolRequest, opts ...grpc.CallOption) (*ExecuteToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecuteToolResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ExecuteTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) QueryDatasource(ctx context.Context, in *QueryDatasourceRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_QueryDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CallLLM(ctx context.Context, in *CallLLMRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CallLLMResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AIStudioManagementService_ServiceDesc.Streams[0], AIStudioManagementService_CallLLM_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CallLLMRequest, CallLLMResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AIStudioManagementService_CallLLMClient = grpc.ServerStreamingClient[CallLLMResponse]
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -903,6 +949,10 @@ type AIStudioManagementServiceServer interface {
 	WritePluginKV(context.Context, *WritePluginKVRequest) (*WritePluginKVResponse, error)
 	ReadPluginKV(context.Context, *ReadPluginKVRequest) (*ReadPluginKVResponse, error)
 	DeletePluginKV(context.Context, *DeletePluginKVRequest) (*DeletePluginKVResponse, error)
+	// Agent Plugin Operations - Wrap REST APIs with credential injection
+	ExecuteTool(context.Context, *ExecuteToolRequest) (*ExecuteToolResponse, error)
+	QueryDatasource(context.Context, *QueryDatasourceRequest) (*QueryDatasourceResponse, error)
+	CallLLM(*CallLLMRequest, grpc.ServerStreamingServer[CallLLMResponse]) error
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -1104,6 +1154,15 @@ func (UnimplementedAIStudioManagementServiceServer) ReadPluginKV(context.Context
 }
 func (UnimplementedAIStudioManagementServiceServer) DeletePluginKV(context.Context, *DeletePluginKVRequest) (*DeletePluginKVResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePluginKV not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ExecuteTool(context.Context, *ExecuteToolRequest) (*ExecuteToolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteTool not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) QueryDatasource(context.Context, *QueryDatasourceRequest) (*QueryDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryDatasource not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CallLLM(*CallLLMRequest, grpc.ServerStreamingServer[CallLLMResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method CallLLM not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -2279,6 +2338,53 @@ func _AIStudioManagementService_DeletePluginKV_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_ExecuteTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ExecuteTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ExecuteTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ExecuteTool(ctx, req.(*ExecuteToolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_QueryDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).QueryDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_QueryDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).QueryDatasource(ctx, req.(*QueryDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CallLLM_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CallLLMRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AIStudioManagementServiceServer).CallLLM(m, &grpc.GenericServerStream[CallLLMRequest, CallLLMResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AIStudioManagementService_CallLLMServer = grpc.ServerStreamingServer[CallLLMResponse]
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2542,7 +2648,21 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeletePluginKV",
 			Handler:    _AIStudioManagementService_DeletePluginKV_Handler,
 		},
+		{
+			MethodName: "ExecuteTool",
+			Handler:    _AIStudioManagementService_ExecuteTool_Handler,
+		},
+		{
+			MethodName: "QueryDatasource",
+			Handler:    _AIStudioManagementService_QueryDatasource_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "ai_studio_management.proto",
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "CallLLM",
+			Handler:       _AIStudioManagementService_CallLLM_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "proto/ai_studio_management/ai_studio_management.proto",
 }

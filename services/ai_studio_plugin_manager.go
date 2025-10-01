@@ -242,6 +242,10 @@ func (c *AIStudioPluginClient) ListAssets(ctx context.Context, req *pb.ListAsset
 	return c.pluginStub.ListAssets(ctx, req, opts...)
 }
 
+func (c *AIStudioPluginClient) HandleAgentMessage(ctx context.Context, req *pb.AgentMessageRequest, opts ...grpc.CallOption) (pb.PluginService_HandleAgentMessageClient, error) {
+	return c.pluginStub.HandleAgentMessage(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {

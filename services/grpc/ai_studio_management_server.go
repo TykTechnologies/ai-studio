@@ -1,12 +1,20 @@
 package grpc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
 
+	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -621,4 +629,524 @@ func convertAppToPB(app *models.App) *pb.AppInfo {
 		CreatedAt:     timestamppb.New(app.CreatedAt),
 		UpdatedAt:     timestamppb.New(app.UpdatedAt),
 	}
+}
+
+// Agent Plugin Operations - Wrap REST APIs with credential injection
+
+// ExecuteTool allows agent plugins to execute tools from their associated app
+func (s *AIStudioManagementServer) ExecuteTool(ctx context.Context, req *pb.ExecuteToolRequest) (*pb.ExecuteToolResponse, error) {
+	// Validate plugin has tools.call scope
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeToolsCall)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load agent config for this plugin with App.Tools preloaded
+	var agentConfig models.AgentConfig
+	if err := s.service.GetDB().
+		Preload("App.Tools").
+		Preload("App.Credential").
+		Where("plugin_id = ?", plugin.ID).
+		First(&agentConfig).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "no agent configuration found for plugin")
+		}
+		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load agent config")
+		return nil, status.Errorf(codes.Internal, "failed to load agent configuration")
+	}
+
+	// Verify tool is in app's allowed tools
+	toolID := req.GetToolId()
+	toolAllowed := false
+	for _, tool := range agentConfig.App.Tools {
+		if tool.ID == uint(toolID) {
+			toolAllowed = true
+			break
+		}
+	}
+	if !toolAllowed {
+		log.Warn().
+			Uint32("tool_id", toolID).
+			Uint("app_id", agentConfig.App.ID).
+			Msg("Tool not allowed for agent's app")
+		return nil, status.Errorf(codes.PermissionDenied, "tool not allowed for this agent")
+	}
+
+	// Call existing tool execution service with app credential context
+	// The service.CallToolOperation method handles authentication internally
+	result, err := s.service.CallToolOperation(
+		uint(toolID),
+		req.GetOperationId(),
+		parseJSONToMap(req.GetParamsJson()),
+		parseJSONToInterface(req.GetPayloadJson()),
+		parseJSONToMap(req.GetHeadersJson()),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("tool_id", toolID).
+			Str("operation_id", req.GetOperationId()).
+			Msg("Tool execution failed")
+		return &pb.ExecuteToolResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	// Convert result to JSON
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return &pb.ExecuteToolResponse{
+			Success:      false,
+			ErrorMessage: "failed to serialize tool result",
+		}, nil
+	}
+
+	log.Info().
+		Uint32("tool_id", toolID).
+		Str("operation_id", req.GetOperationId()).
+		Uint("agent_id", agentConfig.ID).
+		Msg("Tool executed successfully for agent")
+
+	return &pb.ExecuteToolResponse{
+		Success:    true,
+		ResultJson: string(resultJSON),
+		StatusCode: 200,
+	}, nil
+}
+
+// QueryDatasource allows agent plugins to query datasources from their associated app
+func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.QueryDatasourceRequest) (*pb.QueryDatasourceResponse, error) {
+	// Validate plugin has datasources.query scope
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeDatasourcesQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load agent config for this plugin with App.Datasources preloaded
+	var agentConfig models.AgentConfig
+	if err := s.service.GetDB().
+		Preload("App.Datasources").
+		Preload("App.Credential").
+		Where("plugin_id = ?", plugin.ID).
+		First(&agentConfig).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "no agent configuration found for plugin")
+		}
+		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load agent config")
+		return nil, status.Errorf(codes.Internal, "failed to load agent configuration")
+	}
+
+	// Verify datasource is in app's allowed datasources
+	datasourceID := req.GetDatasourceId()
+	datasourceAllowed := false
+	for _, ds := range agentConfig.App.Datasources {
+		if ds.ID == uint(datasourceID) {
+			datasourceAllowed = true
+			break
+		}
+	}
+	if !datasourceAllowed {
+		log.Warn().
+			Uint32("datasource_id", datasourceID).
+			Uint("app_id", agentConfig.App.ID).
+			Msg("Datasource not allowed for agent's app")
+		return nil, status.Errorf(codes.PermissionDenied, "datasource not allowed for this agent")
+	}
+
+	// Load the datasource for RAG query
+	var datasource models.Datasource
+	if err := s.service.GetDB().First(&datasource, datasourceID).Error; err != nil {
+		log.Error().Err(err).Uint32("datasource_id", datasourceID).Msg("Failed to load datasource")
+		return &pb.QueryDatasourceResponse{
+			Success:      false,
+			ErrorMessage: "datasource not found",
+		}, nil
+	}
+
+	// Create data session for RAG query
+	// This uses the same approach as the proxy's handleDatasourceRequest
+	dataSession := dataSession.NewDataSession(map[uint]*models.Datasource{
+		datasource.ID: &datasource,
+	})
+
+	// Perform similarity search
+	maxResults := int(req.GetMaxResults())
+	if maxResults == 0 {
+		maxResults = 5 // Default to 5 results
+	}
+
+	docs, err := dataSession.Search(req.GetQuery(), maxResults)
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Str("query", req.GetQuery()).
+			Msg("RAG query failed")
+		return &pb.QueryDatasourceResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("query failed: %v", err),
+		}, nil
+	}
+
+	// Convert results to proto format
+	results := make([]*pb.DatasourceResult, 0, len(docs))
+	for _, doc := range docs {
+		// Extract similarity score from metadata if available
+		similarityScore := 0.0
+		if score, ok := doc.Metadata["score"]; ok {
+			if scoreFloat, ok := score.(float64); ok {
+				similarityScore = scoreFloat
+			}
+		}
+
+		// Filter by similarity threshold if specified
+		if req.GetSimilarityThreshold() > 0 && similarityScore < req.GetSimilarityThreshold() {
+			continue
+		}
+
+		// Convert metadata to map[string]string
+		metadata := make(map[string]string)
+		for k, v := range doc.Metadata {
+			metadata[k] = fmt.Sprintf("%v", v)
+		}
+
+		results = append(results, &pb.DatasourceResult{
+			Content:         doc.PageContent,
+			SimilarityScore: similarityScore,
+			Metadata:        metadata,
+		})
+	}
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Str("query", req.GetQuery()).
+		Int("result_count", len(results)).
+		Uint("agent_id", agentConfig.ID).
+		Msg("Datasource query executed successfully for agent")
+
+	return &pb.QueryDatasourceResponse{
+		Success: true,
+		Results: results,
+	}, nil
+}
+
+// CallLLM allows agent plugins to make LLM proxy calls from their associated app
+func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIStudioManagementService_CallLLMServer) error {
+	ctx := stream.Context()
+
+	// Validate plugin has llms.proxy scope
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeLLMsProxy)
+	if err != nil {
+		return err
+	}
+
+	// Load agent config for this plugin with App.LLMs preloaded
+	var agentConfig models.AgentConfig
+	if err := s.service.GetDB().
+		Preload("App.LLMs").
+		Preload("App.Credential").
+		Where("plugin_id = ?", plugin.ID).
+		First(&agentConfig).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return status.Errorf(codes.NotFound, "no agent configuration found for plugin")
+		}
+		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load agent config")
+		return status.Errorf(codes.Internal, "failed to load agent configuration")
+	}
+
+	// Verify LLM is in app's allowed LLMs
+	llmID := req.GetLlmId()
+	llmAllowed := false
+	for _, llm := range agentConfig.App.LLMs {
+		if llm.ID == uint(llmID) {
+			llmAllowed = true
+			break
+		}
+	}
+	if !llmAllowed {
+		log.Warn().
+			Uint32("llm_id", llmID).
+			Uint("app_id", agentConfig.App.ID).
+			Msg("LLM not allowed for agent's app")
+		return status.Errorf(codes.PermissionDenied, "LLM not allowed for this agent")
+	}
+
+	// Load the full LLM record
+	var llm models.LLM
+	if err := s.service.GetDB().First(&llm, llmID).Error; err != nil {
+		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to load LLM")
+		return status.Errorf(codes.Internal, "failed to load LLM")
+	}
+
+	// Generate slug from LLM name
+	llmSlug := slug.Make(llm.Name)
+
+	// Build OpenAI-compatible request body from proto request
+	requestBody := map[string]interface{}{
+		"model":    req.GetModel(),
+		"messages": convertProtoMessagesToOpenAI(req.GetMessages()),
+		"stream":   false, // Use non-streaming for simplicity
+	}
+
+	// Add optional parameters if provided
+	if req.GetTemperature() > 0 {
+		requestBody["temperature"] = req.GetTemperature()
+	}
+	if req.GetMaxTokens() > 0 {
+		requestBody["max_tokens"] = req.GetMaxTokens()
+	}
+	if len(req.GetTools()) > 0 {
+		requestBody["tools"] = convertProtoToolsToOpenAI(req.GetTools())
+	}
+
+	requestJSON, err := json.Marshal(requestBody)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal LLM request")
+		return status.Errorf(codes.Internal, "failed to marshal request")
+	}
+
+	// Make internal HTTP call to proxy OpenAI shim endpoint (/ai/)
+	// This ensures all proxy middleware (analytics, budget, filters, plugins) are applied
+	proxyURL := fmt.Sprintf("http://localhost:9090/ai/%s/v1/chat/completions", llmSlug)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", proxyURL, bytes.NewReader(requestJSON))
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create HTTP request for LLM proxy")
+		return status.Errorf(codes.Internal, "failed to create proxy request")
+	}
+
+	// Set headers including app credential for authentication
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+agentConfig.App.Credential.Secret)
+	httpReq.Header.Set("Accept", "application/json")
+
+	// Make the request with timeout
+	client := &http.Client{
+		Timeout: 2 * time.Minute, // Reasonable timeout for non-streaming
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Error().Err(err).Str("proxy_url", proxyURL).Msg("Failed to call LLM proxy")
+		if sendErr := stream.Send(&pb.CallLLMResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("proxy call failed: %v", err),
+			Done:         true,
+		}); sendErr != nil {
+			return status.Errorf(codes.Internal, "failed to send error response: %v", sendErr)
+		}
+		return nil
+	}
+	defer resp.Body.Close()
+
+	// Read the complete response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to read response body")
+		if sendErr := stream.Send(&pb.CallLLMResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("failed to read response: %v", err),
+			Done:         true,
+		}); sendErr != nil {
+			return status.Errorf(codes.Internal, "failed to send error response: %v", sendErr)
+		}
+		return nil
+	}
+
+	// Check for non-200 response
+	if resp.StatusCode != http.StatusOK {
+		log.Error().
+			Int("status_code", resp.StatusCode).
+			Str("response_body", string(bodyBytes)).
+			Msg("LLM proxy returned error")
+		if sendErr := stream.Send(&pb.CallLLMResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("proxy error (status %d): %s", resp.StatusCode, string(bodyBytes)),
+			Done:         true,
+		}); sendErr != nil {
+			return status.Errorf(codes.Internal, "failed to send error response: %v", sendErr)
+		}
+		return nil
+	}
+
+	// Parse OpenAI completion response
+	var openAIResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &openAIResp); err != nil {
+		log.Error().Err(err).Str("body", string(bodyBytes)).Msg("Failed to parse OpenAI response")
+		if sendErr := stream.Send(&pb.CallLLMResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("failed to parse response: %v", err),
+			Done:         true,
+		}); sendErr != nil {
+			return status.Errorf(codes.Internal, "failed to send error response: %v", sendErr)
+		}
+		return nil
+	}
+
+	// Extract content from OpenAI response format
+	// OpenAI format: {"choices": [{"message": {"content": "..."}}]}
+	content := ""
+	var usage *pb.LLMUsage
+	var toolCalls []*pb.LLMToolCall
+
+	if choices, ok := openAIResp["choices"].([]interface{}); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]interface{}); ok {
+			if message, ok := choice["message"].(map[string]interface{}); ok {
+				if c, ok := message["content"].(string); ok {
+					content = c
+				}
+				// Handle tool calls if present
+				if tc, ok := message["tool_calls"].([]interface{}); ok {
+					toolCalls = parseToolCalls(tc)
+				}
+			}
+		}
+	}
+
+	// Extract usage stats if present
+	if usageMap, ok := openAIResp["usage"].(map[string]interface{}); ok {
+		usage = &pb.LLMUsage{
+			PromptTokens:     int32(getIntFromMap(usageMap, "prompt_tokens")),
+			CompletionTokens: int32(getIntFromMap(usageMap, "completion_tokens")),
+			TotalTokens:      int32(getIntFromMap(usageMap, "total_tokens")),
+		}
+	}
+
+	// Send single response through gRPC stream
+	if err := stream.Send(&pb.CallLLMResponse{
+		Success:   true,
+		Content:   content,
+		Usage:     usage,
+		ToolCalls: toolCalls,
+		Done:      true,
+	}); err != nil {
+		return status.Errorf(codes.Internal, "failed to send response: %v", err)
+	}
+
+	log.Info().
+		Uint32("llm_id", llmID).
+		Str("llm_slug", llmSlug).
+		Uint("app_id", agentConfig.App.ID).
+		Uint("agent_id", agentConfig.ID).
+		Msg("LLM proxy call completed successfully for agent")
+
+	return nil
+}
+
+// Helper functions for JSON parsing
+
+func parseJSONToMap(jsonStr string) map[string][]string {
+	if jsonStr == "" {
+		return nil
+	}
+	var result map[string][]string
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		log.Error().Err(err).Str("json", jsonStr).Msg("Failed to parse JSON to map")
+		return nil
+	}
+	return result
+}
+
+func parseJSONToInterface(jsonStr string) map[string]interface{} {
+	if jsonStr == "" {
+		return nil
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		log.Error().Err(err).Str("json", jsonStr).Msg("Failed to parse JSON to interface")
+		return nil
+	}
+	return result
+}
+
+// Helper functions for LLM proxy integration
+
+// convertProtoMessagesToOpenAI converts proto LLMMessage to OpenAI chat message format
+func convertProtoMessagesToOpenAI(messages []*pb.LLMMessage) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(messages))
+	for _, msg := range messages {
+		openAIMsg := map[string]interface{}{
+			"role":    msg.GetRole(),
+			"content": msg.GetContent(),
+		}
+		if msg.GetName() != "" {
+			openAIMsg["name"] = msg.GetName()
+		}
+		if msg.GetToolCallId() != "" {
+			openAIMsg["tool_call_id"] = msg.GetToolCallId()
+		}
+		result = append(result, openAIMsg)
+	}
+	return result
+}
+
+// convertProtoToolsToOpenAI converts proto LLMTool to OpenAI tools format
+func convertProtoToolsToOpenAI(tools []*pb.LLMTool) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(tools))
+	for _, tool := range tools {
+		openAITool := map[string]interface{}{
+			"type": tool.GetType(),
+		}
+		if fn := tool.GetFunction(); fn != nil {
+			fnMap := map[string]interface{}{
+				"name":        fn.GetName(),
+				"description": fn.GetDescription(),
+			}
+			// Parse parameters JSON
+			if fn.GetParametersJson() != "" {
+				var params map[string]interface{}
+				if err := json.Unmarshal([]byte(fn.GetParametersJson()), &params); err == nil {
+					fnMap["parameters"] = params
+				}
+			}
+			openAITool["function"] = fnMap
+		}
+		result = append(result, openAITool)
+	}
+	return result
+}
+
+// parseToolCalls parses tool_calls from OpenAI response format
+func parseToolCalls(toolCallsArray []interface{}) []*pb.LLMToolCall {
+	result := make([]*pb.LLMToolCall, 0, len(toolCallsArray))
+	for _, tc := range toolCallsArray {
+		if tcMap, ok := tc.(map[string]interface{}); ok {
+			toolCall := &pb.LLMToolCall{
+				Id:   getStringFromMap(tcMap, "id"),
+				Type: getStringFromMap(tcMap, "type"),
+			}
+			if fn, ok := tcMap["function"].(map[string]interface{}); ok {
+				toolCall.Function = &pb.LLMFunctionCall{
+					Name:      getStringFromMap(fn, "name"),
+					Arguments: getStringFromMap(fn, "arguments"),
+				}
+			}
+			result = append(result, toolCall)
+		}
+	}
+	return result
+}
+
+// getIntFromMap safely extracts an int value from a map
+func getIntFromMap(m map[string]interface{}, key string) int {
+	if val, ok := m[key]; ok {
+		switch v := val.(type) {
+		case int:
+			return v
+		case int32:
+			return int(v)
+		case int64:
+			return int(v)
+		case float64:
+			return int(v)
+		}
+	}
+	return 0
+}
+
+// getStringFromMap safely extracts a string value from a map
+func getStringFromMap(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
 }

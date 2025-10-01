@@ -64,6 +64,7 @@ const (
 const (
 	PluginTypeGateway   = "gateway"   // Microgateway plugins
 	PluginTypeAIStudio  = "ai_studio" // AI Studio UI extension plugins
+	PluginTypeAgent     = "agent"     // AI Studio agent plugins
 )
 
 // NewPlugin creates a new Plugin instance
@@ -122,7 +123,7 @@ func (p *Plugin) IsValidHookType() bool {
 
 // IsValidPluginType validates if the plugin type is supported
 func (p *Plugin) IsValidPluginType() bool {
-	return p.PluginType == PluginTypeGateway || p.PluginType == PluginTypeAIStudio
+	return p.PluginType == PluginTypeGateway || p.PluginType == PluginTypeAIStudio || p.PluginType == PluginTypeAgent
 }
 
 // IsAIStudioPlugin returns true if this is an AI Studio plugin
@@ -133,6 +134,11 @@ func (p *Plugin) IsAIStudioPlugin() bool {
 // IsGatewayPlugin returns true if this is a Gateway plugin
 func (p *Plugin) IsGatewayPlugin() bool {
 	return p.PluginType == PluginTypeGateway
+}
+
+// IsAgentPlugin returns true if this is an Agent plugin
+func (p *Plugin) IsAgentPlugin() bool {
+	return p.PluginType == PluginTypeAgent
 }
 
 // IsOCIPlugin returns true if this plugin uses OCI (determined by command prefix)
@@ -341,6 +347,7 @@ const (
 	ServiceScopeLLMsRead     = "llms.read"
 	ServiceScopeLLMsWrite    = "llms.write"
 	ServiceScopeLLMsConfig   = "llms.config"
+	ServiceScopeLLMsProxy    = "llms.proxy" // Proxy LLM requests (for agent plugins)
 
 	// Analytics scopes
 	ServiceScopeAnalyticsRead = "analytics.read"
@@ -359,6 +366,7 @@ const (
 	ServiceScopeDatasourcesRead       = "datasources.read"
 	ServiceScopeDatasourcesWrite      = "datasources.write"
 	ServiceScopeDatasourcesEmbeddings = "datasources.embeddings"
+	ServiceScopeDatasourcesQuery      = "datasources.query" // Query datasources (for agent plugins)
 
 	// Data catalogue management scopes
 	ServiceScopeDataCataloguesRead  = "data-catalogues.read"

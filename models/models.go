@@ -41,6 +41,7 @@ func InitModels(db *gorm.DB) error {
 		&RegisteredPlugin{},   // Registered plugins with parsed manifests
 		&UIRegistry{},         // UI component registry
 		&PluginData{},         // Plugin key-value storage
+		&AgentConfig{},        // Agent plugin configurations
 	); err != nil {
 		return err
 	}

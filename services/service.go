@@ -1,7 +1,10 @@
 package services
 
 import (
+	"fmt"
+
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
@@ -115,4 +118,18 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 
 func (s *Service) GetDB() *gorm.DB {
 	return s.DB
+}
+
+// GetPluginClient gets a loaded plugin client by plugin ID
+func (s *Service) GetPluginClient(pluginID uint) (pb.PluginServiceClient, error) {
+	if s.AIStudioPluginManager == nil {
+		return nil, fmt.Errorf("AI Studio plugin manager not available")
+	}
+
+	loadedPlugin, err := s.AIStudioPluginManager.LoadPlugin(pluginID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load plugin: %w", err)
+	}
+
+	return loadedPlugin.GRPCClient, nil
 }

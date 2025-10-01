@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugin.proto
+// source: proto/plugin.proto
 
 package proto
 
@@ -37,6 +37,7 @@ const (
 	PluginService_GetManifest_FullMethodName          = "/plugin.PluginService/GetManifest"
 	PluginService_Call_FullMethodName                 = "/plugin.PluginService/Call"
 	PluginService_GetConfigSchema_FullMethodName      = "/plugin.PluginService/GetConfigSchema"
+	PluginService_HandleAgentMessage_FullMethodName   = "/plugin.PluginService/HandleAgentMessage"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -73,6 +74,8 @@ type PluginServiceClient interface {
 	Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error)
 	// Configuration schema method (for both systems)
 	GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error)
+	// Agent Plugin Methods
+	HandleAgentMessage(ctx context.Context, in *AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentMessageChunk], error)
 }
 
 type pluginServiceClient struct {
@@ -263,6 +266,25 @@ func (c *pluginServiceClient) GetConfigSchema(ctx context.Context, in *GetConfig
 	return out, nil
 }
 
+func (c *pluginServiceClient) HandleAgentMessage(ctx context.Context, in *AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentMessageChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PluginService_ServiceDesc.Streams[0], PluginService_HandleAgentMessage_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AgentMessageRequest, AgentMessageChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PluginService_HandleAgentMessageClient = grpc.ServerStreamingClient[AgentMessageChunk]
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -297,6 +319,8 @@ type PluginServiceServer interface {
 	Call(context.Context, *CallRequest) (*CallResponse, error)
 	// Configuration schema method (for both systems)
 	GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error)
+	// Agent Plugin Methods
+	HandleAgentMessage(*AgentMessageRequest, grpc.ServerStreamingServer[AgentMessageChunk]) error
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -360,6 +384,9 @@ func (UnimplementedPluginServiceServer) Call(context.Context, *CallRequest) (*Ca
 }
 func (UnimplementedPluginServiceServer) GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfigSchema not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleAgentMessage(*AgentMessageRequest, grpc.ServerStreamingServer[AgentMessageChunk]) error {
+	return status.Errorf(codes.Unimplemented, "method HandleAgentMessage not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -706,6 +733,17 @@ func _PluginService_GetConfigSchema_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_HandleAgentMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AgentMessageRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginServiceServer).HandleAgentMessage(m, &grpc.GenericServerStream[AgentMessageRequest, AgentMessageChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PluginService_HandleAgentMessageServer = grpc.ServerStreamingServer[AgentMessageChunk]
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -786,6 +824,12 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginService_GetConfigSchema_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugin.proto",
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "HandleAgentMessage",
+			Handler:       _PluginService_HandleAgentMessage_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "proto/plugin.proto",
 }
