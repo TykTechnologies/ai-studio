@@ -565,5 +565,5 @@ func (f *SharedPostgreSQLQueueFactory) CreateQueue(sessionID string, config map[
 		"session_id", sessionID,
 		"connection_shared", true)
 
-	return NewPostgreSQLQueue(sessionID, f.db, psqlConfig)
+	return NewOptimizedPostgreSQLQueue(sessionID, f.db, psqlConfig)
 }
