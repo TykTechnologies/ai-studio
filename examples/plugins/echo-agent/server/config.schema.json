@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Echo Agent Configuration",
+  "description": "Configuration options for the Echo Agent plugin",
+  "properties": {
+    "prefix": {
+      "type": "string",
+      "title": "Response Prefix",
+      "description": "Text to prepend before LLM responses",
+      "default": "<<"
+    },
+    "suffix": {
+      "type": "string",
+      "title": "Response Suffix",
+      "description": "Text to append after LLM responses",
+      "default": ">>"
+    },
+    "include_metadata": {
+      "type": "boolean",
+      "title": "Include Metadata",
+      "description": "Whether to include metadata about the LLM call in the response",
+      "default": false
+    }
+  },
+  "additionalProperties": false
+}

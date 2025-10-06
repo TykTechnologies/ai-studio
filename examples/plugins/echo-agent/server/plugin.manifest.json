@@ -1,0 +1,29 @@
+{
+  "id": "com.tyk.echo-agent",
+  "version": "0.1.0",
+  "name": "Echo Agent",
+  "description": "A simple test agent that wraps LLM responses in << >> markers for end-to-end testing",
+  "plugin_type": "agent",
+  "permissions": {
+    "services": [
+      "llms.read"
+    ]
+  },
+  "scopeRequests": [
+    {
+      "scope": "llms.read",
+      "reason": "Required to call LLM services and generate agent responses"
+    }
+  ],
+  "ui": {
+    "slots": []
+  },
+  "compat": {
+    "min_studio_version": "0.1.0",
+    "api": ["agent-v1"]
+  },
+  "security": {
+    "required_permissions": ["llms.read"],
+    "csp": "default-src 'none'"
+  }
+}

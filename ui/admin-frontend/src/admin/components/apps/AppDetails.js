@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
+import agentService from "../../services/agentService";
 import {
   Alert,
   Typography,
@@ -123,7 +124,9 @@ const AppDetails = () => {
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
   const [tools, setTools] = useState([]); // Added state for tools
+  const [agents, setAgents] = useState([]); // Added state for agents
   const [loading, setLoading] = useState(true);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [appInteractionsData, setAppInteractionsData] = useState(null);
@@ -242,12 +245,27 @@ const AppDetails = () => {
     }
   };
 
+  const fetchAgents = useCallback(async (appId) => {
+    setAgentsLoading(true);
+    try {
+      const result = await agentService.listAgents(1, 100);
+      const appAgents = result.data.filter(agent => agent.appId === parseInt(appId));
+      setAgents(appAgents);
+    } catch (error) {
+      console.error("Error fetching agents", error);
+      setAgents([]);
+    } finally {
+      setAgentsLoading(false);
+    }
+  }, []);
+
 
   useEffect(() => {
     fetchAppDetails();
     fetchTokenUsageAndCost();
     fetchProxyLogs();
-  }, [id, startDate, endDate, page, pageSize, fetchAppDetails]); // Added fetchAppDetails
+    fetchAgents(id);
+  }, [id, startDate, endDate, page, pageSize, fetchAppDetails, fetchAgents]); // Added fetchAgents
 
 
   const handleCloseSnackbar = (event, reason) => {
@@ -655,6 +673,29 @@ const AppDetails = () => {
                 <Typography variant="body2">No tools associated.</Typography>
               )}
             </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Agents:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            {agentsLoading ? (
+              <CircularProgress size={20} />
+            ) : agents.length > 0 ? (
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {agents.map((agent) => (
+                  <Chip
+                    key={agent.id}
+                    label={agent.name}
+                    component={RouterLink}
+                    to={`/admin/agents/${agent.id}`}
+                    clickable
+                    color={agent.isActive ? 'primary' : 'default'}
+                  />
+                ))}
+              </Box>
+            ) : (
+              <Typography variant="body2">No agents using this app.</Typography>
+            )}
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Monthly Budget:</FieldLabel>

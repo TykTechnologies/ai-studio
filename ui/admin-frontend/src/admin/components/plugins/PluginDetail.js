@@ -27,6 +27,8 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import pluginService from '../../services/pluginService';
+import agentService from '../../services/agentService';
+import { isAgentPlugin } from '../../constants/agentTypes';
 import {
   TitleBox,
   ContentBox,
@@ -38,9 +40,11 @@ import {
 const PluginDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [plugin, setPlugin] = useState(null);
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -50,15 +54,34 @@ const PluginDetail = () => {
   const fetchPlugin = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await pluginService.getPlugin(id);
       setPlugin(result);
+
+      // If this is an agent plugin, fetch associated agents
+      if (isAgentPlugin(result)) {
+        fetchAgents();
+      }
     } catch (err) {
       console.error('Error fetching plugin:', err);
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAgents = async () => {
+    setAgentsLoading(true);
+    try {
+      // Fetch agents for this plugin
+      const result = await agentService.listAgents(1, 100);
+      const pluginAgents = result.data.filter(agent => agent.pluginId === parseInt(id));
+      setAgents(pluginAgents);
+    } catch (err) {
+      console.error('Error fetching agents:', err);
+    } finally {
+      setAgentsLoading(false);
     }
   };
 
@@ -163,6 +186,94 @@ const PluginDetail = () => {
           </TableBody>
         </Table>
       </TableContainer>
+    );
+  };
+
+  const renderAgentAssociations = () => {
+    if (agentsLoading) {
+      return (
+        <Box display="flex" justifyContent="center" p={2}>
+          <CircularProgress size={24} />
+        </Box>
+      );
+    }
+
+    if (!agents || agents.length === 0) {
+      return (
+        <Box>
+          <Typography variant="body2" color="textSecondary" mb={2}>
+            No agent configurations using this plugin
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={() => navigate('/admin/agents/new')}
+          >
+            Create Agent
+          </Button>
+        </Box>
+      );
+    }
+
+    return (
+      <Box>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Agent Name</TableCell>
+                <TableCell>App</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {agents.map((agent) => (
+                <TableRow key={agent.id}>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight="medium">
+                      {agent.name}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="textSecondary">
+                      {agent.app?.name || 'Unknown'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={agent.isActive ? 'Active' : 'Inactive'}
+                      size="small"
+                      color={agent.isActive ? 'success' : 'default'}
+                      variant={agent.isActive ? 'filled' : 'outlined'}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      component={Link}
+                      to={`/admin/agents/${agent.id}`}
+                      size="small"
+                      variant="outlined"
+                    >
+                      View Agent
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Box mt={2}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => navigate('/admin/agents/new')}
+          >
+            Create Another Agent
+          </Button>
+        </Box>
+      </Box>
     );
   };
 
@@ -395,6 +506,21 @@ const PluginDetail = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Agent Associations (only for agent plugins) */}
+          {isAgentPlugin(plugin) && (
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Agent Configurations
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  {renderAgentAssociations()}
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
         </Grid>
 
         <Box

@@ -67,6 +67,10 @@ import SSOProfileDetails from "./components/sso-profiles/SSOProfileDetails";
 import EdgeGatewaysPage from "./pages/EdgeGatewaysPage";
 import PluginsPage from "./pages/PluginsPage";
 
+import AgentList from "./pages/AgentList";
+import AgentDetail from "./components/agents/AgentDetail";
+import AgentForm from "./components/agents/AgentForm";
+
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
@@ -134,6 +138,11 @@ const mainAdminRoutes = (
     <Route path="apps/new" element={<AppForm />} />
 
     <Route path="edge-gateways/*" element={<EdgeGatewaysPage />} />
+
+    <Route path="agents" element={<AgentList />} />
+    <Route path="agents/:id" element={<AgentDetail />} />
+    <Route path="agents/edit/:id" element={<AgentForm />} />
+    <Route path="agents/new" element={<AgentForm />} />
 
     <Route path="chats" element={<ChatList />} />
     <Route path="chats/:id" element={<ChatDetails />} />
