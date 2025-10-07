@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   // Set base path conditionally
-  base: process.env.NODE_ENV === 'production' ? '/midsommar/' : '/',
+  base: process.env.NODE_ENV === 'production' ? '/ai-studio/' : '/',
   title: "Tyk AI Studio",
   description: "Tyk AI Studio - Accelerate AI innovation without sacrificing control",
   ignoreDeadLinks: true,
