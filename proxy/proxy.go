@@ -81,21 +81,21 @@ type MCPServerCache struct {
 }
 
 type Proxy struct {
-	gatewayService services.ServiceInterface
-	budgetService  services.BudgetServiceInterface
-	server         *http.Server
-	llms           map[string]*models.LLM
-	datasources    map[string]*models.Datasource
-	mu             sync.RWMutex
-	config         *Config
-	credValidator  *CredentialValidator
-	modelValidator *ModelValidator
-	filters        []*models.Filter
-	authService    *auth.AuthService
-	mcpServers     map[string]*MCPServerCache
-	mcpServersMu   sync.RWMutex
-	openAPICache   map[string]*OpenAPICache
-	openAPICacheMu sync.RWMutex
+	gatewayService      services.ServiceInterface
+	budgetService       services.BudgetServiceInterface
+	server              *http.Server
+	llms                map[string]*models.LLM
+	datasources         map[string]*models.Datasource
+	mu                  sync.RWMutex
+	config              *Config
+	credValidator       *CredentialValidator
+	modelValidator      *ModelValidator
+	filters             []*models.Filter
+	authService         *auth.AuthService
+	mcpServers          map[string]*MCPServerCache
+	mcpServersMu        sync.RWMutex
+	openAPICache        map[string]*OpenAPICache
+	openAPICacheMu      sync.RWMutex
 	responseHookManager ResponseHookManager // REST-only response hooks
 }
 
@@ -444,20 +444,20 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
-	
+
 	// Use buffered response capture only if hooks are actually configured
 	if p.responseHookManager != nil && p.hasResponseHooks() {
 		bufferedCapture := newBufferedResponseCapture(w)
 		httpProxy.ServeHTTP(bufferedCapture, r)
-		
+
 		// Execute REST-only response hooks (hooks modify the buffered response in-place)
 		if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
 			log.Printf("Response hook execution failed: %v", err)
 		}
-		
+
 		// AI Gateway proxy writes the final (potentially modified) response to client
 		bufferedCapture.WriteToClient()
-		
+
 		go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
 	} else {
 		capture := newResponseCapture(w)
@@ -466,13 +466,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 // executeBufferedResponseHooks executes response hooks on the buffered response (REST-only)
 func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, llm *models.LLM, app *models.App, r *http.Request) error {
 	if p.responseHookManager == nil {
 		return nil // No hooks configured
 	}
-	
+
 	// Create plugin context
 	pluginCtx := &PluginContext{
 		RequestID: r.Header.Get("X-Request-ID"),
@@ -482,61 +481,61 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		UserID:    app.UserID,
 		Metadata:  make(map[string]string),
 	}
-	
+
 	// If no request ID, generate one
 	if pluginCtx.RequestID == "" {
 		pluginCtx.RequestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 	}
-	
+
 	ctx := context.Background()
-	
+
 	// Execute OnBeforeWriteHeaders hook
 	headerReq := &HeadersRequest{
 		Headers: make(map[string]string),
 		Context: pluginCtx,
 	}
-	
+
 	// Convert captured headers to map
 	for key, values := range capture.header {
 		if len(values) > 0 {
 			headerReq.Headers[key] = values[0]
 		}
 	}
-	
+
 	headerResp, err := p.responseHookManager.ExecuteOnBeforeWriteHeaders(ctx, headerReq)
 	if err != nil {
 		return fmt.Errorf("header hook failed: %w", err)
 	}
-	
+
 	// Apply header modifications if any
 	if headerResp.Modified {
 		capture.ModifyHeaders(headerResp.Headers)
 	}
-	
+
 	// Execute OnBeforeWrite hook with current headers
 	currentHeaders := headerResp.Headers
 	if !headerResp.Modified {
 		currentHeaders = headerReq.Headers // Use original if not modified
 	}
-	
+
 	writeReq := &ResponseWriteRequest{
 		Body:    capture.CapturedBody(),
 		Headers: currentHeaders,
 		Context: pluginCtx,
 	}
-	
+
 	writeResp, err := p.responseHookManager.ExecuteOnBeforeWrite(ctx, writeReq)
 	if err != nil {
 		return fmt.Errorf("body hook failed: %w", err)
 	}
-	
+
 	// Apply body modifications if any
 	if writeResp.Modified {
 		capture.ModifyBody(writeResp.Body)
 		// Also apply any header changes from the write hook
 		capture.ModifyHeaders(writeResp.Headers)
 	}
-	
+
 	return nil
 }
 
@@ -553,7 +552,7 @@ func (p *Proxy) AddResponseHook(hook ResponseHook) {
 	if p.responseHookManager == nil {
 		p.responseHookManager = NewDefaultResponseHookManager()
 	}
-	
+
 	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
 		manager.AddHook(hook)
 		log.Printf("Added response hook: %s", hook.GetName())
@@ -695,7 +694,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 240 * time.Second,
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
