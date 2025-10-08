@@ -285,9 +285,9 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		return nil, fmt.Errorf("plugin not found: %w", err)
 	}
 
-	// Only load AI Studio plugins
-	if !plugin.IsAIStudioPlugin() {
-		return nil, fmt.Errorf("plugin %d is not an AI Studio plugin", pluginID)
+	// Only load AI Studio and Agent plugins
+	if !plugin.IsAIStudioPlugin() && plugin.PluginType != models.PluginTypeAgent {
+		return nil, fmt.Errorf("plugin %d is not an AI Studio or Agent plugin", pluginID)
 	}
 
 	if !plugin.IsActive {
@@ -1161,8 +1161,8 @@ func (m *AIStudioPluginManager) loadPluginWithOriginalHandshake(ctx context.Cont
 		pluginMap = map[string]goplugin.Plugin{
 			"plugin": &MicrogatewaPluginGRPC{},
 		}
-	case models.PluginTypeAIStudio:
-		// AI Studio plugin
+	case models.PluginTypeAIStudio, models.PluginTypeAgent:
+		// AI Studio and Agent plugins use the same handshake
 		handshake = m.handshakeConfig
 		pluginMap = m.pluginMap
 	default:

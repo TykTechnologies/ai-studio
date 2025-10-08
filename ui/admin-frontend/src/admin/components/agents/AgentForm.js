@@ -22,7 +22,7 @@ import {
   TitleBox,
   ContentBox,
   PrimaryButton,
-  SecondaryButton,
+  SecondaryOutlineButton,
 } from '../../styles/sharedStyles';
 import agentService from '../../services/agentService';
 import pluginService from '../../services/pluginService';
@@ -371,9 +371,9 @@ const AgentForm = () => {
 
                 {/* Actions */}
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-                  <SecondaryButton onClick={handleCancel} disabled={saving}>
+                  <SecondaryOutlineButton onClick={handleCancel} disabled={saving}>
                     Cancel
-                  </SecondaryButton>
+                  </SecondaryOutlineButton>
                   <PrimaryButton type="submit" disabled={saving}>
                     {saving ? <CircularProgress size={24} /> : isEditMode ? 'Update' : 'Create'}
                   </PrimaryButton>

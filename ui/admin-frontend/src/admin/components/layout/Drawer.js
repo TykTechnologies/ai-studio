@@ -111,6 +111,7 @@ const Drawer = () => {
             icon: <Icon name="message-lines" />,
             subItems: [
               { id: 'chats', text: 'Chats', path: '/admin/chats' },
+              { id: 'agents', text: 'Agents', path: '/admin/agents' },
               { id: 'llm-settings', text: 'Model call settings', path: '/admin/llm-settings' },
             ],
           },

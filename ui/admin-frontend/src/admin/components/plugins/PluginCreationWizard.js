@@ -85,8 +85,8 @@ const PluginCreationWizard = () => {
       const createdPlugin = await pluginService.createPlugin(basicInfo);
       setPluginId(createdPlugin.id);
 
-      // For AI Studio plugins, load metadata
-      if (basicInfo.pluginType === 'ai_studio') {
+      // For AI Studio and Agent plugins, load metadata
+      if (basicInfo.pluginType === 'ai_studio' || basicInfo.pluginType === 'agent') {
         setMetadataLoading(true);
         setWorkflowState(WORKFLOW_STATES.LOADING);
 
@@ -226,7 +226,7 @@ const PluginCreationWizard = () => {
 
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
-          Create a new plugin by following these steps. AI Studio plugins will require scope approval for security.
+          Create a new plugin by following these steps. AI Studio and Agent plugins will require scope approval for security.
         </Typography>
 
         {/* Progress Stepper */}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/agent_session"
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
@@ -15,6 +16,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gosimple/slug"
 )
+
+// agentSessions stores active agent sessions for message handling
+var agentSessions sync.Map
 
 // AgentMessageRequest represents the request body for sending a message to an agent
 type AgentMessageRequest struct {
@@ -35,29 +39,16 @@ type AgentConfigRequest struct {
 	Namespace   string                 `json:"namespace"`
 }
 
-// HandleAgentMessage handles POST /api/agents/:id/message - sends message to agent and streams responses
+// HandleAgentMessage handles POST /api/agents/:id/message - sends a message to an active agent session
 func (a *API) HandleAgentMessage(c *gin.Context) {
-	// Get authenticated user
-	uObj, ok := c.Get("user")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Unauthorized", Detail: "User not found"}},
-		})
-		return
-	}
-	thisUser := uObj.(*models.User)
-
-	// Parse agent config ID
-	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
+	// Get session ID from query parameter (consistent with chat handler)
+	sessionID := c.Query("session_id")
+	if sessionID == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Invalid agent ID", Detail: "Agent ID must be a valid number"}},
+			}{{Title: "Missing session ID", Detail: "Session ID is required"}},
 		})
 		return
 	}
@@ -73,6 +64,70 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 		})
 		return
 	}
+
+	// Get the active session from storage
+	sessionInterface, ok := agentSessions.Load(sessionID)
+	if !ok {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Session not found", Detail: "No active session found. Please establish an SSE connection first."}},
+		})
+		return
+	}
+
+	session := sessionInterface.(*agent_session.AgentSession)
+
+	// Send message to agent
+	if err := session.SendMessage(req.Message, req.History); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Failed to send message", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Message sent successfully",
+		"session_id": sessionID,
+	})
+}
+
+// HandleAgentSSE handles GET /api/agents/:id/stream - establishes SSE connection for agent communication
+func (a *API) HandleAgentSSE(c *gin.Context) {
+	// For SSE, the auth middleware should handle token from query parameter
+	// The GetAuthenticatedUser in auth.go already checks for token in query params
+	thisUser := a.auth.GetAuthenticatedUser(c)
+	if thisUser == nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "Authentication required"}},
+		})
+		return
+	}
+
+	// Load user's groups
+	a.service.DB.Preload("Groups").First(thisUser, thisUser.ID)
+
+	// Parse agent config ID
+	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid agent ID", Detail: "Agent ID must be a valid number"}},
+		})
+		return
+	}
+
+	// Get session ID from query params if provided
+	sessionID := c.Query("session_id")
 
 	// Load agent config with preloaded relationships
 	var agentConfig models.AgentConfig
@@ -173,20 +228,31 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 	pluginClient, err := a.service.GetPluginClient(agentConfig.PluginID)
 	if err != nil {
 		slog.Error("Failed to get plugin client", "error", err, "plugin_id", agentConfig.PluginID)
-		sendSSEMessage(c.Writer, "error", fmt.Sprintf("Failed to connect to agent plugin: %v", err))
+		errorChunk := agent_session.AgentMessageChunk{
+			Type:    "ERROR",
+			Content: fmt.Sprintf("Failed to connect to agent plugin: %v", err),
+			IsFinal: true,
+		}
+		errorJSON, _ := json.Marshal(errorChunk)
+		sendSSEMessage(c.Writer, "error", string(errorJSON))
 		return
 	}
 
 	// Create queue for this session
 	factory := chat_session.CreateDefaultQueueFactoryWithSharedDB(a.service.DB)
-	sessionID := req.SessionID
 	if sessionID == "" {
 		sessionID = fmt.Sprintf("agent-%d-%d", agentID, thisUser.ID)
 	}
 	queue, err := factory.CreateQueue(sessionID, nil)
 	if err != nil {
 		slog.Error("Failed to create message queue", "error", err, "session_id", sessionID)
-		sendSSEMessage(c.Writer, "error", "Failed to create message queue")
+		errorChunk := agent_session.AgentMessageChunk{
+			Type:    "ERROR",
+			Content: "Failed to create message queue",
+			IsFinal: true,
+		}
+		errorJSON, _ := json.Marshal(errorChunk)
+		sendSSEMessage(c.Writer, "error", string(errorJSON))
 		return
 	}
 	defer queue.Close()
@@ -195,29 +261,41 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 	session, err := agent_session.NewAgentSession(&agentConfig, pluginClient, queue, a.service.DB)
 	if err != nil {
 		slog.Error("Failed to create agent session", "error", err, "agent_id", agentID)
-		sendSSEMessage(c.Writer, "error", "Failed to create agent session")
+		errorChunk := agent_session.AgentMessageChunk{
+			Type:    "ERROR",
+			Content: "Failed to create agent session",
+			IsFinal: true,
+		}
+		errorJSON, _ := json.Marshal(errorChunk)
+		sendSSEMessage(c.Writer, "error", string(errorJSON))
 		return
 	}
 	defer session.Close()
 
 	// Send session ID to client
 	sessionMsg := map[string]interface{}{
-		"session_id":     session.GetID(),
-		"agent_id":       agentConfig.ID,
-		"agent_name":     agentConfig.Name,
-		"available_llms": len(agentConfig.App.LLMs),
-		"available_tools": len(agentConfig.App.Tools),
+		"session_id":            session.GetID(),
+		"agent_id":              agentConfig.ID,
+		"agent_name":            agentConfig.Name,
+		"available_llms":        len(agentConfig.App.LLMs),
+		"available_tools":       len(agentConfig.App.Tools),
 		"available_datasources": len(agentConfig.App.Datasources),
 	}
 	sessionJSON, _ := json.Marshal(sessionMsg)
+	slog.Info("Sending session message", "session_id", session.GetID())
+
+	// Send session message using SSE helper
 	sendSSEMessage(c.Writer, "session", string(sessionJSON))
 
-	// Send message to agent (async - responses will stream through queue)
-	if err := session.SendMessage(req.Message, req.History); err != nil {
-		slog.Error("Failed to send message to agent", "error", err, "agent_id", agentID)
-		sendSSEMessage(c.Writer, "error", fmt.Sprintf("Failed to send message: %v", err))
-		return
+	// Explicitly flush to ensure the session message is sent immediately
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
 	}
+	slog.Info("Session message sent and flushed", "session_id", session.GetID())
+
+	// Store session in memory for message handling
+	agentSessions.Store(session.GetID(), session)
+	defer agentSessions.Delete(session.GetID())
 
 	// Stream responses from queue
 	streamCtx, streamCancel := context.WithCancel(ctx)
@@ -226,23 +304,27 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 	streamChan := queue.ConsumeStream(streamCtx)
 	errorChan := queue.ConsumeErrors(streamCtx)
 
+	slog.Info("Starting to consume from queue", "session_id", session.GetID(), "agent_id", agentID)
+
 	clientGone := c.Writer.CloseNotify()
 
 	for {
 		select {
 		case <-clientGone:
-			slog.Debug("Client disconnected", "agent_id", agentID, "session_id", session.GetID())
+			slog.Info("Client disconnected", "agent_id", agentID, "session_id", session.GetID())
 			return
 
 		case <-ctx.Done():
-			slog.Debug("Context cancelled", "agent_id", agentID, "session_id", session.GetID())
+			slog.Info("Context cancelled", "agent_id", agentID, "session_id", session.GetID())
 			return
 
 		case chunk, ok := <-streamChan:
+			slog.Info("Received chunk from queue", "ok", ok, "chunk_size", len(chunk), "session_id", session.GetID())
 			if !ok {
-				// Stream closed
-				sendSSEMessage(c.Writer, "done", "Agent session completed")
-				return
+				// Stream closed - agent is done sending messages
+				// But keep connection alive for client to disconnect
+				slog.Info("Stream channel closed, waiting for client disconnect")
+				continue
 			}
 
 			// Parse agent message chunk
@@ -251,6 +333,8 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 				slog.Error("Failed to unmarshal agent chunk", "error", err)
 				continue
 			}
+
+			slog.Info("Parsed agent chunk", "type", agentChunk.Type, "content_length", len(agentChunk.Content), "is_final", agentChunk.IsFinal)
 
 			// Determine SSE event type based on chunk type
 			eventType := "chunk"
@@ -271,20 +355,27 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 
 			// Send chunk to client
 			chunkJSON, _ := json.Marshal(agentChunk)
+			slog.Info("Sending SSE message", "event_type", eventType, "content_length", len(agentChunk.Content))
+
+			// Send using SSE helper to properly encode newlines
 			sendSSEMessage(c.Writer, eventType, string(chunkJSON))
 
-			// If final chunk, we're done
-			if agentChunk.IsFinal {
-				slog.Debug("Received final chunk", "agent_id", agentID, "session_id", session.GetID())
-				return
-			}
+			// Note: Don't return here even if IsFinal is true
+			// Keep the connection open like chat handler does
+			// The connection will close when client disconnects or context is cancelled
 
 		case err, ok := <-errorChan:
 			if !ok {
 				continue
 			}
 			slog.Error("Error from agent queue", "error", err, "agent_id", agentID)
-			sendSSEMessage(c.Writer, "error", err.Error())
+			errorChunk := agent_session.AgentMessageChunk{
+				Type:    "ERROR",
+				Content: err.Error(),
+				IsFinal: true,
+			}
+			errorJSON, _ := json.Marshal(errorChunk)
+			sendSSEMessage(c.Writer, "error", string(errorJSON))
 		}
 	}
 }
@@ -317,6 +408,9 @@ func (a *API) HandleListAgents(c *gin.Context) {
 	// Get namespace filter if provided
 	namespace := c.Query("namespace")
 
+	// Load user's groups
+	a.service.DB.Preload("Groups").First(thisUser, thisUser.ID)
+
 	// List agents with pagination
 	var agents models.AgentConfigs
 	total, totalPages, err := agents.ListWithPagination(a.service.DB, limit, page, true, namespace, nil)
@@ -333,16 +427,16 @@ func (a *API) HandleListAgents(c *gin.Context) {
 
 	// Filter agents by user access (groups)
 	accessibleAgents := make([]models.AgentConfig, 0)
-	for _, agent := range agents {
-		// Load groups for this agent
-		a.service.DB.Preload("Groups").First(&agent, agent.ID)
+	for i := range agents {
+		// Load groups and relationships for this agent
+		a.service.DB.Preload("Groups").Preload("Plugin").Preload("App").First(&agents[i], agents[i].ID)
 
 		// Check access
 		hasAccess := false
-		if len(agent.Groups) == 0 {
+		if len(agents[i].Groups) == 0 {
 			hasAccess = true // Public
 		} else {
-			for _, agentGroup := range agent.Groups {
+			for _, agentGroup := range agents[i].Groups {
 				for _, userGroup := range thisUser.Groups {
 					if agentGroup.ID == userGroup.ID {
 						hasAccess = true
@@ -356,7 +450,7 @@ func (a *API) HandleListAgents(c *gin.Context) {
 		}
 
 		if hasAccess {
-			accessibleAgents = append(accessibleAgents, agent)
+			accessibleAgents = append(accessibleAgents, agents[i])
 		}
 	}
 
@@ -384,6 +478,9 @@ func (a *API) HandleGetAgent(c *gin.Context) {
 		return
 	}
 	thisUser := uObj.(*models.User)
+
+	// Load user's groups
+	a.service.DB.Preload("Groups").First(thisUser, thisUser.ID)
 
 	// Parse agent ID
 	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)

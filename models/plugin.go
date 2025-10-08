@@ -57,7 +57,8 @@ const (
 	HookTypeDataCollection = "data_collection"
 
 	// AI Studio plugin hook types
-	HookTypeStudioUI       = "studio_ui"     // AI Studio UI extension plugins
+	HookTypeStudioUI = "studio_ui" // AI Studio UI extension plugins
+	HookTypeAgent    = "agent"     // AI Studio agent plugins
 )
 
 // Plugin type constants
@@ -111,6 +112,7 @@ func (p *Plugin) IsValidHookType() bool {
 		HookTypeOnResponse,
 		HookTypeDataCollection,
 		HookTypeStudioUI,
+		HookTypeAgent,
 	}
 
 	for _, validType := range validTypes {

@@ -134,6 +134,8 @@ func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessage
 			continue
 		}
 
+		slog.Info("Publishing chunk to queue", "type", agentChunk.Type, "content_length", len(agentChunk.Content), "session_id", as.id)
+
 		ctx, cancel := context.WithTimeout(as.ctx, 5*time.Second)
 		if err := as.queue.PublishStream(ctx, chunkJSON); err != nil {
 			cancel()
@@ -141,6 +143,7 @@ func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessage
 			return
 		}
 		cancel()
+		slog.Info("Successfully published chunk to queue", "type", agentChunk.Type, "session_id", as.id)
 
 		// If this is the final chunk, we're done
 		if chunk.GetIsFinal() {

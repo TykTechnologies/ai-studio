@@ -30,7 +30,7 @@ import {
   TitleBox,
   ContentBox,
   PrimaryButton,
-  SecondaryButton,
+  SecondaryOutlineButton,
   DangerButton,
 } from '../../styles/sharedStyles';
 import ConfirmationDialog from '../common/ConfirmationDialog';
@@ -49,7 +49,10 @@ const AgentDetail = () => {
   const [testMessage, setTestMessage] = useState('');
   const [testMessages, setTestMessages] = useState([]);
   const [testLoading, setTestLoading] = useState(false);
+  const [testSessionId, setTestSessionId] = useState('');
+  const [testConnected, setTestConnected] = useState(false);
   const testMessagesEndRef = useRef(null);
+  const eventSourceRef = useRef(null);
 
   useEffect(() => {
     loadAgent();
@@ -59,8 +62,106 @@ const AgentDetail = () => {
     scrollToBottom();
   }, [testMessages]);
 
+  // Establish SSE connection when test interface is expanded
+  useEffect(() => {
+    if (testExpanded && agent?.isActive && !eventSourceRef.current) {
+      establishTestConnection();
+    } else if (!testExpanded && eventSourceRef.current) {
+      // Clean up connection when collapsed
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+      setTestConnected(false);
+      setTestSessionId('');
+    }
+    
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [testExpanded, agent]);
+
   const scrollToBottom = () => {
     testMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const establishTestConnection = async () => {
+    try {
+      const baseURL = '/api/v1';
+      
+      // Create SSE connection to establish session
+      // Admin uses cookie auth, no need for token in URL
+      const eventSource = new EventSource(`${baseURL}/agents/${id}/stream`);
+      eventSourceRef.current = eventSource;
+      
+      eventSource.addEventListener('session', (event) => {
+        const data = JSON.parse(event.data);
+        setTestSessionId(data.session_id);
+        setTestConnected(true);
+        console.log('Test session established:', data.session_id);
+        
+        // Add system message
+        setTestMessages(prev => [...prev, {
+          type: 'system',
+          content: `Connected to agent. Session ID: ${data.session_id}`,
+        }]);
+      });
+      
+      // Handle agent responses
+      eventSource.addEventListener('content', (event) => {
+        const data = JSON.parse(event.data);
+        setTestMessages(prev => {
+          const newMessages = [...prev];
+          const lastMsg = newMessages[newMessages.length - 1];
+          
+          if (lastMsg && lastMsg.type === 'agent' && !lastMsg.is_final) {
+            lastMsg.content += data.content || '';
+            lastMsg.is_final = data.is_final;
+            return newMessages;
+          }
+          
+          return [...newMessages, {
+            type: 'agent',
+            content: data.content || '',
+            metadata: data.metadata,
+            is_final: data.is_final,
+          }];
+        });
+        
+        setTestLoading(false);
+      });
+      
+      eventSource.addEventListener('done', (event) => {
+        setTestLoading(false);
+      });
+      
+      eventSource.addEventListener('error', (event) => {
+        const data = JSON.parse(event.data);
+        setTestMessages(prev => [...prev, {
+          type: 'error',
+          content: data.content || 'Unknown error',
+        }]);
+        setTestLoading(false);
+      });
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE connection error:', error);
+        setTestConnected(false);
+        setTestSessionId('');
+        setTestMessages(prev => [...prev, {
+          type: 'error',
+          content: 'Connection lost. Please refresh and try again.',
+        }]);
+      };
+      
+    } catch (err) {
+      console.error('Error establishing test connection:', err);
+      setTestMessages(prev => [...prev, {
+        type: 'error',
+        content: `Failed to connect: ${err.message}`,
+      }]);
+    }
   };
 
   const loadAgent = async () => {
@@ -104,6 +205,14 @@ const AgentDetail = () => {
 
   const handleSendTestMessage = async () => {
     if (!testMessage.trim()) return;
+    
+    if (!testConnected || !testSessionId) {
+      setTestMessages(prev => [...prev, {
+        type: 'error',
+        content: 'Not connected to agent. Please wait for connection to establish.',
+      }]);
+      return;
+    }
 
     const userMessage = testMessage;
     setTestMessage('');
@@ -116,16 +225,16 @@ const AgentDetail = () => {
     }]);
 
     try {
-      // Create SSE connection
-      const token = localStorage.getItem('token');
-      const baseURL = '/api/v1'; // Adjust based on your API client config
+      const baseURL = '/api/v1';
 
-      const response = await fetch(`${baseURL}/agents/${id}/message`, {
+      // Send message with session ID as query parameter
+      // Admin uses cookie auth, no Authorization header needed
+      const response = await fetch(`${baseURL}/agents/${id}/message?session_id=${testSessionId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include cookies for auth
         body: JSON.stringify({
           message: userMessage,
           history: [],
@@ -133,39 +242,19 @@ const AgentDetail = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        const errorData = await response.json();
+        throw new Error(errorData?.errors?.[0]?.detail || 'Failed to send message');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // Keep the last incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              handleTestChunk(data);
-            } catch (err) {
-              console.error('Error parsing SSE data:', err);
-            }
-          }
-        }
-      }
+      // Response will come through the SSE connection, not here
+      // The content/done/error events will update the messages
+      
     } catch (err) {
       console.error('Error sending test message:', err);
       setTestMessages(prev => [...prev, {
         type: 'error',
         content: err.message,
       }]);
-    } finally {
       setTestLoading(false);
     }
   };
@@ -221,15 +310,15 @@ const AgentDetail = () => {
           />
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <SecondaryButton
+          <SecondaryOutlineButton
             startIcon={<EditIcon />}
             onClick={handleEdit}
           >
             Edit
-          </SecondaryButton>
-          <SecondaryButton onClick={handleToggleActive}>
+          </SecondaryOutlineButton>
+          <SecondaryOutlineButton onClick={handleToggleActive}>
             {agent.isActive ? 'Deactivate' : 'Activate'}
-          </SecondaryButton>
+          </SecondaryOutlineButton>
           <DangerButton
             startIcon={<DeleteIcon />}
             onClick={() => setDeleteDialogOpen(true)}

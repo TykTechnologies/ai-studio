@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
-	"os"
 
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
-	ai_studio_sdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
+
+//go:embed plugin.manifest.json
+var manifestFile []byte
+
+//go:embed config.schema.json
+var configSchemaFile []byte
 
 type EchoAgentPlugin struct {
 	pb.UnimplementedPluginServiceServer
@@ -35,10 +40,9 @@ func (p *EchoAgentPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (
 	p.suffix = ">>"
 	p.includeMetadata = false
 
-	// Extract plugin ID from config and set it for SDK
+	// Extract plugin ID from config
 	if pluginIDStr, ok := req.Config["plugin_id"]; ok {
 		fmt.Sscanf(pluginIDStr, "%d", &p.pluginID)
-		ai_studio_sdk.SetPluginID(p.pluginID)
 		log.Printf("EchoAgent: Plugin ID set to %d", p.pluginID)
 	}
 
@@ -60,106 +64,43 @@ func (p *EchoAgentPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (
 
 	return &pb.InitResponse{
 		Success: true,
-		Message: "EchoAgent initialized successfully",
 	}, nil
 }
 
-func (p *EchoAgentPlugin) Ping(ctx context.Context, req *pb.Empty) (*pb.PingResponse, error) {
+func (p *EchoAgentPlugin) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
 	return &pb.PingResponse{
-		Status:  "healthy",
-		Message: "EchoAgent is running",
+		Timestamp: req.Timestamp,
+		Healthy:   true,
 	}, nil
 }
 
-func (p *EchoAgentPlugin) Shutdown(ctx context.Context, req *pb.Empty) (*pb.ShutdownResponse, error) {
+func (p *EchoAgentPlugin) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
 	log.Println("EchoAgent: Shutdown called")
 	return &pb.ShutdownResponse{
 		Success: true,
-		Message: "EchoAgent shutdown successfully",
 	}, nil
 }
 
-func (p *EchoAgentPlugin) GetManifest(ctx context.Context, req *pb.Empty) (*pb.ManifestResponse, error) {
-	manifest, err := os.ReadFile("plugin.manifest.json")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest: %w", err)
-	}
-
-	return &pb.ManifestResponse{
-		ManifestJson: string(manifest),
+func (p *EchoAgentPlugin) GetManifest(ctx context.Context, req *pb.GetManifestRequest) (*pb.GetManifestResponse, error) {
+	return &pb.GetManifestResponse{
+		Success:      true,
+		ManifestJson: string(manifestFile),
 	}, nil
 }
 
 func (p *EchoAgentPlugin) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
-	schema, err := os.ReadFile("config.schema.json")
-	if err != nil {
-		return &pb.GetConfigSchemaResponse{
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("failed to read config schema: %v", err),
-		}, nil
-	}
-
 	return &pb.GetConfigSchemaResponse{
 		Success:    true,
-		SchemaJson: string(schema),
+		SchemaJson: string(configSchemaFile),
 	}, nil
 }
 
 func (p *EchoAgentPlugin) HandleAgentMessage(req *pb.AgentMessageRequest, stream grpc.ServerStreamingServer[pb.AgentMessageChunk]) error {
 	log.Printf("EchoAgent: Received message: %s", req.UserMessage)
 
-	// Check if we have any LLMs available
-	if len(req.AvailableLlms) == 0 {
-		return stream.Send(&pb.AgentMessageChunk{
-			Type:    pb.AgentMessageChunk_ERROR,
-			Content: "No LLMs available for this agent",
-			IsFinal: true,
-		})
-	}
-
-	// Use the first available LLM
-	llmID := req.AvailableLlms[0].Id
-	log.Printf("EchoAgent: Using LLM ID %d", llmID)
-
-	// Call the LLM via SDK
-	llmResponse, err := ai_studio_sdk.CallLLM(context.Background(), llmID, req.UserMessage, nil)
-	if err != nil {
-		log.Printf("EchoAgent: Error calling LLM: %v", err)
-		return stream.Send(&pb.AgentMessageChunk{
-			Type:    pb.AgentMessageChunk_ERROR,
-			Content: fmt.Sprintf("Failed to call LLM: %v", err),
-			IsFinal: true,
-		})
-	}
-
-	// Parse the LLM response
-	var responseData struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-
-	if err := json.Unmarshal(llmResponse, &responseData); err != nil {
-		log.Printf("EchoAgent: Error parsing LLM response: %v", err)
-		return stream.Send(&pb.AgentMessageChunk{
-			Type:    pb.AgentMessageChunk_ERROR,
-			Content: fmt.Sprintf("Failed to parse LLM response: %v", err),
-			IsFinal: true,
-		})
-	}
-
-	// Extract content
-	var content string
-	if len(responseData.Choices) > 0 {
-		content = responseData.Choices[0].Message.Content
-	} else {
-		content = "No response from LLM"
-	}
-
-	// Wrap the content with configured prefix/suffix
-	wrappedContent := fmt.Sprintf("%s %s %s", p.prefix, content, p.suffix)
+	// Simply echo back the user message wrapped with configured prefix/suffix
+	// This is a test plugin to verify the agent flow works end-to-end
+	wrappedContent := fmt.Sprintf("%s %s %s", p.prefix, req.UserMessage, p.suffix)
 	log.Printf("EchoAgent: Sending wrapped response: %s", wrappedContent)
 
 	// Send content chunk
@@ -179,22 +120,37 @@ func (p *EchoAgentPlugin) HandleAgentMessage(req *pb.AgentMessageRequest, stream
 	})
 }
 
+// AgentPluginGRPC implements the go-plugin Plugin interface for agent plugins
+type AgentPluginGRPC struct {
+	goplugin.NetRPCUnsupportedPlugin
+	Impl pb.PluginServiceServer
+}
+
+func (p *AgentPluginGRPC) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
+	pb.RegisterPluginServiceServer(s, p.Impl)
+	return nil
+}
+
+func (p *AgentPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return pb.NewPluginServiceClient(c), nil
+}
+
 func main() {
-	port := os.Getenv("PLUGIN_PORT")
-	if port == "" {
-		port = "50051"
-	}
+	log.Printf("🤖 Starting Echo Agent Plugin")
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
-	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
-	}
+	plugin := &EchoAgentPlugin{}
 
-	grpcServer := grpc.NewServer()
-	pb.RegisterPluginServiceServer(grpcServer, &EchoAgentPlugin{})
-
-	log.Printf("EchoAgent plugin server listening on port %s", port)
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
-	}
+	// Agent plugins serve directly without SDK wrapper
+	// The SDK wrapper is designed for UI plugins, not agent plugins
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: goplugin.HandshakeConfig{
+			ProtocolVersion:  1,
+			MagicCookieKey:   "AI_STUDIO_PLUGIN",
+			MagicCookieValue: "v1",
+		},
+		Plugins: map[string]goplugin.Plugin{
+			"plugin": &AgentPluginGRPC{Impl: plugin},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
 }

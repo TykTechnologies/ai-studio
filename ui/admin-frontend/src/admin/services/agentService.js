@@ -86,10 +86,10 @@ class AgentService {
       const payload = {
         name: agentData.name,
         description: agentData.description || '',
-        plugin_id: agentData.pluginId,
-        app_id: agentData.appId,
+        plugin_id: parseInt(agentData.pluginId, 10),
+        app_id: parseInt(agentData.appId, 10),
         config: agentData.config || {},
-        group_ids: agentData.groupIds || [],
+        group_ids: (agentData.groupIds || []).map(id => parseInt(id, 10)),
         is_active: agentData.isActive !== undefined ? agentData.isActive : true,
         namespace: agentData.namespace || '',
       };
@@ -131,10 +131,10 @@ class AgentService {
       const payload = {
         name: agentData.name,
         description: agentData.description || '',
-        plugin_id: agentData.pluginId,
-        app_id: agentData.appId,
+        plugin_id: parseInt(agentData.pluginId, 10),
+        app_id: parseInt(agentData.appId, 10),
         config: agentData.config || {},
-        group_ids: agentData.groupIds || [],
+        group_ids: (agentData.groupIds || []).map(id => parseInt(id, 10)),
         is_active: agentData.isActive !== undefined ? agentData.isActive : true,
         namespace: agentData.namespace || '',
       };

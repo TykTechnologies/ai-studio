@@ -572,13 +572,14 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/chats/:id/prompt-templates", a.updateChatPromptTemplates)
 
 	// Agent routes
-	v1.POST("/agents/:id/message", a.HandleAgentMessage)      // Send message to agent (SSE stream)
-	v1.GET("/agents", a.HandleListAgents)                     // List agent configs
-	v1.GET("/agents/:id", a.HandleGetAgent)                   // Get agent config
-	v1.POST("/agents", a.HandleCreateAgent)                   // Create agent config (admin only)
-	v1.PUT("/agents/:id", a.HandleUpdateAgent)                // Update agent config (admin only)
-	v1.DELETE("/agents/:id", a.HandleDeleteAgent)             // Delete agent config (admin only)
-	v1.POST("/agents/:id/activate", a.HandleActivateAgent)    // Activate agent (admin only)
+	v1.GET("/agents/:id/stream", a.HandleAgentSSE)             // Establish SSE connection for agent
+	v1.POST("/agents/:id/message", a.HandleAgentMessage)       // Send message to agent session
+	v1.GET("/agents", a.HandleListAgents)                      // List agent configs
+	v1.GET("/agents/:id", a.HandleGetAgent)                    // Get agent config
+	v1.POST("/agents", a.HandleCreateAgent)                    // Create agent config (admin only)
+	v1.PUT("/agents/:id", a.HandleUpdateAgent)                 // Update agent config (admin only)
+	v1.DELETE("/agents/:id", a.HandleDeleteAgent)              // Delete agent config (admin only)
+	v1.POST("/agents/:id/activate", a.HandleActivateAgent)     // Activate agent (admin only)
 	v1.POST("/agents/:id/deactivate", a.HandleDeactivateAgent) // Deactivate agent (admin only)
 
 	// Tool routes

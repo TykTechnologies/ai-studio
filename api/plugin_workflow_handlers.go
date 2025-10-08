@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -133,8 +134,8 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 	// Extract scopes from metadata
 	scopes := a.service.PluginMetadataLoader.ExtractScopesFromMetadata(metadata)
 
-	// For AI Studio plugins, store the scopes (but don't authorize yet)
-	if plugin.IsAIStudioPlugin() && len(scopes) > 0 {
+	// For AI Studio and Agent plugins, store the scopes (but don't authorize yet)
+	if (plugin.IsAIStudioPlugin() || plugin.PluginType == models.PluginTypeAgent) && len(scopes) > 0 {
 		// Update plugin with extracted scopes (but keep ServiceAccessAuthorized as false)
 		plugin.ServiceScopes = scopes
 		plugin.ServiceAccessAuthorized = false
@@ -169,8 +170,8 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 
 	// Determine status
 	status := "ready"
-	if plugin.IsAIStudioPlugin() && len(scopes) > 0 {
-		status = "scopes_pending" // AI Studio plugins with scopes need approval
+	if (plugin.IsAIStudioPlugin() || plugin.PluginType == models.PluginTypeAgent) && len(scopes) > 0 {
+		status = "scopes_pending" // AI Studio and Agent plugins with scopes need approval
 	}
 
 	response := ValidateAndLoadResponse{

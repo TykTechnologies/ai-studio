@@ -26,9 +26,10 @@ const AgentChat = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [sessionId, setSessionId] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
 
   const messagesEndRef = useRef(null);
-  const readerRef = useRef(null);
+  const eventSourceRef = useRef(null);
 
   useEffect(() => {
     loadAgent();
@@ -38,14 +39,20 @@ const AgentChat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Cleanup reader on unmount
+  // Establish SSE connection when agent is loaded
   useEffect(() => {
+    if (agent && agent.isActive && !eventSourceRef.current) {
+      connectToAgent();
+    }
+
+    // Cleanup on unmount or agent change
     return () => {
-      if (readerRef.current) {
-        readerRef.current.cancel();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
     };
-  }, []);
+  }, [agent]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -75,8 +82,92 @@ const AgentChat = () => {
     }
   };
 
+  const connectToAgent = async () => {
+    try {
+      const eventSource = await agentService.connectToAgent(agentId, sessionId);
+      eventSourceRef.current = eventSource;
+      
+      let currentAgentMessage = null;
+
+      // Handle session establishment
+      eventSource.addEventListener('session', (event) => {
+        const data = JSON.parse(event.data);
+        setSessionId(data.session_id);
+        setIsConnected(true);
+        console.log('Agent session established:', data.session_id);
+      });
+
+      // Handle content messages
+      eventSource.addEventListener('content', (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (currentAgentMessage && !data.is_final) {
+          // Append to existing message
+          setMessages(prev => {
+            const updated = [...prev];
+            const lastMsg = updated[updated.length - 1];
+            if (lastMsg.id === currentAgentMessage.id) {
+              lastMsg.content += data.content || '';
+              lastMsg.metadata = data.metadata || lastMsg.metadata;
+              lastMsg.is_final = data.is_final;
+            }
+            return updated;
+          });
+        } else {
+          // Create new message
+          const newMessage = {
+            id: Date.now() + Math.random(),
+            role: 'agent',
+            type: 'content',
+            content: data.content || '',
+            metadata: data.metadata,
+            is_final: data.is_final,
+          };
+          currentAgentMessage = newMessage;
+          setMessages(prev => [...prev, newMessage]);
+        }
+      });
+
+      // Handle other event types
+      ['tool_call', 'tool_result', 'thinking', 'done', 'error'].forEach(eventType => {
+        eventSource.addEventListener(eventType, (event) => {
+          const data = JSON.parse(event.data);
+          const newMessage = {
+            id: Date.now() + Math.random(),
+            role: 'agent',
+            type: eventType,
+            content: data.content || '',
+            metadata: data.metadata,
+            is_final: data.is_final,
+          };
+          setMessages(prev => [...prev, newMessage]);
+          
+          if (eventType === 'done') {
+            setSending(false);
+          }
+        });
+      });
+
+      eventSource.onerror = (error) => {
+        console.error('SSE connection error:', error);
+        setIsConnected(false);
+        if (eventSource.readyState === EventSource.CLOSED) {
+          eventSourceRef.current = null;
+        }
+      };
+
+    } catch (err) {
+      console.error('Error connecting to agent:', err);
+      setError(`Failed to connect to agent: ${err.message}`);
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || sending) return;
+    console.log('handleSendMessage - sessionId:', sessionId);
+    if (!inputMessage.trim() || sending || !sessionId) {
+      console.log('Cannot send - inputMessage:', inputMessage.trim(), 'sending:', sending, 'sessionId:', sessionId);
+      return;
+    }
 
     const userMessage = inputMessage.trim();
     setInputMessage('');
@@ -90,91 +181,27 @@ const AgentChat = () => {
     }]);
 
     try {
-      // Send message and get SSE stream
-      const stream = await agentService.sendMessage(
+      console.log('Sending message with sessionId:', sessionId);
+      // Just send the message - response will come through the SSE connection
+      await agentService.sendMessage(
         agentId,
         userMessage,
         [], // history - could be built from messages
         sessionId
       );
 
-      const reader = stream.getReader();
-      readerRef.current = reader;
-      const decoder = new TextDecoder();
-
-      let buffer = '';
-      let currentAgentMessage = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-
-              // Handle session message
-              if (data.session_id) {
-                setSessionId(data.session_id);
-                continue;
-              }
-
-              // Process chunk
-              const chunkType = data.type?.toLowerCase() || 'content';
-
-              if (currentAgentMessage && currentAgentMessage.type === chunkType && !data.is_final) {
-                // Append to existing message
-                setMessages(prev => {
-                  const updated = [...prev];
-                  const lastMsg = updated[updated.length - 1];
-                  if (lastMsg.id === currentAgentMessage.id) {
-                    lastMsg.content += data.content || '';
-                    lastMsg.metadata = data.metadata || lastMsg.metadata;
-                    lastMsg.is_final = data.is_final;
-                  }
-                  return updated;
-                });
-              } else {
-                // Create new message
-                const newMessage = {
-                  id: Date.now() + Math.random(),
-                  role: 'agent',
-                  type: chunkType,
-                  content: data.content || '',
-                  metadata: data.metadata,
-                  is_final: data.is_final,
-                };
-
-                currentAgentMessage = newMessage;
-                setMessages(prev => [...prev, newMessage]);
-              }
-
-            } catch (err) {
-              console.error('Error parsing SSE data:', err, line);
-            }
-          }
-        }
-      }
-
-      readerRef.current = null;
+      // Response will be handled by the SSE event listeners
+      // setSending(false) will be called when 'done' event is received
+      
     } catch (err) {
       console.error('Error sending message:', err);
+      setSending(false);
       setMessages(prev => [...prev, {
         id: Date.now(),
         role: 'agent',
         type: 'error',
         content: `Error: ${err.message}`,
       }]);
-    } finally {
-      setSending(false);
     }
   };
 
@@ -269,13 +296,22 @@ const AgentChat = () => {
         }}
       >
         <Box sx={{ maxWidth: 800, margin: '0 auto' }}>
-          <ChatInput
-            value={inputMessage}
-            onChange={setInputMessage}
-            onSend={handleSendMessage}
-            disabled={sending}
-            placeholder="Type your message..."
-          />
+          {!isConnected ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={20} />
+              <Typography variant="bodySmallDefault" color="text.secondary">
+                Connecting to agent...
+              </Typography>
+            </Box>
+          ) : (
+            <ChatInput
+              value={inputMessage}
+              onChange={setInputMessage}
+              onSend={handleSendMessage}
+              disabled={sending || !sessionId}
+              placeholder={!sessionId ? "Establishing session..." : "Type your message..."}
+            />
+          )}
         </Box>
       </Paper>
     </Box>

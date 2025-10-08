@@ -61,36 +61,44 @@ class AgentService {
   }
 
   /**
-   * Send a message to an agent via SSE
-   * Returns a readable stream
+   * Establish SSE connection with an agent
+   * Returns the EventSource for streaming
    */
-  async sendMessage(agentId, message, history = [], sessionId = '') {
-    try {
-      const token = localStorage.getItem('token');
-      const baseURL = pubClient.defaults.baseURL || '/api/v1';
+  async connectToAgent(agentId, sessionId = '') {
+    const token = localStorage.getItem('token');
+    const baseURL = pubClient.defaults.baseURL || '/api/v1';
+    
+    // EventSource doesn't support headers, so we need to pass token in URL
+    // Note: This is not ideal for production, consider using a different auth mechanism
+    const params = new URLSearchParams();
+    if (sessionId) {
+      params.append('session_id', sessionId);
+    }
+    params.append('token', token);
+    
+    const url = `${baseURL}/agents/${agentId}/stream?${params.toString()}`;
+    
+    const eventSource = new EventSource(url);
 
-      const response = await fetch(`${baseURL}/agents/${agentId}/message`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          history,
-          session_id: sessionId,
-        }),
+    return eventSource;
+  }
+
+  /**
+   * Send a message to an agent session via POST
+   */
+  async sendMessage(agentId, message, history = [], sessionId) {
+    try {
+      // Send session_id as query parameter (consistent with chat handler)
+      const response = await pubClient.post(`/agents/${agentId}/message?session_id=${sessionId}`, {
+        message,
+        history,
+        // session_id no longer needed in body
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.errors?.[0]?.detail || 'Failed to send message');
-      }
-
-      return response.body;
+      return response.data;
     } catch (error) {
       console.error('Error sending message to agent:', error);
-      throw error;
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to send message');
     }
   }
 }

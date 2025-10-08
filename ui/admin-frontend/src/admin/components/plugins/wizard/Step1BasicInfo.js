@@ -82,6 +82,8 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
       const finalData = { ...formData };
       if (finalData.pluginType === 'ai_studio') {
         finalData.hookType = 'studio_ui';
+      } else if (finalData.pluginType === 'agent') {
+        finalData.hookType = 'agent';
       }
 
       onComplete(finalData);
@@ -151,6 +153,7 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
             >
               <MenuItem value="gateway">Gateway Plugin</MenuItem>
               <MenuItem value="ai_studio">AI Studio Plugin</MenuItem>
+              <MenuItem value="agent">AI Studio Agent</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -184,6 +187,14 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
           <Grid item xs={12} md={6}>
             <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
               AI Studio plugins automatically use the "studio_ui" hook type for UI extensions.
+            </Typography>
+          </Grid>
+        )}
+
+        {formData.pluginType === 'agent' && (
+          <Grid item xs={12} md={6}>
+            <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
+              Agent plugins automatically use the "agent" hook type for agentic workflows.
             </Typography>
           </Grid>
         )}
