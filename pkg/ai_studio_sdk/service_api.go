@@ -913,3 +913,54 @@ func DeleteDataCatalogue(ctx context.Context, catalogueID uint32) error {
 
 	return nil
 }
+
+// === LLM Proxy Operations ===
+
+// CallLLM is a helper function for agent plugins to call the LLM proxy
+// This is the primary way agent plugins interact with LLMs
+// Returns a streaming client for receiving responses
+func CallLLM(ctx context.Context, llmID uint32, model string, messages []*mgmtpb.LLMMessage, temperature float64, maxTokens int32, tools []*mgmtpb.LLMTool, stream bool) (mgmtpb.AIStudioManagementService_CallLLMClient, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	req := &mgmtpb.CallLLMRequest{
+		Context:     createPluginContext(AvailableScopes.LLMsProxy),
+		LlmId:       llmID,
+		Model:       model,
+		Messages:    messages,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
+		Tools:       tools,
+		Stream:      stream,
+	}
+
+	streamClient, err := client.CallLLM(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call LLM: %w", err)
+	}
+
+	return streamClient, nil
+}
+
+// CallLLMSimple is a simplified helper that waits for the complete non-streaming response
+// Use this when you want a simple request-response pattern without streaming
+func CallLLMSimple(ctx context.Context, llmID uint32, model string, messages []*mgmtpb.LLMMessage, temperature float64, maxTokens int32) (string, error) {
+	stream, err := CallLLM(ctx, llmID, model, messages, temperature, maxTokens, nil, false)
+	if err != nil {
+		return "", err
+	}
+
+	// Read the single response (non-streaming mode)
+	resp, err := stream.Recv()
+	if err != nil {
+		return "", fmt.Errorf("failed to receive LLM response: %w", err)
+	}
+
+	if !resp.Success {
+		return "", fmt.Errorf("LLM call failed: %s", resp.ErrorMessage)
+	}
+
+	return resp.Content, nil
+}

@@ -6,13 +6,13 @@
   "plugin_type": "agent",
   "permissions": {
     "services": [
-      "llms.read"
+      "llms.proxy"
     ]
   },
   "scopeRequests": [
     {
-      "scope": "llms.read",
-      "reason": "Required to call LLM services and generate agent responses"
+      "scope": "llms.proxy",
+      "reason": "Required to call LLM services via proxy and generate agent responses"
     }
   ],
   "ui": {
@@ -23,7 +23,7 @@
     "api": ["agent-v1"]
   },
   "security": {
-    "required_permissions": ["llms.read"],
+    "required_permissions": ["llms.proxy"],
     "csp": "default-src 'none'"
   }
 }

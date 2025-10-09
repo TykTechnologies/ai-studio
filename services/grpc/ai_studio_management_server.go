@@ -833,6 +833,12 @@ func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.
 func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIStudioManagementService_CallLLMServer) error {
 	ctx := stream.Context()
 
+	// Extract plugin ID from request context and add to gRPC context for validation
+	// This is needed because streaming RPCs don't go through the unary interceptor
+	if req.GetContext() != nil && req.GetContext().GetPluginId() != 0 {
+		ctx = SetPluginIDInContext(ctx, uint(req.GetContext().GetPluginId()))
+	}
+
 	// Validate plugin has llms.proxy scope
 	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeLLMsProxy)
 	if err != nil {
@@ -904,7 +910,7 @@ func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIS
 		return status.Errorf(codes.Internal, "failed to marshal request")
 	}
 
-	// Make internal HTTP call to proxy OpenAI shim endpoint (/ai/)
+	// Make internal HTTP call to OpenAI shim endpoint (/ai/)
 	// This ensures all proxy middleware (analytics, budget, filters, plugins) are applied
 	proxyURL := fmt.Sprintf("http://localhost:9090/ai/%s/v1/chat/completions", llmSlug)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", proxyURL, bytes.NewReader(requestJSON))

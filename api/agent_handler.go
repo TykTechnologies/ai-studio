@@ -238,6 +238,26 @@ func (a *API) HandleAgentSSE(c *gin.Context) {
 		return
 	}
 
+	// Setup service broker for this agent session
+	var serviceBrokerID uint32
+	if aiStudioClient, ok := pluginClient.(interface{ SetupServiceBroker() (uint32, error) }); ok {
+		serviceBrokerID, err = aiStudioClient.SetupServiceBroker()
+		if err != nil {
+			slog.Error("Failed to setup service broker", "error", err, "plugin_id", agentConfig.PluginID)
+			errorChunk := agent_session.AgentMessageChunk{
+				Type:    "ERROR",
+				Content: fmt.Sprintf("Failed to setup service broker: %v", err),
+				IsFinal: true,
+			}
+			errorJSON, _ := json.Marshal(errorChunk)
+			sendSSEMessage(c.Writer, "error", string(errorJSON))
+			return
+		}
+		slog.Info("Service broker setup for agent", "broker_id", serviceBrokerID, "agent_id", agentID)
+	} else {
+		slog.Warn("Plugin client does not support service broker setup", "plugin_id", agentConfig.PluginID)
+	}
+
 	// Create queue for this session
 	factory := chat_session.CreateDefaultQueueFactoryWithSharedDB(a.service.DB)
 	if sessionID == "" {
@@ -257,8 +277,8 @@ func (a *API) HandleAgentSSE(c *gin.Context) {
 	}
 	defer queue.Close()
 
-	// Create agent session
-	session, err := agent_session.NewAgentSession(&agentConfig, pluginClient, queue, a.service.DB)
+	// Create agent session with service broker ID
+	session, err := agent_session.NewAgentSession(&agentConfig, pluginClient, serviceBrokerID, queue, a.service.DB)
 	if err != nil {
 		slog.Error("Failed to create agent session", "error", err, "agent_id", agentID)
 		errorChunk := agent_session.AgentMessageChunk{

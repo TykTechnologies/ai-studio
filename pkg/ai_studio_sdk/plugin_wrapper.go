@@ -69,3 +69,52 @@ func ServePlugin(impl AIStudioPluginImplementation) {
 		GRPCServer: goplugin.DefaultGRPCServer, // Force gRPC protocol
 	})
 }
+
+// AIStudioAgentPluginGRPC implements the go-plugin Plugin interface for AI Studio agent plugins
+// This wrapper automatically provides service API access to agent plugin implementations
+type AIStudioAgentPluginGRPC struct {
+	goplugin.NetRPCUnsupportedPlugin
+	Impl AgentPluginImplementation
+}
+
+// GRPCServer is called by go-plugin framework to register services on agent plugin's server
+func (p *AIStudioAgentPluginGRPC) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
+	// Create SDK agent plugin instance
+	plugin := NewAIStudioAgentPlugin(p.Impl)
+
+	// Initialize SDK with broker access (this is the plugin process)
+	// Plugin ID will be set later during Initialize() call from config
+	if err := Initialize(s, broker, 0); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize AI Studio SDK for agent plugin")
+	}
+
+	// Register plugin services (Host → Plugin direction)
+	pb.RegisterPluginServiceServer(s, plugin)
+
+	log.Info().Msg("✅ Agent plugin services registered - broker stored for service API access")
+	return nil
+}
+
+// GRPCClient is called by go-plugin framework to get client interface
+func (p *AIStudioAgentPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	// Simple plugin client - service API access happens via broker pattern
+	return pb.NewPluginServiceClient(c), nil
+}
+
+// ServeAgentPlugin is a convenience function for agent plugin developers to serve their plugin
+// This replaces the manual go-plugin setup with SDK-based serving for agent plugins
+func ServeAgentPlugin(impl AgentPluginImplementation) {
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: goplugin.HandshakeConfig{
+			ProtocolVersion:  1,
+			MagicCookieKey:   "AI_STUDIO_PLUGIN",
+			MagicCookieValue: "v1",
+		},
+		Plugins: map[string]goplugin.Plugin{
+			"plugin": &AIStudioAgentPluginGRPC{
+				Impl: impl,
+			},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer, // Force gRPC protocol
+	})
+}

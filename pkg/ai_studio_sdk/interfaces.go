@@ -3,7 +3,9 @@ package ai_studio_sdk
 import (
 	"context"
 
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
+	"google.golang.org/grpc"
 )
 
 // AIStudioPluginImplementation defines the interface that plugin developers must implement
@@ -39,6 +41,34 @@ type AIStudioPluginImplementation interface {
 	GetConfigSchema() ([]byte, error)
 }
 
+// AgentPluginImplementation defines the interface that agent plugin developers must implement
+// Agent plugins process user messages and stream responses back
+// The SDK handles service API injection and broker setup automatically
+type AgentPluginImplementation interface {
+	// OnInitialize is called when the agent plugin is initialized
+	// The serviceAPI client is ready to use for calling AI Studio services (e.g., CallLLM)
+	OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32) error
+
+	// OnShutdown is called when the agent plugin is being shut down
+	// Agent should clean up any resources and complete any in-flight operations
+	OnShutdown() error
+
+	// HandleAgentMessage processes a user message and streams responses back
+	// req contains: user message, available LLMs/tools/datasources, conversation history
+	// stream is used to send back content chunks, tool calls, thinking, errors, etc.
+	// The agent should call stream.Send() for each chunk and end with a DONE chunk
+	HandleAgentMessage(req *pb.AgentMessageRequest, stream grpc.ServerStreamingServer[pb.AgentMessageChunk]) error
+
+	// GetManifest returns the plugin manifest as JSON bytes
+	// The manifest declares permissions, scopes, and metadata
+	GetManifest() ([]byte, error)
+
+	// GetConfigSchema returns the JSON Schema for plugin configuration
+	// Used by the admin UI to generate agent configuration forms
+	// Returns: JSON Schema as bytes
+	GetConfigSchema() ([]byte, error)
+}
+
 // ServiceAPIScope defines the available service API scope constants
 // These match the scopes declared in plugin manifests
 type ServiceAPIScope struct {
@@ -50,6 +80,7 @@ type ServiceAPIScope struct {
 	// LLM management scopes
 	LLMsRead  string
 	LLMsWrite string
+	LLMsProxy string // For agent plugins to call LLM proxy
 
 	// Tool management scopes
 	ToolsRead       string
@@ -91,6 +122,7 @@ var AvailableScopes = ServiceAPIScope{
 	PluginsConfig:       "plugins.config",
 	LLMsRead:            "llms.read",
 	LLMsWrite:           "llms.write",
+	LLMsProxy:           "llms.proxy",
 	ToolsRead:           "tools.read",
 	ToolsWrite:          "tools.write",
 	ToolsOperations:     "tools.operations",

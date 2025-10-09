@@ -34,7 +34,7 @@ This specification focuses primarily on the **OpenAI Translation Layer** and the
 
 **Core Components & Interactions:**
 
-*   **API Router (e.g., `main.go`, `api/router.go`):** Defines the OpenAI-compatible endpoints (e.g., `/openai/{routeId}/v1/chat/completions`) and routes them to the appropriate handlers.
+*   **API Router (e.g., `main.go`, `api/router.go`):** Defines the OpenAI-compatible endpoints (e.g., `/ai/{routeId}/v1/chat/completions`) and routes them to the appropriate handlers.
 *   **Translator Handlers (`proxy/translator.go`):**
     *   `CreateChatCompletionHandler`: Handles requests to the chat completions endpoint.
     *   `CreateCompletionHandler`: Handles requests to the legacy completions endpoint (marked as deprecated).
@@ -87,8 +87,8 @@ graph LR
 **3. Implementation Details**
 
 *   **Endpoints:**
-    *   `POST /openai/{routeId}/v1/chat/completions` (or similar configured path): Handles OpenAI chat completion requests. Mapped to `proxy.CreateChatCompletionHandler`.
-    *   `POST /openai/{routeId}/v1/completions` (or similar): Handles legacy OpenAI completion requests. Mapped to `proxy.CreateCompletionHandler` (deprecated).
+    *   `POST /ai/{routeId}/v1/chat/completions`: Handles OpenAI chat completion requests. Mapped to `proxy.CreateChatCompletionHandler`.
+    *   `POST /ai/{routeId}/v1/completions`: Handles legacy OpenAI completion requests. Mapped to `proxy.CreateCompletionHandler` (deprecated).
     *   `{routeId}`: A path parameter identifying the specific `llm` configuration in the database to use for this request. This determines the *actual* backend vendor, allowed models, etc.
 *   **Authentication:** Expects a Midsommar App credential passed as a Bearer token (`Authorization: Bearer <app_key>`). Validated by `CredentialValidator` against the `apps` table.
 *   **Request Parsing:** Uses structs in `proxy/translator_models.go` (e.g., `ChatCompletionRequest`) that mirror the OpenAI JSON structure.
@@ -105,7 +105,7 @@ graph LR
 
 *   **Client Uses OpenAI SDK with Anthropic Backend:**
     1.  Admin configures an LLM in Midsommar: Name="Claude Opus", Vendor="anthropic", RouteID="claude-opus", AllowedModels=["claude-3-opus-20240229"], DefaultModel="claude-3-opus-20240229".
-    2.  Dev configures their OpenAI client: `baseURL="https://midsommar.example.com/openai/claude-opus/v1/chat/completions"`, `apiKey="<my_app_key>"`.
+    2.  Dev configures their OpenAI client: `baseURL="https://midsommar.example.com/ai/claude-opus/v1/chat/completions"`, `apiKey="<my_app_key>"`.
     3.  Client calls `openai.createChatCompletion` with `model="claude-3-opus-20240229"` (or potentially even a different model name, which might get overridden depending on `ToLangchainOptions` logic) and messages.
     4.  Midsommar receives the request. `CredentialValidator` checks `<my_app_key>` -> OK.
     5.  `CreateChatCompletionHandler` looks up `llm` config using `routeId="claude-opus"`.
@@ -127,7 +127,7 @@ graph LR
 *   **Analytics Granularity:** Ensure `LLMChatRecord` and `ProxyLog` capture sufficient detail for translated requests, including both the requested OpenAI model and the actual backend model used, and potentially the `routeId`.
 *   **Error Mapping:** Refine the mapping of vendor-specific errors (received via `langchaingo`) into meaningful OpenAI error codes and messages.
 *   **Tool Use Translation:** Ensure robust translation of tool definitions (`tools` parameter) and tool calls/results between the OpenAI format and the format expected by various backend vendors via `langchaingo`. The current implementation seems to handle basic tool structure.
-*   **Endpoint Configuration:** Make the base path for OpenAI-compatible endpoints (e.g., `/openai/`) configurable.
+*   **Endpoint Configuration:** Make the base path for OpenAI-compatible endpoints (e.g., `/ai/`) configurable.
 *   **Embeddings Endpoint:** The code mentions `OpenAIEmbeddingsEndpoint`. A similar translation handler (`CreateEmbeddingsHandler`) would be needed to provide universal embedding capabilities via an OpenAI-compatible `/v1/embeddings` endpoint.
 *   **Vendor Feature Parity:** Not all vendors support all OpenAI features (e.g., logprobs, specific tool choice modes). The translation layer needs to handle these discrepancies gracefully, potentially by ignoring unsupported parameters or returning informative errors.
 *   **LangchainGo Limitations:** The translation quality is dependent on `langchaingo`'s ability to abstract vendor differences. Updates or limitations in the library might affect the system.

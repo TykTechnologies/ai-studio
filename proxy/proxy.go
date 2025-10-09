@@ -160,7 +160,7 @@ func (p *Proxy) Start() error {
 		originalHandler := handler
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logPath := false
-			if strings.HasPrefix(r.URL.Path, "/llm/") || strings.HasPrefix(r.URL.Path, "/tools/") || strings.HasPrefix(r.URL.Path, "/datasource/") || strings.HasPrefix(r.URL.Path, "/.well-known/") {
+			if strings.HasPrefix(r.URL.Path, "/llm/") || strings.HasPrefix(r.URL.Path, "/tools/") || strings.HasPrefix(r.URL.Path, "/datasource/") || strings.HasPrefix(r.URL.Path, "/.well-known/") || strings.HasPrefix(r.URL.Path, "/ai/") {
 				logPath = true
 			}
 			if logPath {
@@ -253,6 +253,11 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
+
+	// OpenAI-compatible translation endpoints
+	r.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
+	r.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")

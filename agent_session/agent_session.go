@@ -26,13 +26,14 @@ type MessageQueue interface {
 
 // AgentSession manages the runtime lifecycle of an agent plugin conversation
 type AgentSession struct {
-	id           string
-	agentConfig  *models.AgentConfig
-	queue        MessageQueue
-	pluginClient pb.PluginServiceClient
-	db           *gorm.DB
-	ctx          context.Context
-	cancel       context.CancelFunc
+	id              string
+	agentConfig     *models.AgentConfig
+	queue           MessageQueue
+	pluginClient    pb.PluginServiceClient
+	serviceBrokerID uint32 // Broker ID for service API access
+	db              *gorm.DB
+	ctx             context.Context
+	cancel          context.CancelFunc
 }
 
 // AgentMessageChunk represents a chunk of agent response
@@ -47,6 +48,7 @@ type AgentMessageChunk struct {
 func NewAgentSession(
 	agentConfig *models.AgentConfig,
 	pluginClient pb.PluginServiceClient,
+	serviceBrokerID uint32,
 	queue MessageQueue,
 	db *gorm.DB,
 ) (*AgentSession, error) {
@@ -58,13 +60,14 @@ func NewAgentSession(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	as := &AgentSession{
-		id:           id,
-		agentConfig:  agentConfig,
-		queue:        queue,
-		pluginClient: pluginClient,
-		db:           db,
-		ctx:          ctx,
-		cancel:       cancel,
+		id:              id,
+		agentConfig:     agentConfig,
+		queue:           queue,
+		pluginClient:    pluginClient,
+		serviceBrokerID: serviceBrokerID,
+		db:              db,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 
 	return as, nil
@@ -216,13 +219,14 @@ func (as *AgentSession) buildAgentRequest(userMessage string, history []map[stri
 		})
 	}
 
-	// Build plugin context
+	// Build plugin context with broker ID for service API access
 	pluginContext := &pb.PluginContext{
 		AppId: uint32(agentConfig.App.ID),
 		Metadata: map[string]string{
-			"agent_config_id": fmt.Sprintf("%d", agentConfig.ID),
-			"plugin_id":       fmt.Sprintf("%d", agentConfig.PluginID),
-			"session_id":      as.id,
+			"agent_config_id":     fmt.Sprintf("%d", agentConfig.ID),
+			"plugin_id":           fmt.Sprintf("%d", agentConfig.PluginID),
+			"session_id":          as.id,
+			"_service_broker_id":  fmt.Sprintf("%d", as.serviceBrokerID),
 		},
 	}
 

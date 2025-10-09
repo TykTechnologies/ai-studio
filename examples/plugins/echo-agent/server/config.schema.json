@@ -21,6 +21,12 @@
       "title": "Include Metadata",
       "description": "Whether to include metadata about the LLM call in the response",
       "default": false
+    },
+    "default_llm_id": {
+      "type": "integer",
+      "title": "Default LLM ID",
+      "description": "The ID of the default LLM to use. If not set, uses the first available LLM from the app.",
+      "minimum": 1
     }
   },
   "additionalProperties": false
