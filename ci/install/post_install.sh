@@ -18,9 +18,9 @@ fi
 cleanup() {
     # After installing, remove files that were not needed on this platform / system
     if [ "${use_systemctl}" = "True" ]; then
-        rm -f /etc/init.d/tyk-ai-studio
-    else
         rm -f /lib/systemd/system/tyk-ai-studio.service
+    else
+        rm -f /etc/init.d/tyk-ai-studio
     fi
 }
 
@@ -39,8 +39,8 @@ restoreServices() {
 setupOwnership() {
     printf "\033[32m Post Install of the install directory ownership and permissions\033[0m\n"
     [ "${change_ownership}" = "True" ] && chown -R tyk:tyk /opt/tyk-ai-studio
-    # Config file should never be world-readable (only if it exists)
-    [ -f /opt/tyk-ai-studio/tyk-ai-studio.conf ] && chmod 660 /opt/tyk-ai-studio/tyk-ai-studio.conf
+    # Config file should never be world-readable
+    chmod 660 /opt/tyk-ai-studio/tyk-ai-studio.conf
 }
 
 cleanInstall() {
@@ -112,4 +112,4 @@ esac
 # https://docs.fedoraproject.org/en-US/packaging-guidelines/Scriptlets/ it appears that cleanup is not
 # needed to support systemd and sysv
 
-cleanup
+#cleanup
