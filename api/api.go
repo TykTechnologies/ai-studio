@@ -386,6 +386,10 @@ func (a *API) setupRoutes() {
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
+	authed.GET("/agents", a.HandleListAgents)                // List accessible agents for current user
+	authed.GET("/agents/:id", a.HandleGetAgent)              // Get specific agent
+	authed.GET("/agents/:id/stream", a.HandleAgentSSE)       // Establish SSE connection for agent
+	authed.POST("/agents/:id/message", a.HandleAgentMessage) // Send message to agent session
 	// Use secure version for portal users that hides sensitive fields like auth_key and oas_spec
 	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
 	// Route for tool documentation page

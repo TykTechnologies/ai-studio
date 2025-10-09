@@ -6,7 +6,7 @@ class AgentService {
    */
   async listAccessibleAgents() {
     try {
-      const response = await pubClient.get('/agents');
+      const response = await pubClient.get('/common/agents');
 
       if (response.data?.data) {
         return response.data.data.map(agent => ({
@@ -35,7 +35,7 @@ class AgentService {
    */
   async getAgent(id) {
     try {
-      const response = await pubClient.get(`/agents/${id}`);
+      const response = await pubClient.get(`/common/agents/${id}`);
 
       if (response.data?.data) {
         const agent = response.data.data;
@@ -66,8 +66,8 @@ class AgentService {
    */
   async connectToAgent(agentId, sessionId = '') {
     const token = localStorage.getItem('token');
-    const baseURL = pubClient.defaults.baseURL || '/api/v1';
-    
+    const baseURL = pubClient.defaults.baseURL || '';
+
     // EventSource doesn't support headers, so we need to pass token in URL
     // Note: This is not ideal for production, consider using a different auth mechanism
     const params = new URLSearchParams();
@@ -75,9 +75,9 @@ class AgentService {
       params.append('session_id', sessionId);
     }
     params.append('token', token);
-    
-    const url = `${baseURL}/agents/${agentId}/stream?${params.toString()}`;
-    
+
+    const url = `${baseURL}/common/agents/${agentId}/stream?${params.toString()}`;
+
     const eventSource = new EventSource(url);
 
     return eventSource;
@@ -89,7 +89,7 @@ class AgentService {
   async sendMessage(agentId, message, history = [], sessionId) {
     try {
       // Send session_id as query parameter (consistent with chat handler)
-      const response = await pubClient.post(`/agents/${agentId}/message?session_id=${sessionId}`, {
+      const response = await pubClient.post(`/common/agents/${agentId}/message?session_id=${sessionId}`, {
         message,
         history,
         // session_id no longer needed in body

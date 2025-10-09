@@ -30,6 +30,7 @@ const AgentChat = () => {
 
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
+  const currentAgentMessageRef = useRef(null);
 
   useEffect(() => {
     loadAgent();
@@ -86,8 +87,6 @@ const AgentChat = () => {
     try {
       const eventSource = await agentService.connectToAgent(agentId, sessionId);
       eventSourceRef.current = eventSource;
-      
-      let currentAgentMessage = null;
 
       // Handle session establishment
       eventSource.addEventListener('session', (event) => {
@@ -97,39 +96,38 @@ const AgentChat = () => {
         console.log('Agent session established:', data.session_id);
       });
 
-      // Handle content messages
+      // Handle content messages - aligned with admin test interface pattern
       eventSource.addEventListener('content', (event) => {
         const data = JSON.parse(event.data);
-        
-        if (currentAgentMessage && !data.is_final) {
-          // Append to existing message
-          setMessages(prev => {
-            const updated = [...prev];
-            const lastMsg = updated[updated.length - 1];
-            if (lastMsg.id === currentAgentMessage.id) {
-              lastMsg.content += data.content || '';
-              lastMsg.metadata = data.metadata || lastMsg.metadata;
-              lastMsg.is_final = data.is_final;
-            }
-            return updated;
-          });
-        } else {
-          // Create new message
-          const newMessage = {
+
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastMsg = newMessages[newMessages.length - 1];
+
+          // If last message is an agent content message and not final, append to it
+          if (lastMsg && lastMsg.type === 'content' && lastMsg.role === 'agent' && !lastMsg.is_final) {
+            lastMsg.content += data.content || '';
+            lastMsg.is_final = data.is_final;
+            lastMsg.metadata = data.metadata || lastMsg.metadata;
+            return newMessages;
+          }
+
+          // Otherwise create a new message
+          return [...newMessages, {
             id: Date.now() + Math.random(),
             role: 'agent',
             type: 'content',
             content: data.content || '',
             metadata: data.metadata,
             is_final: data.is_final,
-          };
-          currentAgentMessage = newMessage;
-          setMessages(prev => [...prev, newMessage]);
-        }
+          }];
+        });
+
+        setSending(false);
       });
 
-      // Handle other event types
-      ['tool_call', 'tool_result', 'thinking', 'done', 'error'].forEach(eventType => {
+      // Handle other event types (excluding 'done' which is just a completion signal)
+      ['tool_call', 'tool_result', 'thinking', 'error'].forEach(eventType => {
         eventSource.addEventListener(eventType, (event) => {
           const data = JSON.parse(event.data);
           const newMessage = {
@@ -141,11 +139,12 @@ const AgentChat = () => {
             is_final: data.is_final,
           };
           setMessages(prev => [...prev, newMessage]);
-          
-          if (eventType === 'done') {
-            setSending(false);
-          }
         });
+      });
+
+      // Handle 'done' event separately - just update state, don't show message
+      eventSource.addEventListener('done', (event) => {
+        setSending(false);
       });
 
       eventSource.onerror = (error) => {
@@ -305,11 +304,17 @@ const AgentChat = () => {
             </Box>
           ) : (
             <ChatInput
-              value={inputMessage}
-              onChange={setInputMessage}
-              onSend={handleSendMessage}
-              disabled={sending || !sessionId}
-              placeholder={!sessionId ? "Establishing session..." : "Type your message..."}
+              inputMessage={inputMessage}
+              setInputMessage={setInputMessage}
+              handleSendMessage={handleSendMessage}
+              isConnected={!sending && !!sessionId}
+              uploadedFiles={[]}
+              setUploadedFiles={() => {}}
+              onDrop={() => {}}
+              isUploading={false}
+              renderUploadIndicator={() => null}
+              chatId={agentId}
+              messages={messages}
             />
           )}
         </Box>
