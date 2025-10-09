@@ -34,6 +34,20 @@ builds:
     goarch:
       - arm64
     binary: tyk-ai-studio
+  - id: std-s390x
+    env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=s390x-linux-gnu-gcc
+    ldflags:
+      - -X github.com/TykTechnologies/ai-studio/internal/build.Version={{.Version}}
+      - -X github.com/TykTechnologies/ai-studio/internal/build.Commit={{.FullCommit}}
+      - -X github.com/TykTechnologies/ai-studio/internal/build.BuildDate={{.Date}}
+      - -X github.com/TykTechnologies/ai-studio/internal/build.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - s390x
+    binary: tyk-ai-studio
 nfpms:
   - id: std
     vendor: "Tyk Technologies Ltd"
@@ -45,6 +59,7 @@ nfpms:
     ids:
       - std-amd64
       - std-arm64
+      - std-s390x
     formats:
       - deb
       - rpm
@@ -121,20 +136,44 @@ dockers:
       - "ci/install/"
       - "README.md"
       - "dist/"
+  # Build tykio/tyk-ai-studio std (s390x)
+  - ids:
+      - std-s390x
+    image_templates:
+      - "tykio/tyk-ai-studio:{{.Tag}}-std-s390x"
+    build_flag_templates:
+      - "--build-arg=PORTS=8080"
+      - "--build-arg=BUILD_PACKAGE_NAME=tyk-ai-studio"
+      - "--platform=linux/s390x"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    use: buildx
+    goarch: s390x
+    goos: linux
+    dockerfile: ci/Dockerfile.std
+    extra_files:
+      - "ci/install/"
+      - "README.md"
+      - "dist/"
 docker_manifests:
   # Multi-arch manifest for tykio/tyk-ai-studio std
   - name_template: tykio/tyk-ai-studio:{{ .Tag }}
     image_templates:
       - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-amd64
       - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-arm64
+      - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-s390x
   - name_template: tykio/tyk-ai-studio:v{{ .Major }}.{{ .Minor }}{{.Prerelease}}
     image_templates:
       - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-amd64
       - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-arm64
+      - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-s390x
   - name_template: tykio/tyk-ai-studio:v{{ .Major }}{{.Prerelease}}
     image_templates:
       - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-amd64
       - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-arm64
+      - tykio/tyk-ai-studio:{{`{{ .Tag }}`}}-std-s390x
 # This disables archives
 archives:
   - formats: ['binary']
