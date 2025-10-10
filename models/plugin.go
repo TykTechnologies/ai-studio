@@ -199,9 +199,12 @@ func (plugins *Plugins) ListWithPagination(db *gorm.DB, pageSize, pageNumber int
 	query = query.Where("is_active = ?", isActive)
 
 	// Apply namespace filtering
-	if namespace == "__ALL_NAMESPACES__" || namespace == "" {
-		// No namespace filtering - return plugins from all namespaces (matches App/Filter behavior)
+	if namespace == "__ALL_NAMESPACES__" {
+		// No namespace filtering - return plugins from all namespaces
 		// No additional WHERE clause needed
+	} else if namespace == "" {
+		// Empty namespace means global plugins only (plugins with no namespace)
+		query = query.Where("namespace = ''")
 	} else {
 		// Specific namespace: include global plugins (empty namespace) + plugins in specified namespace
 		query = query.Where("namespace = '' OR namespace = ?", namespace)
@@ -244,9 +247,12 @@ func (plugins *Plugins) ListAllWithPagination(db *gorm.DB, pageSize, pageNumber 
 	// Note: No is_active filter - this returns both active and inactive
 
 	// Apply namespace filtering
-	if namespace == "__ALL_NAMESPACES__" || namespace == "" {
-		// No namespace filtering - return plugins from all namespaces (matches App/Filter behavior)
+	if namespace == "__ALL_NAMESPACES__" {
+		// No namespace filtering - return plugins from all namespaces
 		// No additional WHERE clause needed
+	} else if namespace == "" {
+		// Empty namespace means global plugins only (plugins with no namespace)
+		query = query.Where("namespace = ''")
 	} else {
 		// Specific namespace: include global plugins (empty namespace) + plugins in specified namespace
 		query = query.Where("namespace = '' OR namespace = ?", namespace)

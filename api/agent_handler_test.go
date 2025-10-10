@@ -60,7 +60,6 @@ func TestAgentMessageSSE(t *gotest.T) {
 	// Create an App with mock LLM
 	app := &models.App{
 		Name:   "Test App",
-		Groups: []models.Group{*defaultGroup},
 		LLMs: []models.LLM{
 			{
 				Name:   "Dummy LLM",
@@ -83,8 +82,8 @@ func TestAgentMessageSSE(t *gotest.T) {
 		c.Next()
 	})
 
-	// Register routes
-	a.SetupAgentRoutes(authed)
+	// Register routes - agent routes are now part of SetupRoutes
+	authed.POST("/agents/:id/message", a.HandleAgentMessage)
 
 	// Start test server
 	ts := httptest.NewUnstartedServer(router)

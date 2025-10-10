@@ -354,7 +354,7 @@ func (cs *ChatSession) Start() error {
 				// secure file references
 				scanFailureResponse, ok := cs.scanFiles(msg.FileRef)
 				if !ok {
-					cs.sendError(fmt.Errorf(scanFailureResponse))
+					cs.sendError(fmt.Errorf("%s", scanFailureResponse))
 					continue
 				}
 
