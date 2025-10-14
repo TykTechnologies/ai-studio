@@ -48,6 +48,8 @@ jobs:
           cache-dependency-path: 'ui/admin-frontend/package-lock.json'
       - name: Build frontend
         id: build
+        env:
+          CI: false
         run: |
           cd ui/admin-frontend
           npm ci
