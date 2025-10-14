@@ -7,6 +7,7 @@
 version: 2
 before:
   hooks:
+    - apt-get update && apt-get install -y nodejs npm
     - sh -c 'cd ui/admin-frontend && npm ci && npm run build'
 builds:
   - id: microgateway-amd64
