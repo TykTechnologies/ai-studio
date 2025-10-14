@@ -94,6 +94,11 @@ jobs:
         with:
           name: frontend-build
           path: ui/admin-frontend/build
+      - name: Verify frontend artifacts
+        run: |
+          echo "Checking frontend build artifacts..."
+          ls -la ui/admin-frontend/build || echo "Build directory not found"
+          find ui/admin-frontend/build -type f | head -20 || echo "No files found"
       - name: Set some outputs for later
         id: set_outputs
         shell: bash
@@ -156,6 +161,17 @@ jobs:
           -v /tmp/build.sh:/tmp/build.sh                                         \
           -w /go/src/github.com/TykTechnologies/ai-studio                      \
           tykio/golang-cross:${{ matrix.golang_cross }} /tmp/build.sh
+      - name: Verify GoReleaser output
+        run: |
+          echo "Checking if dist directory was created..."
+          ls -la dist/ || echo "ERROR: dist directory not found!"
+          if [ -d "dist" ]; then
+            echo "Dist directory contents:"
+            find dist -type f | head -30
+          else
+            echo "GoReleaser failed to create dist directory"
+            exit 1
+          fi
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::754489498669:role/ecr_rw_tyk
