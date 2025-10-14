@@ -45,7 +45,7 @@ jobs:
         include:
           - golang_cross: 1.23-bullseye
             goreleaser: 'ci/goreleaser/goreleaser.yml'
-            cgo: 0
+            cgo: 1
             rpmvers: 'el/7 el/8 el/9 amazon/2 amazon/2023'
             debvers: 'ubuntu/xenial ubuntu/bionic ubuntu/focal ubuntu/jammy ubuntu/noble debian/jessie debian/buster debian/bullseye debian/bookworm debian/trixie'
     outputs:

@@ -14,6 +14,7 @@ builds:
     main: ./cmd/microgateway
     env:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=gcc
     ldflags:
       - -X main.Version={{.Version}}
       - -X main.Commit={{.FullCommit}}
@@ -29,6 +30,7 @@ builds:
     main: ./cmd/microgateway
     env:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=aarch64-linux-gnu-gcc
     ldflags:
       - -X main.Version={{.Version}}
       - -X main.Commit={{.FullCommit}}
@@ -44,6 +46,7 @@ builds:
     main: ./cmd/microgateway
     env:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=s390x-linux-gnu-gcc
     ldflags:
       - -X main.Version={{.Version}}
       - -X main.Commit={{.FullCommit}}
@@ -57,6 +60,7 @@ builds:
   - id: std-amd64
     env:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=gcc
     ldflags:
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
@@ -70,6 +74,7 @@ builds:
   - id: std-arm64
     env:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=aarch64-linux-gnu-gcc
     ldflags:
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
@@ -83,6 +88,7 @@ builds:
   - id: std-s390x
     env:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=s390x-linux-gnu-gcc
     ldflags:
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
       - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
