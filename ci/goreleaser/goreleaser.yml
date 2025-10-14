@@ -8,13 +8,13 @@ version: 2
 before:
   hooks:
     - |
-      apt-get update
-      apt-get install -y nodejs npm
-      which node || echo "node not found"
-      which npm || echo "npm not found"
-      echo "PATH=$PATH"
-      cd ui/admin-frontend
-      npm ci
+      apt-get update && \
+      apt-get install -y nodejs npm && \
+      which node || echo "node not found" && \
+      which npm || echo "npm not found" && \
+      echo "PATH=$PATH" && \
+      cd ui/admin-frontend && \
+      npm ci && \
       npm run build
 builds:
   - id: microgateway-amd64
