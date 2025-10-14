@@ -162,16 +162,25 @@ jobs:
           -w /go/src/github.com/TykTechnologies/ai-studio                      \
           tykio/golang-cross:${{ matrix.golang_cross }} /tmp/build.sh
       - name: Verify GoReleaser output
+        id: verify_dist
         run: |
           echo "Checking if dist directory was created..."
-          ls -la dist/ || echo "ERROR: dist directory not found!"
-          if [ -d "dist" ]; then
-            echo "Dist directory contents:"
-            find dist -type f | head -30
-          else
+          if [ ! -d "dist" ]; then
+            echo "ERROR: dist directory not found!"
             echo "GoReleaser failed to create dist directory"
+            echo "Listing workspace contents:"
+            ls -la
             exit 1
           fi
+          echo "Dist directory exists, checking contents:"
+          ls -la dist/
+          echo "Package files:"
+          find dist -type f -name "*.deb" -o -name "*.rpm" | head -20
+          if [ -z "$(find dist -type f -name "*.deb" -o -name "*.rpm")" ]; then
+            echo "ERROR: No packages found in dist directory!"
+            exit 1
+          fi
+          echo "dist_ready=true" >> $GITHUB_OUTPUT
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::754489498669:role/ecr_rw_tyk
