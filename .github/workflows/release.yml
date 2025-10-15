@@ -30,7 +30,7 @@ env:
   # startsWith covers pull_request_target too
   BASE_REF: ${{startsWith(github.event_name, 'pull_request') && github.base_ref || github.ref_name}}
 jobs:
-  frontend-build:
+  ai-studio-frontend-build:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     outputs:
@@ -62,7 +62,7 @@ jobs:
           path: ui/admin-frontend/build
           retention-days: 1
   goreleaser:
-    needs: frontend-build
+    needs: ai-studio-frontend-build
     if: github.event.pull_request.draft == false
     name: '${{ matrix.golang_cross }}'
     runs-on: ubuntu-latest-m
