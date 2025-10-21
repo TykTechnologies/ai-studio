@@ -1,4 +1,4 @@
-package aigateway_test
+package aigateway
 
 import (
 	"fmt"
