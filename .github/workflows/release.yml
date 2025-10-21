@@ -295,7 +295,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            docker.tyk.io/tyk-ai-studio/tyk-ai-studio
             tykio/tyk-ai-studio
           flavor: |
             latest=false
