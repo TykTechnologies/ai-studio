@@ -3,10 +3,10 @@ package services
 import (
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -73,21 +73,19 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	// Wire up plugin manager to plugin service for config schema functionality
 	if pluginService != nil && aiStudioPluginManager != nil {
 		pluginService.SetPluginManager(aiStudioPluginManager)
-		log.Info().Msg("✅ Wired AI Studio plugin manager to plugin service for config schema functionality")
+		logger.Info("Wired AI Studio plugin manager to plugin service for config schema functionality")
 	} else {
-		log.Warn().
-			Bool("plugin_service_nil", pluginService == nil).
-			Bool("ai_studio_plugin_manager_nil", aiStudioPluginManager == nil).
-			Msg("⚠️  Failed to wire plugin manager to plugin service")
+		logger.Warnf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
+			pluginService == nil, aiStudioPluginManager == nil)
 	}
 
 	// Initialize plugin metadata loader with enhanced config provider support
 	var pluginMetadataLoader *PluginMetadataLoader
 	if aiStudioPluginManager != nil {
 		pluginMetadataLoader = NewPluginMetadataLoader(db, aiStudioPluginManager)
-		log.Info().Msg("✅ Initialized plugin metadata loader with enhanced config provider support")
+		logger.Info("Initialized plugin metadata loader with enhanced config provider support")
 	} else {
-		log.Warn().Msg("⚠️  AI Studio plugin manager not available - plugin metadata loader will not be available")
+		logger.Warn("AI Studio plugin manager not available - plugin metadata loader will not be available")
 	}
 
 	// Create service instance
@@ -110,7 +108,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		// Set global service reference for GRPCServer access
 		SetGlobalServiceReference(service)
 
-		log.Info().Msg("✅ Wired service reference to AI Studio plugin manager for service provider injection")
+		logger.Info("Wired service reference to AI Studio plugin manager for service provider injection")
 	}
 
 	return service

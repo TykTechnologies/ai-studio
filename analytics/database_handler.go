@@ -2,8 +2,6 @@ package analytics
 
 import (
 	"context"
-	"log"
-	"log/slog"
 	"math/rand"
 	"os"
 	"regexp"
@@ -12,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
 )
@@ -94,13 +93,13 @@ func (h *DatabaseHandler) start() {
 	if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
 		if err != nil {
-			slog.Warn("ANALYTICS_BUFFER_SIZE must be a string", "error", sanitizeError(err))
+			logger.Warnf("ANALYTICS_BUFFER_SIZE must be a string, error: %s", sanitizeError(err))
 		} else {
 			defaultBufferSize = bfr
 		}
 	}
 
-	slog.Info("starting database analytics handler", "buffer_size", defaultBufferSize)
+	logger.Infof("Starting database analytics handler with buffer_size: %d", defaultBufferSize)
 
 	h.chatRecordChan = make(chan *models.LLMChatRecord, defaultBufferSize)
 	h.logEntryChan = make(chan *models.LLMChatLogEntry, defaultBufferSize)
@@ -128,36 +127,41 @@ func (h *DatabaseHandler) startWorker() {
 				return h.db.Create(record).Error
 			})
 			if err != nil {
-				slog.Warn("error creating chat record", "error", sanitizeError(err), "model", record.Name, "timestamp", record.TimeStamp)
+				logger.Log.Warn().
+					Str("error", sanitizeError(err)).
+					Str("model", record.Name).
+					Time("timestamp", record.TimeStamp).
+					Msg("Error creating chat record")
 			} else {
-				slog.Info("created chat record",
-					"model", record.Name,
-					"app_id", record.AppID,
-					"llm_id", record.LLMID,
-					"cost_raw", record.Cost, // Raw value (e.g., 250000.0)
-					"cost_adjusted", record.Cost/10000, // Human-readable (e.g., 25.0)
-					"timestamp", record.TimeStamp)
+				logger.Log.Info().
+					Str("model", record.Name).
+					Uint("app_id", record.AppID).
+					Uint("llm_id", record.LLMID).
+					Float64("cost_raw", record.Cost).
+					Float64("cost_adjusted", record.Cost/10000).
+					Time("timestamp", record.TimeStamp).
+					Msg("Created chat record")
 			}
 		case logEntry := <-h.logEntryChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(logEntry).Error
 			})
 			if err != nil {
-				slog.Warn("error creating chat log entry", "error", sanitizeError(err))
+				logger.Warnf("Error creating chat log entry: %s", sanitizeError(err))
 			}
 		case toolCall := <-h.toolCallChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(toolCall).Error
 			})
 			if err != nil {
-				slog.Warn("error creating tool call record", "error", sanitizeError(err))
+				logger.Warnf("Error creating tool call record: %s", sanitizeError(err))
 			}
 		case proxyLog := <-h.proxyLogChan:
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(proxyLog).Error
 			})
 			if err != nil {
-				slog.Warn("error creating proxy log", "error", sanitizeError(err))
+				logger.Warnf("Error creating proxy log: %s", sanitizeError(err))
 			}
 		case records := <-h.chatRecordBatchChan:
 			startTime := time.Now()
@@ -167,17 +171,19 @@ func (h *DatabaseHandler) startWorker() {
 			processingTime := time.Since(startTime)
 
 			if err != nil {
-				slog.Warn("error creating chat record batch",
-					"error", sanitizeError(err),
-					"count", len(records),
-					"processing_time_ms", processingTime.Milliseconds())
+				logger.Log.Warn().
+					Str("error", sanitizeError(err)).
+					Int("count", len(records)).
+					Int64("processing_time_ms", processingTime.Milliseconds()).
+					Msg("Error creating chat record batch")
 			} else {
-				slog.Info("created chat record batch",
-					"count", len(records),
-					"processing_time_ms", processingTime.Milliseconds(),
-					"records_per_second", float64(len(records))/processingTime.Seconds(),
-					"first_model", records[0].Name,
-					"timestamp", records[0].TimeStamp)
+				logger.Log.Warn().
+					Int("count", len(records)).
+					Int64("processing_time_ms", processingTime.Milliseconds()).
+					Float64("records_per_second", float64(len(records))/processingTime.Seconds()).
+					Str("first_model", records[0].Name).
+					Time("timestamp", records[0].TimeStamp).
+					Msg("Created chat record batch")
 			}
 		case logs := <-h.proxyLogBatchChan:
 			startTime := time.Now()
@@ -187,20 +193,22 @@ func (h *DatabaseHandler) startWorker() {
 			processingTime := time.Since(startTime)
 
 			if err != nil {
-				slog.Warn("error creating proxy log batch",
-					"error", sanitizeError(err),
-					"count", len(logs),
-					"processing_time_ms", processingTime.Milliseconds())
+				logger.Log.Warn().
+					Str("error", sanitizeError(err)).
+					Int("count", len(logs)).
+					Int64("processing_time_ms", processingTime.Milliseconds()).
+					Msg("Error creating proxy log batch")
 			} else {
-				slog.Info("created proxy log batch",
-					"count", len(logs),
-					"processing_time_ms", processingTime.Milliseconds(),
-					"records_per_second", float64(len(logs))/processingTime.Seconds(),
-					"first_vendor", logs[0].Vendor,
-					"timestamp", logs[0].TimeStamp)
+				logger.Log.Warn().
+					Int("count", len(logs)).
+					Int64("processing_time_ms", processingTime.Milliseconds()).
+					Float64("records_per_second", float64(len(logs))/processingTime.Seconds()).
+					Str("first_vendor", logs[0].Vendor).
+					Time("timestamp", logs[0].TimeStamp).
+					Msg("Created proxy log batch")
 			}
 		case <-h.ctx.Done():
-			slog.Info("shutting down database analytics handler")
+			logger.Info("shutting down database analytics handler")
 			h.recMutex.Lock()
 			h.recStarted = false
 			h.recMutex.Unlock()
@@ -238,10 +246,8 @@ func (h *DatabaseHandler) createRecordWithRetry(createFn func() error) error {
 				jitter := time.Duration(rand.Intn(50)) * time.Millisecond
 				totalDelay := delay + jitter
 
-				slog.Debug("database locked, retrying database operation",
-					"attempt", attempt+1,
-					"max_retries", maxRetries,
-					"delay_ms", totalDelay.Milliseconds())
+				logger.Debugf("Database locked, retrying database operation (attempt %d/%d, delay %dms)",
+					attempt+1, maxRetries, totalDelay.Milliseconds())
 
 				select {
 				case <-time.After(totalDelay):
@@ -270,7 +276,7 @@ func (h *DatabaseHandler) Stop() {
 func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 	h.recMutex.RLock()
 	if !h.recStarted {
-		log.Printf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
+		logger.Warnf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 		h.recMutex.RUnlock()
 		return
 	}
@@ -278,9 +284,9 @@ func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 
 	select {
 	case h.chatRecordChan <- record:
-		log.Printf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
+		logger.Debugf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 	default:
-		log.Printf("Chat record buffer full, dropping record: model=%s, app_id=%d, llm_id=%d", record.Name, record.AppID, record.LLMID)
+		logger.Warnf("Chat record buffer full, dropping record: model=%s, app_id=%d, llm_id=%d", record.Name, record.AppID, record.LLMID)
 	}
 }
 
@@ -295,7 +301,7 @@ func (h *DatabaseHandler) RecordProxyLog(log *models.ProxyLog) {
 	select {
 	case h.proxyLogChan <- log:
 	default:
-		slog.Warn("proxy log buffer full, dropping log")
+		logger.Warn("proxy log buffer full, dropping log")
 	}
 }
 
@@ -317,7 +323,7 @@ func (h *DatabaseHandler) RecordToolCall(name string, timestamp time.Time, execT
 	select {
 	case h.toolCallChan <- tcEntry:
 	default:
-		slog.Warn("tool call buffer full, dropping tool call")
+		logger.Warn("tool call buffer full, dropping tool call")
 	}
 }
 
@@ -333,7 +339,7 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	select {
 	case h.logEntryChan <- logEntry:
 	default:
-		slog.Warn("chat log buffer full, dropping log")
+		logger.Warn("chat log buffer full, dropping log")
 	}
 }
 
@@ -346,7 +352,7 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 
 	h.recMutex.RLock()
 	if !h.recStarted {
-		slog.Warn("Analytics recording not started, dropping batch of chat records", "count", len(records))
+		logger.Warnf("Analytics recording not started, dropping batch of chat records, count: %d", len(records))
 		h.recMutex.RUnlock()
 		return
 	}
@@ -355,9 +361,9 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 	// Send batch to async worker - non-blocking to avoid request latency
 	select {
 	case h.chatRecordBatchChan <- records:
-		slog.Debug("sent chat record batch to async worker", "count", len(records))
+		logger.Debugf("Sent chat record batch to async worker, count: %d", len(records))
 	default:
-		slog.Warn("chat record batch buffer full, dropping batch", "count", len(records))
+		logger.Warnf("Chat record batch buffer full, dropping batch, count: %d", len(records))
 	}
 }
 
@@ -370,7 +376,7 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 
 	h.recMutex.RLock()
 	if !h.recStarted {
-		slog.Warn("Analytics recording not started, dropping batch of proxy logs", "count", len(logs))
+		logger.Warnf("Analytics recording not started, dropping batch of proxy logs, count: %d", len(logs))
 		h.recMutex.RUnlock()
 		return
 	}
@@ -379,9 +385,9 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 	// Send batch to async worker - non-blocking to avoid request latency
 	select {
 	case h.proxyLogBatchChan <- logs:
-		slog.Debug("sent proxy log batch to async worker", "count", len(logs))
+		logger.Debugf("Sent proxy log batch to async worker, count: %d", len(logs))
 	default:
-		slog.Warn("proxy log batch buffer full, dropping batch", "count", len(logs))
+		logger.Warnf("Proxy log batch buffer full, dropping batch, count: %d", len(logs))
 	}
 }
 
@@ -400,6 +406,6 @@ func initDB(db *gorm.DB) {
 	)
 
 	if err != nil {
-		slog.Warn("error migrating analytics tables", "error", sanitizeError(err))
+		logger.Warnf("Error migrating analytics tables: %s", sanitizeError(err))
 	}
 }

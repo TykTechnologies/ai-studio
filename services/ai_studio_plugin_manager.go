@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
@@ -34,7 +35,7 @@ var NewAIStudioManagementServerFunc func(*Service) interface{}
 // SetGlobalServiceReference sets the global service reference for GRPCServer access
 func SetGlobalServiceReference(service *Service) {
 	globalServiceReference = service
-	log.Info().Msg("✅ Global service reference set for plugin GRPCServer access")
+	logger.Info("Global service reference set for plugin GRPCServer access")
 }
 
 
@@ -843,6 +844,7 @@ func (m *AIStudioPluginManager) createOCIPluginClient(command string) (*goplugin
 		Plugins:          m.pluginMap,
 		Cmd:              exec.Command(localPlugin.ExecutablePath),
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
+		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
 }
 
@@ -863,6 +865,7 @@ func (m *AIStudioPluginManager) createLocalPluginClient(command string) (*goplug
 		Plugins:          m.pluginMap,
 		Cmd:              exec.Command(cmdPath),
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
+		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
 }
 
@@ -930,6 +933,7 @@ func (m *AIStudioPluginManager) createConfigOnlyOCIPluginClient(command string) 
 		},
 		Cmd:              exec.Command(localPlugin.ExecutablePath),
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
+		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
 }
 
@@ -953,6 +957,7 @@ func (m *AIStudioPluginManager) createConfigOnlyLocalPluginClient(command string
 		},
 		Cmd:              exec.Command(cmdPath),
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
+		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
 }
 
@@ -1311,6 +1316,7 @@ func (m *AIStudioPluginManager) createOCIPluginClientWithConfig(command string, 
 		Plugins:          pluginMap,
 		Cmd:              exec.Command(localPlugin.ExecutablePath),
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
+		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
 }
 
@@ -1327,6 +1333,7 @@ func (m *AIStudioPluginManager) createLocalPluginClientWithConfig(command string
 		Plugins:          pluginMap,
 		Cmd:              exec.Command(cmdPath),
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
+		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
 }
 

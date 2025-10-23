@@ -10,11 +10,8 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"time"
-
-	logrus "github.com/sirupsen/logrus"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/api"
@@ -22,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/grpc"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
@@ -45,17 +43,16 @@ func printWelcome() {
 func main() {
 	printWelcome()
 
-	// Set up debug logging
-	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-
+	// Get configuration first to initialize logger with correct level
 	appConf := config.Get()
+
+	// Initialize logger with configured level
+	logger.Init(appConf.LogLevel)
+	logger.Infof("Log level set to: %s", appConf.LogLevel)
 
 	// Perform connectivity tests before proceeding with initialization
 	if err := startup.TestConnectivity(appConf); err != nil {
-		log.Fatalf("Connectivity tests failed: %v", err)
+		logger.FatalErr("Connectivity tests failed", err)
 	}
 
 	var dialector gorm.Dialector
@@ -65,49 +62,49 @@ func main() {
 	case "postgres":
 		dialector = postgres.Open(appConf.DatabaseURL)
 	default:
-		log.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
+		logger.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.FatalErr("Failed to connect to database", err)
 	}
 
 	// Test the database connection
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatalf("Failed to get database instance: %v", err)
+		logger.FatalErr("Failed to get database instance", err)
 	}
 	err = sqlDB.Ping()
 	if err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		logger.FatalErr("Failed to ping database", err)
 	}
-	log.Println("Successfully connected to the database")
+	logger.Info("Successfully connected to the database")
 
 	// Auto Migrate the schemas
 	err = models.InitModels(db)
 	if err != nil {
-		log.Fatalf("Failed to initialize models: %v", err)
+		logger.FatalErr("Failed to initialize models", err)
 	}
 
 	// Create a new service instance with OCI support if configured
 	var ociConfig *ociplugins.OCIConfig
 	if appConf.OCIPlugins.IsEnabled() {
 		ociConfig = appConf.OCIPlugins.ToOCILibConfig()
-		log.Printf("🔧 OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
+		logger.Infof("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
 	} else {
-		log.Println("ℹ️  OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
+		logger.Info("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
 	}
 
 	service := services.NewServiceWithOCI(db, ociConfig)
 
 	// Load AI Studio plugins at startup
 	if service.AIStudioPluginManager != nil {
-		log.Println("🔌 Loading AI Studio plugins...")
+		logger.Info("Loading AI Studio plugins...")
 		if err := service.AIStudioPluginManager.LoadAllAIStudioPlugins(); err != nil {
-			log.Printf("⚠️  Failed to load some AI Studio plugins: %v", err)
+			logger.Warnf("Failed to load some AI Studio plugins: %v", err)
 		} else {
-			log.Println("✅ AI Studio plugins loaded successfully")
+			logger.Info("AI Studio plugins loaded successfully")
 		}
 	}
 
@@ -197,20 +194,20 @@ func main() {
 		
 		// Connect reload coordinator to namespace service
 		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
-		
-		log.Printf("✅ Reload coordinator created and connected to control server and namespace service")
-		
+
+		logger.Info("Reload coordinator created and connected to control server and namespace service")
+
 		go func() {
-			log.Printf("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
+			logger.Infof("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
 			if err := controlServer.Start(); err != nil {
-				log.Fatalf("Failed to start gRPC control server: %v", err)
+				logger.FatalErr("Failed to start gRPC control server", err)
 			}
 		}()
-		
+
 		// Graceful shutdown of gRPC server
 		defer func() {
 			if controlServer != nil {
-				log.Printf("Shutting down gRPC control server...")
+				logger.Info("Shutting down gRPC control server...")
 				controlServer.Stop()
 			}
 		}()
@@ -241,9 +238,9 @@ func main() {
 		// listEmbeddedFiles(staticFiles)
 		// Run the API
 		listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
-		log.Println("server listening on", listenOn)
+		logger.Infof("Server listening on %s", listenOn)
 		if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
-			log.Fatalf("Failed to run server: %v", err)
+			logger.FatalErr("Failed to run server", err)
 		}
 	} else {
 		// wait for Ctrl+C

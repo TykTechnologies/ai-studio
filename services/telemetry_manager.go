@@ -7,10 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"gorm.io/gorm"
 )
 
@@ -58,13 +58,13 @@ func NewTelemetryManager(db *gorm.DB, enabled bool, version string) *TelemetryMa
 // Start begins the telemetry collection process
 func (tm *TelemetryManager) Start() {
 	if !tm.enabled {
-		log.Println("Telemetry is disabled")
+		logger.Info("Telemetry is disabled")
 		return
 	}
 
-	log.Printf("Telemetry collection started - collecting usage statistics every %v", TelemetryPeriod)
-	log.Printf("Telemetry data will be sent to: %s", TelemetryURL)
-	log.Println("To disable telemetry, set environment variable: TELEMETRY_ENABLED=false")
+	logger.Infof("Telemetry collection started - collecting usage statistics every %v", TelemetryPeriod)
+	logger.Infof("Telemetry data will be sent to: %s", TelemetryURL)
+	logger.Info("To disable telemetry, set environment variable: TELEMETRY_ENABLED=false")
 
 	// Send initial telemetry data
 	go tm.collectAndSend()
@@ -76,7 +76,7 @@ func (tm *TelemetryManager) Start() {
 		for {
 			select {
 			case <-tm.ctx.Done():
-				log.Println("Telemetry collection stopped")
+				logger.Info("Telemetry collection stopped")
 				return
 			case <-ticker.C:
 				tm.collectAndSend()
@@ -98,7 +98,7 @@ func (tm *TelemetryManager) collectAndSend() {
 		return
 	}
 
-	log.Println("Collecting telemetry data...")
+	logger.Info("Collecting telemetry data...")
 
 	payload := TelemetryPayload{
 		Timestamp:  time.Now(),
@@ -109,7 +109,7 @@ func (tm *TelemetryManager) collectAndSend() {
 	// Collect LLM statistics
 	llmStats, err := tm.telemetryService.GetLLMStats()
 	if err != nil {
-		log.Printf("Warning: Failed to collect LLM statistics: %v", err)
+		logger.Infof("Warning: Failed to collect LLM statistics: %v", err)
 		llmStats = map[string]interface{}{}
 	}
 	payload.LLMStats = llmStats
@@ -117,7 +117,7 @@ func (tm *TelemetryManager) collectAndSend() {
 	// Collect App statistics
 	appStats, err := tm.telemetryService.GetAppStats()
 	if err != nil {
-		log.Printf("Warning: Failed to collect App statistics: %v", err)
+		logger.Infof("Warning: Failed to collect App statistics: %v", err)
 		appStats = map[string]interface{}{}
 	}
 	payload.AppStats = appStats
@@ -125,7 +125,7 @@ func (tm *TelemetryManager) collectAndSend() {
 	// Collect User statistics
 	userStats, err := tm.telemetryService.GetUserStats()
 	if err != nil {
-		log.Printf("Warning: Failed to collect User statistics: %v", err)
+		logger.Infof("Warning: Failed to collect User statistics: %v", err)
 		userStats = map[string]interface{}{}
 	}
 	payload.UserStats = userStats
@@ -133,7 +133,7 @@ func (tm *TelemetryManager) collectAndSend() {
 	// Collect Chat statistics
 	chatStats, err := tm.telemetryService.GetChatStats()
 	if err != nil {
-		log.Printf("Warning: Failed to collect Chat statistics: %v", err)
+		logger.Infof("Warning: Failed to collect Chat statistics: %v", err)
 		chatStats = map[string]interface{}{}
 	}
 	payload.ChatStats = chatStats
@@ -141,9 +141,9 @@ func (tm *TelemetryManager) collectAndSend() {
 	// Send telemetry data
 	err = tm.sendTelemetry(payload)
 	if err != nil {
-		log.Printf("Warning: Failed to send telemetry data: %v", err)
+		logger.Infof("Warning: Failed to send telemetry data: %v", err)
 	} else {
-		log.Println("Telemetry data sent successfully")
+		logger.Info("Telemetry data sent successfully")
 	}
 }
 
