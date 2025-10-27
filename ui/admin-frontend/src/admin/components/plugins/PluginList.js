@@ -212,7 +212,7 @@ const PluginList = () => {
           startIcon={<AddIcon />}
           onClick={handleCreate}
         >
-          Create Plugin
+          Add Plugin
         </PrimaryButton>
       </TitleBox>
 

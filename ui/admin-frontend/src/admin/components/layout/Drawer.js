@@ -40,12 +40,17 @@ const Drawer = () => {
       path: '/admin/dash'
     },
     {
+      id: 'plugins',
+      text: 'Plugins',
+      icon: <Icon name="puzzle-piece" />,
+      path: '/admin/plugins'
+    },
+    {
       id: 'llm-management',
       text: 'LLM management',
       icon: <Icon name="microchip-ai" />,
       subItems: [
         { id: 'llms', text: 'LLM providers', path: '/admin/llms' },
-        { id: 'plugins', text: 'Plugins', path: '/admin/plugins' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices' },
       ],
     },

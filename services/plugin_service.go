@@ -272,6 +272,26 @@ func (s *PluginService) DeletePlugin(id uint) error {
 		log.Info().Uint("plugin_id", id).Msg("Cleaned up registered plugin entries for deleted plugin")
 	}
 
+	// Clean up config schema if no other plugins use this command
+	var otherPluginsCount int64
+	if err := s.db.Model(&models.Plugin{}).
+		Where("command = ? AND id != ?", plugin.Command, id).
+		Count(&otherPluginsCount).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to check for other plugins with same command")
+	} else if otherPluginsCount == 0 {
+		// No other plugins use this command, safe to delete the cached schema
+		if err := s.db.Where("command = ?", plugin.Command).Delete(&models.PluginConfigSchema{}).Error; err != nil {
+			log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to clean up plugin config schema")
+		} else {
+			log.Info().Str("command", plugin.Command).Msg("Cleaned up plugin config schema for deleted plugin")
+		}
+	} else {
+		log.Debug().
+			Str("command", plugin.Command).
+			Int64("other_plugins_count", otherPluginsCount).
+			Msg("Keeping config schema - other plugins still use this command")
+	}
+
 	if err := plugin.Delete(s.db); err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
 	}
