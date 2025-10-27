@@ -23,13 +23,12 @@ func setupPluginDataTestDB(t *testing.T) *gorm.DB {
 // createTestPlugin creates a test plugin
 func createTestPlugin(t *testing.T, db *gorm.DB, name string) *Plugin {
 	plugin := &Plugin{
-		Name:       name,
-		Slug:       name + "-slug",
+		Name:        name,
 		Description: "Test plugin",
-		Command:    "/bin/test",
-		HookType:   HookTypeStudioUI,
-		PluginType: PluginTypeAIStudio,
-		IsActive:   true,
+		Command:     "/bin/test",
+		HookType:    HookTypeStudioUI,
+		PluginType:  PluginTypeAIStudio,
+		IsActive:    true,
 	}
 
 	err := plugin.Create(db)

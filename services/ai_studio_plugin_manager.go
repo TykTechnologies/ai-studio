@@ -61,7 +61,6 @@ type AIStudioPluginManager struct {
 type LoadedAIStudioPlugin struct {
 	ID              uint
 	Name            string
-	Slug            string
 	PluginType      string
 	Command         string
 	IsOCI           bool
@@ -386,7 +385,6 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	loadedPlugin := &LoadedAIStudioPlugin{
 		ID:              plugin.ID,
 		Name:            plugin.Name,
-		Slug:            plugin.Slug,
 		PluginType:      plugin.PluginType,
 		Command:         plugin.Command,
 		IsOCI:           plugin.IsOCIPlugin(),

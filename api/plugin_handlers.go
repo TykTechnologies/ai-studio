@@ -20,7 +20,6 @@ type PluginResponse struct {
 	ID            string `json:"id"`
 	Attributes    struct {
 		Name         string                 `json:"name"`
-		Slug         string                 `json:"slug"`
 		Description  string                 `json:"description"`
 		Command      string                 `json:"command"`
 		Checksum     string                 `json:"checksum,omitempty"`
@@ -155,7 +154,6 @@ func (a *API) listPlugins(c *gin.Context) {
 			ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 			Attributes: struct {
 				Name         string                 `json:"name"`
-				Slug         string                 `json:"slug"`
 				Description  string                 `json:"description"`
 				Command      string                 `json:"command"`
 				Checksum     string                 `json:"checksum,omitempty"`
@@ -170,7 +168,6 @@ func (a *API) listPlugins(c *gin.Context) {
 				UpdatedAt    string                 `json:"updated_at"`
 			}{
 				Name:         plugin.Name,
-				Slug:         plugin.Slug,
 				Description:  plugin.Description,
 				Command:      plugin.Command,
 				Checksum:     plugin.Checksum,
@@ -281,15 +278,6 @@ func (a *API) createPlugin(c *gin.Context) {
 	plugin, err := a.service.PluginService.CreatePlugin(&req)
 	if err != nil {
 		errMsg := err.Error()
-		if errMsg == "plugin slug '"+req.Slug+"' already exists" {
-			c.JSON(http.StatusConflict, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Conflict", Detail: err.Error()}},
-			})
-			return
-		}
 
 		// Check for validation errors that should return 400 instead of 500
 		if strings.Contains(errMsg, "cannot be empty") ||
@@ -941,7 +929,6 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 		ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 		Attributes: struct {
 			Name         string                 `json:"name"`
-			Slug         string                 `json:"slug"`
 			Description  string                 `json:"description"`
 			Command      string                 `json:"command"`
 			Checksum     string                 `json:"checksum,omitempty"`
@@ -956,7 +943,6 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			UpdatedAt    string                 `json:"updated_at"`
 		}{
 			Name:         plugin.Name,
-			Slug:         plugin.Slug,
 			Description:  plugin.Description,
 			Command:      plugin.Command,
 			Checksum:     plugin.Checksum,

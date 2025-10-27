@@ -54,7 +54,6 @@ func NewPluginServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) (*Plu
 // Plugin request/response structures (adapted from microgateway)
 type CreatePluginRequest struct {
 	Name            string                 `json:"name" binding:"required"`
-	Slug            string                 `json:"slug" binding:"required"`
 	Description     string                 `json:"description"`
 	Command         string                 `json:"command" binding:"required"`
 	Checksum        string                 `json:"checksum"` // Optional
@@ -98,7 +97,6 @@ type PluginServiceInterface interface {
 	
 	// Validation and utilities
 	TestPlugin(pluginID uint, testData interface{}) (interface{}, error)
-	PluginSlugExists(slug string) (bool, error)
 }
 
 // CreatePlugin creates a new plugin (adapted from microgateway)
@@ -106,9 +104,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	// Validate required fields
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, fmt.Errorf("plugin name cannot be empty")
-	}
-	if strings.TrimSpace(req.Slug) == "" {
-		return nil, fmt.Errorf("plugin slug cannot be empty")
 	}
 	if strings.TrimSpace(req.Command) == "" {
 		return nil, fmt.Errorf("plugin command cannot be empty")
@@ -120,15 +115,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	// Security validation for plugin command
 	if err := s.validatePluginCommand(req.Command); err != nil {
 		return nil, err
-	}
-
-	// Check if slug already exists
-	exists, err := s.PluginSlugExists(req.Slug)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check plugin slug existence: %w", err)
-	}
-	if exists {
-		return nil, fmt.Errorf("plugin slug '%s' already exists", req.Slug)
 	}
 
 	// Set default plugin type if not specified
@@ -145,7 +131,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 
 	plugin := &models.Plugin{
 		Name:         req.Name,
-		Slug:         req.Slug,
 		Description:  req.Description,
 		Command:      req.Command,
 		Checksum:     req.Checksum,
@@ -400,7 +385,6 @@ func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interfa
 	testResult := map[string]interface{}{
 		"plugin_id":   pluginID,
 		"plugin_name": plugin.Name,
-		"plugin_slug": plugin.Slug,
 		"hook_type":   plugin.HookType,
 		"status":      "passed",
 		"message":     "Plugin configuration validation completed successfully",
@@ -433,16 +417,6 @@ func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interfa
 	}
 
 	return testResult, nil
-}
-
-// PluginSlugExists checks if a plugin slug already exists (adapted from microgateway)
-func (s *PluginService) PluginSlugExists(slug string) (bool, error) {
-	var count int64
-	err := s.db.Model(&models.Plugin{}).Where("slug = ?", slug).Count(&count).Error
-	if err != nil {
-		return false, fmt.Errorf("failed to check plugin slug existence: %w", err)
-	}
-	return count > 0, nil
 }
 
 // GetPluginsInNamespace returns plugins in a specific namespace (AI Studio specific)
@@ -592,7 +566,7 @@ func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest
 	// For MVP, we'll use a default manifest structure
 	// In full implementation, this would extract manifest.json from the OCI artifact
 	manifest := map[string]interface{}{
-		"id":      fmt.Sprintf("plugin-%s", req.Slug),
+		"id":      fmt.Sprintf("plugin-%d", time.Now().Unix()),
 		"version": "1.0.0",
 		"name":    req.Name,
 		"description": req.Description,
@@ -602,7 +576,6 @@ func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest
 	// Create plugin record
 	plugin := &models.Plugin{
 		Name:         req.Name,
-		Slug:         req.Slug,
 		Description:  req.Description,
 		Command:      req.OCIReference, // Store OCI reference as command
 		PluginType:   models.PluginTypeAIStudio,
@@ -696,7 +669,6 @@ func (s *PluginService) GetAIStudioPluginsWithManifests() ([]models.Plugin, erro
 // CreateOCIPluginRequest represents a request to create a plugin from an OCI artifact
 type CreateOCIPluginRequest struct {
 	Name         string                 `json:"name" binding:"required"`
-	Slug         string                 `json:"slug" binding:"required"`
 	Description  string                 `json:"description"`
 	OCIReference string                 `json:"oci_reference" binding:"required"`
 	Config       map[string]interface{} `json:"config"`

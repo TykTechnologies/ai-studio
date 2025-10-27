@@ -208,7 +208,6 @@ type LLMFilter struct {
 type Plugin struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	Name        string         `gorm:"not null" json:"name"`
-	Slug        string         `gorm:"uniqueIndex;not null" json:"slug"`
 	Description string         `json:"description"`
 	Command     string         `gorm:"not null;size:500" json:"command"`
 	Checksum    string         `gorm:"size:255" json:"checksum"`

@@ -176,7 +176,6 @@ func convertPluginToPB(plugin *models.Plugin) *pb.PluginInfo {
 	return &pb.PluginInfo{
 		Id:                      uint32(plugin.ID),
 		Name:                    plugin.Name,
-		Slug:                    plugin.Slug,
 		Description:             plugin.Description,
 		Command:                 plugin.Command,
 		ConfigJson:              configJSON,

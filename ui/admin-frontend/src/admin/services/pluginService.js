@@ -34,7 +34,6 @@ class PluginService {
           data: response.data.data.map(plugin => ({
             id: plugin.id,
             name: plugin.attributes.name,
-            slug: plugin.attributes.slug,
             description: plugin.attributes.description,
             command: plugin.attributes.command,
             checksum: plugin.attributes.checksum,
@@ -68,7 +67,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           checksum: plugin.attributes.checksum,
@@ -102,7 +100,6 @@ class PluginService {
     try {
       const payload = {
         name: pluginData.name,
-        slug: pluginData.slug,
         description: pluginData.description || '',
         command: pluginData.command,
         checksum: pluginData.checksum || '',
@@ -122,7 +119,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           checksum: plugin.attributes.checksum,
@@ -146,7 +142,6 @@ class PluginService {
     try {
       const payload = {
         name: pluginData.name,
-        slug: pluginData.slug,
         description: pluginData.description || '',
         command: pluginData.command,
         checksum: pluginData.checksum || '',
@@ -166,7 +161,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           checksum: plugin.attributes.checksum,
@@ -204,7 +198,6 @@ class PluginService {
         return response.data.data.map(plugin => ({
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           hookType: plugin.attributes.hook_type,
@@ -265,10 +258,6 @@ class PluginService {
       errors.name = 'Plugin name is required';
     }
 
-    if (!pluginData.slug?.trim()) {
-      errors.slug = 'Plugin slug is required';
-    }
-
     // Validate command (auto-detect OCI vs local from prefix)
     if (!pluginData.command?.trim()) {
       errors.command = 'Plugin command is required';
@@ -294,7 +283,6 @@ class PluginService {
     try {
       const payload = {
         name: ociPluginData.name,
-        slug: ociPluginData.slug,
         description: ociPluginData.description || '',
         oci_reference: ociPluginData.ociReference,
         config: ociPluginData.config || {},
@@ -310,7 +298,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           pluginType: plugin.attributes.plugin_type,
@@ -340,7 +327,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           pluginType: plugin.attributes.plugin_type,
@@ -399,7 +385,6 @@ class PluginService {
         return response.data.data.map(plugin => ({
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           pluginType: plugin.attributes.plugin_type,

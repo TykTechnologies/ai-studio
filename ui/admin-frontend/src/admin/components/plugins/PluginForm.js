@@ -39,7 +39,6 @@ const PluginForm = ({ mode = 'create' }) => {
   
   const [formData, setFormData] = useState({
     name: '',
-    slug: '',
     description: '',
     command: '',
     checksum: '',
@@ -86,7 +85,6 @@ const PluginForm = ({ mode = 'create' }) => {
       if (plugin) {
         setFormData({
           name: plugin.name,
-          slug: plugin.slug,
           description: plugin.description,
           command: plugin.command,
           checksum: plugin.checksum || '',
@@ -120,17 +118,6 @@ const PluginForm = ({ mode = 'create' }) => {
       ...prev,
       [fieldName]: value
     }));
-
-    // Auto-generate slug from name if creating new plugin
-    if (fieldName === 'name' && !isEdit && !formData.slug) {
-      const slug = value
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .trim();
-      setFormData(prev => ({ ...prev, slug }));
-    }
 
     // Command change detection for edit mode
     if (fieldName === 'command' && isEdit && value !== originalCommand && formData.pluginType === 'ai_studio') {
@@ -251,7 +238,6 @@ const PluginForm = ({ mode = 'create' }) => {
   const validateForm = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Plugin name is required';
-    if (!formData.slug.trim()) newErrors.slug = 'Plugin slug is required';
 
     // Validate command (auto-detect OCI vs local from prefix)
     if (!formData.command.trim()) {
@@ -350,18 +336,6 @@ const PluginForm = ({ mode = 'create' }) => {
                 onChange={handleChange}
                 error={!!errors.name}
                 helperText={errors.name || 'Display name for the plugin'}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Slug"
-                name="slug"
-                value={formData.slug}
-                onChange={handleChange}
-                error={!!errors.slug}
-                helperText={errors.slug || 'Unique identifier (auto-generated from name)'}
                 required
               />
             </Grid>

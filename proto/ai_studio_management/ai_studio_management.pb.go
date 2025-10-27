@@ -433,18 +433,17 @@ type PluginInfo struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	Id                      uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name                    string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Slug                    string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	Description             string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Command                 string                 `protobuf:"bytes,5,opt,name=command,proto3" json:"command,omitempty"`
-	ConfigJson              string                 `protobuf:"bytes,6,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
-	HookType                string                 `protobuf:"bytes,7,opt,name=hook_type,json=hookType,proto3" json:"hook_type,omitempty"`
-	IsActive                bool                   `protobuf:"varint,8,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	Namespace               string                 `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	PluginType              string                 `protobuf:"bytes,10,opt,name=plugin_type,json=pluginType,proto3" json:"plugin_type,omitempty"`
-	ServiceAccessAuthorized bool                   `protobuf:"varint,11,opt,name=service_access_authorized,json=serviceAccessAuthorized,proto3" json:"service_access_authorized,omitempty"`
-	ServiceScopes           []string               `protobuf:"bytes,12,rep,name=service_scopes,json=serviceScopes,proto3" json:"service_scopes,omitempty"`
-	CreatedAt               *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt               *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Description             string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Command                 string                 `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`
+	ConfigJson              string                 `protobuf:"bytes,5,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
+	HookType                string                 `protobuf:"bytes,6,opt,name=hook_type,json=hookType,proto3" json:"hook_type,omitempty"`
+	IsActive                bool                   `protobuf:"varint,7,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Namespace               string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	PluginType              string                 `protobuf:"bytes,9,opt,name=plugin_type,json=pluginType,proto3" json:"plugin_type,omitempty"`
+	ServiceAccessAuthorized bool                   `protobuf:"varint,10,opt,name=service_access_authorized,json=serviceAccessAuthorized,proto3" json:"service_access_authorized,omitempty"`
+	ServiceScopes           []string               `protobuf:"bytes,11,rep,name=service_scopes,json=serviceScopes,proto3" json:"service_scopes,omitempty"`
+	CreatedAt               *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt               *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -489,13 +488,6 @@ func (x *PluginInfo) GetId() uint32 {
 func (x *PluginInfo) GetName() string {
 	if x != nil {
 		return x.Name
-	}
-	return ""
-}
-
-func (x *PluginInfo) GetSlug() string {
-	if x != nil {
-		return x.Slug
 	}
 	return ""
 }
@@ -10740,28 +10732,27 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"configJson\"P\n" +
 	"\x1aUpdatePluginConfigResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xf3\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xdf\x03\n" +
 	"\n" +
 	"PluginInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04slug\x18\x03 \x01(\tR\x04slug\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
-	"\acommand\x18\x05 \x01(\tR\acommand\x12\x1f\n" +
-	"\vconfig_json\x18\x06 \x01(\tR\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\acommand\x18\x04 \x01(\tR\acommand\x12\x1f\n" +
+	"\vconfig_json\x18\x05 \x01(\tR\n" +
 	"configJson\x12\x1b\n" +
-	"\thook_type\x18\a \x01(\tR\bhookType\x12\x1b\n" +
-	"\tis_active\x18\b \x01(\bR\bisActive\x12\x1c\n" +
-	"\tnamespace\x18\t \x01(\tR\tnamespace\x12\x1f\n" +
-	"\vplugin_type\x18\n" +
-	" \x01(\tR\n" +
+	"\thook_type\x18\x06 \x01(\tR\bhookType\x12\x1b\n" +
+	"\tis_active\x18\a \x01(\bR\bisActive\x12\x1c\n" +
+	"\tnamespace\x18\b \x01(\tR\tnamespace\x12\x1f\n" +
+	"\vplugin_type\x18\t \x01(\tR\n" +
 	"pluginType\x12:\n" +
-	"\x19service_access_authorized\x18\v \x01(\bR\x17serviceAccessAuthorized\x12%\n" +
-	"\x0eservice_scopes\x18\f \x03(\tR\rserviceScopes\x129\n" +
+	"\x19service_access_authorized\x18\n" +
+	" \x01(\bR\x17serviceAccessAuthorized\x12%\n" +
+	"\x0eservice_scopes\x18\v \x03(\tR\rserviceScopes\x129\n" +
 	"\n" +
-	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe0\x01\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe0\x01\n" +
 	"\x0fListLLMsRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x16\n" +
 	"\x06vendor\x18\x02 \x01(\tR\x06vendor\x12 \n" +

@@ -13,7 +13,6 @@ type Plugin struct {
 	gorm.Model
 	ID          uint                   `json:"id" gorm:"primaryKey"`
 	Name        string                 `json:"name" gorm:"not null"`
-	Slug        string                 `json:"slug" gorm:"uniqueIndex;not null"`
 	Description string                 `json:"description"`
 	Command     string                 `json:"command" gorm:"not null;size:500"`
 	Checksum    string                 `json:"checksum" gorm:"size:255"` // Optional - for future use
@@ -83,10 +82,6 @@ func (p *Plugin) Get(db *gorm.DB, id uint) error {
 	return db.Preload("LLMs").First(p, id).Error
 }
 
-// GetBySlug retrieves a plugin by slug
-func (p *Plugin) GetBySlug(db *gorm.DB, slug string) error {
-	return db.Preload("LLMs").Where("slug = ?", slug).First(p).Error
-}
 
 // Create creates a new plugin
 func (p *Plugin) Create(db *gorm.DB) error {

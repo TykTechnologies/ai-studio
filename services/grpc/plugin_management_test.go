@@ -34,7 +34,6 @@ func TestConvertPluginToPB(t *testing.T) {
 		CreatedAt: testTime,
 		UpdatedAt: testTime,
 		Name:                    "Test Plugin",
-		Slug:                    "test-plugin",
 		Description:             "Test Description",
 		Command:                 "test-command",
 		HookType:                models.HookTypeStudioUI,
@@ -53,7 +52,6 @@ func TestConvertPluginToPB(t *testing.T) {
 
 	assert.Equal(t, uint32(123), pbPlugin.Id)
 	assert.Equal(t, "Test Plugin", pbPlugin.Name)
-	assert.Equal(t, "test-plugin", pbPlugin.Slug)
 	assert.Equal(t, "Test Description", pbPlugin.Description)
 	assert.Equal(t, "test-command", pbPlugin.Command)
 	assert.Equal(t, models.HookTypeStudioUI, pbPlugin.HookType)

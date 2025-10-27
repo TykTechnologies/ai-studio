@@ -383,15 +383,6 @@ const PluginDetail = () => {
 
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">
-                    Slug
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                    {plugin.slug}
-                  </Typography>
-                </Box>
-
-                <Box mb={2}>
-                  <Typography variant="body2" color="textSecondary">
                     Description
                   </Typography>
                   <Typography variant="body1">

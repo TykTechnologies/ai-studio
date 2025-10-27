@@ -1046,7 +1046,6 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				pbPlugin := &pb.PluginConfig{
 					Id:          uint32(plugin.ID),
 					Name:        plugin.Name,
-					Slug:        plugin.Slug,
 					Description: plugin.Description,
 					Command:     plugin.Command,
 					Checksum:    plugin.Checksum,
@@ -1072,7 +1071,6 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			pbPlugin := &pb.PluginConfig{
 				Id:          uint32(plugin.ID),
 				Name:        plugin.Name,
-				Slug:        plugin.Slug,
 				Description: plugin.Description,
 				Command:     plugin.Command,
 				Checksum:    plugin.Checksum,

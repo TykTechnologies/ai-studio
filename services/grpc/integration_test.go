@@ -27,7 +27,6 @@ func TestCompleteServiceScopeWorkflow(t *testing.T) {
 		// Step 1: Create plugin with declared service scopes (simulating manifest loading)
 		plugin := &models.Plugin{
 			Name:                    "Workflow Test Plugin",
-			Slug:                    "workflow-test-plugin",
 			Command:                 "test-command",
 			HookType:                models.HookTypeStudioUI,
 			PluginType:              models.PluginTypeAIStudio,
@@ -86,7 +85,6 @@ func TestGRPCServiceIntegration(t *testing.T) {
 		// Create test plugins
 		plugin1 := &models.Plugin{
 			Name:                    "Authorized Plugin",
-			Slug:                    "authorized-plugin",
 			Command:                 "authorized-command",
 			HookType:                models.HookTypeStudioUI,
 			PluginType:              models.PluginTypeAIStudio,
@@ -97,7 +95,6 @@ func TestGRPCServiceIntegration(t *testing.T) {
 
 		plugin2 := &models.Plugin{
 			Name:       "Another Plugin",
-			Slug:       "another-plugin",
 			Command:    "another-command",
 			HookType:   models.HookTypeStudioUI,
 			PluginType: models.PluginTypeAIStudio,
@@ -139,7 +136,6 @@ func TestGRPCServiceIntegration(t *testing.T) {
 
 		require.NotNil(t, foundPlugin, "Should find the test plugin in response")
 		assert.Equal(t, plugin1.Name, foundPlugin.Name)
-		assert.Equal(t, plugin1.Slug, foundPlugin.Slug)
 		assert.True(t, foundPlugin.ServiceAccessAuthorized)
 		assert.Contains(t, foundPlugin.ServiceScopes, models.ServiceScopePluginsRead)
 	})
@@ -189,7 +185,10 @@ func TestEnhancedFilteringIntegration(t *testing.T) {
 		// Create authorized plugin for testing
 		plugin := &models.Plugin{
 			Name:                    "Test Plugin Apps",
-			Slug:                    "test-plugin-apps",
+			Command:                 "test-command",
+			HookType:                models.HookTypeStudioUI,
+			PluginType:              models.PluginTypeAIStudio,
+			IsActive:                true,
 			ServiceAccessAuthorized: true,
 			ServiceScopes:           []string{models.ServiceScopeAppsRead},
 		}
@@ -258,7 +257,10 @@ func TestEnhancedFilteringIntegration(t *testing.T) {
 		// Create authorized plugin for testing
 		plugin := &models.Plugin{
 			Name:                    "Test Plugin Datasources",
-			Slug:                    "test-plugin-datasources",
+			Command:                 "test-command",
+			HookType:                models.HookTypeStudioUI,
+			PluginType:              models.PluginTypeAIStudio,
+			IsActive:                true,
 			ServiceAccessAuthorized: true,
 			ServiceScopes:           []string{models.ServiceScopeDatasourcesRead},
 		}
@@ -304,7 +306,10 @@ func TestEnhancedFilteringIntegration(t *testing.T) {
 		// Create authorized plugin for testing
 		plugin := &models.Plugin{
 			Name:                    "Test Plugin Errors",
-			Slug:                    "test-plugin-errors",
+			Command:                 "test-command",
+			HookType:                models.HookTypeStudioUI,
+			PluginType:              models.PluginTypeAIStudio,
+			IsActive:                true,
 			ServiceAccessAuthorized: true,
 			ServiceScopes:           []string{models.ServiceScopeAppsRead, models.ServiceScopeDatasourcesRead, models.ServiceScopeFiltersRead},
 		}
@@ -390,7 +395,10 @@ func TestEnhancedFilteringIntegration(t *testing.T) {
 		// Create authorized plugin
 		plugin := &models.Plugin{
 			Name:                    "Test Plugin Filters",
-			Slug:                    "test-plugin-filters",
+			Command:                 "test-command",
+			HookType:                models.HookTypeStudioUI,
+			PluginType:              models.PluginTypeAIStudio,
+			IsActive:                true,
 			ServiceAccessAuthorized: true,
 			ServiceScopes:           []string{models.ServiceScopeFiltersRead},
 		}

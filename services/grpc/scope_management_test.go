@@ -171,7 +171,6 @@ func TestPluginServiceAccessLifecycle(t *testing.T) {
 		// 1. Create plugin without service access
 		plugin := &models.Plugin{
 			Name:                    "Lifecycle Test Plugin",
-			Slug:                    "lifecycle-test-plugin",
 			Command:                 "test-command",
 			HookType:                models.HookTypeStudioUI,
 			PluginType:              models.PluginTypeAIStudio,
@@ -224,7 +223,6 @@ func TestPluginServiceAccessLifecycle(t *testing.T) {
 	t.Run("scope validation", func(t *testing.T) {
 		plugin := &models.Plugin{
 			Name:                    "Scope Validation Plugin",
-			Slug:                    "scope-validation-plugin",
 			Command:                 "test-command",
 			HookType:                models.HookTypeStudioUI,
 			PluginType:              models.PluginTypeAIStudio,

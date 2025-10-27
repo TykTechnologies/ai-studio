@@ -502,7 +502,6 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 			Attributes: struct {
 				Name         string                 `json:"name"`
-				Slug         string                 `json:"slug"`
 				Description  string                 `json:"description"`
 				Command      string                 `json:"command"`
 				Checksum     string                 `json:"checksum,omitempty"`
@@ -517,7 +516,6 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 				UpdatedAt    string                 `json:"updated_at"`
 			}{
 				Name:         plugin.Name,
-				Slug:         plugin.Slug,
 				Description:  plugin.Description,
 				Command:      plugin.Command,
 				Checksum:     plugin.Checksum,
@@ -588,7 +586,6 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 				Attributes: struct {
 					Name         string                 `json:"name"`
-					Slug         string                 `json:"slug"`
 					Description  string                 `json:"description"`
 					Command      string                 `json:"command"`
 					Checksum     string                 `json:"checksum,omitempty"`
@@ -603,7 +600,6 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 					UpdatedAt    string                 `json:"updated_at"`
 				}{
 					Name:         plugin.Name,
-					Slug:         plugin.Slug,
 					Description:  plugin.Description,
 					Command:      plugin.Command,
 					Checksum:     plugin.Checksum,

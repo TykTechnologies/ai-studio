@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   TextField,
   Box,
@@ -18,7 +18,6 @@ import pluginService from '../../../services/pluginService';
 const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
   const [formData, setFormData] = useState({
     name: data.name || '',
-    slug: data.slug || '',
     description: data.description || '',
     pluginType: data.pluginType || 'gateway',
     command: data.command || '',
@@ -28,19 +27,6 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
   });
 
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    // Auto-generate slug from name if name changes and slug is empty
-    if (formData.name && !formData.slug) {
-      const slug = formData.name
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .trim();
-      setFormData(prev => ({ ...prev, slug }));
-    }
-  }, [formData.name]);
 
   const handleInputChange = (field) => (event) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
@@ -57,10 +43,6 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
 
     if (!formData.name.trim()) {
       newErrors.name = 'Plugin name is required';
-    }
-
-    if (!formData.slug.trim()) {
-      newErrors.slug = 'Plugin slug is required';
     }
 
     if (!formData.command.trim()) {
@@ -111,19 +93,6 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
             onChange={handleInputChange('name')}
             error={!!errors.name}
             helperText={errors.name || 'Display name for the plugin'}
-            disabled={disabled}
-            required
-          />
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            label="Slug"
-            value={formData.slug}
-            onChange={handleInputChange('slug')}
-            error={!!errors.slug}
-            helperText={errors.slug || 'Unique identifier (auto-generated from name)'}
             disabled={disabled}
             required
           />

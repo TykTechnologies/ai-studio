@@ -196,9 +196,8 @@ const PluginList = () => {
 
   // Client-side search filtering
   const filteredPlugins = plugins.filter(plugin =>
-    searchTerm === '' || 
+    searchTerm === '' ||
     plugin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    plugin.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
     plugin.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

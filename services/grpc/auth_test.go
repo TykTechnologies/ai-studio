@@ -2,9 +2,7 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
@@ -27,12 +25,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 // createTestPlugin creates a test plugin with specified service access settings
 func createTestPlugin(t *testing.T, db *gorm.DB, authorized bool, scopes []string) *models.Plugin {
-	// Generate unique slug to avoid conflicts
-	slug := fmt.Sprintf("test-plugin-%d", time.Now().UnixNano())
-
 	plugin := &models.Plugin{
 		Name:                    "Test Plugin",
-		Slug:                    slug,
 		Command:                 "test-command",
 		HookType:                models.HookTypeStudioUI,
 		PluginType:              models.PluginTypeAIStudio,
