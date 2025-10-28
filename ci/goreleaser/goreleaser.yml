@@ -59,10 +59,10 @@ builds:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
       - CC=gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
@@ -73,10 +73,10 @@ builds:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
       - CC=aarch64-linux-gnu-gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
@@ -87,10 +87,10 @@ builds:
       - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
       - CC=s390x-linux-gnu-gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
