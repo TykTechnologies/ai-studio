@@ -377,7 +377,7 @@ jobs:
         arch:
           - amd64
           - arm64
-        distro: ${{ fromJson(needs.test-controller-distros.outputs.deb) }}
+        distro: ${{ fromJson(needs.test-controller-distros.outputs.deb || '["ubuntu:jammy", "ubuntu:focal", "debian:bullseye"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -422,7 +422,7 @@ jobs:
         arch:
           - amd64
           - arm64
-        distro: ${{ fromJson(needs.test-controller-distros.outputs.rpm) }}
+        distro: ${{ fromJson(needs.test-controller-distros.outputs.rpm || '["amazonlinux:2", "el/8", "el/9"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
