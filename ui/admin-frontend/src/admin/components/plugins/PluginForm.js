@@ -6,6 +6,7 @@ import {
   Grid,
   Snackbar,
   Alert,
+  AlertTitle,
   FormControl,
   InputLabel,
   Select,
@@ -16,10 +17,17 @@ import {
   AccordionDetails,
   Button,
   CircularProgress,
+  Chip,
+  Checkbox,
+  ListItemText,
+  FormHelperText,
 } from '@mui/material';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LockIcon from '@mui/icons-material/Lock';
+import StarIcon from '@mui/icons-material/Star';
+import EditIcon from '@mui/icons-material/Edit';
 import {
   SecondaryLinkButton,
   TitleBox,
@@ -27,7 +35,7 @@ import {
   PrimaryButton,
   StyledAccordion,
 } from '../../styles/sharedStyles';
-import pluginService from '../../services/pluginService';
+import pluginService, { PluginService } from '../../services/pluginService';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
 import PluginConfigurationSection from './PluginConfigurationSection';
 import ScopeReviewSection from './ScopeReviewSection';
@@ -42,10 +50,12 @@ const PluginForm = ({ mode = 'create' }) => {
     description: '',
     command: '',
     config: {},
-    hookType: '',
+    hookType: '',                   // Primary hook (required)
+    hookTypes: [],                  // Additional hooks
+    manifestHookTypes: [],          // From manifest (read-only)
+    hookTypesCustomized: false,     // User overrode manifest
     isActive: true,
     namespace: '',
-    pluginType: 'gateway',
     ociReference: '',
     loadImmediately: false,
   });
@@ -87,11 +97,14 @@ const PluginForm = ({ mode = 'create' }) => {
           description: plugin.description,
           command: plugin.command,
           config: plugin.config || {},
-          hookType: plugin.hookType,
+          hookType: plugin.hookType || '',
+          hookTypes: plugin.hookTypes || [],
+          manifestHookTypes: [], // Will be populated if we load metadata
+          hookTypesCustomized: plugin.hookTypesCustomized || false,
           isActive: plugin.isActive,
           namespace: plugin.namespace === 'global' ? '' : plugin.namespace,
-          pluginType: plugin.pluginType || 'gateway',
           ociReference: plugin.ociReference || '',
+          loadImmediately: false,
         });
         setConfigJson(JSON.stringify(plugin.config || {}, null, 2));
 
@@ -118,12 +131,17 @@ const PluginForm = ({ mode = 'create' }) => {
     }));
 
     // Command change detection for edit mode
-    if (fieldName === 'command' && isEdit && value !== originalCommand && formData.pluginType === 'ai_studio') {
-      setRequiresReapproval(true);
-      setShowCommandChangeWarning(true);
-      setShowScopeApproval(false);
-      // Reset any previous scope approval state
-      setExtractedScopes([]);
+    // Check if plugin has UI or Agent hooks (which need scope approval)
+    if (fieldName === 'command' && isEdit && value !== originalCommand) {
+      const hasUIOrAgent = formData.hookType === 'studio_ui' || formData.hookType === 'agent' ||
+                          formData.hookTypes.includes('studio_ui') || formData.hookTypes.includes('agent');
+      if (hasUIOrAgent) {
+        setRequiresReapproval(true);
+        setShowCommandChangeWarning(true);
+        setShowScopeApproval(false);
+        // Reset any previous scope approval state
+        setExtractedScopes([]);
+      }
     }
   };
 
@@ -177,12 +195,25 @@ const PluginForm = ({ mode = 'create' }) => {
   const handleLoadNewScopes = async () => {
     setScopeLoading(true);
     try {
-      // Call validate-and-load API to get new scopes
+      // Call validate-and-load API to get new scopes and hook types
       const response = await pluginService.validateAndLoadPlugin(id, {
         command: formData.command,
       });
 
-      setExtractedScopes(response.data.attributes.scopes || []);
+      const attrs = response.data.attributes;
+      setExtractedScopes(attrs.scopes || []);
+
+      // Update hook types from manifest
+      if (attrs.hook_types && attrs.hook_types.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          hookType: attrs.primary_hook || attrs.hook_types[0],
+          hookTypes: attrs.hook_types,
+          manifestHookTypes: attrs.hook_types,
+          hookTypesCustomized: false,
+        }));
+      }
+
       setShowScopeApproval(true);
       setShowCommandChangeWarning(false);
     } catch (error) {
@@ -244,9 +275,9 @@ const PluginForm = ({ mode = 'create' }) => {
       newErrors.command = 'OCI reference cannot be empty for OCI plugins';
     }
 
-    // Hook type is required for gateway plugins, auto-set for AI Studio plugins
-    if (formData.pluginType === 'gateway' && !formData.hookType) {
-      newErrors.hookType = 'Hook type is required for gateway plugins';
+    // Hook type is always required
+    if (!formData.hookType) {
+      newErrors.hookType = 'Primary hook type is required';
     }
     if (configError) newErrors.config = configError;
 
@@ -256,24 +287,32 @@ const PluginForm = ({ mode = 'create' }) => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     try {
-      // Prepare form data with auto-set hook type for AI Studio plugins
-      const submissionData = { ...formData };
-      if (submissionData.pluginType === 'ai_studio') {
-        submissionData.hookType = 'studio_ui'; // Auto-set for AI Studio plugins
-      }
+      // Prepare submission data with hook types
+      const submissionData = {
+        name: formData.name,
+        description: formData.description,
+        command: formData.command,
+        hook_type: formData.hookType,
+        hook_types: formData.hookTypes.length > 0 ? formData.hookTypes : [formData.hookType],
+        hook_types_customized: formData.hookTypesCustomized,
+        config: formData.config,
+        is_active: formData.isActive,
+        namespace: formData.namespace,
+        oci_reference: formData.ociReference,
+      };
 
       if (isEdit) {
         await pluginService.updatePlugin(id, submissionData);
       } else {
         await pluginService.createPlugin(submissionData);
       }
-      
+
       setSnackbar({
         open: true,
         message: isEdit ? 'Plugin updated successfully' : 'Plugin created successfully',
@@ -349,68 +388,141 @@ const PluginForm = ({ mode = 'create' }) => {
                 helperText="Optional description of what this plugin does"
               />
             </Grid>
+            {/* Primary Hook Type - Required */}
             <Grid item xs={12}>
-              <FormControl fullWidth required>
-                <InputLabel>Plugin Type</InputLabel>
+              <FormControl fullWidth required error={!!errors.hookType}>
+                <InputLabel>Primary Hook Type</InputLabel>
                 <Select
-                  name="pluginType"
-                  value={formData.pluginType}
-                  label="Plugin Type"
+                  name="hookType"
+                  value={formData.hookType}
+                  label="Primary Hook Type"
                   onChange={handleChange}
+                  disabled={!formData.hookTypesCustomized && formData.manifestHookTypes.length > 0}
                 >
-                  <MenuItem value="gateway">Gateway Plugin</MenuItem>
-                  <MenuItem value="ai_studio">AI Studio Plugin</MenuItem>
+                  {availableHookTypes.map((hookType) => (
+                    <MenuItem key={hookType.value} value={hookType.value}>
+                      <Box>
+                        <Typography variant="body1">{hookType.label}</Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {PluginService.HOOK_TYPE_DESCRIPTIONS[hookType.value]}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
                 </Select>
+                {errors.hookType && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                    {errors.hookType}
+                  </Typography>
+                )}
+                <FormHelperText>
+                  {formData.manifestHookTypes.length > 0 && !formData.hookTypesCustomized
+                    ? "From plugin manifest (click Customize to edit)"
+                    : "The primary capability of this plugin"}
+                </FormHelperText>
               </FormControl>
             </Grid>
-            {formData.pluginType === 'gateway' && (
-              <Grid item xs={12}>
-                <FormControl fullWidth required error={!!errors.hookType}>
-                  <InputLabel>Hook Type</InputLabel>
-                  <Select
-                    name="hookType"
-                    value={formData.hookType}
-                    label="Hook Type"
-                    onChange={handleChange}
-                  >
-                    {availableHookTypes.map((hookType) => (
-                      <MenuItem key={hookType.value} value={hookType.value}>
-                        {hookType.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {errors.hookType && (
-                    <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
-                      {errors.hookType}
-                    </Typography>
-                  )}
-                </FormControl>
-              </Grid>
-            )}
-            {formData.pluginType === 'ai_studio' && (
-              <>
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="textSecondary">
-                    AI Studio plugins automatically use the "studio_ui" hook type for UI extensions.
+
+            {/* Additional Hook Types */}
+            <Grid item xs={12}>
+              {!formData.hookTypesCustomized && formData.manifestHookTypes.length > 0 ? (
+                <Box>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    Plugin Capabilities (from manifest)
                   </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={formData.loadImmediately}
-                        onChange={handleSwitchChange('loadImmediately')}
-                        name="loadImmediately"
+                  <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
+                    {formData.manifestHookTypes.map(hook => (
+                      <Chip
+                        key={hook}
+                        label={PluginService.HOOK_TYPE_LABELS[hook] || hook}
+                        color={hook === formData.hookType ? "primary" : "default"}
+                        icon={hook === formData.hookType ? <StarIcon /> : <LockIcon />}
+                        size="small"
                       />
-                    }
-                    label="Load Immediately"
-                  />
-                  <Typography variant="caption" display="block" color="textSecondary" sx={{ mt: 0.5 }}>
-                    Automatically load plugin and fetch manifest after creation (recommended for development)
-                  </Typography>
-                </Grid>
-              </>
-            )}
+                    ))}
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        hookTypesCustomized: true,
+                        hookTypes: [...prev.manifestHookTypes],
+                      }));
+                    }}
+                  >
+                    Customize Hook Types (Advanced)
+                  </Button>
+                </Box>
+              ) : (
+                <Box>
+                  {formData.manifestHookTypes.length > 0 && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      <AlertTitle>Customizing Hook Types</AlertTitle>
+                      You are customizing hook types. Removing hooks declared in the manifest may cause the plugin to malfunction.
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            hookTypes: [...prev.manifestHookTypes],
+                            hookType: prev.manifestHookTypes[0] || '',
+                            hookTypesCustomized: false,
+                          }));
+                        }}
+                        sx={{ ml: 2 }}
+                      >
+                        Reset to Manifest
+                      </Button>
+                    </Alert>
+                  )}
+                  <FormControl fullWidth>
+                    <InputLabel>Additional Hook Types</InputLabel>
+                    <Select
+                      multiple
+                      value={formData.hookTypes}
+                      onChange={(e) => {
+                        const selectedHooks = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          hookTypes: selectedHooks,
+                          // Ensure primary hook is in the list
+                          hookType: selectedHooks.includes(prev.hookType)
+                            ? prev.hookType
+                            : (selectedHooks[0] || ''),
+                        }));
+                      }}
+                      renderValue={(selected) => (
+                        <Box display="flex" gap={0.5} flexWrap="wrap">
+                          {selected.map(hook => (
+                            <Chip
+                              key={hook}
+                              label={PluginService.HOOK_TYPE_LABELS[hook] || hook}
+                              size="small"
+                            />
+                          ))}
+                        </Box>
+                      )}
+                    >
+                      {availableHookTypes.map((hookType) => (
+                        <MenuItem key={hookType.value} value={hookType.value}>
+                          <Checkbox checked={formData.hookTypes.includes(hookType.value)} />
+                          <ListItemText
+                            primary={hookType.label}
+                            secondary={PluginService.HOOK_TYPE_DESCRIPTIONS[hookType.value]}
+                          />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    <FormHelperText>
+                      Select all hook types this plugin implements
+                    </FormHelperText>
+                  </FormControl>
+                </Box>
+              )}
+            </Grid>
             <Grid item xs={12}>
               <TextField
                 fullWidth

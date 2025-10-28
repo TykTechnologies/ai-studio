@@ -58,26 +58,28 @@ type CreatePluginRequest struct {
 	Command         string                 `json:"command" binding:"required"`
 	Checksum        string                 `json:"checksum"` // Optional
 	Config          map[string]interface{} `json:"config"`
-	HookType        string                 `json:"hook_type" binding:"required"`
+	HookType        string                 `json:"hook_type"` // Optional - will be populated from manifest
+	HookTypes       []string               `json:"hook_types"`
+	HookTypesCustomized bool               `json:"hook_types_customized"`
 	IsActive        bool                   `json:"is_active"`
 	Namespace       string                 `json:"namespace,omitempty"`
-	PluginType      string                 `json:"plugin_type,omitempty"`   // "gateway" or "ai_studio"
 	OCIReference    string                 `json:"oci_reference,omitempty"` // OCI artifact reference
 	LoadImmediately bool                   `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
 }
 
 type UpdatePluginRequest struct {
-	Name            *string                `json:"name"`
-	Description     *string                `json:"description"`
-	Command         *string                `json:"command"`
-	Checksum        *string                `json:"checksum"`
-	Config          map[string]interface{} `json:"config"`
-	HookType        *string                `json:"hook_type"`
-	IsActive        *bool                  `json:"is_active"`
-	Namespace       *string                `json:"namespace"`
-	PluginType      *string                `json:"plugin_type"`
-	OCIReference    *string                `json:"oci_reference"`
-	LoadImmediately *bool                  `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
+	Name                *string                `json:"name"`
+	Description         *string                `json:"description"`
+	Command             *string                `json:"command"`
+	Checksum            *string                `json:"checksum"`
+	Config              map[string]interface{} `json:"config"`
+	HookType            *string                `json:"hook_type"`
+	HookTypes           []string               `json:"hook_types"`
+	HookTypesCustomized *bool                  `json:"hook_types_customized"`
+	IsActive            *bool                  `json:"is_active"`
+	Namespace           *string                `json:"namespace"`
+	OCIReference        *string                `json:"oci_reference"`
+	LoadImmediately     *bool                  `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
 }
 
 // PluginServiceInterface defines the interface for plugin operations (adapted from microgateway)
@@ -108,44 +110,41 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	if strings.TrimSpace(req.Command) == "" {
 		return nil, fmt.Errorf("plugin command cannot be empty")
 	}
-	if !isValidHookType(req.HookType) {
-		return nil, fmt.Errorf("invalid hook type: %s", req.HookType)
-	}
 
 	// Security validation for plugin command
 	if err := s.validatePluginCommand(req.Command); err != nil {
 		return nil, err
 	}
 
-	// Set default plugin type if not specified
-	pluginType := req.PluginType
-	if pluginType == "" {
-		pluginType = models.PluginTypeGateway
+	// Hook type is optional during creation - will be populated from manifest
+	// If provided, validate it
+	hookType := req.HookType
+	if hookType == "" {
+		// Default to "pending" - will be updated from manifest via validate-and-load
+		hookType = "pending"
+	} else if !models.IsValidHookType(hookType) {
+		return nil, fmt.Errorf("invalid hook type: %s - must be one of: %v", hookType, models.GetValidHookTypes())
 	}
 
-	// Set default hook type for AI Studio plugins
-	hookType := req.HookType
-	if pluginType == models.PluginTypeAIStudio && hookType == "" {
-		hookType = models.HookTypeStudioUI
+	// Hook types from request (if customized)
+	hookTypes := req.HookTypes
+	if len(hookTypes) == 0 && hookType != "pending" {
+		hookTypes = []string{hookType}
 	}
 
 	plugin := &models.Plugin{
-		Name:         req.Name,
-		Description:  req.Description,
-		Command:      req.Command,
-		Checksum:     req.Checksum,
-		Config:       req.Config,
-		HookType:     hookType,
-		IsActive:     req.IsActive,
-		Namespace:    req.Namespace,
-		PluginType:   pluginType,
-		OCIReference: req.OCIReference,
-		Manifest:     make(map[string]interface{}),
-	}
-
-	// Validate plugin type
-	if !plugin.IsValidPluginType() {
-		return nil, fmt.Errorf("invalid plugin type: %s", pluginType)
+		Name:                req.Name,
+		Description:         req.Description,
+		Command:             req.Command,
+		Checksum:            req.Checksum,
+		Config:              req.Config,
+		HookType:            hookType,
+		HookTypes:           hookTypes,
+		HookTypesCustomized: req.HookTypesCustomized,
+		IsActive:            req.IsActive,
+		Namespace:           req.Namespace,
+		OCIReference:        req.OCIReference,
+		Manifest:            make(map[string]interface{}),
 	}
 
 	if err := plugin.Create(s.db); err != nil {
@@ -225,13 +224,7 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	if req.Namespace != nil {
 		plugin.Namespace = *req.Namespace
 	}
-	if req.PluginType != nil {
-		plugin.PluginType = *req.PluginType
-		// Validate plugin type
-		if !plugin.IsValidPluginType() {
-			return nil, fmt.Errorf("invalid plugin type: %s", *req.PluginType)
-		}
-	}
+	// PluginType field removed - use hook types instead
 	// IsOCI is now determined by command prefix, no need to set explicitly
 	if req.OCIReference != nil {
 		plugin.OCIReference = *req.OCIReference
@@ -598,9 +591,9 @@ func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest
 		Name:         req.Name,
 		Description:  req.Description,
 		Command:      req.OCIReference, // Store OCI reference as command
-		PluginType:   models.PluginTypeAIStudio,
 		OCIReference: req.OCIReference,
-		HookType:     models.HookTypeStudioUI, // AI Studio plugins use studio_ui hook type
+		HookType:     models.HookTypeStudioUI, // OCI plugins default to studio_ui hook type
+		HookTypes:    []string{models.HookTypeStudioUI}, // OCI plugins support UI extensions
 		IsActive:     req.IsActive,
 		Namespace:    req.Namespace,
 		Config:       req.Config,
@@ -675,12 +668,19 @@ func (s *PluginService) GetPluginsByType(pluginType string) ([]models.Plugin, er
 
 // GetAIStudioPluginsWithManifests returns AI Studio plugins that have UI manifests
 func (s *PluginService) GetAIStudioPluginsWithManifests() ([]models.Plugin, error) {
-	var plugins []models.Plugin
+	// Get all active plugins
+	var allPlugins []models.Plugin
+	if err := s.db.Where("is_active = ?", true).
+		Order("created_at DESC").Find(&allPlugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get plugins: %w", err)
+	}
 
-	if err := s.db.Where("plugin_type = ? AND is_active = ? AND manifest IS NOT NULL AND manifest != '{}'",
-		models.PluginTypeAIStudio, true).
-		Order("created_at DESC").Find(&plugins).Error; err != nil {
-		return nil, fmt.Errorf("failed to get AI Studio plugins with manifests: %w", err)
+	// Filter for plugins that support studio_ui hook and have manifests
+	var plugins []models.Plugin
+	for _, plugin := range allPlugins {
+		if plugin.SupportsHookType(models.HookTypeStudioUI) && len(plugin.Manifest) > 0 {
+			plugins = append(plugins, plugin)
+		}
 	}
 
 	return plugins, nil
@@ -863,8 +863,8 @@ func (s *PluginService) LoadPluginManifestViaGRPC(pluginID uint) (*models.Plugin
 		return nil, fmt.Errorf("failed to get plugin: %w", err)
 	}
 
-	if !plugin.IsAIStudioPlugin() {
-		return nil, fmt.Errorf("manifest loading only supported for AI Studio plugins")
+	if !plugin.SupportsHookType(models.HookTypeStudioUI) {
+		return nil, fmt.Errorf("manifest loading only supported for AI Studio UI plugins")
 	}
 
 	// Check if AI Studio plugin manager is available

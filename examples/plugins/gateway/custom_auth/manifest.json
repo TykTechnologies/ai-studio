@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.custom-auth",
+  "version": "1.0.0",
+  "name": "Custom Authentication",
+  "description": "Custom token-based authentication plugin",
+  "capabilities": {
+    "hooks": ["auth"],
+    "primary_hook": "auth"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

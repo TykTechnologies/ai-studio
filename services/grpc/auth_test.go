@@ -29,7 +29,7 @@ func createTestPlugin(t *testing.T, db *gorm.DB, authorized bool, scopes []strin
 		Name:                    "Test Plugin",
 		Command:                 "test-command",
 		HookType:                models.HookTypeStudioUI,
-		PluginType:              models.PluginTypeAIStudio,
+		HookTypes:               []string{models.HookTypeStudioUI},
 		IsActive:                true,
 		ServiceAccessAuthorized: authorized,
 		ServiceScopes:           scopes,

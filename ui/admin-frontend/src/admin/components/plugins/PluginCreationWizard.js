@@ -45,9 +45,11 @@ const PluginCreationWizard = () => {
     name: '',
     slug: '',
     description: '',
-    pluginType: 'gateway',
     command: '',
     hookType: '',
+    hookTypes: [],
+    manifestHookTypes: [],
+    hookTypesCustomized: false,
     isActive: true,
     namespace: '',
     config: {},
@@ -95,20 +97,33 @@ const PluginCreationWizard = () => {
           command: basicInfo.command,
         });
 
+        const attrs = response.data.attributes;
+
         setMetadata({
-          configSchema: response.data.attributes.config_schema,
-          manifest: response.data.attributes.manifest,
-          scopes: response.data.attributes.scopes || [],
-          status: response.data.attributes.status,
+          configSchema: attrs.config_schema,
+          manifest: attrs.manifest,
+          scopes: attrs.scopes || [],
+          status: attrs.status,
         });
 
-        setWorkflowState(response.data.attributes.status);
+        // Update hook types from manifest if available
+        if (attrs.hook_types && attrs.hook_types.length > 0) {
+          setPluginData(prev => ({
+            ...prev,
+            hookType: attrs.primary_hook || attrs.hook_types[0],
+            hookTypes: attrs.hook_types,
+            manifestHookTypes: attrs.hook_types,
+            hookTypesCustomized: false,
+          }));
+        }
 
-        // If there are scopes (AI Studio/Agent plugins), go to approval step
-        if (response.data.attributes.scopes && response.data.attributes.scopes.length > 0) {
+        setWorkflowState(attrs.status);
+
+        // If there are scopes (UI/Agent plugins), go to approval step
+        if (attrs.scopes && attrs.scopes.length > 0) {
           handleNext(); // Go to scope approval step
         } else {
-          // No scopes (Gateway plugins), skip to configuration
+          // No scopes, skip to configuration
           setActiveStep(2);
           setWorkflowState(WORKFLOW_STATES.READY);
         }
@@ -171,13 +186,16 @@ const PluginCreationWizard = () => {
   };
 
   // Step 3: Handle final configuration and completion
-  const handleConfigurationComplete = async (config) => {
+  const handleConfigurationComplete = async (configData) => {
     setLoading(true);
     try {
-      // Update plugin with final configuration
+      // Update plugin with final configuration and hook types
       await pluginService.updatePlugin(pluginId, {
-        ...pluginData,
-        config,
+        config: configData.config,
+        hookType: configData.hookTypes?.[0] || pluginData.hookType,
+        hookTypes: configData.hookTypes || pluginData.hookTypes,
+        hookTypesCustomized: configData.hookTypesCustomized || false,
+        isActive: true,
       });
 
       setSnackbar({
@@ -199,16 +217,12 @@ const PluginCreationWizard = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // Determine which steps to show
-  const isGatewayPlugin = pluginData.pluginType === 'gateway';
+  // Determine which steps to show based on whether plugin has scopes
   const hasScopes = metadata.scopes && metadata.scopes.length > 0;
-  const shouldShowScopeStep = !isGatewayPlugin && hasScopes;
+  const shouldShowScopeStep = hasScopes;
 
-  // Adjust step labels based on plugin type
+  // Adjust step labels based on whether scopes are present
   const getStepLabels = () => {
-    if (isGatewayPlugin) {
-      return ['Basic Info', 'Configuration'];
-    }
     if (!shouldShowScopeStep) {
       return ['Basic Info', 'Configuration'];
     }
@@ -235,7 +249,7 @@ const PluginCreationWizard = () => {
 
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
-          Create a new plugin by following these steps. AI Studio and Agent plugins will require scope approval for security.
+          Create a new plugin by following these steps. Plugins with UI or Agent capabilities will require scope approval for security.
         </Typography>
 
         {/* Progress Stepper */}
@@ -296,7 +310,6 @@ const PluginCreationWizard = () => {
               pluginData={pluginData}
               configSchema={metadata.configSchema}
               onComplete={handleConfigurationComplete}
-              onBack={handleBack}
               loading={loading}
               disabled={loading}
             />

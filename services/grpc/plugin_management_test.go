@@ -37,7 +37,7 @@ func TestConvertPluginToPB(t *testing.T) {
 		Description:             "Test Description",
 		Command:                 "test-command",
 		HookType:                models.HookTypeStudioUI,
-		PluginType:              models.PluginTypeAIStudio,
+		HookTypes:               []string{models.HookTypeStudioUI},
 		IsActive:                true,
 		Namespace:               "test-namespace",
 		ServiceAccessAuthorized: true,
@@ -55,7 +55,7 @@ func TestConvertPluginToPB(t *testing.T) {
 	assert.Equal(t, "Test Description", pbPlugin.Description)
 	assert.Equal(t, "test-command", pbPlugin.Command)
 	assert.Equal(t, models.HookTypeStudioUI, pbPlugin.HookType)
-	assert.Equal(t, models.PluginTypeAIStudio, pbPlugin.PluginType)
+	assert.Equal(t, []string{models.HookTypeStudioUI}, pbPlugin.HookTypes)
 	assert.True(t, pbPlugin.IsActive)
 	assert.Equal(t, "test-namespace", pbPlugin.Namespace)
 	assert.True(t, pbPlugin.ServiceAccessAuthorized)

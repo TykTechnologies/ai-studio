@@ -35,13 +35,29 @@ type PluginServiceInterface interface {
 
 // PluginData represents plugin data from database (minimal interface)
 type PluginData struct {
-	ID       uint
-	Name     string
-	HookType string
-	Command  string
-	Config   []byte // JSON-encoded config (matches datatypes.JSON from database)
-	Checksum string
-	IsActive bool
+	ID        uint
+	Name      string
+	HookType  string
+	HookTypes []string // All hook types this plugin supports
+	Command   string
+	Config    []byte // JSON-encoded config (matches datatypes.JSON from database)
+	Checksum  string
+	IsActive  bool
+}
+
+// SupportsHookType checks if plugin data supports a specific hook type
+func (pd *PluginData) SupportsHookType(hookType string) bool {
+	// Check primary hook
+	if pd.HookType == hookType {
+		return true
+	}
+	// Check additional hooks
+	for _, ht := range pd.HookTypes {
+		if ht == hookType {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadedPlugin represents a loaded plugin instance
@@ -408,7 +424,15 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 
 	// Filter by hook type and ensure plugins are loaded
 	for _, pluginData := range pluginsData {
-		if interfaces.HookType(pluginData.HookType) != hookType {
+		// Check if plugin supports this hook type
+		if !pluginData.SupportsHookType(string(hookType)) {
+			log.Debug().
+				Uint("plugin_id", pluginData.ID).
+				Str("plugin_name", pluginData.Name).
+				Str("plugin_hook", pluginData.HookType).
+				Strs("plugin_hooks", pluginData.HookTypes).
+				Str("required_hook", string(hookType)).
+				Msg("Plugin does not support required hook type (expected)")
 			continue
 		}
 
@@ -424,7 +448,7 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 					Uint("plugin_id", pluginData.ID).
 					Err(err).
 					Msg("Failed to auto-load plugin")
-				continue
+				return nil, fmt.Errorf("failed to load plugin %d: %w", pluginData.ID, err)
 			}
 		}
 

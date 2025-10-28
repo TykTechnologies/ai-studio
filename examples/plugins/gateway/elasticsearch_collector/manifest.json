@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.elasticsearch-collector",
+  "version": "1.0.0",
+  "name": "Elasticsearch Collector",
+  "description": "Collects analytics and proxy data to Elasticsearch",
+  "capabilities": {
+    "hooks": ["data_collection"],
+    "primary_hook": "data_collection"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

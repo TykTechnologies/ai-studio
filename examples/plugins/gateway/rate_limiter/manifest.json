@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.rate-limiter",
+  "version": "1.0.0",
+  "name": "Rate Limiter",
+  "description": "Rate limiting plugin for request throttling",
+  "capabilities": {
+    "hooks": ["pre_auth"],
+    "primary_hook": "pre_auth"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

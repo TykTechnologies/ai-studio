@@ -175,7 +175,7 @@ func (a *API) listPlugins(c *gin.Context) {
 				HookType:     plugin.HookType,
 				IsActive:     plugin.IsActive,
 				Namespace:    plugin.Namespace,
-				PluginType:   plugin.PluginType,
+				PluginType:   plugin.GetCapabilityCategory(),
 				OCIReference: plugin.OCIReference,
 				Manifest:     plugin.Manifest,
 				CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -301,7 +301,7 @@ func (a *API) createPlugin(c *gin.Context) {
 	}
 
 	// Auto-load AI Studio plugins if requested
-	if req.LoadImmediately && plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+	if req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
 		log.Printf("Auto-loading AI Studio plugin: %s (ID: %d)", plugin.Name, plugin.ID)
 
 		// Load the plugin
@@ -461,7 +461,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	// Handle plugin activation state changes for AI Studio plugins
-	if plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+	if plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
 		wasActive := originalPlugin.IsActive
 		isNowActive := plugin.IsActive
 
@@ -500,7 +500,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	// Auto-load AI Studio plugins if requested on update
-	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
 		log.Printf("Auto-loading AI Studio plugin after update: %s (ID: %d)", plugin.Name, plugin.ID)
 
 		// Unload if currently loaded to ensure fresh reload
@@ -848,12 +848,12 @@ func (a *API) reloadPlugin(c *gin.Context) {
 		return
 	}
 
-	if !plugin.IsAIStudioPlugin() {
+	if !plugin.SupportsHookType(models.HookTypeStudioUI) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Only AI Studio plugins can be reloaded"}},
+			}{{Title: "Bad Request", Detail: "Only AI Studio UI plugins can be reloaded"}},
 		})
 		return
 	}
@@ -950,7 +950,7 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			HookType:     plugin.HookType,
 			IsActive:     plugin.IsActive,
 			Namespace:    plugin.Namespace,
-			PluginType:   plugin.PluginType,
+			PluginType:   plugin.GetCapabilityCategory(),
 			OCIReference: plugin.OCIReference,
 			Manifest:     plugin.Manifest,
 			CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -1144,8 +1144,16 @@ func (a *API) refreshOCIPlugin(c *gin.Context) {
 // @Router /api/v1/plugins/type/{type} [get]
 // @Security BearerAuth
 func (a *API) getPluginsByType(c *gin.Context) {
-	pluginType := c.Param("type")
-	if pluginType != models.PluginTypeGateway && pluginType != models.PluginTypeAIStudio {
+	typeParam := c.Param("type")
+
+	// Map old type names to hook types for backward compatibility
+	var hookTypes []string
+	switch typeParam {
+	case "gateway":
+		hookTypes = []string{models.HookTypeAuth, models.HookTypePreAuth, models.HookTypePostAuth, models.HookTypeOnResponse, models.HookTypeDataCollection}
+	case "ai_studio":
+		hookTypes = []string{models.HookTypeStudioUI, models.HookTypeAgent}
+	default:
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -1155,7 +1163,8 @@ func (a *API) getPluginsByType(c *gin.Context) {
 		return
 	}
 
-	plugins, err := a.service.PluginService.GetPluginsByType(pluginType)
+	// Get all plugins and filter by hook types
+	allPlugins, _, err := a.service.PluginService.ListAllPlugins(1, 10000, "", "__ALL_NAMESPACES__")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -1164,6 +1173,17 @@ func (a *API) getPluginsByType(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Filter plugins that support any of the requested hook types
+	var plugins []models.Plugin
+	for _, plugin := range allPlugins {
+		for _, hookType := range hookTypes {
+			if plugin.SupportsHookType(hookType) {
+				plugins = append(plugins, plugin)
+				break
+			}
+		}
 	}
 
 	// Serialize response
@@ -1185,7 +1205,8 @@ func (a *API) getPluginsByType(c *gin.Context) {
 // @Router /api/v1/plugins/ai-studio/manifests [get]
 // @Security BearerAuth
 func (a *API) getAIStudioPluginsWithManifests(c *gin.Context) {
-	plugins, err := a.service.PluginService.GetAIStudioPluginsWithManifests()
+	// Get all plugins and filter for studio_ui hook type with manifests
+	allPlugins, _, err := a.service.PluginService.ListAllPlugins(1, 10000, "", "__ALL_NAMESPACES__")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -1194,6 +1215,14 @@ func (a *API) getAIStudioPluginsWithManifests(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Filter for AI Studio UI plugins with manifests
+	var plugins []models.Plugin
+	for _, plugin := range allPlugins {
+		if plugin.SupportsHookType(models.HookTypeStudioUI) && len(plugin.Manifest) > 0 {
+			plugins = append(plugins, plugin)
+		}
 	}
 
 	// Serialize response
@@ -1440,10 +1469,10 @@ func (a *API) parsePluginManifest(c *gin.Context) {
 	}
 
 	// For AI Studio plugins, get manifest from running plugin via gRPC
-	log.Printf("DEBUG MANIFEST: Plugin retrieved - ID=%d, Name=%s, Type=%s", plugin.ID, plugin.Name, plugin.PluginType)
+	log.Printf("DEBUG MANIFEST: Plugin retrieved - ID=%d, Name=%s, Hooks=%v", plugin.ID, plugin.Name, plugin.GetAllHookTypes())
 	var manifest *models.PluginManifest
 
-	if plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+	if plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
 		log.Printf("DEBUG MANIFEST: Taking AI Studio path for plugin ID %d", plugin.ID)
 		// Ensure plugin is loaded
 		if !a.service.AIStudioPluginManager.IsPluginLoaded(uint(id)) {
@@ -1686,24 +1715,25 @@ func (a *API) getPluginStatus(c *gin.Context) {
 	}
 
 	status := map[string]interface{}{
-		"plugin_id":     plugin.ID,
-		"plugin_name":   plugin.Name,
-		"plugin_type":   plugin.PluginType,
-		"is_active":     plugin.IsActive,
-		"command":       plugin.Command,
-		"is_oci":        plugin.IsOCIPlugin(),
-		"is_local":      plugin.IsLocalPlugin(),
-		"is_grpc":       plugin.IsGRPCPlugin(),
-		"hook_type":     plugin.HookType,
-		"loaded":        false,
-		"healthy":       false,
-		"load_time":     nil,
-		"last_ping":     nil,
-		"error":         nil,
+		"plugin_id":       plugin.ID,
+		"plugin_name":     plugin.Name,
+		"plugin_category": plugin.GetCapabilityCategory(),
+		"hook_types":      plugin.GetAllHookTypes(),
+		"is_active":       plugin.IsActive,
+		"command":         plugin.Command,
+		"is_oci":          plugin.IsOCIPlugin(),
+		"is_local":        plugin.IsLocalPlugin(),
+		"is_grpc":         plugin.IsGRPCPlugin(),
+		"hook_type":       plugin.HookType,
+		"loaded":          false,
+		"healthy":         false,
+		"load_time":       nil,
+		"last_ping":       nil,
+		"error":           nil,
 	}
 
 	// Check if plugin is loaded (for AI Studio plugins)
-	if plugin.IsAIStudioPlugin() && a.service.AIStudioPluginManager != nil {
+	if plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
 		if loadedPlugin, exists := a.service.AIStudioPluginManager.GetLoadedPlugin(uint(id)); exists {
 			status["loaded"] = true
 			status["healthy"] = loadedPlugin.IsHealthy

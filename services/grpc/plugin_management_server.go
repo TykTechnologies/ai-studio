@@ -182,10 +182,12 @@ func convertPluginToPB(plugin *models.Plugin) *pb.PluginInfo {
 		HookType:                plugin.HookType,
 		IsActive:                plugin.IsActive,
 		Namespace:               plugin.Namespace,
-		PluginType:              plugin.PluginType,
+		HookTypes:               plugin.HookTypes,
 		ServiceAccessAuthorized: plugin.ServiceAccessAuthorized,
 		ServiceScopes:           plugin.ServiceScopes,
 		CreatedAt:               timestamppb.New(plugin.CreatedAt),
 		UpdatedAt:               timestamppb.New(plugin.UpdatedAt),
+		HookTypesCustomized:     plugin.HookTypesCustomized,
+		PluginCategory:          plugin.GetCapabilityCategory(),
 	}
 }

@@ -439,11 +439,13 @@ type PluginInfo struct {
 	HookType                string                 `protobuf:"bytes,6,opt,name=hook_type,json=hookType,proto3" json:"hook_type,omitempty"`
 	IsActive                bool                   `protobuf:"varint,7,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
 	Namespace               string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	PluginType              string                 `protobuf:"bytes,9,opt,name=plugin_type,json=pluginType,proto3" json:"plugin_type,omitempty"`
+	HookTypes               []string               `protobuf:"bytes,9,rep,name=hook_types,json=hookTypes,proto3" json:"hook_types,omitempty"`
 	ServiceAccessAuthorized bool                   `protobuf:"varint,10,opt,name=service_access_authorized,json=serviceAccessAuthorized,proto3" json:"service_access_authorized,omitempty"`
 	ServiceScopes           []string               `protobuf:"bytes,11,rep,name=service_scopes,json=serviceScopes,proto3" json:"service_scopes,omitempty"`
 	CreatedAt               *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt               *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	HookTypesCustomized     bool                   `protobuf:"varint,14,opt,name=hook_types_customized,json=hookTypesCustomized,proto3" json:"hook_types_customized,omitempty"`
+	PluginCategory          string                 `protobuf:"bytes,15,opt,name=plugin_category,json=pluginCategory,proto3" json:"plugin_category,omitempty"` // Computed field for display/backward compatibility
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -534,11 +536,11 @@ func (x *PluginInfo) GetNamespace() string {
 	return ""
 }
 
-func (x *PluginInfo) GetPluginType() string {
+func (x *PluginInfo) GetHookTypes() []string {
 	if x != nil {
-		return x.PluginType
+		return x.HookTypes
 	}
-	return ""
+	return nil
 }
 
 func (x *PluginInfo) GetServiceAccessAuthorized() bool {
@@ -567,6 +569,20 @@ func (x *PluginInfo) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *PluginInfo) GetHookTypesCustomized() bool {
+	if x != nil {
+		return x.HookTypesCustomized
+	}
+	return false
+}
+
+func (x *PluginInfo) GetPluginCategory() string {
+	if x != nil {
+		return x.PluginCategory
+	}
+	return ""
 }
 
 type ListLLMsRequest struct {
@@ -10732,7 +10748,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"configJson\"P\n" +
 	"\x1aUpdatePluginConfigResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xdf\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xba\x04\n" +
 	"\n" +
 	"PluginInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -10743,16 +10759,18 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"configJson\x12\x1b\n" +
 	"\thook_type\x18\x06 \x01(\tR\bhookType\x12\x1b\n" +
 	"\tis_active\x18\a \x01(\bR\bisActive\x12\x1c\n" +
-	"\tnamespace\x18\b \x01(\tR\tnamespace\x12\x1f\n" +
-	"\vplugin_type\x18\t \x01(\tR\n" +
-	"pluginType\x12:\n" +
+	"\tnamespace\x18\b \x01(\tR\tnamespace\x12\x1d\n" +
+	"\n" +
+	"hook_types\x18\t \x03(\tR\thookTypes\x12:\n" +
 	"\x19service_access_authorized\x18\n" +
 	" \x01(\bR\x17serviceAccessAuthorized\x12%\n" +
 	"\x0eservice_scopes\x18\v \x03(\tR\rserviceScopes\x129\n" +
 	"\n" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe0\x01\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x122\n" +
+	"\x15hook_types_customized\x18\x0e \x01(\bR\x13hookTypesCustomized\x12'\n" +
+	"\x0fplugin_category\x18\x0f \x01(\tR\x0epluginCategory\"\xe0\x01\n" +
 	"\x0fListLLMsRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x16\n" +
 	"\x06vendor\x18\x02 \x01(\tR\x06vendor\x12 \n" +

@@ -18,6 +18,8 @@ type Plugin struct {
 	Checksum    string                 `json:"checksum" gorm:"size:255"` // Optional - for future use
 	Config      map[string]interface{} `json:"config" gorm:"serializer:json"`
 	HookType    string                 `json:"hook_type" gorm:"not null;size:50;index:idx_plugins_hook_type"`
+	HookTypes           []string               `json:"hook_types" gorm:"serializer:json"`                        // All hook types this plugin supports
+	HookTypesCustomized bool                   `json:"hook_types_customized" gorm:"default:false"`               // True if user overrode manifest hooks
 	IsActive    bool                   `json:"is_active" gorm:"index:idx_plugins_is_active"`
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
@@ -26,8 +28,7 @@ type Plugin struct {
 	// Hub-and-Spoke Configuration
 	Namespace   string                 `json:"namespace" gorm:"default:'';index:idx_plugin_namespace"`
 
-	// Plugin Type and OCI Support
-	PluginType  string                 `json:"plugin_type" gorm:"not null;default:'gateway';size:50;index:idx_plugins_type"` // "gateway" or "ai_studio"
+	// OCI Support
 	OCIReference string                `json:"oci_reference" gorm:"size:500"`                                                // OCI artifact reference (for OCI plugins)
 	Manifest    map[string]interface{} `json:"manifest" gorm:"serializer:json"`                                              // Plugin manifest for UI extensions
 
@@ -60,20 +61,45 @@ const (
 	HookTypeAgent    = "agent"     // AI Studio agent plugins
 )
 
-// Plugin type constants
-const (
-	PluginTypeGateway   = "gateway"   // Microgateway plugins
-	PluginTypeAIStudio  = "ai_studio" // AI Studio UI extension plugins
-	PluginTypeAgent     = "agent"     // AI Studio agent plugins
-)
+// validHookTypes contains all valid hook type constants
+var validHookTypes = []string{
+	HookTypePreAuth,
+	HookTypeAuth,
+	HookTypePostAuth,
+	HookTypeOnResponse,
+	HookTypeDataCollection,
+	HookTypeStudioUI,
+	HookTypeAgent,
+}
+
+// IsValidHookType validates if a hook type string is valid
+func IsValidHookType(hookType string) bool {
+	// Allow "pending" as a temporary placeholder during plugin creation
+	if hookType == "pending" {
+		return true
+	}
+	for _, valid := range validHookTypes {
+		if hookType == valid {
+			return true
+		}
+	}
+	return false
+}
+
+// GetValidHookTypes returns all valid hook types
+func GetValidHookTypes() []string {
+	result := make([]string, len(validHookTypes))
+	copy(result, validHookTypes)
+	return result
+}
 
 // NewPlugin creates a new Plugin instance
 func NewPlugin() *Plugin {
 	return &Plugin{
-		IsActive:   true,
-		Config:     make(map[string]interface{}),
-		PluginType: PluginTypeGateway, // Default to gateway plugin
-		Manifest:   make(map[string]interface{}),
+		IsActive:  true,
+		Config:    make(map[string]interface{}),
+		Manifest:  make(map[string]interface{}),
+		HookTypes: []string{}, // Empty, must be set explicitly
 	}
 }
 
@@ -100,42 +126,111 @@ func (p *Plugin) Delete(db *gorm.DB) error {
 
 // IsValidHookType validates if the hook type is supported
 func (p *Plugin) IsValidHookType() bool {
-	validTypes := []string{
-		HookTypePreAuth,
-		HookTypeAuth,
-		HookTypePostAuth,
-		HookTypeOnResponse,
-		HookTypeDataCollection,
-		HookTypeStudioUI,
-		HookTypeAgent,
-	}
+	return IsValidHookType(p.HookType)
+}
 
-	for _, validType := range validTypes {
-		if p.HookType == validType {
+// SupportsHookType checks if plugin supports a specific hook type
+func (p *Plugin) SupportsHookType(hookType string) bool {
+	// Check primary hook
+	if p.HookType == hookType {
+		return true
+	}
+	// Check additional hooks
+	for _, ht := range p.HookTypes {
+		if ht == hookType {
 			return true
 		}
 	}
 	return false
 }
 
-// IsValidPluginType validates if the plugin type is supported
-func (p *Plugin) IsValidPluginType() bool {
-	return p.PluginType == PluginTypeGateway || p.PluginType == PluginTypeAIStudio || p.PluginType == PluginTypeAgent
+// GetAllHookTypes returns all hook types (primary + additional)
+func (p *Plugin) GetAllHookTypes() []string {
+	hookSet := make(map[string]bool)
+
+	// Add primary hook
+	if p.HookType != "" {
+		hookSet[p.HookType] = true
+	}
+
+	// Add additional hooks
+	for _, ht := range p.HookTypes {
+		if ht != "" {
+			hookSet[ht] = true
+		}
+	}
+
+	// Convert to sorted slice for consistency (using validHookTypes order)
+	result := make([]string, 0, len(hookSet))
+	for _, validHook := range validHookTypes {
+		if hookSet[validHook] {
+			result = append(result, validHook)
+		}
+	}
+
+	return result
 }
 
-// IsAIStudioPlugin returns true if this is an AI Studio plugin
-func (p *Plugin) IsAIStudioPlugin() bool {
-	return p.PluginType == PluginTypeAIStudio
+// GetCapabilityCategory returns a human-readable category string
+func (p *Plugin) GetCapabilityCategory() string {
+	hooks := p.GetAllHookTypes()
+
+	hasGateway := false
+	hasUI := false
+	hasAgent := false
+
+	for _, ht := range hooks {
+		switch ht {
+		case HookTypeAuth, HookTypePreAuth, HookTypePostAuth, HookTypeOnResponse, HookTypeDataCollection:
+			hasGateway = true
+		case HookTypeStudioUI:
+			hasUI = true
+		case HookTypeAgent:
+			hasAgent = true
+		}
+	}
+
+	// Return specific combinations
+	if hasGateway && hasUI && hasAgent {
+		return "Full-Stack Plugin"
+	}
+	if hasGateway && hasUI {
+		return "Gateway + UI"
+	}
+	if hasGateway && hasAgent {
+		return "Gateway + Agent"
+	}
+	if hasUI && hasAgent {
+		return "Agent + UI"
+	}
+	if hasGateway {
+		return "Gateway Plugin"
+	}
+	if hasUI {
+		return "UI Extension"
+	}
+	if hasAgent {
+		return "Agent Plugin"
+	}
+
+	return "Uncategorized"
 }
 
-// IsGatewayPlugin returns true if this is a Gateway plugin
-func (p *Plugin) IsGatewayPlugin() bool {
-	return p.PluginType == PluginTypeGateway
-}
+// ValidateHookTypes validates all hook types are valid
+func (p *Plugin) ValidateHookTypes() error {
+	allHooks := p.GetAllHookTypes()
 
-// IsAgentPlugin returns true if this is an Agent plugin
-func (p *Plugin) IsAgentPlugin() bool {
-	return p.PluginType == PluginTypeAgent
+	if len(allHooks) == 0 {
+		return fmt.Errorf("plugin must declare at least one hook type")
+	}
+
+	for _, hook := range allHooks {
+		if !IsValidHookType(hook) {
+			return fmt.Errorf("invalid hook type '%s' - must be one of: %v", hook, GetValidHookTypes())
+		}
+	}
+
+	return nil
 }
 
 // IsOCIPlugin returns true if this plugin uses OCI (determined by command prefix)

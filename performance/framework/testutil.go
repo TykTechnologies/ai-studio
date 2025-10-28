@@ -190,10 +190,10 @@ func (bdb *BenchmarkDB) createTestData(t *testing.B) {
 		plugins[i] = models.Plugin{
 			Model:       gorm.Model{ID: uint(i + 1)},
 			Name:        fmt.Sprintf("TestPlugin%d", i+1),
-			Slug:        fmt.Sprintf("test-plugin-%d", i+1),
 			Description: fmt.Sprintf("Test plugin %d for benchmarking", i+1),
 			Command:     fmt.Sprintf("./plugin%d", i+1),
 			HookType:    hookTypes[i%len(hookTypes)],
+			HookTypes:   []string{hookTypes[i%len(hookTypes)]},
 			IsActive:    true,
 			Namespace:   "",
 		}

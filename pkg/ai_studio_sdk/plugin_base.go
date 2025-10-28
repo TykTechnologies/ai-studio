@@ -63,9 +63,9 @@ func (p *AIStudioPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (*
 		log.Warn().Msg("GRPC broker not available - service API client not configured")
 	}
 
-	// Call implementation's initialization
+	// Call implementation's initialization with config
 	if p.impl != nil {
-		if err := p.impl.OnInitialize(p.ServiceAPI, p.PluginID); err != nil {
+		if err := p.impl.OnInitialize(p.ServiceAPI, p.PluginID, req.Config); err != nil {
 			log.Error().Err(err).Msg("Plugin implementation initialization failed")
 			return &pb.InitResponse{
 				Success:      false,
@@ -85,6 +85,14 @@ func (p *AIStudioPlugin) setupServiceAPIClient() error {
 	// No separate connection needed - uses the existing bidirectional gRPC connection
 	log.Info().Msg("Service API client will be available via existing bidirectional connection")
 	return nil
+}
+
+// Ping implements plugin health check
+func (p *AIStudioPlugin) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
+	return &pb.PingResponse{
+		Healthy:   true,
+		Timestamp: req.Timestamp,
+	}, nil
 }
 
 // Shutdown implements graceful plugin shutdown
@@ -198,6 +206,48 @@ func (p *AIStudioPlugin) GetConfigSchema(ctx context.Context, req *pb.GetConfigS
 	}, nil
 }
 
+// Authenticate implements auth hook by delegating to implementation if it supports auth
+// This allows hybrid plugins to implement both UI and auth capabilities
+func (p *AIStudioPlugin) Authenticate(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
+	// Check if implementation has Authenticate method (for hybrid plugins)
+	type AuthPlugin interface {
+		Authenticate(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResponse, error)
+	}
+
+	if authImpl, ok := p.impl.(AuthPlugin); ok {
+		return authImpl.Authenticate(ctx, req)
+	}
+
+	// Implementation doesn't support auth - return unimplemented
+	return nil, fmt.Errorf("plugin does not implement authentication")
+}
+
+// GetAppByCredential delegates to implementation if supported
+func (p *AIStudioPlugin) GetAppByCredential(ctx context.Context, req *pb.GetAppRequest) (*pb.GetAppResponse, error) {
+	type AppCredentialPlugin interface {
+		GetAppByCredential(ctx context.Context, req *pb.GetAppRequest) (*pb.GetAppResponse, error)
+	}
+
+	if appImpl, ok := p.impl.(AppCredentialPlugin); ok {
+		return appImpl.GetAppByCredential(ctx, req)
+	}
+
+	return &pb.GetAppResponse{}, fmt.Errorf("plugin does not implement GetAppByCredential")
+}
+
+// GetUserByCredential delegates to implementation if supported
+func (p *AIStudioPlugin) GetUserByCredential(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+	type UserCredentialPlugin interface {
+		GetUserByCredential(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error)
+	}
+
+	if userImpl, ok := p.impl.(UserCredentialPlugin); ok {
+		return userImpl.GetUserByCredential(ctx, req)
+	}
+
+	return &pb.GetUserResponse{}, fmt.Errorf("plugin does not implement GetUserByCredential")
+}
+
 // SetBroker allows the SDK to access the GRPCBroker for service API setup
 func (p *AIStudioPlugin) SetBroker(broker *goplugin.GRPCBroker) {
 	p.broker = broker
@@ -260,9 +310,9 @@ func (p *AIStudioAgentPlugin) Initialize(ctx context.Context, req *pb.InitReques
 		log.Warn().Msg("GRPC broker not available - service API client not configured")
 	}
 
-	// Call implementation's initialization
+	// Call implementation's initialization with config
 	if p.impl != nil {
-		if err := p.impl.OnInitialize(p.ServiceAPI, p.PluginID); err != nil {
+		if err := p.impl.OnInitialize(p.ServiceAPI, p.PluginID, req.Config); err != nil {
 			log.Error().Err(err).Msg("Agent plugin implementation initialization failed")
 			return &pb.InitResponse{
 				Success:      false,
@@ -279,6 +329,14 @@ func (p *AIStudioAgentPlugin) Initialize(ctx context.Context, req *pb.InitReques
 func (p *AIStudioAgentPlugin) setupServiceAPIClient() error {
 	log.Info().Msg("Service API client will be available via existing bidirectional connection")
 	return nil
+}
+
+// Ping implements plugin health check for agent plugins
+func (p *AIStudioAgentPlugin) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
+	return &pb.PingResponse{
+		Healthy:   true,
+		Timestamp: req.Timestamp,
+	}, nil
 }
 
 // Shutdown implements graceful plugin shutdown

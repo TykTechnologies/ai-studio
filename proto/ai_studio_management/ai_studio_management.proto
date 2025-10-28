@@ -161,11 +161,13 @@ message PluginInfo {
     string hook_type = 6;
     bool is_active = 7;
     string namespace = 8;
-    string plugin_type = 9;
+    repeated string hook_types = 9;
     bool service_access_authorized = 10;
     repeated string service_scopes = 11;
     google.protobuf.Timestamp created_at = 12;
     google.protobuf.Timestamp updated_at = 13;
+    bool hook_types_customized = 14;
+    string plugin_category = 15;  // Computed field for display/backward compatibility
 }
 
 // LLM Management Messages

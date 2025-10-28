@@ -60,8 +60,8 @@ func (a *AgentConfig) Validate(db *gorm.DB) error {
 	if err := db.First(&plugin, a.PluginID).Error; err != nil {
 		return fmt.Errorf("plugin not found: %w", err)
 	}
-	if !plugin.IsAgentPlugin() {
-		return fmt.Errorf("plugin is not of type agent (found: %s)", plugin.PluginType)
+	if !plugin.SupportsHookType(HookTypeAgent) {
+		return fmt.Errorf("plugin does not support agent hook type (supports: %v)", plugin.GetAllHookTypes())
 	}
 	if !plugin.IsActive {
 		return errors.New("plugin is not active")

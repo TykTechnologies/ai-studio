@@ -12,9 +12,12 @@ import (
 // The SDK handles all the gRPC plumbing and provides the ServiceAPI client automatically
 type AIStudioPluginImplementation interface {
 	// OnInitialize is called when the plugin is initialized
-	// The serviceAPI client is ready to use for calling AI Studio services
-	// Plugin developers can store the reference and start using service APIs immediately
-	OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32) error
+	// Parameters:
+	// - serviceAPI: Client for calling AI Studio services (LLMs, tools, etc.)
+	// - pluginID: This plugin's ID in the database
+	// - config: Plugin configuration as map[string]string (from database)
+	// Plugin developers can parse config and store the reference to start using service APIs
+	OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32, config map[string]string) error
 
 	// OnShutdown is called when the plugin is being shut down
 	// Plugin should clean up any resources and complete any in-flight operations
@@ -46,8 +49,12 @@ type AIStudioPluginImplementation interface {
 // The SDK handles service API injection and broker setup automatically
 type AgentPluginImplementation interface {
 	// OnInitialize is called when the agent plugin is initialized
-	// The serviceAPI client is ready to use for calling AI Studio services (e.g., CallLLM)
-	OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32) error
+	// Parameters:
+	// - serviceAPI: Client for calling AI Studio services (e.g., CallLLM for proxying requests)
+	// - pluginID: This plugin's ID in the database
+	// - config: Plugin configuration as map[string]string (from database)
+	// The agent can parse config for settings like default LLM, system prompts, etc.
+	OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32, config map[string]string) error
 
 	// OnShutdown is called when the agent plugin is being shut down
 	// Agent should clean up any resources and complete any in-flight operations

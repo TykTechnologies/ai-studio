@@ -61,7 +61,7 @@ type AIStudioPluginManager struct {
 type LoadedAIStudioPlugin struct {
 	ID              uint
 	Name            string
-	PluginType      string
+	PluginCategory  string // Human-readable category (e.g., "UI Extension", "Agent Plugin")
 	Command         string
 	IsOCI           bool
 	Client          *goplugin.Client
@@ -278,11 +278,12 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	}
 
 	// With unified handshake, we can load any plugin type
-	// The plugin's hook_type determines its behavior, not the plugin_type
+	// The plugin's hook_type determines its behavior
 	log.Debug().
 		Uint("plugin_id", pluginID).
-		Str("plugin_type", plugin.PluginType).
+		Str("plugin_category", plugin.GetCapabilityCategory()).
 		Str("hook_type", plugin.HookType).
+		Strs("all_hooks", plugin.GetAllHookTypes()).
 		Msg("Loading plugin with unified handshake")
 
 	if !plugin.IsActive {
@@ -336,10 +337,27 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Convert config values to strings for gRPC transport
+	// For complex types (arrays, objects), JSON-encode them so plugins can parse them
 	configMap := make(map[string]string)
 	for k, v := range plugin.Config {
-		if str, ok := v.(string); ok {
-			configMap[k] = str
+		switch val := v.(type) {
+		case string:
+			configMap[k] = val
+		case int, int64, uint, uint64, float64, bool:
+			configMap[k] = fmt.Sprintf("%v", val)
+		default:
+			// Complex types (arrays, maps) - JSON encode
+			jsonBytes, err := json.Marshal(val)
+			if err != nil {
+				log.Warn().
+					Str("key", k).
+					Err(err).
+					Msg("Failed to JSON encode config value, using string representation")
+				configMap[k] = fmt.Sprintf("%v", val)
+			} else {
+				configMap[k] = string(jsonBytes)
+			}
 		}
 	}
 
@@ -380,7 +398,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	loadedPlugin := &LoadedAIStudioPlugin{
 		ID:              plugin.ID,
 		Name:            plugin.Name,
-		PluginType:      plugin.PluginType,
+		PluginCategory:  plugin.GetCapabilityCategory(), // Use computed category
 		Command:         plugin.Command,
 		IsOCI:           plugin.IsOCIPlugin(),
 		Client:          client,
@@ -1005,29 +1023,57 @@ func (m *AIStudioPluginManager) PingPlugin(pluginID uint) error {
 	return nil
 }
 
-// LoadAllAIStudioPlugins loads all active AI Studio plugins
-func (m *AIStudioPluginManager) LoadAllAIStudioPlugins() error {
-	// Get all active AI Studio plugins
+// LoadAllUIAndAgentPlugins loads all active plugins that support studio_ui or agent hooks
+func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
+	// Get all active plugins
 	var plugins []models.Plugin
-	err := m.db.Where("plugin_type = ? AND is_active = ?", models.PluginTypeAIStudio, true).
-		Find(&plugins).Error
+	err := m.db.Where("is_active = ?", true).Find(&plugins).Error
 	if err != nil {
-		return fmt.Errorf("failed to get AI Studio plugins: %w", err)
+		return fmt.Errorf("failed to get plugins: %w", err)
 	}
 
-	log.Info().Int("count", len(plugins)).Msg("Loading AI Studio plugins")
+	log.Info().Int("total_plugins", len(plugins)).Msg("Checking plugins for UI/Agent support")
 
 	var loadErrors []string
+	loadedCount := 0
+
 	for _, plugin := range plugins {
-		if _, err := m.LoadPlugin(plugin.ID); err != nil {
+		// Check if plugin supports studio_ui or agent hooks
+		supportsUI := plugin.SupportsHookType(models.HookTypeStudioUI)
+		supportsAgent := plugin.SupportsHookType(models.HookTypeAgent)
+
+		if !supportsUI && !supportsAgent {
+			log.Debug().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Strs("hooks", plugin.GetAllHookTypes()).
+				Msg("Plugin does not support UI or Agent hooks, skipping")
+			continue
+		}
+
+		// Attempt to load
+		_, err := m.LoadPlugin(plugin.ID)
+		if err != nil {
 			log.Error().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Err(err).
-				Msg("Failed to load AI Studio plugin")
-			loadErrors = append(loadErrors, fmt.Sprintf("Plugin %s: %v", plugin.Name, err))
+				Msg("Failed to load UI/Agent plugin")
+			loadErrors = append(loadErrors, fmt.Sprintf("Plugin %s (ID %d): %v", plugin.Name, plugin.ID, err))
+		} else {
+			loadedCount++
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Strs("hooks", plugin.GetAllHookTypes()).
+				Msg("Successfully loaded UI/Agent plugin")
 		}
 	}
+
+	log.Info().
+		Int("loaded", loadedCount).
+		Int("failed", len(loadErrors)).
+		Msg("Completed UI/Agent plugin loading")
 
 	if len(loadErrors) > 0 {
 		return fmt.Errorf("failed to load some plugins: %s", strings.Join(loadErrors, "; "))

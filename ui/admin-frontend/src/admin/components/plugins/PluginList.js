@@ -398,7 +398,10 @@ const PluginList = () => {
           >
             Edit Plugin
           </MenuItem>
-          {selectedPlugin?.pluginType === 'ai_studio' && (
+          {(selectedPlugin?.hookType === 'studio_ui' ||
+            selectedPlugin?.hookType === 'agent' ||
+            selectedPlugin?.hookTypes?.includes('studio_ui') ||
+            selectedPlugin?.hookTypes?.includes('agent')) && (
             <MenuItem
               onClick={() => {
                 handleReloadPlugin(selectedPlugin.id, selectedPlugin.name);

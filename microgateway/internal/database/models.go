@@ -206,20 +206,22 @@ type LLMFilter struct {
 
 // Plugin represents a plugin configuration
 type Plugin struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	Name        string         `gorm:"not null" json:"name"`
-	Description string         `json:"description"`
-	Command     string         `gorm:"not null;size:500" json:"command"`
-	Checksum    string         `gorm:"size:255" json:"checksum"`
-	Config      datatypes.JSON `gorm:"type:json" json:"config"`
-	HookType    string         `gorm:"not null;size:50;index:idx_plugins_hook_type" json:"hook_type"`
-	IsActive    bool           `gorm:"index:idx_plugins_is_active" json:"is_active"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
-	
+	ID                  uint           `gorm:"primaryKey" json:"id"`
+	Name                string         `gorm:"not null" json:"name"`
+	Description         string         `json:"description"`
+	Command             string         `gorm:"not null;size:500" json:"command"`
+	Checksum            string         `gorm:"size:255" json:"checksum"`
+	Config              datatypes.JSON `gorm:"type:json" json:"config"`
+	HookType            string         `gorm:"not null;size:50;index:idx_plugins_hook_type" json:"hook_type"`
+	HookTypes           datatypes.JSON `gorm:"type:json" json:"hook_types"`                         // All hook types this plugin supports
+	HookTypesCustomized bool           `gorm:"default:false" json:"hook_types_customized"`          // True if user overrode manifest hooks
+	IsActive            bool           `gorm:"index:idx_plugins_is_active" json:"is_active"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+	DeletedAt           gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+
 	// Hub-and-Spoke Configuration
-	Namespace   string         `gorm:"default:'';index:idx_plugin_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
+	Namespace string `gorm:"default:'';index:idx_plugin_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_plugins;" json:"llms,omitempty"`

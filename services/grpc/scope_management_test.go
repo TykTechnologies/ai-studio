@@ -173,7 +173,7 @@ func TestPluginServiceAccessLifecycle(t *testing.T) {
 			Name:                    "Lifecycle Test Plugin",
 			Command:                 "test-command",
 			HookType:                models.HookTypeStudioUI,
-			PluginType:              models.PluginTypeAIStudio,
+			HookTypes:               []string{models.HookTypeStudioUI},
 			IsActive:                true,
 			ServiceAccessAuthorized: false,
 			ServiceScopes:           []string{}, // Initially empty
@@ -225,7 +225,7 @@ func TestPluginServiceAccessLifecycle(t *testing.T) {
 			Name:                    "Scope Validation Plugin",
 			Command:                 "test-command",
 			HookType:                models.HookTypeStudioUI,
-			PluginType:              models.PluginTypeAIStudio,
+			HookTypes:               []string{models.HookTypeStudioUI},
 			IsActive:                true,
 			ServiceAccessAuthorized: true,
 			ServiceScopes:           []string{"analytics.read", "plugins.read"},

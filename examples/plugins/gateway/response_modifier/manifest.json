@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.response-modifier",
+  "version": "1.0.0",
+  "name": "Response Modifier",
+  "description": "Modifies LLM responses before returning to client",
+  "capabilities": {
+    "hooks": ["on_response"],
+    "primary_hook": "on_response"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

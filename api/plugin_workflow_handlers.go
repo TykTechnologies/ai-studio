@@ -21,7 +21,8 @@ type ValidateAndLoadResponse struct {
 	ID   string `json:"id"`
 	Attributes struct {
 		Command      string                 `json:"command"`
-		PluginType   string                 `json:"plugin_type"`
+		HookTypes    []string               `json:"hook_types"`
+		PrimaryHook  string                 `json:"primary_hook"`
 		ConfigSchema map[string]interface{} `json:"config_schema,omitempty"`
 		Manifest     map[string]interface{} `json:"manifest,omitempty"`
 		Scopes       []string               `json:"scopes"`
@@ -134,17 +135,78 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 	// Extract scopes from metadata
 	scopes := a.service.PluginMetadataLoader.ExtractScopesFromMetadata(metadata)
 
-	// For AI Studio and Agent plugins, store the scopes (but don't authorize yet)
-	if (plugin.IsAIStudioPlugin() || plugin.PluginType == models.PluginTypeAgent) && len(scopes) > 0 {
+	// Extract hook types from manifest
+	var hookTypes []string
+	var primaryHook string
+
+	if metadata.Manifest != nil {
+		// Try to extract capabilities from manifest
+		if manifestBytes, err := json.Marshal(metadata.Manifest); err == nil {
+			var manifestStruct models.PluginManifest
+			if err := json.Unmarshal(manifestBytes, &manifestStruct); err == nil && manifestStruct.Capabilities != nil {
+				hookTypes = manifestStruct.Capabilities.Hooks
+				primaryHook = manifestStruct.Capabilities.PrimaryHook
+
+				// Auto-select primary hook if not specified
+				if primaryHook == "" && len(hookTypes) > 0 {
+					primaryHook = hookTypes[0]
+				}
+			}
+		}
+	}
+
+	// Validate we got hooks from manifest
+	if len(hookTypes) == 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{
+				Title:  "Invalid Plugin",
+				Detail: "Plugin manifest must declare at least one hook type in capabilities.hooks",
+			}},
+		})
+		return
+	}
+
+	// Update plugin with hook types from manifest (if not already set)
+	shouldUpdatePlugin := false
+
+	if plugin.HookType == "" || plugin.HookType == "pending" {
+		plugin.HookType = primaryHook
+		plugin.HookTypes = hookTypes
+		plugin.HookTypesCustomized = false
+		shouldUpdatePlugin = true
+		log.Info().
+			Uint("plugin_id", uint(id)).
+			Str("primary_hook", primaryHook).
+			Strs("hook_types", hookTypes).
+			Msg("Setting hook types from manifest")
+	}
+
+	// For plugins with studio_ui or agent hooks, store the scopes (but don't authorize yet)
+	hasUIOrAgent := false
+	for _, hook := range hookTypes {
+		if hook == models.HookTypeStudioUI || hook == models.HookTypeAgent {
+			hasUIOrAgent = true
+			break
+		}
+	}
+
+	if hasUIOrAgent && len(scopes) > 0 {
 		// Update plugin with extracted scopes (but keep ServiceAccessAuthorized as false)
 		plugin.ServiceScopes = scopes
 		plugin.ServiceAccessAuthorized = false
+		shouldUpdatePlugin = true
+	}
 
+	// Save plugin updates if needed
+	if shouldUpdatePlugin {
 		if err := plugin.Update(a.service.DB); err != nil {
 			log.Warn().
 				Err(err).
 				Uint("plugin_id", uint(id)).
-				Msg("Failed to store extracted scopes in plugin")
+				Msg("Failed to update plugin with manifest data")
 		}
 	}
 
@@ -170,36 +232,27 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 
 	// Determine status
 	status := "ready"
-	if (plugin.IsAIStudioPlugin() || plugin.PluginType == models.PluginTypeAgent) && len(scopes) > 0 {
-		status = "scopes_pending" // AI Studio and Agent plugins with scopes need approval
+	if hasUIOrAgent && len(scopes) > 0 {
+		status = "scopes_pending" // Plugins with UI/Agent hooks and scopes need approval
 	}
 
 	response := ValidateAndLoadResponse{
 		Type: "plugin-metadata",
 		ID:   idParam,
-		Attributes: struct {
-			Command      string                 `json:"command"`
-			PluginType   string                 `json:"plugin_type"`
-			ConfigSchema map[string]interface{} `json:"config_schema,omitempty"`
-			Manifest     map[string]interface{} `json:"manifest,omitempty"`
-			Scopes       []string               `json:"scopes"`
-			Status       string                 `json:"status"`
-			LoadedAt     string                 `json:"loaded_at"`
-		}{
-			Command:      command,
-			PluginType:   plugin.PluginType,
-			ConfigSchema: configSchema,
-			Manifest:     manifestMap,
-			Scopes:       scopes,
-			Status:       status,
-			LoadedAt:     metadata.LoadTime.Format("2006-01-02T15:04:05Z07:00"),
-		},
 	}
+	response.Attributes.Command = command
+	response.Attributes.HookTypes = hookTypes
+	response.Attributes.PrimaryHook = primaryHook
+	response.Attributes.ConfigSchema = configSchema
+	response.Attributes.Manifest = manifestMap
+	response.Attributes.Scopes = scopes
+	response.Attributes.Status = status
+	response.Attributes.LoadedAt = metadata.LoadTime.Format("2006-01-02T15:04:05Z07:00")
 
 	log.Info().
 		Uint("plugin_id", uint(id)).
 		Str("command", command).
-		Str("plugin_type", plugin.PluginType).
+		Str("plugin_category", plugin.GetCapabilityCategory()).
 		Int("scopes_count", len(scopes)).
 		Bool("has_config_schema", configSchema != nil).
 		Bool("has_manifest", manifestMap != nil).
@@ -360,7 +413,8 @@ func (a *API) getPluginWorkflowStatus(c *gin.Context) {
 	status := "ready"
 	requiresApproval := false
 
-	if plugin.IsAIStudioPlugin() && len(plugin.ServiceScopes) > 0 {
+	// Check if plugin supports UI or Agent hooks (AI Studio plugins)
+	if (plugin.SupportsHookType(models.HookTypeStudioUI) || plugin.SupportsHookType(models.HookTypeAgent)) && len(plugin.ServiceScopes) > 0 {
 		if !plugin.ServiceAccessAuthorized {
 			status = "scopes_pending"
 			requiresApproval = true

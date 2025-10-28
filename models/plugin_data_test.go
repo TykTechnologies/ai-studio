@@ -27,7 +27,7 @@ func createTestPlugin(t *testing.T, db *gorm.DB, name string) *Plugin {
 		Description: "Test plugin",
 		Command:     "/bin/test",
 		HookType:    HookTypeStudioUI,
-		PluginType:  PluginTypeAIStudio,
+		HookTypes:   []string{HookTypeStudioUI},
 		IsActive:    true,
 	}
 

@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.file-analytics-collector",
+  "version": "1.0.0",
+  "name": "File Analytics Collector",
+  "description": "Collects analytics data to file for testing and debugging",
+  "capabilities": {
+    "hooks": ["data_collection"],
+    "primary_hook": "data_collection"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

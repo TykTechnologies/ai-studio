@@ -15,6 +15,9 @@ type PluginManifest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 
+	// Capabilities declares what hooks this plugin implements
+	Capabilities *PluginCapabilities `json:"capabilities" binding:"required"`
+
 	// Permissions and security
 	Permissions struct {
 		KV       []string `json:"kv"`       // KV access permissions: read, write, list
@@ -85,6 +88,12 @@ type UIMount struct {
 	App string `json:"app,omitempty"` // App HTML file for iframe
 }
 
+// PluginCapabilities declares plugin hook capabilities
+type PluginCapabilities struct {
+	Hooks       []string `json:"hooks" binding:"required,min=1"`
+	PrimaryHook string   `json:"primary_hook,omitempty"`
+}
+
 // RegisteredPlugin represents a plugin with its parsed manifest and runtime info
 type RegisteredPlugin struct {
 	gorm.Model
@@ -130,6 +139,40 @@ func (pm *PluginManifest) ValidateManifest() error {
 	}
 	if pm.Name == "" {
 		return fmt.Errorf("manifest name is required")
+	}
+
+	// Validate capabilities (required for all plugins)
+	if pm.Capabilities == nil {
+		return fmt.Errorf("manifest must declare capabilities")
+	}
+	if len(pm.Capabilities.Hooks) == 0 {
+		return fmt.Errorf("manifest must declare at least one hook in capabilities.hooks")
+	}
+
+	// Validate each hook type
+	for _, hook := range pm.Capabilities.Hooks {
+		if !IsValidHookType(hook) {
+			return fmt.Errorf("invalid hook type '%s' in manifest - must be one of: %v", hook, GetValidHookTypes())
+		}
+	}
+
+	// Validate primary hook if specified
+	if pm.Capabilities.PrimaryHook != "" {
+		if !IsValidHookType(pm.Capabilities.PrimaryHook) {
+			return fmt.Errorf("invalid primary_hook '%s' in manifest", pm.Capabilities.PrimaryHook)
+		}
+
+		// Ensure primary hook is in hooks array
+		found := false
+		for _, hook := range pm.Capabilities.Hooks {
+			if hook == pm.Capabilities.PrimaryHook {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("primary_hook '%s' must be included in capabilities.hooks array", pm.Capabilities.PrimaryHook)
+		}
 	}
 
 	// Block analytics service scopes - not available to plugins

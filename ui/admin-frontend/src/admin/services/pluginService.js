@@ -8,6 +8,8 @@ class PluginService {
     POST_AUTH: 'post_auth',
     ON_RESPONSE: 'on_response',
     DATA_COLLECTION: 'data_collection',
+    STUDIO_UI: 'studio_ui',
+    AGENT: 'agent',
   };
 
   static HOOK_TYPE_LABELS = {
@@ -16,6 +18,18 @@ class PluginService {
     [PluginService.HOOK_TYPES.POST_AUTH]: 'Post-Authentication',
     [PluginService.HOOK_TYPES.ON_RESPONSE]: 'Response Processing',
     [PluginService.HOOK_TYPES.DATA_COLLECTION]: 'Data Collection',
+    [PluginService.HOOK_TYPES.STUDIO_UI]: 'UI Extension',
+    [PluginService.HOOK_TYPES.AGENT]: 'Conversational Agent',
+  };
+
+  static HOOK_TYPE_DESCRIPTIONS = {
+    [PluginService.HOOK_TYPES.PRE_AUTH]: 'Process requests before authentication',
+    [PluginService.HOOK_TYPES.AUTH]: 'Handle authentication and authorization',
+    [PluginService.HOOK_TYPES.POST_AUTH]: 'Process authenticated requests',
+    [PluginService.HOOK_TYPES.ON_RESPONSE]: 'Modify or process responses',
+    [PluginService.HOOK_TYPES.DATA_COLLECTION]: 'Collect analytics and metrics',
+    [PluginService.HOOK_TYPES.STUDIO_UI]: 'Extend AI Studio UI with custom interfaces',
+    [PluginService.HOOK_TYPES.AGENT]: 'Implement conversational AI agents',
   };
 
   async listPlugins(page = 1, limit = 50, hookType = '', isActive) {
@@ -147,6 +161,8 @@ class PluginService {
         checksum: pluginData.checksum || '',
         config: pluginData.config || {},
         hook_type: pluginData.hookType,
+        hook_types: pluginData.hookTypes,
+        hook_types_customized: pluginData.hookTypesCustomized,
         is_active: pluginData.isActive !== undefined ? pluginData.isActive : true,
         namespace: pluginData.namespace || '',
         plugin_type: pluginData.pluginType || 'gateway',
@@ -155,7 +171,7 @@ class PluginService {
       };
 
       const response = await apiClient.patch(`/plugins/${id}`, payload);
-      
+
       if (response.data?.data) {
         const plugin = response.data.data;
         return {
@@ -166,13 +182,15 @@ class PluginService {
           checksum: plugin.attributes.checksum,
           config: plugin.attributes.config || {},
           hookType: plugin.attributes.hook_type,
+          hookTypes: plugin.attributes.hook_types,
+          hookTypesCustomized: plugin.attributes.hook_types_customized,
           isActive: plugin.attributes.is_active,
           namespace: plugin.attributes.namespace || 'global',
           createdAt: plugin.attributes.created_at,
           updatedAt: plugin.attributes.updated_at,
         };
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error updating plugin:', error);
@@ -502,4 +520,6 @@ class PluginService {
   }
 }
 
+// Export both the class and a default instance
+export { PluginService };
 export default new PluginService();

@@ -169,12 +169,12 @@ func (a *API) HandleAgentSSE(c *gin.Context) {
 		})
 		return
 	}
-	if !agentConfig.Plugin.IsAgentPlugin() {
+	if !agentConfig.Plugin.SupportsHookType(models.HookTypeAgent) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Invalid plugin type", Detail: "Plugin is not an agent plugin"}},
+			}{{Title: "Invalid plugin type", Detail: "Plugin does not support agent hook type"}},
 		})
 		return
 	}
@@ -608,12 +608,12 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		})
 		return
 	}
-	if !plugin.IsAgentPlugin() {
+	if !plugin.SupportsHookType(models.HookTypeAgent) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Invalid plugin type", Detail: "Plugin is not an agent plugin"}},
+			}{{Title: "Invalid plugin type", Detail: "Plugin does not support agent hook type"}},
 		})
 		return
 	}

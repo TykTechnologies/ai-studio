@@ -24,9 +24,11 @@ import {
   ArrowBack as BackIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Star as StarIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import pluginService from '../../services/pluginService';
+import pluginService, { PluginService } from '../../services/pluginService';
 import agentService from '../../services/agentService';
 import { isAgentPlugin } from '../../constants/agentTypes';
 import {
@@ -98,6 +100,34 @@ const PluginDetail = () => {
         setError(err.message);
       }
     }
+  };
+
+  // Helper functions for hook types
+  const getAllHookTypes = (plugin) => {
+    const hookSet = new Set();
+    if (plugin.hookType) hookSet.add(plugin.hookType);
+    if (plugin.hookTypes) {
+      plugin.hookTypes.forEach(h => hookSet.add(h));
+    }
+    return Array.from(hookSet);
+  };
+
+  const getCapabilityCategory = (plugin) => {
+    const hooks = getAllHookTypes(plugin);
+    const hasGateway = hooks.some(h =>
+      ['pre_auth', 'auth', 'post_auth', 'on_response', 'data_collection'].includes(h)
+    );
+    const hasUI = hooks.includes('studio_ui');
+    const hasAgent = hooks.includes('agent');
+
+    if (hasGateway && hasUI && hasAgent) return 'Full-Stack Plugin';
+    if (hasGateway && hasUI) return 'Gateway + UI';
+    if (hasGateway && hasAgent) return 'Gateway + Agent';
+    if (hasUI && hasAgent) return 'Agent + UI';
+    if (hasGateway) return 'Gateway Plugin';
+    if (hasUI) return 'UI Extension';
+    if (hasAgent) return 'Agent Plugin';
+    return 'Uncategorized';
   };
 
   const formatTimestamp = (timestamp) => {
@@ -390,16 +420,50 @@ const PluginDetail = () => {
                   </Typography>
                 </Box>
 
-                <Box mb={2}>
-                  <Typography variant="body2" color="textSecondary">
-                    Hook Type
+                <Box mb={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Capabilities
                   </Typography>
-                  <Chip
-                    label={pluginService.getHookTypeLabel(plugin.hookType)}
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                  />
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      Category
+                    </Typography>
+                    <Chip
+                      label={getCapabilityCategory(plugin)}
+                      color="primary"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  </Box>
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      Hook Types
+                    </Typography>
+                    <Box display="flex" gap={1} flexWrap="wrap">
+                      {getAllHookTypes(plugin).map(hook => (
+                        <Chip
+                          key={hook}
+                          label={PluginService.HOOK_TYPE_LABELS[hook] || hook}
+                          size="small"
+                          variant={hook === plugin.hookType ? "filled" : "outlined"}
+                          color={hook === plugin.hookType ? "primary" : "default"}
+                          icon={hook === plugin.hookType ? <StarIcon /> : null}
+                        />
+                      ))}
+                    </Box>
+                    {plugin.hookTypesCustomized && (
+                      <Box mt={1}>
+                        <Chip
+                          icon={<WarningIcon />}
+                          label="Customized (differs from manifest)"
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                        />
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
 
                 <Box mb={2}>
