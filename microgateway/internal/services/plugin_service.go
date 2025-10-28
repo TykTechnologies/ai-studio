@@ -38,9 +38,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, fmt.Errorf("plugin name cannot be empty")
 	}
-	if strings.TrimSpace(req.Slug) == "" {
-		return nil, fmt.Errorf("plugin slug cannot be empty")
-	}
 	if strings.TrimSpace(req.Command) == "" {
 		return nil, fmt.Errorf("plugin command cannot be empty")
 	}
@@ -51,15 +48,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 	// Security validation for plugin command
 	if err := s.validatePluginCommand(req.Command); err != nil {
 		return nil, err
-	}
-
-	// Check if slug already exists
-	exists, err := s.PluginSlugExists(req.Slug)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check plugin slug existence: %w", err)
-	}
-	if exists {
-		return nil, fmt.Errorf("plugin slug '%s' already exists", req.Slug)
 	}
 
 	// Convert config to JSON
@@ -74,7 +62,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 
 	plugin := &database.Plugin{
 		Name:        req.Name,
-		Slug:        req.Slug,
 		Description: req.Description,
 		Command:     req.Command,
 		Checksum:    req.Checksum,
@@ -364,7 +351,6 @@ func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interfa
 	testResult := map[string]interface{}{
 		"plugin_id":   pluginID,
 		"plugin_name": plugin.Name,
-		"plugin_slug": plugin.Slug,
 		"hook_type":   plugin.HookType,
 		"status":      "unknown",
 		"message":     "",

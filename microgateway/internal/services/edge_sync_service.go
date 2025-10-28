@@ -296,7 +296,6 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 		plugin := &database.Plugin{
 			ID:          uint(pbPlugin.Id),
 			Name:        pbPlugin.Name,
-			Slug:        pbPlugin.Slug,
 			Description: pbPlugin.Description,
 			Command:     pbPlugin.Command,
 			Checksum:    pbPlugin.Checksum,

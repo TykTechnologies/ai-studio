@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/rs/zerolog/log"
 )
 
 type CredentialExtractor func(r *http.Request) (string, error)
@@ -30,6 +31,16 @@ func (cv *CredentialValidator) RegisterValidator(vendor string, validator Creden
 
 func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if authentication was already done by a microgateway plugin
+		if pluginAuth := r.Context().Value("plugin_authenticated"); pluginAuth != nil {
+			if authenticated, ok := pluginAuth.(bool); ok && authenticated {
+				// Request already authenticated by microgateway plugin - skip credential validation
+				// The plugin has already set the app context with correct AppID
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		pathParts := strings.Split(r.URL.Path, "/")
 		if len(pathParts) < 2 { // Adjusted for paths like "/.well-known/..."
 			// Allow .well-known paths without auth for now, or handle them separately if needed
@@ -237,14 +248,32 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 // Renamed from CheckCredential to CheckAPICredential to differentiate
 func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(apiKey) // API Key is the 'secret'
-	if err != nil || !cred.Active {
+	if err != nil {
+		log.Info().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
+		return false, r
+	}
+	if !cred.Active {
+		log.Info().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
 		return false, r
 	}
 
+	log.Info().
+		Uint("cred_id", cred.ID).
+		Int("cred_id_signed", int(cred.ID)).
+		Str("key_id", cred.KeyID).
+		Msg("CheckAPICredential: Credential found and active")
+
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
+		log.Info().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
 		return false, r
 	}
+
+	log.Info().
+		Uint("app_id", app.ID).
+		Str("app_name", app.Name).
+		Int("llm_count", len(app.LLMs)).
+		Msg("CheckAPICredential: Retrieved app for credential")
 
 	ctx := context.WithValue(r.Context(), "app", app)
 	// Note: toolSlug might be already in r.Context() if set before calling this func
@@ -270,13 +299,29 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
 		if !ok {
+			log.Info().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
 			return false, r
 		}
-		for _, l := range app.LLMs {
+		log.Info().
+			Uint("llm_id", llm.ID).
+			Str("llm_slug", llmSlug).
+			Uint("app_id", app.ID).
+			Int("app_llm_count", len(app.LLMs)).
+			Msg("CheckAPICredential: Checking if app has access to LLM")
+
+		for i, l := range app.LLMs {
+			log.Info().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
 			if l.ID == llm.ID {
+				log.Info().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
 				return true, r
 			}
 		}
+		log.Info().
+			Uint("app_id", app.ID).
+			Uint("required_llm_id", llm.ID).
+			Str("llm_slug", llmSlug).
+			Int("app_llms_count", len(app.LLMs)).
+			Msg("CheckAPICredential: App does not have access to this LLM - validation FAILED")
 		return false, r
 	}
 

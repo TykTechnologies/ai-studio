@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // PluginConfigSchema represents cached configuration schemas for plugins
@@ -50,38 +51,27 @@ func (pcs *PluginConfigSchema) Delete(db *gorm.DB) error {
 }
 
 // Upsert creates or updates a plugin config schema by command
+// Uses PostgreSQL's ON CONFLICT clause for atomic upsert (no race conditions)
 func (pcs *PluginConfigSchema) Upsert(db *gorm.DB, command string, schemaJSON string) error {
 	now := time.Now()
-	pcs.Command = command
-	pcs.SchemaJSON = schemaJSON
-	pcs.LastFetched = now
 
-	// Try to find existing record
-	existing := &PluginConfigSchema{}
-	err := existing.GetByCommand(db, command)
+	// Use GORM's Clauses with OnConflict for atomic upsert
+	// This is thread-safe and prevents duplicate key errors
+	result := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "command"}},
+		DoUpdates: clause.AssignmentColumns([]string{"schema_json", "last_fetched", "updated_at"}),
+	}).Create(&PluginConfigSchema{
+		Command:     command,
+		SchemaJSON:  schemaJSON,
+		LastFetched: now,
+	})
 
-	if err == gorm.ErrRecordNotFound {
-		// Create new record
-		pcs.CreatedAt = now
-		pcs.UpdatedAt = now
-		return db.Create(pcs).Error
-	} else if err != nil {
-		return err
+	if result.Error != nil {
+		return result.Error
 	}
 
-	// Update existing record
-	existing.SchemaJSON = schemaJSON
-	existing.LastFetched = now
-	existing.UpdatedAt = now
-
-	// Save the existing record (which has the proper ID)
-	if err := db.Save(existing).Error; err != nil {
-		return err
-	}
-
-	// Copy the updated record back to pcs
-	*pcs = *existing
-	return nil
+	// Fetch the created/updated record to populate pcs with correct ID
+	return pcs.GetByCommand(db, command)
 }
 
 // IsStale checks if the cached schema is older than the specified duration

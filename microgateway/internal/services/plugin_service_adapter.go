@@ -33,7 +33,6 @@ func (a *PluginServiceAdapter) GetPlugin(id uint) (plugins.PluginData, error) {
 	return plugins.PluginData{
 		ID:       dbPlugin.ID,
 		Name:     dbPlugin.Name,
-		Slug:     dbPlugin.Slug,
 		HookType: dbPlugin.HookType,
 		Command:  dbPlugin.Command,
 		Config:   configBytes,
@@ -57,7 +56,6 @@ func (a *PluginServiceAdapter) GetPluginsByLLMID(llmID uint) ([]plugins.PluginDa
 		result[i] = plugins.PluginData{
 			ID:       dbPlugin.ID,
 			Name:     dbPlugin.Name,
-			Slug:     dbPlugin.Slug,
 			HookType: dbPlugin.HookType,
 			Command:  dbPlugin.Command,
 			Config:   configBytes,
@@ -84,7 +82,6 @@ func (a *PluginServiceAdapter) GetAllPlugins() ([]plugins.PluginData, error) {
 		result[i] = plugins.PluginData{
 			ID:       dbPlugin.ID,
 			Name:     dbPlugin.Name,
-			Slug:     dbPlugin.Slug,
 			HookType: dbPlugin.HookType,
 			Command:  dbPlugin.Command,
 			Config:   configBytes,
@@ -111,7 +108,6 @@ func (a *PluginServiceAdapter) GetPluginsForLLM(llmID uint) ([]plugins.PluginDat
 		result[i] = plugins.PluginData{
 			ID:       dbPlugin.ID,
 			Name:     dbPlugin.Name,
-			Slug:     dbPlugin.Slug,
 			HookType: dbPlugin.HookType,
 			Command:  dbPlugin.Command,
 			Config:   configBytes,

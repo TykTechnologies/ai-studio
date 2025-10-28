@@ -48,7 +48,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 			name: "valid plugin",
 			request: &CreatePluginRequest{
 				Name:        "Test Plugin",
-				Slug:        "test-plugin",
 				Description: "A test plugin",
 				Command:     "./test-plugin",
 				Checksum:    "abc123",
@@ -62,7 +61,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 			name: "empty name",
 			request: &CreatePluginRequest{
 				Name:     "",
-				Slug:     "test-plugin",
 				Command:  "./test-plugin",
 				HookType: "pre_auth",
 			},
@@ -73,7 +71,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 			name: "empty slug",
 			request: &CreatePluginRequest{
 				Name:     "Test Plugin",
-				Slug:     "",
 				Command:  "./test-plugin",
 				HookType: "pre_auth",
 			},
@@ -84,7 +81,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 			name: "empty command",
 			request: &CreatePluginRequest{
 				Name:     "Test Plugin",
-				Slug:     "test-plugin",
 				Command:  "",
 				HookType: "pre_auth",
 			},
@@ -95,7 +91,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 			name: "invalid hook type",
 			request: &CreatePluginRequest{
 				Name:     "Test Plugin",
-				Slug:     "test-plugin",
 				Command:  "./test-plugin",
 				HookType: "invalid",
 			},
@@ -116,7 +111,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, plugin)
 				assert.Equal(t, tt.request.Name, plugin.Name)
-				assert.Equal(t, tt.request.Slug, plugin.Slug)
 				assert.Equal(t, tt.request.Command, plugin.Command)
 				assert.Equal(t, tt.request.HookType, plugin.HookType)
 				assert.Equal(t, tt.request.IsActive, plugin.IsActive)
@@ -134,7 +128,6 @@ func TestPluginService_GetPlugin(t *testing.T) {
 	// Create a test plugin
 	plugin, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin",
-		Slug:     "test-plugin",
 		Command:  "./test-plugin",
 		HookType: "pre_auth",
 		IsActive: true,
@@ -169,7 +162,6 @@ func TestPluginService_GetPlugin(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, plugin.Name, result.Name)
-				assert.Equal(t, plugin.Slug, result.Slug)
 			}
 		})
 	}
@@ -184,11 +176,10 @@ func TestPluginService_ListPlugins(t *testing.T) {
 	plugins := []*database.Plugin{}
 	hookTypes := []string{"pre_auth", "auth", "post_auth", "on_response"}
 	activeStates := []bool{true, false, true, false} // Alternate active/inactive
-	
+
 	for i, hookType := range hookTypes {
 		plugin, err := service.CreatePlugin(&CreatePluginRequest{
 			Name:     fmt.Sprintf("Plugin %d", i+1),
-			Slug:     fmt.Sprintf("plugin-%d", i+1),
 			Command:  fmt.Sprintf("./plugin-%d", i+1),
 			HookType: hookType,
 			IsActive: activeStates[i],
@@ -245,7 +236,7 @@ func TestPluginService_ListPlugins(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Len(t, result, tt.expectedLen)
-			
+
 			if tt.hookType == "" {
 				if tt.isActive {
 					assert.Equal(t, int64(2), total) // 2 active plugins
@@ -265,7 +256,6 @@ func TestPluginService_UpdatePlugin(t *testing.T) {
 	// Create a test plugin
 	plugin, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin",
-		Slug:     "test-plugin",
 		Command:  "./test-plugin",
 		HookType: "pre_auth",
 		IsActive: true,
@@ -288,7 +278,6 @@ func TestPluginService_UpdatePlugin(t *testing.T) {
 	assert.Equal(t, newName, updatedPlugin.Name)
 	assert.Equal(t, newDescription, updatedPlugin.Description)
 	assert.Equal(t, newActive, updatedPlugin.IsActive)
-	assert.Equal(t, plugin.Slug, updatedPlugin.Slug) // Unchanged
 }
 
 func TestPluginService_DeletePlugin(t *testing.T) {
@@ -299,7 +288,6 @@ func TestPluginService_DeletePlugin(t *testing.T) {
 	// Create a test plugin
 	plugin, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin",
-		Slug:     "test-plugin",
 		Command:  "./test-plugin",
 		HookType: "pre_auth",
 		IsActive: true,
@@ -353,11 +341,10 @@ func TestPluginService_ListPluginsComprehensiveFiltering(t *testing.T) {
 	// Create all test plugins
 	for _, testPlugin := range testPlugins {
 		plugin, err := service.CreatePlugin(&CreatePluginRequest{
-			Name:        testPlugin.name,
-			Slug:        testPlugin.slug,
-			Command:     fmt.Sprintf("./bin/%s", testPlugin.slug),
-			HookType:    testPlugin.hookType,
-			IsActive:    testPlugin.isActive,
+			Name:     testPlugin.name,
+			Command:  fmt.Sprintf("./bin/%s", testPlugin.slug),
+			HookType: testPlugin.hookType,
+			IsActive: testPlugin.isActive,
 		})
 		// Set namespace manually after creation since CreatePluginRequest doesn't have namespace in microgateway
 		if err == nil && testPlugin.namespace != "" {
@@ -374,11 +361,11 @@ func TestPluginService_ListPluginsComprehensiveFiltering(t *testing.T) {
 			hookType      string
 			expectedCount int
 		}{
-			{"pre_auth", 2},     // PreAuth Active Global + PreAuth Active TenantA
-			{"auth", 1},         // Auth Active Global
-			{"post_auth", 1},    // PostAuth Active TenantB
-			{"on_response", 2},  // OnResponse Active Global + OnResponse Active TenantA
-			{"nonexistent", 0},  // No plugins with this hook type
+			{"pre_auth", 2},    // PreAuth Active Global + PreAuth Active TenantA
+			{"auth", 1},        // Auth Active Global
+			{"post_auth", 1},   // PostAuth Active TenantB
+			{"on_response", 2}, // OnResponse Active Global + OnResponse Active TenantA
+			{"nonexistent", 0}, // No plugins with this hook type
 		}
 
 		for _, test := range hookTypeTests {
@@ -543,7 +530,6 @@ func TestPluginService_LLMPluginAssociations(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		plugin, err := service.CreatePlugin(&CreatePluginRequest{
 			Name:     fmt.Sprintf("Plugin %d", i+1),
-			Slug:     fmt.Sprintf("plugin-%d", i+1),
 			Command:  fmt.Sprintf("./plugin-%d", i+1),
 			HookType: "pre_auth",
 			IsActive: true,
@@ -561,7 +547,7 @@ func TestPluginService_LLMPluginAssociations(t *testing.T) {
 	llmPlugins, err := service.GetPluginsForLLM(llm.ID)
 	assert.NoError(t, err)
 	assert.Len(t, llmPlugins, 2)
-	
+
 	// Check order
 	assert.Equal(t, plugins[0].ID, llmPlugins[0].ID)
 	assert.Equal(t, plugins[1].ID, llmPlugins[1].ID)
@@ -585,7 +571,6 @@ func TestPluginService_PluginSlugExists(t *testing.T) {
 	// Create a test plugin
 	_, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin",
-		Slug:     "test-plugin",
 		Command:  "./test-plugin",
 		HookType: "pre_auth",
 		IsActive: true,
@@ -626,7 +611,6 @@ func TestPluginService_ValidatePluginChecksum(t *testing.T) {
 	// Create plugin with correct checksum
 	plugin, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin",
-		Slug:     "test-plugin",
 		Command:  "./test-plugin",
 		Checksum: expectedChecksum,
 		HookType: "pre_auth",
@@ -641,7 +625,6 @@ func TestPluginService_ValidatePluginChecksum(t *testing.T) {
 	// Create plugin with wrong checksum
 	plugin2, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin 2",
-		Slug:     "test-plugin-2",
 		Command:  "./test-plugin-2",
 		Checksum: "wrongchecksum",
 		HookType: "pre_auth",
@@ -657,7 +640,6 @@ func TestPluginService_ValidatePluginChecksum(t *testing.T) {
 	// Create plugin with no checksum
 	plugin3, err := service.CreatePlugin(&CreatePluginRequest{
 		Name:     "Test Plugin 3",
-		Slug:     "test-plugin-3",
 		Command:  "./test-plugin-3",
 		HookType: "pre_auth",
 		IsActive: true,

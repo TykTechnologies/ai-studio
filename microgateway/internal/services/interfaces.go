@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 )
 
 // GatewayServiceInterface defines the interface for gateway operations
@@ -153,6 +154,12 @@ type PluginServiceInterface interface {
 	ValidatePluginChecksum(pluginID uint, filePath string) error
 	TestPlugin(pluginID uint, testData interface{}) (interface{}, error)
 	PluginSlugExists(slug string) (bool, error)
+}
+
+// PluginManagerInterface defines minimal interface for plugin execution
+// Uses actual types from plugins package to match the real implementation
+type PluginManagerInterface interface {
+	ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
 }
 
 // Data structures used by service interfaces
@@ -373,7 +380,6 @@ type TokenInfo struct {
 // CreatePluginRequest for creating a new plugin
 type CreatePluginRequest struct {
 	Name        string                 `json:"name" binding:"required"`
-	Slug        string                 `json:"slug" binding:"required"`
 	Description string                 `json:"description"`
 	Command     string                 `json:"command" binding:"required"`
 	Checksum    string                 `json:"checksum"`

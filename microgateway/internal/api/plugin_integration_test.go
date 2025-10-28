@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -232,11 +232,10 @@ func TestPluginAPI_ComprehensiveFiltering(t *testing.T) {
 	createdPlugins := make([]*database.Plugin, 0)
 	for _, testPlugin := range testPlugins {
 		plugin, err := service.CreatePlugin(&services.CreatePluginRequest{
-			Name:        testPlugin.name,
-			Slug:        testPlugin.slug,
-			Command:     fmt.Sprintf("./bin/%s", testPlugin.slug),
-			HookType:    testPlugin.hookType,
-			IsActive:    testPlugin.isActive,
+			Name:     testPlugin.name,
+			Command:  fmt.Sprintf("./bin/%s", testPlugin.slug),
+			HookType: testPlugin.hookType,
+			IsActive: testPlugin.isActive,
 		})
 		// Set namespace manually after creation since CreatePluginRequest doesn't have namespace in microgateway
 		if err == nil && testPlugin.namespace != "" {
@@ -291,11 +290,11 @@ func TestPluginAPI_ComprehensiveFiltering(t *testing.T) {
 			hookType      string
 			expectedCount int
 		}{
-			{"pre_auth", 1},     // Only 1 active pre_auth
-			{"auth", 1},         // Only 1 active auth
-			{"post_auth", 1},    // Only 1 active post_auth
-			{"on_response", 1},  // Only 1 active on_response
-			{"invalid", 0},      // No plugins with invalid hook type
+			{"pre_auth", 1},    // Only 1 active pre_auth
+			{"auth", 1},        // Only 1 active auth
+			{"post_auth", 1},   // Only 1 active post_auth
+			{"on_response", 1}, // Only 1 active on_response
+			{"invalid", 0},     // No plugins with invalid hook type
 		}
 
 		for _, test := range hookTypeTests {

@@ -7,9 +7,10 @@ import (
 )
 
 // HandshakeConfig is used for handshaking with the main microgateway process
+// Updated to use unified AI_STUDIO_PLUGIN handshake for polyglot plugin support
 var HandshakeConfig = plugin.HandshakeConfig{
 	ProtocolVersion:  1,
-	MagicCookieKey:   "MICROGATEWAY_PLUGIN",
+	MagicCookieKey:   "AI_STUDIO_PLUGIN",
 	MagicCookieValue: "v1",
 }
 

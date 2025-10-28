@@ -85,11 +85,11 @@ const PluginCreationWizard = () => {
       const createdPlugin = await pluginService.createPlugin(basicInfo);
       setPluginId(createdPlugin.id);
 
-      // For AI Studio and Agent plugins, load metadata
-      if (basicInfo.pluginType === 'ai_studio' || basicInfo.pluginType === 'agent') {
-        setMetadataLoading(true);
-        setWorkflowState(WORKFLOW_STATES.LOADING);
+      // Load metadata for all plugin types (config schema + manifest)
+      setMetadataLoading(true);
+      setWorkflowState(WORKFLOW_STATES.LOADING);
 
+      try {
         // Call the validate-and-load endpoint to get metadata
         const response = await pluginService.validateAndLoadPlugin(createdPlugin.id, {
           command: basicInfo.command,
@@ -104,18 +104,27 @@ const PluginCreationWizard = () => {
 
         setWorkflowState(response.data.attributes.status);
 
-        // If there are scopes, go to approval step
+        // If there are scopes (AI Studio/Agent plugins), go to approval step
         if (response.data.attributes.scopes && response.data.attributes.scopes.length > 0) {
           handleNext(); // Go to scope approval step
         } else {
-          // No scopes, skip to configuration
+          // No scopes (Gateway plugins), skip to configuration
           setActiveStep(2);
           setWorkflowState(WORKFLOW_STATES.READY);
         }
-      } else {
-        // Gateway plugins skip scope approval
+      } catch (metadataErr) {
+        // If metadata loading fails, log but continue to configuration step
+        console.warn('Failed to load plugin metadata:', metadataErr);
+        setMetadata({
+          configSchema: null,
+          manifest: null,
+          scopes: [],
+          status: 'ready',
+        });
         setWorkflowState(WORKFLOW_STATES.READY);
-        setActiveStep(2); // Go to configuration step
+        setActiveStep(2); // Go to configuration step anyway
+      } finally {
+        setMetadataLoading(false);
       }
     } catch (err) {
       console.error('Error creating plugin:', err);

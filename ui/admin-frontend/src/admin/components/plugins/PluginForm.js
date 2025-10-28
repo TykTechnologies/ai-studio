@@ -41,7 +41,6 @@ const PluginForm = ({ mode = 'create' }) => {
     name: '',
     description: '',
     command: '',
-    checksum: '',
     config: {},
     hookType: '',
     isActive: true,
@@ -87,7 +86,6 @@ const PluginForm = ({ mode = 'create' }) => {
           name: plugin.name,
           description: plugin.description,
           command: plugin.command,
-          checksum: plugin.checksum || '',
           config: plugin.config || {},
           hookType: plugin.hookType,
           isActive: plugin.isActive,
@@ -427,16 +425,6 @@ const PluginForm = ({ mode = 'create' }) => {
                 }
                 placeholder="e.g., oci://registry.com/my-plugin:latest or /path/to/plugin-binary"
                 required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Checksum"
-                name="checksum"
-                value={formData.checksum}
-                onChange={handleChange}
-                helperText="Optional checksum for plugin integrity verification"
               />
             </Grid>
             <Grid item xs={12}>

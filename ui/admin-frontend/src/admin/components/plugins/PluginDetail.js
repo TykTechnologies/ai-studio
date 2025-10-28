@@ -444,15 +444,6 @@ const PluginDetail = () => {
 
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">
-                    Checksum
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                    {plugin.checksum || 'Not specified'}
-                  </Typography>
-                </Box>
-
-                <Box mb={2}>
-                  <Typography variant="body2" color="textSecondary">
                     Created At
                   </Typography>
                   <Typography variant="body1">

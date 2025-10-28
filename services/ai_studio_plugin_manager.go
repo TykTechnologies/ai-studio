@@ -261,14 +261,6 @@ func (p *ConfigOnlyGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBr
 	return configpb.NewConfigProviderServiceClient(c), nil
 }
 
-// ConfigOnlyHandshake - Universal handshake for configuration extraction
-// This handshake is independent of plugin type and allows config extraction from any plugin
-var ConfigOnlyHandshake = goplugin.HandshakeConfig{
-	ProtocolVersion:  1,
-	MagicCookieKey:   "CONFIG_PROVIDER",
-	MagicCookieValue: "v1",
-}
-
 // LoadPlugin loads an AI Studio plugin by ID
 func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin, error) {
 	m.mu.Lock()
@@ -285,10 +277,13 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		return nil, fmt.Errorf("plugin not found: %w", err)
 	}
 
-	// Only load AI Studio and Agent plugins
-	if !plugin.IsAIStudioPlugin() && plugin.PluginType != models.PluginTypeAgent {
-		return nil, fmt.Errorf("plugin %d is not an AI Studio or Agent plugin", pluginID)
-	}
+	// With unified handshake, we can load any plugin type
+	// The plugin's hook_type determines its behavior, not the plugin_type
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_type", plugin.PluginType).
+		Str("hook_type", plugin.HookType).
+		Msg("Loading plugin with unified handshake")
 
 	if !plugin.IsActive {
 		return nil, fmt.Errorf("plugin %d is not active", pluginID)
@@ -923,9 +918,9 @@ func (m *AIStudioPluginManager) createConfigOnlyOCIPluginClient(command string) 
 		Bool("verified", localPlugin.Verified).
 		Msg("Using OCI plugin binary for config-only access")
 
-	// Create plugin client with universal config handshake
+	// Create plugin client with unified AI_STUDIO_PLUGIN handshake
 	return goplugin.NewClient(&goplugin.ClientConfig{
-		HandshakeConfig: ConfigOnlyHandshake,
+		HandshakeConfig: m.handshakeConfig, // Use unified AI_STUDIO_PLUGIN handshake
 		Plugins: map[string]goplugin.Plugin{
 			"config": &ConfigOnlyGRPC{},
 		},
@@ -947,9 +942,9 @@ func (m *AIStudioPluginManager) createConfigOnlyLocalPluginClient(command string
 		Str("path", cmdPath).
 		Msg("Creating config-only client for local plugin executable")
 
-	// Create plugin client with universal config handshake
+	// Create plugin client with unified AI_STUDIO_PLUGIN handshake
 	return goplugin.NewClient(&goplugin.ClientConfig{
-		HandshakeConfig: ConfigOnlyHandshake,
+		HandshakeConfig: m.handshakeConfig, // Use unified AI_STUDIO_PLUGIN handshake
 		Plugins: map[string]goplugin.Plugin{
 			"config": &ConfigOnlyGRPC{},
 		},
@@ -1098,134 +1093,17 @@ type ConfigOnlyPlugin struct {
 	LoadTime         time.Time
 }
 
-// LegacyConfigOnlyPlugin represents a plugin loaded using its original handshake for config extraction
-// Uses the main PluginService's GetConfigSchema method
-type LegacyConfigOnlyPlugin struct {
-	Command    string
-	Client     *goplugin.Client
-	GRPCClient pb.PluginServiceClient
-	LoadTime   time.Time
-}
-
-// MicrogatewaPluginGRPC implements goplugin.Plugin interface for microgateway plugins
-type MicrogatewaPluginGRPC struct {
-	goplugin.NetRPCUnsupportedPlugin
-}
-
-func (p *MicrogatewaPluginGRPC) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
-	// This is implemented by the plugin binary, not the host
-	return nil
-}
-
-func (p *MicrogatewaPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return pb.NewPluginServiceClient(c), nil
-}
-
 // LoadPluginForConfigOnly loads a plugin with minimal resources for schema extraction
-// First tries the isolated ConfigProviderService, then falls back to plugin-specific handshakes
+// Uses universal config provider handshake (AI_STUDIO_PLUGIN + "config" service)
+// All plugins now use the unified handshake, eliminating the need for fallback logic
 func (m *AIStudioPluginManager) LoadPluginForConfigOnly(ctx context.Context, command string) (ConfigProvider, error) {
-	log.Debug().Str("command", command).Msg("Loading plugin for config-only access")
+	log.Debug().Str("command", command).Msg("Loading plugin for config-only access with unified handshake")
 
-	// Get plugin from database to determine its type and appropriate handshake
-	var plugin models.Plugin
-	err := m.db.Where("command = ?", command).First(&plugin).Error
-	if err != nil {
-		log.Warn().Err(err).Str("command", command).Msg("Could not determine plugin type from database, trying universal config handshake")
-		// Fall back to universal config handshake
-		return m.loadPluginWithConfigHandshake(ctx, command)
-	}
-
-	// Try plugin-specific handshake first (for existing plugins)
-	configProvider, err := m.loadPluginWithOriginalHandshake(ctx, command, &plugin)
-	if err == nil {
-		return configProvider, nil
-	}
-
-	log.Debug().Err(err).Str("command", command).Msg("Failed with original handshake, trying universal config handshake")
-
-	// Fall back to universal config handshake
+	// Use universal config handshake - all plugins now support this via unified SDK
 	return m.loadPluginWithConfigHandshake(ctx, command)
 }
 
-// loadPluginWithOriginalHandshake loads plugin using its original handshake and main service
-func (m *AIStudioPluginManager) loadPluginWithOriginalHandshake(ctx context.Context, command string, plugin *models.Plugin) (ConfigProvider, error) {
-	// Get appropriate handshake for this plugin type
-	var handshake goplugin.HandshakeConfig
-	var pluginMap map[string]goplugin.Plugin
-
-	switch plugin.PluginType {
-	case models.PluginTypeGateway:
-		// Microgateway plugin
-		handshake = goplugin.HandshakeConfig{
-			ProtocolVersion:  1,
-			MagicCookieKey:   "MICROGATEWAY_PLUGIN",
-			MagicCookieValue: "v1",
-		}
-		pluginMap = map[string]goplugin.Plugin{
-			"plugin": &MicrogatewaPluginGRPC{},
-		}
-	case models.PluginTypeAIStudio, models.PluginTypeAgent:
-		// AI Studio and Agent plugins use the same handshake
-		handshake = m.handshakeConfig
-		pluginMap = m.pluginMap
-	default:
-		return nil, fmt.Errorf("unknown plugin type: %s", plugin.PluginType)
-	}
-
-	// Create plugin client
-	client, err := m.createPluginClientWithConfig(command, handshake, pluginMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create plugin client: %w", err)
-	}
-
-	// Connect and dispense main plugin service
-	rpcClient, err := client.Client()
-	if err != nil {
-		client.Kill()
-		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
-	}
-
-	raw, err := rpcClient.Dispense("plugin")
-	if err != nil {
-		client.Kill()
-		return nil, fmt.Errorf("failed to dispense plugin service: %w", err)
-	}
-
-	grpcClient, ok := raw.(pb.PluginServiceClient)
-	if !ok {
-		client.Kill()
-		return nil, fmt.Errorf("plugin does not implement PluginServiceClient")
-	}
-
-	// Initialize plugin with minimal config
-	initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	initResp, err := grpcClient.Initialize(initCtx, &pb.InitRequest{
-		Config: make(map[string]string),
-	})
-	if err != nil {
-		client.Kill()
-		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
-	}
-
-	if !initResp.Success {
-		client.Kill()
-		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
-	}
-
-	// Create legacy config plugin instance
-	configPlugin := &LegacyConfigOnlyPlugin{
-		Command:    command,
-		Client:     client,
-		GRPCClient: grpcClient,
-		LoadTime:   time.Now(),
-	}
-
-	return configPlugin, nil
-}
-
-// loadPluginWithConfigHandshake loads plugin using universal CONFIG_PROVIDER handshake
+// loadPluginWithConfigHandshake loads plugin using universal AI_STUDIO_PLUGIN handshake + config service
 func (m *AIStudioPluginManager) loadPluginWithConfigHandshake(ctx context.Context, command string) (ConfigProvider, error) {
 	// Create plugin client with universal config-only handshake and service
 	client, err := m.createConfigOnlyPluginClient(command)
@@ -1276,101 +1154,6 @@ func (m *AIStudioPluginManager) loadPluginWithConfigHandshake(ctx context.Contex
 	return configPlugin, nil
 }
 
-// createPluginClientWithConfig creates a plugin client with specified handshake and plugin map
-func (m *AIStudioPluginManager) createPluginClientWithConfig(command string, handshake goplugin.HandshakeConfig, pluginMap map[string]goplugin.Plugin) (*goplugin.Client, error) {
-	if strings.HasPrefix(command, "oci://") {
-		return m.createOCIPluginClientWithConfig(command, handshake, pluginMap)
-	} else {
-		return m.createLocalPluginClientWithConfig(command, handshake, pluginMap)
-	}
-}
-
-// createOCIPluginClientWithConfig creates an OCI plugin client with custom handshake
-func (m *AIStudioPluginManager) createOCIPluginClientWithConfig(command string, handshake goplugin.HandshakeConfig, pluginMap map[string]goplugin.Plugin) (*goplugin.Client, error) {
-	if m.ociClient == nil {
-		return nil, fmt.Errorf("OCI client not configured")
-	}
-
-	// Parse OCI reference
-	ref, params, err := ociplugins.ParseOCICommand(command)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse OCI command: %w", err)
-	}
-
-	// Get or fetch plugin
-	localPlugin, err := m.ociClient.GetPlugin(ref, params)
-	if err != nil {
-		// Try to fetch if not cached
-		ctx := context.Background()
-		localPlugin, err = m.ociClient.FetchPlugin(ctx, ref, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
-		}
-	}
-
-	// Create plugin client with custom configuration
-	return goplugin.NewClient(&goplugin.ClientConfig{
-		HandshakeConfig:  handshake,
-		Plugins:          pluginMap,
-		Cmd:              exec.Command(localPlugin.ExecutablePath),
-		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
-		Logger:           logger.NewHCLogAdapter("plugin"),
-	}), nil
-}
-
-// createLocalPluginClientWithConfig creates a local plugin client with custom handshake
-func (m *AIStudioPluginManager) createLocalPluginClientWithConfig(command string, handshake goplugin.HandshakeConfig, pluginMap map[string]goplugin.Plugin) (*goplugin.Client, error) {
-	cmdPath := command
-	if strings.HasPrefix(command, "file://") {
-		cmdPath = strings.TrimPrefix(command, "file://")
-	}
-
-	// Create plugin client with custom configuration
-	return goplugin.NewClient(&goplugin.ClientConfig{
-		HandshakeConfig:  handshake,
-		Plugins:          pluginMap,
-		Cmd:              exec.Command(cmdPath),
-		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
-		Logger:           logger.NewHCLogAdapter("plugin"),
-	}), nil
-}
-
-// GetConfigSchema implements ConfigProvider interface for LegacyConfigOnlyPlugin
-func (cp *LegacyConfigOnlyPlugin) GetConfigSchema(ctx context.Context) ([]byte, error) {
-	// Call plugin's GetConfigSchema via the main PluginService
-	schemaCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	resp, err := cp.GRPCClient.GetConfigSchema(schemaCtx, &pb.GetConfigSchemaRequest{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get config schema from main PluginService: %w", err)
-	}
-
-	if !resp.Success {
-		return nil, fmt.Errorf("plugin config schema request failed: %s", resp.ErrorMessage)
-	}
-
-	return []byte(resp.SchemaJson), nil
-}
-
-// GetManifest implements EnhancedConfigProvider interface for LegacyConfigOnlyPlugin
-func (cp *LegacyConfigOnlyPlugin) GetManifest(ctx context.Context) ([]byte, error) {
-	// Call plugin's GetManifest via the main PluginService
-	manifestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	resp, err := cp.GRPCClient.GetManifest(manifestCtx, &pb.GetManifestRequest{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get manifest from main PluginService: %w", err)
-	}
-
-	if !resp.Success {
-		return nil, fmt.Errorf("plugin manifest request failed: %s", resp.ErrorMessage)
-	}
-
-	return []byte(resp.ManifestJson), nil
-}
-
 // UnloadConfigProvider releases resources used by a ConfigProvider
 func (m *AIStudioPluginManager) UnloadConfigProvider(provider ConfigProvider) error {
 	switch cp := provider.(type) {
@@ -1380,25 +1163,6 @@ func (m *AIStudioPluginManager) UnloadConfigProvider(provider ConfigProvider) er
 			cp.Client.Kill()
 		}
 		log.Debug().Str("command", cp.Command).Msg("Config-only plugin unloaded successfully")
-
-	case *LegacyConfigOnlyPlugin:
-		// Legacy plugin using main service - try graceful shutdown first
-		if cp.GRPCClient != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-
-			_, err := cp.GRPCClient.Shutdown(ctx, &pb.ShutdownRequest{
-				TimeoutSeconds: 2,
-			})
-			if err != nil {
-				log.Warn().Str("command", cp.Command).Err(err).Msg("Failed to shutdown legacy config plugin gracefully")
-			}
-		}
-
-		if cp.Client != nil {
-			cp.Client.Kill()
-		}
-		log.Debug().Str("command", cp.Command).Msg("Legacy config-only plugin unloaded successfully")
 
 	default:
 		return fmt.Errorf("unknown config provider type")
@@ -1451,11 +1215,7 @@ func (m *AIStudioPluginManager) GetPluginConfigSchema(pluginID uint) (string, er
 		return "", fmt.Errorf("plugin not found: %w", err)
 	}
 
-	// Only load AI Studio plugins
-	if !plugin.IsAIStudioPlugin() {
-		return "", fmt.Errorf("plugin %d is not an AI Studio plugin", pluginID)
-	}
-
+	// With unified handshake, any plugin can provide a manifest
 	if !plugin.IsActive {
 		return "", fmt.Errorf("plugin %d is not active", pluginID)
 	}
