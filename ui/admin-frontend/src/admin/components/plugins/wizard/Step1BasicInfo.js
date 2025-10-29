@@ -43,11 +43,13 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
 
   const handleNext = () => {
     if (validateForm()) {
-      onComplete({
+      const dataToPass = {
         name: formData.name,
         description: formData.description,
         command: formData.command,
-      });
+      };
+      console.log('Step1 passing data:', dataToPass);
+      onComplete(dataToPass);
     }
   };
 

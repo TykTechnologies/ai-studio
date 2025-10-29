@@ -46,7 +46,6 @@ const AgentForm = () => {
     config: {},
     groupIds: [],
     isActive: true,
-    namespace: '',
   });
 
   // Dropdown options
@@ -105,7 +104,6 @@ const AgentForm = () => {
         config: agent.config || {},
         groupIds: agent.groups.map(g => g.id),
         isActive: agent.isActive,
-        namespace: agent.namespace || '',
       });
 
       setConfigJson(JSON.stringify(agent.config || {}, null, 2));
@@ -361,14 +359,6 @@ const AgentForm = () => {
                     />
                   }
                   label="Active"
-                />
-
-                <TextField
-                  label="Namespace"
-                  fullWidth
-                  value={formData.namespace}
-                  onChange={(e) => handleChange('namespace', e.target.value)}
-                  helperText="Optional namespace for multi-tenancy"
                 />
 
                 {/* Actions */}

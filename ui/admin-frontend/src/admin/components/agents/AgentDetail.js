@@ -344,34 +344,28 @@ const AgentDetail = () => {
                   Overview
                 </Typography>
                 <Divider sx={{ my: 2 }} />
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
+                <Box>
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
                       Description
                     </Typography>
-                    <Typography variant="bodyMedium">
-                      {agent.description || 'No description'}
+                    <Typography variant="body1">
+                      {agent.description || 'No description provided'}
                     </Typography>
                   </Box>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
                       Slug
                     </Typography>
-                    <Typography variant="bodyMedium">{agent.slug}</Typography>
+                    <Typography variant="body1">{agent.slug}</Typography>
                   </Box>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
-                      Namespace
-                    </Typography>
-                    <Typography variant="bodyMedium">
-                      {agent.namespace || 'Global'}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
                       Created
                     </Typography>
-                    <Typography variant="bodyMedium">
+                    <Typography variant="body1">
                       {new Date(agent.createdAt).toLocaleString()}
                     </Typography>
                   </Box>
@@ -388,35 +382,37 @@ const AgentDetail = () => {
                   Configuration
                 </Typography>
                 <Divider sx={{ my: 2 }} />
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
+                <Box>
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
                       Plugin
                     </Typography>
                     <Typography
-                      variant="bodyMedium"
+                      variant="body1"
                       component={RouterLink}
                       to={`/admin/plugins/${agent.plugin?.id}`}
-                      sx={{ textDecoration: 'none', color: 'primary.main' }}
+                      sx={{ textDecoration: 'none', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}
                     >
                       {agent.plugin?.name || 'Unknown Plugin'}
                     </Typography>
                   </Box>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
                       App
                     </Typography>
                     <Typography
-                      variant="bodyMedium"
+                      variant="body1"
                       component={RouterLink}
                       to={`/admin/apps/${agent.app?.id}`}
-                      sx={{ textDecoration: 'none', color: 'primary.main' }}
+                      sx={{ textDecoration: 'none', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}
                     >
                       {agent.app?.name || 'Unknown App'}
                     </Typography>
                   </Box>
-                  <Box>
-                    <Typography variant="bodySmallDefault" color="text.secondary">
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
                       Plugin Config
                     </Typography>
                     <Paper
