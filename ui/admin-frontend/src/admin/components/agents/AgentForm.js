@@ -68,9 +68,11 @@ const AgentForm = () => {
 
   const loadDropdownData = async () => {
     try {
-      // Load agent plugins
+      // Load agent plugins - filter by hook_type instead of plugin_type
       const pluginResult = await pluginService.listPlugins(1, 100, '', true);
-      const agentPlugins = pluginResult.data.filter(p => p.pluginType === 'agent');
+      const agentPlugins = pluginResult.data.filter(p =>
+        p.hookType === 'agent' || p.hookTypes?.includes('agent')
+      );
       setPlugins(agentPlugins);
 
       // Load apps
