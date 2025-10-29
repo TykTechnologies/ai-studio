@@ -801,6 +801,8 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 	// Setup dial options
 	opts := []grpc.DialOption{
 		grpc.WithKeepaliveParams(keepaliveParams),
+		grpc.WithUnaryInterceptor(c.authUnaryInterceptor()),
+		grpc.WithStreamInterceptor(c.authStreamInterceptor()),
 	}
 
 	// Configure transport credentials (TLS or insecure)
@@ -856,4 +858,24 @@ func (c *SimpleEdgeClient) createAuthContext(ctx context.Context) context.Contex
 	})
 
 	return metadata.NewOutgoingContext(ctx, md)
+}
+
+// authUnaryInterceptor returns a unary client interceptor that adds authentication metadata
+func (c *SimpleEdgeClient) authUnaryInterceptor() grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		// Add authentication metadata to context
+		authCtx := c.createAuthContext(ctx)
+		// Invoke the actual RPC with authenticated context
+		return invoker(authCtx, method, req, reply, cc, opts...)
+	}
+}
+
+// authStreamInterceptor returns a stream client interceptor that adds authentication metadata
+func (c *SimpleEdgeClient) authStreamInterceptor() grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		// Add authentication metadata to context
+		authCtx := c.createAuthContext(ctx)
+		// Create the stream with authenticated context
+		return streamer(authCtx, desc, cc, method, opts...)
+	}
 }
