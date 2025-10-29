@@ -27,6 +27,12 @@
       "title": "Default LLM ID",
       "description": "The ID of the default LLM to use. If not set, uses the first available LLM from the app.",
       "minimum": 1
+    },
+    "model": {
+      "type": "string",
+      "title": "Model Name",
+      "description": "The specific model to use for LLM calls. If not set, uses the LLM's default model. Examples: 'gpt-4', 'claude-3-5-sonnet-20241022', 'gpt-3.5-turbo'",
+      "default": ""
     }
   },
   "additionalProperties": false

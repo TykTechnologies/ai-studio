@@ -25,6 +25,7 @@ type EchoAgentPlugin struct {
 	suffix          string
 	includeMetadata bool
 	defaultLLMID    uint32
+	model           string
 }
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	Suffix          string `json:"suffix"`
 	IncludeMetadata bool   `json:"include_metadata"`
 	DefaultLLMID    uint32 `json:"default_llm_id"`
+	Model           string `json:"model"`
 }
 
 // OnInitialize is called when the plugin starts up
@@ -71,8 +73,13 @@ func (p *EchoAgentPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementService
 		}
 	}
 
-	log.Printf("🤖 EchoAgent: Initialized successfully - prefix=%s, suffix=%s, metadata=%v, llmID=%d",
-		p.prefix, p.suffix, p.includeMetadata, p.defaultLLMID)
+	if modelStr, ok := config["model"]; ok {
+		p.model = modelStr
+		log.Printf("🤖 EchoAgent: Using config model: %s", p.model)
+	}
+
+	log.Printf("🤖 EchoAgent: Initialized successfully - prefix=%s, suffix=%s, metadata=%v, llmID=%d, model=%s",
+		p.prefix, p.suffix, p.includeMetadata, p.defaultLLMID, p.model)
 	return nil
 }
 
@@ -109,8 +116,11 @@ func (p *EchoAgentPlugin) HandleAgentMessage(req *pb.AgentMessageRequest, stream
 			}
 			p.includeMetadata = config.IncludeMetadata
 			p.defaultLLMID = config.DefaultLLMID
-			log.Printf("EchoAgent: Using custom config - prefix: %s, suffix: %s, metadata: %v, default_llm_id: %d",
-				p.prefix, p.suffix, p.includeMetadata, p.defaultLLMID)
+			if config.Model != "" {
+				p.model = config.Model
+			}
+			log.Printf("EchoAgent: Using custom config - prefix: %s, suffix: %s, metadata: %v, default_llm_id: %d, model: %s",
+				p.prefix, p.suffix, p.includeMetadata, p.defaultLLMID, p.model)
 		}
 	}
 
@@ -144,7 +154,7 @@ func (p *EchoAgentPlugin) HandleAgentMessage(req *pb.AgentMessageRequest, stream
 		selectedLLM.Name, selectedLLM.Id, selectedLLM.Vendor, selectedLLM.DefaultModel)
 
 	// Call LLM via SDK helper
-	return p.callLLM(req, selectedLLM, stream)
+	return p.callLLM(req, selectedLLM, p.model, stream)
 }
 
 // echoMode is the fallback mode that just echoes the message
@@ -170,7 +180,7 @@ func (p *EchoAgentPlugin) echoMode(userMessage string, stream pb.PluginService_H
 }
 
 // callLLM calls the LLM via the SDK and streams back the wrapped response
-func (p *EchoAgentPlugin) callLLM(req *pb.AgentMessageRequest, llm *pb.AgentLLMInfo, stream pb.PluginService_HandleAgentMessageServer) error {
+func (p *EchoAgentPlugin) callLLM(req *pb.AgentMessageRequest, llm *pb.AgentLLMInfo, model string, stream pb.PluginService_HandleAgentMessageServer) error {
 	ctx := stream.Context()
 
 	// Build LLM messages from user message and history
@@ -190,13 +200,23 @@ func (p *EchoAgentPlugin) callLLM(req *pb.AgentMessageRequest, llm *pb.AgentLLMI
 		Content: req.UserMessage,
 	})
 
+	// Determine which model to use
+	modelToUse := model
+	if modelToUse == "" {
+		// Fallback to LLM's default model
+		modelToUse = llm.DefaultModel
+		log.Printf("EchoAgent: No model specified, using LLM default: %s", modelToUse)
+	} else {
+		log.Printf("EchoAgent: Using configured model: %s", modelToUse)
+	}
+
 	log.Printf("EchoAgent: Calling LLM %d with %d messages via SDK", llm.Id, len(messages))
 
 	// Use SDK's CallLLM helper to call the LLM proxy
 	llmStream, err := ai_studio_sdk.CallLLM(
 		ctx,
 		llm.Id,
-		llm.DefaultModel,
+		modelToUse,
 		messages,
 		0.7,  // temperature
 		1000, // max tokens
