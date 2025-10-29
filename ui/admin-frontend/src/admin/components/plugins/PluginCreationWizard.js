@@ -15,13 +15,14 @@ import {
   SecondaryLinkButton,
   TitleBox,
   ContentBox,
+  PrimaryButton,
 } from '../../styles/sharedStyles';
 import pluginService from '../../services/pluginService';
+import agentService from '../../services/agentService';
 import Step1BasicInfo from './wizard/Step1BasicInfo';
 import Step2ScopeApproval from './wizard/Step2ScopeApproval';
 import Step3Configuration from './wizard/Step3Configuration';
-
-const steps = ['Basic Info', 'Scope Approval', 'Configuration'];
+import Step4AgentConfiguration from './wizard/Step4AgentConfiguration';
 
 const WORKFLOW_STATES = {
   CREATED: 'created',
@@ -66,6 +67,9 @@ const PluginCreationWizard = () => {
 
   // Plugin ID (once created)
   const [pluginId, setPluginId] = useState(null);
+
+  // Agent ID (if agent is created)
+  const [agentId, setAgentId] = useState(null);
 
   // Handle step completion and navigation
   const handleNext = () => {
@@ -198,13 +202,30 @@ const PluginCreationWizard = () => {
         isActive: true,
       });
 
-      setSnackbar({
-        open: true,
-        message: 'Plugin created successfully!',
-        severity: 'success',
-      });
+      // Update pluginData with the final config for Step 4
+      setPluginData(prev => ({
+        ...prev,
+        config: configData.config,
+        hookTypes: configData.hookTypes || prev.hookTypes,
+      }));
 
-      setTimeout(() => navigate(`/admin/plugins/${pluginId}`), 2000);
+      // Check if this is an agent plugin
+      const hookTypes = configData.hookTypes || pluginData.hookTypes || [];
+      const isAgentPlugin = hookTypes.includes('agent');
+
+      if (isAgentPlugin) {
+        // Go to agent configuration step
+        handleNext();
+      } else {
+        // Complete without agent configuration
+        setSnackbar({
+          open: true,
+          message: 'Plugin created successfully!',
+          severity: 'success',
+        });
+
+        setTimeout(() => navigate(`/admin/plugins/${pluginId}`), 2000);
+      }
     } catch (err) {
       console.error('Error updating plugin configuration:', err);
       setError(err.message || 'Failed to save plugin configuration');
@@ -213,20 +234,68 @@ const PluginCreationWizard = () => {
     }
   };
 
+  // Step 4: Handle agent configuration
+  const handleAgentConfiguration = async (agentData) => {
+    setLoading(true);
+    try {
+      const createdAgent = await agentService.createAgent(agentData);
+      setAgentId(createdAgent.id);
+
+      setSnackbar({
+        open: true,
+        message: 'Plugin and agent created successfully!',
+        severity: 'success',
+      });
+
+      // Show completion step with options
+      handleNext();
+    } catch (err) {
+      console.error('Error creating agent:', err);
+      setError(err.message || 'Failed to create agent');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 4: Skip agent configuration
+  const handleSkipAgentConfiguration = () => {
+    setSnackbar({
+      open: true,
+      message: 'Plugin created successfully!',
+      severity: 'success',
+    });
+
+    setTimeout(() => navigate(`/admin/plugins/${pluginId}`), 2000);
+  };
+
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // Determine which steps to show based on whether plugin has scopes
+  // Determine which steps to show based on plugin characteristics
   const hasScopes = metadata.scopes && metadata.scopes.length > 0;
   const shouldShowScopeStep = hasScopes;
 
-  // Adjust step labels based on whether scopes are present
+  // Check if plugin has agent hook type for step 4
+  const hookTypes = pluginData.hookTypes || [];
+  const isAgentPlugin = hookTypes.includes('agent');
+  const shouldShowAgentStep = isAgentPlugin;
+
+  // Adjust step labels based on which steps are present
   const getStepLabels = () => {
-    if (!shouldShowScopeStep) {
-      return ['Basic Info', 'Configuration'];
+    const labels = ['Basic Info'];
+
+    if (shouldShowScopeStep) {
+      labels.push('Scope Approval');
     }
-    return ['Basic Info', 'Scope Approval', 'Configuration'];
+
+    labels.push('Configuration');
+
+    if (shouldShowAgentStep) {
+      labels.push('Agent Setup');
+    }
+
+    return labels;
   };
 
   const stepLabels = getStepLabels();
@@ -313,6 +382,60 @@ const PluginCreationWizard = () => {
               loading={loading}
               disabled={loading}
             />
+          )}
+
+          {/* Step 4: Agent Configuration (only for agent plugins) */}
+          {activeStep === (shouldShowScopeStep ? 3 : 2) && shouldShowAgentStep && (
+            <Step4AgentConfiguration
+              pluginId={pluginId}
+              pluginData={pluginData}
+              onComplete={handleAgentConfiguration}
+              onSkip={handleSkipAgentConfiguration}
+              loading={loading}
+              disabled={loading}
+            />
+          )}
+
+          {/* Completion Step (after agent creation) */}
+          {activeStep === (shouldShowScopeStep ? 4 : 3) && agentId && (
+            <Box>
+              <Alert
+                severity="success"
+                sx={{
+                  mb: 3,
+                  '& .MuiAlert-message': {
+                    width: '100%',
+                    textAlign: 'center',
+                  },
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
+                <Box sx={{ width: '100%' }}>
+                  <Typography variant="h6" gutterBottom>
+                    Success!
+                  </Typography>
+                  <Typography variant="body2">
+                    Your plugin and agent have been created successfully.
+                  </Typography>
+                </Box>
+              </Alert>
+
+              <Box sx={{ textAlign: 'center', py: 2 }}>
+                <Typography variant="body1" sx={{ mb: 3 }}>
+                  What would you like to do next?
+                </Typography>
+
+                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <SecondaryLinkButton onClick={() => navigate(`/admin/plugins/${pluginId}`)}>
+                    View Plugin Details
+                  </SecondaryLinkButton>
+                  <PrimaryButton onClick={() => navigate(`/chat/agent/${agentId}`)}>
+                    Try Agent Now
+                  </PrimaryButton>
+                </Box>
+              </Box>
+            </Box>
           )}
         </ContentBox>
       </Box>

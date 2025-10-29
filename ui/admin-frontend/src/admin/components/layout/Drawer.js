@@ -42,7 +42,7 @@ const Drawer = () => {
     {
       id: 'plugins',
       text: 'Plugins',
-      icon: <Icon name="puzzle-piece" />,
+      icon: <Icon name="screwdriver-wrench" />,
       path: '/admin/plugins'
     },
     {

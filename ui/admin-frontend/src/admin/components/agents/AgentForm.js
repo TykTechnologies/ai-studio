@@ -3,20 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Typography,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Checkbox,
-  FormControlLabel,
   CircularProgress,
   Alert,
-  Chip,
-  OutlinedInput,
   Card,
   CardContent,
-  Divider,
 } from '@mui/material';
 import {
   TitleBox,
@@ -27,6 +17,7 @@ import {
 import agentService from '../../services/agentService';
 import pluginService from '../../services/pluginService';
 import apiClient from '../../utils/apiClient';
+import AgentFormFields from './AgentFormFields';
 
 const AgentForm = () => {
   const navigate = useNavigate();
@@ -209,167 +200,27 @@ const AgentForm = () => {
         <Card>
           <CardContent>
             <form onSubmit={handleSubmit}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {/* Basic Information */}
-                <Typography variant="headingMedium">Basic Information</Typography>
+              <AgentFormFields
+                formData={formData}
+                onFieldChange={handleChange}
+                plugins={plugins}
+                apps={apps}
+                groups={groups}
+                configJson={configJson}
+                onConfigChange={handleConfigChange}
+                configSchema={configSchema}
+                showPluginField={true}
+                disabled={saving}
+              />
 
-                <TextField
-                  label="Name"
-                  required
-                  fullWidth
-                  value={formData.name}
-                  onChange={(e) => handleChange('name', e.target.value)}
-                  helperText="A descriptive name for this agent"
-                />
-
-                <TextField
-                  label="Description"
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => handleChange('description', e.target.value)}
-                  helperText="Optional description of what this agent does"
-                />
-
-                <Divider />
-
-                {/* Agent Configuration */}
-                <Typography variant="headingMedium">Agent Configuration</Typography>
-
-                <FormControl fullWidth required>
-                  <InputLabel>Plugin</InputLabel>
-                  <Select
-                    value={formData.pluginId}
-                    label="Plugin"
-                    onChange={(e) => handleChange('pluginId', e.target.value)}
-                  >
-                    {plugins.map(plugin => (
-                      <MenuItem key={plugin.id} value={plugin.id}>
-                        {plugin.name}
-                        {!plugin.isActive && ' (Inactive)'}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {plugins.length === 0 && (
-                    <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mt: 1 }}>
-                      No agent plugins available. Please install an agent plugin first.
-                    </Typography>
-                  )}
-                </FormControl>
-
-                <FormControl fullWidth required>
-                  <InputLabel>App</InputLabel>
-                  <Select
-                    value={formData.appId}
-                    label="App"
-                    onChange={(e) => handleChange('appId', e.target.value)}
-                  >
-                    {apps.map(app => (
-                      <MenuItem key={app.id} value={app.id}>
-                        {app.attributes?.name || `App ${app.id}`}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mt: 1 }}>
-                    The app provides LLMs, tools, and datasources for the agent
-                  </Typography>
-                </FormControl>
-
-                {/* Plugin Configuration */}
-                {configSchema && (
-                  <Box>
-                    <Typography variant="bodyMedium" gutterBottom>
-                      Plugin Configuration
-                    </Typography>
-                    <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mb: 2 }}>
-                      {configSchema.description || 'Plugin-specific configuration'}
-                    </Typography>
-                  </Box>
-                )}
-
-                <TextField
-                  label="Configuration (JSON)"
-                  fullWidth
-                  multiline
-                  rows={8}
-                  value={configJson}
-                  onChange={(e) => handleConfigChange(e.target.value)}
-                  helperText="Plugin-specific configuration in JSON format"
-                  error={(() => {
-                    try {
-                      JSON.parse(configJson);
-                      return false;
-                    } catch {
-                      return true;
-                    }
-                  })()}
-                  sx={{ fontFamily: 'monospace' }}
-                />
-
-                <Divider />
-
-                {/* Access Control */}
-                <Typography variant="headingMedium">Access Control</Typography>
-
-                <FormControl fullWidth>
-                  <InputLabel>Groups</InputLabel>
-                  <Select
-                    multiple
-                    value={formData.groupIds}
-                    onChange={(e) => handleChange('groupIds', e.target.value)}
-                    input={<OutlinedInput label="Groups" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((groupId) => {
-                          const group = groups.find(g => g.id === groupId);
-                          return (
-                            <Chip
-                              key={groupId}
-                              label={group?.attributes?.name || `Group ${groupId}`}
-                              size="small"
-                            />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {groups.map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        <Checkbox checked={formData.groupIds.indexOf(group.id) > -1} />
-                        {group.attributes?.name || `Group ${group.id}`}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mt: 1 }}>
-                    Leave empty to make agent available to all users
-                  </Typography>
-                </FormControl>
-
-                <Divider />
-
-                {/* Settings */}
-                <Typography variant="headingMedium">Settings</Typography>
-
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={formData.isActive}
-                      onChange={(e) => handleChange('isActive', e.target.checked)}
-                    />
-                  }
-                  label="Active"
-                />
-
-                {/* Actions */}
-                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-                  <SecondaryOutlineButton onClick={handleCancel} disabled={saving}>
-                    Cancel
-                  </SecondaryOutlineButton>
-                  <PrimaryButton type="submit" disabled={saving}>
-                    {saving ? <CircularProgress size={24} /> : isEditMode ? 'Update' : 'Create'}
-                  </PrimaryButton>
-                </Box>
+              {/* Actions */}
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 4 }}>
+                <SecondaryOutlineButton onClick={handleCancel} disabled={saving}>
+                  Cancel
+                </SecondaryOutlineButton>
+                <PrimaryButton type="submit" disabled={saving}>
+                  {saving ? <CircularProgress size={24} /> : isEditMode ? 'Update' : 'Create'}
+                </PrimaryButton>
               </Box>
             </form>
           </CardContent>

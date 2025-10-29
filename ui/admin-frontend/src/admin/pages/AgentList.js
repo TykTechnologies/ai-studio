@@ -345,6 +345,8 @@ const AgentList = () => {
         open={confirmDialog.open}
         title={`${confirmDialog.action === 'delete' ? 'Delete' : confirmDialog.action === 'activate' ? 'Activate' : 'Deactivate'} Agent`}
         message={`Are you sure you want to ${confirmDialog.action} the agent "${confirmDialog.agentName}"?`}
+        buttonLabel={confirmDialog.action === 'delete' ? 'Delete' : confirmDialog.action === 'activate' ? 'Activate' : 'Deactivate'}
+        primaryButtonComponent={confirmDialog.action === 'delete' ? 'danger' : 'primary'}
         onConfirm={handleConfirmAction}
         onCancel={closeConfirmDialog}
       />
